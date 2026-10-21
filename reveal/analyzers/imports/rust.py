@@ -92,6 +92,25 @@ def _line_text(analyzer, line_number: int) -> str:
     return ""
 
 
+_CRATE_ROOT_FILES = ('lib.rs', 'main.rs')
+
+
+def _module_dir(module_file: Path) -> Path:
+    """The directory that holds a module file's child modules: `a/mod.rs`, `src/lib.rs` and
+    `src/main.rs` own their own directory, `a/b.rs` owns `a/b/`."""
+    if module_file.name == 'mod.rs' or module_file.name in _CRATE_ROOT_FILES:
+        return module_file.parent
+    return module_file.with_suffix('')
+
+
+def _in_module_dir(candidate: Path, owner: Path) -> bool:
+    """True when `candidate` is a module below `owner` in the module tree. A `lib.rs` or
+    `main.rs` is a crate root beside it, never a child."""
+    if candidate == owner or candidate.name in _CRATE_ROOT_FILES:
+        return False
+    return candidate.is_relative_to(_module_dir(owner))
+
+
 @register_extractor
 class RustExtractor(LanguageExtractor):
     """Rust import extractor using pure tree-sitter parsing.
@@ -545,6 +564,16 @@ class RustExtractor(LanguageExtractor):
             return self._resolve_from_dir(use_path[6:], base_path)  # Remove 'self::'
 
         return None
+
+    def is_structural_edge(self, from_file: Path, to_file: Path) -> bool:
+        """A module and an ancestor or descendant module in its own tree (BACK-2129).
+
+        `mod x;` plus `use crate::parent::Item` in the child is how a Rust module tree is
+        written; the compiler resolves it with no load order, so it is not a cycle. Two
+        modules that are not on one branch of the tree (siblings, cousins) stay ordinary
+        edges, so a real `a` <-> `b` cycle is still found.
+        """
+        return _in_module_dir(to_file, from_file) or _in_module_dir(from_file, to_file)
 
     def _find_cargo_root(self, start_path: Path) -> Optional[Path]:
         """Find Cargo.toml file by walking up directory tree.

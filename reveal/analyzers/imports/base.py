@@ -448,6 +448,16 @@ class LanguageExtractor(ABC):
         """
         return None
 
+    def is_structural_edge(self, from_file: Path, to_file: Path) -> bool:
+        """True when the edge ``from_file`` -> ``to_file`` is the language's own module
+        layout rather than a dependency choice (BACK-2129).
+
+        Cycle search leaves these edges out; every other view still counts them. The
+        default is False: Python's ``__init__`` importing a submodule that imports the
+        package is a real import-order cycle, and so is a JS barrel and its children.
+        """
+        return False
+
     def resolve_import_targets(
         self,
         stmt: ImportStatement,

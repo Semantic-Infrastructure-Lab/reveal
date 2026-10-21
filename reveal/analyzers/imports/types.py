@@ -160,6 +160,10 @@ class ImportGraph:
     # the error's type name: a later run can read them with mtime and size unchanged (BACK-2084,
     # BACK-2099). Last, so positional construction keeps its field order.
     unreadable_files: Dict[Path, str] = field(default_factory=dict)
+    # BACK-2129: edges the importing file's language declares to be its module layout
+    # (LanguageExtractor.is_structural_edge). Kept in dependencies, reverse_deps and every
+    # count; only the cycle search leaves them out.
+    structural_edges: Set[Tuple[Path, Path]] = field(default_factory=set)
 
     @property
     def cacheable(self) -> bool:
@@ -188,6 +192,16 @@ class ImportGraph:
         self.edge_scopes.setdefault((from_file, to_file), set()).add(scope)
         self.__dict__.pop('_cycles_by_file', None)
         self.__dict__.pop('_edge_views', None)
+
+    def _cycle_successors(self, node: Path) -> List[Path]:
+        """The files ``node`` depends on that can close a cycle, sorted: structural edges
+        (``structural_edges``) are the module tree, not a dependency choice (BACK-2129).
+
+        Sorted, not raw set iteration: neighbor order otherwise depends on Python's
+        per-process hash randomization (BACK-627).
+        """
+        return sorted((to for to in self.dependencies.get(node, ())
+                       if (node, to) not in self.structural_edges), key=str)
 
     def is_lazy_edge(self, from_file: Path, to_file: Path) -> bool:
         """True when every import behind the edge is function-level (scope 'local')."""
@@ -252,13 +266,11 @@ class ImportGraph:
             rec_stack.add(node)
             current_path.append(node)
 
-            # Sorted, not raw set iteration: neighbor order otherwise depends
-            # on Python's per-process hash randomization, and since `visited`
-            # is a global (once-per-node) marker, traversal order determines
-            # *which* cycles are found, not just their order — an unsorted
-            # `set` here made cycle counts nondeterministic across runs
-            # (BACK-627).
-            for neighbor in sorted(self.dependencies.get(node, set()), key=str):
+            # Sorted (see _cycle_successors): since `visited` is a global
+            # (once-per-node) marker, traversal order determines *which* cycles are
+            # found, not just their order — an unsorted `set` here made cycle counts
+            # nondeterministic across runs (BACK-627).
+            for neighbor in self._cycle_successors(node):
                 dfs(neighbor)
 
             current_path.pop()
@@ -314,7 +326,7 @@ class ImportGraph:
             stack.append(v)
             on_stack.add(v)
 
-            for w in self.dependencies.get(v, set()):
+            for w in self._cycle_successors(v):
                 if w not in index:
                     strongconnect(w)
                     lowlink[v] = min(lowlink[v], lowlink[w])
@@ -367,7 +379,7 @@ class ImportGraph:
         # closes the cycle back onto it.
         parent: Dict[Path, Path] = {}
         queue: deque = deque()
-        for neighbor in sorted(self.dependencies.get(start, set()), key=str):
+        for neighbor in self._cycle_successors(start):
             if neighbor == start:
                 return [start, start]  # self-loop
             if neighbor in group_set and neighbor not in parent:
@@ -376,7 +388,7 @@ class ImportGraph:
 
         while queue:
             node = queue.popleft()
-            for neighbor in sorted(self.dependencies.get(node, set()), key=str):
+            for neighbor in self._cycle_successors(node):
                 if neighbor == start:
                     # Reconstruct start → … → node, then close back to start.
                     path = [node]
