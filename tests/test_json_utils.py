@@ -190,6 +190,11 @@ class TestSafeJsonDumps:
 class TestPrintJsonResult:
     """Test print_json_result() — the single JSON-result emission funnel (BACK-893)."""
 
+    def setup_method(self):
+        # An in-process main() run with --provenance (apply_global_flags) can leave the toggle
+        # on in this worker, so start from a known state too (BACK-2142).
+        set_provenance_enabled(False)
+
     def teardown_method(self):
         # Provenance is a module-level toggle (BACK-881) — always reset it so
         # one test can't leak state into the next.

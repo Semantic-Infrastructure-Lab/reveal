@@ -15,3 +15,4 @@ BACK-1869 perf: duplicate-body extraction splits a file's lines once; output unc
 BACK-1870 perf: adapters and heavy libraries import on first use (reveal --version 0.46 -> 0.19 s); output unchanged
 BACK-2122 internal: cache-registration ratchet script and manifest; no product behavior
 BACK-2133 internal: test fixture hardening against a transient git error; no product behavior
+BACK-2142 internal: test isolation for a module-level toggle; no product behavior
