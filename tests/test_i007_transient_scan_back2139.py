@@ -77,6 +77,24 @@ def test_a_transient_scan_failure_is_not_kept_for_the_next_host_request(project,
         f'request 2 was answered from the scan built while the lookup failed: {second}')
 
 
+def test_an_unreadable_file_scan_is_not_kept_either(project, monkeypatch):
+    """BACK-2083's failure through the same door: the extractor's read raises an OSError once."""
+    from reveal import base as reveal_base
+    target, fired = project / 'uses_requests.py', []
+    real = reveal_base.FileAnalyzer._read_file
+
+    def read(self):
+        if Path(str(self.path)).resolve() == target and not fired:
+            fired.append(1)
+            raise PermissionError(13, 'Permission denied', str(self.path))
+        return real(self)
+
+    monkeypatch.setattr(reveal_base.FileAnalyzer, '_read_file', read)  # noqa: V036 reviewed: serial
+    assert 'requests' in _check(project) and fired
+    second = _check(project)
+    assert 'requests' not in second, f'request 2 was answered from the scan built while the file was unreadable: {second}'
+
+
 def test_a_syntax_error_scan_is_still_kept(project):
     """Negative control: the same bytes fail the same way, so a recovered parse stays cached."""
     _write(project / 'uses_requests.py', 'import requests\nx = (\n')

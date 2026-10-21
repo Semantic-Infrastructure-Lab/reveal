@@ -120,6 +120,9 @@ class _ProjectImportFacts:
     traversal_failures: Tuple[_TraversalFailure, ...]
     # The walk honours the gitignore switch, so the scan depends on it (BACK-2118).
     gitignore: bool = field(default_factory=gitignore_enabled)
+    # A file's extraction failed in reveal's machinery or in its environment, not on its content
+    # (``ImportExtraction.cacheable``): unchanged stat, different answer next time (BACK-2139).
+    transient: bool = False
 
 
 _scan_cache: Dict[Path, Dict[_ScanKey, _ProjectImportFacts]] = {}
@@ -134,11 +137,12 @@ def _scan_project_imports(
     key = (extensions, normalize, sep)
     if key not in scans or scans[key].gitignore != gitignore_enabled():
         failures: List[OSError] = []
+        transient: List[str] = []
         imports = _scan_project_imports_uncached(root, extensions, normalize, sep,
-                                               on_error=failures.append)
+                                               on_error=failures.append, on_transient=transient.append)
         scans[key] = _ProjectImportFacts(imports, tuple(
             (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
-            for error in failures))
+            for error in failures), transient=bool(transient))
     facts = scans[key]
     if on_traversal_failure is not None:
         for failure in facts.traversal_failures:
@@ -155,10 +159,12 @@ def _evict_incomplete_scans() -> None:
 
     A scan built with the gitignore switch off is request-local too: the tree stamp that
     validates a kept entry is taken with the default switch, so it cannot see an edit to an
-    ignored file (BACK-2118).
+    ignored file (BACK-2118). So is a scan with a file that failed in reveal's machinery or
+    its environment: the tree stamp does not change when that failure goes away (BACK-2139).
     """
     for root, scans in tuple(_scan_cache.items()):
-        if any(facts.traversal_failures or not facts.gitignore for facts in scans.values()):
+        if any(facts.traversal_failures or facts.transient or not facts.gitignore
+               for facts in scans.values()):
             _evict_root(root)
 
 
@@ -169,6 +175,7 @@ register_validated_cache(__name__, _scan_cache, _evict_root)
 def _scan_project_imports_uncached(
     root: Path, extensions: FrozenSet[str], normalize: Callable[[str], str], sep: str,
     *, on_error: Optional[Callable[[OSError], None]] = None,
+    on_transient: Optional[Callable[[str], None]] = None,
 ) -> ProjectImports:
     """Every normalized top-level module/crate identifier imported anywhere
     (absolute imports only -- relative ones are unambiguously intra-project
@@ -179,7 +186,10 @@ def _scan_project_imports_uncached(
 
     A file whose extraction raises, or whose parse recovered from errors, is recorded in
     ``skipped`` (sorted), not dropped: its imports are missing from (or only partly in)
-    ``names``, which the caller must disclose.
+    ``names``, which the caller must disclose. *on_transient* is called with the path of each
+    file whose failure did not come from its content (the analyzer lookup, a grammar that
+    could not be loaded, an unreadable file: ``ImportExtraction.cacheable``), so the caller
+    does not keep the scan (BACK-2139).
     """
     names: Set[str] = set()
     skipped: Set[str] = set()
@@ -195,6 +205,9 @@ def _scan_project_imports_uncached(
             logger.warning("_dep_reconciliation.py: skipped %s after %s: %s", file_path, type(e).__name__, e)
             skipped.add(str(file_path))
             continue
+        analysis = getattr(extractor, 'analysis', None)
+        if on_transient is not None and analysis is not None and not analysis.cacheable:
+            on_transient(str(file_path))
         if getattr(extractor, 'parse_failed', False):
             # A recovery parse still yields the imports before the error (BACK-1460), so
             # they count, but the file may hold more it could not see: an unused
