@@ -51,7 +51,7 @@ class TestLocaleFanoutExemption:
     """Defect 3 — the exemption must survive nesting below the i18n root."""
 
     def _rows(self, paths):
-        from reveal.adapters.classify import _apply_locale_fanout
+        from reveal.adapters.stats.provenance import apply_locale_fanout as _apply_locale_fanout
         rows = [{'file': p, 'provenance': 'first_party'} for p in paths]
         _apply_locale_fanout(rows)
         return {r['file']: r['provenance'] for r in rows}

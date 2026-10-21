@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct
-from reveal.adapters.classify import ClassifyAdapter, ClassifyRenderer, _classify_directory
+from reveal.adapters.classify import ClassifyAdapter, ClassifyRenderer
+from reveal.adapters.stats.provenance import classify_directory as _classify_directory
 from reveal.utils.exclusions import exclusion_scope
 
 
