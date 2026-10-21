@@ -17,7 +17,6 @@ from ...registry import display_name_for_extension
 from ...utils import print_json_result
 from ...utils.formatting import cwd_path
 from ...utils.entry_points import active_entry_points, entry_point_rule_line
-from ...utils.path_utils import is_test_path_any_sep as _is_test_file  # noqa: F401 -- name kept for importers
 from ...utils.path_utils import to_relative_display
 from ...utils.query_control import omitted_line
 from ...utils.warning_render import meta_warning_lines

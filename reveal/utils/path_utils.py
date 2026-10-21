@@ -145,19 +145,13 @@ def is_test_path(path: Union[str, PurePath]) -> bool:
     (Go ``_test.go``, JS ``.spec.ts``, Ruby ``_spec.rb``, Rust ``tests.rs``, ...
     via the conventions profile, BACK-1277). The one shared answer to "is this
     a test?" for callers that see a whole path.
+
+    A path spelled with Windows separators is read the same on POSIX, where
+    ``PurePath`` splits on ``/`` only (a recorded Windows result read on a POSIX
+    host; BACK-2103).
     """
-    p = PurePath(path)
+    p = PurePath(str(path).replace('\\', '/'))
     return any(is_test_dir(part) for part in p.parts[:-1]) or is_test_file_name(p)
-
-
-def is_test_path_any_sep(path: str) -> bool:
-    """:func:`is_test_path` for a path string that may use either separator.
-
-    A string recorded with Windows separators is read on POSIX too (``PurePath``
-    there splits on ``/`` only), so the architecture, overview and diff entry-point
-    filters normalise first; this is the one place that does.
-    """
-    return is_test_path(path.replace('\\', '/'))
 
 
 def is_test_file_name(path: Union[str, PurePath]) -> bool:

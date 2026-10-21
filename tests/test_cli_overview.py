@@ -17,7 +17,6 @@ from reveal.cli.routing.declared import create_declared_parser, run_declared_com
 from reveal.adapters.overview import (
     OverviewAdapter,
     _age_label,
-    _is_test_file,
     _language_breakdown,
     _annotate_provenance,
     _relpath,
@@ -36,6 +35,7 @@ from reveal.adapters.overview import (
     _run_scope,
     _run_stats,
 )
+from reveal.utils.path_utils import is_test_path
 create_overview_parser = partial(create_declared_parser, 'overview')
 run_overview = partial(run_declared_command, 'overview')
 
@@ -1028,19 +1028,19 @@ class TestAnnotateProvenance(unittest.TestCase):
 class TestIsTestFile(unittest.TestCase):
 
     def test_test_prefix(self):
-        self.assertTrue(_is_test_file('/proj/tests/test_main.py'))
+        self.assertTrue(is_test_path('/proj/tests/test_main.py'))
 
     def test_test_suffix(self):
-        self.assertTrue(_is_test_file('/proj/src/foo_test.py'))
+        self.assertTrue(is_test_path('/proj/src/foo_test.py'))
 
     def test_test_in_path(self):
-        self.assertTrue(_is_test_file('/proj/test/helpers.py'))
+        self.assertTrue(is_test_path('/proj/test/helpers.py'))
 
     def test_normal_file_not_test(self):
-        self.assertFalse(_is_test_file('/proj/src/main.py'))
+        self.assertFalse(is_test_path('/proj/src/main.py'))
 
     def test_contestable_not_matched(self):
-        self.assertFalse(_is_test_file('/proj/src/contestable.py'))
+        self.assertFalse(is_test_path('/proj/src/contestable.py'))
 
 
 class TestRelpath(unittest.TestCase):

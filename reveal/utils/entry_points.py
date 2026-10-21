@@ -7,7 +7,7 @@ Most of those are not places execution starts, so the briefs report only the
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-from .path_utils import is_test_path_any_sep
+from .path_utils import is_test_path
 
 ACTIVE_ENTRY_POINT_RULE = 'fan_out > 0, not a test file, not __init__.py'
 
@@ -16,7 +16,7 @@ def is_active_entry_point(entry: Dict[str, Any]) -> bool:
     """True for a fan-in-0 row that is an active entry point (see the module docstring)."""
     return (
         entry.get('fan_out', 0) > 0
-        and not is_test_path_any_sep(entry['file'])
+        and not is_test_path(entry['file'])
         and Path(entry['file']).name != '__init__.py'
     )
 

@@ -16,13 +16,13 @@ from reveal.adapters.architecture import (
     ArchitectureAdapter,
     _build_next_commands,
     _compute_risks,
-    _is_test_file,
     _relpath,
     _run_combined_analysis,
     _run_complex_functions,
     _run_imports_analysis,
     _run_scope,
 )
+from reveal.utils.path_utils import is_test_path
 from reveal.rendering.adapters.architecture import (
     _render_brief, _render_components, _render_core_abstractions,
     _render_entry_points, _render_next_commands, _render_risks,
@@ -132,24 +132,24 @@ class TestCreateArchitectureParser(unittest.TestCase):
         self.assertEqual(args.against, 'v1.0.0')
 
 
-# ── _is_test_file ──────────────────────────────────────────────────────────────
+# ── is_test_path ──────────────────────────────────────────────────────────────
 
 class TestIsTestFile(unittest.TestCase):
 
     def test_test_prefix(self):
-        self.assertTrue(_is_test_file('/project/tests/test_main.py'))
+        self.assertTrue(is_test_path('/project/tests/test_main.py'))
 
     def test_tests_dir(self):
-        self.assertTrue(_is_test_file('/project/tests/utils.py'))
+        self.assertTrue(is_test_path('/project/tests/utils.py'))
 
     def test_test_dir(self):
-        self.assertTrue(_is_test_file('/project/test/helpers.py'))
+        self.assertTrue(is_test_path('/project/test/helpers.py'))
 
     def test_normal_file(self):
-        self.assertFalse(_is_test_file('/project/src/main.py'))
+        self.assertFalse(is_test_path('/project/src/main.py'))
 
     def test_file_with_test_in_name(self):
-        self.assertFalse(_is_test_file('/project/src/latest.py'))
+        self.assertFalse(is_test_path('/project/src/latest.py'))
 
 
 # ── _relpath ───────────────────────────────────────────────────────────────────

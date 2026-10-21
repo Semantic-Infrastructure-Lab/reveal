@@ -232,9 +232,9 @@ class TestIsTestPath:
             assert not self._t(p), p
 
     def test_go_test_previously_missed_by_overview(self):
-        from reveal.adapters.overview import _is_test_file
-        assert _is_test_file('pkg/util/foo_test.go')
-        assert not _is_test_file('pkg/testing/util.go')
+        from reveal.utils.path_utils import is_test_path
+        assert is_test_path('pkg/util/foo_test.go')
+        assert not is_test_path('pkg/testing/util.go')
 
 
 def test_scanned_dir_named_like_stdlib_root_does_not_hide_stdlib():

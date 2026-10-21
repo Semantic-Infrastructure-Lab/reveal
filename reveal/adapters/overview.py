@@ -33,7 +33,6 @@ from ..rendering.adapters.overview import (  # noqa: F401 -- the render helpers 
     OverviewRenderer,
     _NON_CODE_EXT_LABELS,
     _age_label,
-    _is_test_file,
     _language_breakdown,
     _relpath,
     _render_architecture,

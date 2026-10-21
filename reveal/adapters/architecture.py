@@ -16,7 +16,6 @@ from ..conventions import conventions_for_path
 from ..registry import language_for_extension
 from ..rendering.adapters.architecture import ArchitectureRenderer
 from ..utils.entry_points import active_entry_points, entry_point_filter
-from ..utils.path_utils import is_test_path_any_sep as _is_test_file  # noqa: F401 -- name kept for importers
 from ..utils.path_utils import to_posix, traversal_failed_warning
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
