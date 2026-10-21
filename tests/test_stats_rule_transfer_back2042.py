@@ -1,4 +1,10 @@
-"""New Stats disclosure-sink and fresh-process row-transfer acceptance."""
+"""Stats rows carry no cross-file scan facts through a pool, a pickle or the parent fold (BACK-1884).
+
+BACK-2042 sent each row's ``check_scan_disclosures`` from a worker to the parent and folded them
+into one ``analysis_incomplete`` warning. The count is file-local now, so a row has no such field,
+the optional disclosure sink of ``_count_check_issues`` is gone (the function is
+``_count_local_check_issues``), and the owner's directory denial never fires.
+"""
 import importlib
 import json
 import os
@@ -10,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from reveal.adapters.stats.adapter import StatsAdapter
-from reveal.adapters.stats.metrics import _count_check_issues
+from reveal.adapters.stats import metrics
 from reveal.rules import RuleRegistry
 
 pytestmark = pytest.mark.component
@@ -56,10 +62,9 @@ def test_actual_native_row_survives_fresh_process_pickle_and_parent_fold(measure
     checked, hidden, state = measured
     state['loss'] = loss
     row = StatsAdapter(str(checked.parent)).get_element(checked.name)
-    assert state['events'] == ([hidden] if loss else [])
-    assert row['quality']['check_issues'] == (0 if loss else 1)
-    raw = row.get('check_scan_disclosures', [])
-    assert bool(raw) == loss
+    assert state['events'] == [], 'Stats must not scan for the cross-file rule, so nothing is denied'
+    assert row['quality']['local_check_issues'] == 0
+    assert 'check_scan_disclosures' not in row
     script = '''
 import importlib, json, pickle, sys
 from reveal.adapters.stats.adapter import StatsAdapter
@@ -75,26 +80,17 @@ adapter._disclose_failures(result)
 print(json.dumps({'row': row, 'result': result}))
 '''
     packet = subprocess.run([sys.executable, '-c', script, str(checked.parent)],
-                            input=pickle.dumps(row), capture_output=True, check=True)
+                            input=pickle.dumps(row), capture_output=True, check=True, timeout=120)
     received = json.loads(packet.stdout)
     assert received['row'] == row
-    warnings = received['result'].get('meta', {}).get('warnings', [])
-    assert len(warnings) == (1 if loss else 0)
-    if loss:
-        assert raw[0] in warnings[0]['message']
-        assert warnings[0]['type'] == 'analysis_incomplete'
-        assert 'lower bound' not in warnings[0]['message']
+    assert received['result'].get('meta', {}).get('warnings', []) == []
 
 
-def test_optional_sink_keeps_historical_three_argument_pair(measured):
+def test_the_count_function_is_local_and_takes_no_disclosure_sink(measured):
     checked, hidden, state = measured
     state['loss'] = True
-    counts, failed = _count_check_issues(checked, {}, LITERAL)
-    assert state['events'] == [hidden]
+    counts, failed = metrics._count_local_check_issues(checked, {}, LITERAL)
+    assert state['events'] == []
     assert failed == [] and sum(counts.values()) == 0
-    sink = []
-    repeated = _count_check_issues(checked, {}, LITERAL, disclosures=sink)
-    assert repeated == (counts, failed)
-    assert len(sink) == 1 and 'D005:' in sink[0]
-    assert 'directory enumeration' in sink[0]
-    assert state['events'] == [hidden]  # Same invocation memo remains usable.
+    with pytest.raises(TypeError):
+        metrics._count_local_check_issues(checked, {}, LITERAL, disclosures=[])

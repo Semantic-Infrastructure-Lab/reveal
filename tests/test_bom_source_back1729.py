@@ -80,7 +80,7 @@ def test_stats_scores_a_bom_file_like_the_same_file_without_one(tmp_path):
         assert PARSE_FAILED not in proc.stderr, label
         answers[label] = json.loads(proc.stdout)
     (plain_file,) = answers['plain']['files']
-    assert plain_file['quality']['check_issues'] == 1, 'positive control: B001 counts as an issue'
+    assert plain_file['quality']['local_check_issues'] == 1, 'positive control: B001 is file-local and counts'
     assert answers['bom'] == answers['plain']
 
 

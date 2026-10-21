@@ -854,8 +854,8 @@ class TestStatsQualityCheckPenalty(unittest.TestCase):
                                         {'critical': 100, 'high': 100, 'medium': 100, 'low': 100})
         self.assertGreaterEqual(score, 0.0)
 
-    def test_check_issues_exposed_in_file_stats(self):
-        """calculate_file_stats exposes check_issues count in quality dict."""
+    def test_local_check_issues_exposed_in_file_stats(self):
+        """calculate_file_stats exposes the file-local issue count in the quality dict (BACK-1884)."""
         import tempfile
         code = '''<?php
 function foo($x) {
@@ -884,8 +884,9 @@ function bar($x) {
                 get_quality_config(Path(path)),
                 lambda p: str(p)
             )
-            self.assertIn('check_issues', stats['quality'])
-            self.assertIsInstance(stats['quality']['check_issues'], int)
+            self.assertIn('local_check_issues', stats['quality'])
+            self.assertIsInstance(stats['quality']['local_check_issues'], int)
+            self.assertNotIn('check_issues', stats['quality'])
         finally:
             os.unlink(path)
 

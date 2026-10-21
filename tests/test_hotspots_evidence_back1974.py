@@ -37,7 +37,7 @@ def test_real_single_file_hotspots_retains_quality_ranking(critical_file):
 def test_check_rule_failure_disclosed_for_each_stats_resource(tmp_path, single):
     file = tmp_path/'source.py'
     file.write_text(function('small', 0), encoding='utf-8')
-    with patch.object(metrics, '_count_check_issues', return_value=(
+    with patch.object(metrics, '_count_local_check_issues', return_value=(
             {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}, ['E501'])):
         result = StatsAdapter(str(file if single else tmp_path)).get_structure(hotspots=True)
     assert result['files'][0]['check_rules_failed'] == ['E501']
@@ -54,7 +54,7 @@ def controlled_file_stats(path, *args):
             'complexity': {'average': 25 if benign else 0, 'max': 25 if benign else 0,
                            'min': 25 if benign else 0},
             'quality': {'score': 100 if benign else 69, 'long_functions': 0,
-                        'deep_nesting': 0, 'avg_function_length': 1, 'check_issues': 0},
+                        'deep_nesting': 0, 'avg_function_length': 1, 'local_check_issues': 0},
             'issues': {'long_functions': [], 'deep_nesting': []}}
 
 

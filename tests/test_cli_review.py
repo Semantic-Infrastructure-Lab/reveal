@@ -419,13 +419,15 @@ class TestRunHotspots(unittest.TestCase):
         `quality`/`complexity` as dicts; they rendered as raw Python dicts and
         every 100/100 file was listed as needing attention."""
         def stats(score, cx):
-            return {'files': [{'file': f'q{score}.py', 'quality': {'score': score, 'check_issues': 1},
+            return {'files': [{'file': f'q{score}.py', 'quality': {'score': score, 'local_check_issues': 1},
                                'complexity': {'average': cx, 'max': cx, 'min': cx}}]}
         MockAdapter.return_value.get_structure.side_effect = [stats(100.0, 2), stats(60.0, 31), stats(90.0, 4)]
         result = _run_hotspots(None, files=[Path('a.py'), Path('b.py'), Path('c.py')])
         self.assertEqual([h['file'] for h in result], ['q60.0.py', 'q90.0.py'])
         self.assertEqual(result[0]['quality_score'], 60.0)
         self.assertEqual(result[0]['max_complexity'], 31)
+        self.assertEqual(result[0]['local_check_issues'], 1)  # BACK-1884: the stats field, renamed
+        self.assertNotIn('check_issues', result[0])
 
     @patch('reveal.adapters.stats.adapter.StatsAdapter')
     def test_one_bad_file_does_not_sink_others(self, MockAdapter):

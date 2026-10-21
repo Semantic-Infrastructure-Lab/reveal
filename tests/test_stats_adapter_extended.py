@@ -73,40 +73,33 @@ class TestStatsAdapterExceptionHandling:
 
 
 class TestI002GraphCachePreload:
-    """BACK-531: I002's per-worker cold cache made `overview`/`stats://` log the
-    BACK-338 root-mis-detection warning once per ProcessPoolExecutor worker (up
-    to 8x for one command). stats' pool now uses the rules' shared preload table
-    (reveal/rules/scan_caches.py, BACK-1429): built once in the main process and
-    seeded into every worker. The table's unit tests live in test_file_checker.py
-    (TestI002Preload and siblings); this is the end-to-end stats check.
+    """BACK-531, reversed by BACK-1884: stats' pool no longer builds the I002 import graph.
+
+    BACK-531 made `overview`/`stats://` log the BACK-338 root-mis-detection warning once, not
+    once per ProcessPoolExecutor worker, by building the graph in the parent and seeding every
+    worker (reveal/rules/scan_caches.py, BACK-1429). The issue count is file-local now and I002
+    reads the whole project, so stats never asks for it: the graph is built nowhere (parent or
+    worker) and the warning is logged zero times. The preload table still serves `check`
+    (TestI002Preload and siblings in test_file_checker.py).
     """
 
     @needs_forked_workers  # the patched _find_project_root and caplog see forked workers only
     @pytest.mark.real_worker_pool
-    def test_root_mis_detection_warning_logged_once_across_workers(self, tmp_path, monkeypatch, caplog):
-        """End-to-end BACK-531 regression: a project with no I002 project markers
-        and enough files to trigger the multi-worker path must log the BACK-338
-        ceiling warning exactly once, not once per worker.
-
-        Pre-fix, reveal.adapters.stats.adapter's ProcessPoolExecutor had no I002
-        cache preload/initializer, so each cold forked worker independently
-        rebuilt the graph and re-logged the ceiling warning (up to 8x for one
-        `overview`/`stats://` invocation). Runs the real ProcessPoolExecutor
-        (workers=2, forked) via StatsAdapter rather than mocking it, so this
-        would have caught the pre-fix duplication: on Linux's fork start
-        method, a forked child copies the parent's logging config, so a
-        per-worker warning is visible to caplog exactly like a main-process one.
+    def test_stats_pool_builds_no_import_graph_and_logs_no_ceiling_warning(self, tmp_path, monkeypatch, caplog):
+        """Same fixture as BACK-531's regression (a project with no I002 markers, enough files for
+        the multi-worker path, the ceiling forced to trip), now asserting the opposite: no worker
+        and not the parent builds a graph, so there is no ceiling warning to repeat or to log once.
         """
         from reveal.rules.imports import I002 as i002_module
 
-        # Force the ceiling to trip well below our 25-file fixture (0/negative
-        # values are rejected by _max_graph_files and fall back to the 20000
-        # default, so use the smallest valid positive override instead).
         monkeypatch.setenv("REVEAL_I002_MAX_FILES", "1")
-        # Force every file's "project root" to resolve to the same tmp_path so
-        # all workers share one cache key (matches the real mis-detection case,
-        # where an un-marked language walks up to one shared, wrong root).
-        monkeypatch.setattr(i002_module, "_find_project_root", lambda path: tmp_path)
+        roots_asked = []
+
+        def find_root(path):
+            roots_asked.append(path)
+            return tmp_path
+
+        monkeypatch.setattr(i002_module, "_find_project_root", find_root)
         i002_module._graph_cache.clear()
 
         # >20 files so _collect_filtered_stats picks workers > 1 (workers = len//10).
@@ -119,9 +112,9 @@ class TestI002GraphCachePreload:
         assert 'files' in result
 
         occurrences = sum(1 for r in caplog.records if "import-graph scan" in r.message)
-        assert occurrences == 1, (
-            f"expected exactly 1 ceiling warning, got {occurrences}"
-        )
+        assert occurrences == 0, f"expected no ceiling warning, got {occurrences}"
+        assert roots_asked == [] and i002_module._graph_cache == {}, "I002 was consulted by stats"
+        assert 'analysis_incomplete' not in [w.get('type') for w in result.get('meta', {}).get('warnings', [])]
 
 
 class TestStatsAdapterWorkerOverride:
