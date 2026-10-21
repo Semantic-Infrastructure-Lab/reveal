@@ -9,7 +9,7 @@ import re
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ class L003(BaseRule):
     """Detect framework routing mismatches in Markdown files."""
 
     code = "L003"
+    scope = RuleScope.CROSS_FILE
     message = "Framework routing mismatch"
     category = RulePrefix.L
     severity = Severity.MEDIUM

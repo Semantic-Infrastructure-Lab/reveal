@@ -6,7 +6,7 @@ Detects functions with excessive parameter counts that hurt readability and test
 import ast
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin
 
 
@@ -14,6 +14,7 @@ class R913(BaseRule, ASTParsingMixin):
     """Detect functions with too many arguments (>5 is a code smell)."""
 
     code = "R913"
+    scope = RuleScope.FILE
     message = "Too many arguments to function"
     category = RulePrefix.R  # Refactoring
     severity = Severity.MEDIUM

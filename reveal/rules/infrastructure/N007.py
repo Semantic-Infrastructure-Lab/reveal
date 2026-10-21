@@ -23,7 +23,7 @@ import re
 import ssl
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import NGINX_FILE_PATTERNS
 
 
@@ -31,6 +31,7 @@ class N007(BaseRule):
     """Detect ssl_stapling directives on certs that lack an OCSP responder URL."""
 
     code = "N007"
+    scope = RuleScope.CROSS_FILE
     message = "ssl_stapling enabled but certificate has no OCSP responder URL"
     category = RulePrefix.N
     severity = Severity.LOW

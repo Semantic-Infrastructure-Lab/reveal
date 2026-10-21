@@ -22,7 +22,7 @@ import re
 import logging
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ class B004(BaseRule):
     """Detect @property methods without return statement."""
 
     code = "B004"
+    scope = RuleScope.FILE
     message = "@property has no return statement"
     category = RulePrefix.B
     severity = Severity.HIGH

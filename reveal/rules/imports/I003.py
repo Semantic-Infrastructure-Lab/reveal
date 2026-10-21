@@ -22,7 +22,7 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...analyzers.imports.python import extract_python_imports
 from ...analyzers.imports.resolver import resolve_python_import
 from ...utils.request_cache import register_request_cache
@@ -62,6 +62,7 @@ class I003(BaseRule):
     """
 
     code = "I003"
+    scope = RuleScope.CROSS_FILE
     category = RulePrefix.I
     severity = Severity.HIGH
     message = "Architectural layer violation"

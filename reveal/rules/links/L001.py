@@ -8,7 +8,7 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from reveal.utils.lines import split_lines
 from reveal.utils.request_cache import register_request_cache
 
@@ -27,6 +27,7 @@ class L001(BaseRule):
     """Detect broken internal links in Markdown files."""
 
     code = "L001"
+    scope = RuleScope.CROSS_FILE
     message = "Broken internal link"
     category = RulePrefix.L
     severity = Severity.MEDIUM

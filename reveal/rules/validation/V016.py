@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root, is_dev_checkout
 from ...utils.path_utils import to_posix
 
@@ -43,6 +43,7 @@ class V016(BaseRule):
     """
 
     code = "V016"
+    scope = RuleScope.FILE
     message = "Adapter missing get_help() documentation for discoverability"
     category = RulePrefix.V
     severity = Severity.MEDIUM

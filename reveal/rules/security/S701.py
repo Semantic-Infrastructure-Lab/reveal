@@ -7,7 +7,7 @@ import re
 import logging
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,7 @@ class S701(BaseRule):
     """Detect :latest tag in Docker images (files and URIs)."""
 
     code = "S701"
+    scope = RuleScope.FILE
     message = "Docker image uses :latest tag (pin to specific version)"
     category = RulePrefix.S
     severity = Severity.MEDIUM

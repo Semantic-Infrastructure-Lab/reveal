@@ -25,7 +25,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 logger = logging.getLogger(__name__)
@@ -70,6 +70,7 @@ class V031(BaseRule):
     """Validate capabilities.py's measured-recall numbers trace to VALIDATION.md."""
 
     code = "V031"
+    scope = RuleScope.CROSS_FILE
     message = "capabilities.py validation data not traceable to VALIDATION.md"
     category = RulePrefix.V
     severity = Severity.MEDIUM

@@ -20,7 +20,7 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root, is_dev_checkout
 
 
@@ -28,6 +28,7 @@ class V007(BaseRule):
     """Validate version consistency across project files."""
 
     code = "V007"
+    scope = RuleScope.CROSS_FILE
     message = "Version mismatch across project files"
     category = RulePrefix.V
     severity = Severity.HIGH  # Blocker for releases

@@ -33,7 +33,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 from reveal.utils.lines import split_lines
 
@@ -44,6 +44,7 @@ class V020(BaseRule):
     """Validate that adapters implement element/structure contract correctly."""
 
     code = "V020"
+    scope = RuleScope.CROSS_FILE
     message = "Adapter element/structure contract violation"
     category = RulePrefix.V
     severity = Severity.MEDIUM

@@ -13,7 +13,7 @@ try:
 except ImportError:
     import tomli as tomllib  # Python < 3.11 fallback
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import toml_table
 from ...registry import extensions_for_languages
 from ...utils.request_cache import register_request_cache
@@ -40,6 +40,7 @@ class U502(BaseRule):
     """Detect URLs inconsistent with pyproject.toml canonical URLs."""
 
     code = "U502"
+    scope = RuleScope.CROSS_FILE
     message = "URL doesn't match canonical project URL"
     category = RulePrefix.U
     severity = Severity.MEDIUM

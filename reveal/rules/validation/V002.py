@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import re
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 from ...utils.path_utils import to_posix
 
@@ -25,6 +25,7 @@ class V002(BaseRule):
     """Validate that all analyzer files are properly registered."""
 
     code = "V002"
+    scope = RuleScope.CROSS_FILE
     message = "Analyzer file exists but may not be registered"
     category = RulePrefix.V
     severity = Severity.HIGH  # Unregistered analyzers silently don't work

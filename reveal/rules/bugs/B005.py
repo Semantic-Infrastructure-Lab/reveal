@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from importlib.util import find_spec
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin
 from ..imports import STDLIB_MODULES
 from ...analyzers.imports.javascript import JavaScriptExtractor
@@ -41,6 +41,7 @@ class B005(BaseRule, ASTParsingMixin):
     """Detect imports referencing non-existent modules."""
 
     code = "B005"
+    scope = RuleScope.CROSS_FILE
     message = "Import references non-existent or unresolvable module"
     category = RulePrefix.B
     severity = Severity.HIGH

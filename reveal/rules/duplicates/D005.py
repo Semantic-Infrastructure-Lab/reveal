@@ -31,7 +31,7 @@ from ...utils.request_cache import register_request_cache, register_validated_ca
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Sequence, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin
 from ...utils.pyparse import parse_python, statement_index
 from ...utils.gitignore import gitignore_enabled
@@ -204,6 +204,7 @@ class D005(BaseRule, ASTParsingMixin):
     """
 
     code = "D005"
+    scope = RuleScope.PROJECT_INDEX
     message = "Hardcoded literal cluster duplicated across files"
     category = RulePrefix.D
     severity = Severity.MEDIUM

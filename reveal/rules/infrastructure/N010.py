@@ -16,7 +16,7 @@ import os
 import re
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import NGINX_FILE_PATTERNS, nginx_resolve_include
 
 
@@ -24,6 +24,7 @@ class N010(BaseRule):
     """Detect deprecated X-XSS-Protection header in nginx configs."""
 
     code = "N010"
+    scope = RuleScope.CROSS_FILE
     message = "Deprecated X-XSS-Protection header present"
     category = RulePrefix.N
     severity = Severity.LOW

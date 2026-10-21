@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import ast
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 from ...utils.pyparse import parse_python
 
@@ -47,6 +47,7 @@ class V008(BaseRule):
     """Validate analyzer get_structure signatures: **kwargs, and no head/tail/range."""
 
     code = "V008"
+    scope = RuleScope.CROSS_FILE
     message = "Analyzer get_structure() missing **kwargs parameter"
     category = RulePrefix.V
     severity = Severity.HIGH  # High because this causes runtime errors

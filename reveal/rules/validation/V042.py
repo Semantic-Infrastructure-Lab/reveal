@@ -25,7 +25,7 @@ import re
 from pathlib import PurePath
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import has_noqa, load_sources, parse_test_module
 from reveal.utils.lines import split_lines
 
@@ -82,6 +82,7 @@ class V042(BaseRule):
     """
 
     code = "V042"
+    scope = RuleScope.CROSS_FILE
     message = "Test reads an env:// variable that only POSIX sets"
     category = RulePrefix.V
     severity = Severity.MEDIUM

@@ -13,7 +13,7 @@ from ...utils.request_cache import register_request_cache, register_validated_ca
 from pathlib import Path
 from typing import List, Dict, Any, Callable, Iterator, Optional, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...analyzers.imports import ImportGraph
 from ...analyzers.imports import service as import_analysis
 from ...analyzers.imports.base import get_extractor, get_all_extensions
@@ -372,6 +372,7 @@ class I002(BaseRule):
     """
 
     code = "I002"
+    scope = RuleScope.PROJECT_INDEX
     message = "Circular dependency detected"
     category = RulePrefix.I
     severity = Severity.HIGH

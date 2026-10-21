@@ -8,7 +8,7 @@ RULE_TEMPLATE = '''"""{code}: {name}.
 import logging
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, RuleScope, Severity
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ class {code}(BaseRule):
     """{name}."""
 
     code = "{code}"
+    scope = RuleScope.FILE  # FILE: answers from this file alone; PROJECT_INDEX / CROSS_FILE if it reads others
     message = "{name}"
     category = {category_value}
     severity = Severity.{severity}

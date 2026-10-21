@@ -22,6 +22,19 @@ class Severity(Enum):
     CRITICAL = "critical"
 
 
+class RuleScope(str, Enum):
+    """What a rule reads to decide on one file (BACK-1884).
+
+    The issue count that ``stats://``, ``overview`` and ``hotspots`` print counts the ``FILE``
+    rules only, so one file gets one count whatever else is in the tree: a rule that reads other
+    files answers differently when a scan cap, a sibling file or the project root changes.
+    A ``str`` enum, so a plugin rule may write ``scope = "file"``.
+    """
+    FILE = "file"                      # the checked file's own content (plus configuration)
+    PROJECT_INDEX = "project_index"    # a project-wide index built once (rules/scan_caches.py)
+    CROSS_FILE = "cross_file"          # other files, the project tree or the network, read per check
+
+
 # Canonical terminal marker per severity, keyed by the enum member itself.
 # Shared by Detection.__str__ (single-file check output) and the grouped
 # renderer in cli/file_checker.py (directory/recursive check output) so the
@@ -277,6 +290,10 @@ class BaseRule(ABC):
     category: Optional[RulePrefix] = None     # E, S, C, B, etc.
     severity: Severity = Severity.MEDIUM
     file_patterns: List[str] = ["*"]  # ['.py'] or ['*'] for universal
+    # What the rule reads to answer for one file. Every built-in rule declares it
+    # (tests/test_rule_scope_back1884.py); a rule that declares none is not part of the
+    # file-local issue count, which says so (BACK-1884).
+    scope: Optional[RuleScope] = None
     uri_patterns: List[str] = []    # Optional URI regex patterns
     # Optional: content categories to skip even when file_patterns is universal.
     # Categories come from the analyzer registry: 'code', 'data', 'doc', 'config'.

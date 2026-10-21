@@ -16,7 +16,7 @@ import re
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import NGINX_FILE_PATTERNS
 from reveal.utils.lines import split_lines
 
@@ -25,6 +25,7 @@ class N001(BaseRule):
     """Detect duplicate backend servers across nginx upstreams."""
 
     code = "N001"
+    scope = RuleScope.FILE
     message = "Multiple upstreams point to the same backend server"
     category = RulePrefix.N
     severity = Severity.HIGH

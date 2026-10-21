@@ -24,7 +24,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 from .adapter_utils import find_adapter_file, find_init_definition_line
 
@@ -45,6 +45,7 @@ class V019(BaseRule):
     """Validate that adapters follow initialization patterns correctly."""
 
     code = "V019"
+    scope = RuleScope.CROSS_FILE
     message = "Adapter initialization pattern violation"
     category = RulePrefix.V
     severity = Severity.HIGH

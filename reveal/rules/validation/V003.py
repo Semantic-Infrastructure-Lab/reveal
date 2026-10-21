@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import re
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,7 @@ class V003(BaseRule):
     """Validate feature consistency across analyzers."""
 
     code = "V003"
+    scope = RuleScope.CROSS_FILE
     message = "Analyzer may be missing common feature support"
     category = RulePrefix.V
     severity = Severity.MEDIUM

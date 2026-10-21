@@ -30,7 +30,7 @@ Scope:
 from typing import List, Dict, Any, Optional
 
 from .. import RuleRegistry
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root, iter_current_claim_docs, scan_doc_for_counts
 
 
@@ -38,6 +38,7 @@ class V029(BaseRule):
     """Validate documented quality-rule counts match enabled rules."""
 
     code = "V029"
+    scope = RuleScope.CROSS_FILE
     message = "Quality rule count mismatch in documentation"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases

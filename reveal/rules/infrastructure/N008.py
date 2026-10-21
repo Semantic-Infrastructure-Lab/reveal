@@ -18,7 +18,7 @@ Fix: add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" 
 import re
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import (
     NGINX_FILE_PATTERNS,
     NGINX_INCLUDE_PATTERN,
@@ -33,6 +33,7 @@ class N008(BaseRule):
     """Detect HTTPS server blocks without a Strict-Transport-Security header."""
 
     code = "N008"
+    scope = RuleScope.CROSS_FILE
     message = "HTTPS site missing Strict-Transport-Security header"
     category = RulePrefix.N
     severity = Severity.HIGH

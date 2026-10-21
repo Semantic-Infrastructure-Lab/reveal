@@ -21,7 +21,7 @@ vhost include file.
 import re
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import NGINX_FILE_PATTERNS
 from reveal.utils.lines import split_lines
 
@@ -87,6 +87,7 @@ class N006(BaseRule):
     """Detect dangerous combination of short timeout + large max body size."""
 
     code = "N006"
+    scope = RuleScope.FILE
     message = "Timeout too short for configured max body size — large transfers will be silently killed"
     category = RulePrefix.N
     severity = Severity.HIGH

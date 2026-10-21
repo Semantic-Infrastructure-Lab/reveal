@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,7 @@ class V015(BaseRule):
     """Validate README rules count matches registered rules."""
 
     code = "V015"
+    scope = RuleScope.CROSS_FILE
     message = "Rules count mismatch in documentation"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases

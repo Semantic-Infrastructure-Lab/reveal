@@ -18,7 +18,7 @@ Example:
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,7 @@ class I006(BaseRule):
     """
 
     code = "I006"
+    scope = RuleScope.FILE
     message = "Import inside function body"
     category = RulePrefix.I
     severity = Severity.LOW

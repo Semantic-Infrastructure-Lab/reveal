@@ -17,7 +17,7 @@ import ast
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin, TreeSitterParsingMixin
 from ...core import node_children, _zero_arg
 from ...registry import extensions_for_languages, language_for_extension
@@ -29,6 +29,7 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     """Detect bare/untyped except-all catch clauses."""
 
     code = "B001"
+    scope = RuleScope.FILE
     message = "Bare except clause catches all exceptions including SystemExit"
     category = RulePrefix.B
     severity = Severity.HIGH

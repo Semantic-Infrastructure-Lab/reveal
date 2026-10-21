@@ -17,7 +17,7 @@ Suppress with: # reveal:allow-server-tokens
 import re
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import (
     NGINX_FILE_PATTERNS,
     NGINX_INCLUDE_PATTERN,
@@ -32,6 +32,7 @@ class N009(BaseRule):
     """Detect nginx configs where server_tokens is not disabled."""
 
     code = "N009"
+    scope = RuleScope.CROSS_FILE
     message = "server_tokens not disabled — nginx version exposed in headers"
     category = RulePrefix.N
     severity = Severity.MEDIUM

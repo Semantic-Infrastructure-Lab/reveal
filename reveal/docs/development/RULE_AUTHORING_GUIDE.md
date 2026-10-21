@@ -56,12 +56,13 @@ verbosity):
 
 ```python
 # <project root>/.reveal/rules/custom/X999.py
-from reveal.rules.base import BaseRule, Detection
+from reveal.rules.base import BaseRule, Detection, RuleScope
 
 class X999(BaseRule):
     """Flags any file containing a TODO marker."""
 
     code = "X999"
+    scope = RuleScope.FILE   # answers from this file alone -- see `scope` below
     message = "todo-marker-found"
     category = "custom"      # plain string is fine — see typing below
     severity = "medium"      # plain string is fine — see typing below
@@ -107,6 +108,25 @@ loosely-typed rule:
   `I`, `M`, `N`, `S`, `V`, …). A prefix outside that set — `"custom"`
   itself is a common example — is left as the plain string you wrote; every
   consumer tolerates a `str` category by design, this isn't an error state.
+
+## `scope`: what the rule reads
+
+`scope` says what a rule reads to answer for one file, and it decides whether the rule is in
+the issue count that `stats://`, `overview` and `hotspots` print (`local_check_issues`: file-local
+rules only, so a file's count does not change with a scan cap, a sibling file or the project root).
+
+| `scope` | The rule reads | In the issue count |
+|---------|----------------|--------------------|
+| `RuleScope.FILE` | the checked file's own content, plus configuration | yes |
+| `RuleScope.PROJECT_INDEX` | a project-wide index built once and shared with pool workers (`rules/scan_caches.py`) | no |
+| `RuleScope.CROSS_FILE` | other files, the project tree or the network, on each check | no |
+
+Classify a rule by what it does when asked about a file path: a rule that also has a whole-tree
+`reveal://` mode is `FILE` if its file mode reads only that file. Every built-in rule declares a
+scope (`tests/test_rule_scope_back1884.py` fails on one that does not). A project or user rule that
+declares none still runs under `reveal check`, but is not in the issue count, and the count's
+`meta.issue_count.undeclared` lists it; add `scope = RuleScope.FILE` (or the string `"file"`) when
+the rule reads only its file. `reveal check` is the place for cross-file rules' findings.
 
 ## Debugging a rule that isn't showing up
 

@@ -25,7 +25,7 @@ from ...utils.request_cache import register_request_cache, register_validated_ca
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin
 from ...utils.pyparse import parse_python
 from ...analyzers._python_dict_usage import (
@@ -77,6 +77,7 @@ class T006(BaseRule, ASTParsingMixin):
     """
 
     code = "T006"
+    scope = RuleScope.PROJECT_INDEX
     message = "Function uses bare dict but a matching TypedDict is available"
     category = RulePrefix.T
     severity = Severity.LOW

@@ -16,7 +16,7 @@ Examples:
 import ast
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin
 
 
@@ -24,6 +24,7 @@ class T004(BaseRule, ASTParsingMixin):
     """Detect implicit Optional parameters (PEP 484 violation)."""
 
     code = "T004"
+    scope = RuleScope.FILE
     message = "Parameter has type hint with None default but missing Optional[]"
     category = RulePrefix.T
     severity = Severity.MEDIUM  # Style/compat issue; doesn't affect runtime correctness

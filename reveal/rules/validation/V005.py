@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import re
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 from ...utils.path_utils import to_posix
 
@@ -25,6 +25,7 @@ class V005(BaseRule):
     """Validate that all STATIC_HELP references point to existing files."""
 
     code = "V005"
+    scope = RuleScope.CROSS_FILE
     message = "Help file referenced in STATIC_HELP but does not exist"
     category = RulePrefix.V
     severity = Severity.HIGH  # Broken help commands are serious

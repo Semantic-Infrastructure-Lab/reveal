@@ -33,7 +33,7 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,7 @@ class V032(BaseRule):
     """Warn when unreleased commits have sat ahead of PyPI longer than a threshold."""
 
     code = "V032"
+    scope = RuleScope.CROSS_FILE
     message = "Release gap: commits unreleased to PyPI beyond threshold"
     category = RulePrefix.V
     severity = Severity.MEDIUM

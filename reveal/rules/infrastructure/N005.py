@@ -23,7 +23,7 @@ Real-world context:
 import re
 from typing import List, Dict, Any, Optional, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import NGINX_FILE_PATTERNS
 from reveal.utils.lines import split_lines
 
@@ -93,6 +93,7 @@ class N005(BaseRule):
     """Detect nginx timeout and buffer directives outside safe operational ranges."""
 
     code = "N005"
+    scope = RuleScope.FILE
     message = "Nginx directive value outside safe operational range"
     category = RulePrefix.N
     severity = Severity.MEDIUM

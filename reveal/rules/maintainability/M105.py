@@ -23,7 +23,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ class M105(BaseRule):
     """Detect CLI handlers not wired to main.py."""
 
     code = "M105"
+    scope = RuleScope.CROSS_FILE
     message = "CLI handler function not wired to main.py"
     category = RulePrefix.M
     severity = Severity.HIGH

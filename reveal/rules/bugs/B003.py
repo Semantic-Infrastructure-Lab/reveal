@@ -36,7 +36,7 @@ defensively by skipping it rather than crashing.
 import logging
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import TreeSitterParsingMixin
 from ...core import node_children, _zero_arg
 
@@ -47,6 +47,7 @@ class B003(BaseRule, TreeSitterParsingMixin):
     """Detect @property methods with overly complex bodies."""
 
     code = "B003"
+    scope = RuleScope.FILE
     message = "@property is too complex - properties should be simple getters"
     category = RulePrefix.B
     severity = Severity.MEDIUM

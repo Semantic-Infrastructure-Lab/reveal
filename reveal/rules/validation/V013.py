@@ -21,7 +21,7 @@ Scope:
 
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root, iter_current_claim_docs, scan_doc_for_counts
 
 
@@ -29,6 +29,7 @@ class V013(BaseRule):
     """Validate documented adapter counts match registered adapters."""
 
     code = "V013"
+    scope = RuleScope.CROSS_FILE
     message = "Adapter count mismatch in documentation"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases

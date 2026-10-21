@@ -29,7 +29,7 @@ import re
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import NGINX_FILE_PATTERNS
 
 
@@ -37,6 +37,7 @@ class N004(BaseRule):
     """Detect inconsistent ACME challenge root paths across server blocks."""
 
     code = "N004"
+    scope = RuleScope.FILE
     message = "Inconsistent ACME challenge root paths detected"
     category = RulePrefix.N
     severity = Severity.HIGH

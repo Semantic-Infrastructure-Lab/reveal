@@ -9,7 +9,7 @@ import re
 import logging
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin
 from ...utils.secrets import KNOWN_SECRET_PREFIXES
 from reveal.utils.lines import split_lines
@@ -73,6 +73,7 @@ class S001(BaseRule, ASTParsingMixin):
     """Detect hardcoded secrets in source files."""
 
     code = "S001"
+    scope = RuleScope.FILE
     message = "Hardcoded secret — move to environment variable or secrets manager"
     category = RulePrefix.S
     severity = Severity.HIGH

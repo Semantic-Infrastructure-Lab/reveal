@@ -34,7 +34,7 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .adapter_utils import get_adapter_class
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,7 @@ class V023(BaseRule):
     """
 
     code = "V023"
+    scope = RuleScope.FILE
     message = "Output Contract violation - non-compliant adapter output"
     category = RulePrefix.V
     severity = Severity.HIGH

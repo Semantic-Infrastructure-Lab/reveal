@@ -17,7 +17,7 @@ Should be:
 """
 
 from typing import List, Dict, Any, Optional
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import get_validation_schema, safe_eval_validation
 
 
@@ -25,6 +25,7 @@ class F005(BaseRule):
     """Detect custom validation failures in front matter."""
 
     code = "F005"
+    scope = RuleScope.FILE
     message = "Custom validation failed for front matter field"
     category = RulePrefix.F
     severity = Severity.MEDIUM  # Schema violation

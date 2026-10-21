@@ -41,7 +41,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root, has_noqa, load_sources
 from reveal.utils.lines import split_lines
 
@@ -208,6 +208,7 @@ class V041(BaseRule):
     """
 
     code = "V041"
+    scope = RuleScope.CROSS_FILE
     message = "Text I/O without encoding= (breaks on Windows cp1252)"
     category = RulePrefix.V
     severity = Severity.MEDIUM

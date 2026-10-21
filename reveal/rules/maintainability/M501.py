@@ -2,7 +2,7 @@ import logging
 import re
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,7 @@ class M501(BaseRule):
     """Detect unresolved TODO/FIXME/HACK/XXX comment markers."""
 
     code = "M501"
+    scope = RuleScope.FILE
     message = "Unresolved comment marker"
     category = RulePrefix.M
     severity = Severity.LOW

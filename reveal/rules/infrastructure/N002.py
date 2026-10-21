@@ -13,7 +13,7 @@ Example of violation:
 import re
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import (
     NGINX_FILE_PATTERNS,
     NGINX_INCLUDE_PATTERN,
@@ -28,6 +28,7 @@ class N002(BaseRule):
     """Detect SSL servers missing certificate configuration."""
 
     code = "N002"
+    scope = RuleScope.CROSS_FILE
     message = "SSL server block missing certificate configuration"
     category = RulePrefix.N
     severity = Severity.CRITICAL

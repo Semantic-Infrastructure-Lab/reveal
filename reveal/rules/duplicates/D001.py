@@ -18,7 +18,7 @@ from typing import List, Dict, Any, Optional
 from hashlib import sha256
 import re
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ._bodies import extract_function_body, is_trivial_hook_body
 from reveal.utils.lines import split_lines
 
@@ -29,6 +29,7 @@ class D001(BaseRule):
     """Detect exact duplicate functions (normalized)."""
 
     code = "D001"
+    scope = RuleScope.FILE
     message = "Duplicate function detected"
     category = RulePrefix.D
     severity = Severity.MEDIUM

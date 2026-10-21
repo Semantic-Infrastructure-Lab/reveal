@@ -21,7 +21,7 @@ try:
 except ImportError:
     import tomli as tomllib  # Python < 3.11 fallback
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import toml_table
 from reveal.utils.lines import split_lines
 
@@ -32,6 +32,7 @@ class M103(BaseRule):
     """Detect version mismatches in Python projects."""
 
     code = "M103"
+    scope = RuleScope.CROSS_FILE
     message = "Version mismatch between pyproject.toml and source code"
     category = RulePrefix.M
     severity = Severity.HIGH

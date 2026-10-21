@@ -17,7 +17,7 @@ Suppress per-server with: # reveal:allow-no-http2
 import re
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import NGINX_FILE_PATTERNS
 
 
@@ -25,6 +25,7 @@ class N011(BaseRule):
     """Detect SSL listener lines missing http2."""
 
     code = "N011"
+    scope = RuleScope.FILE
     message = "SSL listener missing http2"
     category = RulePrefix.N
     severity = Severity.LOW

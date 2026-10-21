@@ -34,7 +34,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ._dep_reconciliation import (
     _TraversalFailure, _directory_disclosure, python_declared_unused, rust_declared_unused,
 )
@@ -47,6 +47,7 @@ class I007(BaseRule):
     project (Python, Rust)."""
 
     code = "I007"
+    scope = RuleScope.PROJECT_INDEX
     message = "Declared dependency never imported anywhere in the project"
     category = RulePrefix.I
     severity = Severity.LOW

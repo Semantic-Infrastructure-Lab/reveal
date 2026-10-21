@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ class V009(BaseRule):
     """Validate internal documentation cross-references."""
 
     code = "V009"
+    scope = RuleScope.CROSS_FILE
     message = "Broken documentation cross-reference"
     category = RulePrefix.V
     severity = Severity.MEDIUM

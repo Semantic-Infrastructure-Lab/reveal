@@ -22,7 +22,7 @@ import ast
 import re
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root, has_noqa, is_dev_checkout
 from ...utils.path_utils import to_posix, _STATIC_UNSAFE_ROOTS
 from reveal.utils.lines import split_lines
@@ -153,6 +153,7 @@ class V026(BaseRule):
     """
 
     code = "V026"
+    scope = RuleScope.CROSS_FILE
     message = "Path-handling convention violation (use to_posix()/is_unsafe_scan_root())"
     category = RulePrefix.V
     severity = Severity.HIGH

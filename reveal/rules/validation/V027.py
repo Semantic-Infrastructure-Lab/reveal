@@ -53,7 +53,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...core.treesitter_compat import _zero_arg, node_children, tree_root, ts_parse
 from ...core.treesitter_parse import get_parser
 from ...utils.path_utils import to_posix
@@ -83,6 +83,7 @@ class V027(BaseRule):
     """Validate adapter guide docs match each adapter's live get_schema()."""
 
     code = "V027"
+    scope = RuleScope.CROSS_FILE
     message = "Adapter guide / schema query-param drift"
     category = RulePrefix.V
     severity = Severity.MEDIUM

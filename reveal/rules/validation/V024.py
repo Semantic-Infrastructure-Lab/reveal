@@ -19,7 +19,7 @@ Exemptions:
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 
@@ -27,6 +27,7 @@ class V024(BaseRule):
     """Validate every public URI adapter has a guide doc in docs/adapters/."""
 
     code = "V024"
+    scope = RuleScope.CROSS_FILE
     message = "Registered adapter missing guide file in docs/adapters/"
     category = RulePrefix.V
     severity = Severity.MEDIUM

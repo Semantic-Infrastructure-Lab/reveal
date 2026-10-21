@@ -13,7 +13,7 @@ Example of violation:
 import re
 from typing import List, Dict, Any, Optional, Set
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import NGINX_FILE_PATTERNS, nginx_resolve_include, nginx_strip_comments
 
 
@@ -21,6 +21,7 @@ class N003(BaseRule):
     """Detect proxy locations missing recommended headers."""
 
     code = "N003"
+    scope = RuleScope.CROSS_FILE
     message = "Proxy location missing recommended headers"
     category = RulePrefix.N
     severity = Severity.MEDIUM

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import re
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 from ...utils.path_utils import to_posix
 
@@ -22,6 +22,7 @@ class V006(BaseRule):
     """Validate that analyzers support standard output formats."""
 
     code = "V006"
+    scope = RuleScope.CROSS_FILE
     message = "Analyzer may not properly support all output formats"
     category = RulePrefix.V
     severity = Severity.MEDIUM

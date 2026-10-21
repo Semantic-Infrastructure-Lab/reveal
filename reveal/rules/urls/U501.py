@@ -7,7 +7,7 @@ import re
 import logging
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,7 @@ class U501(BaseRule):
     """Detect insecure http:// GitHub URLs."""
 
     code = "U501"
+    scope = RuleScope.FILE
     message = "GitHub URL uses insecure http:// protocol"
     category = RulePrefix.U
     severity = Severity.LOW

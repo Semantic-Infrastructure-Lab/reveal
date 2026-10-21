@@ -45,7 +45,7 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Sequence
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin, TreeSitterParsingMixin
 from . import _exception_flow as flow
 from ...core import node_children, _zero_arg
@@ -57,6 +57,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     """Detect silent broad exception handlers that swallow errors."""
 
     code = "B006"
+    scope = RuleScope.FILE
     message = "Broad exception handler with no visible failure signal can hide bugs"
     category = RulePrefix.B
     severity = Severity.MEDIUM

@@ -8,7 +8,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ class L004(BaseRule):
     """Validate documentation directories have index files."""
 
     code = "L004"
+    scope = RuleScope.CROSS_FILE
     message = "Documentation directory missing index"
     category = RulePrefix.L
     severity = Severity.LOW

@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import List, Type, Optional, Dict, Any, FrozenSet, Tuple
 
-from .base import BaseRule, Detection, RulePrefix, Severity
+from .base import BaseRule, Detection, RulePrefix, RuleScope, Severity
 from reveal.config import get_config
 from reveal.utils.request_cache import register_request_cache
 
@@ -498,6 +498,21 @@ class RuleRegistry:
         return codes
 
     @classmethod
+    def codes_in_scope(cls, scope: RuleScope) -> List[str]:
+        """Codes of the enabled rules that declare *scope*, sorted (BACK-1884)."""
+        if not cls._discovered:
+            cls.discover()
+        return sorted(r.code for r in cls._rules if r.enabled and r.scope == scope)
+
+    @classmethod
+    def codes_outside_scope(cls, scope: RuleScope) -> List[str]:
+        """Codes of every registered rule that does not declare *scope*, sorted. A rule that
+        declares no scope is outside every scope (BACK-1884)."""
+        if not cls._discovered:
+            cls.discover()
+        return sorted(r.code for r in cls._rules if r.scope != scope)
+
+    @classmethod
     def get_rule(cls, code: str) -> Optional[Type[BaseRule]]:
         """
         Get a specific rule by code.
@@ -774,6 +789,7 @@ __all__ = [
     'BaseRule',
     'Detection',
     'RulePrefix',
+    'RuleScope',
     'Severity',
     'RuleRegistry',
 ]

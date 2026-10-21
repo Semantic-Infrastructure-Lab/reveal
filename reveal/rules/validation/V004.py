@@ -11,7 +11,7 @@ Example violation:
 
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root, is_dev_checkout
 from ...utils.path_utils import to_posix
 
@@ -20,6 +20,7 @@ class V004(BaseRule):
     """Validate that analyzers have corresponding test files."""
 
     code = "V004"
+    scope = RuleScope.CROSS_FILE
     message = "Analyzer missing test file"
     category = RulePrefix.V
     severity = Severity.LOW  # Nice to have but not critical

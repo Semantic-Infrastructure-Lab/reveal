@@ -24,7 +24,7 @@ See internal-docs/design/HELP_SYSTEM_ARCHITECTURE.md §5 for the full surface ma
 import logging
 from typing import Any, Dict, List, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...utils.path_utils import to_posix
 from .utils import find_reveal_root
 
@@ -38,6 +38,7 @@ class V028(BaseRule):
     """Flag help_data yaml files that carry a (dead) query-param block."""
 
     code = "V028"
+    scope = RuleScope.CROSS_FILE
     message = "help_data yaml carries a dead query-param block"
     category = RulePrefix.V
     severity = Severity.MEDIUM

@@ -17,7 +17,7 @@ Exemptions:
 
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 
@@ -25,6 +25,7 @@ class V025(BaseRule):
     """Validate every public adapter appears in help://relationships clusters."""
 
     code = "V025"
+    scope = RuleScope.CROSS_FILE
     message = "Registered adapter missing from help://relationships cluster map"
     category = RulePrefix.V
     severity = Severity.HIGH

@@ -17,7 +17,7 @@ Should be:
 """
 
 from typing import List, Dict, Any, Optional
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import get_validation_schema, validate_type
 
 
@@ -34,6 +34,7 @@ class F004(BaseRule):
     """Detect field type mismatches in front matter."""
 
     code = "F004"
+    scope = RuleScope.FILE
     message = "Field type mismatch in front matter"
     category = RulePrefix.F
     severity = Severity.MEDIUM  # Schema violation

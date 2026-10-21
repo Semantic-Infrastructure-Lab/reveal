@@ -8,7 +8,7 @@ import re
 import logging
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ class B002(BaseRule):
     """Detect @staticmethod methods with 'self' parameter."""
 
     code = "B002"
+    scope = RuleScope.FILE
     message = "@staticmethod should not have 'self' parameter"
     category = RulePrefix.B
     severity = Severity.HIGH

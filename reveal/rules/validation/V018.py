@@ -16,7 +16,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ class V018(BaseRule):
     """Validate that all adapters have registered renderers."""
 
     code = "V018"
+    scope = RuleScope.CROSS_FILE
     message = "Adapter missing renderer registration"
     category = RulePrefix.V
     severity = Severity.HIGH

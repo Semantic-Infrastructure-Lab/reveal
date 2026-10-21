@@ -1,10 +1,11 @@
 """V034: shared pagination behavioral contract (BACK-1660)."""
-from ..base import BaseRule, RulePrefix, Severity
+from ..base import BaseRule, RulePrefix, Severity, RuleScope
 from .behavioral_contracts import pagination_violations
 
 
 class V034(BaseRule):
     code = 'V034'
+    scope = RuleScope.CROSS_FILE
     message = 'Shared pagination contract violation'
     category = RulePrefix.V
     severity = Severity.HIGH

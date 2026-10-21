@@ -8,7 +8,7 @@ They also consume significant LLM context tokens.
 import logging
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ class C902(BaseRule):
     """Detect functions that are too long (god functions)."""
 
     code = "C902"
+    scope = RuleScope.FILE
     message = "Function is too long"
     category = RulePrefix.C
     severity = Severity.MEDIUM

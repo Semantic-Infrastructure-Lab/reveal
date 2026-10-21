@@ -15,7 +15,7 @@ Suppress per-server with: # reveal:allow-no-rate-limit
 import re
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import NGINX_FILE_PATTERNS, nginx_strip_comments
 
 
@@ -23,6 +23,7 @@ class N012(BaseRule):
     """Detect server blocks with no rate limiting applied."""
 
     code = "N012"
+    scope = RuleScope.FILE
     message = "No rate limiting applied to server block"
     category = RulePrefix.N
     severity = Severity.LOW

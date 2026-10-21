@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ class M101(BaseRule):
     """Detect files that are too large."""
 
     code = "M101"
+    scope = RuleScope.FILE
     message = "File is too large"
     category = RulePrefix.M
     severity = Severity.MEDIUM

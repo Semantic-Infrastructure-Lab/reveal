@@ -32,7 +32,7 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class V014(BaseRule):
     """Validate AGENT_HELP.md's documented token cost against a computed estimate."""
 
     code = "V014"
+    scope = RuleScope.CROSS_FILE
     message = "Token-cost estimate mismatch in agent help documentation"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases

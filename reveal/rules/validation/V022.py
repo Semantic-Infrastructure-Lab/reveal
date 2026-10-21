@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 
@@ -29,6 +29,7 @@ class V022(BaseRule):
     """Validate package manifest includes all necessary files."""
 
     code = "V022"
+    scope = RuleScope.CROSS_FILE
     message = "Package manifest missing critical files"
     category = RulePrefix.V
     severity = Severity.HIGH  # Blocks deployment

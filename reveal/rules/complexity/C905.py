@@ -7,7 +7,7 @@ Deep nesting indicates complex control flow that's hard to reason about.
 import logging
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ class C905(BaseRule):
     """Detect functions with excessive nesting depth."""
 
     code = "C905"
+    scope = RuleScope.FILE
     message = "Nesting depth too high"
     category = RulePrefix.C
     severity = Severity.MEDIUM

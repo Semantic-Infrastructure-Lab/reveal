@@ -10,7 +10,7 @@ A keyword count (reveal.complexity.fallback_complexity, shared with ast:// and s
 
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from reveal.complexity import fallback_complexity
 
 
@@ -23,6 +23,7 @@ class C901(BaseRule):
     """
 
     code = "C901"
+    scope = RuleScope.FILE
     message = "Function is too complex"
     category = RulePrefix.C
     severity = Severity.MEDIUM

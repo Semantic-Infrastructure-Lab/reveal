@@ -7,7 +7,7 @@ Universal rule that works on any text file.
 import logging
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,7 @@ class E501(BaseRule):
     """Detect lines that exceed maximum length."""
 
     code = "E501"
+    scope = RuleScope.FILE
     message = "Line too long"
     category = RulePrefix.E
     severity = Severity.LOW

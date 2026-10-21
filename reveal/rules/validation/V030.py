@@ -19,7 +19,7 @@ import logging
 import re
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ class V030(BaseRule):
     """Validate the README.md headline language count against the live registry."""
 
     code = "V030"
+    scope = RuleScope.CROSS_FILE
     message = "README headline language count mismatch"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases

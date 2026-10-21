@@ -19,13 +19,14 @@ Should have fields:
 """
 
 from typing import List, Dict, Any, Optional
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 
 
 class F002(BaseRule):
     """Detect empty YAML front matter in markdown files."""
 
     code = "F002"
+    scope = RuleScope.FILE
     message = "Front matter is empty (no fields)"
     category = RulePrefix.F
     severity = Severity.LOW  # Not critical, but suspicious

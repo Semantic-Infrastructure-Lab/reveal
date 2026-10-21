@@ -13,7 +13,7 @@ import urllib.request
 from urllib.error import URLError, HTTPError
 import socket
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...utils.threadsafe import main_thread_gc
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,7 @@ class L002(BaseRule):
     """Detect broken external links in Markdown files."""
 
     code = "L002"
+    scope = RuleScope.CROSS_FILE
     message = "Broken external link"
     category = RulePrefix.L
     severity = Severity.LOW  # Lower severity - external links can be transient

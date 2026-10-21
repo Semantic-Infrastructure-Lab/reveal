@@ -17,13 +17,14 @@ Should be:
 """
 
 from typing import List, Dict, Any, Optional
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 
 
 class F001(BaseRule):
     """Detect missing YAML front matter in markdown files."""
 
     code = "F001"
+    scope = RuleScope.FILE
     message = "Markdown file missing front matter"
     category = RulePrefix.F
     severity = Severity.LOW  # Not critical, but good practice

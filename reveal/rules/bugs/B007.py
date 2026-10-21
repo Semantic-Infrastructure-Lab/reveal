@@ -38,7 +38,7 @@ or a direct check of reveal/adapters/**/*.py).
 import ast
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin
 from ...utils.pyparse import statement_index
 
@@ -47,6 +47,7 @@ class B007(BaseRule, ASTParsingMixin):
     """Detect adapter exception handlers that log but don't record_composed_error()."""
 
     code = "B007"
+    scope = RuleScope.FILE
     message = "Adapter exception handler logs the failure but never records it in the Output Contract envelope"
     category = RulePrefix.B
     severity = Severity.MEDIUM

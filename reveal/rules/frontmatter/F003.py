@@ -19,7 +19,7 @@ Should be:
 """
 
 from typing import List, Dict, Any, Optional
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import get_validation_schema
 
 
@@ -27,6 +27,7 @@ class F003(BaseRule):
     """Detect required fields missing from front matter."""
 
     code = "F003"
+    scope = RuleScope.FILE
     message = "Required field missing from front matter"
     category = RulePrefix.F
     severity = Severity.MEDIUM  # Schema violation

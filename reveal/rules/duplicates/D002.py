@@ -20,7 +20,7 @@ from collections import Counter
 import math
 import re
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ._bodies import extract_function_body, is_trivial_hook_body
 from reveal.utils.lines import split_lines
 
@@ -31,6 +31,7 @@ class D002(BaseRule):
     """Discover potential duplicate functions worth investigating."""
 
     code = "D002"
+    scope = RuleScope.FILE
     message = "Potential duplicate candidate"
     category = RulePrefix.D
     severity = Severity.LOW  # Advisory, not a defect

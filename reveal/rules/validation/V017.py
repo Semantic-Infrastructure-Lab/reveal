@@ -19,7 +19,7 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 
@@ -43,6 +43,7 @@ class V017(BaseRule):
     """
 
     code = "V017"
+    scope = RuleScope.FILE
     message = "Tree-sitter node types missing for supported language"
     category = RulePrefix.V
     severity = Severity.HIGH

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import re
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ class V001(BaseRule):
     """Validate that all supported file types have help documentation."""
 
     code = "V001"
+    scope = RuleScope.CROSS_FILE
     message = "File type analyzer missing help documentation"
     category = RulePrefix.V
     severity = Severity.MEDIUM

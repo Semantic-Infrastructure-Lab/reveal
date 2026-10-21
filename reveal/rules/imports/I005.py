@@ -8,7 +8,7 @@ import logging
 from collections import defaultdict
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...analyzers.imports.base import get_all_extensions, get_extractor
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class I005(BaseRule):
     """
 
     code = "I005"
+    scope = RuleScope.FILE
     message = "Duplicate import statement"
     category = RulePrefix.I
     severity = Severity.LOW  # Low severity - cosmetic issue

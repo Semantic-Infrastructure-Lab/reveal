@@ -39,7 +39,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...analyzers.imports.base import get_extractor
 from ...utils.path_utils import is_test_dir, resolve_project_root
 from . import STDLIB_MODULES
@@ -53,6 +53,7 @@ class I008(BaseRule):
     declared-dependency manifest (Python, Rust)."""
 
     code = "I008"
+    scope = RuleScope.CROSS_FILE
     message = "Import not declared in the project manifest"
     category = RulePrefix.I
     severity = Severity.LOW

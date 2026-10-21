@@ -11,7 +11,7 @@ from ...utils.request_cache import register_request_cache, register_validated_ca
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set, Iterable, Sequence, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...utils.gitignore import gitignore_enabled
 from ...utils.path_utils import (
     EVIDENCE, _walk_code_files, is_test_path, is_unsafe_scan_root, python_package_top,
@@ -240,6 +240,7 @@ class M102(BaseRule):
     """Detect Python files not imported anywhere in the package."""
 
     code = "M102"
+    scope = RuleScope.PROJECT_INDEX
     message = "File appears to be orphaned (not imported anywhere)"
     category = RulePrefix.M
     severity = Severity.MEDIUM

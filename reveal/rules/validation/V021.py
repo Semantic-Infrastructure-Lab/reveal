@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import ast
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import find_reveal_root
 from ...utils.path_utils import to_posix
 from ...utils.pyparse import parse_python
@@ -58,6 +58,7 @@ class V021(BaseRule):
     """Validate analyzers use tree-sitter instead of regex for code parsing."""
 
     code = "V021"
+    scope = RuleScope.CROSS_FILE
     message = "Analyzer uses regex when tree-sitter is available"
     category = RulePrefix.V
     severity = Severity.HIGH

@@ -29,7 +29,7 @@ import ast
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin
 from ...core.treesitter_compat import tree_root
 from ...core.treesitter_parse import GrammarUnavailable, get_tree
@@ -41,6 +41,7 @@ class M104(BaseRule, ASTParsingMixin):
     """Detect hardcoded lists that may become stale."""
 
     code = "M104"
+    scope = RuleScope.FILE
     message = "Hardcoded list detected"
     category = RulePrefix.M
     severity = Severity.LOW

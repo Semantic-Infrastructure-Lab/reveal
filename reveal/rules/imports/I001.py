@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...analyzers.imports.base import get_extractor, get_all_extensions
 from ...analyzers.imports.unused import bound_name, is_named_import, unused_entries
 
@@ -24,6 +24,7 @@ class I001(BaseRule):
     """Detect unused imports in supported languages (Python, JavaScript, Go, Rust)."""
 
     code = "I001"
+    scope = RuleScope.FILE
     message = "Unused import detected"
     category = RulePrefix.I
     severity = Severity.MEDIUM

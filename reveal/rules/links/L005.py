@@ -9,7 +9,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ class L005(BaseRule):
     """Validate documentation has sufficient cross-references."""
 
     code = "L005"
+    scope = RuleScope.CROSS_FILE
     message = "Documentation has low cross-reference density"
     category = RulePrefix.L
     severity = Severity.LOW

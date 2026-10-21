@@ -13,7 +13,7 @@ avoid flooding on legacy codebases.
 import ast
 from typing import List, Dict, Any, Optional
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin
 
 
@@ -21,6 +21,7 @@ class T005(BaseRule, ASTParsingMixin):
     """Report functions with partial type annotations."""
 
     code = "T005"
+    scope = RuleScope.FILE
     message = "Function has incomplete type annotations"
     category = RulePrefix.T
     severity = Severity.LOW

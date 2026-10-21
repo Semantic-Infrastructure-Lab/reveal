@@ -30,7 +30,7 @@ import ast
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import has_noqa, load_sources, parse_test_module
 from reveal.utils.lines import split_lines
 
@@ -132,6 +132,7 @@ class V040(BaseRule):
     """
 
     code = "V040"
+    scope = RuleScope.CROSS_FILE
     message = "Tree-sitter Node accessor that breaks on the language-pack 1.8.1 floor"
     category = RulePrefix.V
     severity = Severity.MEDIUM

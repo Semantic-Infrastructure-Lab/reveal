@@ -25,7 +25,7 @@ import ast
 import re
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import has_noqa, load_test_suite, parse_test_module
 from reveal.utils.lines import split_lines
 
@@ -163,6 +163,7 @@ class V038(BaseRule):
     """
 
     code = "V038"
+    scope = RuleScope.CROSS_FILE
     message = "Raw subprocess bytes asserted on newlines without normalising \\r\\n"
     category = RulePrefix.V
     severity = Severity.MEDIUM

@@ -25,7 +25,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from .utils import has_noqa, load_sources
 from reveal.utils.lines import split_lines
 
@@ -129,6 +129,7 @@ class V039(BaseRule):
     """
 
     code = "V039"
+    scope = RuleScope.CROSS_FILE
     message = "POSIX path pattern in a test that breaks on Windows"
     category = RulePrefix.V
     severity = Severity.MEDIUM
