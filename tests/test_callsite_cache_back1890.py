@@ -247,6 +247,8 @@ def test_uncacheable_structure_build_stores_no_layer(project, monkeypatch):
 
 
 def test_unreadable_file_fails_the_same_cold_and_warm(project, spy):
+    if os.name == "nt":
+        pytest.skip("chmod 0 does not make a file unreadable on Windows")
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         pytest.skip("root reads a mode 000 file")
     target = project / "b.py"
