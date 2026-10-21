@@ -7,6 +7,7 @@ process-wide cache hands one thread's tree-sitter nodes to another.
 """
 import copy
 import functools
+import gc
 import importlib.util
 import json
 import threading
@@ -254,17 +255,24 @@ def _on_new_thread(fn):
 
 @pytest.mark.mcp
 def test_mcp_checks_of_a_markdown_and_a_javascript_file_alternate_across_threads(tmp_path):
-    """Each call lands on a new thread, as anyio dispatches; no cache may hand a tree across."""
+    """Each call lands on a new thread, as anyio dispatches; no cache may hand a tree across.
+
+    Panics (``PanicException``, a BaseException) only happen on the 1.8.1 binding, so this is
+    run on that venv as well. A Node merely *dropped* on another thread there prints an
+    unraisable RuntimeError at exit that no hook in the test sees; the static rule above
+    (tree-sitter caches are thread-local) is what covers that case.
+    """
     doc, src = tmp_path / 'doc.md', tmp_path / 'app.js'
     doc.write_text(_MD, encoding='utf-8')
     src.write_text(_JS, encoding='utf-8')
     answers = {}
-    for round_number in range(2):
+    for round_number in range(3):
         for path, marker in ((doc, 'L001'), (src, 'B006')):
             result, error = _on_new_thread(lambda p=path: mcp_server.reveal_check(str(p)))
             assert error is None, f'{path.name} round {round_number}: {type(error).__name__}: {error}'
             assert marker in result, result  # positive control: the rule that needs a tree ran
             assert answers.setdefault(path.name, result) == result
+            gc.collect()
 
 
 def test_scan_of_a_tree_reports_a_cache_added_to_it(tmp_path):
