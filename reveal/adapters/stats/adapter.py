@@ -639,7 +639,9 @@ class MetricsAdapter(ResourceAdapter):
         self._disclose_exclusions(result)
 
         if hotspots:
-            self._add_hotspots(result, controlled_stats)
+            # The filtered population, not the limit/offset page: paging the files list must not
+            # change which files are the hotspots (BACK-2146).
+            self._add_hotspots(result, dir_file_stats)
 
         if summary_only:
             result.pop('files', None)
