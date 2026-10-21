@@ -2114,7 +2114,7 @@ manifest entry with a `recall:` block names an independent oracle from
 |---|---|---|
 | `gcc-c` | GCC opens each literal quoted include in an isolated probe | Redis, curl |
 | `gcc-cpp` | The same probe as C++ | assimp |
-| `python-ast` | `ast.parse` plus filesystem module resolution; `TYPE_CHECKING` imports skipped | celery |
+| `python-ast` | `ast.parse` plus filesystem module resolution; `TYPE_CHECKING` imports skipped | celery, reveal's own tree |
 | `rust-use` | Deepest real module file for `crate::`/`super::`/`self::` use paths | Meilisearch, ripgrep |
 | `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java` | Elasticsearch `server/src/main/java`, guava |
 | `typescript-compiler` | TypeScript parser plus `ts.resolveModuleName`, including aliases, re-exports, dynamic and type-query imports | VS Code base, Excalidraw workspace, three.js src |
@@ -2130,7 +2130,18 @@ sorted importers); Go uses the per-file form, whose package view expands a direc
 files. It fails on a capped scan, a cut module list, non-JSON output or a nonzero exit, and
 never reads the adapter's private graph. `partial_files` is the count the CLI prints for the
 whole scan tree, so it includes files of other languages: cpp-assimp's 458 counts one Rust
-file (`port/assimp_rs/src/lib.rs`) that the C++-only count of 457 did not.
+file (`port/assimp_rs/src/lib.rs`) that the C++-only count of 457 did not. The Python callers
+row makes one `calls://<scan>?callers=NAME` request per oracle target and fails on an error or
+a cut list (rows shown differ from `total_callers`).
+
+The gate scores one parameter combination, the oracles' rule: every static edge, function-level
+imports and tests included, `TYPE_CHECKING` excluded. It records the `edge_rule` each answer
+prints and refuses an answer computed under another rule. The report's `declined` list names
+the combinations the engine states but the gate cannot score yet, with the reason:
+`lazy=exclude` and `lazy=only` (`depends://` takes no `&lazy`, and
+`imports://<dir>?rank=fan-in&lazy=` returns counts, not importers) and `tests=exclude` (no
+engine parameter). The `python-reveal` population is reveal's own repository at public
+`4d4116cc` (whole tree, tests included): 1,397 files, 544 targets, 4,986/4,986 edges, 0 extra.
 
 ```bash
 npm ci --prefix scripts/oracles --ignore-scripts --no-audit --no-fund  # optional compiler oracle
@@ -2155,7 +2166,8 @@ not); a baseline or measurement without the field is listed under `notes` in the
 not compared. Precision here covers fan-in to oracle-listed targets only; edges to
 other targets are outside its denominator (nine such Celery edges, one ripgrep and
 one curl edge in the reviewed snapshot, none in Go). The Go file projection is
-called through private adapter methods, not an independent public API. Missing
+`depends://<file>`'s package view. One knob is still set on the adapter class rather than per
+request: VS Code's 20,000-file scan cap, which `depends://` has no query parameter for. Missing
 GCC, missing corpora, changed populations, zero measurements, a file the Python oracle
 cannot parse, an ambiguous Java type or metric drops fail loudly. `--corpus ID` measures
 a subset against its own baseline rows; `--write-baseline` is for reviewed local
