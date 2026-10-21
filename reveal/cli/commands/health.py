@@ -203,6 +203,19 @@ def _check_target(target: str, args: Namespace):
 _HEALTH_MAX_FILES = 5000
 
 
+def _reveal_child(*argv: str) -> tuple:
+    """Command and env for a child `reveal` that runs this process's interpreter and imports (BACK-2125).
+
+    A bare 'reveal' resolves through PATH, which can be another venv or version. The parent's
+    sys.path goes on PYTHONPATH so the child sees the same package and dependencies even when
+    HOME or the cwd differ (a source checkout that is not installed, a user site).
+    """
+    import os
+    env = dict(os.environ)
+    env['PYTHONPATH'] = os.pathsep.join(entry for entry in sys.path if entry)
+    return [sys.executable, '-m', 'reveal', *argv], env
+
+
 def _check_code(path: Path, args: Namespace) -> HealthResult:
     """Use the same scan policy and the actual check result shapes."""
     import subprocess
@@ -219,11 +232,11 @@ def _check_code(path: Path, args: Namespace) -> HealthResult:
             f"code: skipped — {count} files exceeds health check limit "
             f"({_HEALTH_MAX_FILES}). Use `reveal check {path}` directly.", 'skipped', accounting)
     select = getattr(args, 'select', None) or 'B,S,I,C'
-    cmd = ['reveal', 'check', str(path), f'--select={select}', '--only-failures', '--format=json']
+    cmd, env = _reveal_child('check', str(path), f'--select={select}', '--only-failures', '--format=json')
     if not gitignore_enabled():
         cmd.append('--no-gitignore')
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120,
-                            encoding='utf-8', errors='replace')
+                            encoding='utf-8', errors='replace', env=env)
     try:
         data = json.loads(result.stdout)
         return _code_result(data, result.returncode, accounting)
@@ -343,7 +356,7 @@ def _check_uri(scheme: str, uri: str, args: Namespace) -> HealthResult:
         'stats': [],
     }
     flags = _URI_FLAGS.get(scheme, [])
-    cmd = ['reveal', uri] + flags + ['--only-failures', '--format=json']
+    cmd, env = _reveal_child(uri, *flags, '--only-failures', '--format=json')
 
     # Hard outer ceiling independent of what any individual adapter promises
     # internally -- this is the one health-check path reachable straight from
@@ -351,7 +364,8 @@ def _check_uri(scheme: str, uri: str, args: Namespace) -> HealthResult:
     # today, whatever's added tomorrow), so a hung remote host can't block the
     # call forever. Mirrors _check_code's timeout=120 below.
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, encoding='utf-8', errors='replace')
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, encoding='utf-8', errors='replace',
+                                env=env)
     except subprocess.TimeoutExpired:
         return HealthResult(2, f"{scheme}: timed out", 'failed')
     return _uri_health_result(scheme, result.returncode, result.stdout, result.stderr)

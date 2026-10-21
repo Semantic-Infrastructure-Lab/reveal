@@ -195,6 +195,19 @@ class TestCheckCode(unittest.TestCase):
         self.assertNotIn('healthy', summary)
 
     @patch('subprocess.run')
+    def test_children_run_under_the_parents_interpreter(self, mock_run):
+        # BACK-2125: a bare 'reveal' resolves through PATH, which can be another venv or version.
+        from reveal.cli.commands.health import _check_code
+        mock_run.return_value = MagicMock(returncode=0, stdout='{}', stderr='')
+        _check_uri('custom', 'custom://host', Namespace())
+        uri_cmd = mock_run.call_args[0][0]
+        with tempfile.TemporaryDirectory() as tmp:
+            _check_code(Path(tmp), Namespace())
+        code_cmd = mock_run.call_args[0][0]
+        for cmd in (uri_cmd, code_cmd):
+            self.assertEqual(cmd[:3], [sys.executable, '-m', 'reveal'])
+
+    @patch('subprocess.run')
     def test_subprocess_called_with_timeout(self, mock_run):
         """subprocess.run must include timeout= to prevent indefinite hangs (BACK-094)."""
         mock_run.return_value = MagicMock(returncode=0, stdout='')
