@@ -21,6 +21,7 @@ have no signature terminator, so they also guard the rule against a Python-only 
 """
 
 import math
+import re
 import types
 from difflib import SequenceMatcher
 
@@ -158,8 +159,8 @@ def _reported(rule, lang, structure, content):
 
 @pytest.fixture
 def counters(monkeypatch):
-    """Count SequenceMatcher builds and ratio() calls, and math.sqrt calls, inside D002."""
-    counts = {"built": 0, "ratio": 0, "sqrt": 0}
+    """Count SequenceMatcher builds, ratio()/quick_ratio() calls and math.sqrt calls inside D002."""
+    counts = {"built": 0, "ratio": 0, "quick": 0, "sqrt": 0}
 
     class Counting(SequenceMatcher):
         def __init__(self, *args, **kwargs):
@@ -169,6 +170,10 @@ def counters(monkeypatch):
         def ratio(self):
             counts["ratio"] += 1
             return super().ratio()
+
+        def quick_ratio(self):
+            counts["quick"] += 1
+            return super().quick_ratio()
 
     def counting_sqrt(value):
         counts["sqrt"] += 1
@@ -207,12 +212,54 @@ class TestWorkIsDoneOncePerFunction:
         # The exhaustive code runs one per pair (66).
         assert counters["ratio"] == D002.MAX_CANDIDATES, counters
 
+    def test_tester_builds_one_matcher_per_function_for_every_pair(self, counters):
+        """Same claim as above without the early exit hiding it: all 66 pairs are tested."""
+        content, structure = _build("ruby", COPIES)
+        rule = D002()
+        tokens = [rule._tokens(rule._normalize(extract_function_body(f, content)))
+                  for f in structure["functions"]]
+        tester = d002_module._SequenceTester(rule, tokens)
+        assert all(tester.is_match(i, j) for i in range(12) for j in range(i + 1, 12))
+        assert counters["built"] == len(COPIES) - 1, counters  # every function but the first is a seq2
+        assert counters["ratio"] == COPY_PAIRS, counters
+
     def test_cosine_magnitude_is_computed_once_per_function(self, counters):
         content, structure = _build("ruby", COPIES)
         _reported(D002(), "ruby", structure, content)
         # One sqrt per function for its magnitude plus one per scored pair for the
         # interestingness (the old code: 2 magnitudes + 1 interestingness per pair = 198).
         assert counters["sqrt"] <= len(COPIES) + COPY_PAIRS, counters
+
+
+# ---------------------------------------------------------------- the cheap upper bounds
+
+@pytest.mark.parametrize("lang", ["ruby", "lua"])
+class TestUpperBoundsSkipRatio:
+    """real_quick_ratio (2*min(la,lb)/(la+lb)) and quick_ratio (2*|multiset intersection|/(la+lb))
+    are upper bounds of ratio(): matched blocks are a subset of the multiset intersection, which is
+    no larger than the shorter sequence. A pair whose bound is under the floor cannot pass, so
+    ratio() (17.5 of celery's 24 s) is not run. Both pairs clear the cosine floor, so only these
+    bounds stand between them and a ratio() call. Measured:
+
+      junk pair (a vs b with 8 body lines replaced), cosine / quick_ratio shaped / literal:
+        ruby 0.631 / 0.440 / 0.242,  lua 0.671 / 0.495 / 0.323  (floors 0.5 / 0.7)
+      length pair (b = a with its middle repeated 5x), cosine / real_quick_ratio:
+        ruby 0.898 / 0.367,  lua 0.852 / 0.386  (floor 0.5; quick_ratio 0.358 / 0.376)
+    """
+
+    def test_multiset_bound_rejects_without_running_ratio(self, lang, counters):
+        content, structure = _build(lang, [("a", "a", 0), ("b", "b", 8)])
+        assert _reported(D002(), lang, structure, content) == []
+        assert counters["ratio"] == 0, counters
+        assert counters["quick"] == 2, counters  # shaped and literal stage
+
+    def test_length_bound_rejects_before_the_multiset_bound(self, lang, counters):
+        small = _function_lines(lang, "small", "s")
+        big = _function_lines(lang, "big", "b")
+        big = big[:2] + big[2:-2] * 5 + big[-2:]
+        content, structure = _build(lang, [("small", small), ("big", big)])
+        assert _reported(D002(), lang, structure, content) == []
+        assert counters["quick"] == 0 and counters["ratio"] == 0, counters
 
 
 # ---------------------------------------------------------------- output equality
@@ -322,3 +369,39 @@ class TestFloorsStillDecide:
         vec = [rule._vectorize(extract_function_body(f, content)) for f in structure["functions"]]
         assert rule._cosine_similarity(*vec) >= rule.MIN_SIMILARITY  # the sequence floors alone decide
         assert found == []
+
+    def test_reordered_body_clears_every_bound_but_not_the_literal_floor(self, lang):
+        """Same statements rotated by 3: the multiset bound (0.977 / 0.974) lets the pair through
+        to ratio(), which gives shaped 0.250 / 0.385 and literal 0.591 / 0.564 (ruby / lua), under
+        the 0.5 shaped and 0.7 literal floors. A literal test against the shaped floor (0.5) would
+        report it."""
+        base = _function_lines(lang, "base", "base")
+        inner = base[1:-1]
+        moved = [base[0].replace("base", "var")] + inner[3:] + inner[:3] + [base[-1]]
+        content, structure = _build(lang, [("base", base), ("var", moved)])
+        rule = D002()
+        t1, t2 = (rule._tokens(rule._normalize(extract_function_body(f, content)))
+                  for f in structure["functions"])
+        literal = SequenceMatcher(None, t1[1], t2[1], autojunk=False)
+        assert literal.quick_ratio() >= rule.MIN_LITERAL_MATCH
+        assert rule.MIN_SEQUENCE_MATCH <= literal.ratio() < rule.MIN_LITERAL_MATCH
+        assert _reported(rule, lang, structure, content) == []
+
+    def test_renamed_pair_just_over_the_shaped_floor_is_reported(self, lang):
+        """Every local renamed and one (ruby) or two (lua) lines replaced: shaped 0.511 / 0.533,
+        literal 0.600 / 0.507, so only the shaped stage (floor 0.5) reports it. A shaped test
+        against the literal floor (0.7) would lose it."""
+        renames = {"result": "acc", "items": "rows", "item": "entry", "limit": "cap",
+                   "label": "caption", "log_result": "emit_report"}
+        pattern = re.compile("|".join(r"\b%s\b" % word for word in renames))
+        junk = {"ruby": 1, "lua": 2}[lang]
+        var = [pattern.sub(lambda m: renames[m.group(0)], line)
+               for line in _function_lines(lang, "var", "var", junk=junk)]
+        content, structure = _build(lang, [("base", _function_lines(lang, "base", "base")), ("var", var)])
+        rule = D002()
+        t1, t2 = (rule._tokens(rule._normalize(extract_function_body(f, content)))
+                  for f in structure["functions"])
+        ratio = lambda a, b: SequenceMatcher(None, a, b, autojunk=False).ratio()  # noqa: E731
+        assert rule.MIN_SEQUENCE_MATCH <= ratio(t1[0], t2[0]) < rule.MIN_LITERAL_MATCH
+        assert ratio(t1[1], t2[1]) < rule.MIN_LITERAL_MATCH
+        assert len(_reported(rule, lang, structure, content)) == 1

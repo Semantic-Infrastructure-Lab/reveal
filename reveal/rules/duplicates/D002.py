@@ -100,7 +100,40 @@ class D002(BaseRule):
         if len(functions) < 2:
             return []
 
-        # Extract vectors for all functions
+        func_vectors = self._function_vectors(functions, content)
+
+        # Highest interestingness first. Test the sequence floors in rank order and stop at
+        # the MAX_CANDIDATES-th pass: the reported list is the first MAX_CANDIDATES passing
+        # pairs in this order, and a pair ranked below them is never reported whether or not
+        # it passes, so it is not tested. Ranking all scored pairs then filtering is the same
+        # list as filtering then ranking (the sort is stable). celery: 73,713 pairs reached
+        # the sequence test and 47,723 ran ratio(); a file reports at most MAX_CANDIDATES.
+        tester = _SequenceTester(self, [v[3] for v in func_vectors])
+        candidates = []
+        for interestingness, similarity, combined_size, i, j in self._ranked_pairs(func_vectors):
+            if not tester.is_match(i, j):
+                continue
+            candidates.append((interestingness, similarity, combined_size,
+                               func_vectors[i][0], func_vectors[j][0]))
+            if len(candidates) == self.MAX_CANDIDATES:
+                break
+
+        # Generate detections for top candidates
+        detections: List[Detection] = []
+        for interestingness, similarity, combined_size, func1, func2 in candidates[:self.MAX_CANDIDATES]:
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=func2.get('line', 0),
+                message=f"{self.message}: '{func2['name']}' ~{similarity:.0%} similar to '{func1['name']}' (line {func1.get('line', 0)})",
+                suggestion=f"Combined {combined_size} lines. Worth investigating if logic can be shared.",
+                context=f"Interestingness: {interestingness:.1f} (similarity {similarity:.0%} × size {combined_size})"
+            ))
+
+        return detections
+
+    def _function_vectors(self, functions: List[Dict[str, Any]], content: str) -> list:
+        """(function, vector, line count, tokens, vector magnitude) per function large
+        enough to compare; each is computed once here, not once per pair."""
         func_vectors = []
         for func in functions:
             func_body = extract_function_body(func, content)
@@ -117,44 +150,29 @@ class D002(BaseRule):
                 continue
 
             vector = self._vectorize(func_body)
-            func_vectors.append((func, vector, line_count, self._tokens(normalized)))
+            func_vectors.append((func, vector, line_count, self._tokens(normalized),
+                                 self._magnitude(vector)))
+        return func_vectors
 
-        # Compute pairwise similarities with interestingness score
-        candidates = []
-
+    def _ranked_pairs(self, func_vectors: list) -> list:
+        """(interestingness, similarity, combined size, i, j) for every pair that clears
+        the cosine floor, highest interestingness first; equal scores keep (i, j) order."""
+        scored = []
         for i in range(len(func_vectors)):
             for j in range(i + 1, len(func_vectors)):
-                func1, vec1, size1, shape1 = func_vectors[i]
-                func2, vec2, size2, shape2 = func_vectors[j]
+                _, vec1, size1, _, mag1 = func_vectors[i]
+                _, vec2, size2, _, mag2 = func_vectors[j]
 
-                similarity = self._cosine_similarity(vec1, vec2)
-
+                similarity = self._cosine_similarity(vec1, vec2, mag1, mag2)
                 if similarity < self.MIN_SIMILARITY:
-                    continue
-                if not self._is_sequence_match(shape1, shape2):
                     continue
 
                 # Interestingness: similarity weighted by size (sqrt to not over-weight huge functions)
                 combined_size = size1 + size2
-                interestingness = similarity * math.sqrt(combined_size)
+                scored.append((similarity * math.sqrt(combined_size), similarity, combined_size, i, j))
 
-                candidates.append((interestingness, similarity, combined_size, func1, func2))
-
-        # Sort by interestingness (descending)
-        candidates.sort(reverse=True, key=lambda x: x[0])
-
-        # Generate detections for top candidates
-        detections: List[Detection] = []
-        for interestingness, similarity, combined_size, func1, func2 in candidates[:self.MAX_CANDIDATES]:
-            detections.append(self.create_detection(
-                file_path=file_path,
-                line=func2.get('line', 0),
-                message=f"{self.message}: '{func2['name']}' ~{similarity:.0%} similar to '{func1['name']}' (line {func1.get('line', 0)})",
-                suggestion=f"Combined {combined_size} lines. Worth investigating if logic can be shared.",
-                context=f"Interestingness: {interestingness:.1f} (similarity {similarity:.0%} × size {combined_size})"
-            ))
-
-        return detections
+        scored.sort(reverse=True, key=lambda x: x[0])
+        return scored
 
     def _tokens(self, normalized: str) -> tuple:
         """(alpha-renamed shape, literal tokens) of a normalized body."""
@@ -180,15 +198,21 @@ class D002(BaseRule):
     def _is_sequence_match(self, tokens1: tuple, tokens2: tuple) -> bool:
         """A copy keeps its alpha-renamed shape, or (after an edit that shifted the
         renaming) most of its literal tokens."""
-        return (self._sequence_match(tokens1[0], tokens2[0]) >= self.MIN_SEQUENCE_MATCH
-                or self._sequence_match(tokens1[1], tokens2[1], self.MIN_LITERAL_MATCH)
-                >= self.MIN_LITERAL_MATCH)
+        return _SequenceTester(self, [tokens1, tokens2]).is_match(0, 1)
 
-    def _sequence_match(self, shape1: List[str], shape2: List[str],
+    def _sequence_match(self, matcher: SequenceMatcher, tokens: List[str],
                         floor: Optional[float] = None) -> float:
-        """Token-sequence similarity (0.0-1.0), bounded cheaply first."""
+        """Token-sequence similarity (0.0-1.0) of ``tokens`` against the matcher's
+        second sequence, bounded cheaply first.
+
+        Both bounds are upper bounds of ``ratio()``, so a result under ``floor`` from
+        them is the same verdict ``ratio()`` would give (it is then reported as 0.0):
+        real_quick_ratio is 2*min(la, lb)/(la+lb) and quick_ratio is 2*|multiset
+        intersection|/(la+lb); matched blocks are a subset of the multiset intersection,
+        which is a subset of the shorter sequence.
+        """
         floor = self.MIN_SEQUENCE_MATCH if floor is None else floor
-        matcher = SequenceMatcher(None, shape1, shape2, autojunk=False)
+        matcher.set_seq1(tokens)
         if matcher.real_quick_ratio() < floor or matcher.quick_ratio() < floor:
             return 0.0
         return matcher.ratio()
@@ -262,7 +286,13 @@ class D002(BaseRule):
 
         return code.strip()
 
-    def _cosine_similarity(self, vec1: Dict[str, float], vec2: Dict[str, float]) -> float:
+    @staticmethod
+    def _magnitude(vec: Dict[str, float]) -> float:
+        return math.sqrt(sum(v ** 2 for v in vec.values()))
+
+    def _cosine_similarity(self, vec1: Dict[str, float], vec2: Dict[str, float],
+                           mag1: Optional[float] = None,
+                           mag2: Optional[float] = None) -> float:
         """
         Compute cosine similarity between two sparse vectors.
 
@@ -271,6 +301,7 @@ class D002(BaseRule):
 
         Args:
             vec1, vec2: Sparse vectors (dicts mapping features to values)
+            mag1, mag2: ``_magnitude`` of each vector when the caller already has it
 
         Returns:
             Similarity score (0.0 to 1.0)
@@ -285,10 +316,41 @@ class D002(BaseRule):
         dot_product = sum(vec1.get(f, 0) * vec2.get(f, 0) for f in all_features)
 
         # Compute magnitudes
-        mag1 = math.sqrt(sum(v ** 2 for v in vec1.values()))
-        mag2 = math.sqrt(sum(v ** 2 for v in vec2.values()))
+        if mag1 is None:
+            mag1 = self._magnitude(vec1)
+        if mag2 is None:
+            mag2 = self._magnitude(vec2)
 
         if mag1 == 0 or mag2 == 0:
             return 0.0
 
         return dot_product / (mag1 * mag2)
+
+
+class _SequenceTester:
+    """The two sequence floors of a rule over a file's token lists, with one
+    ``SequenceMatcher`` per function and stage instead of one per pair.
+
+    ``SequenceMatcher(None, a, b)`` indexes ``b`` when it is built (the b2j table, and
+    quick_ratio's count table on first use); ``set_seq1`` swaps ``a`` and keeps both. A pair
+    (i, j) always matches ``a`` = function i against ``b`` = function j, as before, so
+    every ratio is the one a fresh matcher gives. celery: 142,592 matchers were built for
+    73,713 pairs, 2.2 s of the 24 s spent in D002.
+    """
+
+    def __init__(self, rule: "D002", tokens: List[tuple]):
+        self._rule = rule
+        self._tokens = tokens
+        self._matchers: Dict[tuple, SequenceMatcher] = {}
+
+    def _ratio(self, i: int, j: int, stage: int, floor: float) -> float:
+        matcher = self._matchers.get((j, stage))
+        if matcher is None:
+            matcher = self._matchers[(j, stage)] = SequenceMatcher(
+                None, [], self._tokens[j][stage], autojunk=False)
+        return self._rule._sequence_match(matcher, self._tokens[i][stage], floor)
+
+    def is_match(self, i: int, j: int) -> bool:
+        rule = self._rule
+        return (self._ratio(i, j, 0, rule.MIN_SEQUENCE_MATCH) >= rule.MIN_SEQUENCE_MATCH
+                or self._ratio(i, j, 1, rule.MIN_LITERAL_MATCH) >= rule.MIN_LITERAL_MATCH)
