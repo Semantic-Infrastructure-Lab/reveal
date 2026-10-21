@@ -362,14 +362,41 @@ def _flatten_structure(file_path: str, structure: Dict[str, Any], analyzer, outl
     return result
 
 
+def _call_site_layer_complete(layer: Dict[str, Any], family: Optional[str]) -> bool:
+    """A stored layer is whole: JS carries its JSX extras in the same entry or the layer is a miss."""
+    if not isinstance(layer.get('module_call_sites'), list):
+        return False
+    return family != 'js' or all(isinstance(layer.get(k), list) for k in ('jsx_references', 'jsx_call_sites'))
+
+
 def _add_call_sites(result: Dict[str, Any], file_path: str, analyzer) -> None:
-    """Module-level and JSX call sites, for the adapters that read them (full scans only)."""
-    result['module_call_sites'] = module_call_sites(file_path, analyzer)
+    """Module-level and JSX call sites, for the adapters that read them (full scans only).
+
+    The sites are file-local (content, language, grammar), so the structure entry that already
+    persists this file's structure carries them too (BACK-1890): a hit parses nothing. Only a
+    collection that finished without a recorded parse failure is stored."""
     from ...conventions import family_for_path
-    if family_for_path(file_path) == 'js':
+    family = family_for_path(file_path)
+    persist = family in _MODULE_CALL_FAMILIES and hasattr(analyzer, 'load_call_site_layer')
+    form = analyzer.call_site_form() if persist else ''
+    if persist:
+        layer = analyzer.load_call_site_layer(form)
+        if layer is not None and _call_site_layer_complete(layer, family):
+            result['module_call_sites'] = layer['module_call_sites']
+            if family == 'js':
+                result['jsx_references'] = layer['jsx_references']
+                result['jsx_call_sites'] = layer['jsx_call_sites']
+            return
+    result['module_call_sites'] = module_call_sites(file_path, analyzer)
+    if family == 'js':
         from ..calls.references import jsx_component_references, jsx_owner_call_sites
         result['jsx_references'] = jsx_component_references(analyzer, result['elements'])
         result['jsx_call_sites'] = jsx_owner_call_sites(analyzer, result['elements'], result['jsx_references'])
+    if persist:
+        stored = {'module_call_sites': result['module_call_sites']}
+        if family == 'js':
+            stored.update(jsx_references=result['jsx_references'], jsx_call_sites=result['jsx_call_sites'])
+        analyzer.store_call_site_layer(form, stored)
 
 
 def _parser_failure(analyzer) -> Optional[str]:

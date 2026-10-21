@@ -89,6 +89,10 @@ _STRUCTURE_CACHE_NAMESPACE = "structure"
 # get_outline()'s cheaper build (BACK-1560) under its own namespace, so it can never
 # be served as a full structure. A full entry answers an outline lookup, not vice versa.
 _OUTLINE_CACHE_NAMESPACE = "structure-outline"
+# BACK-1890: the call-site layer rides in the full structure entry under this key (never in the
+# outline namespace, so an outline can not satisfy a full request). It is private to this module:
+# _get_or_build_structure strips it from what it returns, so no get_structure() override sees it.
+_CALL_SITE_LAYER_KEY = "_call_site_layer"
 
 # One entry per source file (unlike I002's one-entry-per-project-root), so
 # disk_cache's default 64-entry-per-namespace prune cap would thrash on any
@@ -529,6 +533,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
         self._imports_uncacheable = False
         self.parse_error: Optional[str] = None  # BACK-979: set when _parse_tree()'s except branch fires
         self._outline_only: bool = False  # set only for the duration of get_outline()
+        # BACK-1890: the call-site layer of the full structure entry this analyzer hit (None: miss)
+        self._call_site_layer: Optional[Dict[str, Any]] = None
 
         # The parse-cache key: the stat FileAnalyzer took before it read the content, with the
         # size (a same-mtime edit that changes the size is a different file, BACK-2116). None
@@ -666,6 +672,47 @@ class TreeSitterAnalyzer(FileAnalyzer):
         hasher.update(str(self.language).encode("utf-8", "replace"))
         return hasher.hexdigest()
 
+    def call_site_form(self) -> str:
+        """The content form a stored call-site layer was built from (BACK-1890, BACK-1914 note 2).
+
+        ``module_call_sites`` walks the tree parsed from ``content`` plus the file's final newline
+        (``_parse_tree``) and slices text from ``content``, which has lost that newline. A layer is
+        served only to a consumer asking for the form it was built from, so a future consumer of the
+        canonical form can not be handed rows computed from this one."""
+        ends = "eof-lf" if getattr(self, '_ends_with_newline', False) else "no-eof-lf"
+        return f"analyzer-content/{ends}"
+
+    def load_call_site_layer(self, form: str) -> Optional[Dict[str, Any]]:
+        """The call-site layer of this file's FULL structure entry, or None (outline, other form, miss).
+
+        Only meaningful after get_structure(): the layer is read with the entry. A layer built from a
+        different content form than ``form`` is a miss."""
+        layer = self._call_site_layer
+        if self._outline_only or layer is None or layer.get('form') != form:
+            return None
+        return layer
+
+    def store_call_site_layer(self, form: str, layer: Dict[str, Any]) -> None:
+        """Add ``layer`` to this file's stored full structure entry (same key, one entry per file).
+
+        The entry is read back from disk, not rebuilt from memory: only an entry the structure
+        cache actually stored is extended, so an outline, an uncacheable build (BACK-2138), an
+        evicted entry or a disabled cache stores nothing here. A build that recorded a parse
+        failure (``parse_error``) is never stored: the failure is not a property of the content."""
+        fingerprint = self._structure_fingerprint()
+        if (fingerprint is None or self._outline_only or self._imports_uncacheable
+                or self.parse_error is not None):
+            return
+        entry = disk_cache.get(_STRUCTURE_CACHE_NAMESPACE, fingerprint)
+        if not isinstance(entry, dict):
+            return
+        existing = entry.get(_CALL_SITE_LAYER_KEY)
+        if isinstance(existing, dict) and existing.get('form') == form:
+            return
+        disk_cache.put(_STRUCTURE_CACHE_NAMESPACE, fingerprint,
+                       {**entry, _CALL_SITE_LAYER_KEY: {**layer, 'form': form}},
+                       max_entries=_structure_cache_max_files())
+
     def _get_or_build_structure(self) -> Dict[str, Any]:
         """Return the unsliced structure dict, from disk cache when possible.
 
@@ -685,7 +732,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for namespace in namespaces:
                 cached = disk_cache.get(namespace, fingerprint)
                 if cached is not None:
-                    return cached
+                    if namespace == _STRUCTURE_CACHE_NAMESPACE and _CALL_SITE_LAYER_KEY in cached:
+                        self._call_site_layer = cached[_CALL_SITE_LAYER_KEY]
+                    return {k: v for k, v in cached.items() if k != _CALL_SITE_LAYER_KEY}
 
         if not self.tree:  # first access here triggers the actual parse
             return {}

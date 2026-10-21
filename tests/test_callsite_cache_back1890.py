@@ -96,7 +96,7 @@ def test_edit_recomputes_only_the_edited_file(project, spy):
 def test_added_file_recomputes_only_itself(project, spy):
     _scan(project)
     spy.clear()
-    (project / "c.py").write_text("boot()\n", encoding="utf-8")
+    (project / "c.py").write_text("def boot():\n    return 1\n\n\nboot()\n", encoding="utf-8")
     after, _ = _scan(project)
     assert spy == ["c.py"]
     assert "c.py" in after
