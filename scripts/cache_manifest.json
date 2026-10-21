@@ -295,7 +295,7 @@
   },
   "reveal/treesitter.py::TreeSitterAnalyzer._node_cache": {
    "owner": "process-exempt",
-   "reason": "per analyzer instance; holds tree-sitter nodes; analyzers are built per call (not verified for every caller)",
+   "reason": "per analyzer instance; holds tree-sitter nodes; verified (BACK-2140): no instance outlives or leaves the call that builds it (an AST scan of reveal/ finds one analyzer kept past a statement, nav_effects.py _resolve_definition_node, in a dict local to one trace call), and a full-suite run with every analyzer stamped with its creating thread saw no cross-thread use",
    "holds": "tree-sitter"
   },
   "reveal/treesitter.py::_parse_cache_local": {
