@@ -849,9 +849,29 @@ def test_the_own_cap_invariant_bites(harness):
     test_an_adapters_own_cap_is_disclosed is not vacuously green."""
     expected = ['ast', 'calls', 'depends', 'git', 'hotspots', 'imports', 'json', 'overview',
                 'patches', 'stats', 'xlsx']
-    bitten = [scheme for scheme in sorted(s for s in FIXTURE_URIS if _cap_knobs(s))
-              if any(shortened for shortened, _, _ in _knob_cuts(harness, scheme).values())]
-    assert bitten == expected
+    cuts = {scheme: _knob_cuts(harness, scheme)
+            for scheme in sorted(s for s in FIXTURE_URIS if _cap_knobs(s))}
+    bitten = [scheme for scheme, probes in cuts.items()
+              if any(shortened for shortened, _, _ in probes.values())]
+    assert bitten == expected, _unbitten_report(cuts, set(expected) - set(bitten))
+
+
+def _unbitten_report(cuts, missing):
+    """What each probe of a scheme that was not bitten returned (BACK-1647: the bare list diff
+    left four CI recurrences undiagnosable). Evaluated only when the assertion fails."""
+    lines = []
+    for scheme in sorted(missing):
+        for uri, (shortened, cut, full) in cuts.get(scheme, {}).items():
+            lengths = lambda payload: {'.'.join(path): len(items) for path, items in _lists(payload)}  # noqa: E731
+            lines.append(f'{uri}: shortened={shortened} list lengths: uncapped={lengths(full)} cut={lengths(cut)}')
+            for label, payload in (('uncapped', full), ('cut', cut)):
+                if not isinstance(payload, dict):
+                    lines.append(f'  {label} payload is {payload!r} (the run printed no JSON object)')
+                    continue
+                scalars = {k: v for k, v in payload.items() if not isinstance(v, (list, dict))}
+                detail = {key: payload[key] for key in ('metadata', 'modules') if key in payload}
+                lines.append(f'  {label}: {scalars} {detail}')
+    return 'schemes not bitten, and what their probes returned:\n' + '\n'.join(lines)
 
 
 class _EmptyDepends:
