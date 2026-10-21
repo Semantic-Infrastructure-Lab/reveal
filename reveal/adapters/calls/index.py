@@ -457,13 +457,20 @@ def _structures_or_collect(structures: Optional[StructureList], directory: Path)
     return collect_structures(str(directory)) if structures is None else structures
 
 
+def _environmental_loss(skipped: Sequence[Tuple[str, str]],
+                        traversal_failures: Sequence[Tuple[Optional[str], str]]) -> bool:
+    """Whether a collection lost input for a reason a validated cache cannot see recover.
+
+    Directory mtimes cannot prove recovery after an included subtree was unreadable, nor
+    can a tree stamp after a file was (chmod moves only ctime) or a worker died (BACK-2093).
+    A failure the content causes is storable: the same bytes fail the same way.
+    """
+    return bool(traversal_failures) or any(environmental_failure(cause) for _, cause in skipped)
+
+
 def _cache_callers_index(dir_str: str, cache_key: Any, index: CallersIndex,
                          structures: StructureList) -> None:
-    # Directory mtimes cannot prove recovery after an included subtree was unreadable, nor
-    # can a tree stamp after a file was (chmod moves only ctime) or a worker died (BACK-2093).
-    # A failure the content causes is stored: the same bytes fail the same way.
-    if getattr(structures, 'traversal_failures', []) or any(
-            environmental_failure(cause) for _, cause in index.skipped):
+    if _environmental_loss(index.skipped, getattr(structures, 'traversal_failures', [])):
         _INDEX_CACHE.pop(dir_str, None)
         return
     _INDEX_CACHE[dir_str] = (cache_key, index)
