@@ -154,7 +154,6 @@
  "tests/test_structure_disk_cache.py": 2,
  "tests/test_surface_facts.py": 3,
  "tests/test_surface_matrix.py": 1,
- "tests/test_taxonomy_collision_regression.py": 1,
  "tests/test_testability.py": 1,
  "tests/test_tree_view.py": 35,
  "tests/test_treesitter_grammar_availability.py": 2,

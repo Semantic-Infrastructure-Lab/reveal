@@ -19,10 +19,14 @@ fixture (`overview` complexity vs `ast://`, `trace` vs `calls://`, `deps` vs
 
 Fixtures: tests/fixtures/conformance/<lang>/ (the same 9-language Tier 1 set
 as test_conformance_matrix.py) individually, plus the shared parent directory
-tests/fixtures/conformance/ as the mixed-language case.
+tests/fixtures/conformance/ as the mixed-language case. The suite reads a copy
+outside the repo (BACK-2144): in place, I002 resolves the project root to the
+outer checkout and builds its import graph on every review/overview call --
+~95% of this file's time, and the outer-root noise behind BACK-1881.
 """
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -76,13 +80,16 @@ def _json(*args: str, desc: str):
         )
 
 
+@pytest.fixture(scope="session")
+def fixtures_dir(tmp_path_factory) -> Path:
+    dst = tmp_path_factory.mktemp("composite") / "conformance"
+    shutil.copytree(FIXTURES_DIR, dst)
+    return dst
+
+
 @pytest.fixture(params=LANGUAGES)
-def lang(request) -> str:
-    return request.param
-
-
-def _lang_dir(lang: str) -> Path:
-    return FIXTURES_DIR / lang
+def lang_dir(request, fixtures_dir) -> Path:
+    return fixtures_dir / request.param
 
 
 # --------------------------------------------------------------------------- #
@@ -90,67 +97,67 @@ def _lang_dir(lang: str) -> Path:
 # --------------------------------------------------------------------------- #
 
 
-def test_overview_non_crash_and_json(lang):
-    d = _json("overview", str(_lang_dir(lang)), desc=f"{lang} overview")
+def test_overview_non_crash_and_json(lang_dir):
+    d = _json("overview", str(lang_dir), desc=f"{lang_dir.name} overview")
     assert d["stats"]["summary"]["total_files"] >= 1
 
 
-def test_architecture_non_crash_and_json(lang):
-    _json("architecture", str(_lang_dir(lang)), desc=f"{lang} architecture")
+def test_architecture_non_crash_and_json(lang_dir):
+    _json("architecture", str(lang_dir), desc=f"{lang_dir.name} architecture")
 
 
-def test_deps_non_crash_and_json(lang):
-    _json("deps", str(_lang_dir(lang)), desc=f"{lang} deps")
+def test_deps_non_crash_and_json(lang_dir):
+    _json("deps", str(lang_dir), desc=f"{lang_dir.name} deps")
 
 
-def test_review_non_crash_and_json(lang):
-    d = _json("review", str(_lang_dir(lang)), desc=f"{lang} review")
+def test_review_non_crash_and_json(lang_dir):
+    d = _json("review", str(lang_dir), desc=f"{lang_dir.name} review")
     assert "sections" in d
 
 
-def test_pack_non_crash(lang):
-    result = _run("pack", str(_lang_dir(lang)))
-    _assert_sane(result, f"{lang} pack")
+def test_pack_non_crash(lang_dir):
+    result = _run("pack", str(lang_dir))
+    _assert_sane(result, f"{lang_dir.name} pack")
     assert result.stdout.strip()
 
 
-def test_surface_non_crash_and_json(lang):
-    _json("surface", str(_lang_dir(lang)), desc=f"{lang} surface")
+def test_surface_non_crash_and_json(lang_dir):
+    _json("surface", str(lang_dir), desc=f"{lang_dir.name} surface")
 
 
-def test_contracts_non_crash_and_json(lang):
-    _json("contracts", str(_lang_dir(lang)), desc=f"{lang} contracts")
+def test_contracts_non_crash_and_json(lang_dir):
+    _json("contracts", str(lang_dir), desc=f"{lang_dir.name} contracts")
 
 
-def test_testability_requires_explicit_tests_path(lang):
+def test_testability_requires_explicit_tests_path(lang_dir):
     """No --tests: must fail with a clear message, not a crash or a silent
     empty report claiming coverage that was never measured."""
-    result = _run("testability", str(_lang_dir(lang)))
-    _assert_sane(result, f"{lang} testability (no --tests)")
+    result = _run("testability", str(lang_dir))
+    _assert_sane(result, f"{lang_dir.name} testability (no --tests)")
     assert "--tests" in (result.stdout + result.stderr)
 
 
-def test_testability_with_explicit_tests_path(lang):
+def test_testability_with_explicit_tests_path(lang_dir):
     d = _json(
-        "testability", str(_lang_dir(lang)), "--tests", str(_lang_dir(lang)),
-        desc=f"{lang} testability",
+        "testability", str(lang_dir), "--tests", str(lang_dir),
+        desc=f"{lang_dir.name} testability",
     )
     assert d["source_type"] == "directory"
 
 
-def test_trace_agrees_with_calls_uri(lang):
+def test_trace_agrees_with_calls_uri(lang_dir):
     """trace's resolved root must be the same function calls:// finds."""
-    entry = ENTRY_FUNCTION[lang]
+    entry = ENTRY_FUNCTION[lang_dir.name]
     trace = _json(
-        "trace", "--from", entry, str(_lang_dir(lang)), desc=f"{lang} trace"
+        "trace", "--from", entry, str(lang_dir), desc=f"{lang_dir.name} trace"
     )
     assert trace["root"] == entry
-    assert trace["frames"], f"{lang}: trace found no frames for {entry}"
+    assert trace["frames"], f"{lang_dir.name}: trace found no frames for {entry}"
 
     calls = _json(
-        f"calls://{_lang_dir(lang)}?target={entry}", desc=f"{lang} calls://"
+        f"calls://{lang_dir}?target={entry}", desc=f"{lang_dir.name} calls://"
     )
-    assert calls, f"{lang}: calls:// found nothing for {entry}, trace disagrees"
+    assert calls, f"{lang_dir.name}: calls:// found nothing for {entry}, trace disagrees"
 
 
 # --------------------------------------------------------------------------- #
@@ -159,8 +166,8 @@ def test_trace_agrees_with_calls_uri(lang):
 # --------------------------------------------------------------------------- #
 
 
-def test_overview_mixed_dir_covers_every_language():
-    d = _json("overview", str(FIXTURES_DIR), desc="mixed overview")
+def test_overview_mixed_dir_covers_every_language(fixtures_dir):
+    d = _json("overview", str(fixtures_dir), desc="mixed overview")
     files = d["stats"]["files"]
     seen_exts = {Path(f["file"]).suffix.lstrip(".") for f in files}
     expected_exts = {
@@ -170,8 +177,8 @@ def test_overview_mixed_dir_covers_every_language():
     assert not missing, f"overview silently dropped extensions: {missing}"
 
 
-def test_deps_mixed_dir_covers_every_language():
-    d = _json("deps", str(FIXTURES_DIR), desc="mixed deps")
+def test_deps_mixed_dir_covers_every_language(fixtures_dir):
+    d = _json("deps", str(fixtures_dir), desc="mixed deps")
     files = d["base"]["files"]
     seen_exts = {Path(f).suffix.lstrip(".") for f in files}
     expected_exts = {
@@ -181,9 +188,9 @@ def test_deps_mixed_dir_covers_every_language():
     assert not missing, f"deps silently dropped extensions: {missing}"
 
 
-def test_surface_mixed_dir_non_crash_and_json():
-    _json("surface", str(FIXTURES_DIR), desc="mixed surface")
+def test_surface_mixed_dir_non_crash_and_json(fixtures_dir):
+    _json("surface", str(fixtures_dir), desc="mixed surface")
 
 
-def test_review_mixed_dir_non_crash_and_json():
-    _json("review", str(FIXTURES_DIR), desc="mixed review")
+def test_review_mixed_dir_non_crash_and_json(fixtures_dir):
+    _json("review", str(fixtures_dir), desc="mixed review")

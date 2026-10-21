@@ -191,7 +191,22 @@ LOG_DIR="${REVEAL_CI_LOG_DIR:-$(dirname "$VENV")/logs}"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/ci-local-py${PY_VERSION}${LP_VERSION:+-lp$LP_VERSION}-$(date +%Y%m%d-%H%M%S).log"
 
-step() { printf '\n== %s ==\n' "$1" | tee -a "$LOG"; }
+# Per-step timing (BACK-2144): step() closes the previous step's clock; the EXIT trap prints the
+# table (failed runs too) into the log and appends one TSV row per step to $LOG_DIR/timings.tsv.
+STEP_NAME=""; STEP_START=$SECONDS; STEP_TIMES=()
+_close_step() { [[ -n "$STEP_NAME" ]] && STEP_TIMES+=("$((SECONDS - STEP_START))"$'\t'"$STEP_NAME"); return 0; }
+step() { _close_step; STEP_NAME="$1"; STEP_START=$SECONDS; printf '\n== %s ==\n' "$1" | tee -a "$LOG"; }
+_timing_report() {
+    local rc=$?; _close_step; STEP_NAME=""
+    local row stamp; stamp="$(date -Iseconds)"
+    { printf '\n== Step timings (s) ==\n'
+      for row in "${STEP_TIMES[@]}"; do printf '%6ss  %s\n' "${row%%$'\t'*}" "${row#*$'\t'}"; done
+      printf '%6ss  total (exit %s)\n' "$SECONDS" "$rc"; } | tee -a "$LOG"
+    for row in "${STEP_TIMES[@]}"; do
+        printf '%s\t%s\t%s\t%s\n' "$stamp" "py$PY_VERSION${LP_VERSION:+-lp$LP_VERSION}" "$row" "$rc"
+    done >>"$LOG_DIR/timings.tsv"
+}
+trap _timing_report EXIT
 fail() { printf 'FAIL: %s (log: %s)\n' "$1" "$LOG" >&2; exit 1; }
 
 [[ $FRESH -eq 1 ]] && rm -rf "$VENV"
@@ -244,6 +259,20 @@ if [[ $PRIMARY -eq 1 ]]; then
     "$PY" scripts/check_parse_counts.py >>"$LOG" 2>&1 \
         || fail "cold serial parser-count ratchet (see scripts/check_parse_counts.py)"
 
+    # nav_effects.py's bare taxonomy patterns vs the local samples/ corpus (BACK-665). ~50 s of
+    # ripgrep, and only those two files can move it, so it runs when they differ from upstream;
+    # GitHub never had the corpus (BACK-2144).
+    step "Taxonomy collision ratchet"
+    TAX_BASE="$(git merge-base HEAD '@{upstream}' 2>/dev/null || git merge-base HEAD origin/master)"
+    if git diff --quiet "$TAX_BASE" -- reveal/adapters/ast/nav_effects.py tests/fixtures/taxonomy_collision_baseline.json; then
+        echo "unchanged vs ${TAX_BASE:0:8} -- skipped" | tee -a "$LOG"
+    elif ! command -v rg >/dev/null 2>&1; then
+        echo "ripgrep not on PATH -- SKIPPED" | tee -a "$LOG"
+    else
+        "$PY" scripts/check_taxonomy_collisions.py 2>&1 | tee -a "$LOG" | tail -20
+        [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "taxonomy collision ratchet (see scripts/check_taxonomy_collisions.py)"
+    fi
+
     # Bare --check, not --select V: also runs the general rules (C901, D001, E501, ...) over reveal's own source.
     step "Reveal self-validation (reveal:// --check)"
     "$VENV/bin/reveal" reveal:// --check >>"$LOG" 2>&1 || { tail -12 "$LOG"; fail "reveal:// --check self-validation"; }
@@ -290,7 +319,8 @@ fi
 # The suite runs last: the lints and ratchets above fail in seconds, the suite takes minutes.
 if [[ $RUN_TESTS -eq 1 ]]; then
     step "Run tests (pytest ${PYTEST_TARGETS[*]})"
-    "$PY" -m pytest "${PYTEST_TARGETS[@]}" -q -p no:cacheprovider -n auto >>"$LOG" 2>&1 \
+    "$PY" -m pytest "${PYTEST_TARGETS[@]}" -q -p no:cacheprovider -n auto \
+        --durations=0 --durations-min=0.5 >>"$LOG" 2>&1 \
         || { grep -E '^FAILED |^ERROR ' "$LOG" | head -30; fail "pytest"; }
     tail -1 "$LOG"
 fi

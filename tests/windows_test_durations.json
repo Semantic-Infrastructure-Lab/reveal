@@ -454,7 +454,6 @@
   "tests/test_surface_rules.py": 19.64,
   "tests/test_surface_swift_unit_value_back1484.py": 0.03,
   "tests/test_swift.py": 0.15,
-  "tests/test_taxonomy_collision_regression.py": 0.0,
   "tests/test_testability.py": 1.94,
   "tests/test_text_encoding_rule_back1707.py": 16.96,
   "tests/test_threadsafe.py": 2.02,
