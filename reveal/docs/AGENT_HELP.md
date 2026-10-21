@@ -3971,6 +3971,7 @@ def _lazy_import_heavy():
 - A `[text](path)` link points to a file or anchor that doesn't exist on disk
 - Absolute paths checked relative to repo root; relative paths resolved from the source file
 - Suppressed on lines matching `<!-- noqa -->` or inside fenced code blocks
+- An anchor is verified only against a markdown target's headings. `[x](code.ts#L42)` checks that the file exists; the anchor is reported once per target as a skipped outcome ("only the file's existence was checked"), never as clean or broken
 
 **L002: Broken external link** *(opt-in — disabled by default)*
 - An `http://` or `https://` URL returns a non-2xx response

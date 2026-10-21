@@ -105,6 +105,9 @@ class L001(BaseRule):
                     context=f"[{text}]({url})",
                 ))
 
+        if self.outcomes:
+            # The links were checked; only some anchors were not (declared per target).
+            self.completed(file_path)
         return detections
 
     def _headings_to_anchors(self, headings: List[Dict[str, Any]]) -> List[str]:
@@ -213,6 +216,10 @@ class L001(BaseRule):
                 return (True, "anchor_not_found")
         return (False, "")
 
+    def _has_heading_anchors(self, target: Path) -> bool:
+        """True for the targets whose anchors are markdown headings (this rule's file types)."""
+        return target.suffix.lower() in self.file_patterns
+
     def _check_file_case_mismatch(self, target: Path) -> Tuple[bool, str]:
         """Check for case mismatch in file path (case-insensitive FS detection)."""
         try:
@@ -258,6 +265,15 @@ class L001(BaseRule):
             return (is_broken, reason)
 
         # Validate anchor if present
+        if anchor and not self._has_heading_anchors(target):
+            # Only markdown has heading anchors; the file exists (checked above), its anchor
+            # (#L42, a symbol) is not something L001 can verify, so say so once per target
+            # instead of calling a markdown-only method on a code analyzer (BACK-2130).
+            if not any(o['subject'] == str(target) for o in self.outcomes):
+                self.not_applicable(
+                    f"anchor '#{anchor}' on a target that is not markdown: only the file's "
+                    f"existence was checked", str(target))
+            return (False, "")
         if anchor:
             valid_anchors = self._extract_anchors_from_markdown(target)
             if valid_anchors is not None and anchor not in valid_anchors:
