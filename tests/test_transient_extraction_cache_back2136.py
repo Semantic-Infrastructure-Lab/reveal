@@ -272,6 +272,17 @@ def test_syntax_error_stays_a_cached_disclosed_parse_failure(proj, cache, extrac
     assert extractions['c.py'] == 1, 'a genuine parse failure should still be cached'
 
 
+def test_an_analyzer_refusing_the_content_stays_cached(proj, cache, extractions, monkeypatch):
+    """Constructing the analyzer reads the content; what it raises there (a file over the size
+    limit) is the content's own failure, so only the lookup and the tree build are transient."""
+    monkeypatch.setattr(reveal_base.FileAnalyzer, 'MAX_INPUT_SIZE', 8)  # each file is 9 bytes (10 with CRLF)
+    first = _depends(proj)
+    assert first[:2] == (0, 0) and '3 file(s) parsed with errors' in first[2], f'fixture: {first}'
+    _next_run(cache)
+    assert _depends(proj) == first
+    assert extractions == {'a.py': 1, 'b.py': 1, 'c.py': 1}, 'a content failure should still be cached'
+
+
 def test_unreadable_file_is_read_again(proj, cache, extractions, read_fails):
     """BACK-2083's case keeps working: an OSError is never stored either."""
     read_fails.armed.add(proj / 'b.py')

@@ -69,6 +69,10 @@ class ImportExtraction:
     # keep it (BACK-2083).
     read_error: Optional[str] = None
     diagnostics: Dict[str, Any] = field(default_factory=dict)
+    # The failure came from reveal's own machinery, not the content: the analyzer lookup raised,
+    # or tree-sitter built no tree because the grammar could not be loaded (the language pack's
+    # fetch or cache lock failed). Its one-line reason. Also not keyed by stat (BACK-2136).
+    transient_error: Optional[str] = None
 
     @property
     def environmental(self) -> bool:
@@ -76,8 +80,8 @@ class ImportExtraction:
 
     @property
     def cacheable(self) -> bool:
-        """Whether this record is the file's answer for its stat key (BACK-2083)."""
-        return not (self.environmental or self.worker_lost)
+        """Whether this record is the file's answer for its stat key (BACK-2083, BACK-2136)."""
+        return not (self.environmental or self.transient_error or self.worker_lost)
 
 
 @dataclass
@@ -164,12 +168,17 @@ class ImportGraph:
     # (LanguageExtractor.is_structural_edge). Kept in dependencies, reverse_deps and every
     # count; only the cycle search leaves them out.
     structural_edges: Set[Tuple[Path, Path]] = field(default_factory=set)
+    # The subset of failed_files whose extraction failed in reveal's machinery, not on the
+    # content (ImportExtraction.transient_error), each with its reason (BACK-2136).
+    transient_files: Dict[Path, str] = field(default_factory=dict)
 
     @property
     def cacheable(self) -> bool:
         """Whether the graph is the tree's answer for its stat key: no file lost to a dead
-        worker, none unreadable, no directory left unlisted (BACK-2084)."""
-        return not (self.lost_files or self.unreadable_files or self.traversal_failures)
+        worker, none unreadable or failed in the machinery, no directory left unlisted
+        (BACK-2084, BACK-2136)."""
+        return not (self.lost_files or self.unreadable_files or self.transient_files
+                    or self.traversal_failures)
 
     @classmethod
     def from_imports(cls, imports: List[ImportStatement]) -> 'ImportGraph':

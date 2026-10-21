@@ -321,14 +321,27 @@ class LanguageExtractor(ABC):
         imports/symbols outside the ERROR region are kept (BACK-1460).
         """
         path_str = str(file_path)
+        # Where a failure comes from decides whether it is the file's answer (BACK-2136). The
+        # analyzer lookup and the tree build are reveal's machinery: tree-sitter's error-tolerant
+        # parser returns a tree for any content, so a missing one with a parse_error means the
+        # grammar could not be loaded. Both can succeed next time with the file unchanged.
+        # Constructing the analyzer reads the content, whose own failures (too large) stay.
+        content_stage = False
         try:
             analyzer_class = get_analyzer(path_str)
             if not analyzer_class:
                 return None
+            content_stage = True
             analyzer = analyzer_class(path_str)
+            content_stage = False
             if not analyzer.tree:
                 self.parse_failed = True
-                self.analysis.diagnostics['parse'] = {'status': 'unavailable', 'reason': 'tree-sitter returned no tree'}
+                load_error = getattr(analyzer, 'parse_error', None)
+                reason = 'tree-sitter returned no tree'
+                if load_error:
+                    reason = f'{reason}: {load_error}'
+                    self.analysis.transient_error = reason
+                self.analysis.diagnostics['parse'] = {'status': 'unavailable', 'reason': reason}
                 logger.debug(
                     "Parse failed for %s -- tree-sitter returned no tree; "
                     "imports/symbols for this file are incomplete, not confirmed empty",
@@ -373,6 +386,8 @@ class LanguageExtractor(ABC):
             if isinstance(e, OSError):
                 # Unreadable now, not unparseable: never cached as the file's answer (BACK-2083).
                 self.analysis.read_error = type(e).__name__
+            elif not content_stage:
+                self.analysis.transient_error = f'{type(e).__name__}: {e}'
             logger.debug(
                 "Parse failed for %s: %s -- imports/symbols for this file "
                 "are incomplete, not confirmed empty",

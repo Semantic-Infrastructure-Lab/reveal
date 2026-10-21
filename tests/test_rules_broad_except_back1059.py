@@ -242,7 +242,7 @@ def test_i002_unextractable_file_is_a_failed_file_not_an_exception(tmp_path, mon
     src = tmp_path / 'a.py'
     src.write_text('import b\n', encoding='utf-8')
     monkeypatch.setattr(module, 'get_extractor', lambda p: _Boom())
-    assert module._extract_imports_for_file(str(src)) == ([], True, None)  # content failure: cacheable, no read error (BACK-2084)
+    assert module._extract_imports_for_file(str(src)) == ([], True, None, None)  # content failure: cacheable, no read error (BACK-2084), not transient (BACK-2136)
 
 
 # --- I003 ---------------------------------------------------------------------------
