@@ -16,3 +16,4 @@ BACK-1870 perf: adapters and heavy libraries import on first use (reveal --versi
 BACK-2122 internal: cache-registration ratchet script and manifest; no product behavior
 BACK-2133 internal: test fixture hardening against a transient git error; no product behavior
 BACK-2142 internal: test isolation for a module-level toggle; no product behavior
+BACK-2143 internal: follow-up to the unreleased BACK-2117 stamp; covered by its changelog entry

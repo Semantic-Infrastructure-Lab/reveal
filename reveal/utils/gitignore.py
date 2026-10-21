@@ -51,6 +51,7 @@ import functools
 import logging
 import os
 import re
+import stat as stat_mod
 import subprocess
 import threading
 import time
@@ -202,7 +203,9 @@ def _stat_stamp(paths) -> Tuple[Tuple[str, Optional[Tuple[int, int]]], ...]:
     for path in paths:
         try:
             st = os.stat(path)
-            stamp.append((path, (st.st_mtime_ns, st.st_size)))
+            # A device file (GIT_CONFIG_GLOBAL=/dev/null) has no content to compare, and its mtime
+            # moves whenever any process writes to it (macOS): stamp it as present, not by time.
+            stamp.append((path, (st.st_mtime_ns, st.st_size) if stat_mod.S_ISREG(st.st_mode) else (0, 0)))
         except OSError:
             stamp.append((path, None))
     return tuple(stamp)
