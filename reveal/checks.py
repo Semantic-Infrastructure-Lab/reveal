@@ -3,7 +3,6 @@
 This module is separate from main.py to avoid circular dependencies with cli.routing.
 """
 
-import os
 import re
 import sys
 from collections import defaultdict
@@ -12,7 +11,7 @@ from typing import Optional, Any, List, Tuple
 
 from .base import FileAnalyzer
 from .utils import get_file_type_from_analyzer, print_breadcrumbs
-from reveal.utils.json_utils import write_requested_artifact, write_text_artifact
+from reveal.utils.json_utils import json_sink_paths, write_requested_artifact, write_text_artifact
 from reveal.utils.lines import split_lines
 
 # When a single rule fires this many times in one file, collapse to a summary line.
@@ -186,6 +185,34 @@ def _detections_json(path: str, result: dict) -> str:
     return subcommand_json(result, name='check', source=path, source_type='file')
 
 
+def _write_file_artifact(args: Any, output_format: str, path: str, result: dict,
+                         collect: Optional[List[dict]]) -> bool:
+    """Write a single file's result to the json sinks, or hand it to a --stdin run's *collect*; True when a
+    write failed. A json stdout already is the document, so nothing is written for it."""
+    sinks = json_sink_paths(args)
+    if not sinks or output_format == 'json':
+        return False
+    if collect is not None:
+        collect.append(result)
+        return False
+    return write_requested_artifact(lambda: write_text_artifact(sinks, _detections_json(path, result))) is not None
+
+
+def stdin_check_artifact(results: List[dict]) -> str:
+    """The one document a ``--stdin --check`` run writes to its json sinks (BACK-2095): every file's result
+    in input order under ``files``, with the totals the directory report keeps in ``summary``."""
+    from reveal.cli.routing.subcommand import subcommand_json
+    report = {
+        'files': results,
+        'summary': {
+            'files_checked': len(results),
+            'files_with_issues': sum(1 for r in results if r['total']),
+            'total_issues': sum(r['total'] for r in results),
+        },
+    }
+    return subcommand_json(report, name='check', source='stdin', source_type='stdin')
+
+
 def _emit_detections(path: str, output_format: str, detections: List[Any],
                      rendered: List[Any], no_group: bool = False,
                      scan_incomplete: bool = False, **result_fields: Any) -> dict:
@@ -349,7 +376,8 @@ def run_pattern_detection(
     path: str,
     output_format: str,
     args: Any,
-    config: Optional[Any] = None
+    config: Optional[Any] = None,
+    collect: Optional[List[dict]] = None,
 ) -> Tuple[int, bool, bool]:
     """Run pattern detection rules on a file.
 
@@ -359,6 +387,8 @@ def run_pattern_detection(
         output_format: Output format ('text', 'json', 'grep')
         args: CLI arguments (for --select, --ignore)
         config: Optional RevealConfig for breadcrumb settings
+        collect: A --stdin run's list: the file's result is appended for ``stdin_check_artifact`` to write
+            once, instead of being written to the json sinks here (BACK-2095).
 
     Returns:
         (detection_count, degraded, artifact_failed) tuple. `degraded` is True when the file
@@ -435,17 +465,13 @@ def run_pattern_detection(
         disclosures=disclosures, scan_incomplete=bool(scan_disclosures),
     )
 
-    # BACK-1248: --also-json on a single file. Built from the same detections
+    # BACK-1248: the json file sinks on a single file. Built from the same detections
     # the renderer just used -- no second analysis pass -- and deliberately the
     # same document `--format json` prints for this invocation, so the artifact
     # never depends on which --format the human report happened to use.
-    # isinstance rather than truthiness: `args` is a Mock in several callers'
-    # tests, and getattr on a Mock returns a truthy Mock for any attribute.
-    also_json = getattr(args, 'also_json', None)
-    artifact_failed = False
-    if isinstance(also_json, (str, os.PathLike)) and output_format != 'json':
-        artifact_failed = write_requested_artifact(
-            lambda: write_text_artifact(also_json, _detections_json(path, result))) is not None
+    # A --stdin run hands in *collect* and writes once at the end (BACK-2095): one
+    # invocation is one result, so a sink is not rewritten per file.
+    artifact_failed = _write_file_artifact(args, output_format, path, result, collect)
 
     # Print breadcrumbs after text output (not for json/grep)
     if output_format == 'text':

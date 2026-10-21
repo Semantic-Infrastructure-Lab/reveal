@@ -223,11 +223,13 @@ def _add_global_options(target) -> None:
                              'another value exits 2 with the supported list. Defaults to $REVEAL_FORMAT if set.')
     target.add_argument('--output', metavar='FORMAT[=PATH]', action='append', default=None,
                         help='An output sink, repeatable. FORMAT alone is the stdout sink (the same as --format); '
-                             'json=PATH also writes the result as JSON to PATH, one invocation and one parse '
-                             'for a human report plus a machine artifact. scheme://resource URIs, '
-                             '`reveal check` and declared adapter commands only; no-op if the stdout sink is '
-                             'already json. Only json file sinks exist yet, and one of them. A write that fails '
-                             'exits 3; a bad sink exits 2 before the scan.')
+                             'FORMAT=PATH also writes the result to PATH in that format, one invocation and '
+                             'one parse for a human report plus a machine artifact; give several for several '
+                             'files. scheme://resource URIs, `reveal check` and declared adapter commands only; '
+                             'a json file sink is a no-op if the stdout sink is already json. A format the '
+                             'command does not render (and text/grep on `reveal check`) exits 2 before the '
+                             'scan; a write that fails exits 3 with the answer printed and the other sinks '
+                             'written. With --stdin it needs --check and holds one document for the run.')
     target.add_argument('--also-json', metavar='PATH', default=None,
                         help='Retired: use --output json=PATH. Also write the result as JSON to PATH, in addition to '
                              '--format\'s primary output -- one invocation, one parse, both a '

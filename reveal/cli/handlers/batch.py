@@ -70,7 +70,8 @@ def _process_stdin_uri(target: str, args: 'Namespace', is_batch_mode: bool,
 
 
 def _process_stdin_file(
-    target: str, args: 'Namespace', handle_file_func, is_check_mode: bool = False
+    target: str, args: 'Namespace', handle_file_func, is_check_mode: bool = False,
+    collect: Optional[List[dict]] = None,
 ) -> Tuple[int, bool, bool]:
     """Process a file path from stdin.
 
@@ -79,6 +80,8 @@ def _process_stdin_file(
         args: Parsed arguments
         handle_file_func: Function to handle individual files
         is_check_mode: When True, run quality check and return violation count
+        collect: The run's list of per-file check results; the json sinks are written once from it
+            (BACK-2095) instead of once per file here.
 
     Returns:
         (violation count, degraded, artifact_failed) when is_check_mode is True, else
@@ -119,7 +122,7 @@ def _process_stdin_file(
         cli_overrides = _build_file_cli_overrides(args)
         config = RevealConfig.get(start_path=path.parent, cli_overrides=cli_overrides or None)
         violations, degraded, artifact_failed = run_pattern_detection(
-            analyzer, str(path), getattr(args, 'format', 'text'), args, config=config
+            analyzer, str(path), getattr(args, 'format', 'text'), args, config=config, collect=collect
         )
         return violations, degraded, artifact_failed
 
@@ -146,6 +149,19 @@ def _stdin_check_exit(args: 'Namespace', violations: int, degraded: bool, artifa
         output_failed=artifact_failed,
     )
     return 0 if exit_zero and not artifact_failed else max(file_exit, ssl_exit, uri_exit)
+
+
+def _write_stdin_check_artifact(args: 'Namespace', results: List[dict], failed: bool) -> bool:
+    """Write the one document of a ``--stdin --check`` run to each json sink; True when a write failed, or
+    *failed* already was (exit 3, disclosed by the shared artifact owner). Nothing is written for no checked
+    file or a json stdout sink, which already is the output (BACK-2095)."""
+    from reveal.checks import stdin_check_artifact
+    from reveal.utils.json_utils import json_sink_paths, write_requested_artifact, write_text_artifact
+    sinks = json_sink_paths(args)
+    if not sinks or not results:
+        return failed
+    write = lambda: write_text_artifact(sinks, stdin_check_artifact(results))  # noqa: E731
+    return write_requested_artifact(write) is not None or failed
 
 
 def handle_stdin_mode(args: 'Namespace', handle_file_func):
@@ -188,6 +204,7 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     any_file_degraded = False
     any_artifact_failed = False  # BACK-1939: a requested artifact write failed (exit 3, even under --exit-zero)
     uri_exit = 0  # the worst exit of a URI answered one at a time (BACK-1556)
+    check_results: List[dict] = []  # BACK-2095: each checked file's result; the json sinks get one document
 
     # Read paths/URIs from stdin (one per line)
     first_line_checked = False
@@ -216,7 +233,7 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
             # Apply --ext filter for file paths
             if _passes_ext_filter(target, getattr(args, 'ext', None)):
                 violations, degraded, artifact_failed = _process_stdin_file(
-                    target, args, handle_file_func, is_check_mode=is_check_mode
+                    target, args, handle_file_func, is_check_mode=is_check_mode, collect=check_results
                 )
                 total_file_violations += violations
                 any_file_degraded = any_file_degraded or degraded
@@ -232,6 +249,7 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     ssl_exit = _render_ssl_batch_results(ssl_check_results, args) if ssl_check_results else 0
 
     if is_check_mode:
+        any_artifact_failed = _write_stdin_check_artifact(args, check_results, any_artifact_failed)
         sys.exit(_stdin_check_exit(args, total_file_violations, any_file_degraded,
                                    any_artifact_failed, ssl_exit, uri_exit))
 

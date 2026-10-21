@@ -159,9 +159,11 @@ def test_a_format_the_target_does_not_render_is_a_sink_error_before_the_scan(pro
     assert not out.exists()
 
 
-def test_one_failing_sink_exits_3_and_the_other_sinks_and_the_answer_survive(project, tmp_path):
+@pytest.mark.parametrize('bad_first', [True, False], ids=['bad-first', 'bad-last'])
+def test_one_failing_sink_exits_3_and_the_other_sinks_and_the_answer_survive(project, tmp_path, bad_first):
     good, bad = tmp_path / 'good.json', tmp_path / 'no-such-dir' / 'bad.txt'
-    result = run('hotspots', str(project), '--output', f'json={good}', '--output', f'text={bad}')
+    sinks = [f'text={bad}', f'json={good}'] if bad_first else [f'json={good}', f'text={bad}']
+    result = run('hotspots', str(project), '--output', sinks[0], '--output', sinks[1])
     assert result.returncode == 3, result.stderr
     assert 'Hotspots:' in result.stdout
     assert json.loads(good.read_text(encoding='utf-8'))['type'] == 'hotspots_scan'

@@ -1,6 +1,9 @@
 """JSON utilities for reveal."""
 
+import contextlib
+import io
 import json
+import os
 import sys
 from datetime import datetime, date
 
@@ -67,19 +70,74 @@ def attach_retirements(result):
     return {**result, 'meta': meta}
 
 
-def write_also_json(result, args) -> None:
-    """BACK-1184: write *result* as JSON to args.also_json, if set, alongside
-    whatever --format is already rendering to stdout. Lets one invocation
-    produce both a human-readable report and a machine-readable artifact
-    without a second reveal call re-parsing the same files. No-op when
-    --also-json wasn't passed, or when --format is already json (the primary
-    output already covers it).
+def file_sinks(args) -> list:
+    """(format, path) of every file sink the invocation requested, in the order given.
+
+    ``--output FORMAT=PATH`` specs (a bare FORMAT is the stdout sink and was consumed by
+    ``apply_output_sinks``), then the retired ``--also-json PATH`` as a json sink. The one reader of
+    both spellings, so a writer asks for sinks and never for a flag (BACK-2089). ``isinstance`` rather
+    than truthiness: ``args`` is a Mock in several callers' tests.
     """
-    path = getattr(args, 'also_json', None)
-    if not path or getattr(args, 'format', 'text') == 'json':
-        return
-    with open(path, 'w', encoding='utf-8') as f:
-        print_json_result(result, file=f)
+    sinks: list = []
+    specs = getattr(args, 'output', None)
+    if isinstance(specs, list):
+        sinks.extend((spec.partition('=')[0], spec.partition('=')[2])
+                     for spec in specs if isinstance(spec, str) and '=' in spec)
+    legacy = getattr(args, 'also_json', None)
+    if isinstance(legacy, (str, os.PathLike)) and legacy:
+        sinks.append(('json', legacy))
+    return sinks
+
+
+def json_sink_paths(args) -> list:
+    """The paths of the json file sinks: what a writer that only knows the JSON document asks for."""
+    return [path for fmt, path in file_sinks(args) if fmt == 'json']
+
+
+def _render_sink(result, fmt, render, render_kwargs) -> str:
+    """The text *render* prints for *result* in *fmt*, as the stdout sink would print it: the body, the
+    result's warnings, then each cut list once. What it prints to stderr was already said by the stdout
+    sink, so it is dropped."""
+    from ..display.formatting import print_result_control_notes
+    from ..rendering.base import emit_rendered
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
+        emit_rendered(render, result, fmt, **render_kwargs)
+        print_result_control_notes(result, fmt)
+    return buffer.getvalue()
+
+
+def write_also_json(result, args, render=None, **render_kwargs) -> None:
+    """Write *result* to every file sink the invocation asked for (BACK-1184, BACK-2089): one result, one
+    write per sink, each sink rendered on its own.
+
+    A ``json`` sink is the result as JSON; any other format is what *render* prints for it
+    (``render(result, fmt, **render_kwargs)``, the call the stdout sink makes). A json sink is a no-op
+    when the stdout sink is already json: the primary output covers it. Every sink is attempted; the first
+    failure is raised after the rest were tried, tagged with its format (``sink_format``) for the one
+    disclosure line in ``write_requested_artifact``, and any later failure is disclosed there as well.
+    A non-json sink on a path that cannot render it fails like an unwritable one.
+    """
+    failures: list = []
+    primary = getattr(args, 'format', 'text')
+    for fmt, path in file_sinks(args):
+        if fmt == 'json' and primary == 'json':
+            continue
+        try:
+            if fmt == 'json':
+                with open(path, 'w', encoding='utf-8') as f:
+                    print_json_result(result, file=f)
+            elif render is None:
+                raise ValueError(f'{path}: this output cannot be rendered as {fmt}')
+            else:
+                write_text_artifact(path, _render_sink(result, fmt, render, render_kwargs))
+        except ARTIFACT_WRITE_ERRORS as exc:
+            setattr(exc, "sink_format", fmt)  # read back by _disclose_failed_sink
+            failures.append(exc)
+    if failures:
+        for later in failures[1:]:
+            _disclose_failed_sink(later)
+        raise failures[0]
 
 
 # What a requested artifact write raises: no path (OSError), an unencodable value, a bad serialization.
@@ -87,9 +145,30 @@ ARTIFACT_WRITE_ERRORS = (OSError, UnicodeError, ValueError)
 
 
 def write_text_artifact(path, text) -> None:
-    """Write an already-rendered artifact document to *path* (raises ARTIFACT_WRITE_ERRORS)."""
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(text)
+    """Write an already-rendered artifact document to *path* (raises ARTIFACT_WRITE_ERRORS).
+
+    *path* may be several paths: each is written, and the first failure is raised once the rest were tried.
+    """
+    paths = [path] if isinstance(path, (str, os.PathLike)) else list(path)
+    first = None
+    for one in paths:
+        try:
+            with open(one, 'w', encoding='utf-8') as f:
+                f.write(text)
+        except ARTIFACT_WRITE_ERRORS as exc:
+            first = first or exc
+    if first is not None:
+        raise first
+
+
+def _disclose_failed_sink(exc) -> str:
+    """Say once, on stderr, that a requested sink failed; returns the line's text (the json sink keeps the
+    wording that named it a JSON artifact)."""
+    fmt = getattr(exc, 'sink_format', 'json')
+    kind = 'JSON artifact' if fmt == 'json' else f'{fmt} output sink'
+    message = f'Requested {kind} failed: {exc}'
+    print(f'Error: {message}', file=sys.stderr)  # boundary-ok: print -- the one disclosure line for a failed requested artifact, shared by declared nouns and check
+    return message
 
 
 def write_requested_artifact(write, result=None):
@@ -104,8 +183,7 @@ def write_requested_artifact(write, result=None):
     try:
         write()
     except ARTIFACT_WRITE_ERRORS as exc:
-        message = f'Requested JSON artifact failed: {exc}'
-        print(f'Error: {message}', file=sys.stderr)  # boundary-ok: print -- the one disclosure line for a failed requested artifact, shared by declared nouns and check
+        message = _disclose_failed_sink(exc)
         if isinstance(result, dict):
             result.setdefault('meta', {}).setdefault('output_errors', []).append(
                 {'code': 'artifact_write_failed', 'message': message})

@@ -39,8 +39,19 @@ def declared_output_formats(adapter_class: Any) -> Optional[Tuple[str, ...]]:
     return tuple(formats) if isinstance(formats, (list, tuple)) else None
 
 
+def _require_supported_sinks(args: Any, supported: Sequence[str], label: str) -> None:
+    """Exit 2 when a file sink names a format `label` does not render (``--output grep=PATH`` on a
+    command that renders text and json): the same check, and the same list, as --format."""
+    from ...utils.json_utils import file_sinks
+    for fmt, target in file_sinks(args):
+        if fmt not in supported:
+            print(f"Error: --output {fmt}={target}: {fmt} is not supported by {label} "
+                  f"(supported: {', '.join(supported)}).", file=sys.stderr)
+            sys.exit(2)
+
+
 def require_supported_format(args: Any, supported: Optional[Sequence[str]], label: str) -> None:
-    """Exit 2 when --format names a format `label` does not render.
+    """Exit 2 when --format or a file sink names a format `label` does not render.
 
     A format that came from REVEAL_FORMAT rather than the command line falls
     back to text with a note instead: a session-wide preference should not
@@ -48,6 +59,7 @@ def require_supported_format(args: Any, supported: Optional[Sequence[str]], labe
     """
     if supported is None:
         return
+    _require_supported_sinks(args, supported, label)
     fmt = getattr(args, 'format', None) or 'text'
     if fmt in supported:
         return
@@ -101,34 +113,39 @@ def _stdout_sink(args: Any, invocation: Any, stdout_sinks: list) -> None:
         args.format = fmt
 
 
-def _file_sink(args: Any, file_sinks: list) -> None:
-    for fmt, target in file_sinks:
-        if fmt != 'json':
-            _sink_error(f'{fmt}={target}: only json file sinks exist yet; use --output json={target}')
-    if len(file_sinks) > 1:
-        _sink_error('only one file sink exists yet; got ' + ', '.join(f'{f}={t}' for f, t in file_sinks))
-    if file_sinks:
-        if getattr(args, 'also_json', None):
-            _sink_error('--also-json and --output json=PATH both name the artifact; use --output json=PATH only')
-        args.also_json = file_sinks[0][1]
+def _file_sink(args: Any, invocation: Any, file_sinks: list) -> None:
+    if file_sinks and (invocation.command == 'check' or getattr(args, 'check', False)):
+        other = [f'{f}={t}' for f, t in file_sinks if f != 'json']
+        if other:
+            _sink_error(f"{', '.join(other)}: check writes only json file sinks; "
+                        'its text and grep reports are built per format, so use --output json=PATH')
+    if (file_sinks or getattr(args, 'also_json', None)) and getattr(args, 'stdin', False) \
+            and not getattr(args, 'check', False):
+        _sink_error('a file sink with --stdin needs --check: a list of inputs answers once per input and one '
+                    'file holds one result; add --check, or run once per input')
+    if file_sinks and getattr(args, 'also_json', None):
+        _sink_error('--also-json and --output FORMAT=PATH both name the artifact; use --output FORMAT=PATH only')
+    # Left on args.output for the writers (utils.json_utils.file_sinks): the stdout sinks were consumed above.
+    args.output = [f'{fmt}={target}' for fmt, target in file_sinks] or None
 
 
 def apply_output_sinks(args: Any, invocation: Any) -> None:
-    """Resolve ``--output FORMAT[=PATH]`` onto the fields the writers read (BACK-2089 slice 5a), before any scan.
+    """Resolve ``--output FORMAT[=PATH]`` before any scan (BACK-2089 slices 5a, 5b).
 
-    A bare FORMAT is the stdout sink and sets ``args.format``; ``json=PATH`` sets ``args.also_json``, the one
-    artifact the writers already own. A bad sink exits 2 here: an unknown format, two stdout sinks, a stdout
-    sink that disagrees with a typed --format, a file sink that is not JSON or is not the only one, or
-    ``--also-json`` mixed with ``--output json=``. ``--also-json`` alone still works and prints its note.
+    A bare FORMAT is the stdout sink and sets ``args.format``. A ``FORMAT=PATH`` file sink stays on
+    ``args.output``, where ``utils.json_utils.file_sinks`` reads it (with ``--also-json``, the retired json
+    sink) for whichever writer the command reaches: no writer reads a flag of its own. A bad sink exits 2
+    here: an unknown format, an empty PATH, two stdout sinks, a stdout sink that disagrees with a typed
+    --format, a non-json file sink on ``check``, a file sink with ``--stdin`` but no ``--check``, or
+    ``--also-json`` mixed with a file sink. A format the target does not render is refused where
+    --format is (``require_supported_format``). ``--also-json`` alone still works and prints its note.
     """
     from ..invocation import retirement_note
     if invocation.typed('--also-json'):
         retirement_note('flag:--also-json')
-    specs = getattr(args, 'output', None)
-    if specs:
-        stdout_sinks, file_sinks = _parse_sinks(specs)
-        _stdout_sink(args, invocation, stdout_sinks)
-        _file_sink(args, file_sinks)
+    stdout_sinks, file_sinks = _parse_sinks(getattr(args, 'output', None) or ())
+    _stdout_sink(args, invocation, stdout_sinks)
+    _file_sink(args, invocation, file_sinks)
 
 
 def _also_json_typed() -> bool:
@@ -138,17 +155,20 @@ def _also_json_typed() -> bool:
 
 
 def reject_unhonored_also_json(args: Any, label: str) -> None:
-    """Exit 2 when --also-json was given to an output path that never writes it.
+    """Exit 2 when a file sink (--output FORMAT=PATH, --also-json) was given to an output path that never writes it.
 
     It is honored by scheme:// URIs (and the file/directory flags that route to
-    one) and by check; the file view, directory listing, --grep and the other
+    one), by declared commands and by check; the file view, directory listing, --grep and the other
     subcommands wrote nothing and said nothing (BACK-1425). With --format json
-    the primary output already is the JSON, so the flag is redundant there,
-    not unhonored.
+    a json sink is redundant, not unhonored: the primary output already is the JSON.
     """
-    if not getattr(args, 'also_json', None) or getattr(args, 'format', 'text') == 'json':
+    from ...utils.json_utils import file_sinks
+    sinks = file_sinks(args)
+    if getattr(args, 'format', 'text') == 'json':
+        sinks = [(fmt, path) for fmt, path in sinks if fmt != 'json']
+    if not sinks:
         return
-    spelling = '--also-json' if _also_json_typed() else '--output json=PATH'
+    spelling = '--also-json' if _also_json_typed() else f'--output {sinks[0][0]}=PATH'
     print(
         f"Error: {spelling} is not supported by {label}; it works with scheme:// URIs and "
         "`reveal check`. Use --format json for this command's JSON.",

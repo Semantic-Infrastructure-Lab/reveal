@@ -14,7 +14,7 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from ..logging_setup import worker_bootstrap
 from ..utils.parallel import pool_worker_count, submit_each
-from ..utils.json_utils import write_requested_artifact, write_text_artifact
+from ..utils.json_utils import json_sink_paths, write_requested_artifact, write_text_artifact
 from ..utils.results import note_truncation, requested_fail_on
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1055,7 +1055,7 @@ def _scope_dict(scope: ScopeCensus, select, ignore) -> dict:
     return scope_dict
 
 
-def _write_also_json_report(path: str, result: dict, source: str) -> bool:
+def _write_also_json_report(path, result: dict, source: str) -> bool:
     """BACK-1248: write check's JSON report to *path* alongside a text/grep
     render on stdout, so one invocation produces both the human report and the
     machine artifact -- the document --format json prints (subcommand_json).
@@ -1207,7 +1207,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
 
     from .routing.subcommand import emit_subcommand_result
     emit_subcommand_result(result, args, name='check', source=shown, render=render)
-    artifact_failed = artifact is not None and _write_also_json_report(args.also_json, artifact, shown)
+    artifact_failed = artifact is not None and _write_also_json_report(json_sink_paths(args), artifact, shown)
 
     # Exit with appropriate code (BACK-1099: distinguish "clean" from
     # "issues found" from "scan incomplete" -- files_errored/files_degraded
@@ -1303,7 +1303,7 @@ def _json_or_grep_check(files: List[Path], directory: Path, collection: 'FileCol
             # than polluting stdout with a non-conforming line.
             print(f"⚠️  {reason}", file=sys.stderr)
 
-    artifact = result if args.format == 'grep' and getattr(args, 'also_json', None) else None
+    artifact = result if args.format == 'grep' and json_sink_paths(args) else None
     return tally, result, render_grep, artifact
 
 
@@ -1331,7 +1331,7 @@ def _text_check(files: List[Path], directory: Path, collection: 'FileCollectionR
     result = report(tally, text.budget)
 
     artifact = None
-    if getattr(args, 'also_json', None):
+    if json_sink_paths(args):
         entries, budget = _json_file_entries(
             text.checked_files, max_items, no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
         )

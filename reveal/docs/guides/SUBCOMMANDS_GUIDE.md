@@ -504,7 +504,7 @@ reveal contracts [PATH] [--abstract-only] [--no-implementations] [--impls N] [--
 | `--abstract-only` | Show only ABCs and Protocols; skip TypedDicts, dataclasses, path-heuristic |
 | `--no-implementations` | Skip showing which classes implement each contract |
 | `--impls N` | Implementers per contract in text (default 5; 0 displays all); JSON arrays remain complete |
-| `--output json=PATH` | Write the complete JSON result alongside text output |
+| `--output json=PATH` | Write the complete JSON result alongside text output; `--output text=PATH` writes the text render beside a JSON stdout, and the flag repeats for several files |
 | `--fail-on none` | Default policy; required analysis/output failures still exit 3 |
 | `--format` | `text` (default), `json` |
 
@@ -944,7 +944,7 @@ git diff --name-only | reveal --stdin --check  # check only changed files
 
 Exit code 1 is set consistently across all invocation forms: single file, directory, and `--stdin --check` piped file lists.
 
-A requested `--output json=PATH` that cannot be written (the path is a directory, the parent is missing or read-only) exits 3 in all three forms: the report on stdout is still printed in full, and `Error: Requested JSON artifact failed: ...` is printed once on stderr. This outranks issues found (1) and the legacy `--exit-zero`. With `--format json` the artifact would equal the printed document, so `--output json=PATH` is not written and cannot fail. (Before this, `check` printed a `Warning:` and kept the scan's exit code, so a gate could read 0 for a run whose artifact was never written.)
+A requested `--output json=PATH` that cannot be written (the path is a directory, the parent is missing or read-only) exits 3 in all three forms: the report on stdout is still printed in full, and `Error: Requested JSON artifact failed: ...` is printed once on stderr. This outranks issues found (1) and the legacy `--exit-zero`. With `--format json` the artifact would equal the printed document, so `--output json=PATH` is not written and cannot fail. (Before this, `check` printed a `Warning:` and kept the scan's exit code, so a gate could read 0 for a run whose artifact was never written.) `printf 'a.py\nb.py\n' | reveal --stdin --check --output json=PATH` writes PATH once, for the whole run, as one `check` document with a `files[]` entry per input; it used to be rewritten per file, so it held only the last one.
 
 ### See Also
 

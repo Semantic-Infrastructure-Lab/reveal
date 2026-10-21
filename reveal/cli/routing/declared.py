@@ -269,7 +269,7 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
     result = attach_provenance(result)
     if announce_error:
         announce_outcome(result, f'{scheme}://')
-    failure = write_requested_artifact(lambda: write_also_json(result, args), result)
+    failure = write_requested_artifact(lambda: write_also_json(result, args, render, **render_kwargs), result)
     if failure is not None:
         facts = merge_execution_facts(facts, failure_execution_facts(FailureCause.OUTPUT))
         if execution_answer is not None:

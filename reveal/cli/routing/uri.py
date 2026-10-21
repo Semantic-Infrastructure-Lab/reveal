@@ -17,6 +17,7 @@ from ...errors import NotApplicableError
 from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
+from ...utils.json_utils import write_requested_artifact
 from ...display.formatting import print_result_control_notes
 from ...utils.results import (ExecutionFacts, Outcome, ResultBuilder, echo_source, note_truncation, outcome_of,
                              slice_items, truncations_of)
@@ -671,8 +672,8 @@ def _check_answer(adapter, renderer_class: type[Any], args: 'Namespace',
 
 
 def _emit_check(result: Any, adapter, renderer_class: type[Any], args: 'Namespace') -> NoReturn:
-    """Print a check result and exit with its own exit_code (EXIT_CODE_CONTRACT)."""
-    write_also_json(result, args)
+    """Print a check result and exit with its own exit_code (EXIT_CODE_CONTRACT); 3 when a requested sink failed."""
+    failure = write_requested_artifact(lambda: write_also_json(result, args), result)
 
     # Render check results
     if hasattr(renderer_class, 'render_check'):
@@ -693,7 +694,7 @@ def _emit_check(result: Any, adapter, renderer_class: type[Any], args: 'Namespac
         logger.warning("check() returned non-dict result; treating as pass (exit 0)")
         exit_code = 0
     complete(args)
-    sys.exit(exit_code)
+    sys.exit(3 if failure is not None else exit_code)
 
 
 def _view_answer(adapter, renderer_class: type[Any], scheme: str,
@@ -1274,10 +1275,12 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
                              execution_answer=execution_answer, announce_error=announce_error, **render_kwargs)
         return
     outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
-    write_also_json(result, args)
+    failure = write_requested_artifact(lambda: write_also_json(result, args, render, **render_kwargs), result)
     emit_rendered(render, result, args.format, **render_kwargs)
     conclude_outcome(result, outcome, args.format)
     code = exit_code(result, args.format) if exit_code and outcome != 'failed' else 0
+    if failure is not None:
+        code = 3  # a requested output failed (D6): outranks the renderer's findings exit, the answer was printed
     if code:
         sys.exit(code)
 
