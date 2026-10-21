@@ -52,6 +52,21 @@ def _run_reveal_direct(*args):
     return _Result(rc, buf_out.getvalue(), buf_err.getvalue())
 
 
+def _run_reveal_in(cwd, *args, stdin=None):
+    """_run_reveal_direct from *cwd*, with *stdin* (a str) as sys.stdin: the in-process form of
+    ``subprocess.run([sys.executable, '-m', 'reveal', *args], cwd=cwd, input=stdin)``, for tests
+    that do not test the process itself (BACK-2144: a spawn per call made such files ~60 s)."""
+    saved_cwd, saved_stdin = os.getcwd(), sys.stdin
+    os.chdir(cwd)
+    if stdin is not None:
+        sys.stdin = StringIO(stdin)
+    try:
+        return _run_reveal_direct(*args)
+    finally:
+        os.chdir(saved_cwd)
+        sys.stdin = saved_stdin
+
+
 def sliced_structure(analyzer, head=None, tail=None, range=None, **kwargs) -> dict:
     """``analyzer``'s structure cut as ``reveal FILE --head N`` cuts it (BACK-1548).
 

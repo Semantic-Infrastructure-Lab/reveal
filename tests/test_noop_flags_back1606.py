@@ -4,13 +4,11 @@ Each test here failed on the code before the fix: the flag or param was advertis
 and then ignored (with a note at best, silently at worst).
 """
 
-import os
-import subprocess
-import sys
 from argparse import Namespace
 
 import pytest
 
+from conftest import _run_reveal_in
 from reveal.adapters.architecture import ArchitectureRenderer
 from reveal.adapters.deps import DepsAdapter, DepsRenderer
 from reveal.adapters.overview import OverviewRenderer
@@ -18,9 +16,7 @@ from reveal.cli.routing.uri import _render_structure_top_kwargs
 
 
 def _cli(*argv, cwd):
-    env = dict(os.environ, PYTHONIOENCODING='utf-8', REVEAL_NO_UPDATE_CHECK='1')
-    return subprocess.run([sys.executable, '-m', 'reveal', *argv], cwd=cwd, env=env,
-                          capture_output=True, text=True, encoding='utf-8', timeout=120)
+    return _run_reveal_in(cwd, *argv)
 
 
 @pytest.fixture
@@ -146,6 +142,12 @@ def _subcommands_with_format():
     from reveal.cli.invocation import COMMANDS
     return [name for name in sorted(COMMANDS)
             if any('--format' in a.option_strings for a in COMMANDS[name].load()[0]._actions)]
+
+
+def test_the_format_inventory_is_not_vacuous():
+    """An empty list would parametrize nothing and pass. This test is both directions of the usage
+    claim: a listed format that is rejected (BACK-1611 item 6) and an accepted one left out."""
+    assert len(_subcommands_with_format()) >= 10, _subcommands_with_format()
 
 
 @pytest.mark.parametrize('name', _subcommands_with_format())

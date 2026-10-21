@@ -11,10 +11,9 @@ The parser-derived guard fails when a flag is added to one of those groups and c
 no table, so the next one cannot be missed.
 """
 
-import subprocess
-import sys
-
 import pytest
+
+from conftest import _run_reveal_in
 
 HTML = '<html><head><title>T</title></head><body><h1 id="x">hi</h1><script>1</script></body></html>\n'
 MD = '# T\n\n## S\n\nhello [l](http://x.y) `c`\n\n```python\nprint(1)\n```\n'
@@ -38,8 +37,7 @@ CONTENT = {'html': HTML, 'md': MD, 'py': PY, 'conf': CONF}
 
 
 def _reveal(cwd, *args, stdin=None):
-    return subprocess.run([sys.executable, '-m', 'reveal', *args], cwd=cwd, input=stdin,
-                          capture_output=True, text=True, encoding='utf-8', timeout=60)
+    return _run_reveal_in(cwd, *args, stdin=stdin)
 
 
 @pytest.fixture

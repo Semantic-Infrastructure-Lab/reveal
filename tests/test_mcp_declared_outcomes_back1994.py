@@ -72,8 +72,7 @@ mcp_server.main()
 '''
 
 
-@pytest.mark.parametrize('provenance', [False, True])
-@pytest.mark.parametrize('case,public,private', [
+_FAILURE_CASES = [
     ('analysis_permission', 'PUBLIC_ANALYSIS_PERMISSION', ''),
     ('analysis_crash', '', 'PRIVATE_ANALYSIS_CRASH'),
     ('returned_failed', '', 'PRIVATE_RETURNED_FAILURE'),
@@ -83,26 +82,33 @@ mcp_server.main()
     ('render_permission', 'PUBLIC_RENDER_PERMISSION', ''),
     ('render_crash', '', 'PRIVATE_RENDER_CRASH'),
     ('render_after_stdout', '', 'PRIVATE_RENDER_CRASH'),
-])
-def test_declared_failures_are_errors_regardless_of_rendered_body(tmp_path, case, public, private, provenance):
-    root = tmp_path / case
-    root.mkdir()
-    (root / 'demo.py').write_text('VALUE = 1\n', encoding='utf-8')
+]
+
+
+@pytest.mark.parametrize('provenance', [False, True])
+def test_declared_failures_are_errors_regardless_of_rendered_body(tmp_path, provenance):
+    """Every case through one server: the injected server branches on the directory name, so a
+    server per case only repeated its ~3 s start (18 starts, BACK-2144)."""
+    for case, _, _ in _FAILURE_CASES:
+        (tmp_path / case).mkdir()
+        (tmp_path / case / 'demo.py').write_text('VALUE = 1\n', encoding='utf-8')
 
     async def scenario(session):
-        answer = await session.call_tool('reveal_query', {'uri': f'surface://{root}', 'provenance': provenance})
-        assert answer.is_error
-        assert _text(answer).strip()
-        serialized = json.dumps(answer.model_dump(mode='json'))
-        if public:
-            assert public in _text(answer)
-        if private:
-            assert private not in serialized
-        assert 'BROKEN_PARTIAL_OUTPUT' not in serialized
+        for case, public, private in _FAILURE_CASES:
+            answer = await session.call_tool(
+                'reveal_query', {'uri': f'surface://{tmp_path / case}', 'provenance': provenance})
+            assert answer.is_error, case
+            assert _text(answer).strip(), case
+            serialized = json.dumps(answer.model_dump(mode='json'))
+            if public:
+                assert public in _text(answer), case
+            if private:
+                assert private not in serialized, case
+            assert 'BROKEN_PARTIAL_OUTPUT' not in serialized, case
 
     _run(tmp_path, scenario, _SERVER)
-    if private:
-        assert private in (tmp_path / 'server-stderr.txt').read_text(encoding='utf-8')
+    stderr = (tmp_path / 'server-stderr.txt').read_text(encoding='utf-8')
+    assert [p for _, _, p in _FAILURE_CASES if p and p not in stderr] == []
 
 
 @pytest.mark.parametrize('provenance', [False, True])
