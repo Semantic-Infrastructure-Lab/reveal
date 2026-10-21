@@ -43,6 +43,18 @@ POPULATION_FIELDS = ('oracle', 'sha', 'targets', 'oracle_edges', 'coverage')
 
 
 _PARTIAL_PARSE = re.compile(r'(\d+) file\(s\) parsed with errors')
+# The one parameter combination the import oracles define truth for, and that depends:// applies:
+# every static edge, function-level and tests included, TYPE_CHECKING excluded (BACK-2077).
+SCORED_RULE = {'lazy': 'include', 'tests': 'included', 'type_checking': 'excluded'}
+# The combinations the engine states but this gate cannot score through the public path yet (BACK-2062).
+DECLINED = (
+    {'combination': 'lazy=exclude', 'reason': 'depends:// takes no &lazy and imports://?rank=fan-in&lazy= returns '
+     'counts, not importers, so the public path lists no importers per edge view. Oracles: the TypeScript oracle '
+     'emits no scope (BACK-2064), rust-use is a regex that cannot tell a fn-local use (BACK-2079), python-ast does '
+     'not tag it yet; C, C++, Go and Java have no function-scope import'},
+    {'combination': 'lazy=only', 'reason': 'as lazy=exclude'},
+    {'combination': 'tests=exclude', 'reason': "no engine parameter: every answer's edge_rule.tests is 'included'"},
+)
 
 
 @contextlib.contextmanager
@@ -86,7 +98,18 @@ def _depends_request(target: Path, scan: Path) -> dict[str, Any]:
                        target.name)
     if result.get('metadata', {}).get('scan_capped'):
         raise RuntimeError('Reveal scan was capped; measurement unavailable')
+    rule = result.get('edge_rule') or {}
+    applied = {key: rule.get(key) for key in SCORED_RULE}
+    if applied != SCORED_RULE:
+        shown = ', '.join(f'{key}={value!r}' for key, value in applied.items() if value != SCORED_RULE[key])
+        raise RuntimeError(f'depends:// answered under rule {shown}; the gate scores {SCORED_RULE}')
     return result
+
+
+def _edge_rule(result: dict[str, Any]) -> dict[str, Any]:
+    """The rule an answer was computed under, as its edge_rule states it (recorded, not compared)."""
+    rule = result['edge_rule']
+    return {key: rule.get(key) for key in (*SCORED_RULE, 'scope', 'unclassified_languages')}
 
 
 def _partial_files(result: dict[str, Any]) -> int:
@@ -107,7 +130,7 @@ def rendered_dependents(scan: Path, target: Path) -> dict[str, Any]:
     if len(dependents) != result['count']:
         raise RuntimeError(f'depends:// answer truncated for {target.name}: {len(dependents)} of {result["count"]} shown')
     return {'importers': {Path(os.path.normpath(scan / dep['file'])) for dep in dependents},
-            'partial_files': _partial_files(result)}
+            'partial_files': _partial_files(result), 'edge_rule': _edge_rule(result)}
 
 
 def rendered_reverse_graph(scan: Path) -> dict[str, Any]:
@@ -123,7 +146,7 @@ def rendered_reverse_graph(scan: Path) -> dict[str, Any]:
         raise RuntimeError(f'depends:// summary truncated: {len(modules)} of {result["total_modules"]} modules shown')
     return {'by_target': {Path(os.path.normpath(scan / m['module'])): {Path(os.path.normpath(scan / d)) for d in m['dependents']}
                           for m in modules},
-            'partial_files': _partial_files(result)}
+            'partial_files': _partial_files(result), 'edge_rule': _edge_rule(result)}
 
 
 def corpus_key(entry: dict) -> str:
@@ -154,6 +177,7 @@ def measure(entry: dict, root: Path) -> dict[str, Any]:
     excluded_suffixes = tuple(config.get('exclude_importer_suffixes', []))
     population = {p for p in importers if not excluded_suffixes or not p.name.endswith(excluded_suffixes)}
     hit = expected = extra = partial = 0
+    rule: dict[str, Any] = {}
     differences = []
     with _scan_cap(cap):
         reset_request_caches()
@@ -162,9 +186,10 @@ def measure(entry: dict, root: Path) -> dict[str, Any]:
         for target, truth_list in edges.items():
             if graph is None:
                 view = rendered_dependents(scan, root / target)
-                importers, partial = view['importers'], view['partial_files']
+                importers, partial, rule = view['importers'], view['partial_files'], view['edge_rule']
             else:
-                importers, partial = graph['by_target'].get(root / target, set()), graph['partial_files']
+                importers = graph['by_target'].get(root / target, set())
+                partial, rule = graph['partial_files'], graph['edge_rule']
             truth = set(truth_list)
             found = {p.relative_to(root).as_posix() for p in importers if p in population}
             matched, missed, surplus = truth & found, truth - found, found - truth
@@ -177,7 +202,7 @@ def measure(entry: dict, root: Path) -> dict[str, Any]:
         raise RuntimeError('Reveal found zero oracle edges; positive control failed')
     return {'oracle': name, 'sha': head, 'targets': len(edges), 'oracle_edges': expected, 'hit_edges': hit,
             'extra_edges': extra, 'recall': hit / expected, 'precision': hit / (hit + extra),
-            'coverage': coverage, 'partial_files': partial,
+            'coverage': coverage, 'partial_files': partial, 'edge_rule': rule,
             'differences': differences}
 
 
@@ -352,11 +377,14 @@ def main(argv=None) -> int:
             errors.extend(regressions(current, baseline, notes))
         except (KeyError, TypeError) as exc:
             errors.append(f'Baseline malformed: {type(exc).__name__}: {exc}')
+    # The import signal scores one rule and names the combinations it declines (calls scores depth-1 callers).
+    combinations = {'scored': SCORED_RULE, 'declined': list(DECLINED)} if args.signal == 'imports' else {}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps({'measured_at': datetime.now(timezone.utc).isoformat(),
                                      'reveal_version': __version__, 'python': sys.version,
                                      'signal': args.signal, 'implementation': implementation_identity(),
-                                     'measurements': current, 'failures': errors, 'notes': notes}, indent=2) + '\n', encoding='utf-8')
+                                     **combinations, 'measurements': current, 'failures': errors, 'notes': notes},
+                                    indent=2) + '\n', encoding='utf-8')
     for note in notes:
         print(f'note: {note}', flush=True)
     for error in errors:
