@@ -57,6 +57,7 @@ import time
 from contextlib import contextmanager
 from typing import Dict, List, Optional, Tuple, Union
 
+from .lines import split_lines
 from .request_cache import in_host_request, register_request_cache
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,7 @@ def _stamp_paths(root: str) -> Optional[List[str]]:
                      '--git-path', 'config')
     if where is None or where.returncode != 0:
         return None
-    paths = [os.path.join(root, line) for line in os.fsdecode(where.stdout).splitlines() if line]
+    paths = [os.path.join(root, line) for line in split_lines(os.fsdecode(where.stdout)) if line]
     # Nested ignore files at the time of the load (tracked, or untracked and not ignored).
     nested = _run_git(root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard',
                       '--', ':(glob)**/.gitignore')
@@ -197,7 +198,7 @@ def _stamp_paths(root: str) -> Optional[List[str]]:
 
 def _stat_stamp(paths) -> Tuple[Tuple[str, Optional[Tuple[int, int]]], ...]:
     """(path, (mtime_ns, size)) per path; (path, None) for a path that does not exist."""
-    stamp = []
+    stamp: List[Tuple[str, Optional[Tuple[int, int]]]] = []
     for path in paths:
         try:
             st = os.stat(path)
