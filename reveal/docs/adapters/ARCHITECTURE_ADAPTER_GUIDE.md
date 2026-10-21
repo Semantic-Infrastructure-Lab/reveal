@@ -60,7 +60,7 @@ For resource paths, an existing literal percent path wins; otherwise an encoded
 existing path is decoded once. Both empty resources default to the current directory.
 
 Both spellings return the same operation identity and support human output plus
-`--also-json PATH`. With primary `--format json`, `--also-json` retains its
+`--output json=PATH`. With primary `--format json`, `--output json=PATH` retains its
 existing no-op behavior. Execution exits are 0 for complete answers, 2 for invalid
 requests, and 3 for required analysis or requested-output failure/incompleteness.
 Only `--fail-on none` is supported; risks do not establish a findings exit gate.

@@ -174,11 +174,11 @@ def test_postprocessing_cannot_manufacture_absence(project, monkeypatch, prior, 
 def test_artifacts_environment_and_output_failure(project, monkeypatch, transport):
     argv = requests(project)[transport == 'uri']
     artifact = project.parent / (transport + '.json')
-    human = run(*argv, '--also-json', str(artifact))
+    human = run(*argv, '--output', f'json={artifact}')
     primary = run(*argv, '--format', 'json')
     assert human.returncode == primary.returncode == 0
     assert json.loads(artifact.read_text(encoding='utf-8')) == json.loads(primary.stdout)
-    failed = run(*argv, '--also-json', str(project))
+    failed = run(*argv, '--output', f'json={project}')
     assert failed.returncode == 3
     assert 'Trace:' in failed.stdout
     monkeypatch.setenv('REVEAL_FORMAT', 'json')
@@ -238,7 +238,7 @@ def test_direct_typed_binding_rejects_nonscalar_or_nonwhole_values(project, valu
 
 @pytest.mark.parametrize('transport', ['cli', 'uri'])
 def test_required_output_failure_overrides_proven_absence(project, transport):
-    result = run(*requests(project, 'absent')[transport == 'uri'], '--also-json', str(project))
+    result = run(*requests(project, 'absent')[transport == 'uri'], '--output', f'json={project}')
     assert result.returncode == 3
     assert 'Trace:' in result.stdout
     assert 'Requested JSON artifact failed' in result.stderr

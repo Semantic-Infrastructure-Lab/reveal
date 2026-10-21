@@ -22,6 +22,7 @@ from .registry import FALLBACK_SUPPORT_NOTE, display_name_for_extension, fallbac
 from . import __version__
 from .utils import copy_to_clipboard, check_for_updates
 from .cli.global_flags import apply_global_flags
+from .cli.routing.formats import apply_output_sinks
 from .cli.invocation import (COMMANDS, Invocation, RetiredSpellingError, invocation_scope,
                              retirement_note)
 from .config import disable_breadcrumbs_permanently
@@ -307,6 +308,7 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
         if invocation.typed('--search'):
             retirement_note('flag:--search')
         validate_navigation_args(args)
+        apply_output_sinks(args, invocation)
         return args, lambda: _main_impl(invocation, parser, args)
 
     retirement_note(f'subcommand:{name}')
@@ -316,6 +318,7 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
     _show_subcommand_formats(sub_parser, formats)
     _show_subcommand_options(sub_parser, name)
     sub_args = sub_parser.parse_args(invocation.command_argv)
+    apply_output_sinks(sub_args, invocation)
     _require_subcommand_format(name, sub_args, formats)
     # BACK-1539: the flag ledger and the REVEAL_IGNORE/--exclude walk scope, once for all.
     from .cli.routing.subcommand import dispatch_subcommand

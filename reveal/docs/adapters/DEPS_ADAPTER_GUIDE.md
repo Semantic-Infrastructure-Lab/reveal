@@ -52,7 +52,7 @@ cannot suppress required failures. Mixed URI batches retain their legacy policy
 and reject explicit `--fail-on`.
 
 Summary projection applies only to primary `--format json`. Text remains full
-and reports that summary-only has no effect; a human-primary `--also-json PATH`
+and reports that summary-only has no effect; a human-primary `--output json=PATH`
 artifact also retains the full map. Primary JSON keeps the existing mirror no-op.
 
 ## Reading The Output

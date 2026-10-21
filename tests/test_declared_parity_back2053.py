@@ -188,7 +188,7 @@ def test_requested_artifact_equals_the_primary_json(project, tmp_path, noun):
     docs = {}
     for spelling in ('cli', 'uri'):
         artifact = tmp_path / f'{spelling}.json'
-        result = run(noun, spelling, '--also-json', str(artifact))
+        result = run(noun, spelling, '--output', f'json={artifact}')
         assert result.returncode == 0, result.stderr
         docs[spelling] = json.loads(artifact.read_text(encoding='utf-8'))
     primary = json.loads(run(noun, 'cli', '--format', 'json').stdout)

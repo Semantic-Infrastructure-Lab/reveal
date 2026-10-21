@@ -103,7 +103,7 @@ optional churn/test conventions, confidence alone and ranking cuts do not.
 Surviving observations and attributed diagnostics remain available.
 
 `--fields`, URI `--head` and `--max-items` operate after execution facts are
-captured. Human-primary `--also-json PATH` writes the same answer; a failed
+captured. Human-primary `--output json=PATH` writes the same answer; a failed
 requested write exits 3. Primary JSON retains the existing artifact no-op.
 Mixed URI batches retain their legacy execution policy and reject `--fail-on`.
 

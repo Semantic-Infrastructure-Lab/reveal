@@ -219,7 +219,7 @@ same note as `?target=`/`?root=`); both spellings give equal JSON through one ex
 |------|---------|
 | 0 | Complete answer (an empty one included: a defined function with no callers, or a name with call sites and no definition, such as a library function) |
 | 2 | Rejected before analysis: two modes, no mode, a malformed value, a missing path, `callers=FILE:NAME`, `detail` outside `callees`. Also a complete answer whose name names nothing: `callees` finds no definition, or `callers` finds no definition and no call site (`error`: "Function 'X' not found in PATH"; the empty answer is still printed). A tree `.gitignore` hid is never absent (0, with `scope_hidden`) |
-| 3 | Required analysis or output incomplete: a file or directory could not be read (the answer is still printed with its `analysis_failed`/`analysis_incomplete` warning), or a requested `--also-json` could not be written |
+| 3 | Required analysis or output incomplete: a file or directory could not be read (the answer is still printed with its `analysis_failed`/`analysis_incomplete` warning), or a requested `--output json=PATH` could not be written |
 
 `--fail-on` accepts `none` only: calls reports facts, not findings.
 

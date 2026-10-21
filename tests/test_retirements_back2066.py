@@ -178,6 +178,8 @@ def test_a_retirement_row_validates_itself():
 PRODUCTION_CASES = {
     'flag:--search': lambda f: [f, '--search', 'auth'],
     'flag:--check': lambda f: [f, '--check', '--select', 'B001'],
+    # Phase 3 slice 5a (BACK-2089): --output json=PATH is the sink, --also-json its retired spelling.
+    'flag:--also-json': lambda f: ['check', str(Path(f).parent), '--also-json', str(Path(f).parent / 'artifact.json')],
     # Phase 2b (BACK-2066); every spelling of each row is in tests/test_retired_call_spellings_back2066.py.
     'param:calls.root': lambda f: [f'calls://{Path(f).parent}?root=auth_gate'],
     'param:calls.target': lambda f: [f'calls://{Path(f).parent}?target=auth_gate'],

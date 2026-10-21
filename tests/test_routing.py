@@ -1239,7 +1239,7 @@ class TestHandleFile(unittest.TestCase):
                 self.assertEqual(printed['source'], target)
                 for render in ('text', 'grep'):
                     artifact = Path(outdir) / f'{render}.json'
-                    rendered = run('--format', render, '--also-json', str(artifact))
+                    rendered = run('--format', render, '--output', f'json={artifact}')
                     self.assertTrue(
                         artifact.exists(),
                         f"artifact not written for {target} ({render}): {rendered.stderr}",
@@ -1271,7 +1271,7 @@ class TestHandleFile(unittest.TestCase):
                 out = Path(tmp) / 'a.json'
                 subprocess.run(
                     [_sys.executable, '-m', 'reveal', 'check', tmp, '--exit-zero',
-                     '--also-json', str(out), *extra],
+                     '--output', f'json={out}', *extra],
                     capture_output=True, text=True, encoding='utf-8',
                 )
                 return json.loads(out.read_text())['files']

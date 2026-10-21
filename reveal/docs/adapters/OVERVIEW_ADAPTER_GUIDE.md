@@ -114,8 +114,8 @@ complete. The validated uncapped AST count preserves availability before `top=0`
 or other ranking limits; projections cannot manufacture observations or erase failure.
 
 Execution facts are retained before `--fields` projection and postprocessing.
-Human-primary `--also-json PATH` retains complete arrays; a failed artifact write
-exits 3. Primary JSON keeps its established `--also-json` no-op. Closed stdout
+Human-primary `--output json=PATH` retains complete arrays; a failed artifact write
+exits 3. Primary JSON keeps its established `--output json=PATH` no-op. Closed stdout
 alone retains exit 0 but cannot erase an independent analysis or output failure.
 Overview has no sliceable outer list: URI `--head` and `--max-items` disclose no
 effect, and generated CLI `--max-items` likewise leaves these arrays unchanged.

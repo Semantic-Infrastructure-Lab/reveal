@@ -19,7 +19,7 @@ reveal contracts . --format json
 reveal contracts . --abstract-only
 reveal contracts . --no-implementations
 reveal contracts . --impls 0
-reveal contracts . --also-json contracts.json
+reveal contracts . --output json=PATH contracts.json
 
 reveal 'contracts://src'
 reveal 'contracts://.?abstract_only=true'
@@ -119,7 +119,7 @@ diagnostics. Empty results and disclosed unsupported-language coverage remain
 complete. `--fail-on none` is supported and is the default; it does not suppress
 required failures. Contracts has no findings gate.
 
-Text output can also write the complete result with `--also-json PATH`.
+Text output can also write the complete result with `--output json=PATH`.
 Primary JSON output keeps that option as a no-op. Text implementer caps never
 shrink the JSON arrays. Legacy stdin and mixed URI batches retain their existing
 exit policy and reject `--fail-on` until separately qualified.

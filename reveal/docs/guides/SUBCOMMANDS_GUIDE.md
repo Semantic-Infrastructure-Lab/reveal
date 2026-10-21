@@ -230,7 +230,7 @@ intentional exclusions keep their existing behavior.
 Pack retains its legacy exits and ordinary MCP responses, including under discovery
 loss; inspect the warnings to distinguish that uncertainty. This disclosure does not
 establish completeness of optional import-graph ranking or file reads and parsing.
-URI requests support `--also-json` artifacts and global field/item cuts; the native
+URI requests support `--output json=PATH` artifacts and global field/item cuts; the native
 Pack subcommand retains its existing supported flags.
 
 ### File measurements and budgets
@@ -504,7 +504,7 @@ reveal contracts [PATH] [--abstract-only] [--no-implementations] [--impls N] [--
 | `--abstract-only` | Show only ABCs and Protocols; skip TypedDicts, dataclasses, path-heuristic |
 | `--no-implementations` | Skip showing which classes implement each contract |
 | `--impls N` | Implementers per contract in text (default 5; 0 displays all); JSON arrays remain complete |
-| `--also-json PATH` | Write the complete JSON result alongside text output |
+| `--output json=PATH` | Write the complete JSON result alongside text output |
 | `--fail-on none` | Default policy; required analysis/output failures still exit 3 |
 | `--format` | `text` (default), `json` |
 
@@ -753,7 +753,7 @@ reveal architecture src/ --against main --format json
 reveal 'architecture://src?against=main' --format json
 ```
 
-The two spellings share answers and support human output with `--also-json PATH`.
+The two spellings share answers and support human output with `--output json=PATH`.
 Architecture exits 0 for completed answers, 2 for invalid requests and 3 for
 required analysis/output failure or missing evidence. `--fail-on none` retains
 required failures; no adverse-risk gate is declared. Ordinary verbose expands
@@ -940,11 +940,11 @@ git diff --name-only | reveal --stdin --check  # check only changed files
 | `0` | Complete and clean, or explicit `--exit-zero` |
 | `1` | One or more violations found with no known scan incompleteness |
 | `2` | Usage error |
-| `3` | Incomplete analysis, including disclosed rule-wide evidence loss, or a requested `--also-json` artifact that could not be written |
+| `3` | Incomplete analysis, including disclosed rule-wide evidence loss, or a requested `--output json=PATH` artifact that could not be written |
 
 Exit code 1 is set consistently across all invocation forms: single file, directory, and `--stdin --check` piped file lists.
 
-A requested `--also-json PATH` that cannot be written (the path is a directory, the parent is missing or read-only) exits 3 in all three forms: the report on stdout is still printed in full, and `Error: Requested JSON artifact failed: ...` is printed once on stderr. This outranks issues found (1) and the legacy `--exit-zero`. With `--format json` the artifact would equal the printed document, so `--also-json` is not written and cannot fail. (Before this, `check` printed a `Warning:` and kept the scan's exit code, so a gate could read 0 for a run whose artifact was never written.)
+A requested `--output json=PATH` that cannot be written (the path is a directory, the parent is missing or read-only) exits 3 in all three forms: the report on stdout is still printed in full, and `Error: Requested JSON artifact failed: ...` is printed once on stderr. This outranks issues found (1) and the legacy `--exit-zero`. With `--format json` the artifact would equal the printed document, so `--output json=PATH` is not written and cannot fail. (Before this, `check` printed a `Warning:` and kept the scan's exit code, so a gate could read 0 for a run whose artifact was never written.)
 
 ### See Also
 

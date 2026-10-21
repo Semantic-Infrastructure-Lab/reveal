@@ -221,8 +221,15 @@ def _add_global_options(target) -> None:
                         help='Output format (text, json, typed [typed JSON with types/relationships], grep). '
                              'Each target accepts only the formats it renders (help://schemas/<adapter>); '
                              'another value exits 2 with the supported list. Defaults to $REVEAL_FORMAT if set.')
+    target.add_argument('--output', metavar='FORMAT[=PATH]', action='append', default=None,
+                        help='An output sink, repeatable. FORMAT alone is the stdout sink (the same as --format); '
+                             'json=PATH also writes the result as JSON to PATH, one invocation and one parse '
+                             'for a human report plus a machine artifact. scheme://resource URIs, '
+                             '`reveal check` and declared adapter commands only; no-op if the stdout sink is '
+                             'already json. Only json file sinks exist yet, and one of them. A write that fails '
+                             'exits 3; a bad sink exits 2 before the scan.')
     target.add_argument('--also-json', metavar='PATH', default=None,
-                        help='Also write the result as JSON to PATH, in addition to '
+                        help='Retired: use --output json=PATH. Also write the result as JSON to PATH, in addition to '
                              '--format\'s primary output -- one invocation, one parse, both a '
                              'human-readable report and a machine-readable artifact. '
                              'scheme://resource URIs, `reveal check` and declared adapter commands only; '

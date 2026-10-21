@@ -103,7 +103,7 @@ def test_missing_resource_is_structured_usage(project, spelling):
 def test_human_primary_artifact(project, tmp_path, spelling):
     argv = ['surface', 'proj'] if spelling == 'surface' else ['surface://proj']
     artifact = tmp_path / (spelling + '.json')
-    human = run(*argv, '--also-json', str(artifact), '--no-gitignore')
+    human = run(*argv, '--output', f'json={artifact}', '--no-gitignore')
     primary = run(*argv, '--format', 'json', '--no-gitignore')
     assert human.returncode == primary.returncode == 0
     assert 'Total surface entries:' in human.stdout

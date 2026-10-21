@@ -68,6 +68,75 @@ def _format_flag_given() -> bool:
     return invocation is not None and invocation.typed('--format')
 
 
+_SINK_FORMATS = ('text', 'json', 'typed', 'grep')
+
+
+def _sink_error(message: str) -> None:
+    print(f'Error: --output: {message}', file=sys.stderr)  # boundary-ok: print -- the sink usage error line
+    sys.exit(2)
+
+
+def _parse_sinks(specs: Sequence[str]) -> Tuple[list, list]:
+    """Split ``--output`` specs into (stdout sinks, file sinks) as (format, path) pairs; exit 2 on a malformed one."""
+    stdout_sinks: list = []
+    file_sinks: list = []
+    for spec in specs:
+        fmt, sep, target = spec.partition('=')
+        if fmt not in _SINK_FORMATS:
+            _sink_error(f"unknown format {fmt!r} in {spec!r}; use one of {', '.join(_SINK_FORMATS)}")
+        if sep and not target:
+            _sink_error(f'{spec!r} names no PATH; write FORMAT=PATH, or FORMAT alone for stdout')
+        (file_sinks if sep else stdout_sinks).append((fmt, target))
+    return stdout_sinks, file_sinks
+
+
+def _stdout_sink(args: Any, invocation: Any, stdout_sinks: list) -> None:
+    if len(stdout_sinks) > 1:
+        _sink_error('two stdout sinks: '
+                    + ' and '.join(f'--output {f}' for f, _ in stdout_sinks) + '; give a path to all but one')
+    if stdout_sinks:
+        fmt = stdout_sinks[0][0]
+        if invocation.typed('--format') and args.format != fmt:
+            _sink_error(f'--output {fmt} disagrees with --format {args.format}; they are the same sink')
+        args.format = fmt
+
+
+def _file_sink(args: Any, file_sinks: list) -> None:
+    for fmt, target in file_sinks:
+        if fmt != 'json':
+            _sink_error(f'{fmt}={target}: only json file sinks exist yet; use --output json={target}')
+    if len(file_sinks) > 1:
+        _sink_error('only one file sink exists yet; got ' + ', '.join(f'{f}={t}' for f, t in file_sinks))
+    if file_sinks:
+        if getattr(args, 'also_json', None):
+            _sink_error('--also-json and --output json=PATH both name the artifact; use --output json=PATH only')
+        args.also_json = file_sinks[0][1]
+
+
+def apply_output_sinks(args: Any, invocation: Any) -> None:
+    """Resolve ``--output FORMAT[=PATH]`` onto the fields the writers read (BACK-2089 slice 5a), before any scan.
+
+    A bare FORMAT is the stdout sink and sets ``args.format``; ``json=PATH`` sets ``args.also_json``, the one
+    artifact the writers already own. A bad sink exits 2 here: an unknown format, two stdout sinks, a stdout
+    sink that disagrees with a typed --format, a file sink that is not JSON or is not the only one, or
+    ``--also-json`` mixed with ``--output json=``. ``--also-json`` alone still works and prints its note.
+    """
+    from ..invocation import retirement_note
+    if invocation.typed('--also-json'):
+        retirement_note('flag:--also-json')
+    specs = getattr(args, 'output', None)
+    if specs:
+        stdout_sinks, file_sinks = _parse_sinks(specs)
+        _stdout_sink(args, invocation, stdout_sinks)
+        _file_sink(args, file_sinks)
+
+
+def _also_json_typed() -> bool:
+    from ..invocation import current_invocation
+    invocation = current_invocation()
+    return invocation is not None and invocation.typed('--also-json')
+
+
 def reject_unhonored_also_json(args: Any, label: str) -> None:
     """Exit 2 when --also-json was given to an output path that never writes it.
 
@@ -79,8 +148,9 @@ def reject_unhonored_also_json(args: Any, label: str) -> None:
     """
     if not getattr(args, 'also_json', None) or getattr(args, 'format', 'text') == 'json':
         return
+    spelling = '--also-json' if _also_json_typed() else '--output json=PATH'
     print(
-        f"Error: --also-json is not supported by {label}; it works with scheme:// URIs and "
+        f"Error: {spelling} is not supported by {label}; it works with scheme:// URIs and "
         "`reveal check`. Use --format json for this command's JSON.",
         file=sys.stderr,
     )

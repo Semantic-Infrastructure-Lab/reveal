@@ -90,7 +90,7 @@ table mirrors those groups; verified live against reveal-cli 0.129.0.
                       # including URI-adapter targets (confirmed live)
 --ext EXTS / --files / --hotspots / --code-only
 ```
-> `--format` and `--also-json` are honored or rejected per target (BACK-1425):
+> `--format` and `--output json=PATH` are honored or rejected per target (BACK-1425):
 > each adapter's declared `output_formats` (`help://schemas/<adapter>`) is
 > enforced, and any other value exits 2 with the supported list. `--sort`,
 > `--limit` and `--head`/`--tail`/`--range` print a `Note: ... has no effect`

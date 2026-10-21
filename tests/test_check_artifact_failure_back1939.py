@@ -81,7 +81,7 @@ def test_stdin_check_exits_three_on_an_unwritable_artifact(tree):
 @pytest.mark.parametrize('label, target, own_exit', TARGETS, ids=[t[0] for t in TARGETS])
 def test_written_artifact_keeps_the_scan_exit_and_the_format_json_document(tree, tmp_path, label, target, own_exit):
     artifact = tmp_path / 'report.json'
-    shown = _reveal(tree, 'check', target, '--also-json', str(artifact))
+    shown = _reveal(tree, 'check', target, '--output', f'json={artifact}')
     assert shown.returncode == own_exit, shown.stderr
     assert _FAILED not in shown.stderr
     primary = _reveal(tree, 'check', target, '--format', 'json')

@@ -218,6 +218,8 @@ RETIREMENTS: Dict[str, Retirement] = {
     'flag:--search': Retirement('--search', '--name PATTERN (regex)'),
     # One row for the file route's --check and its --lint alias.
     'flag:--check': Retirement('file --check/--lint', 'reveal check <path>'),
+    # --also-json is the one JSON file sink of --output FORMAT[=PATH] (BACK-2089 slice 5a); it answers until the cut.
+    'flag:--also-json': Retirement('--also-json PATH', '--output json=PATH'),
     # review folded into check --changed plus the diff:// adapter (D3, BACK-2068 slice 3b): it answers as before until the
     # cut. Its hotspots and complexity sections have no new home until stats becomes metrics (BACK-2069);
     # the MCP tool reveal_review keeps its name until Phase 7.

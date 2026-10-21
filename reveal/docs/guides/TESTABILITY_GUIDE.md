@@ -147,7 +147,7 @@ best-effort. Do not treat the report as a precise runtime call graph.
 before grouping thresholds and display cuts. A pure function with no boundary
 categories still contributes a profile. Empty hotspot arrays therefore do not
 establish that no observations were collected. `--max-items` cuts both hotspot
-lists; JSON `--fields` projects the primary answer. Text `--also-json` saves the
+lists; JSON `--fields` projects the primary answer. Text `--output json=PATH` saves the
 full answer after cuts, including its summary and diagnostics.
 
 ## Execution Outcomes

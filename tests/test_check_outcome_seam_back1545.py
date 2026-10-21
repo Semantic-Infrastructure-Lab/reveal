@@ -67,7 +67,7 @@ class TestMaxItemsCutOnTheSeam:
         (tmp_path / "tree").mkdir()
         tree = _tree(tmp_path / "tree")
         artifact = tmp_path / "out.json"  # outside the tree, or the second run checks it
-        text = _check(tree, "--max-items", "2", "--also-json", str(artifact))
+        text = _check(tree, "--max-items", "2", "--output", f"json={artifact}")
         assert text.returncode == 1
         printed = json.loads(_check(tree, "--format", "json", "--max-items", "2").stdout)
         written = json.loads(artifact.read_text(encoding="utf-8"))

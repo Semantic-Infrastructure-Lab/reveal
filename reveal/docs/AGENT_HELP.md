@@ -66,7 +66,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 - **Limit results:** `--limit N` becomes `?limit=N` on ast/markdown/json/git/stats and `?top=N` on hotspots/calls/depends/testability; elsewhere a note says it has no effect. `--head N` slices any list result.
 - **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
 - **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~12,500 tokens); rules are `reveal --rules`.
-- **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--also-json` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `review` 0 pass, 1 findings (warnings or a blocking issue; `overall_status` tells them apart), 2 bad target, 3 incomplete (beats findings); `--fail-on none` on `review` reports findings without exit 1; `deps` defaults to no findings gate, with `--fail-on findings` for exit 1, usage 2 and incomplete/output failure 3; `hotspots` defaults to no findings gate; `--fail-on findings` exits 1 for file quality below 70 or function complexity above 20, usage exits 2, and incomplete/output failure exits 3.
+- **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `review` 0 pass, 1 findings (warnings or a blocking issue; `overall_status` tells them apart), 2 bad target, 3 incomplete (beats findings); `--fail-on none` on `review` reports findings without exit 1; `deps` defaults to no findings gate, with `--fail-on findings` for exit 1, usage 2 and incomplete/output failure 3; `hotspots` defaults to no findings gate; `--fail-on findings` exits 1 for file quality below 70 or function complexity above 20, usage exits 2, and incomplete/output failure exits 3.
 
 ---
 
@@ -1690,7 +1690,7 @@ Files tree-sitter parsed only by guessing across an ERROR region are named too (
 **`--source-only` (v0.101.0+):** Prunes test directories (`tests/`, `test/`, `spec/`, `__tests__/`, any dir starting with `test` or `spec`) and test files (`test_*.py`, `*_test.py`, `conftest.py`, `*.test.ts`, `*.spec.ts`, etc.) before scanning. Useful for security/architecture reviews where test scaffolding adds noise. `_meta.known_limits` in JSON output records the exclusion.
 
 Both surface spellings emit `type: surface_scan` and support human-primary
-`--also-json`. Direct requests follow the
+`--output json=PATH`. Direct requests follow the
 [declared execution policy](development/OUTPUT_CONTRACT.md#declared-execution-policy);
 `--fail-on none` does not suppress unparsed/recovered input. See the
 [surface guide](adapters/SURFACE_ADAPTER_GUIDE.md#execution-and-compatibility) for migration details.
@@ -1769,7 +1769,7 @@ Direct `reveal contracts` and `contracts://` share declarations and output.
 invalid limits. Boolean query values are validated strictly. Complete work exits
 0, invalid requests 2, required failed/incomplete analysis or output 3. Only
 `--fail-on none` is supported; it retains required failures. Empty/unsupported
-inventories remain complete. Text supports `--also-json PATH`; primary JSON keeps
+inventories remain complete. Text supports `--output json=PATH`; primary JSON keeps
 the mirror no-op. See [the adapter guide](adapters/CONTRACTS_ADAPTER_GUIDE.md) for
 resource encoding and legacy batch boundaries.
 
@@ -2933,7 +2933,7 @@ reveal file.py --format text         # an explicit --format always wins
 
 `REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal hotspots`, `reveal check`, …). An explicit `--format` on the command line overrides it.
 
-**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for a single file and `reveal check`. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note). With human primary output, `--also-json PATH` works with supported `scheme://` URI requests, `reveal check`, and the six qualified subcommands: `surface`, `architecture`, `contracts`, `deps`, `hotspots` and `overview`. A requested artifact that cannot be written exits 3 for all of them, `reveal check` included. Other subcommands reject it with exit 2; use `--format json` for their JSON output. Primary `--format json` retains the existing `--also-json` no-op.
+**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for a single file and `reveal check`. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note). With human primary output, `--output json=PATH` works with supported `scheme://` URI requests, `reveal check`, and the six qualified subcommands: `surface`, `architecture`, `contracts`, `deps`, `hotspots` and `overview`. A requested artifact that cannot be written exits 3 for all of them, `reveal check` included. Other subcommands reject it with exit 2; use `--format json` for their JSON output. Primary `--format json` retains the existing `--output json=PATH` no-op.
 
 **Token budget flags (URI adapters — limits list fields like items/results/checks/commits):**
 ```bash
@@ -3665,7 +3665,7 @@ reveal deep_dir/
 
 | Command | `0` | `1` | `2` | `3` |
 |---------|-----|-----|-----|-----|
-| `reveal check` (also `--changed RANGE`) / `<path> --check` | no issues | issues found | request rejected before scanning (bad arguments, missing path, URI given as a path, unknown `--profile`, unusable `--changed` range) | scan incomplete — a file could not be parsed or checked, or a requested `--also-json` artifact could not be written (the report is still printed; beats findings and `--exit-zero`) |
+| `reveal check` (also `--changed RANGE`) / `<path> --check` | no issues | issues found | request rejected before scanning (bad arguments, missing path, URI given as a path, unknown `--profile`, unusable `--changed` range) | scan incomplete — a file could not be parsed or checked, or a requested `--output json=PATH` artifact could not be written (the report is still printed; beats findings and `--exit-zero`) |
 | `reveal review` (retired; prints a note) | pass | findings — warnings, or a blocking `high`/`critical` issue (`overall_status` says which) | invalid target (unknown revision, not a git repo) | incomplete — a check crashed or skipped files; beats findings |
 | `reveal health` | all targets pass | findings (warnings or failing checks, severe ones included) | usage error (no target) | a check failed, could not reach its target (a missing local path included) or was incomplete (a skipped oversized directory, a degraded parse) |
 | `ssl://… --check`, `domain://… --check` | pass | warning (e.g. cert expiring <30 days) | critical/failure (expired, <7 days, DNS/HTTP failure) | — |

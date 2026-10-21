@@ -377,7 +377,7 @@ apply after this legacy outcome handling:
   `--base-path`, `check`, `get_element`, `get_structure`, `post_process`) goes through
   `cli/routing/uri._call_adapter`, which turns an exception into an error result and handles
   it as above: the error once on stderr, text stdout empty, the envelope in JSON,
-  `--also-json` written, exit 1 (BACK-1553). An element lookup that returns `None` fails the
+  `--output json=PATH` written, exit 1 (BACK-1553). An element lookup that returns `None` fails the
   same way, with the adapter's `available_elements`. Such a result has `type` = the scheme,
   `source_type` `unknown` unless the source is an existing file or directory, and one
   `meta.errors` entry whose `code` (`adapter_error`, `element_not_found`) says the router
@@ -582,18 +582,18 @@ selection. Proven absence remains a normal MCP response for compatibility;
 required output failure overrides that exception. Legacy mixed batches keep their
 existing outcome policy.
 
-Human-primary `--also-json PATH` uses the same result as primary JSON. A requested
+Human-primary `--output json=PATH` uses the same result as primary JSON. A requested
 artifact write failure is disclosed on stderr and in `meta.output_errors`, while the
 primary result remains available and the exit is 3. Primary `--format json` retains
-its existing `--also-json` no-op. Closing stdout alone keeps the conventional exit 0;
+its existing `--output json=PATH` no-op. Closing stdout alone keeps the conventional exit 0;
 it cannot erase an independent analysis or artifact failure.
 
 Native `reveal check` (single file, directory and `--stdin --check`) follows the same artifact
 rule through the one owner, `write_requested_artifact` (`utils/json_utils.py`), which is
-flag-agnostic: a requested `--also-json` write that fails is disclosed once on stderr and exits 3,
+flag-agnostic: a requested `--output json=PATH` write that fails is disclosed once on stderr and exits 3,
 over findings (1) and over the legacy `--exit-zero` (`check_exit_code(..., output_failed=True)`
 through `execution_exit_code`). The report is printed in full first. Primary `--format json`
-keeps the `--also-json` no-op, so check's JSON never carries `meta.output_errors`.
+keeps the `--output json=PATH` no-op, so check's JSON never carries `meta.output_errors`.
 
 The reusable owner API is `ExecutionFacts`, `AnalysisCompleteness`, `FailureCause`,
 `merge_execution_facts()` and `execution_exit_code()` in `utils.results`. Producers

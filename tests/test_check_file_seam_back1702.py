@@ -58,7 +58,7 @@ class TestMaxItemsCutOnTheSeam:
     def test_also_json_is_the_format_json_document(self, tmp_path):
         src = _file(tmp_path)
         artifact = tmp_path / "out.json"
-        text = _check(src, "--max-items", "2", "--also-json", str(artifact))
+        text = _check(src, "--max-items", "2", "--output", f"json={artifact}")
         assert text.returncode == 1
         printed = json.loads(_check(src, "--format", "json", "--max-items", "2").stdout)
         assert json.loads(artifact.read_text(encoding="utf-8")) == printed
