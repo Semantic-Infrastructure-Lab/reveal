@@ -215,46 +215,56 @@ class DisplayDefaults:
     MINIFIED_AVG_LINE_CHARS = 200
 
 
-# Cross-file call-graph EXTRACTION confidence, per language (BACK-1198).
+# Cross-file call-graph EXTRACTION confidence, per language (BACK-1198, BACK-2105).
 #
-# Grounded in reveal's own measured recall figures (VALIDATION.md, "Cross-File
-# Call-Graph Recall") -- NOT invented. Previously calls:// emitted a single
-# hardcoded 0.85 confidence regardless of language: identical for a language
-# measured at 100% recall (Go, TypeScript, Java, ...) and one with real,
-# documented residual gaps (C++ 95.73%, Dart 97.55%). Values below are the
-# best POST-FIX recall figure recorded for each language's real-corpus oracle
-# validation (20-per-bucket sample where VALIDATION.md reports one, else the
-# single measured figure); update this table if VALIDATION.md's numbers
-# change. A language absent from this table has not been oracle-validated at
-# all -- CALL_GRAPH_DEFAULT_CONFIDENCE is a floor, not a measurement.
+# DERIVED, not typed: a language's value is the LOWEST edge recall (edges found over oracle
+# edges, rounded to four places) over the recall snapshot's callers, depth 2 and callees runs
+# for that language, so the one number an answer reports never exceeds the worst direction
+# measured. Source: snapshot_2026-10-20 (reveal 8406819b, tree-sitter language pack 1.22.1;
+# private repository, one harness JSON per language pair and mode). javascript is scored by two
+# corpora (the lower of both), tsx inside the typescript corpus. tests/test_call_graph_confidence_back2105.py
+# pins every value to the snapshot where it is reachable and checks the rule's arithmetic
+# everywhere. A language absent from this table has no snapshot -- CALL_GRAPH_DEFAULT_CONFIDENCE
+# is a floor, not a measurement. Refresh by taking a new snapshot, then re-deriving every row.
 #
-# This is EXTRACTION confidence only -- "did calls:// find the real call
-# edges that exist in the source" -- not the separate, unmeasured question of
-# how much a language's dynamic-dispatch idioms (method_missing, reflection,
-# eval, ...) hide real callers from ANY static tool. See
+# The lowest run and the residual behind it (edges missed / oracle edges):
+#   python 1.0000   all three runs complete
+#   typescript, tsx, go, rust, java, csharp, c, scala, lua, gdscript 1.0000   all three runs complete
+#   javascript 0.9997   depth 2 on the excalidraw corpus, 1 / 3,947
+#   ruby 0.9771   callees, 16 / 700 (callers 0.9985, depth 2 0.9993)
+#   php 0.9998   depth 2, 2 / 11,197
+#   kotlin 1.0000   all three runs complete (was 0.9979 from the older, smaller sample)
+#   swift 0.9985   depth 2, 16 / 10,829 (callers 0.9992); BACK-742 grammar gaps
+#   cpp 0.9596   depth 2, 87 / 2,155 (callers 0.9603, callees 0.9876); mostly oracle incompleteness
+#   zig 0.9996   depth 2, 11 / 27,765
+#   dart 0.9986   callees, 1 / 696 (depth 2 0.9997); BACK-768 generic-call gap
+#
+# This is EXTRACTION confidence only -- "did calls:// find the real call edges that exist in the
+# source" -- not the separate, unmeasured question of how much a language's dynamic-dispatch
+# idioms (method_missing, reflection, eval, ...) hide real callers from ANY static tool. See
 # CALL_GRAPH_DYNAMIC_DISPATCH_VOCAB below for that per-language caveat, and
-# adapters/calls/adapter.py's `?uncalled` handling for why that query gets
-# its own, more conservative framing (derived-signal vs. extraction).
+# adapters/calls/adapter.py's `?uncalled` handling for why that query gets its own, more
+# conservative framing (derived-signal vs. extraction).
 CALL_GRAPH_EXTRACTION_CONFIDENCE: Dict[str, float] = {
-    'python': 0.9996,     # reverse 99.96%, forward 100.00%, transitive 99.98%
-    'typescript': 1.00,
-    'tsx': 1.00,
-    'javascript': 1.00,
-    'go': 1.00,
-    'rust': 1.00,
-    'java': 1.00,
-    'ruby': 1.00,
-    'php': 1.00,
-    'csharp': 1.00,
-    'kotlin': 0.9979,     # 20/bucket -- residual: tree-sitter-kotlin grammar gap (BACK-738, open)
-    'swift': 0.9979,      # 20/bucket -- residual: 2 tree-sitter-swift grammar gaps (BACK-742, open)
-    'cpp': 0.9573,        # 20/bucket -- residual mostly oracle-incompleteness, not calls:// bugs
-    'c': 1.00,
-    'scala': 1.00,
-    'zig': 0.9998,        # 8,403/8,405 (20/bucket) -- residual: one file's parse error
-    'lua': 1.00,
-    'gdscript': 1.00,
-    'dart': 0.9755,       # 20/bucket -- residual: tree-sitter-dart generic-call gap (BACK-768)
+    'python': 1.0,
+    'typescript': 1.0,
+    'tsx': 1.0,
+    'javascript': 0.9997,
+    'go': 1.0,
+    'rust': 1.0,
+    'java': 1.0,
+    'ruby': 0.9771,
+    'php': 0.9998,
+    'csharp': 1.0,
+    'kotlin': 1.0,
+    'swift': 0.9985,
+    'cpp': 0.9596,
+    'c': 1.0,
+    'scala': 1.0,
+    'zig': 0.9996,
+    'lua': 1.0,
+    'gdscript': 1.0,
+    'dart': 0.9986,
 }
 
 # Prior blanket confidence value, kept as the floor for any language not yet

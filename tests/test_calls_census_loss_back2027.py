@@ -8,6 +8,7 @@ import pytest
 from conftest import _run_reveal_direct as run
 from reveal.adapters.calls import CallsAdapter
 from reveal.adapters.calls import confidence
+from reveal.analyzers._capability_table import calls_extraction_confidence
 from reveal.utils.exclusions import exclusion_scope
 from reveal.utils.path_utils import census_for_path
 
@@ -78,7 +79,7 @@ def observations(result):
 def test_actual_census_loss_all_modes_preserves_healthy_query_observations(tmp_path, monkeypatch, query, scope):
     root = tmp_path / 'affected'; child = project(root)
     baseline = CallsAdapter(str(root), query).get_structure()
-    assert baseline['meta']['confidence'] == 0.9996
+    assert baseline['meta']['confidence'] == calls_extraction_confidence('python')
     state = fault(monkeypatch, {root if scope == 'root' else child})
     result = CallsAdapter(str(root), query).get_structure()
     assert state['events'] and all(label == 'census' for label, _ in state['events'])

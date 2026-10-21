@@ -7,6 +7,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from reveal.adapters.calls import CallsAdapter, confidence, index
+from reveal.analyzers._capability_table import calls_extraction_confidence
 from reveal.utils.exclusions import exclusion_scope
 from reveal.utils.path_utils import census_for_path
 
@@ -81,7 +82,8 @@ def test_partial_mixed_language_census_cannot_silently_change_score_with_query_u
     adapter = CallsAdapter(str(tmp_path), 'target=target')
     clean = adapter.get_structure()
     assert fault['censuses'][-1] == {'python': 1, 'ruby': 1}
-    assert clean['meta']['confidence'] == 0.9998
+    assert clean['meta']['confidence'] == round(
+        (calls_extraction_confidence('python') + calls_extraction_confidence('ruby')) / 2, 4)
     fault.update(denied=set(children), unknown=unknown)
     lost = adapter.get_structure()
     assert fault['events'] and fault['censuses'][-1] == {'python': 1}

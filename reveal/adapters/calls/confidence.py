@@ -8,7 +8,7 @@ residual gaps. Split into its own module (out of adapter.py) once it grew
 past a few constants, to keep adapter.py under reveal's own file-length gate.
 
 See ``defaults.CALL_GRAPH_EXTRACTION_CONFIDENCE`` for where the per-language
-numbers come from (reveal's own VALIDATION.md oracle recall figures).
+numbers come from (the lowest recall in reveal's committed oracle snapshot, BACK-2105).
 """
 
 from pathlib import Path
