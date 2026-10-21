@@ -63,8 +63,59 @@ TREESITTER_EXTENSION_MAP: Dict[str, str] = {
     '.hrl': 'erlang',
 }
 
+class _AnalyzerRegistry(Dict[str, type]):
+    """The extension -> analyzer map; every change drops the cached extension sets (BACK-2120).
+
+    ``register()`` is the usual writer, but plugins' discovery, tests and tools edit the map
+    directly, and ``get_code_extensions`` / ``get_markdown_extensions`` are derived from it.
+    Overriding the mutators keeps those answers a function of the registry without costing
+    their cached reads anything.
+    """
+
+    __slots__ = ()
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        _drop_extension_caches()
+
+    def __delitem__(self, key):
+        super().__delitem__(key)
+        _drop_extension_caches()
+
+    def __ior__(self, other):  # type: ignore[misc]  # dict's own signature clashes with __or__'s
+        result = super().__ior__(other)
+        _drop_extension_caches()
+        return result
+
+    def clear(self):
+        super().clear()
+        _drop_extension_caches()
+
+    def pop(self, *args):
+        try:
+            return super().pop(*args)
+        finally:
+            _drop_extension_caches()
+
+    def popitem(self):
+        try:
+            return super().popitem()
+        finally:
+            _drop_extension_caches()
+
+    def setdefault(self, *args):
+        try:
+            return super().setdefault(*args)
+        finally:
+            _drop_extension_caches()
+
+    def update(self, *args, **kwargs):
+        super().update(*args, **kwargs)
+        _drop_extension_caches()
+
+
 # Registry for file type analyzers
-_ANALYZER_REGISTRY: Dict[str, type] = {}
+_ANALYZER_REGISTRY: Dict[str, type] = _AnalyzerRegistry()
 
 # Declarations with no behavior (Python type stubs). They have an analyzer, so
 # `reveal x.pyi` works, but directory scans skip them: a stub next to its module
@@ -141,6 +192,8 @@ def _reset_plugin_discovery() -> None:
     """Reset plugin discovery state — for test isolation only."""
     global _plugins_loaded
     _plugins_loaded = False
+    # The cached extension sets include what discovery registered and the next call rediscovers.
+    _drop_extension_caches()
 
 
 def register(*extensions, name: str = '', icon: str = '', category: str = 'code'):
@@ -158,13 +211,13 @@ def register(*extensions, name: str = '', icon: str = '', category: str = 'code'
         category: Content category — 'code', 'data', 'doc', or 'config' (default 'code')
     """
     def decorator(cls):
-        for ext in extensions:
-            _ANALYZER_REGISTRY[ext.lower()] = cls
-
-        # Store metadata on class
+        # Store metadata on class (before the insert: the cached extension sets read it)
         cls.type_name = name or cls.__name__.replace('Analyzer', '')
         cls.icon = icon
         cls.CATEGORY = category
+
+        for ext in extensions:
+            _ANALYZER_REGISTRY[ext.lower()] = cls
 
         return cls
 
@@ -662,6 +715,12 @@ def display_name_for_extension(ext: str) -> str:
     return LANGUAGE_DISPLAY_NAMES.get(lang, lang.capitalize())
 
 
+def _drop_extension_caches() -> None:
+    """Forget the cached extension sets: the registry they are derived from changed."""
+    get_code_extensions.cache_clear()
+    get_markdown_extensions.cache_clear()
+
+
 @functools.lru_cache(maxsize=None)
 def get_code_extensions() -> FrozenSet[str]:
     """Return all extensions that represent code files.
@@ -672,9 +731,15 @@ def get_code_extensions() -> FrozenSet[str]:
     usage this is guaranteed because reveal's adapter layer imports analyzers
     before any path-scanning function runs.
 
+    Plugin discovery runs here too, before the first answer (it is a no-op after the first
+    call in a process): ``ast://`` asks for this set before it analyses a file, and
+    ``get_analyzer`` was the only thing that discovered plugins, so a plugin's extension was
+    missing from the walk (BACK-2120). Registrations after that drop the cached set.
+
     Returns:
         Frozenset of lowercase extensions (e.g. {'.py', '.rs', '.zig', ...})
     """
+    discover_plugins()
     explicit = frozenset(
         ext for ext, cls in _ANALYZER_REGISTRY.items()
         if getattr(cls, 'CATEGORY', 'code') == 'code'
@@ -694,9 +759,12 @@ def get_markdown_extensions() -> FrozenSet[str]:
     'doc' — so this additionally matches on type_name, which register()
     derives from the analyzer's own `name=` argument ('Markdown').
 
+    Discovers plugins first and follows registrations, like get_code_extensions (BACK-2120).
+
     Returns:
         Frozenset of lowercase extensions (e.g. {'.md', '.markdown'})
     """
+    discover_plugins()
     return frozenset(
         ext for ext, cls in _ANALYZER_REGISTRY.items()
         if getattr(cls, 'CATEGORY', 'code') == 'doc'
