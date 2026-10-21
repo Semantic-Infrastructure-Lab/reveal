@@ -523,7 +523,7 @@ def test_go_lost_edge_fails_the_existing_gate(go_corpus, monkeypatch):
     original = DependsAdapter._format_file_dependents
     def drop(self, target, **kwargs):
         answer = original(self, target, **kwargs)
-        answer['dependents'] = []
+        answer['dependents'], answer['count'] = [], 0  # a consistent loss; a cut list fails as truncated
         return answer
     monkeypatch.setattr(DependsAdapter, '_format_file_dependents', drop)
     with pytest.raises(RuntimeError, match='zero oracle edges'):
