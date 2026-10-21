@@ -89,6 +89,11 @@ def request(target):
     return json.loads(answer)
 
 
+def without_execution(result):
+    # execution.git.dirty reads the process checkout, which other workers write to (BACK-2059)
+    return {key: value for key, value in result.items() if key != 'execution'}
+
+
 def assert_risk(result, discoveries, loads, root, positive=False):
     assert result['_meta']['confidence'] == 'reduced'
     assert result['undercount_possible'] is True
@@ -184,7 +189,7 @@ def test_intentional_absence_and_noise_keep_exact_clean_behavior(tmp_path, contr
     clean = request(target)
     with inventory_fault(tmp_path, mode, denied=denied) as (events, _, _):
         actual = request(target)
-    assert not events and actual == clean
+    assert not events and without_execution(actual) == without_execution(clean)
 
 
 def test_current_inventory_pair_and_default_cache_controls_are_preserved(tmp_path):

@@ -186,13 +186,18 @@ def test_normal_decorated_requests_repair_without_clears_and_keep_sibling_exact(
         result = reveal_query(path, provenance=provenance)
         assert type(result) is str and not isinstance(result, _ToolFailure)
         return result
+    def stable(text):
+        # execution.git.dirty reads the process checkout, which other workers write to (BACK-2059)
+        if not provenance:
+            return text
+        return {key: value for key, value in json.loads(text).items() if key != 'execution'}
     clean = query(uri); baseline_sibling = query(sibling_uri)
     with monkeypatch.context() as context:
         fault(context, root, cores, 'manifest')
         lost = query(uri)
         assert 'directory enumeration' in lost
-        assert query(sibling_uri) == baseline_sibling
-    assert query(uri) == clean
+        assert stable(query(sibling_uri)) == stable(baseline_sibling)
+    assert stable(query(uri)) == stable(clean)
 
 
 def test_imports_annotation_scope_stays_explicit_unresolved_without_graph_loss_adoption(tmp_path, monkeypatch):
