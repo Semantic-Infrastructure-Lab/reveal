@@ -437,3 +437,36 @@ def test_a_plugin_rule_counts_only_when_it_declares_a_file_scope_and_the_count_l
     # ... and the count says it was left out, instead of dropping it silently.
     assert basis['undeclared'] == ['X8852']
     assert basis['rule_count'] == len(basis['rules'])
+
+
+def test_review_is_no_longer_incomplete_for_a_cap_on_a_rule_it_did_not_run(tmp_path, monkeypatch):
+    """review's hotspot step reads stats: the cap note of D005, a rule review's own quality pass
+    does not select, used to make the whole review incomplete (exit 3)."""
+    root = project(tmp_path)
+    monkeypatch.setenv('REVEAL_D005_MAX_FILES', '3')
+    review = run('review', str(root), '--select', 'B', '--format', 'json')
+    report = json.loads(review.stdout)
+    assert 'analysis_incomplete' not in warning_types(report), report.get('meta')
+    assert report['overall_status'] != 'incomplete' and review.returncode != 3
+
+
+def test_review_still_reports_a_cap_on_a_rule_its_own_quality_pass_runs(tmp_path, monkeypatch):
+    """Negative control: with D005 selected review's check pass runs it, and check discloses the cap."""
+    root = project(tmp_path)
+    monkeypatch.setenv('REVEAL_D005_MAX_FILES', '3')
+    review = run('review', str(root), '--select', 'D005', '--format', 'json')
+    report = json.loads(review.stdout)
+    assert any('D005' in note for note in report.get('scan_disclosures', [])), report.keys()
+    assert (review.returncode, report['overall_status']) == (3, 'incomplete')
+
+
+@pytest.mark.mcp
+@pytest.mark.parametrize('scheme, query', [('hotspots', ''), ('overview', '?no_git=true&no_imports=true')])
+def test_the_mcp_query_tool_adds_no_incomplete_note_for_a_scan_cap(tmp_path, monkeypatch, scheme, query):
+    """mcp_server appends 'Required analysis is incomplete' to an INCOMPLETE answer; a cap alone is not one."""
+    from reveal import mcp_server
+    root = project(tmp_path)
+    monkeypatch.setenv('REVEAL_D005_MAX_FILES', '3')
+    answer = mcp_server.reveal_query(f'{scheme}://{root}{query}')
+    assert 'Required analysis is incomplete' not in answer, answer
+    assert COUNTING_RULE in answer, 'the answer still says what its count counts'
