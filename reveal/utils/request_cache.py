@@ -28,6 +28,7 @@ _STAMPS: Dict[Tuple[str, Union[str, Path]], str] = {}
 # made inside another one joins it instead of resetting the caches it is using.
 _REQUEST_LOCK = threading.RLock()
 _request_depth = 0
+_request_thread: Optional[int] = None
 
 
 def register_request_cache(name: str, reset: Callable[[], None]) -> None:
@@ -121,17 +122,30 @@ def host_request() -> Iterator[None]:
     ``reveal.api``, BACK-2093). Held under ``_REQUEST_LOCK``; a nested request (a tool that
     calls ``reveal.api``) neither resets nor seals, so the outer request's evidence stays.
     """
-    global _request_depth
+    global _request_depth, _request_thread
     with _REQUEST_LOCK:
         outer = _request_depth == 0
         started_ns = 0
         if outer:
             reset_request_caches()
             started_ns = request_started_ns()
+            _request_thread = threading.get_ident()
         _request_depth += 1
         try:
             yield
         finally:
             _request_depth -= 1
             if outer:
+                _request_thread = None
                 seal_request_caches(started_ns)
+
+
+def in_host_request() -> bool:
+    """Whether this thread is inside ``host_request()``.
+
+    A validated cache that is filled lazily reads and stores only here: outside a request
+    nothing revalidated its entries on entry or will seal them on exit (a CLI run, a direct
+    library call). Another thread's request does not count, and neither does a worker
+    thread a request starts: both read False, so they neither read nor store.
+    """
+    return _request_depth > 0 and _request_thread == threading.get_ident()
