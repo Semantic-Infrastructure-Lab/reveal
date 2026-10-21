@@ -47,11 +47,12 @@ _RULE = textwrap.dedent('''
     import uuid
     from pathlib import Path
 
-    from reveal.rules.base import BaseRule, RulePrefix, Severity
+    from reveal.rules.base import BaseRule, RulePrefix, RuleScope, Severity
 
 
     class Z901(BaseRule):
         code = "Z901"
+        scope = RuleScope.FILE   # stats counts file-local rules only (BACK-1884)
         message = "test rule: records the pool's start method, dies on one file"
         category = RulePrefix.B
         severity = Severity.LOW

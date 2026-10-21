@@ -4,6 +4,7 @@ from ..base import BaseRenderer
 from ...utils.formatting import cwd_path
 from ...utils.results import outcome_of
 from ...utils.warning_render import meta_warning_lines
+from ...adapters.stats.issue_count import issue_count_line
 
 def _render_file_hotspots(hotspots: List[Dict[str, Any]], top: int, root: str='') -> List[str]:
     lines: List[str] = []
@@ -122,7 +123,9 @@ class HotspotsRenderer(BaseRenderer):
     def _body(cls, result: Dict[str, Any], top: int,
               test_index: Optional[Set[str]] = None) -> str:
         diagnostics = meta_warning_lines(result)
+        count_line = issue_count_line(result)
         return ('\n'.join(_render_report(result, top, test_index)) + '\n' +
+                (count_line + '\n' if count_line else '') +
                 ('\n'.join(diagnostics) + '\n' if diagnostics else ''))
 
     @classmethod

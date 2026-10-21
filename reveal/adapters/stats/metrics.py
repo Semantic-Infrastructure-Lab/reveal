@@ -138,7 +138,7 @@ def calculate_quality_score(
     deep_nesting_count: int,
     total_functions: int,
     quality_config: Dict[str, Any],
-    check_issue_counts: Optional[Dict[str, int]] = None,
+    local_issue_counts: Optional[Dict[str, int]] = None,
 ) -> float:
     """Calculate quality score (0-100, higher is better).
 
@@ -151,8 +151,8 @@ def calculate_quality_score(
         deep_nesting_count: Number of functions with depth >4
         total_functions: Total number of functions
         quality_config: Quality configuration dict
-        check_issue_counts: Counts of check detections by severity
-            (keys: 'critical', 'high', 'medium', 'low')
+        local_issue_counts: Counts of file-local check detections by severity
+            (keys: 'critical', 'high', 'medium', 'low'); see stats/issue_count.py
 
     Returns:
         Quality score 0-100
@@ -196,31 +196,31 @@ def calculate_quality_score(
         max_penalty = ratio_pen.get('max', 25)
         score -= min(max_penalty, deep_nesting_ratio * multiplier)
 
-    # Penalize check rule detections by severity
-    if check_issue_counts:
-        check_pen = penalties.get('check_issues', {})
+    # Penalize file-local check rule detections by severity
+    if local_issue_counts:
+        check_pen = penalties.get('local_check_issues', {})
         penalty = (
-            check_issue_counts.get('critical', 0) * check_pen.get('critical', 10) +
-            check_issue_counts.get('high', 0) * check_pen.get('high', 5) +
-            check_issue_counts.get('medium', 0) * check_pen.get('medium', 2) +
-            check_issue_counts.get('low', 0) * check_pen.get('low', 0.5)
+            local_issue_counts.get('critical', 0) * check_pen.get('critical', 10) +
+            local_issue_counts.get('high', 0) * check_pen.get('high', 5) +
+            local_issue_counts.get('medium', 0) * check_pen.get('medium', 2) +
+            local_issue_counts.get('low', 0) * check_pen.get('low', 0.5)
         )
         score -= min(check_pen.get('max', 40), penalty)
 
     return max(0, score)
 
 
-def _count_check_issues(
+def _count_local_check_issues(
     file_path: Path,
     structure: Dict[str, Any],
     content: str,
-    *,
-    disclosures: Optional[List[str]] = None,
 ) -> Tuple[Dict[str, int], List[str]]:
-    """Run check rules and count detections by severity.
+    """Run the file-local check rules and count detections by severity (BACK-1884).
 
-    Reuses already-computed structure and content — no re-parsing.
-    An optional disclosure sink receives notes from rules that actually ran.
+    Reuses already-computed structure and content -- no re-parsing. Only rules that declare
+    ``RuleScope.FILE`` run (stats/issue_count.py): a rule that reads other files, a project
+    index or the network is left to ``reveal check``, so the count does not move with a scan
+    cap or a sibling file and needs no scan-cap disclosure.
 
     Returns:
         (counts, failed): counts for 'critical', 'high', 'medium', 'low', and the rules that
@@ -229,23 +229,18 @@ def _count_check_issues(
     """
     counts: Dict[str, int] = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
     rule_errors: List[Dict[str, str]] = []
-    coverage: List[Dict[str, Any]] = []
     try:
         from ...rules import RuleRegistry
-        detections = RuleRegistry.check_file(str(file_path), structure, content, errors=rule_errors, coverage=coverage)
+        from .issue_count import ignored_codes
+        detections = RuleRegistry.check_file(str(file_path), structure, content,
+                                             ignore=ignored_codes(), errors=rule_errors)
         for d in detections:
             sev = d.severity.value if d.severity else 'medium'
             if sev in counts:
                 counts[sev] += 1
-    except Exception as e:  # boundary-ok: broad-except -- check_file() loads the project's .reveal.yaml and runs every registered rule, plugin rules included (arbitrary code); one file's failed rule run must not drop its other statistics, and it is recorded as check_rules_failed in the file's stats
+    except Exception as e:  # boundary-ok: broad-except -- check_file() loads the project's .reveal.yaml and runs the file-local registered rules, plugin rules included (arbitrary code); one file's failed rule run must not drop its other statistics, and it is recorded as check_rules_failed in the file's stats
         logger.warning(f"Check rules failed for {file_path}, counting as 0 issues: {e}")
         return counts, ['all rules']
-    if disclosures is not None:
-        from ...rules.scan_caches import get_scan_disclosures
-        eligible = sorted({row['rule'] for row in coverage
-                           if row['status'] in {'run', 'unavailable'}})
-        if eligible:
-            disclosures.extend(get_scan_disclosures([file_path], eligible, None))
     return counts, sorted({err['rule'] for err in rule_errors})
 
 
@@ -282,10 +277,8 @@ def calculate_file_stats(
     # Extract complexity metrics
     metrics = extract_complexity_metrics(functions, content, file_path)
 
-    # Run check rules using already-computed structure + content (no re-parsing)
-    check_scan_disclosures: List[str] = []
-    check_issue_counts, check_rules_failed = _count_check_issues(
-        file_path, structure, content, disclosures=check_scan_disclosures)
+    # Run the file-local check rules using already-computed structure + content (no re-parsing)
+    local_issue_counts, check_rules_failed = _count_local_check_issues(file_path, structure, content)
 
     # Calculate quality score
     quality_score = calculate_quality_score(
@@ -295,7 +288,7 @@ def calculate_file_stats(
         len(metrics['deep_nesting']),
         len(functions),
         quality_config,
-        check_issue_counts,
+        local_issue_counts,
     )
 
     # Get display path
@@ -324,7 +317,7 @@ def calculate_file_stats(
             'long_functions': len(metrics['long_functions']),
             'deep_nesting': len(metrics['deep_nesting']),
             'avg_function_length': round(metrics['avg_func_length'], 1),
-            'check_issues': sum(check_issue_counts.values()),
+            'local_check_issues': sum(local_issue_counts.values()),
         },
         'issues': {
             'long_functions': metrics['long_functions'],
@@ -333,6 +326,4 @@ def calculate_file_stats(
     }
     if check_rules_failed:
         stats['check_rules_failed'] = check_rules_failed
-    if check_scan_disclosures:
-        stats['check_scan_disclosures'] = check_scan_disclosures
     return stats

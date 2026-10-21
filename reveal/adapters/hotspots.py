@@ -397,6 +397,8 @@ class HotspotsAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Test-coverage hint is a name-matching heuristic, not real coverage data.',
+                'File quality counts file-local check rules only, so a scan cap on a cross-file rule '
+                'cannot change a score or the exit code; the text footer and meta.issue_count name the rule set.',
                 'Default --fail-on none reports findings without failing; --fail-on findings exits 1 '
                 'for file quality below 70 or function complexity above 20. Required analysis/output '
                 'failure exits 3; invalid requests exit 2.',
@@ -442,6 +444,7 @@ class HotspotsAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Composes StatsAdapter (file quality) and AstAdapter (function complexity) — not an independent scan.',
+                'File quality counts file-local rules only; meta.issue_count names the rule and the rule set. Cross-file rules run under reveal check.',
             ],
         }
 
@@ -504,7 +507,7 @@ class HotspotsAdapter(ResourceAdapter):
                            'test convention (' + ', '.join(sorted(unknown_families)) + '); '
                            'null means unknown, not untested',
             })
-        return ResultBuilder.create(
+        result = ResultBuilder.create(
             result_type='hotspots_scan',
             source=self.path,
             contract_version=CONTRACT_VERSION,
@@ -513,3 +516,6 @@ class HotspotsAdapter(ResourceAdapter):
             errors=meta.get('errors') if meta else None,
             confidence=meta.get('confidence') if meta else None,
         )
+        from .stats.issue_count import note_issue_count_basis
+        note_issue_count_basis(result)  # file quality counts file-local rules only (BACK-1884)
+        return result

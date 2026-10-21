@@ -498,8 +498,9 @@ class RuleRegistry:
         return codes
 
     @classmethod
-    def codes_in_scope(cls, scope: RuleScope) -> List[str]:
-        """Codes of the enabled rules that declare *scope*, sorted (BACK-1884)."""
+    def codes_in_scope(cls, scope: Optional[RuleScope]) -> List[str]:
+        """Codes of the enabled rules that declare *scope*, sorted; None asks for the rules
+        that declare no scope (BACK-1884)."""
         if not cls._discovered:
             cls.discover()
         return sorted(r.code for r in cls._rules if r.enabled and r.scope == scope)

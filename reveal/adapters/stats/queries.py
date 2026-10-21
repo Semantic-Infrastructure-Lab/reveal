@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, cast
 
 from ...utils.query import compare_values
+from .issue_count import DEPRECATED_FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,9 @@ QUALITY_DEFAULTS = {
             'multiplier': 50,          # For long_func_ratio, deep_nesting_ratio
             'max': 25,
         },
-        'check_issues': {
+        # Per file-local check detection (BACK-1884; was `check_issues`, still read from a
+        # config file, with a deprecated_config_key warning).
+        'local_check_issues': {
             'critical': 10,            # Points lost per CRITICAL detection
             'high': 5,                 # Points lost per HIGH detection
             'medium': 2,               # Points lost per MEDIUM detection
@@ -57,6 +60,25 @@ def _merge_quality_section(config: Dict[str, Any], loaded: Dict[str, Any], key: 
         config_section.update(loaded_section)
 
 
+def _read_deprecated_penalty_key(config_path: Path, config: Dict[str, Any], loaded: Dict[str, Any]) -> Dict[str, Any]:
+    """Read the pre-BACK-1884 ``penalties.check_issues`` key as ``local_check_issues``.
+
+    The new key wins when a file has both. Each use is recorded in ``config['deprecations']``,
+    which the adapter turns into a ``deprecated_config_key`` warning on every result.
+    """
+    from .issue_count import COUNT_FIELD, DEPRECATED_PENALTY_KEY
+    penalties = loaded.get('penalties')
+    if not isinstance(penalties, dict) or DEPRECATED_PENALTY_KEY not in penalties:
+        return loaded
+    renamed = dict(penalties)
+    old_value = renamed.pop(DEPRECATED_PENALTY_KEY)
+    renamed.setdefault(COUNT_FIELD, old_value)
+    config.setdefault('deprecations', []).append(
+        f"{config_path}: penalties.{DEPRECATED_PENALTY_KEY} is deprecated, the penalty applies to "
+        f"file-local rules only and is now penalties.{COUNT_FIELD}; the old key is still read")
+    return {**loaded, 'penalties': renamed}
+
+
 def _apply_yaml_config_file(config_path: Path, config: Dict[str, Any]) -> bool:
     """Load a YAML config file and merge into config. Returns True if merged."""
     import yaml
@@ -66,7 +88,7 @@ def _apply_yaml_config_file(config_path: Path, config: Dict[str, Any]) -> bool:
         loaded_raw = yaml.safe_load(f)
     if not loaded_raw or not isinstance(loaded_raw, dict):
         return False
-    loaded: Dict[str, Any] = loaded_raw
+    loaded: Dict[str, Any] = _read_deprecated_penalty_key(config_path, config, loaded_raw)
     for key in ['thresholds', 'penalties']:
         _merge_quality_section(config, loaded, key)
     return True
@@ -136,6 +158,7 @@ def field_value(stats: Dict[str, Any], field: str) -> Any:
         Field value or None if not found
     """
     field_path = _FIELD_ALIASES.get(field, field)
+    field_path = DEPRECATED_FIELDS.get(field_path, field_path)  # BACK-1884: the old name still answers
 
     # Navigate nested structure
     value = stats

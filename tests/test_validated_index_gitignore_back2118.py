@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-import reveal.api as api
 from reveal.rules.duplicates import D005 as d005_module
 from reveal.rules.imports import _dep_reconciliation as dep
 from reveal.rules.maintainability import M102 as m102_module
@@ -45,11 +44,20 @@ def project(tmp_path):
     return tmp_path
 
 
-def _scores(project: Path, respect: bool) -> dict:
-    """Per-file quality score of stats:// through the public API (D005 penalises a cluster)."""
-    suffix = '' if respect else '?respect_gitignore=false'
-    result = api.query(f'stats://{project}{suffix}')
-    return {Path(f['file']).as_posix(): f['quality']['score'] for f in result['files']}
+def _findings(project: Path, respect: bool) -> dict:
+    """D005 findings per file, asked of the rule itself inside one host request.
+
+    stats:// used to be the probe (D005 penalised a cluster in the quality score); the issue
+    count is file-local now (BACK-1884) and stats never runs D005, so the rule is called as
+    check does: one request, the URI's ?respect_gitignore= scope inside it.
+    """
+    def evaluate():
+        found = {}
+        for name in ('a.py', 'b.py', 'ign/c.py'):
+            path = project / name
+            found[name] = len(d005_module.D005().check(str(path), {}, path.read_text(encoding='utf-8')))
+        return found
+    return _request(respect, evaluate)
 
 
 def _count_builds(monkeypatch, module) -> list:
@@ -60,37 +68,35 @@ def _count_builds(monkeypatch, module) -> list:
 
 
 def test_d005_index_built_without_gitignore_is_not_served_to_a_default_request(project):
-    off = _scores(project, respect=False)
-    on = _scores(project, respect=True)
-    assert sorted(off) == ['a.py', 'b.py', 'ign/c.py']
-    assert sorted(on) == ['a.py', 'b.py']
-    # Three files form a duplicate cluster (score penalised); two visible files do not.
-    assert max(off.values()) < 100.0
-    assert set(on.values()) == {100.0}
+    off = _findings(project, respect=False)
+    on = _findings(project, respect=True)
+    # Three files form a duplicate cluster (D005 reports it); two visible files do not.
+    assert off['a.py'] > 0 and off['b.py'] > 0
+    assert on['a.py'] == 0 and on['b.py'] == 0
 
 
 def test_d005_index_built_with_gitignore_is_not_served_to_a_no_gitignore_request(project):
-    on = _scores(project, respect=True)
-    off = _scores(project, respect=False)
-    assert set(on.values()) == {100.0}
-    assert sorted(off) == ['a.py', 'b.py', 'ign/c.py']
-    assert max(off.values()) < 100.0
+    on = _findings(project, respect=True)
+    off = _findings(project, respect=False)
+    assert on['a.py'] == 0 and on['b.py'] == 0
+    assert off['a.py'] > 0 and off['b.py'] > 0
 
 
 def test_d005_same_switch_repeat_still_reuses_the_index(project, monkeypatch):
     builds = _count_builds(monkeypatch, d005_module)
-    first = _scores(project, respect=True)
-    second = _scores(project, respect=True)
+    first = _findings(project, respect=True)
+    second = _findings(project, respect=True)
     assert first == second
     assert len(builds) == 1, "an unchanged tree under the same switch must not be rescanned"
 
 
 def test_d005_edit_to_a_gitignored_file_is_seen_by_the_next_no_gitignore_request(project):
     """An index built with the switch off is not covered by the default-scope fingerprint."""
-    before = _scores(project, respect=False)
-    assert max(before.values()) < 100.0
+    before = _findings(project, respect=False)
+    assert before['a.py'] > 0
     (project / 'ign' / 'c.py').write_text('X = 1\n', encoding='utf-8')
-    assert set(_scores(project, respect=False).values()) == {100.0}
+    after = _findings(project, respect=False)
+    assert after['a.py'] == 0 and after['b.py'] == 0
 
 
 def _request(respect: bool, evaluate):

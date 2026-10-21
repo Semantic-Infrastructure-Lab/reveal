@@ -21,6 +21,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .git import GitAdapter
 from .imports import ImportsAdapter
 from .stats import StatsAdapter
+from .stats.issue_count import note_issue_count_basis
 from ..analyzers.imports import service as import_analysis
 from ..utils.entry_points import entry_point_filter
 from ..utils.exclusions import exclusion_scope
@@ -301,10 +302,7 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int, *,
     query += f'&respect_gitignore={"true" if adapter.respect_gitignore else "false"}'
     stats = _required_child(adapter, StatsAdapter, path, _validate_stats, query=query,
                             observations=observations,
-                            cut_as=('hotspots', 'raise ?top=N'),
-                            # I002's import-graph loss is the imports slice's fact: disclosed
-                            # there when requested, skipped under no_imports (BACK-2018).
-                            omit_warnings=lambda w: w.get('rule') == 'I002')
+                            cut_as=('hotspots', 'raise ?top=N'))
     if observations is not None and any(_measured_stats(entry) for entry in stats.get('files', [])):
         observations['usable'] = True
     if stats.get('warnings'):
@@ -738,6 +736,7 @@ class OverviewAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Composed from stats://, git://, ast://, and imports:// — not an independent scan.',
+                'Quality counts file-local rules only (stats.files[].quality.local_check_issues); meta.issue_count names the rule and the rule set. Cross-file rules run under reveal check.',
             ],
         }
 
@@ -779,7 +778,7 @@ class OverviewAdapter(ResourceAdapter):
             meta = meta or {}
             meta.setdefault('errors', []).append(error)
         meta = _with_scope_warning(meta, scope_failures, path)
-        return ResultBuilder.create(
+        result = ResultBuilder.create(
             result_type='overview',
             source=self.path,
             contract_version=CONTRACT_VERSION,
@@ -789,3 +788,5 @@ class OverviewAdapter(ResourceAdapter):
             errors=meta.get('errors') if meta else None,
             confidence=meta.get('confidence') if meta else None,
         )
+        note_issue_count_basis(result)  # the quality section counts file-local rules only (BACK-1884)
+        return result

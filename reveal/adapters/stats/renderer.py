@@ -2,6 +2,14 @@
 
 from ...utils import print_json_result
 from ...utils.warning_render import render_meta_warnings
+from .issue_count import issue_count_line
+
+
+def _print_issue_count_line(result: dict) -> None:
+    """The footer that names the counting rule behind the quality score (BACK-1884)."""
+    line = issue_count_line(result)
+    if line:
+        print(f"\n{line}")
 
 
 class StatsRenderer:
@@ -44,6 +52,7 @@ class StatsRenderer:
                     print(f"  Long functions: {len(long_funcs)}")
                 if deep_nesting:
                     print(f"  Deep nesting: {len(deep_nesting)}")
+            _print_issue_count_line(result)
             render_meta_warnings(result)
             return
 
@@ -66,6 +75,7 @@ class StatsRenderer:
                     print(f"\n{i}. {h['file']}")
                     print(f"   Quality: {h['quality_score']:.1f}/100 | Score: {h['hotspot_score']:.1f}")
                     print(f"   Issues: {', '.join(h['issues'])}")
+            _print_issue_count_line(result)
             render_meta_warnings(result)
 
     @staticmethod
@@ -98,4 +108,5 @@ class StatsRenderer:
         print(f"  Score:     {result['quality']['score']:.1f}/100")
         print(f"  Long funcs: {result['quality']['long_functions']}")
         print(f"  Deep nest:  {result['quality']['deep_nesting']}")
+        _print_issue_count_line(result)
         render_meta_warnings(result)

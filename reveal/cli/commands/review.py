@@ -366,7 +366,7 @@ def _as_hotspot(entry: Dict[str, Any]) -> Dict[str, Any]:
         'file': entry.get('file', '?'),
         'quality_score': quality.get('score'),
         'max_complexity': complexity.get('max') if isinstance(complexity, dict) else complexity,
-        'check_issues': quality.get('check_issues', 0),
+        'local_check_issues': quality.get('local_check_issues', 0),
     }
 
 

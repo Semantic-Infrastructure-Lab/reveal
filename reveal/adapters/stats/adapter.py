@@ -1,6 +1,5 @@
 """Statistics adapter (stats://) for codebase metrics and hotspots."""
 
-import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION
@@ -19,11 +18,11 @@ from ...utils.path_utils import to_posix, to_relative_display
 from ...utils.results import ResultBuilder, note_truncation, note_warning
 from ...utils.validation import require_path_exists
 from ...utils.parallel import pool_worker_count, submit_each
-from ...rules.scan_caches import init_scan_caches, preload_scan_caches
 
 # Import modular functions
 from .renderer import StatsRenderer
 from .analysis import find_analyzable_files, analyze_file, get_file_display_path, is_failure
+from .issue_count import note_issue_count_basis, renamed_field
 from .metrics import calculate_file_stats
 from .queries import SORT_FIELDS, get_quality_config, field_value, compare, matches_filters
 from .aggregation import aggregate_stats, identify_hotspots
@@ -125,7 +124,7 @@ _SCHEMA_OUTPUT_TYPES = [
             }},
             'quality': {'type': 'object', 'properties': {
                 'score': {'type': 'number'}, 'long_functions': {'type': 'integer'},
-                'deep_nesting': {'type': 'integer'}, 'check_issues': {'type': 'integer'},
+                'deep_nesting': {'type': 'integer'}, 'local_check_issues': {'type': 'integer'},
             }},
         }},
     },
@@ -145,6 +144,7 @@ _SCHEMA_NOTES = [
     'quality_score is 0-100: 100 = no issues; weighted by severity (error/warning/info)',
     'Complexity is heuristic-based (average functions per 100 lines) — not cyclomatic complexity',
     'hotspots=true adds a ranked list of files most in need of refactoring',
+    'quality.local_check_issues counts the findings of file-local check rules only, so a file has one count whatever else is in the tree; meta.issue_count names the rule and the rule set. Cross-file rules (import cycles, duplicate literals, ...) run under reveal check.',
     'Both files and directories are supported; directories show aggregate + per-file breakdown',
     'On large repos, an unscoped call returns one entry per file (can reach tens of MB) — use summary_only=true when only the aggregate summary/hotspots are needed',
 ]
@@ -237,7 +237,6 @@ class StatsAdapter(ResourceAdapter):
             skip_filter_keys=True,
             extra_known_keys={'sort', 'limit', 'offset', 'exclude', 'respect_gitignore'},
         )
-        self._check_scan_disclosures: List[str] = []
         self._analysis_failures: list = []
         self._excluded_by_extension: Dict[str, int] = {}
 
@@ -292,15 +291,12 @@ class StatsAdapter(ResourceAdapter):
         # though each is fast in isolation.
         workers = pool_worker_count(min(8, max(1, len(files) // 10)))
         if workers > 1:
-            # The rules' project-wide indexes (I002, D005, T006, M102) are built
-            # once here and seeded into every worker, instead of once per worker
-            # (BACK-531, BACK-1429): the same table check's pool uses. stats runs
-            # the default rule set, hence no select/ignore.
-            caches = preload_scan_caches(files, self.path, None, None)
+            # No rule index is preloaded: the issue count runs the file-local rules only
+            # (issue_count.py), and the project-wide indexes (I002, D005, T006, M102, I007)
+            # belong to rules it leaves out (BACK-1884; they were built here by BACK-531).
             with ProcessPoolExecutor(
                 max_workers=workers,
                 initializer=worker_bootstrap,
-                initargs=(init_scan_caches, (caches,)),
             ) as executor:
                 all_stats = _pool_results(executor, args)
         else:
@@ -320,21 +316,23 @@ class StatsAdapter(ResourceAdapter):
         self._analysis_failures = [s for s in all_stats
                                    if is_failure(s) or s and (s.get('parse_degraded')
                                                               or s.get('check_rules_failed'))]
-        self._check_scan_disclosures = list(dict.fromkeys(
-            message for s in all_stats if s and not is_failure(s)
-            for message in s.get('check_scan_disclosures', [])))
 
-    def _disclose_rule_scans(self, result: dict) -> None:
-        for message in self._check_scan_disclosures:
-            entry = {
-                'type': 'analysis_incomplete',
-                'message': ('Check-issue counts, quality scores, and rankings may be inaccurate '
-                            f'or incomplete: {message}'),
-            }
-            rule = re.match(r'([A-Z]\d{3}):', message)
-            if rule:
-                entry['rule'] = rule.group(1)
-            note_warning(result, entry)
+    def _disclose_issue_count(self, result: dict) -> None:
+        """Say what the issue count counts, and flag a renamed spelling the query used.
+
+        The scan-cap and discovery-loss notes of the cross-file rules are not part of the
+        count's evidence any more (BACK-1884): those rules do not run here.
+        """
+        note_issue_count_basis(result)
+        for message in self._quality_config.get('deprecations', []):
+            note_warning(result, {'type': 'deprecated_config_key', 'message': message})
+        used = [name for name in [qf.field for qf in self.query_filters] + [self.result_control.sort_field]
+                if renamed_field(name)]
+        for name in dict.fromkeys(used):
+            note_warning(result, {
+                'type': 'deprecated_field',
+                'message': f"{name} was renamed {renamed_field(name)}; the old name still answers",
+            })
 
     def _apply_sorting(self, file_stats: list) -> list:
         """Apply sorting to file stats if sort field is specified."""
@@ -385,7 +383,7 @@ class StatsAdapter(ResourceAdapter):
         from ..ast.analysis import traversal_failed_warning
         note_warning(result, cast(Optional[Dict[str, Any]],
                                   traversal_failed_warning(self._traversal_failures, self.path)))
-        self._disclose_rule_scans(result)
+        self._disclose_issue_count(result)
         degraded = [s for s in self._analysis_failures if s.get('parse_degraded')]
         if degraded:
             note_warning(result, {

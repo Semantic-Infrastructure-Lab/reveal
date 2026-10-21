@@ -21,6 +21,7 @@ from ...utils.path_utils import is_test_path_any_sep as _is_test_file  # noqa: F
 from ...utils.path_utils import to_relative_display
 from ...utils.query_control import omitted_line
 from ...utils.warning_render import meta_warning_lines
+from ...adapters.stats.issue_count import issue_count_line
 
 
 # Display labels for extensions the language registry doesn't know at all
@@ -343,6 +344,9 @@ def _render_overview(report: Dict[str, Any], top: int) -> List[str]:
     # BACK-1261: the JSON documented these and the render dropped them, so a
     # section showing 5 of 97 complex functions looked complete. Rendered after
     # the body rather than inline because they describe the report as a whole.
+    count_line = issue_count_line(report)
+    if count_line:
+        lines += ["", count_line]
     lines += meta_warning_lines(report, heading="Caveats")
     lines += _render_next_steps(path_str)
     return lines

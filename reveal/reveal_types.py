@@ -46,7 +46,8 @@ class WarningEntry(TypedDict, total=False):
     suggestion: str
     # The --fields names that matched nothing ('fields_unmatched', BACK-1607).
     fields: List[str]
-    # The check rule whose scan produced the warning (stats rule-scan disclosures, BACK-2042).
+    # The check rule whose scan produced the warning. Stats' rule-scan disclosures (BACK-2042) were
+    # its only producer and ended with BACK-1884; compose(omit_warnings=) can still filter on it.
     rule: str
 
 
@@ -55,6 +56,9 @@ class RevealMeta(TypedDict, total=False):
     confidence: float
     warnings: List[WarningEntry]
     errors: List[WarningEntry]
+    # What stats://, overview and hotspots count as issues: the counting rule, the rule set
+    # (count, id, codes) and any plugin rule left out for declaring no scope (BACK-1884).
+    issue_count: Dict[str, Any]
 
 
 class _RevealResultRequired(TypedDict):
