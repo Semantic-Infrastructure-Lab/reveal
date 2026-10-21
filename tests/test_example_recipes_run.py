@@ -356,6 +356,10 @@ SCHEMA_UNRUNNABLE = (
 )
 # Also needs a live host / package / session beyond the recipe list's schemes.
 SCHEMA_SKIP_SCHEMES = NEEDS_HOST + NEEDS_SESSION
+# Run exactly as written by a gate step: test.yml's "Reveal self-validation" (ubuntu, 3.12) and
+# ci-local.sh. Here it was ~50 s in one worker, twice (this test and the hint harvest, which
+# skips marked examples); its output prints no next-step hints (BACK-2144).
+SCHEMA_GATE_STEPS = ('reveal:// --check',)
 
 # uri -> task naming why it fails today. Strict xfail: fixing one fails the run until deleted.
 SCHEMA_KNOWN_VIOLATIONS: dict = {}
@@ -373,6 +377,8 @@ def _schema_examples():
                 marks.append(pytest.mark.skip(reason='needs a live host or recorded session'))
             elif any(u in uri for u in SCHEMA_UNRUNNABLE):
                 marks.append(pytest.mark.skip(reason='names content the fixture does not have'))
+            elif uri in SCHEMA_GATE_STEPS:
+                marks.append(pytest.mark.skip(reason='run as written by the self-validation gate step'))
             elif uri in SCHEMA_KNOWN_VIOLATIONS:
                 marks.append(pytest.mark.xfail(
                     strict=True, reason=f'{SCHEMA_KNOWN_VIOLATIONS[uri]}: known violation'))
