@@ -88,6 +88,12 @@ skips that optional section; operational dependency, I/O and repository-open
 failures remain attributed diagnostics. `no_git=true` skips discovery and history.
 Optional Stats churn warnings reach the overview Caveats section once.
 
+Quality counts file-local check rules only, the same count `stats://` and `hotspots` print
+(`stats.files[].quality.local_check_issues`); `meta.issue_count` and the text footer name the
+rule set, and cross-file rules run under `reveal check`. A cross-file scan cap therefore
+neither changes a score nor fails the overview
+([what the issue count counts](STATS_ADAPTER_GUIDE.md#what-the-issue-count-counts)).
+
 The quality pulse's average describes the analyzed population. Its critical and
 warning file counts describe the shown hotspot ranking, which may omit files
 outside `top`. No matches in that ranking are not an overall quality verdict.

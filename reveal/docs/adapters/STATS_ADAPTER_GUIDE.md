@@ -220,14 +220,14 @@ Quality score (0-100, higher is better) based on:
 - **Function length** - Long functions (>100 lines) are harder to understand
 - **Deep nesting** - Functions with >4 nesting levels
 - **Ratios** - Proportion of problematic functions in file
-- **Check rule detections** - `reveal check` issues by severity (v0.73.0+)
+- **File-local check rule detections** - issues from the rules that read only the file, by severity; cross-file rules are left to `reveal check` ([what the issue count counts](#what-the-issue-count-counts))
 
 Default penalties:
 - High complexity (>10): -3 points per unit (max -30)
 - Long functions (>50 avg): -0.5 points per line (max -20)
 - Many long functions: -50 points per ratio (max -25)
 - Deep nesting: -50 points per ratio (max -25)
-- Check issues: CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts (cap -40)
+- File-local check issues: CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts (cap -40)
 
 **Configurable** via `.reveal/stats-quality.yaml` (see [Configuration](#configuration)).
 
@@ -535,41 +535,54 @@ Starting score: **100 points**
   - Penalty: `ratio × 50` (max -25 points)
   - Example: 2/10 functions deeply nested → `0.2×50 = -10 points`
 
-**Penalty 5: Check Rule Detections** (v0.73.0+)
-- Runs `reveal check` rules against the file (reusing already-parsed structure — no re-parsing cost)
+**Penalty 5: File-Local Check Rule Detections**
+- Runs the file-local `reveal check` rules against the file (reusing already-parsed structure — no re-parsing cost); see [What the issue count counts](#what-the-issue-count-counts)
 - Penalty per issue: CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts
 - Combined penalty capped at 40 points
 - Example: 2 HIGH + 5 MEDIUM issues → `2×5 + 5×2 = 20 points`
-- Issue count exposed as `quality.check_issues` in file output
-- Configurable via `check_issues` section in `.reveal/stats-quality.yaml`
+- Issue count exposed as `quality.local_check_issues` in file output (named `quality.check_issues` before BACK-1884)
+- Configurable via the `local_check_issues` section in `.reveal/stats-quality.yaml` (the old `check_issues` section is still read and reported as a `deprecated_config_key` warning)
 
 **Final score**: `max(0, 100 - total_penalties)`
 
-### Incomplete Check Evidence
+### What the issue count counts
 
-A file can have valid physical measurements while a scoring rule has incomplete
-project-wide evidence. Stats retains that rule's scan-limit or discovery notes
-in `check_scan_disclosures` and reports them through `meta.warnings` as
-`analysis_incomplete`. These notes come from scoring rules that actually ran;
-a disabled rule's unused preloaded index does not make scoring incomplete.
-Original rule notes survive filtering, pagination, summary-only output and
-hotspot cuts, even when the affected file is no longer displayed.
+`quality.local_check_issues` is the number of findings from the **file-local** check rules
+only: rules that declare `RuleScope.FILE` because they answer from the file's own content
+(bare `except`, complexity, line length, unused imports, security patterns, ...). Rules that
+read other files, a project-wide index or the network (import cycles `I002`, duplicate
+literals `D005`, orphan modules `M102`, `TypedDict` index `T006`, dependency reconciliation
+`I007`, link and nginx include checks, ...) run under `reveal check`, not here. One definition
+serves `stats://`, `overview` and `hotspots`, so a file has one count and one score in all three.
 
-Treat check-issue counts, quality scores and rankings under these warnings as
-potentially inaccurate or incomplete. Missing duplicate evidence can hide
-penalties, while missing importers can make M102 report a false orphan and
-reduce its score. Neither issue counts nor scores have a universal lower-bound
-interpretation. Read the attributed rule note before acting on a ranking.
+The result says so. `meta.issue_count` holds the counting rule (`file-local rules only`), the
+field, the rule count, a stable `rule_set_id` (the first 8 hex digits of a SHA-256 over the
+sorted codes) and the codes; `undeclared` lists any plugin rule that declares no scope (it is
+not counted; set `scope = RuleScope.FILE` on it, see the
+[rule authoring guide](../development/RULE_AUTHORING_GUIDE.md)). Text output ends with
+`Issue count (local_check_issues): file-local rules only -- N rules, set <id>; ...`.
 
-A successful rule with partial evidence differs from a rule that crashes:
-actual rule failures remain in `check_rules_failed`. Score formulas and
-measurements remain available in both cases. File, directory and element text
-views display the warning footer once; JSON retains the diagnostics. Native
-`stats://` preserves its legacy exit 0 for these warnings.
-[Hotspots](HOTSPOTS_ADAPTER_GUIDE.md) and
-[Overview](OVERVIEW_ADAPTER_GUIDE.md) apply their existing required-analysis
-policy to composed Stats warnings: useful surviving observations remain
-available with incomplete analysis, and direct CLI requests exit 3.
+Why: a cross-file rule answers differently when a scan cap trips, a sibling file changes or
+the project root is mis-detected, so counting it gave one file two scores. Its scan-cap and
+discovery-loss notes (`analysis_incomplete` with a `rule`) no longer qualify Stats, and they no
+longer fail `overview` or `hotspots` with exit 3 — `check` still discloses them for the rules it
+runs. A rule that crashes is unchanged: `check_rules_failed` marks the file's count as a
+lower bound and `overview` and `hotspots` exit 3. Directory enumeration loss
+(`analysis_incomplete`, `unit: directories`) is unchanged too.
+
+**Score change (BACK-1884).** Where no cross-file rule detects, nothing changes (the celery
+package's stats and overview JSON are identical apart from the renamed field and the new
+`meta.issue_count`; Go `pkg/kubelet` is unchanged). Scores only rise. Rust `crates` (659
+files): 160 files change score (142 `.rs`, 17 `Cargo.toml`, 1 `.md`), the files under 70
+fall from 171 to 144 (27 cross up, none cross down), the average rises from 80.9 to 82.6,
+mostly because `I002` reported the module tree as import cycles (BACK-2129). TypeScript
+`src/vs/platform`: 18 files change, 5 Markdown files cross 70 upward. The old
+`quality.check_issues` is gone; a filter or `?sort=` on `quality.check_issues` is still
+answered and carries a `deprecated_field` warning.
+
+A file-local rule that cannot run differs from a cap: it stays in `check_rules_failed`. Score
+formulas and measurements remain available either way. File, directory and element text views
+display the warning footer once; JSON retains the diagnostics.
 
 ### Quality Score Interpretation
 
@@ -597,7 +610,7 @@ Start: 100
 - Length penalty: (80-50)/2 = -15
 - Long function penalty: 0.4×50 = -20
 - Deep nesting penalty: 0.2×50 = -10
-- Check issues penalty: 0 check issues assumed → 0
+- File-local check issues penalty: 0 check issues assumed → 0
 ────────────────────────────────────
 Final score: 100-15-15-20-10-0 = 40
 ```
@@ -1307,6 +1320,13 @@ penalties:
   ratios:
     multiplier: 50               # Penalty multiplier for ratios
     max: 25                      # Maximum ratio penalty
+
+  local_check_issues:            # per file-local check finding (was check_issues)
+    critical: 10
+    high: 5
+    medium: 2
+    low: 0.5
+    max: 40                      # Maximum check-issue penalty
 ```
 
 ### Customizing Thresholds

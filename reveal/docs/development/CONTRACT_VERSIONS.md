@@ -125,6 +125,13 @@ When `contract_version='1.1'` and meta is populated:
 | `0.50–0.79` | Partial results (parse errors, fallback used). |
 | `< 0.50` | Low confidence — agent should treat result skeptically. |
 
+### Adapter-owned `meta` keys
+
+`stats://`, `overview` and `hotspots` add `meta.issue_count`: the counting rule
+(`file-local rules only`), the field it fills (`local_check_issues`), the rule count, a
+stable `rule_set_id`, the rule codes, and `undeclared` (plugin rules left out for declaring
+no scope). It is an optional key, so it needs no `contract_version` change (BACK-1884).
+
 ### `warnings` and `errors`
 
 Both are lists of dicts:

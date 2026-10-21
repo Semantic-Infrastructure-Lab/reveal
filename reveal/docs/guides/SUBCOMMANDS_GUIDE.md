@@ -899,9 +899,9 @@ Traversal-incomplete M102 inventories are retried at the next normal serialized
 host request, even if access recovered before the earlier request finished.
 Healthy inventories retain their existing validation and reuse. This handling
 covers directory enumeration, not the separate importer-file read or
-`__init__.py` fallback-read failure channels. See the
-[Stats scoring caveats](../adapters/STATS_ADAPTER_GUIDE.md#incomplete-check-evidence)
-when M102 contributes to quality scores and rankings.
+`__init__.py` fallback-read failure channels. M102 is a cross-file rule, so it is not part
+of the quality scores and rankings of `stats://`, `overview` and `hotspots`, which count
+file-local rules only ([what the issue count counts](../adapters/STATS_ADAPTER_GUIDE.md#what-the-issue-count-counts)).
 
 ### Usage
 
