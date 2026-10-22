@@ -1525,6 +1525,7 @@ class ImportsAdapter(ResourceAdapter):
         # - absolute path (imports:///absolute/path → '/absolute/path')
         self._target_path: Optional[Path] = Path(path).resolve() if path else None
         self._query_params = _typed_params(params) if params is not None else parse_query_params(query or '')
+        self.query_params = self._query_params  # the name the declared route reads (D6)
         self._warn_unknown_query_params(self._query_params)  # BACK-507
         # Validation is not application: a preceding query mode may take priority.
         for key, value in self._query_params.peek_items():
@@ -1543,11 +1544,6 @@ class ImportsAdapter(ResourceAdapter):
         # Where _build_graph resolved and under which file cap (BACK-1054).
         self._scan: Optional[resolution.ScanRoot] = None
         self._scan_budget = ScanBudget(_MAX_FILES.default)
-
-    @property
-    def query_params(self) -> QueryParams:
-        """The request's parameters, under the name the declared route reads."""
-        return cast(QueryParams, self._query_params)
 
     @staticmethod
     def result_type_for(params: Any) -> str:
