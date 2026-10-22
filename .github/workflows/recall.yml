@@ -1,7 +1,7 @@
 name: Pinned corpus recall
 
 # Optional source-only validation: independent import and Python caller oracles (GCC for C/C++, Python's ast,
-# Rust/Java resolution rules, Go toolchain, TypeScript compiler) vs depends:// on the manifest's pinned recall corpora. The corpora
+# Rust/Java resolution rules, Go toolchain, TypeScript compiler) vs imports://?importers on the manifest's pinned recall corpora. The corpora
 # are never services or runtime dependencies.
 on:
   schedule:
