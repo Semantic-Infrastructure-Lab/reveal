@@ -251,7 +251,7 @@ def test_every_public_adapter_example_queries_are_well_formed(adapter):
 _EXECUTABLE_QUERY = {
     "ast": lambda: f"ast://{CONFORMANCE_DIR}?type=function",
     "calls": lambda: f"calls://{FIXTURE_FILE}?target=process_order",
-    "imports": lambda: f"imports://{FIXTURE_FILE}",
+    "imports": lambda: f"imports://{FIXTURE_FILE}?scope=path",
     "metrics": lambda: f"metrics://{CONFORMANCE_DIR}",
 }
 

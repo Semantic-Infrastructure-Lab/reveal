@@ -119,7 +119,7 @@ def test_imports_unused_detection(lang):
     language genuinely lacks unused-import support, must not silently claim a
     false clean pass (BACK-398 precedent: silent 0 read as "clean" is worse
     than an honest gap)."""
-    out = _run(f"imports://{_lang_dir(lang)}/?unused", "--format", "json")
+    out = _run(f"imports://{_lang_dir(lang)}/?unused&scope=path", "--format", "json")
     data = json.loads(out)
     unused_names = [entry["module"] for entry in data["unused"]]
     expected = EXPECTED[lang]["imports_unused"]

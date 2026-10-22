@@ -52,7 +52,7 @@ def test_uncalled_counts_test_entry_points(lang, request):
 
 def test_stdlib_import_classification(lang, request):
     expected = _row(request, lang, 'imports')
-    result = _json(f"imports://{FIXTURES_DIR / lang}")
+    result = _json(f"imports://{FIXTURES_DIR / lang}?scope=path")
     got = {}
 
     def walk(node):

@@ -295,7 +295,7 @@ class TestRevealQueryTool(unittest.TestCase):
         self.assertGreater(len(result), 0)
 
     def test_imports_unused_query(self):
-        result = self.reveal_query('imports://reveal/utils/query.py?unused')
+        result = self.reveal_query('imports://reveal/utils/query.py?unused&scope=path')
         self.assertIsInstance(result, str)
 
     def test_provenance_attaches_execution_block(self):

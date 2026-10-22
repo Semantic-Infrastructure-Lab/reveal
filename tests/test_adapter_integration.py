@@ -693,7 +693,7 @@ class TestImportsAdapterIntegration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Both tests run the same command — run it once in-process and cache.
-        cls._imports_result = _run_reveal_direct("imports://reveal")
+        cls._imports_result = _run_reveal_direct("imports://reveal?scope=path")
 
     def test_imports_adapter_shows_import_graph(self):
         """Test imports:// adapter shows import analysis."""
