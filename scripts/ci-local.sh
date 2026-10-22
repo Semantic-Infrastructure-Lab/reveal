@@ -359,6 +359,20 @@ if [[ $RUN_TESTS -eq 1 ]]; then
             "$(awk -v u="$CPU_USER" -v s="$CPU_SYS" 'BEGIN{printf "%.0f", u+s}')" "pytest CPU seconds" 0 \
             >>"$LOG_DIR/timings.tsv"
         rm -f "$LOG.cpu"
+        # BACK-2159: the suite grew 30% in one slice (scope=root fixtures) and only a human reading
+        # timings.tsv noticed. The full 3.12 suite is compared with .github/pytest_cpu_baseline.txt
+        # (the median of the 10-21 green runs, 1,718-1,910 s): warn at +8%, fail at +15%. A suite
+        # that really grew raises the file in the commit that grew it, with the reason in the message.
+        if [[ $PRIMARY -eq 1 && "${PYTEST_TARGETS[*]}" == "tests/" && -f .github/pytest_cpu_baseline.txt ]]; then
+            CPU_BASE=$(cat .github/pytest_cpu_baseline.txt)
+            CPU_NOW=$(awk -v u="$CPU_USER" -v s="$CPU_SYS" 'BEGIN{printf "%.0f", u+s}')
+            echo "pytest CPU vs baseline: ${CPU_NOW}s (baseline ${CPU_BASE}s)" | tee -a "$LOG"
+            if awk -v n="$CPU_NOW" -v b="$CPU_BASE" 'BEGIN{exit !(n > b*1.15)}'; then
+                fail "pytest CPU ${CPU_NOW}s is over 115% of the baseline ${CPU_BASE}s (.github/pytest_cpu_baseline.txt): find the slow tests in the log's --durations, or raise the baseline with a reason"
+            elif awk -v n="$CPU_NOW" -v b="$CPU_BASE" 'BEGIN{exit !(n > b*1.08)}'; then
+                echo "WARN: pytest CPU ${CPU_NOW}s is over 108% of the baseline ${CPU_BASE}s" | tee -a "$LOG"
+            fi
+        fi
     fi
 fi
 
