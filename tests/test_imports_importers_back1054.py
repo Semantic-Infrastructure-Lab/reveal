@@ -359,3 +359,57 @@ def test_reveal_imports_subcommand_answers_like_the_uri(fx, monkeypatch):
     strip = lambda out: {k: v for k, v in json.loads(out).items() if k not in ('meta', 'provenance')}
     assert strip(typed.stdout) == strip(uri.stdout)
     assert json.loads(typed.stdout)['count'] == 4
+
+
+# ── what the host-request memo may keep ────────────────────────────────────────────────────────
+
+@pytest.fixture
+def extraction_calls(monkeypatch):
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
+    calls = []
+    real = imports_adapter._extract_one_file
+
+    def counting(fp_str, *args):
+        calls.append(Path(fp_str).name)
+        return real(fp_str, *args)
+
+    monkeypatch.setattr(imports_adapter, '_extract_one_file', counting)
+    return calls
+
+
+def test_the_memo_never_keeps_a_build_that_lost_a_file(fx, monkeypatch, extraction_calls):
+    """chmod moves no stat the tree stamp reads: a build with an unreadable file is returned,
+    never kept (BACK-2083), or the next request serves the loss after the file is readable."""
+    from reveal import base as reveal_base
+    denied = {(fx / 'pkg' / 'a.py').resolve()}
+    real = reveal_base.FileAnalyzer._read_file
+
+    def read(self):
+        if Path(self.path).resolve() in denied:
+            raise PermissionError(13, 'Permission denied', str(self.path))
+        return real(self)
+
+    monkeypatch.setattr(reveal_base.FileAnalyzer, '_read_file', read)  # noqa: V036 reviewed: serial
+    with request_cache.host_request():
+        lost = _structure(fx / 'pkg' / 'core.py', 'importers')
+    assert lost['metadata']['files_failed_count'] == 1
+    denied.clear()
+    with request_cache.host_request():
+        healthy = _structure(fx / 'pkg' / 'core.py', 'importers')
+    assert healthy['metadata']['files_failed_count'] == 0
+    assert 'a.py' in {row['file'] for row in healthy['importers']}
+
+
+def test_a_gitignore_off_build_lives_for_its_request_only(fx, extraction_calls):
+    """The tree stamp walks with the default gitignore switch, so it cannot see an edit to an
+    ignored file: a build made with the switch off is dropped at the next request (BACK-2118)."""
+    from reveal.utils.gitignore import gitignore_scope
+    with request_cache.host_request(), gitignore_scope(False):
+        _structure(fx / 'pkg', 'rank=fan-in')
+        built = len(extraction_calls)
+        _structure(fx / 'pkg', 'rank=fan-in')
+    within = len(extraction_calls)
+    assert built and within == built  # reused inside its own request
+    with request_cache.host_request(), gitignore_scope(False):
+        _structure(fx / 'pkg', 'rank=fan-in')
+    assert len(extraction_calls) > within
