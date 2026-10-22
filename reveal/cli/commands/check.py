@@ -252,6 +252,9 @@ def run_check(args: Namespace) -> None:
             from reveal.cli.file_checker import handle_recursive_check
             handle_recursive_check(path, args)
     else:
+        from reveal.cli.routing.formats import reject_check_text_sinks
+        from reveal.utils.json_utils import file_sinks
+        reject_check_text_sinks(file_sinks(args), 'a single-file check')
         from reveal.file_handler import _get_analyzer_or_exit, _build_file_cli_overrides
         from reveal.checks import run_pattern_detection
         from reveal.config import RevealConfig

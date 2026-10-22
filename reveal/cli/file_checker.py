@@ -14,7 +14,7 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from ..logging_setup import worker_bootstrap
 from ..utils.parallel import pool_worker_count, submit_each
-from ..utils.json_utils import json_sink_paths, write_requested_artifact, write_text_artifact
+from ..utils.json_utils import file_sinks, write_also_json, write_requested_artifact, write_text_artifact
 from ..utils.results import note_truncation, requested_fail_on
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1068,7 +1068,7 @@ def _write_also_json_report(path, result: dict, source: str) -> bool:
     """
     from .routing.subcommand import subcommand_json
     return write_requested_artifact(
-        lambda: write_text_artifact(path, subcommand_json(result, name='check', source=source))) is not None
+        lambda: write_text_artifact(path, subcommand_json(result, name='check', source=source) + '\n')) is not None
 
 
 def _print_grep_output(file_results: List[dict]) -> None:
@@ -1200,14 +1200,16 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         )
         sys.exit(2)
 
-    if output_format in ('json', 'grep'):
-        tally, result, render, artifact = _json_or_grep_check(files_to_check, directory, collection, args)
-    else:
-        tally, result, render, artifact = _text_check(files_to_check, directory, collection, config, args)
+    sinks = file_sinks(args)
+    select, ignore = _rule_filters(args)
+    checked = _check_json(files_to_check, directory, select, ignore, getattr(args, 'severity', None))
+    views = _check_views({output_format, *(fmt for fmt, _ in sinks)}, checked, files_to_check, directory,
+                         collection, config, args)
+    result, render = views[output_format]
 
     from .routing.subcommand import emit_subcommand_result
     emit_subcommand_result(result, args, name='check', source=shown, render=render)
-    artifact_failed = artifact is not None and _write_also_json_report(json_sink_paths(args), artifact, shown)
+    artifact_failed = _write_file_sinks(views, sinks, args, shown)
 
     # Exit with appropriate code (BACK-1099: distinguish "clean" from
     # "issues found" from "scan incomplete" -- files_errored/files_degraded
@@ -1269,85 +1271,80 @@ def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Na
     return report
 
 
-def _json_or_grep_check(files: List[Path], directory: Path, collection: 'FileCollectionResult',
-                        args: 'Namespace') -> tuple:
-    """Run check for --format json or grep: (tally, result, render, --also-json result).
+def _check_views(formats, checked: List[_CheckedFile], files: List[Path], directory: Path,
+                 collection: 'FileCollectionResult', config, args: 'Namespace') -> dict:
+    """{format: (result, render)} for each of *formats*, all built from the ONE scan's *checked* files
+    (BACK-2145): the primary output and every file sink are views of the same data, so a second sink is a
+    second render, never a second scan. Scan disclosures are read once, after the scan recorded its caps.
 
-    BACK-1035: --format grep renders file:line:col:rule:message, the shape the
-    single-file ``reveal check <file> --format grep`` prints, from the JSON
-    result's per-file detections. It never applied --max-items or the snippet
-    flags, and its --also-json artifact is that same result.
+    The views differ in what they print, not in what they found: json carries ``files[]`` under the
+    --max-items budget and the snippet flags; grep prints every detection (BACK-1035: no budget, no
+    snippets); text carries the summary and the cut of what its blocks print, under --limit and --max-items.
     """
     select, ignore = _rule_filters(args)
-    severity = getattr(args, 'severity', None)
-    checked = _check_json(files, directory, select, ignore, severity)
     tally = _tally(checked)
-    if args.format == 'json':
-        file_results, budget = _json_file_entries(
-            checked, getattr(args, 'max_items', None),
-            no_snippets=getattr(args, 'no_snippets', False),
-            max_snippet_chars=getattr(args, 'max_snippet_chars', None),
-        )
-    else:
-        file_results, budget = _json_file_entries(checked)
-    disclosures, scan_incomplete = _scan_disclosures(
-        files, select, ignore, collection=collection, directory=directory)
-    result = _report_for(files, collection, args, select, ignore, disclosures, scan_incomplete)(
-        tally, budget, file_results)
-
-    def render_grep(_result: dict) -> None:
-        _print_grep_output(file_results)
-        for reason in disclosures:
-            # BACK-1051: grep output is meant to stay machine-parseable
-            # (file:line:col:rule:message only) — disclose to stderr rather
-            # than polluting stdout with a non-conforming line.
-            print(f"⚠️  {reason}", file=sys.stderr)
-
-    artifact = result if args.format == 'grep' and json_sink_paths(args) else None
-    return tally, result, render_grep, artifact
-
-
-def _text_check(files: List[Path], directory: Path, collection: 'FileCollectionResult', config,
-                args: 'Namespace') -> tuple:
-    """Run check for the text report: (tally, result, render, --also-json result).
-
-    The text result carries the summary and the --max-items cut of what the text
-    prints; its per-file blocks are printed from the _TextReport. --also-json gets
-    the --format json document, with its own budget over every file (BACK-1248).
-    """
-    select, ignore = _rule_filters(args)
-    no_group = getattr(args, 'no_group', False)
-    no_snippets = getattr(args, 'no_snippets', False)
-    max_snippet_chars = getattr(args, 'max_snippet_chars', None)
-    max_items = getattr(args, 'max_items', None)
-    limit = getattr(args, 'limit', None)
-    if limit is None:  # --limit not typed (parser default is None; URI targets share the flag)
-        limit = 50
-    text = _check_text(files, directory, select, ignore, getattr(args, 'severity', None), limit, max_items)
-    tally = text.tally
     disclosures, scan_incomplete = _scan_disclosures(
         files, select, ignore, collection=collection, directory=directory)
     report = _report_for(files, collection, args, select, ignore, disclosures, scan_incomplete)
-    result = report(tally, text.budget)
+    views: dict = {}
+    for fmt in formats:
+        # Read a flag only in the view that applies it: the flag ledger reports a flag nobody read (grep never
+        # applied --max-items or the snippet flags, BACK-1035).
+        if fmt == 'text':
+            max_items = getattr(args, 'max_items', None)
+            no_snippets = getattr(args, 'no_snippets', False)
+            max_snippet_chars = getattr(args, 'max_snippet_chars', None)
+            limit = getattr(args, 'limit', None)
+            if limit is None:  # --limit not typed (parser default is None; URI targets share the flag)
+                limit = 50
+            text = _build_text_report(checked, limit, max_items)
 
-    artifact = None
-    if json_sink_paths(args):
-        entries, budget = _json_file_entries(
-            text.checked_files, max_items, no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-        )
-        artifact = report(tally, budget, entries)
+            def render_text(_result: dict, text=text, limit=limit) -> None:
+                _print_text_report(text, limit, no_group=getattr(args, 'no_group', False),
+                                   no_snippets=no_snippets, max_snippet_chars=max_snippet_chars)
+                _print_text_summary(
+                    len(files), tally.files_with_issues, tally.total_issues, directory, config,
+                    files_errored=tally.files_errored, files_degraded=tally.files_degraded,
+                    scan_disclosures=disclosures,
+                    scan_incomplete=scan_incomplete, changed=collection.changed,
+                )
+            views[fmt] = (report(text.tally, text.budget), render_text)
+        elif fmt == 'grep':
+            entries, budget = _json_file_entries(checked)
 
-    def render_text(_result: dict) -> None:
-        _print_text_report(text, limit, no_group=no_group,
-                           no_snippets=no_snippets, max_snippet_chars=max_snippet_chars)
-        _print_text_summary(
-            len(files), tally.files_with_issues, tally.total_issues, directory, config,
-            files_errored=tally.files_errored, files_degraded=tally.files_degraded,
-            scan_disclosures=disclosures,
-            scan_incomplete=scan_incomplete, changed=collection.changed,
-        )
+            def render_grep(_result: dict, entries=entries) -> None:
+                _print_grep_output(entries)
+                for reason in disclosures:
+                    # BACK-1051: grep output stays machine-parseable (file:line:col:rule:message only);
+                    # disclose to stderr rather than pollute stdout with a non-conforming line.
+                    print(f"⚠️  {reason}", file=sys.stderr)
+            views[fmt] = (report(tally, budget, entries), render_grep)
+        else:
+            entries, budget = _json_file_entries(
+                checked, getattr(args, 'max_items', None), no_snippets=getattr(args, 'no_snippets', False),
+                max_snippet_chars=getattr(args, 'max_snippet_chars', None))
+            views[fmt] = (report(tally, budget, entries), None)
+    return views
 
-    return tally, result, render_text, artifact
+
+def _write_file_sinks(views: dict, sinks: list, args: 'Namespace', shown: str) -> bool:
+    """Write each requested file sink from its view of the one scan; True when any write failed.
+
+    Every sink is attempted; each failure is disclosed once by the shared artifact owner and maps to exit 3
+    (BACK-1939, D6). A json sink beside a json stdout is a no-op: the primary output already is the document.
+    """
+    from types import SimpleNamespace
+    failed = False
+    for fmt, path in sinks:
+        result, render = views[fmt]
+        if fmt == 'json':
+            if args.format != 'json':
+                failed = _write_also_json_report([path], result, shown) or failed
+            continue
+        one = SimpleNamespace(format=args.format, output=[f'{fmt}={path}'], also_json=None)
+        failed = write_requested_artifact(
+            lambda: write_also_json(result, one, lambda r, _fmt, _render=render: _render(r))) is not None or failed
+    return failed
 
 
 def handle_profile_rules(directory: Path, args: 'Namespace') -> None:

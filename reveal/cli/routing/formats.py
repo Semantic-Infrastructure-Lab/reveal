@@ -114,19 +114,29 @@ def _stdout_sink(args: Any, invocation: Any, stdout_sinks: list) -> None:
 
 
 def _file_sink(args: Any, invocation: Any, file_sinks: list) -> None:
-    if file_sinks and (invocation.command == 'check' or getattr(args, 'check', False)):
-        other = [f'{f}={t}' for f, t in file_sinks if f != 'json']
-        if other:
-            _sink_error(f"{', '.join(other)}: check writes only json file sinks; "
-                        'its text and grep reports are built per format, so use --output json=PATH')
     if (file_sinks or getattr(args, 'also_json', None)) and getattr(args, 'stdin', False) \
             and not getattr(args, 'check', False):
         _sink_error('a file sink with --stdin needs --check: a list of inputs answers once per input and one '
                     'file holds one result; add --check, or run once per input')
+    if getattr(args, 'stdin', False) and getattr(args, 'check', False):
+        reject_check_text_sinks(file_sinks, '--stdin --check')
     if file_sinks and getattr(args, 'also_json', None):
         _sink_error('--also-json and --output FORMAT=PATH both name the artifact; use --output FORMAT=PATH only')
     # Left on args.output for the writers (utils.json_utils.file_sinks): the stdout sinks were consumed above.
     args.output = [f'{fmt}={target}' for fmt, target in file_sinks] or None
+
+
+def reject_check_text_sinks(sinks: Sequence[Tuple[str, str]], what: str) -> None:
+    """Exit 2 when a text or grep file sink reaches a check that holds no per-format scan to render it from.
+
+    ``reveal check DIR`` renders every sink from its one scan (BACK-2145). A single file and a ``--stdin``
+    run answer through ``run_pattern_detection``, which writes the json document only, so they still refuse
+    the other formats, before the file is read. *sinks* are (format, path) pairs.
+    """
+    other = sorted({fmt for fmt, _ in sinks if fmt != 'json'})
+    if other:
+        _sink_error(f"{', '.join(other)}: {what} writes only json file sinks; "
+                    'use --output json=PATH, or check the directory for text and grep sinks')
 
 
 def apply_output_sinks(args: Any, invocation: Any) -> None:
@@ -136,7 +146,7 @@ def apply_output_sinks(args: Any, invocation: Any) -> None:
     ``args.output``, where ``utils.json_utils.file_sinks`` reads it (with ``--also-json``, the retired json
     sink) for whichever writer the command reaches: no writer reads a flag of its own. A bad sink exits 2
     here: an unknown format, an empty PATH, two stdout sinks, a stdout sink that disagrees with a typed
-    --format, a non-json file sink on ``check``, a file sink with ``--stdin`` but no ``--check``, or
+    --format, a file sink with ``--stdin`` but no ``--check``, or
     ``--also-json`` mixed with a file sink. A format the target does not render is refused where
     --format is (``require_supported_format``). ``--also-json`` alone still works and prints its note.
     """

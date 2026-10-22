@@ -227,7 +227,7 @@ def _add_global_options(target) -> None:
                              'one parse for a human report plus a machine artifact; give several for several '
                              'files. scheme://resource URIs, `reveal check` and declared adapter commands only; '
                              'a json file sink is a no-op if the stdout sink is already json. A format the '
-                             'command does not render (and text/grep on `reveal check`) exits 2 before the '
+                             'command does not render (and text/grep on a single-file check) exits 2 before the '
                              'scan; a write that fails exits 3 with the answer printed and the other sinks '
                              'written. With --stdin it needs --check and holds one document for the run.')
     target.add_argument('--also-json', metavar='PATH', default=None,

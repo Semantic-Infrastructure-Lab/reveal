@@ -64,8 +64,6 @@ def test_a_bare_format_is_the_stdout_sink(project):
     (['--output', 'json='], 'names no PATH'),
     (['--output', 'text', '--output', 'json'], 'two stdout sinks'),
     (['--output', 'grep', '--format', 'text'], 'same sink'),
-    (['--output', 'text=@PATH@'], 'check writes only json file sinks'),
-    (['--output', 'grep=@PATH@'], 'check writes only json file sinks'),
     (['--output', 'json=@PATH@', '--also-json', '@PATH@2'], 'both name the artifact'),
 ])
 def test_a_bad_sink_exits_2_before_any_scan_and_writes_nothing(project, tmp_path, extra, needle):
