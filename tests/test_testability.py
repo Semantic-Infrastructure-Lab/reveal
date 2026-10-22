@@ -585,7 +585,7 @@ class TestNoTestsIsNotApplicable:
 
         (tmp_path / "a.py").write_text("def f(): pass\n")
         adapter = TestabilityAdapter(str(tmp_path))
-        with pytest.raises(NotApplicableError, match="no tests found"):
+        with pytest.raises(NotApplicableError, match="no test files found"):
             adapter.get_structure()
 
 

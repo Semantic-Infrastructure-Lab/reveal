@@ -81,7 +81,7 @@ class PatchesAdapter(ResourceAdapter):
         return {
             'adapter': 'patches',
             'description': 'Patch pressure scanner for Python and TypeScript/JavaScript tests',
-            'uri_syntax': 'patches://<tests-path>?group=target&limit=20',
+            'uri_syntax': 'patches://<path>?group=target&limit=20',
             'query_params': {
                 'group': {'type': 'string', 'description': 'Grouping mode: target, test, or file', 'examples': ['group=target']},
                 **param_schema(_NUMERIC_PARAMS),
@@ -112,6 +112,7 @@ class PatchesAdapter(ResourceAdapter):
                 {'uri': 'patches://tests?group=test&min=3', 'description': 'Find patch-heavy tests', 'output_type': 'patches_scan'},
             ],
             'notes': [
+                'Scans the test files under <path> by the shared is_test_path rule, judged from the path\'s own name down (patches://tests scans all of tests/); `test_scope` names the rule and the file count.',
                 'Uses Python AST parsing for .py files, tree-sitter for .ts/.tsx/.js/.jsx files.',
                 'TypeScript: recognises jest.mock, vi.mock, jest.spyOn, vi.spyOn, jest.fn, vi.fn, jest.replaceProperty.',
                 'Dynamic patch targets are retained with lower confidence.',
@@ -125,7 +126,9 @@ class PatchesAdapter(ResourceAdapter):
         # from "this suite genuinely does no patching." Same convention as
         # classify.py's own get_structure().
         require_path_exists(Path(self.path))
-        patches = scan_patches([self.path])
+        # The path is the root; the test files under it are chosen by the shared is_test_path rule, judged from
+        # the root's own name down, so patches://tests scans all of tests/ and a repository root only its tests (BACK-1888).
+        patches = scan_patches([self.path], by_test_path=True)
         # BACK-1211: query_parser.coerce_value() turns a literal '0'/'1'
         # value into bool regardless of field type -- str(True/False) would
         # silently corrupt group_by/target_filter if either were ever
@@ -190,6 +193,7 @@ class PatchesAdapter(ResourceAdapter):
                     'private': private_only,
                     'suppress': suppress,
                 },
+                'test_scope': {'rule': 'is_test_path', 'files_scanned': patches.files_scanned},
                 'total_uses': len(patches),
                 'total_targets': len(targets),
                 'displayed_groups': len(groups),

@@ -10,7 +10,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Callable, Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from ..utils.path_utils import _walk_code_files, is_test_basename_for_language, to_posix
+from ..utils.path_utils import _walk_code_files, is_test_basename_for_language, is_test_path, to_posix
 from ..utils.pyparse import parse_python
 from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root
 from ..core.treesitter_parse import GrammarUnavailable, get_tree
@@ -59,6 +59,7 @@ class PatchUses(List[PatchUse]):
         self.skipped: List[Tuple[str, str]] = []
         self.traversal_failures: List[Tuple[Optional[str], str]] = []
         self.recovered_files: List[str] = []
+        self.files_scanned = 0  # test files the scan opened: the denominator of 'no patches here'
 
     def record_traversal_failure(self, error: OSError) -> None:
         """Retain directory evidence separately from files that failed analysis."""
@@ -73,6 +74,7 @@ class PatchUses(List[PatchUse]):
         self.skipped.extend(other.skipped)
         self.traversal_failures.extend(other.traversal_failures)
         self.recovered_files.extend(other.recovered_files)
+        self.files_scanned += other.files_scanned
 
 
 @dataclass(frozen=True)
@@ -111,16 +113,34 @@ def _is_ts_test_file(p: Path) -> bool:
     )
 
 
+def in_test_scope(path: Path, root: Path) -> bool:
+    """Whether *path*, found by walking *root*, is a test by the one shared rule (``is_test_path``).
+
+    The path is judged from the root's own name down, so ``patches://tests`` (the root IS a test
+    directory) scans everything under it while a repository root scans only its test-named
+    directories and files, and the directories above the root never decide (a checkout that lives
+    under a ``tests/`` directory is not all tests). BACK-1888, Phase 4 Q-P4-1.
+    """
+    try:
+        return is_test_path(Path(root.name) / path.relative_to(root))
+    except ValueError:
+        return is_test_path(path)
+
+
 def iter_test_files(
     paths: Sequence[str | Path],
     extensions: Optional[Sequence[str]] = None,
     *,
     on_error: Optional[Callable[[OSError], None]] = None,
+    by_test_path: bool = False,
 ) -> List[Path]:
     """Return test files under the given paths, dispatching by extension.
 
     When *extensions* is given only files with those suffixes are returned.
     The default (None) returns both Python and TypeScript/JavaScript test files.
+    *by_test_path* is the discovered scope: a directory is walked and a file kept only when
+    :func:`in_test_scope` calls it a test. Without it the paths are trusted as the test suite
+    (an explicit ``tests=``), and every Python file under them is scanned.
     """
     files: List[Path] = []
     for raw in paths:
@@ -129,9 +149,19 @@ def iter_test_files(
             if _file_matches(path, extensions):
                 files.append(path)
         elif path.is_dir():
-            files.extend(fp for fp in _walk_code_files(path, on_error=on_error)  # the shared walker (BACK-1577)
-                         if _file_matches(fp, extensions))
+            walked = _walk_code_files(path, on_error=on_error)  # the shared walker (BACK-1577)
+            if by_test_path:
+                files.extend(fp for fp in walked if _file_scannable(fp, extensions) and in_test_scope(fp, path))
+            else:
+                files.extend(fp for fp in walked if _file_matches(fp, extensions))
     return sorted(set(files))
+
+
+def _file_scannable(path: Path, extensions: Optional[Sequence[str]]) -> bool:
+    """A file the patch scan can read (Python, or a JS/TS extension), before the test-or-not question."""
+    if extensions is not None:
+        return path.suffix in extensions
+    return path.suffix == '.py' or path.suffix in _TS_TEST_EXTENSIONS
 
 
 def _file_matches(path: Path, extensions: Optional[Sequence[str]]) -> bool:
@@ -149,10 +179,11 @@ def _file_matches(path: Path, extensions: Optional[Sequence[str]]) -> bool:
     return _is_ts_test_file(path)
 
 
-def scan_patches(paths: Sequence[str | Path]) -> PatchUses:
-    """Scan Python and TypeScript test files for patch-like calls."""
+def scan_patches(paths: Sequence[str | Path], *, by_test_path: bool = False) -> PatchUses:
+    """Scan Python and TypeScript test files for patch-like calls (*by_test_path*: see ``iter_test_files``)."""
     uses = PatchUses()
-    for file_path in iter_test_files(paths, on_error=uses.record_traversal_failure):
+    for file_path in iter_test_files(paths, on_error=uses.record_traversal_failure, by_test_path=by_test_path):
+        uses.files_scanned += 1
         if file_path.suffix == '.py':
             uses.merge(_scan_file(file_path))
         elif file_path.suffix in _TS_TEST_EXTENSIONS:

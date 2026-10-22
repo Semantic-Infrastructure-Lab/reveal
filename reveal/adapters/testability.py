@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..errors import NotApplicableError
+from ..utils.path_utils import is_test_dir
 from ..rendering.adapters.testability import TestabilityRenderer
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
@@ -119,23 +120,16 @@ def _report_error(result: Dict[str, Any], *, initial: bool = False) -> Optional[
 
 
 def _resolve_test_paths(src_path: Path, tests: Optional[List[str]]) -> List[Path]:
+    """The roots the patch scan walks: the given ``tests=`` (trusted as the suite), else the target
+    itself (its parent for a file), where ``is_test_path`` picks the test files, plus the test
+    directories beside the target (``pkg/`` with a sibling ``tests/`` or ``t/``, the usual layout;
+    BACK-1888)."""
     if tests:
         return [Path(t).expanduser().resolve() for t in tests if Path(t).expanduser().exists()]
-
-    roots = []
-    candidates = []
-    if src_path.is_dir():
-        candidates.append(src_path)
-        candidates.append(src_path.parent)
-    else:
-        candidates.append(src_path.parent)
-
-    for root in candidates:
-        for name in ('tests', 'test', 'spec'):
-            candidate = root / name
-            if candidate.exists():
-                roots.append(candidate.resolve())
-    return sorted(set(roots))
+    root = (src_path if src_path.is_dir() else src_path.parent).resolve()
+    beside = [d for d in sorted(root.parent.iterdir()) if d.is_dir() and d != root and is_test_dir(d.name)] \
+        if src_path.is_dir() and root.parent != root else []
+    return [root, *beside]
 
 
 @register_adapter('testability')
@@ -156,7 +150,7 @@ class TestabilityAdapter(ResourceAdapter):
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     BUDGET_LIST_FIELD = ('patch_hotspots', 'boundary_hotspots')
     PARAM_SPECS = (
-        ParamSpec('tests', 'array', 'Test paths (omitted: discover tests/, test/, spec/)', None,
+        ParamSpec('tests', 'array', 'Test paths, trusted as the suite (omitted: the test files under the target, by the shared is_test_path rule)', None,
                   _test_roots, uri_codec='comma-percent', role='analysis',
                   cli=CliBinding(('--tests',), nargs='+')),
         ParamSpec('top', 'integer', 'Maximum groups per hotspot list; zero is unlimited', 20,
@@ -210,7 +204,7 @@ class TestabilityAdapter(ResourceAdapter):
             'description': 'Find testability pressure by joining test patch usage with production boundary fan-out.',
             'syntax': 'testability://<path>[?tests=tests,integration_tests&top=20&min_patches=3&min_categories=3&include_unresolved=true]',
             'examples': [
-                {'uri': 'testability://src', 'description': 'Testability report for src/ (auto-detects tests/, test/, or spec/)'},
+                {'uri': 'testability://src', 'description': 'Testability report for src/ (finds its test files by the is_test_path rule)'},
                 {'uri': 'testability://src?tests=tests,integration_tests', 'description': 'Scan specific test directories'},
                 {'uri': 'testability://src?top=10', 'description': 'Top 10 patch/boundary groups'},
             ],
@@ -222,7 +216,7 @@ class TestabilityAdapter(ResourceAdapter):
                 'Patch pressure scans Python unittest.mock/monkeypatch and JS/TS jest/vitest tests',
             ],
             'notes': [
-                'Auto-detects tests/, test/, or spec/ under the source root (or its parent) when `tests` is omitted.',
+                'When `tests` is omitted the test files are the ones under the source root that the shared is_test_path rule calls tests (test directories, test_*, *_test, *.spec.*); the report names the rule and the file count in `test_scope`.',
             ],
             'see_also': [
                 'reveal testability <path> - CLI subcommand form',
@@ -265,6 +259,7 @@ class TestabilityAdapter(ResourceAdapter):
         }
 
     def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
+        from reveal.testability.patches import iter_test_files
         from reveal.testability.report import build_testability_report
         from reveal.utils.path_utils import as_spelled, detect_non_python_language
 
@@ -276,10 +271,14 @@ class TestabilityAdapter(ResourceAdapter):
         min_categories = self.PARAM_SPECS[3].read(self.query_params)
         include_unresolved = self.PARAM_SPECS[4].read(self.query_params)
 
+        by_test_path = not tests
         test_paths = _resolve_test_paths(path, tests)
-        if not test_paths:
+        if tests and not test_paths:
+            raise NotApplicableError(f"none of the tests= paths exist for {path}: {', '.join(tests)}")
+        if by_test_path and not iter_test_files(test_paths, by_test_path=True):
             raise NotApplicableError(
-                f"no tests found for {path} — pass --tests <path> (URI: tests=<path>) or add tests/, test/, or spec/"
+                f"no test files found under {path} (the shared is_test_path rule: test directories such as tests/, test/, "
+                "spec/, t/, and test_*, *_test, *.spec.* names) — pass --tests <path> (URI: tests=<path>)"
             )
 
         report = build_testability_report(
@@ -289,6 +288,7 @@ class TestabilityAdapter(ResourceAdapter):
             min_patches=max(1, min_patches),
             min_categories=max(1, min_categories),
             include_unresolved=include_unresolved,
+            by_test_path=by_test_path,
         )
         # The tests dirs found were resolved; name them as the user named the target (BACK-1366).
         report['tests'] = [as_spelled(p, self.path) for p in test_paths]

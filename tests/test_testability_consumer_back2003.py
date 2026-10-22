@@ -48,10 +48,10 @@ def evidence(monkeypatch):
     real_patches, real_profiles = report.scan_patches, report.collect_boundary_profiles
     real_scandir, real_open, real_read = os.scandir, builtins.open, Path.read_text
 
-    def patches(paths):
+    def patches(paths, **kwargs):
         state['active'] = 'tests'
         try:
-            uses = real_patches(paths)
+            uses = real_patches(paths, **kwargs)
             if state['mutation'] == 'patch_line_bool' and uses:
                 uses[0] = dataclasses.replace(uses[0], line=True)
             if state['mutation'] == 'child_exception':

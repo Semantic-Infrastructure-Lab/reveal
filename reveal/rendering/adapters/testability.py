@@ -56,11 +56,18 @@ def boundary_hotspot_lines(rows: List[Dict[str, Any]]) -> List[str]:
     return lines
 
 
+def _scope_line(scope: Any) -> str:
+    if not isinstance(scope, dict):
+        return 'Test scope: unknown'
+    return f"Test scope: {scope.get('rule')} ({scope.get('files_scanned', 0)} test files scanned)"
+
+
 def testability_text(report: Dict[str, Any]) -> str:
     summary = report.get('summary', {})
     lines = [
         f"Testability: {report.get('source')}",
         f"Tests: {', '.join(report.get('tests', []))}",
+        _scope_line(report.get('test_scope')),
         "-" * 50,
         f"Patch uses: {summary.get('total_patch_uses', 0)}  "
         f"Patch targets: {summary.get('total_patch_targets', 0)}",

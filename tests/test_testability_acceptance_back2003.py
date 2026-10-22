@@ -31,8 +31,8 @@ def test_constructed_carrier_protocol_failure_dominates_real_profile(project, mo
     src, tests = project
     real = report.scan_patches
     reached = []
-    def malformed(paths):
-        rows = real(paths)
+    def malformed(paths, **kwargs):
+        rows = real(paths, **kwargs)
         assert rows
         reached.append(len(rows))
         if mutation == 'plain_list':
@@ -81,7 +81,7 @@ def test_constructed_report_envelope_is_required_even_with_positive_other_popula
 def test_typed_empty_or_nonpath_roots_are_usage_errors_before_collection(project, monkeypatch, tests):
     src, _ = project
     calls = []
-    monkeypatch.setattr(report, 'scan_patches', lambda *a: calls.append('patches'))
+    monkeypatch.setattr(report, 'scan_patches', lambda *a, **k: calls.append('patches'))
     with pytest.raises((ValueError, TypeError)):
         Adapter(str(src), params={'tests': tests})
     assert calls == []

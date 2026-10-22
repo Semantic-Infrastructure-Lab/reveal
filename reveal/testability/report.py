@@ -92,11 +92,13 @@ def build_testability_report(
     min_patches: int = 3,
     min_categories: int = 3,
     include_unresolved: bool = False,
+    by_test_path: bool = False,
 ) -> Dict[str, Any]:
-    """Build the composed testability pressure report."""
+    """Build the composed testability pressure report (*by_test_path*: the test files are discovered
+    under *test_paths* by ``is_test_path`` instead of trusting them as the suite)."""
     from ..adapters.ast.analysis import analysis_skipped_warning, parse_recovered_warning, traversal_failed_warning
 
-    patches = scan_patches(test_paths)
+    patches = scan_patches(test_paths, by_test_path=by_test_path)
     profiles = collect_boundary_profiles(src_path)
     _validate_observations(patches, profiles)
     patch_groups = group_patches(patches, group_by='target', min_count=min_patches)
@@ -138,6 +140,9 @@ def build_testability_report(
         'source': str(Path(src_path)),
         'source_type': 'directory' if Path(src_path).is_dir() else 'file',
         'tests': [str(Path(p)) for p in test_paths],
+        # The rule that chose the test files, and how many it found: two answers about one suite
+        # 1000x apart were once indistinguishable (BACK-1888).
+        'test_scope': {'rule': 'is_test_path' if by_test_path else 'tests=', 'files_scanned': patches.files_scanned},
         'summary': {
             'total_patch_uses': len(patches),
             'total_boundary_profiles': len(profiles),
