@@ -240,6 +240,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 |------------|-----------|------------------|
 | `reveal overview [path]` | One-glance dashboard: languages, quality, hotspots, recent git | `reveal overview --help` |
 | `reveal architecture [path]` | Architectural brief: entry points, core abstractions, risks | `reveal architecture --help` |
+| `reveal imports [path]` | Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations | `reveal imports --help` |
 | `reveal deps [path]` | Dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
 | `reveal hotspots [path]` | High-complexity files and functions that need attention | `reveal hotspots --help` |
 | `reveal metrics [path]` | Per-file lines, complexity and quality; --hotspots ranks files; --view provenance tags every file | `reveal metrics --help` |

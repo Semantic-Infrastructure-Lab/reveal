@@ -186,7 +186,7 @@ def test_unknown_lazy_value_is_rejected_before_graph_work(project, monkeypatch):
 
 def test_unknown_lazy_value_fails_the_cli(project):
     out = _run_reveal_direct(_uri(project, 'circular&lazy=sometimes'))
-    assert out.returncode == 1
+    assert out.returncode == 2  # D6 (BACK-1054): a usage error (was 1)
     assert 'lazy must be one of' in out.stderr
 
 

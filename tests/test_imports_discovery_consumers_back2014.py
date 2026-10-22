@@ -97,12 +97,12 @@ def test_all_imports_text_modes_disclose_loss_without_clean_claim(tmp_path, monk
     deny(monkeypatch, child)
     uri = f'imports://{root}' + (f'?{query}' if query else '')
     machine = run(uri, '--format', 'json')
-    assert machine.returncode == 0, machine.stderr
+    assert machine.returncode == 3, machine.stderr  # D6: a lost directory is incomplete analysis (BACK-1054)
     result = json.loads(machine.stdout)
     assert result['metadata']['scanned_files'] == (2 if survivors else 0)
     traversal_warning(result)
     human = run(uri)
-    assert human.returncode == 0, human.stderr
+    assert human.returncode == 3, human.stderr
     assert human.stdout.count('missing file population is unknown') == 1
     assert '✅ No' not in human.stdout
     assert '(every file is imported by at least one other)' not in human.stdout
@@ -112,11 +112,11 @@ def test_unknown_loss_survives_json_projection_and_text_sidecar(tmp_path, monkey
     root = tmp_path / 'project'; child = python_tree(root)
     deny(monkeypatch, child, unknown=True)
     result = run(f'imports://{root}', '--format', 'json', '--fields', 'metadata')
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 3, result.stderr  # D6 (BACK-1054)
     traversal_warning(json.loads(result.stdout), unknown=True)
     artifact = tmp_path / 'imports.json'
     text = run(f'imports://{root}?rank=fan-in&top=1', '--also-json', str(artifact))
-    assert text.returncode == 0, text.stderr
+    assert text.returncode == 3, text.stderr
     assert text.stdout.count('missing file population is unknown') == 1
     traversal_warning(json.loads(artifact.read_text(encoding='utf-8')), unknown=True)
 

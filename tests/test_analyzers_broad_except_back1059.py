@@ -523,9 +523,10 @@ def test_load_layer_config_valid_file_still_loads(tmp_path):
     assert [layer.name for layer in load_layer_config(tmp_path).layers] == ['api']
 
 
-def test_imports_violations_with_a_bad_layer_exits_1_and_names_the_config_file(tmp_path):
+def test_imports_violations_with_a_bad_layer_exits_3_and_names_the_config_file(tmp_path):
     config_file = _reveal_yaml(tmp_path, 'root: true\narchitecture:\n  layers:\n    - not-a-dict\n')
     (tmp_path / 'a.py').write_text('import os\n', encoding='utf-8')
     result = _run_reveal_direct(f'imports://{tmp_path}?violations')
-    assert result.returncode == 1, (result.stdout, result.stderr)
+    # D6 (BACK-1054): the analysis failed on the configuration it needed: exit 3 (was 1).
+    assert result.returncode == 3, (result.stdout, result.stderr)
     assert str(config_file) in result.stderr

@@ -732,7 +732,7 @@ class TestImportsAdapterIntegration(unittest.TestCase):
         # Should either fail gracefully or fall back to current directory
         # The key is it shouldn't crash
         self.assertIn(
-            result.returncode, [0, 1],
+            result.returncode, [2],  # D6 (BACK-1054): a missing path is a usage error
             f"Unexpected exit code:\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
 

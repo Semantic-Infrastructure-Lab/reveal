@@ -33,7 +33,8 @@ from ..conventions import family_for_path
 from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
-from ..utils.query_parser import ParamSpec
+from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec
+from ..utils.query_binding import boolean_value
 from ..analyzers.imports import service as import_analysis
 from ..analyzers.imports import resolution
 from ..analyzers.imports.file_index import resolution_fingerprint
@@ -393,6 +394,45 @@ _IMPORTERS = ParamSpec(
     examples=('imports://src?importers', 'imports://src?importers=utils.py', 'imports://src/utils.py?importers'),
 )
 _REQUEST_SPECS = (_LAZY, _SCOPE, _TESTS, _ROOT, _MAX_FILES, _IMPORTERS)
+
+
+def _flag(name: str, description: str) -> ParamSpec:
+    return ParamSpec(name, 'boolean', description, False, boolean_value, (f'imports://src?{name}',),
+                     role='operation', cli=CliBinding((f'--{name}',), action='store_true'))
+
+
+def _top_value(value: Any) -> int:
+    if isinstance(value, bool):
+        raise TypeError(value)
+    return int(value)
+
+
+# The declaration the `reveal imports` subcommand and the declared URI route bind (BACK-1054, D6):
+# every parameter imports:// reads. The views read presence for the flags, as the URI always did.
+PARAM_SPECS: Tuple[ParamSpec, ...] = (
+    _flag('unused', 'Find unused imports'),
+    _flag('circular', 'Detect circular dependencies (load-time edges unless &lazy says otherwise)'),
+    _flag('violations', 'Check layer violations (requires .reveal.yaml layers)'),
+    ParamSpec('rank', 'string', 'Rank files by fan-in (one value: fan-in)', None, _choice_value,
+              ('imports://src?rank=fan-in',), choices=('fan-in',), role='operation',
+              cli=CliBinding(('--rank',), metavar='fan-in')),
+    ParamSpec('top', 'integer', 'Limit ?rank rows (default: all)', None, _top_value,
+              ('imports://src?rank=fan-in&top=20',), minimum=0, role='analysis',  # the adapter cuts the rows
+              cli=CliBinding(('--top',), metavar='N')),
+    _flag('entrypoints', 'Files with fan-in 0 (entry points, scripts or dead code)'),
+    _flag('components', 'Score each directory as a component'),
+    ParamSpec('verbose', 'boolean', 'Show everything instead of a summary (same as --verbose)', False,
+              boolean_value, ('imports://src?circular&verbose',), role='presentation'),
+    *(ParamSpec(spec.name, spec.type, spec.description, spec.default, spec.convert, spec.examples,
+                minimum=spec.minimum, choices=spec.choices, role='analysis',
+                cli=CliBinding((f'--{spec.name.replace("_", "-")}',), dest=spec.name,
+                               metavar=spec.name.upper()))
+      for spec in _REQUEST_SPECS if spec is not _IMPORTERS),
+    ParamSpec(_IMPORTERS.name, _IMPORTERS.type, _IMPORTERS.description, None, _IMPORTERS.convert,
+              _IMPORTERS.examples, role='operation',
+              cli=CliBinding(('--importers',), nargs='?', metavar='FILE')),
+)
+_FLAG_NAMES = frozenset(spec.name for spec in PARAM_SPECS if spec.type == 'boolean')
 
 _SCHEMA_QUERY_PARAMS = {
     'unused': {
@@ -1419,6 +1459,35 @@ def _relativize_imports_paths(result: Dict[str, Any], base_path: Path, scan_root
     # project_root in _format_violations); 'imports_error' has no file fields.
 
 
+def _typed_params(params: Any) -> QueryParams:
+    """Typed (subcommand) parameters as the URI spells them: an unset flag or option is absent, a
+    set flag is present (the views read presence), a bare ``--importers`` (argparse's ``None`` for
+    ``nargs='?'``) is ``?importers``."""
+    items = list(params.peek_items() if isinstance(params, QueryParams) else dict(params).items())
+    if isinstance(params, QueryParams) and not any(v is None or v is False for _k, v in items):
+        return params
+    typed = QueryParams()
+    for key, value in items:
+        if value is None and key == _IMPORTERS.name:
+            value = True
+        if value is None or value is False:
+            continue
+        typed[key] = True if key in _FLAG_NAMES else value
+    return typed
+
+
+def _incomplete(result: Dict[str, Any]) -> bool:
+    """Whether an imports answer is short of its input: a file parsed with errors or lost to a dead
+    worker, a walk the file cap cut short, a directory it could not list (D6: exit 3)."""
+    metadata = result.get('metadata') or {}
+    if metadata.get('files_failed_count') or metadata.get('files_lost_count'):
+        return True
+    if (metadata.get('scan_budget') or {}).get('capped'):
+        return True
+    return any(w.get('type') in ('analysis_incomplete', 'scan_capped')
+               for w in (result.get('meta') or {}).get('warnings', []))
+
+
 @register_adapter('imports')
 @register_renderer(ImportsRenderer)
 class ImportsAdapter(ResourceAdapter):
@@ -1429,12 +1498,22 @@ class ImportsAdapter(ResourceAdapter):
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
     CLI_QUERY_FLAGS = {'verbose': 'verbose', 'respect_gitignore': 'respect_gitignore=false'}  # `--verbose` == `&verbose` (BACK-1361)
 
-    def __init__(self, resource: str = '.', query: Optional[str] = None):
+    # D6 (BACK-1054): imports is a declared command, so a usage error exits 2 and an incomplete
+    # analysis (a file parsed with errors or lost, a capped walk, a lost directory) exits 3.
+    RESULT_TYPE = 'imports'
+    FINDINGS_POLICIES = ('none',)
+    DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    PARAM_SPECS = PARAM_SPECS
+
+    def __init__(self, resource: str = '.', query: Optional[str] = None, *,
+                 params: Optional[Any] = None):
         """Initialize imports adapter.
 
         Args:
             resource: Directory or file path to analyze (e.g., 'src', '/abs/path')
             query: Query string portion (e.g., 'unused', 'circular=true')
+            params: the subcommand's typed parameters (a flag left off is not supplied)
         """
         path = resource
         self.analysis = ImportAnalysis()
@@ -1445,7 +1524,7 @@ class ImportsAdapter(ResourceAdapter):
         # - netloc component from URI parsing (imports://relative/path → 'relative/path')
         # - absolute path (imports:///absolute/path → '/absolute/path')
         self._target_path: Optional[Path] = Path(path).resolve() if path else None
-        self._query_params = parse_query_params(query or '')
+        self._query_params = _typed_params(params) if params is not None else parse_query_params(query or '')
         self._warn_unknown_query_params(self._query_params)  # BACK-507
         # Validation is not application: a preceding query mode may take priority.
         for key, value in self._query_params.peek_items():
@@ -1454,7 +1533,7 @@ class ImportsAdapter(ResourceAdapter):
                 raise ValueError(f'rank must be one of: {choices}; got {value!r}')
             if key == _LAZY.name:
                 _LAZY.validate(value)
-            for spec in _REQUEST_SPECS[1:]:
+            for spec in _REQUEST_SPECS[1:] + PARAM_SPECS[3:5]:
                 if key == spec.name:
                     spec.validate(value)
         self._local_names_cache: Optional[frozenset] = None  # BACK-1190, lazy
@@ -1464,6 +1543,50 @@ class ImportsAdapter(ResourceAdapter):
         # Where _build_graph resolved and under which file cap (BACK-1054).
         self._scan: Optional[resolution.ScanRoot] = None
         self._scan_budget = ScanBudget(_MAX_FILES.default)
+
+    @property
+    def query_params(self) -> QueryParams:
+        """The request's parameters, under the name the declared route reads."""
+        return cast(QueryParams, self._query_params)
+
+    @staticmethod
+    def result_type_for(params: Any) -> str:
+        """The answer type the query selects, in get_structure's precedence (the path decides
+        between the two ?importers types: ``result_type_at``)."""
+        supplied = dict(_typed_params(params).peek_items()) if not isinstance(params, str) else {}
+        if 'importers' in supplied:
+            return 'importer_summary'
+        for key, kind in (('unused', 'unused_imports'), ('circular', 'circular_dependencies'),
+                          ('violations', 'layer_violations')):
+            if key in supplied:
+                return kind
+        if supplied.get('rank') == 'fan-in':
+            return 'fan_in_ranking'
+        if 'entrypoints' in supplied:
+            return 'entrypoints'
+        if 'components' in supplied:
+            return 'components'
+        return 'imports'
+
+    @classmethod
+    def result_type_at(cls, params: Any, path: str) -> str:
+        kind = cls.result_type_for(params)
+        if kind != 'importer_summary':
+            return kind
+        named = dict(_typed_params(params).peek_items()).get('importers')
+        target = Path(path).expanduser()
+        if isinstance(named, str):
+            target = Path(named).expanduser() if Path(named).is_absolute() else (
+                (target if target.is_dir() else target.parent) / named)
+        return 'module_importers' if target.is_file() else 'importer_summary'
+
+    @staticmethod
+    def execution_facts(result: Any):
+        from ..utils.results import AnalysisCompleteness, result_execution_facts
+        if not isinstance(result, dict):
+            return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+        state = AnalysisCompleteness.INCOMPLETE if _incomplete(result) else AnalysisCompleteness.COMPLETE
+        return result_execution_facts(result, completeness=state)
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Analyze imports in directory or file.

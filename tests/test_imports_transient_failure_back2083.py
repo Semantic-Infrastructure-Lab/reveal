@@ -75,8 +75,9 @@ def builds(monkeypatch):
 
 def _fan_in(root):
     result = _run_reveal_direct(f'imports://{root}?rank=fan-in', '--format', 'json')
-    assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)
+    # D6 (BACK-1054): a file whose imports may be incomplete makes the answer incomplete: exit 3.
+    assert result.returncode == (3 if data['metadata']['files_failed_count'] else 0), result.stderr
     return data['metadata']['files_failed_count'], {e['file']: e['fan_in'] for e in data['entries']}
 
 
