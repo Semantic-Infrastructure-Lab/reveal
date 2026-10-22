@@ -75,9 +75,10 @@ from reveal.utils.lines import split_lines
 # namespace shared by every language riding this generic extractor (C/C++/
 # Java/Kotlin/Scala/C#/Ruby/PHP/Swift/Dart/Lua/GDScript); the per-file
 # fingerprint already keys on the file's own path, so different languages
-# never collide. Bypassed when constant_index is supplied (PHP's define()
-# resolution, BACK-565) -- that argument makes the result depend on more than
-# the file's own contents, so it is not safe to key purely on path+mtime+size.
+# never collide. Bypassed when a non-empty constant_index reaches a language
+# that reads it (PHP's define() resolution, BACK-565) -- that argument makes the
+# result depend on more than the file's own contents, so it is not safe to key
+# purely on path+mtime+size (extract_imports, BACK-1054).
 _IMPORTS_CACHE = ImportsDiskCache("generic_imports")
 
 logger = logging.getLogger(__name__)
@@ -614,12 +615,16 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         constant-involving concatenations are honestly skipped, not
         fabricated.
 
-        Cached cross-invocation on disk (BACK-626) when ``constant_index`` is
-        ``None`` -- the common case for every caller but PHP's constant-aware
-        resolution path, whose result depends on more than the file's own
-        contents and so is deliberately never cached.
+        Cached cross-invocation on disk (BACK-626) unless the index can change
+        the result: it holds a constant and this language builds includes by
+        concatenation (``spec.concat_relative_node_types``, PHP). That result
+        depends on more than the file's own contents and so is never cached.
+        An empty index, or one passed to a language that never reads it, gives
+        the answer ``None`` gives, so it is cached (BACK-1054: depends:// passes
+        the project's index to every generic extractor and re-parsed every file
+        on every request).
         """
-        if constant_index is not None:
+        if constant_index and self.spec.concat_relative_node_types:
             return self._extract_imports_uncached(file_path, constant_index)
         return _IMPORTS_CACHE.get_or_compute(
             file_path, lambda: self._extract_imports_uncached(file_path, None),
