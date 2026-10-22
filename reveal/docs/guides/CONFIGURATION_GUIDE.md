@@ -373,7 +373,7 @@ export REVEAL_CACHE_DIR=/var/tmp/reveal-cache
 ```
 
 #### `REVEAL_STRUCTURE_CACHE_MAX_FILES`
-How many per-file structures the cache keeps before evicting the oldest. Default `100000`; raise it
+How many per-file entries the `structure` and `surface-file` namespaces keep, each, before evicting the oldest. Default `100000`; raise it
 only for a repository with more source files than that, or every entry is evicted before it can be
 reused. A value that is not an integer is ignored.
 
@@ -410,6 +410,7 @@ the values, and `<namespace>` names the kind of artifact.
 |-----------|-------|
 | `structure` | a file's parsed structure: imports, functions, classes, declarations, plus (once a full scan has collected them) the file's module-level call sites and JSX references, so a warm scan re-parses nothing for them |
 | `structure-outline` | the lighter outline-only structure `--grep` uses to name each hit's enclosing function |
+| `surface-file` | one source file's complete `surface` scanner result, before the type filter and the cross-file route passes, so a repeat run, or a run for another type, scans only the files that changed. A file the scanner could not parse is not stored |
 | `adapter_import_graph` | the project import graph behind `imports://` |
 | `import_graph_v4` | the project import graph behind the `I002` rule, including source-scan accounting |
 | `python_imports`, `javascript_imports`, `go_imports`, `rust_imports`, `zig_imports`, `generic_imports` | per-language import extraction feeding those graphs |
@@ -443,7 +444,7 @@ the values, and `<namespace>` names the kind of artifact.
 
 **Housekeeping:** when a new build directory appears, only the 4 most recently used build
 directories are kept and the rest are deleted. Within a namespace the oldest entries are evicted past
-64 entries (the `structure` namespace uses `REVEAL_STRUCTURE_CACHE_MAX_FILES` instead).
+64 entries (the `structure` and `surface-file` namespaces use `REVEAL_STRUCTURE_CACHE_MAX_FILES` instead).
 
 **Turn it off or clear it:**
 

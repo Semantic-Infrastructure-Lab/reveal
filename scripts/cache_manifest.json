@@ -41,6 +41,10 @@
   "disk:structure-outline": {
    "owner": "disk"
   },
+  "disk:surface-file": {
+   "owner": "disk",
+   "note": "BACK-2151: one entry per source file holding the surface scanner's FULL raw result (never type-filtered or merged); keyed on path, spelling, mtime_ns, size and scanner; unparsed, invalid and raised scans are never stored; capped by REVEAL_STRUCTURE_CACHE_MAX_FILES"
+  },
   "disk:zig_imports": {
    "owner": "disk"
   },
