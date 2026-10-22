@@ -17,3 +17,4 @@ BACK-2122 internal: cache-registration ratchet script and manifest; no product b
 BACK-2133 internal: test fixture hardening against a transient git error; no product behavior
 BACK-2142 internal: test isolation for a module-level toggle; no product behavior
 BACK-2143 internal: follow-up to the unreleased BACK-2117 stamp; covered by its changelog entry
+BACK-1895 internal: the packaging test builds from a committed copy instead of rewriting the checkout's PKG-INFO; no product behavior
