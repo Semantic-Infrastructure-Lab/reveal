@@ -2007,6 +2007,7 @@ class ImportsAdapter(ResourceAdapter):
         # A file lost to a dead worker or unreadable this run is not the tree's answer (BACK-2083).
         if key is not None and self.analysis.cacheable and not resolved.traversal_failures:
             disk_cache.put(_ADAPTER_IMPORT_GRAPH_NAMESPACE, key, self.analysis)
+        if key is not None and not resolved.traversal_failures:
             _remember_graph(root, key, self.analysis)
 
     def _extract_and_resolve(self, files: import_analysis.ImportFileSet, candidates: List[Path],

@@ -12,6 +12,7 @@ path (architecture, overview, pack, the architecture diff) pass ``&scope=path`` 
 numbers.
 """
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -413,3 +414,30 @@ def test_a_gitignore_off_build_lives_for_its_request_only(fx, extraction_calls):
     with request_cache.host_request(), gitignore_scope(False):
         _structure(fx / 'pkg', 'rank=fan-in')
     assert len(extraction_calls) > within
+
+
+def test_an_edit_evicts_the_old_build_from_the_memo(fx, extraction_calls):
+    """The key already carries every file's stat, so a stale build is never served; the tree stamp
+    (register_validated_cache) is what drops it, so a root holds one build per live variant."""
+    root = str(fx.resolve())
+    with request_cache.host_request():
+        _structure(fx / 'pkg', 'rank=fan-in')
+    assert len(imports_adapter._GRAPH_MEMO[root]) == 1
+    (fx / 'pkg' / 'core.py').write_text('CONST = 3\n\n\ndef helper():\n    return 2\n', encoding='utf-8')
+    os.utime(fx / 'pkg' / 'core.py', ns=(1, 1))
+    with request_cache.host_request():
+        _structure(fx / 'pkg', 'rank=fan-in')
+    assert len(imports_adapter._GRAPH_MEMO[root]) == 1
+
+
+def test_a_php_include_through_a_define_constant_is_tagged_constant(tmp_path):
+    _write(tmp_path, {
+        'composer.json': '{}\n',
+        'config.php': "<?php\ndefine('BASE', __DIR__ . '/');\n",
+        'lib/x.php': '<?php\nfunction x() {}\n',
+        'main.php': "<?php\nrequire_once BASE . 'lib/x.php';\n",
+        'other.php': "<?php\nrequire_once __DIR__ . '/lib/x.php';\n",
+    })
+    rows = {r['file']: r for r in _structure(tmp_path / 'lib' / 'x.php', 'importers')['importers']}
+    assert rows['../main.php']['via'] == ['constant']
+    assert rows['../other.php']['via'] == ['direct']
