@@ -242,9 +242,9 @@ def _i002_extract_dying(fp_str):
     return _REAL_I002_EXTRACT(fp_str)
 
 
-def _imports_extract_dying(fp_str, want_structure):
+def _imports_extract_dying(fp_str, want_structure, inputs=None):
     _dies_on_one(fp_str)
-    return _REAL_IMPORTS_EXTRACT(fp_str, want_structure)
+    return _REAL_IMPORTS_EXTRACT(fp_str, want_structure, inputs)
 
 
 def _scan_dying(args):

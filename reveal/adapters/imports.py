@@ -12,7 +12,9 @@ Usage:
     reveal 'imports://src?circular'          # Find cycles
 """
 
+import hashlib
 import os
+from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, Sequence, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
@@ -33,10 +35,13 @@ from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..utils.query_parser import ParamSpec
 from ..analyzers.imports import service as import_analysis
+from ..analyzers.imports import resolution
 from ..analyzers.imports.file_index import resolution_fingerprint
 from ..registry import get_code_extensions
 from ..utils.parallel import pool_worker_count, submit_each, worker_lost_warning as _worker_lost_warning
-from ..utils.path_utils import hidden_entries_warning, to_posix, to_relative_display
+from ..utils.path_utils import hidden_entries_warning, is_test_path, to_posix, to_relative_display
+from ..utils.query_control import ScanBudget
+from ..utils.request_cache import in_host_request, register_request_cache, register_validated_cache
 from ..utils.results import ResultBuilder, note_truncation
 from ..utils.warning_render import meta_warning_lines
 
@@ -55,6 +60,92 @@ def _candidate_set_fingerprint(candidates: List[Path],
     """Shared root/source/target fingerprint; preserve the private source-only call shape."""
     return resolution_fingerprint(candidates, {} if file_index is None else file_index, excluded_root=disk_cache.cache_root(),
                                   root=root, traversal_failures=traversal_failures)
+
+
+def _graph_cache_key(candidates: List[Path], file_index: Dict[str, List[Path]], root: Path,
+                     traversal_failures: Sequence[Tuple[Optional[str], str]], cap: Optional[int]) -> Optional[str]:
+    """The whole-graph cache key: the resolution fingerprint of the scan root, plus the build's
+    identity (the file cap the walk ran under, the extensions it parsed). None: not cacheable."""
+    fingerprint = _candidate_set_fingerprint(candidates, file_index, root=root,
+                                             traversal_failures=traversal_failures)
+    if fingerprint is None:
+        return None
+    identity = f'{fingerprint}|cap={cap}|exts={",".join(sorted(get_all_extensions()))}'
+    return hashlib.sha256(identity.encode('utf-8')).hexdigest()
+
+
+# BACK-1054 (the BACK-2109 pattern): inside a host request (MCP, reveal.api) the resolved graph of
+# a scan root is kept across requests while the tree stamp of that root is unchanged
+# (register_validated_cache), so a repeated per-file ?importers= answers without a rebuild when
+# the disk cache is off or cold. Keyed by the root alone, as resolved; the value holds at most
+# _GRAPH_MEMO_VARIANTS builds, each under the cache key it was built for (which already carries
+# the source set, targets and file cap) and the --exclude/gitignore scope the walk ran under,
+# which the tree stamp cannot see. A build with a gitignore-off scope lives for its request only
+# (the BACK-2118 rule). &scope, &tests and &lazy are applied at presentation: never a variant.
+_GRAPH_MEMO: 'OrderedDict[str, List[Tuple[Tuple[str, Any, bool], ImportAnalysis]]]' = OrderedDict()
+_GRAPH_MEMO_ROOTS = 4
+_GRAPH_MEMO_VARIANTS = 2
+
+
+def _evict_graph_root(root: str) -> None:
+    _GRAPH_MEMO.pop(root, None)
+
+
+def _drop_request_local_graphs() -> None:
+    for root, builds in tuple(_GRAPH_MEMO.items()):
+        kept = [build for build in builds if build[0][2]]
+        if kept:
+            _GRAPH_MEMO[root] = kept
+        else:
+            del _GRAPH_MEMO[root]
+
+
+register_request_cache(__name__ + '.graph_request_local', _drop_request_local_graphs)
+register_validated_cache(__name__ + '.graph', _GRAPH_MEMO, _evict_graph_root)
+
+
+def _memo_variant(key: str) -> Tuple[str, Any, bool]:
+    from ..utils.exclusions import active_exclusions
+    from ..utils.gitignore import gitignore_enabled
+    return key, active_exclusions(), gitignore_enabled()
+
+
+def _recall_graph(root: Path, key: str) -> Optional[ImportAnalysis]:
+    """The build this host request may reuse for *root* and *key*; None outside a request."""
+    if not in_host_request():
+        return None
+    variant = _memo_variant(key)
+    for built_for, analysis in _GRAPH_MEMO.get(str(root), []):
+        if built_for == variant:
+            _GRAPH_MEMO.move_to_end(str(root))
+            return analysis
+    return None
+
+
+def _remember_graph(root: Path, key: str, analysis: ImportAnalysis) -> None:
+    """Keep a cacheable build for the rest of this host request and the next ones (validated)."""
+    if not in_host_request() or not analysis.cacheable:
+        return
+    variant = _memo_variant(key)
+    builds = [build for build in _GRAPH_MEMO.get(str(root), []) if build[0] != variant]
+    _GRAPH_MEMO[str(root)] = [*builds, (variant, analysis)][-_GRAPH_MEMO_VARIANTS:]
+    _GRAPH_MEMO.move_to_end(str(root))
+    if len(_GRAPH_MEMO) > _GRAPH_MEMO_ROOTS:
+        _GRAPH_MEMO.popitem(last=False)
+
+
+def _cached_graph(root: Path, key: Optional[str]) -> Optional[ImportAnalysis]:
+    """The stored build for *key*: the host-request memo first, then the disk layer (a disk hit
+    joins the memo). A record from before the cascade (no ``resolution``) is a miss."""
+    if key is None:
+        return None
+    cached = _recall_graph(root, key)
+    if cached is None:
+        cached = disk_cache.get(_ADAPTER_IMPORT_GRAPH_NAMESPACE, key)
+    if not isinstance(cached, ImportAnalysis) or cached.resolution is None:
+        return None
+    _remember_graph(root, key, cached)
+    return cached
 
 
 def _discovery_incomplete(result: Dict[str, Any]) -> bool:
@@ -239,6 +330,70 @@ _LAZY = ParamSpec(
     choices=LAZY_MODES,
 )
 
+def _choice_value(value: Any) -> str:
+    if not isinstance(value, str):  # a bare `&scope` parses as True
+        raise TypeError(value)
+    return value
+
+
+def _max_files_value(value: Any) -> int:
+    if isinstance(value, bool):
+        raise TypeError(value)
+    return int(value)
+
+
+def _importers_value(value: Any) -> Any:
+    """A bare ``?importers`` (True) asks for every module under the path; a value names one file."""
+    if value is True:
+        return True
+    if not isinstance(value, str) or not value:
+        raise TypeError(value)
+    return value
+
+
+# BACK-1054 (slice S2 of folding depends://, deps:// and calls?modules into imports://): where an
+# answer is resolved, which rows it shows and which importers count. Each is read where it is
+# applied; none of them enters a cache key (the root does).
+SCOPE_ROOT, SCOPE_PATH = 'root', 'path'
+_SCOPE = ParamSpec(
+    'scope', 'string',
+    'root (default): resolve at the project root the climb finds (?root=, .reveal.yaml root: true, '
+    'package marker, VCS root, else the requested directory) and show rows under the requested path, '
+    'counting importers from anywhere under the root. path: the requested path is the scan root, '
+    'as imports:// resolved before (architecture, overview, pack and diff pass it)',
+    SCOPE_ROOT, _choice_value,
+    examples=('imports://src?rank=fan-in&scope=path',), choices=(SCOPE_ROOT, SCOPE_PATH),
+)
+_TESTS = ParamSpec(
+    'tests', 'string',
+    'Importers under a test path (path_utils.is_test_path: a tests/ or test/ directory, '
+    'test_*.py, *_test.go, *.spec.ts, ...): include them (default) or exclude them from every count',
+    'include', _choice_value,
+    examples=('imports://src?rank=fan-in&tests=exclude',), choices=('include', 'exclude'),
+)
+_ROOT = ParamSpec(
+    'root', 'string',
+    'Pin the scan root to DIR (beats .reveal.yaml, package and VCS markers): resolved against cwd, '
+    'must be an existing directory containing the path, not a filesystem/home/system root; a refused '
+    'value says why and the climb decides. Ignored with scope=path',
+    None, _choice_value, examples=('imports://src/app.py?importers&root=.',),
+)
+_MAX_FILES = ParamSpec(
+    'max_files', 'integer',
+    'Source files the walk may keep (default 20000); a capped walk is disclosed in metadata.scan_budget '
+    'and as a warning, never silently partial',
+    20000, _max_files_value, examples=('imports://.?importers&max_files=50000',), minimum=1,
+)
+_IMPORTERS = ParamSpec(
+    'importers', 'string',
+    'Who imports what: bare (or on a directory) lists every module under the path with its sorted '
+    'importers; =FILE (relative to the path) or a file path lists that file\'s importers with the import '
+    'line, scope and the cascade stage (via) of each edge',
+    None, _importers_value,
+    examples=('imports://src?importers', 'imports://src?importers=utils.py', 'imports://src/utils.py?importers'),
+)
+_REQUEST_SPECS = (_LAZY, _SCOPE, _TESTS, _ROOT, _MAX_FILES, _IMPORTERS)
+
 _SCHEMA_QUERY_PARAMS = {
     'unused': {
         'type': 'flag',
@@ -282,6 +437,11 @@ _SCHEMA_QUERY_PARAMS = {
         'examples': ['imports://src?circular&verbose']
     },
     'lazy': _LAZY.schema(),
+    'importers': _IMPORTERS.schema(),
+    'scope': _SCOPE.schema(),
+    'tests': _TESTS.schema(),
+    'root': _ROOT.schema(),
+    'max_files': _MAX_FILES.schema(),
 }
 
 # BACK-2077: the counting rule every edge-derived answer carries (service.edge_rule).
@@ -295,6 +455,15 @@ _EDGE_RULE_SCHEMA = {
         'scope': {'type': 'string', 'enum': ['scanned_path', 'scan_root']},
         'unclassified_edges': {'type': 'integer'},
         'unclassified_languages': {'type': 'array', 'items': {'type': 'string'}},
+        # BACK-1054: where the answer was resolved and which rows it shows.
+        'root': {'type': 'string', 'description': 'scan root, relative to the requested path'},
+        'root_source': {'type': 'string', 'enum': list(resolution.ROOT_SOURCES)},
+        'scope_param': {'type': 'string', 'enum': [SCOPE_ROOT, SCOPE_PATH]},
+        'tests_param': {'type': 'string', 'enum': ['include', 'exclude']},
+        'via': {'type': 'object', 'description': 'counted edges by the cascade stage that found them',
+                'additionalProperties': {'type': 'integer'}},
+        'ungated_languages': {'type': 'array', 'items': {'type': 'string'}},
+        'ungated_edges': {'type': 'integer'},
         'text': {'type': 'string'},
     },
 }
@@ -480,6 +649,63 @@ _SCHEMA_OUTPUT_TYPES = [
     }
 ]
 
+_SCHEMA_OUTPUT_TYPES += [
+    {
+        'type': 'module_importers',
+        'description': 'The files that import one file (?importers on a file, or ?importers=FILE)',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'module_importers'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string'},
+                'target': {'type': 'string'},
+                'count': {'type': 'integer'},
+                'edge_rule': _EDGE_RULE_SCHEMA,
+                'importers': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'file': {'type': 'string'}, 'line': {'type': 'integer'}, 'module': {'type': 'string'},
+                            'names': {'type': 'array', 'items': {'type': 'string'}}, 'type': {'type': 'string'},
+                            'is_relative': {'type': 'boolean'}, 'alias': {'type': ['string', 'null']},
+                            'scope': {'type': ['array', 'null'], 'items': {'type': 'string'}},
+                            'via': {'type': ['array', 'null'], 'items': {'type': 'string'}},
+                        },
+                    },
+                },
+            },
+        },
+    },
+    {
+        'type': 'importer_summary',
+        'description': 'Every module under the path with its sorted importers (?importers on a directory)',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'importer_summary'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string'},
+                'total': {'type': 'integer'},
+                'edge_rule': _EDGE_RULE_SCHEMA,
+                'entries': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'file': {'type': 'string'}, 'fan_in': {'type': 'integer'},
+                            'importers': {'type': 'array', 'items': {'type': 'string'}},
+                        },
+                    },
+                },
+            },
+        },
+    },
+]
+
 _SCHEMA_EXAMPLE_QUERIES = [
     {
         'uri': 'imports://src',
@@ -529,6 +755,16 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'description': 'Cycles counting function-level (lazy) imports too',
         'output_type': 'circular_dependencies'
     },
+    {
+        'uri': 'imports://src/utils.py?importers',
+        'description': 'Who imports utils.py, from anywhere under the project root',
+        'output_type': 'module_importers'
+    },
+    {
+        'uri': 'imports://src?importers&tests=exclude',
+        'description': 'Every module under src with its importers, test importers not counted',
+        'output_type': 'importer_summary'
+    },
 ]
 
 _SCHEMA_NOTES = [
@@ -540,6 +776,8 @@ _SCHEMA_NOTES = [
     'Fan-in ranking covers static imports only — decorator-based registration and importlib dynamic imports are not captured',
     'Function-level (lazy) imports are edges: ?circular and metadata.has_cycles leave them out by default, every other view counts them; &lazy=include|exclude|only overrides. Each answer states its rule in edge_rule (and a Rule: line in text). Python, JavaScript, TypeScript and TSX record import scope; edge_rule names the languages whose edges it could not classify',
     'Two summary views sit on top of this adapter: deps:// (whole-tree dashboard) and depends:// (single-module reverse lookup) — use imports:// directly for the raw graph or a query neither of those covers',
+    'Scope (BACK-1054): every answer resolves at the project root (&root=, .reveal.yaml root: true, package marker, VCS root, else the requested directory) through the same cascade depends:// uses, and shows rows under the requested path; &scope=path makes the requested path the scan root. edge_rule names the root, its source, &scope, &tests, the edges each cascade stage found (via) and the languages no recall oracle gates',
+    'Swift module and Ruby Zeitwerk convention edges (via module, convention) are counted as importers but never close a cycle',
 ]
 
 
@@ -985,12 +1223,14 @@ def _parallel_worker_count(n_files: int) -> int:
     return pool_worker_count(min(os.cpu_count() or 1, _PARALLEL_MAX_WORKERS))
 
 
-def _extract_one_file(fp_str: str, want_structure: bool):
+def _extract_one_file(fp_str: str, want_structure: bool,
+                      inputs: Optional[resolution.ResolutionInputs] = None):
     """Extract imports/symbols (+ optional AST structure) for a single file.
 
     Module-level and picklable so it runs unchanged under a
     `ProcessPoolExecutor` (fork *or* spawn). Returns
-    `(fp_str, imports_or_None, symbols_or_None, structure_or_None, extraction, structure_failure_or_None)`:
+    `(fp_str, imports_or_None, symbols_or_None, structure_or_None, extraction, structure_failure_or_None,
+    entry_or_None)`:
     `imports`/`symbols` are None when the file has no import extractor (mirrors
     the serial path only populating them for extractable files); `structure`
     is None when not requested or when analysis raised (`structure_failure` then
@@ -1001,17 +1241,26 @@ def _extract_one_file(fp_str: str, want_structure: bool):
     a file's `imports`/`symbols` are an empty/partial result, not a confirmed-
     clean one, so callers (I001/I002, this adapter's own summary) must not
     treat it the same as a genuinely-clean file.
+
+    With the cascade's project-wide *inputs* (BACK-1054) the file is read as the cascade reads it
+    (PHP gets the constant index) and also indexed where it was parsed (``resolution.index_file``),
+    so the main process never parses it again; ``entry`` is None without them or an extractor.
     """
     fp = Path(fp_str)
-    imports = symbols = structure = structure_failure = None
+    imports = symbols = structure = structure_failure = entry = None
     extraction = None
     extractor = get_extractor(fp)
     if extractor is not None:
-        imports = extractor.extract_imports(fp)
+        if inputs is None:
+            imports = extractor.extract_imports(fp)
+        else:
+            imports = resolution.extract_file(fp, extractor, inputs.constant_index)
         symbols = extractor.extract_symbols(fp)
         if hasattr(extractor, 'extract_exports'):
             symbols = symbols | extractor.extract_exports(fp)
         extraction = extractor.analysis
+        if inputs is not None:
+            entry = resolution.index_file(fp, extractor, imports, inputs.manifest_dirs)
     if want_structure:
         # Structure is a separate add-on (only requested via collect_structures=True).
         # analyze_file_outcome catches an analysis failure itself and returns it, so it
@@ -1020,13 +1269,22 @@ def _extract_one_file(fp_str: str, want_structure: bool):
         # the chunk, which _extract_files records per file (BACK-1059, BACK-1856).
         from .ast.analysis import analyze_file_outcome
         structure, structure_failure = analyze_file_outcome(fp_str)
-    return fp_str, imports, symbols, structure, extraction, structure_failure
+    return fp_str, imports, symbols, structure, extraction, structure_failure, entry
 
 
-def _extract_chunk(job: Tuple[List[str], bool]) -> list:
+def _extract_chunk(job: Tuple[List[str], bool, Optional[resolution.ResolutionInputs]]) -> list:
     """`_extract_one_file` over one chunk of paths: the pool's unit of work."""
-    paths, want_structure = job
-    return [_extract_one_file(fp_str, want_structure) for fp_str in paths]
+    paths, want_structure, inputs = job
+    return [_extract_one_file(fp_str, want_structure, inputs) for fp_str in paths]
+
+
+def _recording_entries(rows, entries: Optional[Dict[Path, resolution.FileEntry]]):
+    """``_extract_files`` rows without their last element, the file's ``FileEntry``, which lands in
+    *entries* (a file with no extractor, or lost to a dead worker, has none)."""
+    for fp, *rest, entry in rows:
+        if entry is not None and entries is not None:
+            entries[fp] = entry
+        yield (fp, *rest)
 
 
 def _lost_extraction(error: BaseException) -> ImportExtraction:
@@ -1036,7 +1294,42 @@ def _lost_extraction(error: BaseException) -> ImportExtraction:
         'parse': {'status': 'unavailable', 'reason': f"{type(error).__name__}: {error}"}})
 
 
-def _relativize_imports_paths(result: Dict[str, Any], base_path: Path) -> None:
+def _path_display(base_path: Path, scan_root: Optional[Path]) -> Callable[[Optional[str]], Optional[str]]:
+    """Paths relative to the requested path; under scope=root a file outside it (never outside the
+    scan root) is spelled from the requested directory (``../tests/test_x.py``), not absolute."""
+    base_dir = base_path if base_path.is_dir() else base_path.parent
+
+    def rel(value: Optional[str]) -> Optional[str]:
+        if not value:
+            return value
+        if scan_root is not None and os.path.isabs(value) and not resolution.path_is_under(Path(value), base_dir) \
+                and resolution.path_is_under(Path(value), scan_root):
+            return to_posix(os.path.relpath(value, base_dir))
+        return to_relative_display(value, base_path)
+    return rel
+
+
+def _relativize_importer_paths(result: Dict[str, Any], base_path: Path,
+                               rel: Callable[[Optional[str]], Optional[str]]) -> None:
+    """The importer views (BACK-1054) name every file relative to the requested directory (a file
+    target's own directory), as depends:// names them relative to its root."""
+    base_dir = base_path if base_path.is_dir() else base_path.parent
+
+    def rel_dir(value: str) -> str:
+        if base_path.is_dir() or value == str(base_path) or not resolution.path_is_under(Path(value), base_dir):
+            return rel(value) or value
+        return to_relative_display(value, base_dir)
+
+    if result.get('target'):
+        result['target'] = rel_dir(result['target'])
+    for row in result.get('importers', []):
+        row['file'] = rel_dir(row['file'])
+    for entry in result.get('entries', []):
+        entry['file'] = rel_dir(entry['file'])
+        entry['importers'] = sorted(rel_dir(f) for f in entry['importers'])
+
+
+def _relativize_imports_paths(result: Dict[str, Any], base_path: Path, scan_root: Optional[Path] = None) -> None:
     """Relativize the file-path fields the text renderer already relativizes
     (ImportsRenderer._render_components's local `rel()`, etc.), but in the
     raw structures get_structure() serializes directly to JSON -- those never
@@ -1046,8 +1339,7 @@ def _relativize_imports_paths(result: Dict[str, Any], base_path: Path) -> None:
     follow-up). BACK-1212. Mutates in place; dispatches on result['type']
     since get_structure() returns a different shape per query param.
     """
-    def rel(value: Optional[str]) -> Optional[str]:
-        return to_relative_display(value, base_path) if value else value
+    rel = _path_display(base_path, scan_root)
 
     def relativize_import_dicts(imports: List[Dict[str, Any]]) -> None:
         for imp in imports:
@@ -1068,15 +1360,15 @@ def _relativize_imports_paths(result: Dict[str, Any], base_path: Path) -> None:
     elif result_type == 'unused_imports':
         relativize_import_dicts(result.get('unused', []))
     elif result_type in ('fan_in_ranking', 'entrypoints'):
+        # Every entry and component carries these keys; rel() leaves an empty value as it is.
         for entry in result.get('entries', []):
-            if entry.get('file'):
-                entry['file'] = rel(entry['file'])
+            entry['file'] = rel(entry['file'])
     elif result_type == 'components':
         for component in result.get('components', []):
-            if component.get('component'):
-                component['component'] = rel(component['component'])
-            if component.get('top_bridge'):
-                component['top_bridge'] = rel(component['top_bridge'])
+            component['component'] = rel(component['component'])
+            component['top_bridge'] = rel(component['top_bridge'])
+    elif result_type in ('module_importers', 'importer_summary'):
+        _relativize_importer_paths(result, base_path, rel)
     elif result_type == 'circular_dependencies':
         for key in ('cycles', 'cycle_paths'):
             groups = result.get(key)
@@ -1121,10 +1413,16 @@ class ImportsAdapter(ResourceAdapter):
                 raise ValueError(f'rank must be one of: {choices}; got {value!r}')
             if key == _LAZY.name:
                 _LAZY.validate(value)
+            for spec in _REQUEST_SPECS[1:]:
+                if key == spec.name:
+                    spec.validate(value)
         self._local_names_cache: Optional[frozenset] = None  # BACK-1190, lazy
         self._project_namespaces_cache: Optional[set] = None  # BACK-1234, lazy
         # A walk that hid every candidate says so (BACK-2065); set by _build_graph.
         self._scope_hidden: Optional[WarningEntry] = None
+        # Where _build_graph resolved and under which file cap (BACK-1054).
+        self._scan: Optional[resolution.ScanRoot] = None
+        self._scan_budget = ScanBudget(_MAX_FILES.default)
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Analyze imports in directory or file.
@@ -1147,7 +1445,18 @@ class ImportsAdapter(ResourceAdapter):
 
         # Handle query parameters
         verbose = 'verbose' in query_params or kwargs.get('verbose', False)
-        if 'unused' in query_params or kwargs.get('unused'):
+        result = self._format_view(query_params, kwargs)
+        _relativize_imports_paths(result, target_path, self._scan.root if self._scan else None)
+        if verbose:
+            result['verbose'] = True
+        return result
+
+    def _format_view(self, query_params: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """The one view the query asks for, in precedence order (?importers first, BACK-1054)."""
+        importers = _IMPORTERS.read(query_params)
+        if importers is not None:
+            result = self._format_importers(importers)
+        elif 'unused' in query_params or kwargs.get('unused'):
             result = self._format_unused()
         elif 'circular' in query_params or kwargs.get('circular'):
             result = self._format_circular()
@@ -1161,9 +1470,6 @@ class ImportsAdapter(ResourceAdapter):
             result = self._format_components()
         else:
             result = self._format_all()
-        _relativize_imports_paths(result, target_path)
-        if verbose:
-            result['verbose'] = True
         return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
@@ -1212,9 +1518,10 @@ class ImportsAdapter(ResourceAdapter):
         if not self.analysis.graph:
             return {'status': 'not_analyzed'}
 
+        in_scope = [imports for f, imports in self.analysis.graph.files.items() if self._in_scope(f)]
         return {
-            'total_imports': self.analysis.graph.get_import_count(),
-            'total_files': self.analysis.graph.get_file_count(),
+            'total_imports': sum(len(imports) for imports in in_scope),
+            'total_files': len(in_scope),
             # Files actually scanned with a working extractor — distinct from
             # total_files (files that happen to have >=1 import statement).
             # A file with a supported language but zero imports (common in
@@ -1222,9 +1529,9 @@ class ImportsAdapter(ResourceAdapter):
             # during the BACK-431 feature-breadth pass) legitimately has
             # total_files == 0 despite being fully, correctly analyzed; the
             # text renderer needs this count to tell "clean" from "unchecked."
-            'scanned_files': len(self.analysis.scanned_files),
+            'scanned_files': sum(1 for f in self.analysis.scanned_files if self._in_scope(f)),
             # Cycles leave function-level imports out unless &lazy says otherwise (BACK-2077).
-            'has_cycles': len(self._edges(LAZY_EXCLUDE).find_cycle_groups()) > 0,
+            'has_cycles': len(self._cycle_groups(self._edges(LAZY_EXCLUDE))) > 0,
             'cycles_lazy': self._lazy_mode(LAZY_EXCLUDE)[0],
             'analyzer': 'imports',
             # Recognized code files whose language has no import extractor yet.
@@ -1251,7 +1558,30 @@ class ImportsAdapter(ResourceAdapter):
             # autoloading framework (Rails/Django/Laravel) -- see
             # detect_autoload_regime()/autoload_regime_warning() above.
             'autoload_regime': detect_autoload_regime(self._target_path) if self._target_path else None,
+            # BACK-1054: the one file cap the walk ran under (&max_files) and what it kept.
+            'scan_budget': self._scan_budget_dict(),
         }
+
+    def _scan_budget_dict(self) -> Dict[str, Any]:
+        record = self.analysis.resolution
+        accounting = record.scan_accounting if record is not None else None
+        return {'scope': accounting.scope if accounting else 'source_candidates',
+                'limit': self._scan_budget.limit,
+                'total': accounting.total if accounting else None,
+                'returned': accounting.returned if accounting else None,
+                'exact': accounting.exact if accounting else None,
+                'capped': bool(record.capped) if record is not None else False}
+
+    def _row_files(self, graph: ImportGraph) -> set:
+        """The files an answer has rows for: every scanned file and every edge target (which may
+        live outside the parse corpus), whichever view, so a row never vanishes with &lazy or
+        &tests; under scope=root only those under the requested path."""
+        files = self.analysis.scanned_files | set(graph.files.keys()) | set(self._graph().reverse_deps.keys())
+        return {f for f in files if self._in_scope(f)}
+
+    def _cycle_groups(self, graph: ImportGraph) -> List[List[Path]]:
+        """Cycle groups of ``graph`` that hold a row of this answer (all of each group is shown)."""
+        return [group for group in graph.find_cycle_groups() if any(self._in_scope(f) for f in group)]
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -1296,9 +1626,10 @@ class ImportsAdapter(ResourceAdapter):
             symbols = symbols | exports
         return imports, symbols
 
-    def _extract_files(self, candidates: List[Path], want_structure: bool):
+    def _extract_files(self, candidates: List[Path], want_structure: bool,
+                       inputs: Optional[resolution.ResolutionInputs] = None):
         """Yield ``(Path, imports_or_None, symbols_or_None, structure_or_None, extraction,
-        structure_failure_or_None)``
+        structure_failure_or_None, entry_or_None)``
         per candidate file, in candidate order.
 
         Fans the independent per-file extraction out across processes when the
@@ -1312,7 +1643,7 @@ class ImportsAdapter(ResourceAdapter):
         workers = _parallel_worker_count(len(candidates))
         if workers <= 1:
             for fp in candidates:
-                yield (fp, *_extract_one_file(str(fp), want_structure)[1:])
+                yield (fp, *_extract_one_file(str(fp), want_structure, inputs)[1:])
             return
 
         from concurrent.futures import ProcessPoolExecutor
@@ -1325,12 +1656,12 @@ class ImportsAdapter(ResourceAdapter):
         with ProcessPoolExecutor(
             max_workers=workers, initializer=worker_bootstrap,
         ) as executor:
-            futures = submit_each(executor, _extract_chunk, [(chunk, want_structure) for chunk in chunks])
+            futures = submit_each(executor, _extract_chunk, [(chunk, want_structure, inputs) for chunk in chunks])
             for chunk, future in zip(chunks, futures):
                 try:
                     rows = future.result()
                 except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever the worker raised: BrokenProcessPool when it died, or any exception an extractor threw on one file of the chunk; the chunk's files are recorded as failed extractions (_lost_extraction carries the cause) and reach files_failed and the partial-parse warning
-                    rows = [(fp_str, None, None, None, _lost_extraction(e), None) for fp_str in chunk]
+                    rows = [(fp_str, None, None, None, _lost_extraction(e), None, None) for fp_str in chunk]
                 for fp_str, *rest in rows:
                     yield (Path(fp_str), *rest)
 
@@ -1364,11 +1695,14 @@ class ImportsAdapter(ResourceAdapter):
         on_file_processed: Optional[Callable[[Path], None]],
         supported_exts: frozenset,
         code_exts: frozenset,
+        inputs: Optional[resolution.ResolutionInputs] = None,
+        entries: Optional[Dict[Path, resolution.FileEntry]] = None,
     ) -> List[ImportStatement]:
         """Run per-file extraction (parallel on large repos, else serial),
         consumed in candidate order so assembly is deterministic. Populates
         self.analysis.symbols_by_file/_scanned_files/_unsupported_extensions/_structures/
-        _files_failed and returns the collected import statements.
+        _files_failed and returns the collected import statements; with the cascade's
+        *inputs*, each extracted file's ``FileEntry`` lands in *entries*.
         """
         files: List[Path] = []
         all_imports: List[ImportStatement] = []
@@ -1378,7 +1712,8 @@ class ImportsAdapter(ResourceAdapter):
         lost_files: List[Path] = []
         structure_failures: List[Tuple[str, str]] = []
 
-        for fp, imports, symbols, structure, extraction, structure_failure in self._extract_files(candidates, collect_structures):
+        for fp, imports, symbols, structure, extraction, structure_failure in _recording_entries(
+                self._extract_files(candidates, collect_structures, inputs), entries):
             if extraction is not None and extraction.worker_lost:
                 # Lost before its extractor ran, so "no import extractor" is unknown for
                 # it: failed either way, never silently unsupported (BACK-1752).
@@ -1415,12 +1750,15 @@ class ImportsAdapter(ResourceAdapter):
         self.analysis.structure_failures = structure_failures
         return all_imports
 
-    def _resolve_dependencies(self, target_path: Path, file_index: Dict[str, List[Path]], *,
-                              traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> None:
-        import_analysis.resolve_graph(
-            import_analysis.ScanScope(target_path, frozenset(get_all_extensions())),
-            import_analysis.ImportFileSet(tuple(self.analysis.scanned_files), file_index,
-                                          traversal_failures=tuple(traversal_failures)), self.analysis)
+    def _scan_root_for(self, target_path: Path) -> resolution.ScanRoot:
+        """Where this request resolves: the requested path itself under ``&scope=path``, else the
+        project root the shared climb finds (``resolution.choose_scan_root``: ``&root=``, markers,
+        the inferred subtree)."""
+        raw_root = self._query_params.get(_ROOT.name)  # a read: the build applies it
+        if _SCOPE.read(self._query_params) == SCOPE_PATH:
+            rejected = f'?root={raw_root} is ignored under scope=path' if raw_root else None
+            return resolution.ScanRoot(target_path, 'path', override_rejected=rejected)
+        return resolution.choose_scan_root(target_path, raw_root)
 
     def _build_graph(
         self,
@@ -1428,25 +1766,30 @@ class ImportsAdapter(ResourceAdapter):
         on_file_processed: Optional[Callable[[Path], None]] = None,
         collect_structures: bool = False,
     ) -> None:
-        """Build import graph from target path (multi-language).
+        """Build the import graph a request about ``target_path`` reads (multi-language).
 
-        Uses plugin-based architecture to automatically detect and use
-        appropriate extractor for each file type.
+        The graph is resolved at the scan root ``_scan_root_for`` picks (the project root, or
+        the path itself under ``&scope=path``), through depends://'s cascade
+        (``analyzers/imports/resolution.py``, BACK-1054): direct resolution, the PHP constant
+        index, namespace, member and Swift module fan-out, Zeitwerk convention edges, each edge
+        tagged with the stage that found it. The walk keeps at most ``&max_files`` source files
+        (one ScanBudget, disclosed). ``&scope``, ``&tests`` and ``&lazy`` choose rows and edges at
+        presentation; none of them changes the build or its cache key.
 
         Only static imports are captured. Dynamic dispatch — Python's
         importlib.import_module, JS require(), Java Class.forName, Ruby autoload,
         and similar patterns — is invisible to this graph. All query modes
         (fan-in, entrypoints, unused, circular, violations) share this limitation.
 
-        Per-file import/symbol extraction (and, when requested, AST structure
-        analysis) is independent across files and runs in parallel across
-        processes on large repos — see `_extract_one_file` / the module-level
-        BACK-489 P1 note. The graph assembly that follows is a cheap serial
-        reduce; results are consumed in file order so output is identical to a
-        serial run.
+        Per-file import/symbol extraction, the file's part of the cascade's indices and, when
+        requested, AST structure analysis are independent across files and run in parallel
+        across processes on large repos — see `_extract_one_file` / the module-level BACK-489 P1
+        note. The project-wide inputs extraction reads (PHP constants, Swift manifests, gemspec
+        roots) are built first, the resolution after; results are consumed in file order so
+        output is identical to a serial run.
 
         Args:
-            target_path: Directory or file to analyze
+            target_path: Directory or file the request is about
             on_file_processed: Optional callback invoked once per code file
                 (import-extractable or not), in deterministic file order, after
                 that file's extraction. A lightweight per-file notification hook
@@ -1459,49 +1802,71 @@ class ImportsAdapter(ResourceAdapter):
                 a second full-repo walk/parse. When False (default), no
                 structure analysis is done.
 
-        Disk cache (BACK-834): when `collect_structures` is False and no
-        `on_file_processed` callback was given — the common case for
-        `imports://`, `pack --architecture`'s fan-in, and `pack --focus`'s
-        graph-relevance ranking — the resolved graph is cached on disk keyed by
-        a fingerprint of the scan root (BACK-2082), source membership and resolution
-        targets, so a 2nd+ call on an unchanged tree skips the tree-sitter
-        extraction and dependency-resolution walk entirely. Skipped (never read or written) when either is set, since
-        `self._structures` and per-file progress callbacks aren't part of the
-        cached payload and would silently go missing on a cache hit.
+        Caches (BACK-834, BACK-2082, BACK-2109): when `collect_structures` is False and no
+        `on_file_processed` callback was given, the resolved graph is cached on disk keyed by a
+        fingerprint of the scan root, source membership, resolution targets and the build's file
+        cap, and inside a host request it is also kept in memory (``_GRAPH_MEMO``, keyed by the
+        root alone, validated by the tree stamp). A build that lost a file for a reason its
+        content did not cause is returned, never stored (BACK-2083).
         """
         supported_exts = frozenset(get_all_extensions())
         # Recognized-code extensions that lack an import extractor — used to warn
         # honestly (instead of a silent 0) when a scan hits, e.g., Swift or Scala.
         code_exts = get_code_extensions()
-
-        traversal_failures: List[Tuple[Optional[str], str]] = []
-        hidden: Dict[str, int] = {}
-        candidates, file_index = self._discover_candidate_files(
-            target_path, supported_exts, code_exts, traversal_failures=traversal_failures, hidden=hidden)
+        self._scan = scan = self._scan_root_for(target_path)
+        root = scan.root
+        self._scan_budget = ScanBudget(_MAX_FILES.read(self._query_params))
+        focus = None if root == target_path else target_path
+        files = import_analysis.discover(import_analysis.ScanScope(
+            root, supported_exts, code_exts, cap=self._scan_budget.limit, focus=focus))
+        candidates, file_index = list(files.candidates), files.index
+        if focus is not None and target_path.is_file() and target_path not in candidates and (
+                target_path.suffix in supported_exts or target_path.suffix.lower() in code_exts):
+            # A file the request names is analyzed even when the root's walk leaves it out (a
+            # declaration stub, BACK-1467; an ignored file), as a walk of the file alone keeps it.
+            candidates.append(target_path)
+        traversal_failures = list(files.traversal_failures)
         # Discovery runs on a cache hit too, so the disclosure is never a cached one.
-        self._scope_hidden = hidden_entries_warning(hidden, len(candidates))
+        self._scope_hidden = hidden_entries_warning(files.hidden, files.analyzed)
 
         cacheable = not collect_structures and on_file_processed is None
-        fingerprint = _candidate_set_fingerprint(
-            candidates, file_index, root=target_path,
-            traversal_failures=traversal_failures) if cacheable else None
-        if fingerprint is not None:
-            cached = disk_cache.get(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint)
-            if isinstance(cached, ImportAnalysis):
-                self.analysis = cached
-                return
+        key = _graph_cache_key(candidates, file_index, root, traversal_failures,
+                               self._scan_budget.limit) if cacheable else None
+        cached = _cached_graph(root, key)
+        if cached is not None:
+            self.analysis = cached
+            return
 
-        self.analysis = ImportAnalysis()
-        all_imports = self._process_extracted_files(
-            candidates, collect_structures, on_file_processed, supported_exts, code_exts)
-
-        self.analysis.graph = ImportGraph.from_imports(all_imports)
-        self._resolve_dependencies(target_path, file_index, traversal_failures=traversal_failures)
+        resolved = self._extract_and_resolve(files, candidates, focus, collect_structures, on_file_processed,
+                                             supported_exts, code_exts)
 
         # A file lost to a dead worker or unreadable this run is not the tree's answer (BACK-2083).
-        if fingerprint is not None and self.analysis.cacheable:
-            disk_cache.put(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint, self.analysis)
+        if key is not None and self.analysis.cacheable and not resolved.traversal_failures:
+            disk_cache.put(_ADAPTER_IMPORT_GRAPH_NAMESPACE, key, self.analysis)
+            _remember_graph(root, key, self.analysis)
 
+    def _extract_and_resolve(self, files: import_analysis.ImportFileSet, candidates: List[Path],
+                             focus: Optional[Path], collect_structures: bool,
+                             on_file_processed: Optional[Callable[[Path], None]],
+                             supported_exts: frozenset, code_exts: frozenset) -> resolution.ProjectResolution:
+        """The uncached build: the cascade's project-wide inputs, the (parallel) per-file pass, then
+        the cascade over the files' entries; fills ``self.analysis``."""
+        assert self._scan is not None
+        root = self._scan.root
+        self.analysis = ImportAnalysis()
+        resolver = resolution.ProjectResolver(cap=self._scan_budget.limit, focus=focus)
+        resolver.result.scan_root = root
+        resolver.record_discovery(files)
+        parse_corpus = [fp for fp in candidates if fp.suffix in supported_exts]
+        inputs = resolver.prepare(parse_corpus, root)
+        entries: Dict[Path, resolution.FileEntry] = {}
+        self._process_extracted_files(
+            candidates, collect_structures, on_file_processed, supported_exts, code_exts, inputs, entries)
+        resolved = resolver.resolve_entries(root, [fp for fp in parse_corpus if fp in entries], files.index,
+                                            entries, inputs)
+        self.analysis.graph = resolved.graph
+        self.analysis.resolution = resolved
+        return resolved
 
     def _build_response(self, response_type: str, **data_fields) -> Dict[str, Any]:
         """Build standardized adapter response with common structure.
@@ -1521,6 +1886,7 @@ class ImportsAdapter(ResourceAdapter):
                     if warning.get('type') == 'analysis_incomplete']
         if self._scope_hidden:
             warnings.append(self._scope_hidden)
+        warnings.extend(self._scan_warnings())
         response = ResultBuilder.create(
             result_type=response_type,
             source=str(self._target_path),
@@ -1549,15 +1915,45 @@ class ImportsAdapter(ResourceAdapter):
         return self.analysis.graph
 
     def _edges(self, default: str) -> ImportGraph:
-        """The graph view an edge-derived answer counts: &lazy, else the view's default."""
-        return self._graph().edge_view(self._lazy_mode(default)[0])
+        """The graph view an edge-derived answer counts: &lazy, else the view's default, then
+        &tests=exclude (importers under a test path dropped, ``path_utils.is_test_path``)."""
+        view = self._graph().edge_view(self._lazy_mode(default)[0])
+        return view.without_test_importers() if self._tests_excluded() else view
 
-    def _edge_rule(self, default: str, subject: str, *, tests_counted: bool = True) -> Dict[str, Any]:
+    def _tests_excluded(self) -> bool:
+        return bool(_TESTS.read(self._query_params) == 'exclude')
+
+    def _scope_is_root(self) -> bool:
+        return bool(_SCOPE.read(self._query_params) == SCOPE_ROOT)
+
+    def _base_dir(self) -> Path:
+        target = self._target_path or Path('.').resolve()
+        return target if target.is_dir() else target.parent
+
+    def _in_scope(self, path: Path) -> bool:
+        """Whether ``path`` is a row of this answer: everything the graph holds when the requested
+        path is the scan root, else the requested file or files under the requested directory."""
+        target = self._target_path
+        if target is None or self._scan is None or self._scan.source == 'path' or self._scan.root == target:
+            return True
+        return path == target or (target.is_dir() and resolution.path_is_under(path, target))
+
+    def _resolved_at(self, cycles: bool = False) -> import_analysis.ResolvedAt:
+        scan = self._scan or resolution.ScanRoot(self._target_path or Path('.').resolve(), 'path')
+        return import_analysis.ResolvedAt(
+            root=to_posix(os.path.relpath(scan.root, self._base_dir())), root_source=scan.source,
+            scope=_SCOPE.read(self._query_params), tests=_TESTS.read(self._query_params),
+            gated=resolution.IMPORT_RECALL_GATED, cycles=cycles)
+
+    def _edge_rule(self, default: str, subject: str, *, tests_counted: bool = True,
+                   cycles: bool = False) -> Dict[str, Any]:
         """The rule (JSON and text) of an answer counted on ``self._edges(default)``."""
         lazy, lazy_default = self._lazy_mode(default)
         return import_analysis.edge_rule(
             self._graph(), lazy, lazy_default=lazy_default, subject=subject,
-            scope='scanned_path', tests_counted=tests_counted)
+            scope='scan_root' if self._scope_is_root() else 'scanned_path',
+            tests_counted=tests_counted and not self._tests_excluded(),
+            resolved_at=self._resolved_at(cycles), counted=self._edges(default))
 
     def _format_all(self) -> Dict[str, Any]:
         """Format all imports (default view)."""
@@ -1566,12 +1962,12 @@ class ImportsAdapter(ResourceAdapter):
 
         imports_by_file = {
             str(file_path): [self._format_import(stmt) for stmt in imports]
-            for file_path, imports in self.analysis.graph.files.items()
+            for file_path, imports in self.analysis.graph.files.items() if self._in_scope(file_path)
         }
 
         return self._build_response(
             'imports', files=imports_by_file,
-            edge_rule=self._edge_rule(LAZY_EXCLUDE, 'Cycles Found uses static imports between'))
+            edge_rule=self._edge_rule(LAZY_EXCLUDE, 'Cycles Found uses static imports between', cycles=True))
 
     def _format_fan_in(self) -> Dict[str, Any]:
         """Rank files by fan-in (number of other files that import them).
@@ -1588,7 +1984,7 @@ class ImportsAdapter(ResourceAdapter):
         graph = self._edges(LAZY_INCLUDE)
         # Union: all scanned files + files that appear as import targets (may live outside scan
         # root); every edge's target, whichever view, so a row never vanishes with &lazy.
-        all_files = self.analysis.scanned_files | set(graph.files.keys()) | set(self.analysis.graph.reverse_deps.keys())
+        all_files = self._row_files(graph)
         entries = sorted(
             [
                 {
@@ -1642,7 +2038,7 @@ class ImportsAdapter(ResourceAdapter):
                 if not is_test_path(importer)
             )
 
-        all_files = self.analysis.scanned_files | set(graph.files.keys()) | set(self.analysis.graph.reverse_deps.keys())
+        all_files = self._row_files(graph)
         candidates = [f for f in all_files if _non_test_fan_in(f) == 0]
         entries = sorted(
             [
@@ -1705,7 +2101,8 @@ class ImportsAdapter(ResourceAdapter):
         # Group scanned files by immediate parent — only analyze files within the scan root
         dir_files: dict = defaultdict(set)
         for f in self.analysis.scanned_files:
-            dir_files[f.parent].add(f)
+            if self._in_scope(f):
+                dir_files[f.parent].add(f)
 
         components = []
         for directory, file_set in dir_files.items():
@@ -1771,7 +2168,9 @@ class ImportsAdapter(ResourceAdapter):
         if not self.analysis.graph:
             return {'unused': []}
 
-        unused = self.analysis.graph.find_unused_imports(self.analysis.symbols_by_file)
+        unused = [(stmt, names) for stmt, names in
+                  self.analysis.graph.find_unused_imports(self.analysis.symbols_by_file)
+                  if self._in_scope(stmt.file_path)]
 
         # `unused_names` narrows a partly-used `from x import a, b` to the names
         # actually unused (BACK-1066); `count` is statements, like `unused`.
@@ -1787,7 +2186,7 @@ class ImportsAdapter(ResourceAdapter):
             return {'cycles': []}
 
         graph = self._edges(LAZY_EXCLUDE)
-        groups = graph.find_cycle_groups()
+        groups = self._cycle_groups(graph)
         cycle_paths = [
             [str(p) for p in graph.find_cycle_path(group)]
             for group in groups
@@ -1798,7 +2197,7 @@ class ImportsAdapter(ResourceAdapter):
             cycles=[[str(p) for p in group] for group in groups],
             cycle_paths=cycle_paths,
             count=len(groups),
-            edge_rule=self._edge_rule(LAZY_EXCLUDE, 'cycles use static imports between'),
+            edge_rule=self._edge_rule(LAZY_EXCLUDE, 'cycles use static imports between', cycles=True),
         )
 
     def _format_violations(self) -> Dict[str, Any]:
@@ -1817,6 +2216,8 @@ class ImportsAdapter(ResourceAdapter):
         violations = []
 
         for from_file, to_files in self._edges(LAZY_INCLUDE).dependencies.items():
+            if not self._in_scope(from_file):
+                continue
             for to_file in to_files:
                 result = layer_config.check_import(from_file, to_file, project_root)
                 if result is not None:
@@ -1834,6 +2235,75 @@ class ImportsAdapter(ResourceAdapter):
             count=len(violations),
             edge_rule=self._edge_rule(LAZY_INCLUDE, 'violations check static imports between'),
         )
+
+    def _scan_warnings(self) -> List[WarningEntry]:
+        """A refused ?root= (the climb decided instead) and a walk the file cap cut short."""
+        warnings: List[WarningEntry] = []
+        if self._scan is not None and self._scan.override_rejected:
+            warnings.append(cast(WarningEntry, {
+                'type': 'root_rejected', 'field': 'root',
+                'message': f"{self._scan.override_rejected}; resolved at the scan root the climb found instead"}))
+        record = self.analysis.resolution
+        if record is not None and record.capped:
+            warnings.append(cast(WarningEntry, {
+                'type': 'scan_capped', 'field': 'max_files', 'limit': self._scan_budget.limit,
+                'message': (f"the walk kept {self._scan_budget.limit:,} source files (max_files) and stopped: "
+                            "files past the cap are neither importers nor rows, so counts can under-report; "
+                            "raise &max_files=N or narrow &root=")}))
+        return warnings
+
+    def _format_importers(self, importers: Any) -> Dict[str, Any]:
+        """``?importers``: who imports what, from the edges every other view counts.
+
+        A file (the requested file, or ``=FILE`` relative to the requested directory) lists each
+        importer with the statement behind the edge (``resolution.ProjectResolution.edge_statements``),
+        its scope and the cascade stage (via) that found it; a package-granularity language (Go)
+        also counts importers of the file's directory (BACK-553). Otherwise every module under the
+        path with at least one importer, with the sorted importers: the depends:// directory answer.
+        """
+        target = self._target_path or Path('.').resolve()
+        if isinstance(importers, str):
+            named = Path(importers).expanduser()
+            target = (named if named.is_absolute() else self._base_dir() / named).resolve()
+        if target.is_file():
+            return self._format_file_importers(target)
+        graph = self._edges(LAZY_INCLUDE)
+        entries = [
+            {'file': str(f), 'fan_in': len(sources), 'importers': sorted(str(src) for src in sources)}
+            for f, sources in graph.reverse_deps.items() if sources and self._in_scope(f)
+            and (target == self._target_path or resolution.path_is_under(f, target))
+        ]
+        entries.sort(key=lambda e: (-cast(int, e['fan_in']), str(e['file'])))
+        return self._build_response(
+            'importer_summary', entries=entries, total=len(entries),
+            edge_rule=self._edge_rule(LAZY_INCLUDE, 'importers are files whose static imports resolve here, among'))
+
+    def _format_file_importers(self, target: Path) -> Dict[str, Any]:
+        graph = self._edges(LAZY_INCLUDE)
+        record = self.analysis.resolution
+        statements = record.edge_statements if record is not None else {}
+        sources = set(graph.reverse_deps.get(target, set()))
+        # BACK-553: a package-granularity language resolves an import to the package directory.
+        package_sources = graph.reverse_deps.get(target.parent, set())
+        sources |= package_sources
+        sources.discard(target)
+        rows = []
+        for src in sorted(sources):
+            key = (src, target) if (src, target) in graph.edge_scopes else (src, target.parent)
+            stmt = statements.get(key)
+            row: Dict[str, Any] = {'file': str(src), 'line': 0, 'module': '', 'names': [], 'type': 'unknown',
+                                   'is_relative': False, 'alias': None}
+            if stmt is not None:
+                row.update({'line': stmt.line_number, 'module': stmt.module_name, 'names': stmt.imported_names,
+                            'type': stmt.import_type, 'is_relative': stmt.is_relative, 'alias': stmt.alias})
+            if row['module'] and os.path.isabs(row['module']):
+                row['module'] = to_posix(os.path.relpath(row['module'], self._base_dir()))
+            row['scope'] = sorted(s for s in graph.edge_scopes.get(key, ()) if s) or None
+            row['via'] = sorted(graph.edge_via.get(key, ())) or None
+            rows.append(row)
+        return self._build_response(
+            'module_importers', target=str(target), importers=rows, count=len(rows),
+            edge_rule=self._edge_rule(LAZY_INCLUDE, 'importers are files whose static imports resolve here, among'))
 
     def _get_local_names(self) -> frozenset:
         """Local package names for the scanned root, computed once (BACK-1190)."""

@@ -435,8 +435,9 @@ counted by, as a `Rule:` line in text and an `edge_rule` object in JSON (`lazy`,
 | `only` | function-level edges only | none |
 
 `exclude` and `only` split the edges: per file, fan-in under `include` is the sum of the other
-two. Only importers inside the scanned path count, tests included (`?entrypoints` does not count
-importers under a test path); `depends://` scans from the project root instead. Python,
+two. Importers anywhere under the scan root count, tests included unless `&tests=exclude`
+(`?entrypoints` never counts importers under a test path); `&scope=path` makes the requested path
+the scan root. Python,
 JavaScript, TypeScript and TSX record import scope (positionally: an import, `import()` or
 `require()` in a function, method, arrow or function expression is function-level; a class field
 initializer or static block is module level). Other languages' edges count as load-time under
@@ -677,8 +678,23 @@ Use `?flag` syntax for operations:
 | `top=N` | Limit results for `?rank` (default: all) | `imports://src?rank=fan-in&top=20` |
 | `entrypoints` | Files with fan-in=0 — entry points, scripts, or dead code; sorted by fan-out | `imports://src?entrypoints` |
 | `components` | Per-directory cohesion + coupling scores; top bridge file | `imports://src?components` |
+| `importers` | Who imports what: on a file (or `=FILE`, relative to the path) each importer with its import line, scope and cascade stage (`via`); on a directory every module under it with its sorted importers | `imports://src/utils.py?importers` |
+| `scope=root\|path` | `root` (default): resolve at the project root, rows under the path; `path`: the path itself is the scan root | `imports://src?rank=fan-in&scope=path` |
+| `tests=include\|exclude` | Count importers under a test path (`path_utils.is_test_path`), or not | `imports://src?importers&tests=exclude` |
+| `root=DIR` | Pin the scan root (must contain the path; not a filesystem/home/system root; a refused value is a warning) | `imports://src/app.py?importers&root=.` |
+| `max_files=N` | Source files the walk may keep (default 20000); a cut is `metadata.scan_budget.capped` and a `scan_capped` warning | `imports://.?importers&max_files=50000` |
 
 **Note**: `unused`, `circular`, and `violations` are flags (no `=value` needed). `rank` and `top` take values.
+
+**Where an answer is resolved** (BACK-1054): at the project root the shared climb finds (`&root=`,
+`.reveal.yaml` `root: true`, the nearest package marker, the VCS root, else the requested directory),
+through the same resolution cascade `depends://` uses (direct, PHP `define()` constants, namespaces,
+members, Swift modules, Ruby Zeitwerk naming). Rows are the requested path's files; importers come from
+anywhere under the root, so `imports://pkg?rank=fan-in` counts `tests/` and `scripts/` importers of
+`pkg/core.py`. `&scope=path` resolves at the path itself (what `architecture://`, `overview://`, `pack` and
+the architecture diff use). `edge_rule` adds `root` (relative to the path), `root_source`, `scope_param`,
+`tests_param`, `via` (counted edges by stage) and `ungated_languages`/`ungated_edges` (languages no recall
+oracle measures). Swift module and Zeitwerk convention edges count as importers but never close a cycle.
 
 ```bash
 # Correct

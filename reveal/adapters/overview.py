@@ -452,7 +452,7 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, *,
     the same way compose() would (BACK-984).
     """
     try:
-        importer = ImportsAdapter(str(path))
+        importer = ImportsAdapter(str(path), 'scope=path')  # BACK-1054: the requested path is the scan root
         # BACK-1495: this call bypasses compose(), so --exclude has to be scoped here.
         with exclusion_scope(path if path.is_dir() else path.parent, adapter.exclude_patterns):
             # Match ImportsAdapter.get_structure's resolved analysis target;

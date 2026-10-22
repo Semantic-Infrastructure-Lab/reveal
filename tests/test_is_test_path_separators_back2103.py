@@ -29,6 +29,7 @@ def _imports_view(path: str) -> bool:
     adapter = SimpleNamespace(
         analysis=SimpleNamespace(graph=graph, scanned_files={file}),
         _edges=lambda default: graph,
+        _row_files=lambda view: {file},
         _edge_rule=lambda *args, **kwargs: {},
         _build_response=lambda response_type, **fields: fields,
     )

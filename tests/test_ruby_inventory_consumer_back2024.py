@@ -207,7 +207,9 @@ def test_imports_annotation_scope_stays_explicit_unresolved_without_graph_loss_a
     result = ImportsAdapter(str(root)).get_structure()
     records = [row for rows in result['files'].values() for row in rows]
     assert next(row for row in records if row['module'] == 'spree0/missing')['classification'] == 'unresolved'
-    assert not any(entry.get('unit') == 'directories' for entry in result.get('meta', {}).get('warnings', []))
+    # BACK-1054: imports:// resolves through the cascade now, which reads the gem manifests for its
+    # load-path roots as depends:// does, so the unreadable manifest is resolution loss it discloses.
+    assert any(entry.get('unit') == 'directories' for entry in result.get('meta', {}).get('warnings', []))
 
 
 def test_absent_marker_keeps_unknown_and_pair_facade_preserves_cache_controls(tmp_path):

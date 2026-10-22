@@ -314,7 +314,7 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     imports_state = 'complete'
 
     try:
-        adapter = ImportsAdapter(str(root))
+        adapter = ImportsAdapter(str(root), 'scope=path')  # BACK-1054: the requested path is the scan root
         adapter._build_graph(root)
         with import_analysis.composed_rules('architecture://'):  # BACK-2087
             fan_in_data = adapter._format_fan_in()

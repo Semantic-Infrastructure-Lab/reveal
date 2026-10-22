@@ -216,15 +216,69 @@ _LAZY_PHRASES = {
 }
 
 
+@dataclass(frozen=True)
+class ResolvedAt:
+    """Where an imports:// answer was resolved and which rows it shows (BACK-1054), for its rule.
+
+    ``root`` is the scan root as displayed (relative to the requested path), ``root_source``
+    one of ``resolution.ROOT_SOURCES``, ``scope`` the request's ``&scope`` (``root``: rows under
+    the requested path, edges from anywhere under the root; ``path``: the requested path is the
+    root), ``tests`` its ``&tests``. ``gated`` names the languages a recall oracle scores; edges
+    from any other language are named as not gated. ``cycles`` marks a cycle view, which leaves
+    module and convention edges out.
+    """
+    root: str
+    root_source: str
+    scope: str
+    tests: str
+    gated: frozenset
+    cycles: bool = False
+
+
+_VIA_ORDER = ('direct', 'constant', 'namespace', 'member', 'module', 'convention')
+
+
+def _resolution_fields(graph: ImportGraph, at: ResolvedAt) -> Tuple[Dict[str, Any], str]:
+    """The rule fields and text an answer resolved through the cascade adds: its root, scope and
+    tests choice, how many counted edges each cascade stage found, and the ungated languages."""
+    via: Dict[str, int] = {}
+    ungated: Dict[str, int] = {}
+    for src, targets in graph.dependencies.items():
+        language = language_for_extension(src.suffix.lower()) or src.suffix
+        for dst in targets:
+            tags = graph.edge_via.get((src, dst)) or {'direct'}
+            first = next(tag for tag in _VIA_ORDER if tag in tags)
+            via[first] = via.get(first, 0) + 1
+            if language not in at.gated:
+                ungated[language] = ungated.get(language, 0) + 1
+    via = {tag: via[tag] for tag in _VIA_ORDER if tag in via}
+    fields = {'root': at.root, 'root_source': at.root_source, 'scope_param': at.scope, 'tests_param': at.tests,
+              'via': via, 'ungated_languages': sorted(ungated), 'ungated_edges': sum(ungated.values())}
+    rows = 'rows are files under the requested path' if at.scope == 'root' else 'the requested path is the scan root'
+    text = f' Resolved at the scan root {at.root} ({at.root_source.replace("_", " ")}); {rows}'
+    if via:
+        text += '; edges by stage: ' + ', '.join(f'{tag} {n}' for tag, n in via.items())
+    if at.cycles:
+        text += '; module and convention edges never close a cycle'
+    text += '.'
+    if ungated:
+        text += (f' Not gated (no recall oracle measures them): {", ".join(sorted(ungated))}, '
+                 f'{sum(ungated.values())} edge(s); treat those counts as unmeasured.')
+    return fields, text
+
+
 def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str,
-              scope: str, tests_counted: bool = True, hint: Optional[str] = None) -> Dict[str, Any]:
+              scope: str, tests_counted: bool = True, hint: Optional[str] = None,
+              resolved_at: Optional[ResolvedAt] = None, counted: Optional[ImportGraph] = None) -> Dict[str, Any]:
     """The counting rule of an edge-derived answer, for its JSON and its text (BACK-2077).
 
     ``lazy`` is the LAZY_MODES value the answer used and ``lazy_default`` whether the
     request left it to the view's default. ``subject`` names what is counted, ``scope``
     which files an edge may join ('scanned_path' or 'scan_root'). ``hint`` replaces the
     default pointer at the other ``&lazy`` values. Edges from languages whose extractor
-    records no import scope are named: every view counts them as load-time.
+    records no import scope are named: every view counts them as load-time. ``resolved_at``
+    (imports://) adds where the answer was resolved and its stage and gating counts over
+    ``counted``, the view the answer counts (the graph itself when not given).
     """
     unclassified = graph.unclassified_edges()
     languages = sorted({language_for_extension(src.suffix.lower()) or src.suffix
@@ -241,7 +295,7 @@ def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str
     if unclassified:
         text += (f' Import scope is not recorded for {", ".join(languages)}: '
                  f'{len(unclassified)} edge(s) count as load-time under every &lazy value.')
-    return {
+    rule = {
         'lazy': lazy,
         'lazy_default': lazy_default,
         'type_checking': 'excluded',
@@ -249,8 +303,15 @@ def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str
         'scope': scope,
         'unclassified_edges': len(unclassified),
         'unclassified_languages': languages,
-        'text': text,
     }
+    # A command composing imports answers (inside composed_rules) takes no &scope, &tests or &root
+    # and keeps the rule it printed before: the resolution fields are imports://'s own.
+    if resolved_at is not None and _RULE_HINT.get() is None:
+        fields, more = _resolution_fields(graph if counted is None else counted, resolved_at)
+        rule.update(fields)
+        text += more
+    rule['text'] = text
+    return rule
 
 
 def _counting_view(rule: Dict[str, Any]) -> Tuple[Any, Any, Any]:

@@ -234,7 +234,7 @@ class ImportGraph:
     def _not_a_cycle_edge(self, from_file: Path, to_file: Path) -> bool:
         """An edge only VIA_NOT_CYCLES stages found (a module or naming-convention edge)."""
         via = self.edge_via.get((from_file, to_file))
-        return bool(via) and via <= VIA_NOT_CYCLES
+        return via is not None and bool(via) and via <= VIA_NOT_CYCLES
 
     def is_lazy_edge(self, from_file: Path, to_file: Path) -> bool:
         """True when every import behind the edge is function-level (scope 'local')."""
@@ -270,6 +270,25 @@ class ImportGraph:
                         reverse_deps[to_file].add(from_file)
             view = replace(self, dependencies=dependencies, reverse_deps=reverse_deps)
             views[lazy] = view
+        return view
+
+    def without_test_importers(self) -> 'ImportGraph':
+        """This graph without the edges whose importer is under a test path
+        (``path_utils.is_test_path``, BACK-1891's one definition), computed once: ``&tests=exclude``."""
+        from ...utils.path_utils import is_test_path
+        views: Dict[str, 'ImportGraph'] = self.__dict__.setdefault('_edge_views', {})
+        view = views.get('tests_excluded')
+        if view is None:
+            dependencies: Dict[Path, Set[Path]] = defaultdict(set)
+            reverse_deps: Dict[Path, Set[Path]] = defaultdict(set)
+            for from_file, to_files in self.dependencies.items():
+                if is_test_path(from_file):
+                    continue
+                for to_file in to_files:
+                    dependencies[from_file].add(to_file)
+                    reverse_deps[to_file].add(from_file)
+            view = replace(self, dependencies=dependencies, reverse_deps=reverse_deps)
+            views['tests_excluded'] = view
         return view
 
     def find_cycles(self) -> List[List[Path]]:

@@ -156,11 +156,11 @@ def test_graph_layer_does_not_store_a_read_failure(tree, deny, builds):
 def test_graph_layer_does_not_store_a_lost_file(tree, monkeypatch, builds):
     real = ImportsAdapter._extract_files
 
-    def one_lost(self, candidates, want_structure):
-        for row in real(self, candidates, want_structure):
+    def one_lost(self, candidates, want_structure, inputs=None):
+        for row in real(self, candidates, want_structure, inputs):
             if row[0].name == 'a.py':
                 lost = BrokenProcessPool('A process in the process pool was terminated abruptly')
-                row = (row[0], None, None, None, imports_adapter._lost_extraction(lost), None)
+                row = (row[0], None, None, None, imports_adapter._lost_extraction(lost), None, None)
             yield row
 
     with monkeypatch.context() as patched:

@@ -157,7 +157,7 @@ def _run_imports_analysis(adapter: 'ArchitectureAdapter', path: Path) -> Dict[st
     # the same way compose() would (BACK-984).
     try:
         from reveal.adapters.imports import ImportsAdapter
-        importer = ImportsAdapter(str(path))
+        importer = ImportsAdapter(str(path), 'scope=path')  # BACK-1054: the requested path is the scan root
         importer._build_graph(path)
         warnings = importer.integrity_warnings(path)  # BACK-1598, BACK-1753
         if warnings:
@@ -228,7 +228,7 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
     graph_built = False
     try:
         from reveal.adapters.imports import ImportsAdapter
-        importer = ImportsAdapter(str(path))
+        importer = ImportsAdapter(str(path), 'scope=path')  # BACK-1054: the requested path is the scan root
         # collect_structures=True runs per-file AST analysis in the same
         # (parallelized) walk as import extraction — no second full-repo pass.
         importer._build_graph(path, collect_structures=True)

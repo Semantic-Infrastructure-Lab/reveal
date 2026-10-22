@@ -137,7 +137,7 @@ def _build_pack_import_graph(
     """
     try:
         from reveal.adapters.imports import ImportsAdapter  # noqa: I006
-        adapter = ImportsAdapter(resource=str(path))
+        adapter = ImportsAdapter(resource=str(path), query='scope=path')  # BACK-1054: the path is the scan root
         adapter._build_graph(adapter._target_path)
         warnings = adapter.integrity_warnings(path)
         if warnings:

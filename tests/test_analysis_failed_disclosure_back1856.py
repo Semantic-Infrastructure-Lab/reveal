@@ -69,5 +69,5 @@ def test_imports_graph_discloses_the_skipped_file(tree):
 
 
 def test_extract_one_file_returns_the_failure(tree):
-    *_, structure, _extraction, failure = _extract_one_file(str(tree / 'bad.py'), True)
+    *_, structure, _extraction, failure, _entry = _extract_one_file(str(tree / 'bad.py'), True)
     assert structure is None and 'synthetic analyzer bug' in failure

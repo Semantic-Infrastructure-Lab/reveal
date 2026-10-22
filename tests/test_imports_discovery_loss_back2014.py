@@ -154,14 +154,17 @@ def test_exact_healthy_single_file_and_hard_excluded_controls(tmp_path, monkeypa
     root = tmp_path / 'source'
     child = make_tree(root)
     source = root / 'visible.py'
-    single = ImportsAdapter(str(source)).get_structure()
+    # The file alone (scope=path): its walk never reaches the sibling directory. Under the
+    # default scope=root the file's importers come from the whole root, so a denied directory
+    # there is loss (BACK-1054); test_actual_loss_text_once_and_json_parseable covers that.
+    single = ImportsAdapter(str(source), 'scope=path').get_structure()
     # REVEAL_IGNORE removes inputs from both source and target populations. Soft
     # File-level --exclude/gitignore paths remain resolution targets; directory
     # --exclude is pruned by the existing policy. Both are tested separately.
     monkeypatch.setenv('REVEAL_IGNORE', 'included_child/')
     excluded = ImportsAdapter(str(root)).get_structure()
     deny_child(monkeypatch, child)
-    assert ImportsAdapter(str(source)).get_structure() == single
+    assert ImportsAdapter(str(source), 'scope=path').get_structure() == single
     assert ImportsAdapter(str(root)).get_structure() == excluded
 
 
@@ -250,7 +253,7 @@ def test_graph_preserves_distinct_causes_but_formatter_counts_unique_directories
     adapter._build_graph(tmp_path)
     child = (tmp_path / 'included_child').as_posix()
     events = [(child, 'PermissionError: first'), (child, 'PermissionError: first'), (child, 'OSError: second')]
-    adapter._resolve_dependencies(tmp_path, {}, traversal_failures=events)
+    adapter.analysis.graph.traversal_failures = list(events)  # what resolution records (BACK-1054)
     assert adapter.analysis.graph.traversal_failures == events
     (warning,) = adapter.integrity_warnings(tmp_path)
     assert warning['count'] == 1 and warning['directories'] == ['included_child']

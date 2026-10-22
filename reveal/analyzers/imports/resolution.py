@@ -39,6 +39,13 @@ VIA_DIRECT, VIA_CONSTANT, VIA_NAMESPACE, VIA_MEMBER, VIA_MODULE, VIA_CONVENTION 
     'direct', 'constant', 'namespace', 'member', 'module', 'convention')
 VIAS = (VIA_DIRECT, VIA_CONSTANT, VIA_NAMESPACE, VIA_MEMBER, VIA_MODULE, VIA_CONVENTION)
 
+# The languages (registry.language_for_extension) whose import edges a recall oracle scores in
+# the CI recall gate (scripts/recall_gate.py over tests/corpus/manifest.yaml's ``recall:``
+# entries; tests/test_imports_importers_back1054.py pins this set to the manifest). An answer
+# with edges from any other language names it as not gated: its counts are unmeasured, whatever
+# the cascade stage that found them (plan rule 8).
+IMPORT_RECALL_GATED = frozenset({'c', 'cpp', 'go', 'java', 'javascript', 'python', 'rust', 'typescript', 'tsx'})
+
 
 @dataclass(frozen=True)
 class ScanRoot:
@@ -354,6 +361,12 @@ class ProjectResolver:
         """
         files = service.discover(service.ScanScope(
             scan_root, supported_exts, cap=self._cap, focus=self._focus))
+        self.record_discovery(files)
+        return list(files.candidates), files.index
+
+    def record_discovery(self, files: service.ImportFileSet) -> None:
+        """The walk's census on the record: its losses, what it hid, and the cap's accounting
+        (a caller that walked the root itself hands its file set here)."""
         self.result.traversal_failures = files.traversal_failures
         scope_hidden = hidden_entries_warning(files.hidden, files.analyzed)
         self.result.scope_hidden = dict(scope_hidden) if scope_hidden else None
@@ -362,7 +375,6 @@ class ProjectResolver:
         if files.traversal_failures:
             # The combined source/target walk cannot certify the source census.
             self.result.scan_accounting = replace(self.result.scan_accounting, exact=False)
-        return list(files.candidates), files.index
 
     def _build_resolution_indices(self, files: List[Path], entries: Dict[Path, 'FileEntry'],
                                   inputs: 'ResolutionInputs') -> _ResolutionIndices:

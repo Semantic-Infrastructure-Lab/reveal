@@ -43,6 +43,16 @@ examples:
   - uri: "imports://src?circular&lazy=include"
     description: 'Count function-level (lazy) imports as cycle edges too; ?circular leaves them out by default'
 
+  # Who imports what (the depends:// answers, BACK-1054)
+  - uri: "imports://src/utils.py?importers"
+    description: 'Who imports utils.py, from anywhere under the project root: each import line, its scope and the cascade stage that resolved it'
+
+  - uri: "imports://src?importers&tests=exclude"
+    description: 'Every module under src with its sorted importers, importers under a test path not counted'
+
+  - uri: "imports://src?rank=fan-in&scope=path"
+    description: 'Resolve at src itself instead of the project root (the requested path is the scan root)'
+
   # Verbose output
   - uri: "imports://src --verbose"
     description: 'Show detailed import information including file paths and line numbers'
@@ -56,6 +66,11 @@ elements:
   circular: 'Circular dependency chains between modules'
   violations: 'Architecture layer violations (requires .reveal.yaml config)'
   lazy: 'Which function-level import edges count: include, exclude (load-time only) or only'
+  importers: 'Who imports a file (=FILE or a file path), or every module under a directory with its importers'
+  scope: 'root (default): resolve at the project root, rows under the path; path: the path is the scan root'
+  tests: 'include (default) or exclude importers under a test path from every count'
+  root: 'Pin the scan root to DIR (must contain the path)'
+  max_files: 'Source files the walk may keep (default 20000), disclosed when it cuts'
 
 flags:
   --verbose: 'Show detailed import information (file paths, line numbers, full chains)'
@@ -138,6 +153,7 @@ notes:
   - 'Circular dependency detection builds full import graph'
   - 'Layer violations require .reveal.yaml configuration file'
   - "Function-level (lazy) imports are edges: ?circular and has_cycles leave them out (a lazy back-edge is no import-time cycle), every other view counts them; &lazy=include|exclude|only overrides. Every answer prints its rule (Rule: line, edge_rule in JSON). Python, JavaScript, TypeScript and TSX record import scope; the rule names other languages' unclassified edges"
+  - "Every answer resolves at the project root (&root=, .reveal.yaml root: true, package marker, VCS root, else the requested directory) through depends://'s cascade (direct, PHP constants, namespaces, members, Swift modules, Zeitwerk naming) and shows rows under the requested path; &scope=path makes the path itself the scan root. The rule names the root and its source, &scope, &tests, the edges each stage found (via) and the languages no recall oracle gates. Swift module and Zeitwerk convention edges never close a cycle"
   - 'Static imports only — dynamic dispatch (importlib.import_module, JS require(), Java Class.forName, Ruby autoload, plugin registries, etc.) is not captured by any query mode; affected files show lower fan-in than actual and may appear as false-positive entrypoints'
   - 'Supported languages: Python, JavaScript, TypeScript, Go, Rust, Java, C++, and more'
   - 'Use --verbose for detailed import chains and file paths'
