@@ -64,7 +64,7 @@ def _answer(root: Path, view, cache_dir: Path, *, cache: bool):
     env = {**os.environ, 'PYTHONHASHSEED': '0', 'REVEAL_NO_CONFIG': '1',
            'REVEAL_CACHE_DIR': str(cache_dir), 'REVEAL_DISK_CACHE': '1' if cache else '0'}
     done = subprocess.run([sys.executable, '-m', 'reveal', 'imports', str(root), *VIEWS[view],
-                           '--format', 'json'], capture_output=True, text=True, env=env, timeout=120)
+                           '--format', 'json'], capture_output=True, text=True, encoding='utf-8', env=env, timeout=120)
     assert done.returncode in (0, 3), done.stderr
     return done.returncode, _comparable(json.loads(done.stdout))
 
