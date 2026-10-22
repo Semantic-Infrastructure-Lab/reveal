@@ -131,6 +131,62 @@ def test_key_separates_scanner_and_spelling(tmp_path, field):
     assert scanner.calls == 2
 
 
+def test_every_stat_field_and_the_scanner_are_in_the_key(tmp_path):
+    src = _src(tmp_path)
+    base = sfc.file_key(str(src), 'm.f', 'go', (10, 20))
+    assert sfc.file_key(str(src), 'm.f', 'go', (11, 20)) != base      # mtime_ns
+    assert sfc.file_key(str(src), 'm.f', 'go', (10, 21)) != base      # size
+    assert sfc.file_key(str(src), 'm.g', 'go', (10, 20)) != base      # scanner identity
+    assert sfc.file_key(str(src), 'm.f', 'go', (10, 20)) == base      # and nothing else varies
+
+
+def test_same_mtime_different_size_misses(tmp_path):
+    src = _src(tmp_path, text='aaaa\n')
+    stamp = os.stat(src)
+    scanner = Scanner()
+    _scan(scanner, src)
+    src.write_text('aaaaaaaa\n', encoding='utf-8')
+    os.utime(src, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    _scan(scanner, src)
+    assert scanner.calls == 2
+
+
+def test_an_entry_written_by_another_scanner_is_not_served(tmp_path):
+    src = _src(tmp_path)
+    key = sfc.file_key(str(src), 'm.f', 'go', sfc._stat_stamp(str(src)))
+    disk_cache.put(sfc._SURFACE_FILE_NAMESPACE, key,
+                   {'schema': sfc._ENTRY_SCHEMA, 'scanner': 'm.other', 'result': {'env': []}})
+    scanner = Scanner()
+    assert _scan(scanner, src)['env'], 'the foreign entry was served'
+    assert scanner.calls == 1
+
+
+def test_an_entry_of_another_schema_is_not_served(tmp_path):
+    src = _src(tmp_path)
+    key = sfc.file_key(str(src), 'm.f', 'go', sfc._stat_stamp(str(src)))
+    disk_cache.put(sfc._SURFACE_FILE_NAMESPACE, key,
+                   {'schema': sfc._ENTRY_SCHEMA + 1, 'scanner': 'm.f', 'result': {'env': []}})
+    scanner = Scanner()
+    _scan(scanner, src)
+    assert scanner.calls == 1
+
+
+def test_a_result_that_is_not_a_dict_is_not_stored_whatever_the_validator_says(tmp_path):
+    src = _src(tmp_path)
+    key = sfc.file_key(str(src), 'm.f', 'go', sfc._stat_stamp(str(src)))
+    sfc.scan_file_cached(Scanner(result=['not', 'a', 'dict']), 'm.f', 'go', str(src), lambda result, type_filter: None)
+    assert disk_cache.get(sfc._SURFACE_FILE_NAMESPACE, key) is None
+
+
+def test_an_entry_whose_result_is_not_a_dict_is_not_served(tmp_path):
+    src = _src(tmp_path)
+    key = sfc.file_key(str(src), 'm.f', 'go', sfc._stat_stamp(str(src)))
+    disk_cache.put(sfc._SURFACE_FILE_NAMESPACE, key,
+                   {'schema': sfc._ENTRY_SCHEMA, 'scanner': 'm.f', 'result': ['x']})
+    scanner = Scanner()
+    assert isinstance(_scan(scanner, src), dict) and scanner.calls == 1
+
+
 def test_interpreter_version_is_in_the_python_key_only(tmp_path, monkeypatch):
     src = _src(tmp_path, 'a.py')
     stamp = sfc._stat_stamp(str(src))
