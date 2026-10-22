@@ -19,8 +19,91 @@ from .file_index import load_path_manifests
 from .generic import RubyImportExtractor
 from .types import ImportGraph, ImportStatement
 from .._capability_table import depends_intra_project_classification_supported
-from ...utils.path_utils import hidden_entries_warning, to_posix
+from ...utils.path_utils import (hidden_entries_warning, is_unsafe_scan_root, resolve_project_root,
+                                 search_parents, to_posix)
 from ...utils.query_control import BudgetAccounting, ScanBudget
+
+
+# Where a scan root came from, in the climb's precedence order: a validated ``?root=``, then
+# the tiers of ``resolve_project_root`` (``.reveal.yaml root: true``, the nearest package
+# marker, the nearest VCS root), then the inferred fallback when nothing matched before the
+# ceiling (BACK-525 layer 3). ``path``: the caller asked for the requested path itself.
+ROOT_SOURCES = ('root_param', 'reveal_yaml', 'package_marker', 'vcs', 'inferred', 'path')
+
+
+@dataclass(frozen=True)
+class ScanRoot:
+    """The directory one request resolves imports at, and why (BACK-525, BACK-610)."""
+    root: Path
+    source: str
+    # The validated ``?root=`` in effect, or the one-line reason a passed one was refused
+    # (the climb then decided, and the presenter says so).
+    override_used: Optional[Path] = None
+    override_rejected: Optional[str] = None
+
+    @property
+    def inferred(self) -> bool:
+        return self.source == 'inferred'
+
+
+def path_is_under(path: Path, directory: Path) -> bool:
+    """True if path is inside directory (or is directory itself); lexical, both resolved."""
+    try:
+        path.relative_to(directory)
+        return True
+    except ValueError:
+        return False
+
+
+def _validated_root(target: Path, raw: Any) -> Tuple[Optional[Path], Optional[str]]:
+    """BACK-610: the ``?root=DIR`` pin, or why it was refused (fail-closed to the climb).
+
+    Resolved against cwd with ``~`` expanded, so a relative DIR works the same in CLI and
+    MCP; it must be an existing directory, not a filesystem/home/system root (the ceiling
+    the climb obeys), and must contain the target.
+    """
+    if not raw or not isinstance(raw, str):
+        return None, None
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    candidate = candidate.resolve()
+    if not candidate.is_dir():
+        return None, f"?root={raw} is not an existing directory"
+    if is_unsafe_scan_root(candidate):
+        return None, f"?root={raw} resolves to a filesystem/home/system root"
+    if not path_is_under(target, candidate):
+        return None, f"?root={raw} does not contain the target"
+    return candidate, None
+
+
+def _marker_tier(target: Path, root: Path) -> str:
+    """Which tier of ``resolve_project_root`` produced ``root`` (each probe is one cached climb)."""
+    if resolve_project_root(target, use_package_markers=False, use_vcs=False) == root:
+        return 'reveal_yaml'
+    if resolve_project_root(target, honor_reveal_root=False, use_vcs=False) == root:
+        return 'package_marker'
+    return 'vcs'
+
+
+def choose_scan_root(target: Path, raw_root: Any = None) -> ScanRoot:
+    """The project root a request about ``target`` resolves at: ``?root=`` (validated), else
+    the ceiling-bounded marker climb, else the inferred subtree (BACK-525 layer 3: the target
+    directory, or for a file its nearest ``src`` ancestor or its parent, BACK-498).
+
+    Moved from depends:// so imports:// climbs the same way (BACK-1054); the presenter keeps
+    the wording of every disclosure built from the record.
+    """
+    override, rejected = _validated_root(target, raw_root)
+    if override is not None:
+        return ScanRoot(override, 'root_param', override_used=override)
+    root = resolve_project_root(target)
+    if root is not None:
+        return ScanRoot(root, _marker_tier(target, root), override_rejected=rejected)
+    if target.is_dir():
+        return ScanRoot(target, 'inferred', override_rejected=rejected)
+    src_root = search_parents(target, lambda p: p.name == 'src')
+    return ScanRoot(src_root if src_root else target.parent, 'inferred', override_rejected=rejected)
 
 
 @dataclass

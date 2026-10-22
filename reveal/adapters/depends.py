@@ -29,9 +29,7 @@ from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder, note_truncation, note_warning
 from ..utils.path_utils import (
     traversal_failed_warning,
-    is_unsafe_scan_root,
     resolve_project_root,
-    search_parents,
     to_relative_display,
     _PACKAGE_ROOT_MARKERS,
     _VCS_ROOT_MARKERS,
@@ -506,23 +504,15 @@ class DependsAdapter(ResourceAdapter):
         # Composer convention that all four affected languages share) when one
         # exists above the file; only fall back to the bare parent dir if even
         # that isn't found.
-        # BACK-525 layers 1+2: tiered nearest-marker climb, bounded by a hard
-        # ceiling it can never itself become the answer to. BACK-610: an
-        # explicit ?root= override (validated) takes precedence over the climb.
-        root_override = self._validated_root_override(target_path)
-        project_root = _resolve_project_root(target_path, root_override=root_override)
-        if project_root is None:
-            # BACK-525 layer 3: inferred-project fallback (tsserver's model)
-            # — no marker found before the ceiling, so don't scan the
-            # ceiling itself. Scope to the target's own subtree and say so,
-            # rather than silently pulling in whatever unrelated sibling
-            # happens to share that ceiling (the `~/src/{p1,p2}` case).
-            self._root_inferred = True
-            if target_path.is_dir():
-                project_root = target_path
-            else:
-                src_root = search_parents(target_path, lambda p: p.name == 'src')
-                project_root = src_root if src_root else target_path.parent
+        # BACK-525 layers 1-3 and BACK-610's ?root=, in the owner the imports:// climb shares
+        # (resolution.choose_scan_root): a validated override, the ceiling-bounded marker
+        # climb, else the inferred subtree (tsserver's model: no marker before the ceiling,
+        # so scope to the target's own subtree and say so).
+        choice = resolution.choose_scan_root(target_path, self._query_params.get('root'))
+        self._root_override_used = choice.override_used
+        self._root_override_rejected = choice.override_rejected
+        self._root_inferred = choice.inferred
+        project_root = choice.root
         self._target_path = target_path
         # BACK-525 layer 4: for a single-file target, only files in its own
         # extractor's `extensions` family (e.g. C's .c+.h) can ever satisfy
@@ -550,54 +540,6 @@ class DependsAdapter(ResourceAdapter):
         if 'verbose' in self._query_params or kwargs.get('verbose', False):
             result['verbose'] = True
         return result
-
-    def _validated_root_override(self, target_path: Path) -> Optional[Path]:
-        """BACK-610: resolve and validate the ``?root=DIR`` query param, if any.
-
-        Returns the pinned scan root (an absolute, resolved ``Path``) when the
-        param is present and valid, else ``None`` — in which case resolution
-        falls through to the normal tier-0..3 climb. A *passed-but-invalid*
-        ``?root=`` records a one-line reason in ``self._root_override_rejected``
-        (surfaced via :meth:`_warnings`) so the fallback is never silent.
-
-        Validation (fail-closed to the auto climb, never raising):
-        * resolved relative to cwd and ``~`` expanded, so a relative DIR works
-          the same in CLI and MCP/service mode (the URI is what's passed in both);
-        * must be an existing directory;
-        * must not be an unsafe scan root (``/``, ``$HOME``, temp/system dir) —
-          the same ceiling guard the climb obeys, so ``?root=`` cannot be used
-          to force the catastrophic wide scan the ceiling exists to prevent;
-        * must contain the target (or equal it) — a root that doesn't hold the
-          target can never surface the target's dependents.
-
-        The scan-file cap in :meth:`_build_graph` still applies to whatever root
-        is pinned, so a legitimately huge pinned root is capped-and-warned, not
-        silently truncated.
-        """
-        raw = self._query_params.get('root')
-        if not raw or not isinstance(raw, str):
-            return None
-        candidate = Path(raw).expanduser()
-        if not candidate.is_absolute():
-            candidate = Path.cwd() / candidate
-        candidate = candidate.resolve()
-        if not candidate.is_dir():
-            self._root_override_rejected = (
-                f"?root={raw} is not an existing directory"
-            )
-            return None
-        if is_unsafe_scan_root(candidate):
-            self._root_override_rejected = (
-                f"?root={raw} resolves to a filesystem/home/system root"
-            )
-            return None
-        if not _path_is_under(target_path, candidate):
-            self._root_override_rejected = (
-                f"?root={raw} does not contain the target"
-            )
-            return None
-        self._root_override_used = candidate
-        return candidate
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get dependents for a specific module by name.
@@ -992,7 +934,7 @@ class DependsAdapter(ResourceAdapter):
         # Only include modules that live inside the directory
         modules = []
         for target, importers in self._graph.reverse_deps.items():
-            if not _path_is_under(target, directory):
+            if not resolution.path_is_under(target, directory):
                 continue
             # BACK-1214: 'module' and every 'dependents' entry are absolute
             # paths from the import graph -- never relativized. Same
@@ -1082,12 +1024,3 @@ def _format_import_stmt(stmt: ImportStatement) -> Dict[str, Any]:
         'is_relative': stmt.is_relative,
         'alias': stmt.alias,
     }
-
-
-def _path_is_under(path: Path, directory: Path) -> bool:
-    """True if path is inside directory (or is directory itself)."""
-    try:
-        path.relative_to(directory)
-        return True
-    except ValueError:
-        return False
