@@ -322,3 +322,16 @@ def test_importers_through_the_cli_json(fx, monkeypatch):
     assert data['type'] == 'module_importers' and data['count'] == 5
     assert {Path(r['file']).parts[-1] for r in data['importers']} == {'a.py', 'b.py', 'd.py', 'run.py', 'test_core.py'}
     assert not any(Path(r['file']).is_absolute() for r in data['importers'])
+
+
+def test_importers_text_lists_each_importer_with_stage_and_scope(fx, capsys):
+    from reveal.adapters.imports import ImportsRenderer
+    ImportsRenderer.render_structure(_structure(fx / 'pkg' / 'core.py', 'importers'))
+    text = capsys.readouterr().out
+    assert 'Importers of core.py: 5' in text
+    assert 'b.py:2  pkg.core  [direct, local]' in text
+    assert 'Resolved at the scan root ..' in text
+    ImportsRenderer.render_structure(_structure(fx / 'pkg', 'importers'))
+    text = capsys.readouterr().out
+    assert 'Modules with importers: 6' in text and 'core.py  (5)' in text
+    assert 'Import Analysis' not in text
