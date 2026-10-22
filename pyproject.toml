@@ -151,6 +151,7 @@ markers = [
     "conformance: cross-adapter or cross-language agreement/ratchet tests",
     "compat: dependency-version compatibility tests (e.g. tree-sitter-language-pack pinning)",
     "disk_cache: reads reveal's disk cache back; runs with REVEAL_DISK_CACHE unset whatever the ambient env says (BACK-1677)",
+    "scans_checkout: resolves an imports/depends scan root at the checkout (or above) on purpose; every other test must scope to its fixture (BACK-2159)",
     "external_fixture: depends on real external state (a live repo, network, or another host) beyond tmp_path fixtures",
 ]
 filterwarnings = [

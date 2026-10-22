@@ -135,7 +135,7 @@ def test_ast_complexity_query_emits_ranked_results():
 def test_imports_circular_query_emits_cycle_shape():
     d = _json(
         "imports://circular",
-        f"imports://{REPO_STR}?circular",
+        f"imports://{REPO_STR}?circular&scope=path",
         "--format",
         "json",
     )
@@ -230,7 +230,7 @@ DD_SURFACE = [
     ("architecture", ("architecture", REPO_STR, "--format", "json")),
     ("surface", ("surface", REPO_STR, "--format", "json")),
     ("ast://", (f"ast://{REPO_STR}?complexity>0&sort=-complexity", "--format", "json")),
-    ("imports://", (f"imports://{REPO_STR}?circular", "--format", "json")),
+    ("imports://", (f"imports://{REPO_STR}?circular&scope=path", "--format", "json")),
     ("calls://", (f"calls://{REPO_STR}?uncalled&type=function", "--format", "json")),
     ("check", ("check", REPO_STR, "--select", "B,S", "--format", "json")),
     ("git://ownership", (f"git://{REPO_STR}?type=ownership", "--format", "json")),

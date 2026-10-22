@@ -433,6 +433,44 @@ def _serial_workers_unless_pool_test(request, monkeypatch):
         monkeypatch.delenv("REVEAL_MAX_WORKERS", raising=False)
 
 
+_CHECKOUT = Path(__file__).resolve().parents[1]
+
+
+def _is_checkout_scan_root(root) -> bool:
+    """True when ``root`` is the checkout or one of its ancestors (a scan there walks the repo)."""
+    return _CHECKOUT.is_relative_to(Path(root).resolve())
+
+
+@pytest.fixture(autouse=True)
+def _checkout_scan_guard(request, monkeypatch):
+    """Fail a test whose imports/depends request resolves its scan root at the checkout or above
+    (BACK-2159). Since the ``scope=root`` default (BACK-1054 S2) a fixture or a ``reveal/`` path
+    under the checkout walks and resolves the whole repo: 3.4 s instead of 0.21 s per call, and the
+    pytest CPU rose 30%. Copy the fixture to ``tmp_path_factory`` or add ``&scope=path``; a test
+    that really exercises repo-root resolution carries ``@pytest.mark.scans_checkout``. In-process
+    only: a scan in a spawned ``python -m reveal`` is not seen."""
+    from reveal.analyzers.imports import resolution
+    real = resolution.choose_scan_root
+    hits = []
+
+    def watched(target, raw_root=None):
+        chosen = real(target, raw_root)
+        if _is_checkout_scan_root(chosen.root):
+            hits.append(f"{target} -> {chosen.root} ({chosen.source})")
+        return chosen
+
+    monkeypatch.setattr(resolution, "choose_scan_root", watched)
+    yield
+    if hits and not request.node.get_closest_marker("scans_checkout"):
+        pytest.fail(
+            "scan root resolved at the checkout (scope=root walks the whole repo): "
+            + "; ".join(hits[:3])
+            + " -- add &scope=path, copy the fixture to tmp_path_factory, or mark the test "
+            "@pytest.mark.scans_checkout (BACK-2159)",
+            pytrace=False,
+        )
+
+
 @pytest.fixture(autouse=True)
 def _disk_cache_marker(request, monkeypatch):
     """``@pytest.mark.disk_cache`` (BACK-1677): the test reads the disk cache back, so it needs
