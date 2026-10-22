@@ -56,7 +56,7 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
+from typing import Any, ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ...core import node_children as _children
 from ...core import tree_root
@@ -89,6 +89,20 @@ logger = logging.getLogger(__name__)
 # skipped — do not fabricate an edge, do not fall back to text parsing
 # either, since text parsing would produce a *worse*, garbage module_name").
 _NOT_CONCAT = object()
+
+
+class _RecordedLookups(dict):
+    """A constant index that counts the names a concatenation found in it, so the statement
+    can say its target came through a project constant (the edge's via, BACK-1054)."""
+
+    def __init__(self, index: Dict[str, Tuple[str, str]]):
+        super().__init__(index)
+        self.hits = 0
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        if key in self:
+            self.hits += 1
+        return super().get(key, default)
 
 
 def _include_ancestors(base_path: Path, search_paths: Optional[List[Path]]) -> List[Path]:
@@ -1467,7 +1481,8 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         # value. Still never a guess: any operand that doesn't reduce to a
         # literal, the magic-constant idiom, or an indexed constant fails
         # the whole statement.
-        resolved = self._resolve_concat_operand(concat, analyzer, file_path, constant_index or {})
+        known = _RecordedLookups(constant_index or {})
+        resolved = self._resolve_concat_operand(concat, analyzer, file_path, known)
         if resolved is None:
             return None
         anchor, tail = resolved
@@ -1493,6 +1508,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             alias=None,
             source_line=analyzer._get_node_text(node).strip(),
             skip_unused=True,
+            through_constant=known.hits > 0,
         )
 
     @staticmethod

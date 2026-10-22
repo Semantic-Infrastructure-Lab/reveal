@@ -107,7 +107,7 @@ def _build_namespace_index(
     return namespace_index
 
 
-def _mark_structural(graph: ImportGraph, extractor: LanguageExtractor, from_file: Path, to_file: Path) -> None:
+def mark_structural(graph: ImportGraph, extractor: LanguageExtractor, from_file: Path, to_file: Path) -> None:
     """Record an edge the importing language calls its module layout (BACK-2129)."""
     if extractor.is_structural_edge(from_file, to_file):
         graph.structural_edges.add((from_file, to_file))
@@ -185,7 +185,7 @@ def resolve_graph(scope: ScanScope, files: ImportFileSet, analysis: ImportAnalys
             if targets:
                 for resolved in targets:
                     analysis.graph.add_dependency(file_path, resolved, stmt.scope)
-                    _mark_structural(analysis.graph, extractor, file_path, resolved)
+                    mark_structural(analysis.graph, extractor, file_path, resolved)
                 analysis.graph.resolved_paths[stmt.module_name] = targets[0]
                 # BACK-1193: carry the resolution onto the statement itself
                 # (not just the module-name-keyed graph index) so per-import
@@ -203,7 +203,7 @@ def resolve_graph(scope: ScanScope, files: ImportFileSet, analysis: ImportAnalys
                 for target in getattr(extractor, 'resolve_namespace_targets')(stmt, namespace_index):
                     if target != file_path:
                         analysis.graph.add_dependency(file_path, target, stmt.scope)
-                        _mark_structural(analysis.graph, extractor, file_path, target)
+                        mark_structural(analysis.graph, extractor, file_path, target)
                         stmt.resolved_path = target  # BACK-1193: any in-tree target proves intra-project
 
     return analysis

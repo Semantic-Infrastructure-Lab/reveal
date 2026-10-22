@@ -2053,7 +2053,8 @@ class TestDependsAdapterSwiftModuleFanout:
         from reveal.analyzers.imports.resolution import ProjectResolver
         resolver = ProjectResolver()
         files, _ = resolver._discover_files(root, frozenset({'.swift'}))
-        idx = resolver._build_resolution_indices(files, root)
+        inputs = resolver.prepare(files, root)
+        idx = resolver._build_resolution_indices(files, resolver.index_files(files, inputs), inputs)
         # Every Api-module file must be a real file under Sources/ (the path:
         # override), never a phantom from the dependency reference.
         for p in idx.module_index['Api']:

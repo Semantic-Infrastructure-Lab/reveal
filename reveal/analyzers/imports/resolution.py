@@ -30,6 +30,15 @@ from ...utils.query_control import BudgetAccounting, ScanBudget
 # ceiling (BACK-525 layer 3). ``path``: the caller asked for the requested path itself.
 ROOT_SOURCES = ('root_param', 'reveal_yaml', 'package_marker', 'vcs', 'inferred', 'path')
 
+# Which cascade stage found an edge (ImportGraph.edge_via): the import resolved to the file
+# directly, or through the PHP constant index (BACK-565), the namespace fan-out (BACK-554), the
+# member index (BACK-547/557/669), the Swift module fan-out (BACK-567) or the Zeitwerk naming
+# convention (BACK-557, no statement behind it). Module and convention edges name a module or a
+# naming rule, not a file the importer loads, so the cycle views leave them out (VIA_NOT_CYCLES).
+VIA_DIRECT, VIA_CONSTANT, VIA_NAMESPACE, VIA_MEMBER, VIA_MODULE, VIA_CONVENTION = (
+    'direct', 'constant', 'namespace', 'member', 'module', 'convention')
+VIAS = (VIA_DIRECT, VIA_CONSTANT, VIA_NAMESPACE, VIA_MEMBER, VIA_MODULE, VIA_CONVENTION)
+
 
 @dataclass(frozen=True)
 class ScanRoot:
@@ -158,6 +167,85 @@ class _ResolutionIndices(NamedTuple):
     load_path_roots: List[Path]         # BACK-669: extra gemspec-registered lib/ search roots
 
 
+class ResolutionInputs(NamedTuple):
+    """The project-wide inputs per-file extraction and indexing read (``ProjectResolver.prepare``).
+    Plain data, so they travel to pool workers."""
+    constant_index: Dict[str, Tuple[str, str]]  # BACK-565: PHP define() constants, ambiguous ones excluded
+    constants_ambiguous: int
+    manifest_dirs: List[Tuple[Path, str]]       # BACK-567: explicit-path Package.swift targets
+    manifest_target_names: Set[str]             # BACK-669: every declared target name
+    load_path_roots: List[Path]                 # BACK-669: gemspec lib/ roots
+
+
+@dataclass
+class FileEntry:
+    """One file's part of the cascade's indices, made where the file is parsed (``index_file``).
+    Plain data, so a pool worker can return it."""
+    imports: List[ImportStatement]
+    parse_failed: bool = False
+    # BACK-557: None when the language is not convention-autoloaded, else whether the file
+    # declares any import (the require-density numerator and denominator).
+    autoloaded: Optional[bool] = None
+    zeitwerk_path: Optional[str] = None          # BACK-557: the constant Zeitwerk maps it to
+    module_name: Optional[str] = None            # BACK-567: its SwiftPM target
+    declared: Tuple[str, ...] = ()               # namespaces/packages it declares (honest-decline)
+    namespace_keys: Tuple[str, ...] = ()         # BACK-554: the namespaces it joins the fan-out under
+    member_keys: Tuple[Tuple[str, str], ...] = ()  # BACK-547/557/669: (package, symbol) keys, in order
+
+
+def extract_file(file_path: Path, extractor: Any, constant_index: Dict[str, Tuple[str, str]]) -> List[ImportStatement]:
+    """A file's imports as the cascade reads them: a spec-based extractor gets the project's PHP
+    constant index (BACK-565; a language that never reads it answers as without it)."""
+    if getattr(extractor, 'spec', None) is not None:
+        return cast(List[ImportStatement], extractor.extract_imports(file_path, constant_index=constant_index))
+    return cast(List[ImportStatement], extractor.extract_imports(file_path))
+
+
+def _member_keys(file_path: Path, extractor: Any, spec: Any, declared: List[str]) -> List[Tuple[str, str]]:
+    """BACK-547 Kotlin measurement loop: (package, symbol) for each top-level free function or
+    property (`import a.b.foo` has no enclosing type to peel to). BACK-557 Scala: a lowerCamelCase
+    top-level object's members keyed under `package<sep>container` (BACK-551's Uppercase-gated
+    peel refuses to reach them). BACK-669 C# recall loop: `using static Foo.Bar.Type;` names a
+    type one component past any declared namespace. All three share resolve_member_targets'
+    (namespace, symbol) shape; gated per language by the spec flags."""
+    keys: List[Tuple[str, str]] = []
+    if not declared:
+        return keys
+    if getattr(spec, 'member_symbol_fallback', False):
+        keys += [(ns, symbol) for symbol in extractor.extract_top_level_members(file_path) for ns in declared]
+    if getattr(spec, 'container_member_fallback', False):
+        sep = getattr(spec, 'module_separator', None) or ''
+        keys += [(f'{ns}{sep}{container}', symbol)
+                 for container, symbol in extractor.extract_container_members(file_path) for ns in declared]
+    if getattr(spec, 'namespaced_type_fallback', False):
+        keys += [(ns, typename) for typename in extractor.extract_namespaced_type_names(file_path) for ns in declared]
+    return keys
+
+
+def index_file(file_path: Path, extractor: Any, imports: List[ImportStatement],
+               manifest_dirs: List[Tuple[Path, str]]) -> FileEntry:
+    """One file's contribution to every cascade index (BACK-919's per-file loop body, as data):
+    autoload coverage over every file of the language, including zero-import ones (BACK-557);
+    its Zeitwerk constant path; its Swift module (an explicit manifest `path:` wins over the
+    directory convention, BACK-567); the namespaces it declares and the member keys under them."""
+    spec = getattr(extractor, 'spec', None)
+    entry = FileEntry(imports=imports)
+    if getattr(spec, 'convention_autoloaded', False):
+        entry.autoloaded = bool(imports)
+    if getattr(spec, 'zeitwerk_convention', False):
+        entry.zeitwerk_path = _zeitwerk_constant_path(file_path)
+    if getattr(spec, 'module_dir_convention', None):
+        entry.module_name = ProjectResolver._swift_module_for(extractor, file_path, manifest_dirs)
+    if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
+        declared = list(extractor.extract_namespaces(file_path))
+        entry.declared = tuple(declared)
+        if getattr(spec, 'resolve_namespaces', False):
+            entry.namespace_keys = tuple(declared)
+        entry.member_keys = tuple(_member_keys(file_path, extractor, spec, declared))
+    entry.parse_failed = bool(getattr(extractor, 'parse_failed', False))
+    return entry
+
+
 def resolve_project(scope: service.ScanScope) -> ProjectResolution:
     """One cascade build of ``scope.root``: the walk is capped at ``scope.cap`` source files and
     judges what it hid at ``scope.focus``; only files with an extension in ``scope.extensions``
@@ -185,13 +273,60 @@ class ProjectResolver:
         """
         self.result = ProjectResolution(scan_root=scan_root)
         self._ruby_inventory_roots_seen = set()
-        # Four phases, split out for readability/complexity (BACK-566), same
-        # order and behavior as before: (1) walk the tree into `files` + a
-        # basename index; (2) parse every file once into the resolution
-        # indices; (3) resolve each import to graph edges; (4) add the
-        # convention-only Zeitwerk edges.
+        # Phases, split out for readability/complexity (BACK-566), same order and behavior
+        # as before: (1) walk the tree into `files` + a basename index; (2) the project-wide
+        # inputs extraction needs (PHP constants, Swift manifests, gemspec roots); (3) parse
+        # every file once into its imports and its part of the indices; (4) resolve each
+        # import to graph edges and add the convention-only Zeitwerk edges.
         files, file_index = self._discover_files(scan_root, supported_exts)
-        indices = self._build_resolution_indices(files, scan_root)
+        inputs = self.prepare(files, scan_root)
+        return self.resolve_entries(scan_root, files, file_index, self.index_files(files, inputs), inputs)
+
+    @staticmethod
+    def index_files(files: List[Path], inputs: 'ResolutionInputs') -> Dict[Path, 'FileEntry']:
+        """Every file with an extractor parsed once, serially, into its ``FileEntry``."""
+        entries: Dict[Path, FileEntry] = {}
+        for file_path in files:
+            extractor = get_extractor(file_path)
+            if extractor:
+                entries[file_path] = index_file(
+                    file_path, extractor, extract_file(file_path, extractor, inputs.constant_index),
+                    inputs.manifest_dirs)
+        return entries
+
+    def prepare(self, files: List[Path], scan_root: Path) -> 'ResolutionInputs':
+        """The project-wide inputs per-file extraction and indexing read, built once before it.
+
+        BACK-565: name -> ('literal', str) | ('absolute', str), the project-wide PHP
+        framework-constant index (`define('ABSPATH', __DIR__ . '/')`) that `_concat_to_import`'s
+        `ABSPATH . WPINC . '/version.php'`-shaped resolution looks up, built to a fixed point
+        over `files` (real WordPress code chains constants through each other, and `files` is
+        walk-ordered, not dependency-ordered). BACK-567: explicit-`path:` target dirs from every
+        Package.swift, so each Swift file's module lookup can prefer an authoritative manifest
+        mapping over the directory convention (see _swift_module_for); BACK-669 (swift-collections
+        second corpus): every target NAME declared anywhere in a manifest, unioned into
+        project_namespaces so a target reachable only through a computed `targets:` array is
+        still known as in-tree for honest-decline purposes. BACK-669: extra bare-import search
+        roots for a multi-package monorepo (RubyGems' *.gemspec + lib/), gated on the language
+        being present. A manifest the walk cannot read joins the traversal failures.
+        """
+        if self.result.scan_root is None:
+            self.result = ProjectResolution(scan_root=scan_root)
+        constant_index, constant_ambiguous = self._build_constant_index(files)
+        return ResolutionInputs(
+            constant_index=constant_index,
+            constants_ambiguous=len(constant_ambiguous),
+            manifest_dirs=self._build_manifest_module_dirs(files),
+            manifest_target_names=self._build_manifest_target_names(files),
+            load_path_roots=self._build_load_path_roots(files, scan_root, on_error=self._record_manifest_failure),
+        )
+
+    def resolve_entries(self, scan_root: Path, files: List[Path], file_index: Dict[str, List[Path]],
+                        entries: Dict[Path, 'FileEntry'], inputs: 'ResolutionInputs') -> ProjectResolution:
+        """Resolve ``files`` (walk order) from their per-file ``entries`` (one per file with an
+        extractor, made by ``index_file`` wherever the file was parsed: serially here, in pool
+        workers for imports://) through the cascade, and add the Zeitwerk edges."""
+        indices = self._build_resolution_indices(files, entries, inputs)
         self._graph = ImportGraph.from_imports(indices.all_imports)
         self.result.graph = self._graph
         self._resolve_edges(scan_root, file_index, indices)
@@ -229,207 +364,49 @@ class ProjectResolver:
             self.result.scan_accounting = replace(self.result.scan_accounting, exact=False)
         return list(files.candidates), files.index
 
-    def _build_resolution_indices(self, files: List[Path], scan_root: Path) -> _ResolutionIndices:
-        """Parse every file in `files` once into the resolution indices.
+    def _build_resolution_indices(self, files: List[Path], entries: Dict[Path, 'FileEntry'],
+                                  inputs: 'ResolutionInputs') -> _ResolutionIndices:
+        """Merge every file's entry, in walk order, into the resolution indices.
 
-        One pass over the parse corpus that produces everything edge
-        resolution needs: the flat import list (→ ImportGraph), the
-        package/namespace declaration sets, and the namespace / member /
-        Zeitwerk indices. Also updates the autoload-coverage and
-        PHP-constant counters as a side effect.
+        Produces everything edge resolution needs: the flat import list (→ ImportGraph), the
+        package/namespace declaration sets (BACK-547/544/549: an unresolved dotted import is
+        intra-project iff the project declares a matching package/namespace), the namespace
+        index (BACK-554: namespace -> [declaring files], from every scanned file, so a
+        zero-import leaf file's own declaration is indexed), the member index (BACK-547/557:
+        (package, symbol) -> [declaring files]), the Zeitwerk index (BACK-557: constant path ->
+        first declaring file) and the Swift module index (BACK-567: module -> [member files],
+        whose keys also join project_namespaces as the in-tree module inventory). Also sets the
+        autoload-coverage and PHP-constant counters and the parse failures.
         """
-        all_imports: List[ImportStatement] = []
-        # BACK-547/544/549: the set of packages/namespaces the tree declares,
-        # for honest-decline classification of package-declaring languages
-        # (C#, and since this session, Java/Kotlin/PHP) — an unresolved
-        # dotted import is intra-project iff the project declares a matching
-        # package/namespace. Only files whose extractor supports it
-        # contribute (no-op scan otherwise); Swift has no such declaration to
-        # scan and stays on the conservative None verdict.
-        project_namespaces: Set[str] = set()
-        # BACK-554: namespace -> [declaring files], the C# edge-fanout index
-        # (BACK-544) that ImportsAdapter._build_namespace_index builds but
-        # depends:// never wired in — resolve_import's dotted-name match only
-        # catches a namespace that coincidentally names one file (`using
-        # X.Y` -> `Y.cs`); the common case, a namespace declared across
-        # several files (or a file with NO local `using` at all, e.g. one
-        # that relies purely on a project-wide C# 10 `global using`), needs
-        # this fan-out instead. Built from `files` (every scanned file, not
-        # just the ones that emit an import statement) so a zero-import leaf
-        # file's own namespace declaration is still indexed — the
-        # `self._graph.files`-only scope ImportsAdapter's version uses is
-        # itself a sibling bug this loop found (BACK-554, fixed there too).
-        namespace_index: Dict[str, List[Path]] = {}
-        # BACK-547 Kotlin measurement loop: (package, symbol) -> [declaring
-        # files], the top-level free-function/property index that
-        # resolve_member_targets looks up. `import a.b.foo` for a top-level
-        # `fun foo`/`val foo` has no enclosing type anywhere in the import
-        # string, so neither the direct dotted match nor BACK-551's
-        # enclosing-class peel can find the declaring file — only a
-        # content-scanned index over each package's files can. Built the same
-        # way ImportsAdapter._build_namespace_index builds its namespace
-        # index (every scanned file, not just ones with their own imports),
-        # gated per-language via `spec.member_symbol_fallback` so this is a
-        # no-op scan for trees with no such language present.
-        member_index: Dict[Tuple[str, str], List[Path]] = {}
-        # BACK-557 direction a: constant-path -> declaring file, the Zeitwerk
-        # path->constant convention index. Built from EVERY scanned file
-        # under a recognized autoload root (app/<component>/...), not just
-        # ones with import statements — most Zeitwerk-resolved files have
-        # zero require statements by design, so gating this on
-        # self._graph.files (import-derived) would miss almost all of them.
-        zeitwerk_index: Dict[str, Path] = {}
-        # BACK-567: module-name -> [member files], the Swift SwiftPM
-        # target-membership index. Built purely from each file's PATH
-        # (Sources/<Target>/** convention) — no tree-sitter parse, no Swift
-        # toolchain — so `import Foo` can fan out to every file in module Foo
-        # (mirroring C#'s namespace fan-out), instead of _resolve_module's
-        # bare-basename match that resolves ~0% of real multi-file targets. Its
-        # key set is also the in-tree module inventory is_intra_project_import
-        # needs (fed via project_namespaces below) to classify `import Foo` as
-        # intra-project vs an external framework — that dual use is why the
-        # keys join project_namespaces rather than a separate set.
-        module_index: Dict[str, List[Path]] = {}
-        # BACK-565: name -> ('literal', str) | ('absolute', str), the
-        # project-wide PHP framework-constant index (`define('ABSPATH',
-        # __DIR__ . '/')`) that `_concat_to_import`'s `ABSPATH . WPINC .
-        # '/version.php'`-shaped resolution looks up. Built to a fixed point
-        # over `files` (not a single pass): real WordPress code chains
-        # constants through each other (`WP_CONTENT_DIR = ABSPATH .
-        # 'wp-content'`, `WP_PLUGIN_DIR = WP_CONTENT_DIR . '/plugins'`), and
-        # `files` is walk-ordered, not dependency-ordered, so a constant
-        # defined later in the walk than a file that references it needs a
-        # second pass to resolve — capped at a small iteration count since
-        # real chains are only 2-3 levels deep, never unbounded.
-        constant_index, constant_ambiguous = self._build_constant_index(files)
-        self.result.constants_indexed = len(constant_index)
-        self.result.constants_ambiguous = len(constant_ambiguous)
-        # BACK-567: explicit-`path:` target dirs from every Package.swift, built
-        # once before the per-file loop so each Swift file's module lookup can
-        # prefer an authoritative manifest mapping over the directory
-        # convention (see _swift_module_for).
-        manifest_dirs = self._build_manifest_module_dirs(files)
-        # BACK-669 (swift-collections second corpus): a broader, position-
-        # independent set of target NAMES declared anywhere in the manifest,
-        # unioned into project_namespaces below (not module_index) so a
-        # target reachable only through a computed `targets:` array (no
-        # literal `path:` for _build_manifest_module_dirs to resolve) is
-        # still known as real and in-tree for honest-decline purposes, even
-        # when it can't be fanned out to real files.
-        project_namespaces.update(self._build_manifest_target_names(files))
-        # BACK-669: extra bare-import search roots for a multi-package monorepo
-        # (RubyGems' *.gemspec + lib/, spec.load_path_manifest_glob). Built once
-        # per scan, gated on the language actually being present (files may span
-        # languages for a directory target), so this is a no-op glob for every
-        # other tree.
-        load_path_roots = self._build_load_path_roots(files, scan_root, on_error=self._record_manifest_failure)
-        # Built empty and mutated in place by _index_one_file below — every
-        # field is a mutable List/Set/Dict, so there is no reassignment
-        # risk, and it lets the per-file helper take the same one-bundle
-        # `indices` param its edge-resolution siblings already do (BACK-919:
-        # replaces 5 separate positional index params with 1).
+        self.result.constants_indexed = len(inputs.constant_index)
+        self.result.constants_ambiguous = inputs.constants_ambiguous
         indices = _ResolutionIndices(
-            all_imports=all_imports,
-            project_namespaces=project_namespaces,
-            namespace_index=namespace_index,
-            member_index=member_index,
-            zeitwerk_index=zeitwerk_index,
-            module_index=module_index,
-            load_path_roots=load_path_roots,
-        )
+            all_imports=[], project_namespaces=set(inputs.manifest_target_names), namespace_index={},
+            member_index={}, zeitwerk_index={}, module_index={}, load_path_roots=inputs.load_path_roots)
         for file_path in files:
-            extractor = get_extractor(file_path)
-            if not extractor:
+            entry = entries.get(file_path)
+            if entry is None:
                 continue
-            self._index_one_file(file_path, extractor, constant_index, manifest_dirs, indices)
-            if extractor.parse_failed:
+            indices.all_imports.extend(entry.imports)
+            if entry.autoloaded is not None:
+                self.result.autoload_total += 1
+                if entry.autoloaded:
+                    self.result.autoload_with_imports += 1
+            if entry.zeitwerk_path:
+                # First declaration wins on a naming collision (two autoload roots producing
+                # the same constant is an app misconfiguration, not something to guess between).
+                indices.zeitwerk_index.setdefault(entry.zeitwerk_path, file_path)
+            if entry.module_name:
+                indices.module_index.setdefault(entry.module_name, []).append(file_path)
+                indices.project_namespaces.add(entry.module_name)
+            indices.project_namespaces.update(entry.declared)
+            for ns in entry.namespace_keys:
+                indices.namespace_index.setdefault(ns, []).append(file_path)
+            for key in entry.member_keys:
+                indices.member_index.setdefault(key, []).append(file_path)
+            if entry.parse_failed:
                 self.result.files_failed.append(str(file_path))  # BACK-1598
-
         return indices
-
-    def _index_one_file(
-        self, file_path: Path, extractor: Any, constant_index: Dict[str, Tuple[str, str]],
-        manifest_dirs: List[Tuple[Path, str]], indices: _ResolutionIndices,
-    ) -> None:
-        """One file's contribution to every `_build_resolution_indices` index
-        (BACK-919 phase-split of the former single per-file loop body).
-        Mutates `indices`' fields in place."""
-        if getattr(extractor, 'spec', None) is not None:
-            file_imports = extractor.extract_imports(file_path, constant_index=constant_index)
-        else:
-            file_imports = extractor.extract_imports(file_path)
-        indices.all_imports.extend(file_imports)
-        spec = getattr(extractor, 'spec', None)
-        # BACK-557: require-statement coverage for the convention-autoloaded
-        # language (Ruby). Counted over EVERY scanned file of that language,
-        # including zero-import ones (which never enter self._graph.files),
-        # so the density denominator is the true file count.
-        if getattr(spec, 'convention_autoloaded', False):
-            self.result.autoload_total += 1
-            if file_imports:
-                self.result.autoload_with_imports += 1
-        if getattr(spec, 'zeitwerk_convention', False):
-            const_path = _zeitwerk_constant_path(file_path)
-            if const_path:
-                # First declaration wins on a naming collision (two
-                # autoload roots producing the same constant is a
-                # pre-existing Zeitwerk-app misconfiguration, not
-                # something to guess between).
-                indices.zeitwerk_index.setdefault(const_path, file_path)
-        if getattr(spec, 'module_dir_convention', None):
-            # BACK-567: index this file under its SwiftPM target. An explicit
-            # manifest `path:` (manifest_dirs) wins over the directory
-            # convention (real case: GraphAPI's `path: "./Sources"`); the
-            # convention is the fallback for the common default layout.
-            # Every scanned file of the module participates, including
-            # zero-import ones, so `import Foo` fans out to the whole target.
-            # The module name also joins project_namespaces as the in-tree
-            # module inventory is_intra_project_import checks against.
-            module_name = self._swift_module_for(extractor, file_path, manifest_dirs)
-            if module_name:
-                indices.module_index.setdefault(module_name, []).append(file_path)
-                indices.project_namespaces.add(module_name)
-        if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
-            declared = extractor.extract_namespaces(file_path)
-            indices.project_namespaces.update(declared)
-            if getattr(spec, 'resolve_namespaces', False):
-                for ns in declared:
-                    indices.namespace_index.setdefault(ns, []).append(file_path)
-            if getattr(spec, 'member_symbol_fallback', False) and declared:
-                for symbol in extractor.extract_top_level_members(file_path):
-                    for ns in declared:
-                        indices.member_index.setdefault((ns, symbol), []).append(file_path)
-            if getattr(spec, 'container_member_fallback', False) and declared:
-                # BACK-557 Scala measurement loop: `import a.b.container.member`
-                # where `container` is a lowerCamelCase top-level object (e.g.
-                # `object helpers`) that BACK-551's Uppercase-gated peel
-                # deliberately refuses to reach. Synthesize the same
-                # (package, symbol) shape member_symbol_fallback uses, keyed
-                # under the container's own qualified name
-                # (`declared_package<sep>containerName`), so
-                # resolve_member_targets's existing split-on-last-component
-                # lookup finds it with no further changes.
-                sep = getattr(spec, 'module_separator', None) or ''
-                for container_name, symbol in extractor.extract_container_members(file_path):
-                    for ns in declared:
-                        key = (f'{ns}{sep}{container_name}', symbol)
-                        indices.member_index.setdefault(key, []).append(file_path)
-            if getattr(spec, 'namespaced_type_fallback', False) and declared:
-                # BACK-669 C# recall loop: `using static Foo.Bar.Type;` /
-                # `using Alias = Foo.Bar.Type;` name a specific TYPE, one
-                # dotted component longer than any namespace the tree
-                # declares — resolve_namespace_targets never matches, and
-                # the plain dotted-suffix match only succeeds when the
-                # directory layout mirrors the namespace and the type's
-                # filename is tree-wide unique (real Jellyfin corpus:
-                # `LinkedChildType` is declared in two different
-                # namespaces, both under an `Entities/` dir, so the
-                # bare-basename match correctly declines on ambiguity).
-                # Reuses the same (namespace, symbol) member_index shape
-                # member_symbol_fallback populates above.
-                for typename in extractor.extract_namespaced_type_names(file_path):
-                    for ns in declared:
-                        indices.member_index.setdefault((ns, typename), []).append(file_path)
 
     def _record_manifest_failure(self, error: OSError) -> None:
         """Resolution loss joins graph diagnostics without changing the source census."""
@@ -581,6 +558,15 @@ class ProjectResolver:
                     stmt, file_path, extractor, base_path, extra_paths,
                     file_index, indices)
 
+    def _add_edge(self, stmt: ImportStatement, extractor: Any, file_path: Path, target: Path, via: str) -> None:
+        """One edge of ``stmt``, tagged with the cascade stage that found it (``via``) and, when the
+        importing language calls it its module layout, marked structural (BACK-2129). The statement
+        records its first in-tree target (BACK-1193: any one proves it intra-project)."""
+        self._graph.add_dependency(file_path, target, stmt.scope, via=via)
+        service.mark_structural(self._graph, extractor, file_path, target)
+        if stmt.resolved_path is None:
+            stmt.resolved_path = target
+
     def _resolve_statement_edges(
         self, stmt: ImportStatement, file_path: Path, extractor: Any,
         base_path: Path, extra_paths: List[Path],
@@ -614,9 +600,10 @@ class ProjectResolver:
         targets = service.resolve_targets(
             stmt, extractor, service.ResolutionContext(base_path, tuple(extra_paths), file_index))
         added = False
+        via = VIA_CONSTANT if stmt.through_constant else VIA_DIRECT
         for resolved in targets:
             if resolved and resolved != file_path:
-                self._graph.add_dependency(file_path, resolved, stmt.scope)
+                self._add_edge(stmt, extractor, file_path, resolved, via)
                 self._graph.resolved_paths[stmt.module_name] = resolved
                 self.result.edge_statements[(file_path, resolved)] = stmt
                 added = True
@@ -634,7 +621,7 @@ class ProjectResolver:
         added = False
         for resolved in extractor.resolve_namespace_targets(stmt, indices.namespace_index):
             if resolved != file_path:
-                self._graph.add_dependency(file_path, resolved, stmt.scope)
+                self._add_edge(stmt, extractor, file_path, resolved, VIA_NAMESPACE)
                 self.result.edge_statements[(file_path, resolved)] = stmt
                 added = True
         return added
@@ -656,7 +643,7 @@ class ProjectResolver:
         added = False
         for resolved in extractor.resolve_member_targets(stmt, indices.member_index):
             if resolved != file_path:
-                self._graph.add_dependency(file_path, resolved, stmt.scope)
+                self._add_edge(stmt, extractor, file_path, resolved, VIA_MEMBER)
                 self.result.edge_statements[(file_path, resolved)] = stmt
                 added = True
         return added
@@ -678,7 +665,7 @@ class ProjectResolver:
         added = False
         for resolved in extractor.resolve_module_targets(stmt, indices.module_index):
             if resolved != file_path:
-                self._graph.add_dependency(file_path, resolved, stmt.scope)
+                self._add_edge(stmt, extractor, file_path, resolved, VIA_MODULE)
                 self.result.edge_statements.setdefault((file_path, resolved), stmt)
                 added = True
         return added
@@ -745,7 +732,7 @@ class ProjectResolver:
                 target = zeitwerk_index.get(const_path)
                 if target is None or target == file_path:
                     continue
-                self._graph.add_dependency(file_path, target)
+                self._graph.add_dependency(file_path, target, via=VIA_CONVENTION)
                 self.result.zeitwerk_edges += 1
                 if (file_path, target) not in self.result.edge_statements:
                     # No real statement backs this edge — synthesize one

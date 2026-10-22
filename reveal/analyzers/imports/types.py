@@ -18,6 +18,11 @@ from ...core.node_taxonomy import LOCAL_SCOPE
 LAZY_INCLUDE, LAZY_EXCLUDE, LAZY_ONLY = 'include', 'exclude', 'only'
 LAZY_MODES = (LAZY_INCLUDE, LAZY_EXCLUDE, LAZY_ONLY)
 
+# The ImportGraph.edge_via tags (resolution.VIAS) whose edges never close a cycle: a Swift
+# `import Foo` names the whole module and a Zeitwerk edge a naming rule, not a file the
+# importer loads. An edge with any other tag behind it still counts.
+VIA_NOT_CYCLES = frozenset({'module', 'convention'})
+
 
 @dataclass
 class ImportStatement:
@@ -53,6 +58,8 @@ class ImportStatement:
                                # this statement. None means "did not resolve" — may
                                # still be a real external/stdlib package, never a
                                # positive local-file claim (BACK-1193).
+    through_constant: bool = False  # The target path was built from a project constant
+                               # (PHP define(), BACK-565): the edge's via is 'constant'.
 
 
 @dataclass
@@ -100,6 +107,9 @@ class ImportAnalysis:
     structure_failures: List[Tuple[str, str]] = field(default_factory=list)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
     extractions: Dict[Path, ImportExtraction] = field(default_factory=dict)
+    # The cascade's record (resolution.ProjectResolution: edge statements, honest-decline and
+    # autoload counters) when the graph was resolved through it (imports://, BACK-1054).
+    resolution: Any = None
 
     @property
     def cacheable(self) -> bool:
@@ -171,6 +181,10 @@ class ImportGraph:
     # The subset of failed_files whose extraction failed in reveal's machinery, not on the
     # content (ImportExtraction.transient_error), each with its reason (BACK-2136).
     transient_files: Dict[Path, str] = field(default_factory=dict)
+    # (from_file, to_file) -> the cascade stages that found the edge (resolution.VIAS); empty
+    # for a graph not resolved through the cascade. Edges tagged only VIA_NOT_CYCLES are left
+    # out of the cycle search, kept everywhere else.
+    edge_via: Dict[Tuple[Path, Path], Set[str]] = field(default_factory=dict)
 
     @property
     def cacheable(self) -> bool:
@@ -193,12 +207,16 @@ class ImportGraph:
 
         return graph
 
-    def add_dependency(self, from_file: Path, to_file: Path, scope: Optional[str] = None) -> None:
+    def add_dependency(self, from_file: Path, to_file: Path, scope: Optional[str] = None,
+                       via: Optional[str] = None) -> None:
         """Add a dependency edge: from_file imports to_file, from an import at ``scope``
-        (``ImportStatement.scope``; None when the extractor does not record it)."""
+        (``ImportStatement.scope``; None when the extractor does not record it), found by the
+        cascade stage ``via`` (None outside the cascade)."""
         self.dependencies[from_file].add(to_file)
         self.reverse_deps[to_file].add(from_file)
         self.edge_scopes.setdefault((from_file, to_file), set()).add(scope)
+        if via is not None:
+            self.edge_via.setdefault((from_file, to_file), set()).add(via)
         self.__dict__.pop('_cycles_by_file', None)
         self.__dict__.pop('_edge_views', None)
 
@@ -210,7 +228,13 @@ class ImportGraph:
         per-process hash randomization (BACK-627).
         """
         return sorted((to for to in self.dependencies.get(node, ())
-                       if (node, to) not in self.structural_edges), key=str)
+                       if (node, to) not in self.structural_edges and not self._not_a_cycle_edge(node, to)),
+                      key=str)
+
+    def _not_a_cycle_edge(self, from_file: Path, to_file: Path) -> bool:
+        """An edge only VIA_NOT_CYCLES stages found (a module or naming-convention edge)."""
+        via = self.edge_via.get((from_file, to_file))
+        return bool(via) and via <= VIA_NOT_CYCLES
 
     def is_lazy_edge(self, from_file: Path, to_file: Path) -> bool:
         """True when every import behind the edge is function-level (scope 'local')."""
@@ -442,4 +466,4 @@ class ImportGraph:
 
 
 __all__ = ['ImportStatement', 'ImportExtraction', 'ImportAnalysis', 'ImportGraph',
-           'LAZY_INCLUDE', 'LAZY_EXCLUDE', 'LAZY_ONLY', 'LAZY_MODES']
+           'LAZY_INCLUDE', 'LAZY_EXCLUDE', 'LAZY_ONLY', 'LAZY_MODES', 'VIA_NOT_CYCLES']
