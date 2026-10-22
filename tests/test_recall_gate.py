@@ -231,7 +231,7 @@ def test_the_gate_scores_what_imports_renders_not_the_private_graph(python_corpu
     def render_without_b(self, importers):
         result = real(self, importers)
         for module in result['entries']:
-            module['importers'] = [d for d in module['importers'] if not d.endswith('pkg/b.py')]  # absolute here; relativized after
+            module['importers'] = [d for d in module['importers'] if not d.replace('\\', '/').endswith('pkg/b.py')]  # absolute here, native separators; relativized after
             module['fan_in'] = len(module['importers'])
         return result
 
