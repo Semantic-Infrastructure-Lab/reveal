@@ -219,7 +219,7 @@ class TestabilityAdapter(ResourceAdapter):
                 'When `tests` is omitted the test files are the ones under the source root that the shared is_test_path rule calls tests (test directories, test_*, *_test, *.spec.*); the report names the rule and the file count in `test_scope`.',
             ],
             'see_also': [
-                'reveal testability <path> - CLI subcommand form',
+                'reveal patches <path> --view pressure - the current spelling (reveal testability is retired)',
                 'reveal patches://<tests> - raw patch/mock scan',
             ],
             'output_formats': ['text', 'json'],
