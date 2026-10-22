@@ -44,6 +44,7 @@ from ..utils.query_parser import (
 )
 from ..utils.query_binding import bind_declared_params, boolean_value
 from .ast.surface_matrix import CATEGORIES, RECOVERED_KEY, UNPARSED_KEY, coverage_matrix
+from .surface_file_cache import scan_file_cached
 from .ast.nav_surface_common import ROUTE_CLASSES_KEY, resolve_inherited_route_prefixes
 from .ast.nav_surface_rails import resolve_engine_mounts
 from ..utils.results import ResultBuilder
@@ -233,8 +234,11 @@ def _scan_collected_surface(
             continue
         scanned_languages.add(spec.language)
         scan_fn = _load_scanner(spec)
+        scanner_id = f'{spec.module}.{spec.func}'
         for file_path in file_list:
-            result = scan_fn(str(file_path))
+            # The scanner's full raw result, from the persisted per-file entry when the file is
+            # unchanged (BACK-2151). Validation and the type filter below run on it either way.
+            result = scan_file_cached(scan_fn, scanner_id, spec.language, str(file_path), _validate_requested_surface)
             if directory_loss:
                 try:
                     _validate_requested_surface(result, type_filter)
