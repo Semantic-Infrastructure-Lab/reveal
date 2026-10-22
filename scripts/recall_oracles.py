@@ -44,6 +44,8 @@ class Scope(NamedTuple):
 class Oracle(NamedTuple):
     suffixes: frozenset[str]
     build: Callable[[Scope], tuple[Edges, Coverage]]
+    # The edges (a subset of build's) whose every import is function-level; None when the oracle cannot tell.
+    lazy_only: Callable[[Scope], Edges] | None = None
 
 
 def tracked_files(root: Path, directories: list[str], suffixes: frozenset[str]) -> list[Path]:
@@ -173,28 +175,34 @@ def _type_checking_test(expr: ast.expr) -> bool:
                isinstance(n, ast.Attribute) and n.attr == 'TYPE_CHECKING' for n in ast.walk(expr))
 
 
-def _python_imports(tree: ast.AST) -> list[tuple[ast.Import | ast.ImportFrom, bool]]:
-    """Every import with whether it sits under ``if TYPE_CHECKING:`` (depends:// skips those)."""
-    found: list[tuple[ast.Import | ast.ImportFrom, bool]] = []
+def _python_imports(tree: ast.AST) -> list[tuple[ast.Import | ast.ImportFrom, bool, bool]]:
+    """Every import with whether it sits under ``if TYPE_CHECKING:`` (depends:// skips those) and whether
+    its nearest enclosing scope is a function (a class body runs at load time, so it does not count)."""
+    found: list[tuple[ast.Import | ast.ImportFrom, bool, bool]] = []
 
-    def walk(node: ast.AST, in_type_checking: bool) -> None:
+    def walk(node: ast.AST, in_type_checking: bool, in_function: bool) -> None:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            found.append((node, in_type_checking))
+            found.append((node, in_type_checking, in_function))
         elif isinstance(node, ast.If):
             for stmt in node.body:
-                walk(stmt, in_type_checking or _type_checking_test(node.test))
+                walk(stmt, in_type_checking or _type_checking_test(node.test), in_function)
             for stmt in node.orelse:
-                walk(stmt, in_type_checking)
+                walk(stmt, in_type_checking, in_function)
         else:
+            # The nearest function-like ancestor decides, as the engine's edge_scope does: a class body
+            # at module level runs at load time, a class body inside a function does not.
+            inner = in_function or isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
             for child in ast.iter_child_nodes(node):
-                walk(child, in_type_checking)
+                walk(child, in_type_checking, inner)
 
-    walk(tree, False)
+    walk(tree, False, False)
     return found
 
 
-def build_python_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+def _python_scoped_edges(scope: Scope) -> tuple[dict[Path, set[Path]], dict[Path, set[Path]], Coverage]:
+    """(every edge, the edges whose every import is function-level, coverage), from one parse of each file."""
     edges: dict[Path, set[Path]] = defaultdict(set)
+    load_time: dict[Path, set[Path]] = defaultdict(set)
     statements = type_checking = resolved = 0
     unparsed = []
     for importer in scope.importers:
@@ -203,7 +211,7 @@ def build_python_oracle(scope: Scope) -> tuple[Edges, Coverage]:
         except (SyntaxError, ValueError) as exc:
             unparsed.append(f'{_relative(scope, importer)}: {exc}')
             continue
-        for node, in_type_checking in _python_imports(tree):
+        for node, in_type_checking, in_function in _python_imports(tree):
             if in_type_checking:
                 type_checking += 1
                 continue
@@ -212,12 +220,25 @@ def build_python_oracle(scope: Scope) -> tuple[Edges, Coverage]:
             resolved += bool(targets)
             for target in targets:
                 edges[target].add(importer)
+                if not in_function:
+                    load_time[target].add(importer)
     if unparsed:
         # A file the oracle cannot parse is missing ground truth; this interpreter is too old for the corpus.
         raise RuntimeError(f'Python oracle could not parse {len(unparsed)} file(s) under '
                            f'Python {sys.version.split()[0]}; measurement unavailable: {unparsed[:3]}')
-    return _finish(scope, edges), {'files': len(scope.importers), 'import_statements': statements,
-                                   'resolved_statements': resolved, 'type_checking_skipped': type_checking}
+    lazy_only = {t: importers - load_time.get(t, set()) for t, importers in edges.items()}
+    return edges, lazy_only, {'files': len(scope.importers), 'import_statements': statements,
+                              'resolved_statements': resolved, 'type_checking_skipped': type_checking}
+
+
+def build_python_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+    edges, _, coverage = _python_scoped_edges(scope)
+    return _finish(scope, edges), coverage
+
+
+def python_lazy_only_edges(scope: Scope) -> Edges:
+    """The Python edges every import behind which is function-level: the engine's ``&lazy=only`` view."""
+    return _finish(scope, _python_scoped_edges(scope)[1])
 
 
 # ---- Rust: deepest existing module file for crate::/super::/self:: use paths ----
@@ -485,7 +506,7 @@ ORACLES: dict[str, Oracle] = {
     'go-toolchain': Oracle(frozenset({'.go'}), build_go_oracle),
     'gcc-c': Oracle(C_SUFFIXES, _gcc_oracle('c')),
     'gcc-cpp': Oracle(CPP_SUFFIXES, _gcc_oracle('c++')),
-    'python-ast': Oracle(frozenset({'.py'}), build_python_oracle),
+    'python-ast': Oracle(frozenset({'.py'}), build_python_oracle, python_lazy_only_edges),
     'rust-use': Oracle(frozenset({'.rs'}), build_rust_oracle),
     'typescript-compiler': Oracle(frozenset({'.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'}), build_typescript_oracle),
     'java-jls': Oracle(frozenset({'.java'}), build_java_oracle),

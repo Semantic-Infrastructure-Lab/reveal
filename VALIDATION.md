@@ -2135,13 +2135,19 @@ file (`port/assimp_rs/src/lib.rs`) that the C++-only count of 457 did not. The P
 row makes one `calls://<scan>?callers=NAME` request per oracle target and fails on an error or
 a cut list (rows shown differ from `total_callers`).
 
-The gate scores one parameter combination, the oracles' rule: every static edge, function-level
-imports and tests included, `TYPE_CHECKING` excluded. It records the `edge_rule` each answer
-prints and refuses an answer computed under another rule. The report's `declined` list names
-the combinations the engine states but the gate cannot score yet, with the reason:
-`lazy=exclude` and `lazy=only` (`imports://?importers` always lists the all-edges view, and
-`imports://<dir>?rank=fan-in&lazy=` returns counts, not importers) and `tests=exclude` (no
-engine parameter). The `python-reveal` population is reveal's own repository at public
+The gate's main row scores the oracles' rule: every static edge, function-level imports and
+tests included, `TYPE_CHECKING` excluded. For the populations whose oracle labels function-level
+imports (the `python-ast` rows, celery and reveal) it also scores `&lazy=exclude` and
+`&lazy=only` as rendered, under `lazy` in each row. An edge is function-level only when every
+import behind it is, so the two views split the all-edges edges exactly: celery 1,323 + 121 =
+1,444, reveal 3,760 + 1,226 = 4,986, all hit with 0 extra. Every oracle target is scored in
+each view, so an importer listed in the wrong view counts as extra. The gate records the
+`edge_rule` each answer prints and refuses an answer computed under another rule. The report's
+`declined` list names the combinations the gate cannot score everywhere, with the reason:
+`lazy=exclude` and `lazy=only` outside the Python rows (the TypeScript oracle emits no scope,
+BACK-2064; the Rust oracle is a regex that cannot tell a function-local `use`, BACK-2079; C, C++,
+Go and Java have no function-scope import) and `tests=exclude` (no engine parameter and no oracle
+test-path rule). The `python-reveal` population is reveal's own repository at public
 `4d4116cc` (whole tree, tests included): 1,397 files, 544 targets, 4,986/4,986 edges, 0 extra.
 
 ```bash

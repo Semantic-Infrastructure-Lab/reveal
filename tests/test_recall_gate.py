@@ -12,6 +12,7 @@ import pytest
 
 from reveal.adapters.imports import ImportsAdapter
 from reveal.analyzers.imports.resolution import ProjectResolver
+from reveal.analyzers.imports.types import ImportGraph
 
 pytestmark = pytest.mark.component
 SCRIPTS = Path(__file__).resolve().parent.parent / 'scripts'
@@ -111,6 +112,62 @@ def test_python_oracle_resolves_like_the_interpreter_and_skips_type_checking(pyt
     assert coverage['type_checking_skipped'] == 1 and coverage['files'] == 5
     measured = gate.measure(entry, root)
     assert measured['recall'] == measured['precision'] == 1 and measured['oracle_edges'] == 4
+
+
+PYTHON_LAZY = {
+    'pyproject.toml': '[project]\nname = "pkg"\n',
+    'pkg/__init__.py': '',
+    'pkg/a.py': 'VALUE = 1\n',
+    'pkg/lazy_only.py': 'def f():\n    import pkg.a\n',                      # every import of a.py here is function-level
+    'pkg/mixed.py': 'import pkg.a\n\n\ndef g():\n    import pkg.a\n',         # one load-time import makes the edge load-time
+    'pkg/klass.py': 'class K:\n    import pkg.a\n',                          # a class body at module level runs at load time
+    'pkg/nested.py': 'def h():\n    class K:\n        import pkg.a\n',        # a class body inside a function does not
+}
+
+
+@pytest.fixture
+def lazy_corpus(tmp_path):
+    return _repo(tmp_path, PYTHON_LAZY, {'oracle': 'python-ast', 'importer_dirs': ['.']})
+
+
+def test_python_oracle_splits_edges_by_the_nearest_function_ancestor(lazy_corpus):
+    root, entry = lazy_corpus
+    oracle = oracles.ORACLES['python-ast']
+    scope = oracles.Scope(root, root, oracles.tracked_files(root, ['.'], oracle.suffixes), entry['recall'])
+    edges, _ = oracle.build(scope)
+    assert edges['pkg/a.py'] == ['pkg/klass.py', 'pkg/lazy_only.py', 'pkg/mixed.py', 'pkg/nested.py']
+    assert oracle.lazy_only(scope) == {'pkg/a.py': ['pkg/lazy_only.py', 'pkg/nested.py']}
+
+
+def test_each_lazy_mode_is_scored_as_rendered_and_a_mislabelled_edge_is_seen(lazy_corpus, monkeypatch):
+    root, entry = lazy_corpus
+    baseline = gate.measure(entry, root)
+    modes = baseline['lazy']
+    assert modes['exclude']['oracle_edges'] == 2 and modes['only']['oracle_edges'] == 2
+    assert all(m['recall'] == m['precision'] == 1 for m in modes.values())
+    assert modes['only']['edge_rule']['lazy'] == 'only' and modes['exclude']['edge_rule']['lazy'] == 'exclude'
+    # Negative control: the engine files the mixed edge under &lazy=only. The all-edges row stays perfect,
+    # which is why the per-mode rows exist.
+    real = ImportGraph.is_lazy_edge
+    monkeypatch.setattr(ImportGraph, 'is_lazy_edge',
+                        lambda self, src, dst: real(self, src, dst) or src.name == 'mixed.py')
+    measured = gate.measure(entry, root)
+    assert measured['recall'] == measured['precision'] == 1
+    assert measured['lazy']['only']['differences'] == [{'target': 'pkg/a.py', 'missed': [], 'extra': ['pkg/mixed.py']}]
+    assert measured['lazy']['exclude']['differences'] == [{'target': 'pkg/a.py', 'missed': ['pkg/mixed.py'], 'extra': []}]
+    failures = gate.regressions({'py': measured}, {'py': baseline})
+    assert any('lazy=exclude recall dropped' in f for f in failures)
+    assert any('lazy=only extra-edge population changed' in f for f in failures)
+
+
+def test_a_new_lazy_row_needs_a_baseline_review(lazy_corpus):
+    root, entry = lazy_corpus
+    measured = gate.measure(entry, root)
+    without = {k: v for k, v in measured.items() if k != 'lazy'}
+    assert gate.regressions({'py': measured}, {'py': without}) == [
+        'py: lazy=exclude baseline missing; review required', 'py: lazy=only baseline missing; review required']
+    assert gate.regressions({'py': without}, {'py': measured}) == [
+        'py: lazy=exclude measurement missing', 'py: lazy=only measurement missing']
 
 
 def test_python_file_the_oracle_cannot_parse_is_a_failure_not_a_smaller_truth(tmp_path):
@@ -216,7 +273,9 @@ def test_a_reveal_side_loss_is_measured_and_fails_the_gate(python_corpus, monkey
     measured = gate.measure(entry, root)
     assert measured['recall'] == 0.75
     assert measured['differences'] == [{'target': 'pkg/a.py', 'missed': ['pkg/b.py'], 'extra': []}]
-    assert gate.regressions({'py': measured}, {'py': baseline}) == ['py: recall dropped 100.000000% -> 75.000000%']
+    # The fixture has no function-level import, so every edge is in the exclude view and the loss shows there too.
+    assert gate.regressions({'py': measured}, {'py': baseline}) == [
+        'py: recall dropped 100.000000% -> 75.000000%', 'py: lazy=exclude recall dropped 100.000000% -> 75.000000%']
     monkeypatch.setattr(ProjectResolver, '_resolve_statement_edges', lambda *args, **kwargs: None)
     with pytest.raises(RuntimeError, match='zero oracle edges'):
         gate.measure(entry, root)
@@ -299,6 +358,7 @@ def test_the_report_names_each_combination_it_declines(tmp_path, monkeypatch):
     declined = {row['combination']: row['reason'] for row in report['declined']}
     assert set(declined) == {'lazy=exclude', 'lazy=only', 'tests=exclude'}
     assert all(declined.values())
+    assert 'python-ast' in declined['lazy=exclude']
     assert report['scored'] == {'lazy': 'include', 'tests': 'included', 'type_checking': 'excluded'}
 
 

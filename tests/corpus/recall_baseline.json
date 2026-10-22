@@ -51,7 +51,50 @@
       "type_checking_skipped": 24
     },
     "partial_files": 0,
-    "differences": []
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": []
+    },
+    "differences": [],
+    "lazy": {
+      "exclude": {
+        "targets": 176,
+        "oracle_edges": 1323,
+        "hit_edges": 1323,
+        "extra_edges": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "partial_files": 0,
+        "edge_rule": {
+          "lazy": "exclude",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": []
+        },
+        "differences": []
+      },
+      "only": {
+        "targets": 65,
+        "oracle_edges": 121,
+        "hit_edges": 121,
+        "extra_edges": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "partial_files": 0,
+        "edge_rule": {
+          "lazy": "only",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": []
+        },
+        "differences": []
+      }
+    }
   },
   "rust-ripgrep": {
     "oracle": "rust-use",
@@ -355,6 +398,46 @@
         "cpp"
       ]
     },
-    "differences": []
+    "differences": [],
+    "lazy": {
+      "exclude": {
+        "targets": 519,
+        "oracle_edges": 3760,
+        "hit_edges": 3760,
+        "extra_edges": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "partial_files": 0,
+        "edge_rule": {
+          "lazy": "exclude",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": [
+            "cpp"
+          ]
+        },
+        "differences": []
+      },
+      "only": {
+        "targets": 319,
+        "oracle_edges": 1226,
+        "hit_edges": 1226,
+        "extra_edges": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "partial_files": 0,
+        "edge_rule": {
+          "lazy": "only",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": [
+            "cpp"
+          ]
+        },
+        "differences": []
+      }
+    }
   }
 }
