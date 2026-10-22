@@ -54,6 +54,15 @@ def _exclusive_build(project_root: Path, timeout: float = 600.0):
             lock.unlink()
 
 
+def _checkout_fingerprint(project_root: Path):
+    """What a build in the checkout would disturb: the top-level names (the
+    sdist staging dir reveal_cli-X.Y.Z/ appears and vanishes there) and the
+    install metadata that reveal.version reads on every import."""
+    pkg_info = project_root / 'reveal_cli.egg-info' / 'PKG-INFO'
+    stamp = pkg_info.stat().st_mtime_ns if pkg_info.exists() else None
+    return sorted(p.name for p in project_root.iterdir()), stamp
+
+
 class TestPackagingManifest(unittest.TestCase):
     """Test that MANIFEST.in accurately includes all necessary files."""
 
@@ -62,6 +71,7 @@ class TestPackagingManifest(unittest.TestCase):
         """Build the package once for all tests."""
         cls.project_root = Path(__file__).parent.parent
         cls.temp_dir = Path(tempfile.mkdtemp())
+        cls.checkout_before = _checkout_fingerprint(cls.project_root)
 
         # Build the package in temp directory
         with _exclusive_build(cls.project_root):
@@ -71,7 +81,7 @@ class TestPackagingManifest(unittest.TestCase):
                 capture_output=True,
                 text=True, encoding='utf-8', errors='replace'
             )
-        
+
         if result.returncode != 0:
             raise RuntimeError(f"Package build failed: {result.stderr}")
         
@@ -86,6 +96,17 @@ class TestPackagingManifest(unittest.TestCase):
     def tearDownClass(cls):
         """Clean up temp directory."""
         shutil.rmtree(cls.temp_dir, ignore_errors=True)
+
+    def test_build_leaves_the_checkout_untouched(self):
+        """The sdist build must not write into the checkout (BACK-1895).
+
+        Building in place rewrites reveal_cli.egg-info/PKG-INFO, which every
+        `import reveal` reads (reveal/version.py), and stages reveal_cli-X.Y.Z/
+        in the repo root, which other tests walk. Both race with readers on
+        other xdist workers: "Access is denied" on the PKG-INFO rename on
+        Windows, FileNotFoundError mid-walk elsewhere."""
+        self.assertEqual(self.checkout_before,
+                         _checkout_fingerprint(self.project_root))
 
     def test_agent_help_files_included(self):
         """AGENT_HELP.md must be included in distribution.
