@@ -72,6 +72,7 @@ PROBES = {
     ('architecture', 'verbose'): (['{pkg}'], True),
     ('deps', 'verbose'): (['{pkg}'], True),
     ('hotspots', 'verbose'): (['{pkg}'], True),
+    ('imports', 'verbose'): (['{pkg}', '--importers'], True),
     ('testability', 'verbose'): (['{pkg}', '--tests', '{tests}'], True),
     ('check', 'respect_gitignore'): (['{tree}'], False),
     # BACK-1386: every walking subcommand, via apply_global_flags (probe_tree's *ignored*).
@@ -79,6 +80,7 @@ PROBES = {
     ('contracts', 'respect_gitignore'): (['{tree}'], False),
     ('deps', 'respect_gitignore'): (['{tree}'], False),
     ('hotspots', 'respect_gitignore'): (['{tree}'], False),
+    ('imports', 'respect_gitignore'): (['{tree}'], False),
     ('metrics', 'respect_gitignore'): (['{tree}'], False),
     ('pack', 'respect_gitignore'): (['{tree}'], False),
     ('surface', 'respect_gitignore'): (['{tree}'], False),

@@ -99,6 +99,10 @@ def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
     source = {}
     for spec in adapter.PARAM_SPECS:
         if spec.cli is None:
+            # A boolean with no flag of its own is carried by the global flag of its name
+            # (`--verbose` is `&verbose`), supplied only when set, as the URI spells it.
+            if spec.type == 'boolean' and peek(args, spec.name, False) is True:
+                source[spec.name] = True
             continue
         dest = spec.cli.dest or spec.name
         if dest in vars(args):
@@ -121,10 +125,9 @@ def _delegate_typed_parameters(adapter, args, source, transport: str) -> None:
     if transport != 'typed':
         return
     for spec in adapter.PARAM_SPECS:
-        if spec.cli is not None:
-            dest = spec.cli.dest or spec.name
-            if dest in source:
-                delegate(args, dest, spec.name)
+        dest = (spec.cli.dest if spec.cli else None) or spec.name
+        if dest in source:
+            delegate(args, dest, spec.name)
 
 
 def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=(), *,

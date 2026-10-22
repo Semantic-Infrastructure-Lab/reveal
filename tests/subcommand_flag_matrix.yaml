@@ -235,6 +235,35 @@ subcommands:
       review: honored
       via:
       - declared-read
+  imports:
+    all:
+      reason: --all is not declared on `reveal imports`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    respect_gitignore:
+      reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
+        proves an output diff'
+      review: honored
+      via:
+      - declared-global
+    since:
+      reason: --since is not declared on `reveal imports`'s own parser -- argparse
+        rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    until:
+      reason: --until is not declared on `reveal imports`'s own parser -- argparse
+        rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: 'BACK-1054: --verbose expands the ?unused, ?circular, ?violations and ?importers
+        views, read where they apply it; on any other view the flag ledger names it as
+        a no-op; PROBES entry proves an output diff'
+      review: honored
+      via:
+      - declared-unused
   metrics:
     all:
       reason: --all is not declared on `reveal metrics`'s own parser -- argparse rejects

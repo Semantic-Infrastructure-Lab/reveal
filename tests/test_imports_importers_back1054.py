@@ -441,3 +441,29 @@ def test_a_php_include_through_a_define_constant_is_tagged_constant(tmp_path):
     rows = {r['file']: r for r in _structure(tmp_path / 'lib' / 'x.php', 'importers')['importers']}
     assert rows['../main.php']['via'] == ['constant']
     assert rows['../other.php']['via'] == ['direct']
+
+
+def _cycle_pairs(root: Path, count: int = 8) -> None:
+    """More cycle groups than the summary lists (5), so --verbose changes the answer."""
+    _write(root, {f'm{n}{side}.py': f'import m{n}{"b" if side == "a" else "a"}\n'
+                  for n in range(count) for side in 'ab'})
+
+
+def test_the_verbose_flag_expands_reveal_imports_as_the_uri_does(tmp_path):
+    """`reveal imports PATH --verbose` is `imports://PATH?verbose`: it bound no parameter, so the
+    answer stayed a summary while the flag ledger said it had no effect."""
+    from conftest import _run_reveal_direct as run
+    _cycle_pairs(tmp_path)
+    plain = run('imports', tmp_path, '--circular')
+    flag = run('imports', tmp_path, '--circular', '--verbose')
+    uri = run(f'imports://{tmp_path.as_posix()}?circular&verbose')
+    assert flag.stdout == uri.stdout != plain.stdout
+    assert 'has no effect' not in flag.stderr
+    assert 'has no effect' not in plain.stderr
+
+
+def test_an_unset_verbose_is_not_supplied_to_reveal_imports(tmp_path):
+    """A boolean carried by its global flag is supplied only when set (`?verbose` is presence)."""
+    from conftest import _run_reveal_direct as run
+    _cycle_pairs(tmp_path)
+    assert run('imports', tmp_path, '--circular').stdout == run(f'imports://{tmp_path.as_posix()}?circular').stdout

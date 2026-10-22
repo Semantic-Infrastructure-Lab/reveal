@@ -407,6 +407,11 @@ def _top_value(value: Any) -> int:
     return int(value)
 
 
+# The answer types --verbose expands (the renderers that take it).
+_VERBOSE_VIEWS = frozenset({'unused_imports', 'circular_dependencies', 'layer_violations',
+                           'module_importers', 'importer_summary'})
+
+
 # The declaration the `reveal imports` subcommand and the declared URI route bind (BACK-1054, D6):
 # every parameter imports:// reads. The views read presence for the flags, as the URI always did.
 PARAM_SPECS: Tuple[ParamSpec, ...] = (
@@ -1604,10 +1609,10 @@ class ImportsAdapter(ResourceAdapter):
         self._build_graph(target_path)
 
         # Handle query parameters
-        verbose = 'verbose' in query_params or kwargs.get('verbose', False)
         result = self._format_view(query_params, kwargs)
         _relativize_imports_paths(result, target_path, self._scan.root if self._scan else None)
-        if verbose:
+        # Read where the view expands: on any other view the flag is unread, and says so.
+        if result.get('type') in _VERBOSE_VIEWS and ('verbose' in query_params or kwargs.get('verbose', False)):
             result['verbose'] = True
         return result
 
