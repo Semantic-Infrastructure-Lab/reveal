@@ -4,10 +4,6 @@ This test would have caught the bug where MANIFEST.in referenced old paths
 (reveal/AGENT_HELP.md) that were moved to reveal/docs/AGENT_HELP.md.
 """
 
-import contextlib
-import hashlib
-import os
-import time
 import unittest
 import subprocess
 import tarfile
@@ -21,37 +17,30 @@ import pytest
 pytestmark = pytest.mark.contract
 
 
-@contextlib.contextmanager
-def _exclusive_build(project_root: Path, timeout: float = 600.0):
-    """Serialize 'python -m build' across processes for one checkout.
+def _stage_sources(project_root: Path, dest: Path) -> None:
+    """Copy the working tree (tracked files plus untracked, non-ignored ones)
+    into *dest* and commit it with git, so the sdist built there holds what a
+    build in the checkout holds. setuptools_scm's file finder adds every file
+    committed in HEAD to the sdist (reveal/adapters/help_data/*.yaml and the
+    frontmatter schemas ship only that way), so an uncommitted copy would
+    build a different sdist.
 
-    Under xdist each worker that receives one of this class's tests runs
-    setUpClass, and every build stages the sdist in the repo root's
-    reveal_cli-X.Y.Z/ directory -- so concurrent builds deleted that tree
-    under each other ("No such file ... BENCHMARKS.md", CI py3.10/macOS,
-    2026-09-24). An O_EXCL lock file works on every CI platform and leaves
-    xdist's test distribution untouched."""
-    key = hashlib.sha1(str(project_root.resolve()).encode('utf-8')).hexdigest()[:12]
-    lock = Path(tempfile.gettempdir()) / f'reveal-packaging-build-{key}.lock'
-    deadline = time.monotonic() + timeout
-    while True:
-        try:
-            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            break
-        except FileExistsError:
-            with contextlib.suppress(OSError):
-                if time.time() - lock.stat().st_mtime > timeout:
-                    lock.unlink()  # stale: its owner died mid-build
-                    continue
-            if time.monotonic() > deadline:
-                raise RuntimeError(f"Timed out waiting for {lock}")
-            time.sleep(0.25)
-    try:
-        yield
-    finally:
-        os.close(fd)
-        with contextlib.suppress(OSError):
-            lock.unlink()
+    Building here and not in the checkout keeps the build's writes
+    (reveal_cli.egg-info/PKG-INFO, the reveal_cli-X.Y.Z/ staging dir) away
+    from every other test (BACK-1895): concurrent builds also need no lock."""
+    listing = subprocess.run(
+        ['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+        cwd=project_root, capture_output=True, check=True,
+    ).stdout.decode('utf-8')
+    for rel in filter(None, listing.split('\0')):
+        src = project_root / rel
+        if src.is_file():  # a tracked file deleted from the tree is not staged
+            (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest / rel)
+    git = ['git', '-c', 'user.name=stage', '-c', 'user.email=stage@localhost',
+           '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=']
+    for args in (['init', '-q'], ['add', '-A'], ['commit', '-q', '--no-verify', '-m', 'stage']):
+        subprocess.run(git + args, cwd=dest, check=True, capture_output=True)
 
 
 def _checkout_fingerprint(project_root: Path):
@@ -73,20 +62,22 @@ class TestPackagingManifest(unittest.TestCase):
         cls.temp_dir = Path(tempfile.mkdtemp())
         cls.checkout_before = _checkout_fingerprint(cls.project_root)
 
-        # Build the package in temp directory
-        with _exclusive_build(cls.project_root):
-            result = subprocess.run(
-                ['python', '-m', 'build', '--outdir', str(cls.temp_dir)],
-                cwd=cls.project_root,
-                capture_output=True,
-                text=True, encoding='utf-8', errors='replace'
-            )
+        # Build the package from a staged copy, never in the checkout
+        stage = cls.temp_dir / 'src'
+        out = cls.temp_dir / 'out'
+        _stage_sources(cls.project_root, stage)
+        result = subprocess.run(
+            ['python', '-m', 'build', '--outdir', str(out)],
+            cwd=stage,
+            capture_output=True,
+            text=True, encoding='utf-8', errors='replace'
+        )
 
         if result.returncode != 0:
             raise RuntimeError(f"Package build failed: {result.stderr}")
         
         # Find the built tarball
-        tarballs = list(cls.temp_dir.glob('*.tar.gz'))
+        tarballs = list(out.glob('*.tar.gz'))
         if not tarballs:
             raise RuntimeError("No tarball found after build")
         
@@ -107,6 +98,21 @@ class TestPackagingManifest(unittest.TestCase):
         Windows, FileNotFoundError mid-walk elsewhere."""
         self.assertEqual(self.checkout_before,
                          _checkout_fingerprint(self.project_root))
+
+    def test_every_tracked_package_file_ships(self):
+        """The sdist built from the staged copy holds every tracked file under
+        reveal/, data files included (help_data/*.yaml, schemas/frontmatter):
+        they ship through setuptools_scm's git file finder, so this fails if
+        _stage_sources stops committing its copy."""
+        tracked = subprocess.run(
+            ['git', 'ls-files', '-z', 'reveal'], cwd=self.project_root,
+            capture_output=True, check=True,
+        ).stdout.decode('utf-8').split('\0')
+        with tarfile.open(self.tarball, 'r:gz') as tar:
+            shipped = {n.split('/', 1)[1] for n in tar.getnames() if '/' in n}
+        missing = sorted(f for f in tracked
+                         if f and (self.project_root / f).is_file() and f not in shipped)
+        self.assertEqual([], missing, f"tracked files missing from the sdist: {missing[:10]}")
 
     def test_agent_help_files_included(self):
         """AGENT_HELP.md must be included in distribution.
