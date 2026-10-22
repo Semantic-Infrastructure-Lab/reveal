@@ -118,16 +118,18 @@ def test_same_mtime_same_size_edit_is_the_documented_hole(tmp_path):
 
 @pytest.mark.parametrize('field', ['scanner_id', 'path_spelling'])
 def test_key_separates_scanner_and_spelling(tmp_path, field):
+    """The scanner puts the path it was given into every row, so the same file reached by another
+    spelling (a `..` component here) must not be served the first spelling's rows."""
     src = _src(tmp_path)
+    (tmp_path / 'sub').mkdir()
     scanner = Scanner()
     _scan(scanner, src)
     if field == 'scanner_id':
         _scan(scanner, src, scanner_id='m.other')
     else:
-        rel = os.path.relpath(src)
-        if os.path.abspath(rel) != str(src.resolve()) and rel == str(src):
-            pytest.skip('no distinct spelling')
-        sfc.scan_file_cached(scanner, 'm.f', 'go', rel, _validate_requested_surface)
+        respelled = os.path.join(str(tmp_path), 'sub', '..', 'a.go')
+        assert os.path.abspath(respelled) == os.path.abspath(str(src))
+        assert _scan(scanner, respelled)['env'][0]['file'] == respelled
     assert scanner.calls == 2
 
 
