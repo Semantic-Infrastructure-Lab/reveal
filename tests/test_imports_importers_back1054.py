@@ -335,3 +335,27 @@ def test_importers_text_lists_each_importer_with_stage_and_scope(fx, capsys):
     text = capsys.readouterr().out
     assert 'Modules with importers: 6' in text and 'core.py  (5)' in text
     assert 'Import Analysis' not in text
+
+
+# ── D6 exit codes (imports is a declared command) ─────────────────────────────────────────────
+
+def test_imports_exits_2_for_usage_and_3_for_partial_analysis(fx, monkeypatch):
+    from tests.conftest import _run_reveal_direct
+    monkeypatch.chdir(fx)
+    assert _run_reveal_direct('imports://pkg?rank=fan-in').returncode == 0
+    assert _run_reveal_direct('imports://missing_dir').returncode == 2  # was 1
+    assert _run_reveal_direct('imports://pkg?rank=nope').returncode == 2  # was 1
+    assert _run_reveal_direct('imports://pkg?rank=fan-in&max_files=2').returncode == 3  # capped walk; was 0
+    (fx / 'pkg' / 'broken.py').write_text('def f(\n    x = ( ( (\n', encoding='utf-8')
+    assert _run_reveal_direct('imports://pkg?rank=fan-in').returncode == 3  # parsed with errors; was 0
+
+
+def test_reveal_imports_subcommand_answers_like_the_uri(fx, monkeypatch):
+    from tests.conftest import _run_reveal_direct
+    monkeypatch.chdir(fx)
+    typed = _run_reveal_direct('imports', 'pkg/core.py', '--importers', '--tests', 'exclude', '--format', 'json')
+    uri = _run_reveal_direct('imports://pkg/core.py?importers&tests=exclude', '--format', 'json')
+    assert typed.returncode == uri.returncode == 0
+    strip = lambda out: {k: v for k, v in json.loads(out).items() if k not in ('meta', 'provenance')}
+    assert strip(typed.stdout) == strip(uri.stdout)
+    assert json.loads(typed.stdout)['count'] == 4
