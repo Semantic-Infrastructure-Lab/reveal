@@ -214,10 +214,6 @@ def test_pack_over_mcp_states_its_rule(project):
 
 # ------------------------------------------------------------------ deps
 
-@pytest.mark.xfail(strict=True, reason=(
-    'BACK-1054 S2: deps:// composes imports:// with the new default scope=root, so its cycle rule says '
-    'scan_root while it scans the requested path; the fix is deps.py passing scope=path to its three '
-    'compose calls (patch in the S2 report; deps.py is not this slice\'s file)'))
 def test_deps_text_states_the_cycle_rule(project):
     """deps:// reports 'no circular deps' from the load-time view; its JSON said so, its text did not."""
     data = _json(f'deps://{to_posix(project)}')

@@ -38,7 +38,7 @@ from ..utils.results import AnalysisCompleteness, ExecutionFacts, ResultBuilder,
 def _run_base(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
     """Fetch base import map via ImportsAdapter."""
     with import_analysis.composed_rules('deps://'):  # BACK-2087
-        result = adapter.compose(ImportsAdapter, str(path), default={})
+        result = adapter.compose(ImportsAdapter, str(path), default={}, query='scope=path')  # BACK-1054: deps scans the requested path
     adapter._record_component('base', result)
     return result if isinstance(result, dict) and _valid_component_payload('base', result) else {}
 
@@ -46,14 +46,14 @@ def _run_base(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
 def _run_circular(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
     """Fetch circular dependency cycles via ImportsAdapter."""
     with import_analysis.composed_rules('deps://'):  # BACK-2087
-        result = adapter.compose(ImportsAdapter, str(path), default={}, query='circular')
+        result = adapter.compose(ImportsAdapter, str(path), default={}, query='circular&scope=path')
     adapter._record_component('circular', result)
     return result if _valid_component_payload('circular', result, require_count=False) else {}
 
 
 def _run_unused(adapter: 'DepsAdapter', path: Path) -> List[Dict[str, Any]]:
     """Fetch unused imports via ImportsAdapter."""
-    data = adapter.compose(ImportsAdapter, str(path), default={}, query='unused')
+    data = adapter.compose(ImportsAdapter, str(path), default={}, query='unused&scope=path')
     adapter._record_component('unused', data)
     return data['unused'] if _valid_component_payload('unused', data, require_count=False) else []
 
