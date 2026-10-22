@@ -55,6 +55,22 @@ DECLINED = (
 )
 
 
+@contextlib.contextmanager
+def _engine_uncached():
+    """Score the engine, not a stored answer: imports:// keeps its graph on disk, so a second measurement in
+    the same process (or on a runner with a warm cache) would read the first one's answer and miss a loss
+    injected or introduced between them. Cache correctness is BACK-2081's differential test, not this gate's."""
+    before = os.environ.get('REVEAL_DISK_CACHE')
+    os.environ['REVEAL_DISK_CACHE'] = '0'
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop('REVEAL_DISK_CACHE', None)
+        else:
+            os.environ['REVEAL_DISK_CACHE'] = before
+
+
 def _cli_json(uri: str, label: str, *, incomplete_ok: bool = False) -> dict[str, Any]:
     """One request through ``reveal.main.main`` with the argv a user would type, read back as JSON.
 
@@ -84,7 +100,8 @@ def _importers_request(target: Path, scan: Path, cap: int | None) -> dict[str, A
     """One ``imports://<target>?importers`` request at the scan root; a capped scan raises like any
     other failed answer. ``cap`` is the corpus's own ``scan_file_cap``, else the engine's default."""
     query = f'importers&root={urllib.parse.quote(scan.as_posix(), safe="/:")}' + (f'&max_files={cap}' if cap else '')
-    result = _cli_json(f'imports://{target.as_posix()}?{query}', target.name, incomplete_ok=True)
+    with _engine_uncached():
+        result = _cli_json(f'imports://{target.as_posix()}?{query}', target.name, incomplete_ok=True)
     if (result.get('metadata', {}).get('scan_budget') or {}).get('capped'):
         raise RuntimeError('Reveal scan was capped; measurement unavailable')
     rule = result.get('edge_rule') or {}

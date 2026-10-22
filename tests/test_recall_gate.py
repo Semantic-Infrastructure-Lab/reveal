@@ -197,7 +197,12 @@ def test_java_duplicate_types_in_scope_are_ambiguous_not_guessed(tmp_path):
         _build(root, entry)
 
 
-def test_a_reveal_side_loss_is_measured_and_fails_the_gate(python_corpus, monkeypatch):
+@pytest.mark.disk_cache
+def test_a_reveal_side_loss_is_measured_and_fails_the_gate(python_corpus, monkeypatch, tmp_path):
+    # CI runs with the disk cache ON; the second measure() below must not be served the first one's graph
+    # (the gate measures the engine uncached), or the injected loss goes unseen. ci-local exports
+    # REVEAL_DISK_CACHE=0, so this marker is what makes the local gate see the CI condition.
+    monkeypatch.setenv('REVEAL_CACHE_DIR', str(tmp_path / 'cache'))
     # Negative control: the comparison is not vacuous. Drop every edge reveal resolves from
     # pkg/b.py and the gate must see the miss; drop all of them and it must refuse a zero.
     root, entry = python_corpus
