@@ -33,7 +33,7 @@ category: reference
 | [MCP_SETUP.md](guides/MCP_SETUP.md) | — | MCP server setup for Claude Code, Cursor, Windsurf — 10 tools, stdio/SSE transports |
 | [CI_RECIPES.md](guides/CI_RECIPES.md) | — | GitHub Actions and GitLab CI ready-to-paste YAML: PR review, complexity gate, hotspot tracking, SSL checks |
 | [RECIPES.md](guides/RECIPES.md) | — | Task-based workflows, multi-adapter patterns, and real-world scenarios |
-| [TESTABILITY_GUIDE.md](guides/TESTABILITY_GUIDE.md) | — | Test patch pressure joined with production boundary fan-out (`reveal testability`) |
+| [TESTABILITY_GUIDE.md](guides/TESTABILITY_GUIDE.md) | — | Test patch pressure joined with production boundary fan-out (`reveal patches --view pressure`, was `reveal testability`) |
 
 ---
 
@@ -128,7 +128,7 @@ Reference guides for all reveal subcommands (`architecture`, `check`, `deps`, `d
 | File | Lines | Description |
 |------|-------|-------------|
 | [SUBCOMMANDS_GUIDE.md](guides/SUBCOMMANDS_GUIDE.md) | — | All subcommand reference: `architecture`, `check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold` |
-| [TESTABILITY_GUIDE.md](guides/TESTABILITY_GUIDE.md) | — | `reveal testability` workflow: joins test patch pressure with production boundary profiles |
+| [TESTABILITY_GUIDE.md](guides/TESTABILITY_GUIDE.md) | — | `reveal patches --view pressure` workflow: joins test patch pressure with production boundary profiles |
 
 ---
 

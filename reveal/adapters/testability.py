@@ -259,48 +259,54 @@ class TestabilityAdapter(ResourceAdapter):
         }
 
     def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
-        from reveal.testability.patches import iter_test_files
-        from reveal.testability.report import build_testability_report
-        from reveal.utils.path_utils import as_spelled, detect_non_python_language
+        return testability_report(self.path, self.query_params, verbose)
 
-        path = Path(self.path)
-        tests = self.PARAM_SPECS[0].read(self.query_params)
-        from .overview import UNLIMITED_TOP
-        top = UNLIMITED_TOP if verbose else self.PARAM_SPECS[1].read(self.query_params)
-        min_patches = self.PARAM_SPECS[2].read(self.query_params)
-        min_categories = self.PARAM_SPECS[3].read(self.query_params)
-        include_unresolved = self.PARAM_SPECS[4].read(self.query_params)
 
-        by_test_path = not tests
-        test_paths = _resolve_test_paths(path, tests)
-        if tests and not test_paths:
-            raise NotApplicableError(f"none of the tests= paths exist for {path}: {', '.join(tests)}")
-        if by_test_path and not iter_test_files(test_paths, by_test_path=True):
-            raise NotApplicableError(
-                f"no test files found under {path} (the shared is_test_path rule: test directories such as tests/, test/, "
-                "spec/, t/, and test_*, *_test, *.spec.* names) — pass --tests <path> (URI: tests=<path>)"
+def testability_report(resource: str, query_params: Any, verbose: bool = False) -> Dict[str, Any]:
+    """The report both ``testability://`` and ``patches://?view=pressure`` answer (BACK-2160): one owner, read from
+    the declared parameters of whichever adapter was asked."""
+    from reveal.testability.patches import iter_test_files
+    from reveal.testability.report import build_testability_report
+    from reveal.utils.path_utils import as_spelled, detect_non_python_language
+
+    path = Path(resource)
+    tests = TestabilityAdapter.PARAM_SPECS[0].read(query_params)
+    from .overview import UNLIMITED_TOP
+    top = UNLIMITED_TOP if verbose else TestabilityAdapter.PARAM_SPECS[1].read(query_params)
+    min_patches = TestabilityAdapter.PARAM_SPECS[2].read(query_params)
+    min_categories = TestabilityAdapter.PARAM_SPECS[3].read(query_params)
+    include_unresolved = TestabilityAdapter.PARAM_SPECS[4].read(query_params)
+
+    by_test_path = not tests
+    test_paths = _resolve_test_paths(path, tests)
+    if tests and not test_paths:
+        raise NotApplicableError(f"none of the tests= paths exist for {path}: {', '.join(tests)}")
+    if by_test_path and not iter_test_files(test_paths, by_test_path=True):
+        raise NotApplicableError(
+            f"no test files found under {path} (the shared is_test_path rule: test directories such as tests/, test/, "
+            "spec/, t/, and test_*, *_test, *.spec.* names) — pass --tests <path> (URI: tests=<path>)"
+        )
+
+    report = build_testability_report(
+        str(path),
+        [str(p) for p in test_paths],
+        top=max(0, top),
+        min_patches=max(1, min_patches),
+        min_categories=max(1, min_categories),
+        include_unresolved=include_unresolved,
+        by_test_path=by_test_path,
+    )
+    # The tests dirs found were resolved; name them as the user named the target (BACK-1366).
+    report['tests'] = [as_spelled(p, resource) for p in test_paths]
+
+    # A supported JS/TS suite can genuinely contain no recognized mock calls.
+    if report.get('summary', {}).get('total_patch_uses', 0) == 0:
+        lang = detect_non_python_language(test_paths[0])
+        if lang and lang not in ('TypeScript', 'JavaScript'):
+            report['_patch_note'] = (
+                f'patch pressure not computed for {lang} test suites — '
+                'the patch scan supports Python and JavaScript/TypeScript tests '
+                '(boundary hotspots below still apply).'
             )
 
-        report = build_testability_report(
-            str(path),
-            [str(p) for p in test_paths],
-            top=max(0, top),
-            min_patches=max(1, min_patches),
-            min_categories=max(1, min_categories),
-            include_unresolved=include_unresolved,
-            by_test_path=by_test_path,
-        )
-        # The tests dirs found were resolved; name them as the user named the target (BACK-1366).
-        report['tests'] = [as_spelled(p, self.path) for p in test_paths]
-
-        # A supported JS/TS suite can genuinely contain no recognized mock calls.
-        if report.get('summary', {}).get('total_patch_uses', 0) == 0:
-            lang = detect_non_python_language(test_paths[0])
-            if lang and lang not in ('TypeScript', 'JavaScript'):
-                report['_patch_note'] = (
-                    f'patch pressure not computed for {lang} test suites — '
-                    'the patch scan supports Python and JavaScript/TypeScript tests '
-                    '(boundary hotspots below still apply).'
-                )
-
-        return report
+    return report

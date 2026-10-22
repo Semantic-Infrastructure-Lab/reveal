@@ -230,7 +230,7 @@ def test_empty_patches_text_qualifies_directory_loss(tree, monkeypatch):
     root, child = tree
     deny(monkeypatch, child)
     result = _run_reveal_direct(f'patches://{root}')
-    assert result.returncode == 0
+    assert result.returncode == 3  # an unwalkable directory is a lost observation (D6)
     assert 'No patch pressure groups in the available observations.' in result.stdout
     assert 'No patch pressure groups found.' not in result.stdout
     assert (result.stdout + result.stderr).count('directory enumeration(s) failed') == 1

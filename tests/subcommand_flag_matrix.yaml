@@ -377,6 +377,35 @@ subcommands:
       review: honored
       via:
       - declared-read
+  patches:
+    all:
+      reason: --all is not declared on `reveal patches`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    respect_gitignore:
+      reason: The declared runner applies the global gitignore scope to the test walk;
+        probed by hand on a tree whose ignored directory holds a test file (1 use
+        by default, 2 with --no-gitignore).
+      review: honored
+      via:
+      - declared-global
+    since:
+      reason: --since is not declared on `reveal patches`'s own parser -- argparse
+        rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    until:
+      reason: --until is not declared on `reveal patches`'s own parser -- argparse
+        rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: patches accepts shared verbosity but nothing it prints changes with it;
+        the flag ledger names it as a no-op, as for calls:// (BACK-2160).
+      review: not-applicable
+      via:
+      - declared-unused
   review:
     all:
       reason: --all is not declared on `reveal review`'s own parser -- argparse rejects

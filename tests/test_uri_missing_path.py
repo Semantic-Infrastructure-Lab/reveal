@@ -111,11 +111,16 @@ def test_empty_resource_means_cwd_not_an_error(tmp_path, monkeypatch):
 @pytest.mark.parametrize('uri', [
     'stats://nonexistent_zz_1321',
     'classify://nonexistent_zz_1321',
-    'patches://nonexistent_zz_1321',
 ])
 def test_adapters_with_their_own_check_still_exit_1(uri):
     code, _, _ = _run(uri)
     assert code == 1
+
+
+def test_patches_is_a_declared_noun_and_rejects_a_missing_path_with_exit_2():
+    """patches adopted the declared path (BACK-2160): a request naming nothing is rejected before analysis."""
+    code, _, _ = _run('patches://nonexistent_zz_1321')
+    assert code == 2
 
 
 def test_calls_name_shorthand_is_not_a_missing_path(tmp_path):

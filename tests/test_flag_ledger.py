@@ -585,6 +585,8 @@ WALKERS = {
     'overview': ['proj'],
     'pack': ['proj'],
     'surface': ['proj'],
+    # The pressure view walks the production tree skipme/ lives in; the default view reads only test files.
+    'patches': ['proj', '--view', 'pressure', '--tests', 'proj/tests'],
     'testability': ['proj', '--tests', 'proj/tests'],
     'trace': ['proj', '--from', 'main'],
 }

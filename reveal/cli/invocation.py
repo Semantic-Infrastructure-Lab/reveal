@@ -121,6 +121,9 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'reveal pack <path>',
                      'Token-budgeted context snapshot for LLM consumption',
                      help_guide=_SUBCOMMANDS_GUIDE),  # pack:// guide is a pointer stub
+    'patches':      _declared('patches',
+                     'reveal patches [path]',
+                     'Mock/patch pressure in tests, grouped by target; --view pressure joins it with production boundary fan-out'),
     'review':       _spec('review',
                      'reveal review <path>',
                      'Retired: use reveal check --changed RANGE and the diff:// adapter',
@@ -134,7 +137,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls'),
     'testability':  _declared('testability',
                      'reveal testability [path]',
-                     'Test patch pressure joined with production boundary fan-out',
+                     'Retired: use reveal patches <path> --view pressure (the same answer); '
+                     'test patch pressure joined with production boundary fan-out',
                      help_guide='guides/TESTABILITY_GUIDE.md'),
     'trace':        _declared('trace',
                      'reveal trace --from FUNC',
@@ -145,7 +149,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
 EPILOG_ORDER = ('overview', 'architecture', 'imports', 'deps', 'hotspots', 'metrics', 'contracts', 'surface',
-                'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
+                'patches', 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline')
 
 
@@ -252,6 +256,10 @@ RETIREMENTS: Dict[str, Retirement] = {
     # stats became metrics and absorbed classify (D2, BACK-2069): both old schemes answer from the
     # metrics owner, unchanged, until the cut. File hotspots are metrics' ?hotspots=true ranking.
     'scheme:stats': Retirement('stats://', 'metrics://<path> (the same answer)'),
+    # testability became patches ?view=pressure (D2, Q-P4-2, BACK-2160): the old scheme answers from the patches owner,
+    # unchanged, until the cut.
+    'subcommand:testability': Retirement('reveal testability', 'reveal patches <path> --view pressure (the same answer)'),
+    'scheme:testability': Retirement('testability://', 'patches://<path>?view=pressure (the same answer)'),
     'scheme:classify': Retirement('classify://', 'metrics://<path>?view=provenance (the same answer)'),
 }
 

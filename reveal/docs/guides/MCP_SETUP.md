@@ -122,7 +122,7 @@ CLI-only global flags (`--severity`, `--select`, `--format`) don't pass
 through here — write `?limit=N`, `?sort=field`/`?sort=-field`, and
 `?offset=M` directly in the URI instead. Only `ast://`, `markdown://`,
 `json://`, `git://` and `stats://` apply these; `hotspots://`, `calls://`,
-`depends://` and `testability://` cap with `?top=N`, and other adapters
+`depends://` and `patches://?view=pressure` cap with `?top=N`, and other adapters
 answer `Unknown query param ... ignored`. Everything else is each
 adapter's own `?key=value` vocabulary — check `reveal_query('help://schemas/
 <adapter>')` for what a given scheme accepts, or use a dedicated typed tool

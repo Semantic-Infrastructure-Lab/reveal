@@ -2,7 +2,7 @@
 title: Testability Pressure Guide
 category: guide
 help_topic: testability
-help_description: "Test patch pressure joined with production boundary fan-out (reveal testability)"
+help_description: "Test patch pressure joined with production boundary fan-out (reveal patches --view pressure)"
 help_category: feature_guides
 ---
 
@@ -24,14 +24,14 @@ reveal patches://tests
 reveal 'patches://tests?group=target&limit=20'
 
 # Combined workflow: test patches + production boundaries
-reveal testability src --tests tests
-reveal testability src --tests tests --top 20
-reveal testability src --tests tests --format json
+reveal patches src --view pressure --tests tests
+reveal patches src --view pressure --tests tests --top 20
+reveal patches src --view pressure --tests tests --format json
 
-# testability:// is also a queryable URI in its own right (BACK-959)
-reveal 'testability://src'
-reveal 'testability://src?tests=tests,integration_tests'
-reveal 'testability://src?top=10'
+# the same view as a queryable URI (testability:// is its retired spelling)
+reveal 'patches://src?view=pressure'
+reveal 'patches://src?view=pressure&tests=tests,integration_tests'
+reveal 'patches://src?view=pressure&top=10'
 ```
 
 Read the output as a ranked review queue:
@@ -54,7 +54,7 @@ fractions, booleans, exponent spellings and nonfinite values are usage errors.
 
 ## What It Finds
 
-Both `patches://` and `reveal testability` scan Python tests with AST parsing and detect:
+Both the default `patches://` scan and `?view=pressure` scan Python tests with AST parsing and detect:
 
 - `@patch("pkg.mod.name")`
 - `patch("pkg.mod.name")`
@@ -77,7 +77,7 @@ All of the above are measured against an independent ground-truth oracle
 (100% recall on both languages) — see
 [VALIDATION.md](../../../VALIDATION.md).
 
-`reveal testability` joins those patch groups to production function profiles.
+`reveal patches --view pressure` joins those patch groups to production function profiles.
 Each production function's categories come from its own calls, classified by the
 same per-language taxonomy as `--sideeffects`:
 
@@ -137,7 +137,7 @@ Use JSON for agents, dashboards, and CI experiments:
 
 ```bash
 reveal 'patches://tests?group=target' --format json
-reveal testability src --tests tests --format json
+reveal patches src --view pressure --tests tests --format json
 ```
 
 The JSON output includes confidence metadata because static target resolution is

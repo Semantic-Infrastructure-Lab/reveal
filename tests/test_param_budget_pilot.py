@@ -38,8 +38,8 @@ def test_patches_numeric_declaration_matches_runtime_and_cli(patches):
 @pytest.mark.parametrize('query, message', [
     ('limit=-1', 'limit must be >= 0'),
     ('min=-1', 'min must be >= 0'),
-    ('limit=1.5', "limit must be a whole number, got 1.5"),
-    ('min=2.5', "min must be a whole number, got 2.5"),
+    ('limit=1.5', "limit must be a whole number, got '1.5'"),
+    ('min=2.5', "min must be a whole number, got '2.5'"),
     ('limit=abc', "limit must be a whole number, got 'abc'"),
 ])
 def test_patches_rejects_values_that_changed_meaning_silently(patches, query, message):

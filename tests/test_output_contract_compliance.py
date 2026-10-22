@@ -168,6 +168,7 @@ SUBCOMMAND_ARGV = {
     'metrics': ['proj'],
     'overview': ['proj'],
     'pack': ['proj'],
+    'patches': ['proj'],
     'review': ['proj'],
     'surface': ['proj'],
     'testability': ['proj'],

@@ -26,6 +26,7 @@ CASES = {
     'metrics': ([], ''),
     'overview': ([], ''),
     'pack': ([], ''),
+    'patches': ([], ''),
     'surface': ([], ''),
     'testability': ([], ''),
     'trace': (['--from', 'serve'], '?from=serve'),
@@ -118,7 +119,7 @@ def branchy(x):
 # A retired noun's note names the spelling used (``reveal trace`` vs ``trace://``), so it differs
 # between the two spellings by design. The rows are lifted here so the rest of the answer is
 # compared byte for byte; test_a_retired_nouns_spellings_differ_only_by_their_own_note puts them back.
-RETIRED_NOUN_ROWS = ('subcommand:trace', 'scheme:trace')
+RETIRED_NOUN_ROWS = ('subcommand:trace', 'scheme:trace', 'subcommand:testability', 'scheme:testability')
 
 
 @pytest.fixture
@@ -295,12 +296,13 @@ def test_a_harmless_warning_is_shown_and_never_makes_a_complete_answer_fail(proj
     assert_equal_answers(noun, *answers)
 
 
-def test_a_retired_nouns_spellings_differ_only_by_their_own_note(project, monkeypatch):
-    """trace (BACK-2066 slice D): each spelling carries its own retired_spelling warning and note;
-    without them the two answers are equal."""
+@pytest.mark.parametrize('noun', ['trace', 'testability'])
+def test_a_retired_nouns_spellings_differ_only_by_their_own_note(project, monkeypatch, noun):
+    """trace (BACK-2066 slice D) and testability (BACK-2160): each spelling carries its own retired_spelling
+    warning and note; without them the two answers are equal."""
     monkeypatch.undo()
     monkeypatch.chdir(project.parent)
-    a, b = run('trace', 'cli', '--format', 'json'), run('trace', 'uri', '--format', 'json')
+    a, b = run(noun, 'cli', '--format', 'json'), run(noun, 'uri', '--format', 'json')
     assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
     left, right = json.loads(a.stdout), json.loads(b.stdout)
     fields = []
@@ -308,10 +310,10 @@ def test_a_retired_nouns_spellings_differ_only_by_their_own_note(project, monkey
         warnings = doc['meta']['warnings']
         fields.append([w['field'] for w in warnings if w.get('code') == 'retired_spelling'])
         doc['meta']['warnings'] = [w for w in warnings if w.get('code') != 'retired_spelling']
-    assert fields == [['subcommand:trace'], ['scheme:trace']]
-    assert_equal_answers('trace', left, right)
+    assert fields == [[f'subcommand:{noun}'], [f'scheme:{noun}']]
+    assert_equal_answers(noun, left, right)
     notes = [[line for line in r.stderr.splitlines() if 'deprecated' in line] for r in (a, b)]
-    assert notes == [[f'note: {RETIREMENTS["subcommand:trace"].text}'], [f'note: {RETIREMENTS["scheme:trace"].text}']]
+    assert notes == [[f'note: {RETIREMENTS[f"subcommand:{noun}"].text}'], [f'note: {RETIREMENTS[f"scheme:{noun}"].text}']]
 
 
 def test_the_comparison_fails_on_a_changed_count_or_dropped_diagnostic():

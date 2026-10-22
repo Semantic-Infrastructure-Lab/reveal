@@ -41,7 +41,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **reveal://** | none | N/A |
 
 `sort`, `limit` and `offset` are applied by `ast://`, `markdown://`, `json://`, `git://` and
-`metrics://` only. `hotspots://`, `calls://`, `depends://` and `testability://` cap with `top=N`
+`metrics://` only. `hotspots://`, `calls://`, `depends://` and `patches://?view=pressure` cap with `top=N`
 (the `--limit N` flag maps to it), and other adapters answer `Unknown query param ... ignored`.
 Every adapter that walks a directory also takes `respect_gitignore=false` (the same as `--no-gitignore`).
 

@@ -60,11 +60,12 @@ def _answer(doc):
     return doc
 
 
-QUERY = ['', '&tests=t', '&top=1', '&min_patches=1', '&include_unresolved=true']
+QUERY = ['', '&tests={repo}/t', '&top=1', '&min_patches=1', '&include_unresolved=true']
 
 
 @pytest.mark.parametrize('extra', QUERY, ids=['default', 'tests', 'top', 'min_patches', 'include_unresolved'])
 def test_the_pressure_view_is_the_testability_report(repo, extra):
+    extra = extra.format(repo=repo)
     old = run(f'testability://{repo}' + ('?' + extra.lstrip('&') if extra else ''), '--format', 'json')
     new = run(f'patches://{repo}?view=pressure{extra}', '--format', 'json')
     assert old.returncode == new.returncode == 0, old.stderr + new.stderr
@@ -89,21 +90,20 @@ def test_the_default_view_still_scans_a_test_root(repo):
     """Negative control: adding a view did not move the default. patches://<tests> is the raw scan."""
     doc = json.loads(run(f'patches://{repo}/t', '--format', 'json').stdout)
     assert doc['type'] == 'patches_scan' and doc['total_uses'] == 3
-    assert json.loads(run(f'patches://{repo}/t?view=patches', '--format', 'json').stdout)['total_uses'] == 3
 
 
 def test_pressure_only_parameters_are_not_silently_ignored_by_the_default_view(repo):
-    """tests= means nothing to the patches scan (its path is the root); the answer must say so."""
-    done = run(f'patches://{repo}/t?tests=t', '--format', 'json')
-    doc = json.loads(done.stdout)
-    assert doc['type'] == 'patches_scan'
-    assert any('tests' in json.dumps(w) for w in doc.get('meta', {}).get('warnings', []) + doc.get('warnings', [])), doc.get('meta')
+    """tests= means nothing to the patches scan (its path is the root); the answer says so."""
+    done = run(f'patches://{repo}/t?tests={repo}/t', '--format', 'json')
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout)['type'] == 'patches_scan'
+    assert "query param 'tests' has no effect on this patches:// query" in done.stderr
 
 
 def test_an_unknown_view_is_rejected(repo):
     done = run(f'patches://{repo}?view=everything', '--format', 'json')
-    assert done.returncode != 0, done.stdout
-    assert "view='everything' is not a patches view" in done.stderr
+    assert done.returncode == 2, (done.returncode, done.stdout, done.stderr)
+    assert "view must be one of ('pressure',), got 'everything'" in done.stderr
     assert json.loads(done.stdout)['error']
 
 
@@ -114,3 +114,10 @@ def test_a_missing_suite_is_the_same_failure_in_both_spellings(tmp_path):
     new = run(f'patches://{root}?view=pressure', '--format', 'json')
     assert old.returncode == new.returncode
     assert _answer(json.loads(old.stdout)) == _answer(json.loads(new.stdout))
+
+
+def test_an_unknown_group_is_rejected_not_silently_target(repo):
+    """patches used to answer any unknown group= as target; it is a declared choice now (a correction)."""
+    done = run(f'patches://{repo}/t?group=everything', '--format', 'json')
+    assert done.returncode == 2, (done.returncode, done.stderr)
+    assert "group must be one of ('target', 'test', 'file'), got 'everything'" in done.stderr

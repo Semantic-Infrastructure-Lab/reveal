@@ -147,12 +147,13 @@ def test_output_owners_join_exact_failure_and_recovery_counts(tmp_path, owner):
 
 @pytest.mark.parametrize('owner', ['testability', 'patches'])
 @pytest.mark.parametrize('output_format', ['text', 'json'])
-def test_actual_output_discloses_failure_once_without_changing_legacy_exit(tmp_path, owner, output_format):
+def test_actual_output_discloses_failure_once_and_exits_incomplete(tmp_path, owner, output_format):
     src = _write(tmp_path / 'src' / 'ok.py', 'VALUE=1\n')
     target = _write(tmp_path / 'tests' / 'test_bad.py', 'def broken(:\n')
     uri = f'testability://{src.parent}?tests={target.parent}' if owner == 'testability' else f'patches://{target.parent}'
     result = _run_reveal_direct(uri, '--format', output_format)
-    assert result.returncode == (3 if owner == 'testability' else 0)
+    # patches adopted the declared D6 path with ?view=pressure (BACK-2160): a lost test file is exit 3 in both owners.
+    assert result.returncode == 3
     if output_format == 'json':
         payload = json.loads(result.stdout)
         failed, = _warning(payload, 'analysis_failed')
@@ -191,7 +192,7 @@ def test_policy_exclusions_stay_outside_patch_failure_evidence(tmp_path):
 def test_patches_empty_text_describes_available_observations(tmp_path, filename, source):
     target = _write(tmp_path / filename, source)
     result = _run_reveal_direct(f'patches://{target}', '--format', 'text')
-    assert result.returncode == 0
+    assert result.returncode == (3 if target.suffix == '.py' else 0)  # the unparsable file is a lost observation
     if target.suffix == '.py':
         assert 'No patch pressure groups in the available observations.' in result.stdout
         assert 'No patch pressure groups found.' not in result.stdout

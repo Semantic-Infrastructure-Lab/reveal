@@ -983,13 +983,13 @@ reveal scaffold rule B007 "too-long"          # new quality rule stub
 
 ---
 
-## reveal testability — Testability Pressure Finder
+## reveal patches --view pressure — Testability Pressure Finder (was reveal testability)
 
 Joins test patch usage with production boundary fan-out to find review targets
 where repeated mocking and runtime-boundary complexity overlap — not "mocking
 is bad," but where patching and boundary fan-out compound.
 
-Both CLI and URI spellings return `testability_report`. Direct requests reject
+`reveal patches PATH --view pressure` and `patches://PATH?view=pressure` return `testability_report`; `reveal testability` and `testability://` are retired spellings of the same answer and print a replaced-by note. Direct requests reject
 missing explicit test roots before scanning (exit 2), retain required evidence
 loss before display cuts (exit 3), and keep genuine clean zero results and
 omitted-tests non-applicability at exit 0. Only `--fail-on none` is supported.
@@ -998,7 +998,7 @@ See the full guide for uncapped observation counts, path encoding and artifacts.
 ### Usage
 
 ```
-reveal testability [PATH] [--tests PATHS...] [--top N] [--min-patches N] [--min-categories N]
+reveal patches [PATH] --view pressure [--tests PATHS...] [--top N] [--min-patches N] [--min-categories N]
 ```
 
 ### CLI Flags
@@ -1015,9 +1015,9 @@ reveal testability [PATH] [--tests PATHS...] [--top N] [--min-patches N] [--min-
 ### Examples
 
 ```bash
-reveal testability src --tests tests
-reveal testability . --tests tests integration_tests --top 20
-reveal testability src --tests tests --format json
+reveal patches src --view pressure --tests tests
+reveal patches . --view pressure --tests tests integration_tests --top 20
+reveal patches src --view pressure --tests tests --format json
 ```
 
 ### See Also

@@ -246,7 +246,8 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal metrics [path]` | Per-file lines, complexity and quality; --hotspots ranks files; --view provenance tags every file | `reveal metrics --help` |
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal contracts --help` |
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
-| `reveal testability [path]` | Test patch pressure joined with production boundary fan-out *(Python and TS/JS test suites)* | `reveal testability --help` |
+| `reveal patches [path]` | Mock/patch pressure in tests, grouped by target; --view pressure joins it with production boundary fan-out *(Python and TS/JS test suites)* | `reveal patches --help` |
+| `reveal testability [path]` | Retired: use reveal patches <path> --view pressure (the same answer); test patch pressure joined with production boundary fan-out | `reveal testability --help` |
 | `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --rank callers, --uncalled, --modules | `reveal calls --help` |
 | `reveal trace --from FUNC` | Retired: use reveal calls --callees FUNC --depth N --detail (the same walk); depth-indented narrative with side effects | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
@@ -263,7 +264,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 - Building LLM context with a token budget → `reveal pack`.
 - Tracing what a function actually does (calls + side-effects) → `reveal calls <path> --callees <func> --depth 2 --detail`.
 - Mapping the system's external boundaries → `reveal surface`.
-- Finding testability pressure → `reveal testability src --tests tests`.
+- Finding testability pressure → `reveal patches src --view pressure --tests tests`.
 - Building your own adapter, analyzer, or rule → `reveal dev new-adapter|new-analyzer|new-rule`.
 
 ---
@@ -631,12 +632,12 @@ reveal 'patches://tests?group=target&limit=20'
 reveal 'patches://tests?group=test&min=3'
 
 # Combined report: test patches + production boundary fan-out
-reveal testability src --tests tests
-reveal testability src --tests tests --top 20
-reveal testability src --tests tests --format json
+reveal patches src --view pressure --tests tests
+reveal patches src --view pressure --tests tests --top 20
+reveal patches src --view pressure --tests tests --format json
 ```
 
-**Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `patches://` shows what tests patch. `reveal testability` joins that pressure with production functions that touch network clients, persistence, filesystem state, logging, sleeps, environment/config, process exit, or mutation -- each function's own calls, classified exactly as `--sideeffects` classifies them, so the two never disagree. *(Supports Python (`unittest.mock`/`pytest`) and TypeScript/JavaScript (Jest/Vitest: `jest.mock`, `vi.mock`, `jest.spyOn`, `vi.spyOn`, `jest.fn`, `vi.fn`, `jest.replaceProperty`). Boundary fan-out half works for all languages.)*
+**Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `reveal patches <tests>` shows what tests patch. `reveal patches <src> --view pressure` joins that pressure with production functions that touch network clients, persistence, filesystem state, logging, sleeps, environment/config, process exit, or mutation -- each function's own calls, classified exactly as `--sideeffects` classifies them, so the two never disagree. *(Supports Python (`unittest.mock`/`pytest`) and TypeScript/JavaScript (Jest/Vitest: `jest.mock`, `vi.mock`, `jest.spyOn`, `vi.spyOn`, `jest.fn`, `vi.fn`, `jest.replaceProperty`). Boundary fan-out half works for all languages.)*
 
 **How to interpret it:** This is advisory. Mocking an external API, clock, certificate probe, or filesystem boundary can be correct. High signal comes from repeated private/internal patches or patch pressure that overlaps with high boundary fan-out.
 

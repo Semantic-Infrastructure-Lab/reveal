@@ -177,7 +177,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Check code complexity', 'query': 'ast://src?complexity>10', 'description': 'High complexity functions', 'output_type': 'ast_query'},
             {'goal': 'Find long functions lacking simplicity', 'query': 'ast://src?type=function&lines>50&sort=-lines', 'description': 'Large functions sorted by size — prime documentation/refactor targets', 'output_type': 'ast_query'},
             {'goal': 'Dependency health at a glance', 'query': 'deps://src', 'description': 'External packages, circular deps, unused imports — a dashboard composed from three imports:// queries, for when you want the summary not the raw graph', 'output_type': 'deps_scan'},
-            {'goal': 'Where test mocking hides real coupling', 'query': 'testability://src', 'description': 'Joins test patch/mock pressure with production boundary fan-out — over-mocked boundaries are untested boundaries', 'output_type': 'testability_report'},
+            {'goal': 'Where test mocking hides real coupling', 'query': 'patches://src?view=pressure', 'description': 'Joins test patch/mock pressure with production boundary fan-out — over-mocked boundaries are untested boundaries', 'output_type': 'testability_report'},
         ]
     },
     'infrastructure': {

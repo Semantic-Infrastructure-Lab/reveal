@@ -9,39 +9,114 @@ from reveal.adapters.base import ResourceAdapter, register_adapter, register_ren
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.testability.patches import group_patches, scan_patches
 from reveal.utils.path_utils import to_posix
-from reveal.utils.query import parse_query_params
-from reveal.utils.query_parser import ParamSpec, param_schema, param_cli_flags, whole_number
-from reveal.utils.results import ResultBuilder, note_truncation
+from reveal.utils.query_binding import bind_declared_params, boolean_value
+from reveal.utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema,
+                                       peek_query_items, whole_number)
+from reveal.utils.results import AnalysisCompleteness, ResultBuilder, note_truncation, result_execution_facts
 from reveal.utils.validation import require_path_exists
 
 from ...rendering.adapters.patches import PatchesRenderer
+from ..testability import TestabilityAdapter, _report_error, testability_report
 
 
-# Start with the two numeric controls; other fields retain their existing policy.
-_NUMERIC_PARAMS = (
-    ParamSpec('limit', 'integer', 'Maximum groups to return', 20, whole_number,
-              ('limit=20',), minimum=0, zero_policy='all', cli_flags=(('all', '1000000'),)),
-    ParamSpec('min', 'integer', 'Minimum patch count for a group', 1, whole_number,
-              ('min=3',), minimum=0, zero_policy='no minimum'),
-)
-_LIMIT, _MIN = _NUMERIC_PARAMS
+# The warning types a patch scan emits when it lost files it should have read.
+_REQUIRED_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete', 'parse_recovered'})
+
+# The declaration `reveal patches` and patches:// are both generated from (BACK-2160). The default view is the raw
+# scan of a test root; ?view=pressure is testability's report (was testability://), whose path is the production
+# root and whose test files are chosen by the shared is_test_path rule or the explicit tests= override.
+VIEWS = ('pressure',)
+GROUPS = ('target', 'test', 'file')
+
+
+def _text(value: Any) -> str:
+    return str(value)
+
+
+def _whole(value: Any) -> int:
+    """whole_number for a URI value: '2' and '2.0' are accepted, '1.5' is not (the legacy query parser
+    turned numeric strings into numbers first)."""
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except ValueError:
+            pass
+    return whole_number(value)
+
+
+_VIEW = ParamSpec('view', 'string', 'pressure: testability\'s report (was testability://), patch hotspots joined with production '
+                  'boundary fan-out; the path is then the production root. Omitted: the raw patch scan of a test root',
+                  None, _text, ('view=pressure',), choices=VIEWS, role='analysis',
+                  cli=CliBinding(('--view',), metavar='VIEW'))
+_GROUP = ParamSpec('group', 'string', 'Grouping mode: target, test, or file', 'target', _text,
+                   ('group=target',), choices=GROUPS, role='analysis', cli=CliBinding(('--group',), metavar='MODE'))
+_LIMIT = ParamSpec('limit', 'integer', 'Maximum groups to return', 20, _whole,
+                   ('limit=20',), minimum=0, zero_policy='all', role='presentation',
+                   cli=CliBinding(('--limit',), metavar='N'))
+_MIN = ParamSpec('min', 'integer', 'Minimum patch count for a group', 1, _whole,
+                 ('min=3',), minimum=0, zero_policy='no minimum', role='analysis', cli=CliBinding(('--min',), metavar='N'))
+_TARGET = ParamSpec('target', 'string', 'Filter by target substring or glob', '', _text, ('target=ssl',),
+                    role='analysis', cli=CliBinding(('--target',), metavar='PATTERN'))
+_PRIVATE = ParamSpec('private', 'boolean', 'Only include private/internal patch targets', False, boolean_value,
+                     ('private=true',), role='analysis', cli=CliBinding(('--private',), action='store_true'))
+_SUPPRESS = ParamSpec('suppress', 'boolean', 'Hide stdlib I/O noise (sys.stdout/stderr, builtins) from grouped output. '
+                      'Default: true. Raw totals always include them.', True, boolean_value, ('suppress=false',),
+                      role='analysis', cli=CliBinding(('--no-suppress',), action='store_false'))
+# The pressure view's own parameters are testability's, declared once there.
+_PRESSURE_SPECS = TestabilityAdapter.PARAM_SPECS
+PARAM_SPECS = (_VIEW, _GROUP, _LIMIT, _MIN, _TARGET, _PRIVATE, _SUPPRESS, *_PRESSURE_SPECS)
 
 
 @register_adapter('patches')
 @register_renderer(PatchesRenderer)
 class PatchesAdapter(ResourceAdapter):
-    """Adapter for exploring patch pressure in Python and TypeScript tests."""
+    """Patch pressure in Python and TypeScript tests; ?view=pressure joins it with production boundary fan-out
+    (was testability://)."""
     HELP_CLUSTER = 'Code Analysis'
 
     BUDGET_LIST_FIELD = 'groups'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
-    CLI_QUERY_FLAGS = {**param_cli_flags(_NUMERIC_PARAMS), 'respect_gitignore': 'respect_gitignore=false'}  # lifts the limit=20 group default (BACK-1379)
+    RESULT_TYPE = 'patches_scan'
+    FINDINGS_POLICIES = ('none',)  # patch pressure is advisory; there is no findings gate
+    DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    PARAM_SPECS = PARAM_SPECS
+    CLI_QUERY_FLAGS = {'all': 'limit=1000000', 'respect_gitignore': 'respect_gitignore=false'}  # lifts the limit=20 group default (BACK-1379)
 
-    def __init__(self, resource: str, query: Optional[str] = None):
-        path, query_string = resource, query
-        self.path = to_posix(Path(path).expanduser())  # '/' on every OS (BACK-1586)
-        self.query_params = parse_query_params(query_string or '', coerce=True)
+    def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
+        self.path = to_posix(Path(resource).expanduser())  # '/' on every OS (BACK-1586)
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                self.PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
         self._warn_unknown_query_params(self.query_params)  # BACK-507
+
+    @staticmethod
+    def result_type_for(params) -> str:
+        """The answer type the selected view produces, from key presence before conversion."""
+        return TestabilityAdapter.RESULT_TYPE if dict(peek_query_items(params)).get('view') == 'pressure' else 'patches_scan'
+
+    @staticmethod
+    def validate_request(params, args):
+        if dict(peek_query_items(params)).get('view') == 'pressure':
+            TestabilityAdapter.validate_request(params, args)
+
+    def answer_requirement_error(self, result, expected_type, prior_facts=None):
+        if expected_type == TestabilityAdapter.RESULT_TYPE:
+            return _report_error(result, initial=prior_facts is None)
+        return None
+
+    @staticmethod
+    def execution_facts(result):
+        """The report view is testability's. A scan that lost test files (unparsable, unreadable, an unwalkable
+        directory) is incomplete: its totals leave out uses it could not read."""
+        if isinstance(result, dict) and result.get('type') == TestabilityAdapter.RESULT_TYPE:
+            return TestabilityAdapter.execution_facts(result)
+        meta = result.get('meta') or {} if isinstance(result, dict) else {}
+        lost = any(w.get('type') in _REQUIRED_WARNINGS for w in meta.get('warnings', []) if isinstance(w, dict))
+        return result_execution_facts(
+            result, completeness=AnalysisCompleteness.INCOMPLETE if lost else AnalysisCompleteness.COMPLETE)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -82,13 +157,8 @@ class PatchesAdapter(ResourceAdapter):
             'adapter': 'patches',
             'description': 'Patch pressure scanner for Python and TypeScript/JavaScript tests',
             'uri_syntax': 'patches://<path>?group=target&limit=20',
-            'query_params': {
-                'group': {'type': 'string', 'description': 'Grouping mode: target, test, or file', 'examples': ['group=target']},
-                **param_schema(_NUMERIC_PARAMS),
-                'target': {'type': 'string', 'description': 'Filter by target substring or glob', 'examples': ['target=ssl']},
-                'private': {'type': 'boolean', 'description': 'Only include private/internal patch targets', 'examples': ['private=true']},
-                'suppress': {'type': 'boolean', 'description': 'Hide stdlib I/O noise (sys.stdout/stderr, builtins) from grouped output. Default: true. Raw totals always include them.', 'examples': ['suppress=false']},
-            },
+            'resource': PatchesAdapter.RESOURCE_SPEC.schema(),
+            'query_params': param_schema(PatchesAdapter.PARAM_SPECS),
             'elements': {},
             'supports_batch': False,
             'supports_advanced': False,
@@ -106,6 +176,18 @@ class PatchesAdapter(ResourceAdapter):
                         },
                     },
                 },
+                {
+                    'type': 'testability_report',
+                    'description': 'view=pressure: patch hotspots and boundary fan-out hotspots for a source tree (was testability://)',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'summary': {'type': 'object'},
+                            'patch_hotspots': {'type': 'array'},
+                            'boundary_hotspots': {'type': 'array'},
+                        },
+                    },
+                },
             ],
             'example_queries': [
                 {'uri': 'patches://tests', 'description': 'Summarize patch pressure', 'output_type': 'patches_scan'},
@@ -120,6 +202,8 @@ class PatchesAdapter(ResourceAdapter):
         }
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+        if _VIEW.read(self.query_params) == 'pressure':
+            return testability_report(self.path, self.query_params, bool(kwargs.get('verbose')))
         # BACK-1250: scan_patches() silently accepted a nonexistent path and
         # returned a clean, successful-looking empty result (total_uses: 0,
         # errors: [], source_type mislabeled 'file') -- indistinguishable
@@ -136,15 +220,12 @@ class PatchesAdapter(ResourceAdapter):
         # target is a mock-target name), but if that ever changes, follow
         # PackAdapter.get_structure()'s isinstance(value, bool) recovery
         # pattern for ?budget= (BACK-1180).
-        group_by = str(self.query_params.get('group') or 'target')
-        if group_by not in {'target', 'test', 'file'}:
-            group_by = 'target'
+        group_by = _GROUP.read(self.query_params)
         limit = _LIMIT.read(self.query_params)
         min_count = _MIN.read(self.query_params)
-        target_filter = str(self.query_params.get('target') or '')
-        private_only = bool(self.query_params.get('private') or False)
-        _suppress_raw = self.query_params.get('suppress')
-        suppress = str(_suppress_raw).lower() != 'false' if _suppress_raw is not None else True
+        target_filter = _TARGET.read(self.query_params)
+        private_only = _PRIVATE.read(self.query_params)
+        suppress = _SUPPRESS.read(self.query_params)
 
         ranked = group_patches(
             patches,

@@ -7,6 +7,14 @@ from ...utils.results import outcome_of
 
 
 class PatchesRenderer(BaseRenderer):
+    @classmethod
+    def render_structure(cls, result: Dict[str, Any], format: str = 'text', top=None):
+        """?view=pressure answers testability's report, rendered as testability renders it."""
+        if result.get('type') == 'testability_report':
+            from .testability import TestabilityRenderer
+            return TestabilityRenderer.render_structure(result, format, top)
+        return super().render_structure(result, format)
+
     """Render patch pressure without writing domain text to stdout."""
 
     @classmethod

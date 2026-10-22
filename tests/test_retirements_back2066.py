@@ -196,6 +196,10 @@ PRODUCTION_CASES = {
     # proves each old spelling answers like the new one.
     'scheme:stats': lambda f: [f'stats://{Path(f).parent}'],
     'scheme:classify': lambda f: [f'classify://{Path(f).parent}'],
+    # Phase 4 lane P4-B (BACK-2160): testability became patches ?view=pressure; tests/test_patches_pressure_back2160.py
+    # proves the old spellings answer like the new one.
+    'subcommand:testability': lambda f: ['testability', str(Path(f).parent), '--tests', str(Path(f).parent)],
+    'scheme:testability': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}'],
 }
 
 

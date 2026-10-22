@@ -93,14 +93,23 @@ can jump straight to the test.
 
 ## Combined Workflow
 
-Use `reveal testability` when you want patch pressure joined with production
-boundary profiles:
+Use `?view=pressure` (was `testability://`) when you want patch pressure joined with
+production boundary profiles. The path is then the production root; its test files are
+chosen by the shared `is_test_path` rule, or by `tests=` (trusted as the suite):
 
 ```bash
-reveal testability src --tests tests
-reveal testability src --tests tests --top 20
-reveal testability src --tests tests --format json
+reveal patches src --view pressure --tests tests
+reveal patches src --view pressure --tests tests --top 20
+reveal patches src --view pressure --tests tests --format json
+reveal 'patches://src?view=pressure&tests=tests,integration_tests&top=20&min_patches=3&min_categories=3&include_unresolved=true'
 ```
+
+The pressure view answers a `testability_report`. Its own parameters are `tests`, `top`
+(maximum groups per hotspot list, default 20), `min_patches` (default 3), `min_categories`
+(default 3) and `include_unresolved`; `limit`, `min`, `group`, `target`, `private` and
+`suppress` belong to the default scan, and a pressure-only parameter on the default scan
+is named in a note. `testability://` and `reveal testability` still answer, with a
+replaced-by note, until the cut release.
 
 That command points at production functions where repeated patching overlaps
 with multiple runtime boundaries such as network calls, persistence, filesystem
@@ -124,5 +133,5 @@ state, sleeps, environment reads, process exits, or mutation.
 
 - `reveal help://testability` - combined workflow guide
 - `reveal help://schemas/patches` - JSON schema
-- `reveal testability src --tests tests` - patch pressure plus boundary fan-out
+- `reveal patches src --view pressure --tests tests` - patch pressure plus boundary fan-out
 
