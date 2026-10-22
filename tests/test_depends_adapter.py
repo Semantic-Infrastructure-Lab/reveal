@@ -1940,7 +1940,7 @@ class TestDependsAdapterSwiftModuleFanout:
         root = self._spm_workspace(tmp_path)
         a = DependsAdapter(str(root / 'Sources' / 'KsApi' / 'Service.swift'))
         a.get_structure()
-        assert a._unresolved_intra == 0
+        assert a._resolution.unresolved_intra == 0
 
     def test_module_with_no_importers_reports_zero_with_note(self, tmp_path):
         """Standalone is imported by nobody → 0 dependents, and the Swift
@@ -2042,7 +2042,7 @@ class TestDependsAdapterSwiftModuleFanout:
         root = self._custom_path_workspace(tmp_path)
         a = DependsAdapter(str(root / 'Sources' / 'Schema' / 'User.swift'))
         a.get_structure()
-        assert a._unresolved_intra == 0
+        assert a._resolution.unresolved_intra == 0
 
     def test_manifest_dependency_reference_not_a_declaration(self, tmp_path):
         """A `.target(name: "Api")` nested in a testTarget's dependencies: is a
@@ -2050,9 +2050,10 @@ class TestDependsAdapterSwiftModuleFanout:
         located `Api` module. Only the real target dir maps."""
         from reveal.adapters.depends import DependsAdapter
         root = self._custom_path_workspace(tmp_path)
-        a = DependsAdapter(str(root))
-        files, _ = a._discover_files(root, frozenset({'.swift'}))
-        idx = a._build_resolution_indices(files, root)
+        from reveal.analyzers.imports.resolution import ProjectResolver
+        resolver = ProjectResolver()
+        files, _ = resolver._discover_files(root, frozenset({'.swift'}))
+        idx = resolver._build_resolution_indices(files, root)
         # Every Api-module file must be a real file under Sources/ (the path:
         # override), never a phantom from the dependency reference.
         for p in idx.module_index['Api']:
@@ -2106,7 +2107,7 @@ class TestDependsAdapterSwiftManifestTargetNameHonestDecline:
         root = self._workspace(tmp_path)
         a = DependsAdapter(str(root / 'Sources' / 'App' / 'Main.swift'))
         a.get_structure()
-        assert a._unresolved_intra >= 1
+        assert a._resolution.unresolved_intra >= 1
 
     def test_known_external_module_still_no_false_decline(self, tmp_path):
         """Widening project_namespaces with manifest target names must not
@@ -2134,7 +2135,7 @@ class TestDependsAdapterSwiftManifestTargetNameHonestDecline:
         _write(root / 'Sources' / 'App' / 'Other.swift', 'import Foundation\n')
         a = DependsAdapter(str(root / 'Sources' / 'App' / 'Other.swift'))
         a.get_structure()
-        assert a._unresolved_intra == 0
+        assert a._resolution.unresolved_intra == 0
 
 
 class TestRelativeFromImportMixedSymbolSubmodule:

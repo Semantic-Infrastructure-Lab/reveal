@@ -9,6 +9,7 @@ from conftest import _run_reveal_direct as run
 from reveal.adapters import depends
 from reveal.adapters.imports import ImportsAdapter
 from reveal.analyzers.imports import generic, service
+from reveal.analyzers.imports.resolution import ProjectResolver
 
 pytestmark = pytest.mark.component
 
@@ -42,7 +43,7 @@ def fault(monkeypatch, root, cores, mode, *, unknown=False):
     real_scandir = os.scandir
     real_iterdir = Path.iterdir
     real_discover = service.discover
-    real_load = depends.DependsAdapter._build_load_path_roots
+    real_load = ProjectResolver._build_load_path_roots
 
     def manifests(*args, **kwargs):
         previous = state['manifest']; state['manifest'] = True
@@ -80,7 +81,7 @@ def fault(monkeypatch, root, cores, mode, *, unknown=False):
     monkeypatch.setattr(os, 'scandir', scandir)
     monkeypatch.setattr(Path, 'iterdir', iterdir)
     monkeypatch.setattr(service, 'discover', discover)
-    monkeypatch.setattr(depends.DependsAdapter, '_build_load_path_roots', staticmethod(load))
+    monkeypatch.setattr(ProjectResolver, '_build_load_path_roots', staticmethod(load))
     return state
 
 

@@ -608,5 +608,8 @@ Import graph discovery/resolution now has a public analysis-layer service in
 uses the existing file-index walker; `resolve_graph` updates the complete
 `ImportAnalysis` artifact. `resolve_primary` preserves imports' startup-cycle policy;
 `resolve_targets` preserves depends' multi-target Python imports. Both use the same
-extractor dispatch. Keep depends' namespace/member/module fallback policies explicit;
-this first migration does not merge its full indexing engine or I002.
+extractor dispatch. Depends' project-wide fallback cascade (namespace, member, Swift
+module, Zeitwerk and PHP-constant indexes, gemspec load paths, the honest-decline
+counters) is `analyzers/imports/resolution.py`: `resolve_project(ScanScope)` returns a
+`ProjectResolution` record that `depends://` presents. imports:// and I002 do not use the
+cascade yet (BACK-1054).

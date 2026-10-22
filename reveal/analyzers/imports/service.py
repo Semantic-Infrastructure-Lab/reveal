@@ -3,6 +3,7 @@
 Discovery stays in the shared file-index walker. This module owns graph assembly
 and extractor resolution dispatch, rather than loading a resource adapter in the
 analysis layer. Extraction/cache ownership remains with existing callers in this pilot.
+The project-wide fallback cascade depends:// answers from is ``resolution.py``.
 """
 from contextlib import contextmanager
 from contextvars import ContextVar

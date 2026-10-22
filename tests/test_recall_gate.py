@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from reveal.adapters.depends import DependsAdapter
+from reveal.analyzers.imports.resolution import ProjectResolver
 
 pytestmark = pytest.mark.component
 SCRIPTS = Path(__file__).resolve().parent.parent / 'scripts'
@@ -201,17 +202,17 @@ def test_a_reveal_side_loss_is_measured_and_fails_the_gate(python_corpus, monkey
     # pkg/b.py and the gate must see the miss; drop all of them and it must refuse a zero.
     root, entry = python_corpus
     baseline = gate.measure(entry, root)
-    real = DependsAdapter._resolve_statement_edges
+    real = ProjectResolver._resolve_statement_edges
 
     def lossy(self, stmt, file_path, *args, **kwargs):
         return None if file_path.name == 'b.py' else real(self, stmt, file_path, *args, **kwargs)
 
-    monkeypatch.setattr(DependsAdapter, '_resolve_statement_edges', lossy)
+    monkeypatch.setattr(ProjectResolver, '_resolve_statement_edges', lossy)
     measured = gate.measure(entry, root)
     assert measured['recall'] == 0.75
     assert measured['differences'] == [{'target': 'pkg/a.py', 'missed': ['pkg/b.py'], 'extra': []}]
     assert gate.regressions({'py': measured}, {'py': baseline}) == ['py: recall dropped 100.000000% -> 75.000000%']
-    monkeypatch.setattr(DependsAdapter, '_resolve_statement_edges', lambda *args, **kwargs: None)
+    monkeypatch.setattr(ProjectResolver, '_resolve_statement_edges', lambda *args, **kwargs: None)
     with pytest.raises(RuntimeError, match='zero oracle edges'):
         gate.measure(entry, root)
 
@@ -457,10 +458,10 @@ def test_compiler_oracle_resolves_aliases_barrels_dynamic_and_js(typescript_corp
 def test_compiler_oracle_lost_edge_fails_the_existing_gate(typescript_corpus, monkeypatch):
     root, entry = typescript_corpus
     baseline = gate.measure(entry, root)
-    real = DependsAdapter._resolve_statement_edges
+    real = ProjectResolver._resolve_statement_edges
     def lossy(self, stmt, file_path, *args, **kwargs):
         return None if file_path.name == 'use.tsx' else real(self, stmt, file_path, *args, **kwargs)
-    monkeypatch.setattr(DependsAdapter, '_resolve_statement_edges', lossy)
+    monkeypatch.setattr(ProjectResolver, '_resolve_statement_edges', lossy)
     current = gate.measure(entry, root)
     assert current['recall'] == .8
     assert gate.regressions({'ts': current}, {'ts': baseline}) == ['ts: recall dropped 100.000000% -> 80.000000%']

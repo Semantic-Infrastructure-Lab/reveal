@@ -78,10 +78,6 @@
   "reveal/adapters/calls/index.py::_REFERENCE_CACHE": {
    "owner": "validated"
   },
-  "reveal/adapters/depends.py::DependsAdapter._ruby_inventory_roots_seen": {
-   "owner": "process-exempt",
-   "reason": "per adapter instance (paths); dies with the instance"
-  },
   "reveal/adapters/factory.py::_legacy_init_warned": {
    "owner": "process-exempt",
    "reason": "warn-once flag: adapter class names already warned about"
@@ -126,6 +122,10 @@
   "reveal/analyzers/imports/python.py::_python_project_inventory": {
    "owner": "request",
    "holds": "plain"
+  },
+  "reveal/analyzers/imports/resolution.py::ProjectResolver._ruby_inventory_roots_seen": {
+   "owner": "process-exempt",
+   "reason": "per resolver instance (paths); dies with the instance"
   },
   "reveal/analyzers/imports/rust.py::_rust_crate_inventory": {
    "owner": "request",

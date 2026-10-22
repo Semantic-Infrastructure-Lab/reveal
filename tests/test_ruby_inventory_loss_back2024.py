@@ -12,6 +12,7 @@ import pytest
 from conftest import _run_reveal_direct as run
 from reveal.adapters.depends import DependsAdapter
 from reveal.analyzers.imports import generic, service
+from reveal.analyzers.imports.resolution import ProjectResolver
 from reveal.mcp_server import _ToolFailure, reveal_query
 
 
@@ -42,7 +43,7 @@ def inventory_fault(root, mode, *, lib_error=PermissionError, denied=None):
     original_manifest = generic.load_path_manifests
     original_scandir, original_iterdir = os.scandir, Path.iterdir
     original_discover = service.discover
-    original_load = DependsAdapter._build_load_path_roots
+    original_load = ProjectResolver._build_load_path_roots
     active = []
     events, discoveries, loads = [], [], []
     denied_path = (denied or root / ('core' if mode == 'manifest' else 'core/lib')).resolve()
@@ -79,7 +80,7 @@ def inventory_fault(root, mode, *, lib_error=PermissionError, denied=None):
 
     with patch.object(generic, 'load_path_manifests', manifests), patch('os.scandir', scandir), \
             patch.object(Path, 'iterdir', iterdir), patch.object(service, 'discover', discover), \
-            patch.object(DependsAdapter, '_build_load_path_roots', side_effect=load):
+            patch.object(ProjectResolver, '_build_load_path_roots', side_effect=load):
         yield events, discoveries, loads
 
 

@@ -9,9 +9,9 @@ from unittest.mock import patch
 import pytest
 
 from conftest import _run_reveal_direct as run
-from reveal.adapters import depends as depends_module
 from reveal.adapters.depends import DependsAdapter
-from reveal.analyzers.imports import service
+from reveal.analyzers.imports import resolution, service
+from reveal.analyzers.imports.resolution import ProjectResolver
 from reveal.analyzers.imports.file_index import load_path_manifests
 from reveal.utils.exclusions import exclusion_scope
 
@@ -37,7 +37,7 @@ def tree(root, *, positive_other=False):
 
 @contextmanager
 def manifest_fault(root, *, unknown=False, combined=False, denied_path=None):
-    real_manifest, real_scandir, real_discover = depends_module.load_path_manifests, os.scandir, service.discover
+    real_manifest, real_scandir, real_discover = resolution.load_path_manifests, os.scandir, service.discover
     active = []
     events, discoveries = [], []
     denied = (denied_path or root / 'core').resolve()
@@ -62,7 +62,7 @@ def manifest_fault(root, *, unknown=False, combined=False, denied_path=None):
         discoveries.append(files)
         return files
 
-    with patch.object(depends_module, 'load_path_manifests', manifests), patch('os.scandir', scandir), \
+    with patch.object(resolution, 'load_path_manifests', manifests), patch('os.scandir', scandir), \
             patch.object(service, 'discover', discover):
         yield events, discoveries
 
@@ -242,7 +242,7 @@ def test_reserved_noise_is_relative_to_root_and_never_attempted(tmp_path):
 def test_default_manifest_helpers_keep_list_and_positional_call_contracts(tmp_path):
     target, manifest, consumer = tree(tmp_path)
     assert load_path_manifests(tmp_path, '*.gemspec') == [manifest]
-    roots = DependsAdapter._build_load_path_roots([target, consumer], tmp_path)
+    roots = ProjectResolver._build_load_path_roots([target, consumer], tmp_path)
     assert isinstance(roots, list) and roots == [tmp_path / 'core' / 'lib']
 
 
@@ -250,6 +250,6 @@ def test_non_ruby_source_does_not_run_manifest_discovery(tmp_path):
     write(tmp_path / 'pyproject.toml', '[project]\nname="python"\n')
     target = write(tmp_path / 'target.py', 'VALUE = 1\n')
     write(tmp_path / 'consumer.py', 'import target\n')
-    with patch.object(depends_module, 'load_path_manifests', wraps=depends_module.load_path_manifests) as manifests:
+    with patch.object(resolution, 'load_path_manifests', wraps=resolution.load_path_manifests) as manifests:
         result = DependsAdapter(str(target)).get_structure()
     assert result['count'] == 1 and manifests.call_count == 0

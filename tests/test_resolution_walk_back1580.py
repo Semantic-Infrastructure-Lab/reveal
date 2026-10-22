@@ -6,8 +6,8 @@ tested the absolute path, so a project under ~/.cache/ lost every gemspec.
 """
 import pytest
 
-from reveal.adapters.depends import DependsAdapter
 from reveal.adapters.imports import ImportsAdapter
+from reveal.analyzers.imports.resolution import ProjectResolver
 from reveal.analyzers.imports.file_index import (
     basename_index, discover_import_files, load_path_manifests,
 )
@@ -37,7 +37,7 @@ def test_imports_and_depends_see_the_same_graph_files(project):
     exts = frozenset({'.py', '.pyi', '.ts'})
     with exclusion_scope(project, ['b.py']):
         imports, _ = ImportsAdapter._discover_candidate_files(project, exts, get_code_extensions())
-        depends, _ = DependsAdapter()._discover_files(project, exts)
+        depends, _ = ProjectResolver()._discover_files(project, exts)
     expected = ['.github/scripts/ci.py', 'src/a.py', 'src/app.ts']
     assert _rel(project, imports) == expected
     assert _rel(project, depends) == expected

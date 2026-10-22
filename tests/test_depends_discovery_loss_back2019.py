@@ -7,6 +7,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from reveal.adapters.depends import DependsAdapter, DependsRenderer
+from reveal.analyzers.imports.resolution import ProjectResolver
 from reveal.utils.exclusions import exclusion_scope
 
 pytestmark = pytest.mark.component
@@ -199,7 +200,7 @@ def test_repeated_actual_directory_events_have_bounded_unique_display(tmp_path, 
     assert 'and 2 more' in entry['message']
     assert result['warning'].count('identified directory enumeration(s) failed') == 1
     # The established helper remains a pair even when its FileSet had failures.
-    files, index = adapter._discover_files(root, frozenset({'.py'}))
+    files, index = ProjectResolver()._discover_files(root, frozenset({'.py'}))
     assert files == [target] and 'target.py' in index
 
 

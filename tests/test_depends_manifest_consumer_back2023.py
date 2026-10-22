@@ -7,7 +7,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from reveal.adapters import depends
-from reveal.analyzers.imports import service
+from reveal.analyzers.imports import resolution, service
 from reveal.utils.exclusions import exclusion_scope
 from reveal.utils.path_utils import to_posix
 
@@ -32,7 +32,7 @@ def ruby(root, *, positive=False):
 
 def fault(monkeypatch, root, *, unknown=False, combined=False):
     state = {'manifest': False, 'events': [], 'discoveries': []}
-    real_loader = depends.load_path_manifests
+    real_loader = resolution.load_path_manifests
     real_scandir = os.scandir
     real_discover = service.discover
 
@@ -58,7 +58,7 @@ def fault(monkeypatch, root, *, unknown=False, combined=False):
         state['discoveries'].append(files)
         return files
 
-    monkeypatch.setattr(depends, 'load_path_manifests', loader)
+    monkeypatch.setattr(resolution, 'load_path_manifests', loader)
     monkeypatch.setattr(os, 'scandir', scandir)
     monkeypatch.setattr(service, 'discover', discover)
     return state
@@ -183,7 +183,7 @@ def test_unrelated_sibling_and_nonruby_do_not_acquire_manifest_loss(tmp_path, mo
     python = write(pyroot / 'target.py', 'VALUE=1\n')
     write(pyroot / 'consumer.py', 'import target\n')
     (pyroot / '.git').mkdir()
-    original = depends.load_path_manifests
+    original = resolution.load_path_manifests
     calls = []
 
     def loader(*args, **kwargs):
@@ -192,7 +192,7 @@ def test_unrelated_sibling_and_nonruby_do_not_acquire_manifest_loss(tmp_path, mo
     with monkeypatch.context() as context:
         fault(context, root)
         assert sibling.get_structure() == clean
-    monkeypatch.setattr(depends, 'load_path_manifests', loader)
+    monkeypatch.setattr(resolution, 'load_path_manifests', loader)
     assert depends.DependsAdapter(str(python)).get_structure()['count'] == 1
     assert calls == []
 

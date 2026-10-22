@@ -7,12 +7,12 @@
   "reveal/adapters/ast/nav_varflow.py::VarFlowWalker._walk_call": 24,
   "reveal/adapters/ast/surface_rules.py::_call_fields": 23,
   "reveal/adapters/claude/handlers/post_process.py::_post_process_session_list": 22,
-  "reveal/adapters/depends.py::DependsAdapter._index_one_file": 25,
   "reveal/adapters/help.py::HelpAdapter._search_help": 24,
   "reveal/adapters/pack.py::_compute_priority": 27,
   "reveal/adapters/xlsx.py::XlsxAdapter._parse_xmla_tables": 25,
   "reveal/analyzers/_js_function_values.py::JSFunctionValueMixin._iter_function_values": 25,
-  "reveal/analyzers/imports/javascript.py::_get_tsconfig_aliases": 25
+  "reveal/analyzers/imports/javascript.py::_get_tsconfig_aliases": 25,
+  "reveal/analyzers/imports/resolution.py::ProjectResolver._index_one_file": 25
  },
  "threshold": 21,
  "watch": {
@@ -78,7 +78,6 @@
   "reveal/adapters/cpanel/adapter.py::CpanelAdapter._get_ssl_structure": 18,
   "reveal/adapters/cpanel/renderer.py::CpanelRenderer._render_acl": 16,
   "reveal/adapters/depends.py::DependsAdapter._format_file_dependents": 21,
-  "reveal/adapters/depends.py::DependsAdapter._index_one_file": 25,
   "reveal/adapters/domain/dns.py::check_ns_authority": 19,
   "reveal/adapters/domain/renderer.py::DomainRenderer._render_domain_ns_audit": 16,
   "reveal/adapters/git/adapter.py::GitAdapter._warn_view_scoped_query_params": 16,
@@ -118,6 +117,7 @@
   "reveal/analyzers/imports/javascript.py::_load_workspace_package_globs": 17,
   "reveal/analyzers/imports/javascript.py::_resolve_exports_subpath": 19,
   "reveal/analyzers/imports/python.py::_parse_pyproject_dependency_names": 16,
+  "reveal/analyzers/imports/resolution.py::ProjectResolver._index_one_file": 25,
   "reveal/analyzers/imports/service.py::resolve_graph": 16,
   "reveal/analyzers/imports/unused.py::unused_entries": 16,
   "reveal/analyzers/markdown.py::MarkdownAnalyzer._extract_related": 16,
