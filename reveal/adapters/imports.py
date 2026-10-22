@@ -1058,6 +1058,45 @@ class ImportsRenderer:
         print()
 
     @staticmethod
+    def _render_file_importers(result: dict, resource: str) -> None:
+        rows = result.get('importers', [])
+        print(f"\nImporters of {result.get('target', resource)}: {result.get('count', len(rows))}")
+        print()
+        ImportsRenderer._render_edge_rule(result)
+        for row in rows:
+            where = f":{row['line']}" if row.get('line') else ''
+            tags = ', '.join(filter(None, [', '.join(row.get('via') or []), ', '.join(row.get('scope') or [])]))
+            module = f"  {row['module']}" if row.get('module') else ''
+            print(f"  {row['file']}{where}{module}" + (f"  [{tags}]" if tags else ''))
+        if not rows:
+            print('  No importers found.')
+        print()
+
+    @staticmethod
+    def _render_importers(result: dict, resource: str, verbose: bool) -> None:
+        """Render ?importers: one file's importers (module_importers) or every module's (importer_summary)."""
+        if result.get('type') == 'module_importers':
+            ImportsRenderer._render_file_importers(result, resource)
+            return
+        entries = result.get('entries', [])
+        shown = entries if verbose else entries[:20]
+        print(f"\nImporters: {result.get('source', resource)}")
+        print(f"Modules with importers: {result.get('total', len(entries))}")
+        print()
+        ImportsRenderer._render_edge_rule(result)
+        for entry in shown:
+            print(f"  {entry['file']}  ({entry['fan_in']})")
+            for importer in entry['importers'] if verbose else entry['importers'][:5]:
+                print(f"      {importer}")
+            if not verbose and len(entry['importers']) > 5:
+                print(f"      ... and {len(entry['importers']) - 5} more")
+        if len(entries) > len(shown):
+            print(f"\n  ... and {len(entries) - len(shown)} more modules (--verbose or --format json lists all)")
+        if not entries:
+            print('  No module under this path has an importer.')
+        print()
+
+    @staticmethod
     def _render_entrypoints(result: dict, resource: str) -> None:
         """Render ?entrypoints output — files with fan-in=0 (nothing imports them)."""
         entries = result.get('entries', [])
@@ -1167,6 +1206,8 @@ class ImportsRenderer:
                 ImportsRenderer._render_entrypoints(result, resource)
             elif result_type == 'components':
                 ImportsRenderer._render_components(result, resource)
+            elif result_type in ('module_importers', 'importer_summary'):
+                ImportsRenderer._render_importers(result, resource, verbose)
             else:
                 ImportsRenderer._render_import_summary(result, resource)
         else:
