@@ -31,7 +31,6 @@ from typing import Any
 import yaml
 
 from recall_oracles import ORACLES, Scope, tracked_files, build_python_calls_oracle
-from reveal.adapters.depends import DependsAdapter
 from reveal.main import main as reveal_main
 from reveal.utils.request_cache import reset_request_caches
 from reveal import __version__
@@ -42,14 +41,13 @@ BASELINE = MANIFEST.with_name('recall_baseline.json')
 POPULATION_FIELDS = ('oracle', 'sha', 'targets', 'oracle_edges', 'coverage')
 
 
-_PARTIAL_PARSE = re.compile(r'(\d+) file\(s\) parsed with errors')
-# The one parameter combination the import oracles define truth for, and that depends:// applies:
+# The one parameter combination the import oracles define truth for, and that the importer views apply by default:
 # every static edge, function-level and tests included, TYPE_CHECKING excluded (BACK-2077).
 SCORED_RULE = {'lazy': 'include', 'tests': 'included', 'type_checking': 'excluded'}
 # The combinations the engine states but this gate cannot score through the public path yet (BACK-2062).
 DECLINED = (
-    {'combination': 'lazy=exclude', 'reason': 'depends:// takes no &lazy and imports://?rank=fan-in&lazy= returns '
-     'counts, not importers, so the public path lists no importers per edge view. Oracles: the TypeScript oracle '
+    {'combination': 'lazy=exclude', 'reason': 'imports://?importers always lists the all-edges view (&lazy changes only the '
+     'counting views, e.g. ?rank=fan-in, which return counts, not importers), so the public path lists no importers per edge view. Oracles: the TypeScript oracle '
      'emits no scope (BACK-2064), rust-use is a regex that cannot tell a fn-local use (BACK-2079), python-ast does '
      'not tag it yet; C, C++, Go and Java have no function-scope import'},
     {'combination': 'lazy=only', 'reason': 'as lazy=exclude'},
@@ -57,18 +55,7 @@ DECLINED = (
 )
 
 
-@contextlib.contextmanager
-def _scan_cap(cap: int):
-    """The one knob without a per-request spelling: depends:// reads the class default."""
-    before = DependsAdapter._SCAN_FILE_CAP
-    DependsAdapter._SCAN_FILE_CAP = cap
-    try:
-        yield
-    finally:
-        DependsAdapter._SCAN_FILE_CAP = before
-
-
-def _cli_json(uri: str, label: str) -> dict[str, Any]:
+def _cli_json(uri: str, label: str, *, incomplete_ok: bool = False) -> dict[str, Any]:
     """One request through ``reveal.main.main`` with the argv a user would type, read back as JSON.
 
     Flag routing, the project-root choice, the rendered path spelling and the disclosures are the
@@ -87,22 +74,24 @@ def _cli_json(uri: str, label: str) -> dict[str, Any]:
         result = json.loads(out.getvalue())
     except json.JSONDecodeError as exc:
         raise RuntimeError(f'{scheme}:// printed no JSON for {label} (exit {code}): {err.getvalue()[:200]}') from exc
-    if code or result.get('error'):
+    # Exit 3 is 'complete answer, incomplete analysis' (a file parsed with errors): the caller qualifies it.
+    if (code and not (incomplete_ok and code == 3)) or result.get('error'):
         raise RuntimeError(f'{scheme}:// failed for {label} (exit {code}): {result.get("error") or err.getvalue()[:200]}')
     return result
 
 
-def _depends_request(target: Path, scan: Path) -> dict[str, Any]:
-    """One ``depends://`` request; a capped scan raises like any other failed answer."""
-    result = _cli_json(f'depends://{target.as_posix()}?root={urllib.parse.quote(scan.as_posix(), safe="/:")}',
-                       target.name)
-    if result.get('metadata', {}).get('scan_capped'):
+def _importers_request(target: Path, scan: Path, cap: int | None) -> dict[str, Any]:
+    """One ``imports://<target>?importers`` request at the scan root; a capped scan raises like any
+    other failed answer. ``cap`` is the corpus's own ``scan_file_cap``, else the engine's default."""
+    query = f'importers&root={urllib.parse.quote(scan.as_posix(), safe="/:")}' + (f'&max_files={cap}' if cap else '')
+    result = _cli_json(f'imports://{target.as_posix()}?{query}', target.name, incomplete_ok=True)
+    if (result.get('metadata', {}).get('scan_budget') or {}).get('capped'):
         raise RuntimeError('Reveal scan was capped; measurement unavailable')
     rule = result.get('edge_rule') or {}
     applied = {key: rule.get(key) for key in SCORED_RULE}
     if applied != SCORED_RULE:
         shown = ', '.join(f'{key}={value!r}' for key, value in applied.items() if value != SCORED_RULE[key])
-        raise RuntimeError(f'depends:// answered under rule {shown}; the gate scores {SCORED_RULE}')
+        raise RuntimeError(f'imports:// answered under rule {shown}; the gate scores {SCORED_RULE}')
     return result
 
 
@@ -113,39 +102,43 @@ def _edge_rule(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _partial_files(result: dict[str, Any]) -> int:
-    """The partial-parse count, which the public JSON carries only in the warning text."""
-    warning = result.get('warning') or ''
-    found = _PARTIAL_PARSE.search(warning)
-    if 'parsed with errors' in warning and not found:
-        raise RuntimeError(f'Unrecognized partial-parse disclosure: {warning[:200]}')
-    return int(found.group(1)) if found else 0
+    """Files parsed with errors, from the metadata ``imports://`` prints them from (failed minus lost, as
+    its own summary computes it). A file lost to a dead worker or unreadable is not a partial parse:
+    the answer is smaller than the tree's, so the gate refuses it."""
+    metadata = result.get('metadata') or {}
+    lost, failed = metadata.get('files_lost_count'), metadata.get('files_failed_count')
+    if not isinstance(lost, int) or not isinstance(failed, int):
+        raise RuntimeError('imports:// answer carries no files_failed_count/files_lost_count; cannot qualify it')
+    if lost:
+        raise RuntimeError(f'imports:// lost {lost} file(s) from its answer; measurement unavailable')
+    return failed
 
 
-def rendered_dependents(scan: Path, target: Path) -> dict[str, Any]:
-    """Importers of one file as ``depends://<file>`` prints them: the package view Go needs, where an
-    import names a directory. It builds the whole graph per request, so use it only where the
+def rendered_dependents(scan: Path, target: Path, cap: int | None) -> dict[str, Any]:
+    """Importers of one file as ``imports://<file>?importers`` prints them: the package view Go needs, where
+    an import names a directory. It builds the whole graph per request, so use it only where the
     directory form below cannot answer."""
-    result = _depends_request(target, scan)
-    dependents = result['dependents']
-    if len(dependents) != result['count']:
-        raise RuntimeError(f'depends:// answer truncated for {target.name}: {len(dependents)} of {result["count"]} shown')
-    return {'importers': {Path(os.path.normpath(scan / dep['file'])) for dep in dependents},
+    result = _importers_request(target, scan, cap)
+    importers = result['importers']
+    if len(importers) != result['count']:
+        raise RuntimeError(f'imports:// answer truncated for {target.name}: {len(importers)} of {result["count"]} shown')
+    return {'importers': {Path(os.path.normpath(target.parent / row['file'])) for row in importers},
             'partial_files': _partial_files(result), 'edge_rule': _edge_rule(result)}
 
 
-def rendered_reverse_graph(scan: Path) -> dict[str, Any]:
-    """Every module's importers from ONE ``depends://<scan dir>`` request (the dependency summary).
+def rendered_reverse_graph(scan: Path, cap: int | None) -> dict[str, Any]:
+    """Every module's importers from ONE ``imports://<scan dir>?importers`` request (the importer summary).
 
-    ``depends://<file>`` rebuilds the full import graph per request (4837 files, 10-28 s each on
-    the Java corpus), so a per-target gate would take hours; the directory summary lists
-    every module with its sorted importers in a single answer.
+    ``imports://<file>?importers`` rebuilds the full import graph per request (4837 files, 10-28 s each
+    on the Java corpus), so a per-target gate would take hours; the directory summary lists every
+    module with at least one importer, sorted, in a single answer.
     """
-    result = _depends_request(scan, scan)
-    modules = result['modules']
-    if len(modules) != result['total_modules']:
-        raise RuntimeError(f'depends:// summary truncated: {len(modules)} of {result["total_modules"]} modules shown')
-    return {'by_target': {Path(os.path.normpath(scan / m['module'])): {Path(os.path.normpath(scan / d)) for d in m['dependents']}
-                          for m in modules},
+    result = _importers_request(scan, scan, cap)
+    entries = result['entries']
+    if len(entries) != result['total']:
+        raise RuntimeError(f'imports:// summary truncated: {len(entries)} of {result["total"]} modules shown')
+    return {'by_target': {Path(os.path.normpath(scan / e['file'])): {Path(os.path.normpath(scan / i)) for i in e['importers']}
+                          for e in entries},
             'partial_files': _partial_files(result), 'edge_rule': _edge_rule(result)}
 
 
@@ -170,34 +163,33 @@ def measure(entry: dict, root: Path) -> dict[str, Any]:
     edges, coverage = oracle.build(Scope(root, scan, importers, config))
     if not edges or not importers or not coverage.get('files'):
         raise RuntimeError('Oracle produced zero rows/files; measurement unavailable')
-    # The parse corpus depends:// itself scans for a file target of this language.
-    cap = config.get('scan_file_cap', DependsAdapter._SCAN_FILE_CAP)
-    if not isinstance(cap, int) or cap <= 0:
+    # The corpus's own file cap (&max_files=), else the engine's default: the gate scores what a user gets.
+    cap = config.get('scan_file_cap')
+    if cap is not None and (not isinstance(cap, int) or isinstance(cap, bool) or cap <= 0):
         raise RuntimeError('scan_file_cap must be a positive integer')
     excluded_suffixes = tuple(config.get('exclude_importer_suffixes', []))
     population = {p for p in importers if not excluded_suffixes or not p.name.endswith(excluded_suffixes)}
     hit = expected = extra = partial = 0
     rule: dict[str, Any] = {}
     differences = []
-    with _scan_cap(cap):
-        reset_request_caches()
-        # Go imports name packages, so its per-file answer is the package view of depends://<file>.
-        graph = None if name == 'go-toolchain' else rendered_reverse_graph(scan)
-        for target, truth_list in edges.items():
-            if graph is None:
-                view = rendered_dependents(scan, root / target)
-                importers, partial, rule = view['importers'], view['partial_files'], view['edge_rule']
-            else:
-                importers = graph['by_target'].get(root / target, set())
-                partial, rule = graph['partial_files'], graph['edge_rule']
-            truth = set(truth_list)
-            found = {p.relative_to(root).as_posix() for p in importers if p in population}
-            matched, missed, surplus = truth & found, truth - found, found - truth
-            hit += len(matched)
-            expected += len(truth)
-            extra += len(surplus)
-            if missed or surplus:
-                differences.append({'target': target, 'missed': sorted(missed), 'extra': sorted(surplus)})
+    reset_request_caches()
+    # Go imports name packages, so its per-file answer is the package view of imports://<file>?importers.
+    graph = None if name == 'go-toolchain' else rendered_reverse_graph(scan, cap)
+    for target, truth_list in edges.items():
+        if graph is None:
+            view = rendered_dependents(scan, root / target, cap)
+            importers, partial, rule = view['importers'], view['partial_files'], view['edge_rule']
+        else:
+            importers = graph['by_target'].get(root / target, set())
+            partial, rule = graph['partial_files'], graph['edge_rule']
+        truth = set(truth_list)
+        found = {p.relative_to(root).as_posix() for p in importers if p in population}
+        matched, missed, surplus = truth & found, truth - found, found - truth
+        hit += len(matched)
+        expected += len(truth)
+        extra += len(surplus)
+        if missed or surplus:
+            differences.append({'target': target, 'missed': sorted(missed), 'extra': sorted(surplus)})
     if not hit:
         raise RuntimeError('Reveal found zero oracle edges; positive control failed')
     return {'oracle': name, 'sha': head, 'targets': len(edges), 'oracle_edges': expected, 'hit_edges': hit,

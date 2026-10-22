@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from reveal.adapters.depends import DependsAdapter
+from reveal.adapters.imports import ImportsAdapter
 from reveal.analyzers.imports.resolution import ProjectResolver
 
 pytestmark = pytest.mark.component
@@ -217,70 +217,70 @@ def test_a_reveal_side_loss_is_measured_and_fails_the_gate(python_corpus, monkey
         gate.measure(entry, root)
 
 
-def test_the_gate_scores_what_depends_renders_not_the_private_graph(python_corpus, monkeypatch):
+def test_the_gate_scores_what_imports_renders_not_the_private_graph(python_corpus, monkeypatch):
     # BACK-2062: the gate once read adapter._graph.reverse_deps, so it stayed green while the
-    # rendered answer lost a dependent. Drop pkg/b.py from the rendered summary only; the graph keeps it.
+    # rendered answer lost an importer. Drop pkg/b.py from the rendered summary only; the graph keeps it.
     root, entry = python_corpus
-    real = DependsAdapter._format_directory_summary
+    real = ImportsAdapter._format_importers
 
-    def render_without_b(self, directory, top_n, fmt):
-        result = real(self, directory, top_n, fmt)
-        for module in result['modules']:
-            module['dependents'] = [d for d in module['dependents'] if d != 'pkg/b.py']
-            module['dependent_count'] = len(module['dependents'])
+    def render_without_b(self, importers):
+        result = real(self, importers)
+        for module in result['entries']:
+            module['importers'] = [d for d in module['importers'] if not d.endswith('pkg/b.py')]  # absolute here; relativized after
+            module['fan_in'] = len(module['importers'])
         return result
 
-    monkeypatch.setattr(DependsAdapter, '_format_directory_summary', render_without_b)
+    monkeypatch.setattr(ImportsAdapter, '_format_importers', render_without_b)
     measured = gate.measure(entry, root)
     assert measured['recall'] == 0.75
     assert measured['differences'] == [{'target': 'pkg/a.py', 'missed': ['pkg/b.py'], 'extra': []}]
 
 
 def test_a_truncated_rendered_summary_is_a_failure_not_a_smaller_answer(python_corpus, monkeypatch):
-    # The rendered module list may be cut (?top=N); the gate must see total_modules > len(modules) and refuse.
+    # The rendered entry list may be cut; the gate must see total > len(entries) and refuse.
     root, entry = python_corpus
-    real = DependsAdapter._format_directory_summary
+    real = ImportsAdapter._format_importers
 
-    def cut(self, directory, top_n, fmt):
-        result = real(self, directory, top_n, fmt)
-        result['modules'] = result['modules'][:1]  # total_modules still says what the full answer held
+    def cut(self, importers):
+        result = real(self, importers)
+        result['entries'] = result['entries'][:1]  # total still says what the full answer held
         return result
 
-    monkeypatch.setattr(DependsAdapter, '_format_directory_summary', cut)
+    monkeypatch.setattr(ImportsAdapter, '_format_importers', cut)
     with pytest.raises(RuntimeError, match='truncated'):
         gate.measure(entry, root)
 
 
 def test_the_per_file_form_scores_the_rendered_package_view_and_refuses_a_cut(python_corpus, monkeypatch):
-    # Go's answer is the per-file form of depends://, so that helper is gated the same way.
+    # Go's answer is the per-file form of imports://?importers, so that helper is gated the same way.
     root, entry = python_corpus
     scan = root.resolve()
-    assert gate.rendered_dependents(scan, scan / 'pkg/a.py')['importers'] == {scan / 'pkg/b.py'}
-    real = DependsAdapter._format_file_dependents
+    assert gate.rendered_dependents(scan, scan / 'pkg/a.py', None)['importers'] == {scan / 'pkg/b.py'}
+    real = ImportsAdapter._format_file_importers
 
-    def cut(self, target, top_n=None):
-        result = real(self, target, top_n=top_n)
-        result['dependents'] = []  # count still says what the full answer held
+    def cut(self, target):
+        result = real(self, target)
+        result['importers'] = []  # count still says what the full answer held
         return result
 
-    monkeypatch.setattr(DependsAdapter, '_format_file_dependents', cut)
+    monkeypatch.setattr(ImportsAdapter, '_format_file_importers', cut)
     with pytest.raises(RuntimeError, match='truncated'):
-        gate.rendered_dependents(scan, scan / 'pkg/a.py')
+        gate.rendered_dependents(scan, scan / 'pkg/a.py', None)
 
 
 def test_the_gate_scores_one_stated_rule_and_refuses_another(python_corpus, monkeypatch):
     # BACK-2062: the oracles' truth is every edge, function-level included, tests included,
-    # TYPE_CHECKING excluded. The gate records the rule depends:// printed and refuses an answer
+    # TYPE_CHECKING excluded. The gate records the rule imports:// printed and refuses an answer
     # computed under any other rule, instead of scoring it against the wrong truth.
     root, entry = python_corpus
     measured = gate.measure(entry, root)
     assert measured['edge_rule']['lazy'] == 'include' and measured['edge_rule']['tests'] == 'included'
-    real = DependsAdapter._edge_rule
+    real = ImportsAdapter._edge_rule
 
-    def load_time_only(self):
-        return {**real(self), 'lazy': 'exclude'}
+    def load_time_only(self, *args, **kwargs):
+        return {**real(self, *args, **kwargs), 'lazy': 'exclude'}
 
-    monkeypatch.setattr(DependsAdapter, '_edge_rule', load_time_only)
+    monkeypatch.setattr(ImportsAdapter, '_edge_rule', load_time_only)
     with pytest.raises(RuntimeError, match="rule lazy='exclude'"):
         gate.measure(entry, root)
 
@@ -521,12 +521,12 @@ def test_go_native_parser_and_public_package_projection(go_corpus):
 def test_go_lost_edge_fails_the_existing_gate(go_corpus, monkeypatch):
     root, entry = go_corpus
     before = gate.measure(entry, root)
-    original = DependsAdapter._format_file_dependents
-    def drop(self, target, **kwargs):
-        answer = original(self, target, **kwargs)
-        answer['dependents'], answer['count'] = [], 0  # a consistent loss; a cut list fails as truncated
+    original = ImportsAdapter._format_file_importers
+    def drop(self, target):
+        answer = original(self, target)
+        answer['importers'], answer['count'] = [], 0  # a consistent loss; a cut list fails as truncated
         return answer
-    monkeypatch.setattr(DependsAdapter, '_format_file_dependents', drop)
+    monkeypatch.setattr(ImportsAdapter, '_format_file_importers', drop)
     with pytest.raises(RuntimeError, match='zero oracle edges'):
         gate.measure(entry, root)
     assert gate.regressions({'go': {**before, 'recall': 0.5}}, {'go': before})
@@ -791,3 +791,14 @@ def test_missing_partial_files_is_disclosed_not_failed_or_crashed():
     notes = []
     calls = {'calls': {k: v for k, v in baseline['c'].items() if k != 'partial_files'}}
     assert gate.regressions(calls, calls, notes) == [] and notes == []
+
+
+def test_partial_parse_is_counted_and_a_lost_file_is_refused():
+    # BACK-2062: imports:// exits 3 for a file parsed with errors (a complete answer, an incomplete
+    # analysis); the gate counts it as failed minus lost, as the CLI's own summary does. A file lost
+    # to a dead worker or an unreadable path makes the answer smaller than the tree's: refuse it.
+    assert gate._partial_files({'metadata': {'files_failed_count': 3, 'files_lost_count': 0}}) == 3
+    with pytest.raises(RuntimeError, match='lost 1 file'):
+        gate._partial_files({'metadata': {'files_failed_count': 3, 'files_lost_count': 1}})
+    with pytest.raises(RuntimeError, match='cannot qualify'):
+        gate._partial_files({'metadata': {}})

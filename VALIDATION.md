@@ -2125,10 +2125,11 @@ The corpora are optional test inputs, never runtime dependencies or services. No
 installation and the normal test suite do not fetch them.
 
 The gate reads reveal through its public output. For the import oracles it makes one
-`depends://<scan dir>` request per corpus (the dependency summary lists every module with its
-sorted importers); Go uses the per-file form, whose package view expands a directory import to
-files. It fails on a capped scan, a cut module list, non-JSON output or a nonzero exit, and
-never reads the adapter's private graph. `partial_files` is the count the CLI prints for the
+`imports://<scan dir>?importers&root=<scan dir>` request per corpus (the importer summary lists
+every module with an importer, with its sorted importers); Go uses the per-file form, whose
+package view expands a directory import to files. It fails on a capped scan, a cut list,
+non-JSON output, a file lost from the answer or any exit but 0 and 3 (3 is a file parsed with
+errors, counted below), and never reads the adapter's private graph. `partial_files` is the count the CLI prints for the
 whole scan tree, so it includes files of other languages: cpp-assimp's 458 counts one Rust
 file (`port/assimp_rs/src/lib.rs`) that the C++-only count of 457 did not. The Python callers
 row makes one `calls://<scan>?callers=NAME` request per oracle target and fails on an error or
@@ -2138,7 +2139,7 @@ The gate scores one parameter combination, the oracles' rule: every static edge,
 imports and tests included, `TYPE_CHECKING` excluded. It records the `edge_rule` each answer
 prints and refuses an answer computed under another rule. The report's `declined` list names
 the combinations the engine states but the gate cannot score yet, with the reason:
-`lazy=exclude` and `lazy=only` (`depends://` takes no `&lazy`, and
+`lazy=exclude` and `lazy=only` (`imports://?importers` always lists the all-edges view, and
 `imports://<dir>?rank=fan-in&lazy=` returns counts, not importers) and `tests=exclude` (no
 engine parameter). The `python-reveal` population is reveal's own repository at public
 `4d4116cc` (whole tree, tests included): 1,397 files, 544 targets, 4,986/4,986 edges, 0 extra.
