@@ -29,8 +29,9 @@ _FUNCTION_LITERALS = ('arrow_function', 'function_expression', 'generator_functi
 # What an object literal's parent must be for its methods to be named API:
 # `const api = {...}`, `x = {...}` (incl. module.exports), `export default {...}`.
 _NAMED_OBJECT_HOLDERS = ('variable_declarator', 'assignment_expression', 'export_statement')
-# HOCs whose first argument is the component, whatever follows it (``memo(fn, areEqual)``).
-_COMPONENT_WRAPPERS = frozenset({'memo', 'forwardRef'})
+# Calls whose first argument is the function they return or wrap, whatever follows it (``memo(fn, areEqual)``,
+# ``useCallback(fn, deps)``), also as a member call (``React.useCallback``; BACK-2169).
+_FUNCTION_WRAPPERS = frozenset({'memo', 'forwardRef', 'useCallback'})
 
 
 class JSFunctionValueMixin(_Base):
@@ -99,8 +100,12 @@ class JSFunctionValueMixin(_Base):
 
         A component wrapper (``memo``, ``React.forwardRef``) may carry more arguments (a
         comparator), nest another wrapper (``memo(forwardRef(fn))``) or sit in
-        ``Object.assign(wrapper(fn), {...})`` (BACK-1830); any other call wraps its sole
+        ``Object.assign(wrapper(fn), {...})`` (BACK-1830); any other plain call wraps its sole
         function-literal argument.
+
+        BACK-2169: a member call (``xs.map(fn)``, ``items.find(fn)``) returns the method's value, not
+        the function it is given, so it never wraps; ``React.memo`` / ``Object.assign`` are still
+        wrappers by name. Plain calls (``useCallback(fn)``, ``derived(fn)``) are unchanged for now.
 
         BACK-726: supports the `HOC(...)((...) => {...})` shape — looks only
         at the call's own direct `arguments` list (not nested calls), so a
@@ -113,6 +118,8 @@ class JSFunctionValueMixin(_Base):
             if self._is_wrapper_call(call_expression_node):
                 # The component is the first argument; a trailing comparator is not it.
                 return self._wrapper_first_argument(call_expression_node, ch)
+            if self._callee_parts(call_expression_node)[0]:
+                return None
             candidates = [
                 arg for arg in _children(ch)
                 if _zero_arg(arg, 'kind') in ('arrow_function', 'function_expression', 'generator_function')
@@ -136,7 +143,7 @@ class JSFunctionValueMixin(_Base):
 
     def _is_wrapper_call(self, call) -> bool:
         obj, name = self._callee_parts(call)
-        return name in _COMPONENT_WRAPPERS or (obj, name) == ('Object', 'assign')
+        return name in _FUNCTION_WRAPPERS or (obj, name) == ('Object', 'assign')
 
     def _wrapper_first_argument(self, call, arguments) -> Optional[Any]:
         """The component a ``memo`` / ``forwardRef`` / ``Object.assign`` call is given first."""

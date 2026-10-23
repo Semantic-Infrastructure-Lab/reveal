@@ -25,10 +25,11 @@ const Bare = memo((p: number) => helper(p));
 const Fwd = forwardRef((p: number) => helper(p));
 const Assigned = Object.assign((p: number) => helper(p), { tag: 1 });
 const cb = useCallback((q: number) => helper(q), []);
+const rcb = React.useCallback((q: number) => helper(q), []);
 const plain = (z: number) => helper(z);
 '''
 PHANTOMS = {'mapped', 'kept', 'found', 'unused'}
-FUNCTION_VALUES = {'Memoed', 'Bare', 'Fwd', 'Assigned', 'cb', 'plain'}
+FUNCTION_VALUES = {'Memoed', 'Bare', 'Fwd', 'Assigned', 'cb', 'rcb', 'plain'}
 
 
 @pytest.fixture

@@ -2115,7 +2115,9 @@ These are scoped estimates from one reviewer and one repository per language, no
 claims; recall (dead code the tool misses) was not measured. The causes of false claims are general:
 public API with no in-repo caller, framework hooks, calls inside class-field initializers,
 `@command`-style decorators, calls from inline `<script>` in HTML, string-keyed or computed dispatch,
-and an arrow function reported under the name of the variable it is assigned to. The answer's
+and an arrow function reported under the name of the variable it is assigned to (fixed for member
+calls such as `xs.map(fn)`, which removed 159 of VS Code's 1,220 and 12 of Excalidraw's 96 claims; plain calls
+like `derived(fn)` remain, BACK-2169). The answer's
 `meta.confidence` is call-extraction recall and does not cover any of them, so `?uncalled` over
 JavaScript, TypeScript or TSX withholds it and says so (W-CALLS-11). Java and PHP follow below; other
 languages are not yet measured (BACK-1899).
