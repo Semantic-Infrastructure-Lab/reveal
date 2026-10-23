@@ -101,6 +101,24 @@ def _binding_kind(node):
     return 'function' if value is not None and _FUNCTION_VALUE.search(_zero_arg(value, 'kind')) else 'variable'
 
 
+def _is_function_field(node) -> bool:
+    """A JS-family class field whose value is a function literal (`public f = () => {}`), BACK-2180."""
+    parent = _zero_arg(node, 'parent')
+    if parent is None or _zero_arg(parent, 'kind') not in ('public_field_definition', 'field_definition'):
+        return False
+    value = parent.child_by_field_name('value')
+    return value is not None and bool(_FUNCTION_VALUE.search(_zero_arg(value, 'kind')))
+
+
+def _name_binding(node, kind: str, family: str, name: str, defined_here: Dict[str, int]):
+    """`_binding_kind` for a name leaf. A class-field arrow method this file defines is a function: the element
+    list counts it as one definition, so its own name must count as one occurrence (BACK-2180)."""
+    binding = _binding_kind(node) if _is_name_leaf(kind) else None
+    if binding == 'member' and family == 'js' and name in defined_here and _is_function_field(node):
+        return 'function'
+    return binding
+
+
 def _read_reference_text(
     file_path: str, *, on_read_error: Optional[Callable[[str, OSError], None]] = None,
 ) -> Optional[str]:
@@ -143,7 +161,7 @@ def _count_occurrences(file_path: str, family: str, names: Set[str], defined_her
             continue
         if family == 'c' and _is_c_declarator_name(node):
             continue
-        binding = _binding_kind(node) if _is_name_leaf(kind) else None
+        binding = _name_binding(node, kind, family, name, defined_here)
         # A variable of a name this file defines as a function is that definition
         # (`export const f = wrap(...)` listed as f); anything else is a separate
         # variable, parameter or field that shadows the name in this file.
