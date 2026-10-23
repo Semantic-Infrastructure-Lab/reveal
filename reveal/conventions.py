@@ -176,6 +176,8 @@ JVM_ENTRY_POINT_DECORATORS: FrozenSet[str] = frozenset({
     'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS',
     # Dagger/Hilt: module methods are called by generated component code (BACK-1392).
     'Provides', 'Binds', 'BindsInstance', 'BindsOptionalOf', 'Multibinds',
+    # Guava EventBus and GWT/J2CL interop: dispatched by annotation, not called (BACK-2171).
+    'Subscribe', 'JsMethod',
 })
 # ASP.NET Core actions/routes and Azure Functions, as captured `[Attr(...)]` names (BACK-1392).
 CSHARP_ENTRY_POINT_DECORATORS: FrozenSet[str] = frozenset({
@@ -456,7 +458,12 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         LanguageConventions(
             family='java', test_annotation_markers=_JVM_TEST_MARKERS,
             entry_point_files=frozenset({'main.java', 'app.java', 'application.java'}),
-            implicit_names=frozenset({'main'}),
+            # Java serialization calls these by name through reflection (BACK-2171); the
+            # exact list, like PHP's magic methods, so `readConfig` stays checkable.
+            implicit_names=frozenset({
+                'main', 'readResolve', 'writeReplace', 'readObject', 'writeObject',
+                'readObjectNoData', 'readExternal', 'writeExternal',
+            }),
             entry_point_decorators=JVM_ENTRY_POINT_DECORATORS,
             stdlib_key=_prefix_stdlib_key('java', 'javax', 'jdk'),
             test_name_prefixes=('test',), test_prefixes_in_test_files_only=True,

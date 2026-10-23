@@ -322,8 +322,9 @@ CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB: Dict[str, str] = {
     'rust': 'main and #[test]/#[bench] functions (invoked by the runtime / test harness)',
     # BACK-1392: constructors are recognized by their declaration shape (no return type),
     # overrides by the `override` keyword or an @Override/@override annotation.
-    'java': 'constructors, @Override methods, main, and Spring/JAX-RS/Dagger-registered methods '
-            '(@GetMapping, @Bean, @Provides, ...)',
+    'java': 'constructors, @Override methods, main, serialization hooks (readObject, writeReplace, ...), '
+            'JUnit 3 test* methods of TestCase subclasses, and Spring/JAX-RS/Dagger/EventBus-registered '
+            'methods (@GetMapping, @Bean, @Provides, @Subscribe, ...)',
     'csharp': 'constructors, override methods, Main, ASP.NET actions ([HttpGet], [Route], ...) '
               'and middleware/Startup methods invoked by name (Invoke, Configure, ...)',
     'cpp': _CPP_IMPLICIT_EXCLUSIONS,

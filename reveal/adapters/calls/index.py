@@ -1461,6 +1461,38 @@ def _drop_referenced(entries: List[Dict[str, Any]],
             if _bare_callee_name(e['name']) not in referenced.get(_lang_family(e['file']), ())]
 
 
+_JUNIT3_ROOTS = frozenset({'TestCase', 'junit.framework.TestCase'})
+
+
+def _junit3_class_spans(structures: Sequence[Dict[str, Any]]) -> Dict[str, List[Tuple[int, int]]]:
+    """Per Java file, the line spans of classes that derive from JUnit 3's TestCase, followed
+    through the scanned hierarchy by bare class name."""
+    classes = [(fs.get('file', ''), e) for fs in structures if _lang_family(fs.get('file', '')) == 'java'
+               for e in fs.get('elements', []) if e.get('category') == 'classes']
+    derived: Set[str] = set(_JUNIT3_ROOTS)
+    while True:
+        added = {c['name'] for _, c in classes if c.get('name') not in derived
+                 and any(_bare_callee_name(b) in derived for b in c.get('bases', ()))}
+        if not added:
+            break
+        derived |= added
+    spans: Dict[str, List[Tuple[int, int]]] = {}
+    for file_path, cls in classes:
+        if cls.get('name') in derived:
+            spans.setdefault(file_path, []).append((cls['line'], cls['line'] + max(cls.get('line_count', 1), 1)))
+    return spans
+
+
+def _junit3_test_methods(structures: Sequence[Dict[str, Any]]) -> Set[Tuple[str, int]]:
+    """(file, line) of each `test*` method declared in a TestCase subclass (BACK-2171). The
+    runner finds these by reflection; a `test*` method elsewhere is an ordinary method, so
+    the rule is class-scoped."""
+    spans = _junit3_class_spans(structures)
+    return {(fs['file'], e['line']) for fs in structures for e in fs.get('elements', ())
+            if e.get('category') in ('functions', 'methods') and str(e.get('name', '')).startswith('test')
+            and any(start <= e.get('line', 0) < end for start, end in spans.get(fs.get('file', ''), ()))}
+
+
 @dataclass
 class _UncalledScope:
     """What an uncalled-symbol exclusion needs from the whole scan (BACK-1533)."""
@@ -1470,6 +1502,7 @@ class _UncalledScope:
     cpp_overrides: Set[str]
     only_functions: bool
     include_test_framework: bool
+    junit3_tests: Set[Tuple[str, int]] = field(default_factory=set)
 
 
 class _UncalledCandidate:
@@ -1530,6 +1563,10 @@ def _x_test_entry_point(c: _UncalledCandidate, s: _UncalledScope) -> bool:
         c.name, c.file_path, c.line_no, c.decorator_names, s.file_lines)
 
 
+def _x_junit3_test(c: _UncalledCandidate, s: _UncalledScope) -> bool:
+    return not s.include_test_framework and (c.file_path, c.line_no) in s.junit3_tests
+
+
 def _x_constructor_or_override(c: _UncalledCandidate, s: _UncalledScope) -> bool:
     return bool(c.line_no) and (
         _is_constructor_definition(c.name, c.family, c.file_path, c.line_no, s.file_lines)
@@ -1551,9 +1588,10 @@ _UNCALLED_EXCLUSIONS: Tuple[Tuple[str, Any], ...] = (
     ('noqa', _x_noqa),
     ('c_family_hook', _x_c_family_hook),
     ('test_entry_point', _x_test_entry_point),
+    ('junit3_test', _x_junit3_test),
     ('constructor_or_override', _x_constructor_or_override),
 )
-_TEST_ENTRYPOINT_REASONS = ('test_block', 'test_entry_point')
+_TEST_ENTRYPOINT_REASONS = ('test_block', 'test_entry_point', 'junit3_test')
 
 
 def _uncalled_exclusion(candidate: _UncalledCandidate, scope: _UncalledScope) -> Optional[str]:
@@ -1628,6 +1666,7 @@ def find_uncalled(
         called_names=called_names, file_lines=file_lines,
         extra_implicit_decorators=extra_implicit_decorators, cpp_overrides=cpp_overrides,
         only_functions=only_functions, include_test_framework=include_test_framework,
+        junit3_tests=_junit3_test_methods(structures),
     )
     total_defined = 0
     excluded_by_reason: Dict[str, int] = {}
