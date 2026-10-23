@@ -553,3 +553,13 @@ def _reset_gitignore_state():
     yield
     set_gitignore_enabled(True)
     clear_cache()
+
+
+@pytest.fixture(autouse=True)
+def _reset_provenance_state():
+    """--provenance is process state (BACK-2086): a test that runs a CLI with it, or sets it
+    directly, must not make the next test in the same worker print an `execution` block."""
+    from reveal.utils.json_utils import set_provenance_enabled
+    set_provenance_enabled(False)
+    yield
+    set_provenance_enabled(False)
