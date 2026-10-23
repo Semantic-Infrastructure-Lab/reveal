@@ -97,22 +97,34 @@ def _unmeasured_language_warning(per_language: Dict[str, int]) -> Optional[Dict[
 
 
 # ?uncalled dead-code precision, measured by source review (BACK-1899, VALIDATION.md): 20 claims per
-# corpus, one corpus per language. The calls confidence is extraction recall and says nothing about it.
-UNCALLED_MEASURED_LOW_LANGUAGES = frozenset({'javascript', 'typescript', 'tsx'})
+# corpus, one to three corpora per language. The calls confidence is extraction recall and says nothing
+# about it. Each family contributes one sentence, shown only when a language of that family is in scope.
+_UNCALLED_MEASURED_LOW = (
+    (frozenset({'javascript', 'typescript', 'tsx'}),
+     'JavaScript/TypeScript: 0 of 20 (three.js), 12 of 20 (VS Code) and 1 of 20 (Excalidraw) uncalled claims '
+     'were dead; public API, framework hooks, class-field initializers, decorators and string-keyed dispatch '
+     'read as dead.'),
+    (frozenset({'java'}),
+     'Java: 1 of 20 (Elasticsearch server, scanned in server/src/main/java only; the other 19 are used '
+     'elsewhere in the repo) and 0 of 20 (Guava) were dead; JUnit 3 test methods, serialization hooks, '
+     'annotation dispatch, methods looked up by name and callers outside the scanned directory read as dead.'),
+    (frozenset({'php'}),
+     'PHP: 0 of 20 (WordPress) were dead; hooks registered by string name (add_action), public API, '
+     'deprecated shims and interface methods read as dead.'),
+)
+UNCALLED_MEASURED_LOW_LANGUAGES = frozenset().union(*(langs for langs, _ in _UNCALLED_MEASURED_LOW))
 
 
 def _uncalled_measured_low_warning(per_language: Dict[str, int]) -> Optional[Dict[str, Any]]:
-    """W-CALLS-11, naming each scanned JS/TS-family language whose dead-code claims were measured
-    low, or None."""
+    """W-CALLS-11, naming each scanned language whose dead-code claims were measured low and stating
+    the figures of only those families, or None."""
     named = sorted(lang for lang in per_language if lang in UNCALLED_MEASURED_LOW_LANGUAGES)
     if not named:
         return None
+    figures = ' '.join(text for langs, text in _UNCALLED_MEASURED_LOW if langs.intersection(named))
     return {'code': 'W-CALLS-11', 'type': 'not_measured', 'languages': named,
-            'message': ('Confidence withheld: dead-code precision is measured low for JavaScript/TypeScript. '
-                        'In a 20-claim source review per corpus, 0 of 20 (three.js), 12 of 20 (VS Code) and '
-                        '1 of 20 (Excalidraw) uncalled claims were dead: public API, framework hooks, '
-                        'class-field initializers, decorators and string-keyed dispatch read as dead. '
-                        'Treat this as a review list, not findings.')}
+            'message': ('Confidence withheld: dead-code precision is measured low. In a 20-claim source '
+                        f'review per corpus, {figures} Treat this as a review list, not findings.')}
 
 
 def _declines(per_language: Dict[str, int], unmeasured_walk: bool, uncalled: bool = False) -> List[Dict[str, Any]]:

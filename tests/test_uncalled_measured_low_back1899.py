@@ -1,8 +1,9 @@
-"""?uncalled over JavaScript/TypeScript says its dead-code reading is measured low (BACK-1899).
+"""?uncalled over JS/TS, Java and PHP says its dead-code reading is measured low (BACK-1899).
 
 The meta confidence is call-extraction recall. For ?uncalled over JS/TS/TSX it read 0.9997 over claims
 a source review found 0 of 20 (three.js), 12 of 20 (VS Code) and 1 of 20 (Excalidraw) dead, so the
-number is withheld and W-CALLS-11 names the measurement (plan rule 8).
+number is withheld and W-CALLS-11 names the measurement (plan rule 8). Java (1 of 20 Elasticsearch, 0 of 20
+Guava) and PHP (0 of 20 WordPress) were measured the same way.
 """
 import json
 
@@ -11,6 +12,8 @@ import pytest
 from conftest import _run_reveal_direct
 
 TS = 'export function used() { return helper(); }\nfunction helper() { return 1; }\nfunction orphan() { return 2; }\n'
+JAVA = 'class A {\n  int used() { return helper(); }\n  int helper() { return 1; }\n  int orphan() { return 2; }\n}\n'
+PHP = '<?php\nfunction used() { return helper(); }\nfunction helper() { return 1; }\nfunction orphan() { return 2; }\n'
 PY = 'def used():\n    return helper()\n\n\ndef helper():\n    return 1\n\n\ndef orphan():\n    return 2\n'
 
 
@@ -57,3 +60,27 @@ def test_a_mixed_scan_names_only_the_js_ts_languages(tmp_path):
     assert meta.get('confidence') is None
     warning = next(w for w in meta['warnings'] if w.get('code') == 'W-CALLS-11')
     assert warning['languages'] == ['typescript']
+
+
+@pytest.mark.parametrize('name,text,language,figure', [
+    ('A.java', JAVA, 'java', '1 of 20 (Elasticsearch server'),
+    ('app.php', PHP, 'php', '0 of 20 (WordPress)'),
+])
+def test_uncalled_over_java_and_php_withholds_confidence_and_states_only_its_own_figures(
+        tmp_path, name, text, language, figure):
+    meta = meta_of(tmp_path, {name: text}, 'uncalled=true')
+    assert meta.get('confidence') is None
+    warning = next(w for w in meta['warnings'] if w.get('code') == 'W-CALLS-11')
+    assert warning['languages'] == [language]
+    assert figure in warning['message'] and 'review list' in warning['message']
+    assert 'three.js' not in warning['message'] or language == 'javascript'
+    others = {'java': 'WordPress', 'php': 'Guava'}[language]
+    assert others not in warning['message']
+
+
+@pytest.mark.parametrize('name,text', [('A.java', JAVA), ('app.php', PHP)])
+def test_callers_over_java_and_php_keeps_its_confidence(tmp_path, name, text):
+    """Negative control: the figure is about the dead-code reading, not call extraction."""
+    meta = meta_of(tmp_path, {name: text}, 'callers=helper')
+    assert isinstance(meta['confidence'], float)
+    assert 'W-CALLS-11' not in codes(meta)

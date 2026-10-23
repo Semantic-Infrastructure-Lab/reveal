@@ -436,7 +436,7 @@ reveal 'metrics://.?hotspots&code_only'
 One mode per request (`callers`, `callees`, `rank`, `uncalled`, `modules`, or the retired `target`
 and `root`); two exit 2.
 A name that names nothing exits 2 (`callees`: no definition; `callers`: no definition and no call
-site). A scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds `meta.confidence` and is named (W-CALLS-10). `?uncalled` over JavaScript, TypeScript or TSX withholds it too (W-CALLS-11): dead-code precision was measured low there.
+site). A scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds `meta.confidence` and is named (W-CALLS-10). `?uncalled` over JavaScript, TypeScript, TSX, Java or PHP withholds it too (W-CALLS-11): dead-code precision was measured low there.
 
 - **`external=true`** - Include stdlib/third-party edges in `?modules=true` output (default: false)
   ```bash

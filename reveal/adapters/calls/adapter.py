@@ -196,8 +196,8 @@ _HELP: Dict[str, Any] = {
         '(W-CALLS-9).',
         'A scanned language that yields call sources and has no recall snapshot (Elixir, Objective-C) withholds '
         'meta.confidence and is named (W-CALLS-10); shell, SQL and other files with no call edges do not. '
-        '?uncalled over JavaScript, TypeScript or TSX withholds it too (W-CALLS-11): dead-code precision was '
-        'measured low there.',
+        '?uncalled over JavaScript, TypeScript, TSX, Java or PHP withholds it too (W-CALLS-11): dead-code precision '
+        'was measured low there.',
         '?uncalled: web/CLI framework routes (Flask, FastAPI, Click, …) are dispatched by the '
         'framework, not a static call, so they false-flag as dead code by default. Declare '
         'project-specific entry-point decorators in .reveal.yaml to exclude them: '
@@ -416,7 +416,7 @@ _SCHEMA: Dict[str, Any] = {
         '?callees depth=2-5 and detail: the callee walk under calls_callees, every call site of an expanded '
         'definition an edge; not measured in any language (W-CALLS-9 in meta.warnings, walk_rule.measured).',
         'A call-source language with no recall snapshot in scope: no meta.confidence, W-CALLS-10 names it (languages). '
-        '?uncalled over JS/TS/TSX: no meta.confidence, W-CALLS-11 names the language and the measured precision.',
+        '?uncalled over JS/TS/TSX, Java or PHP: no meta.confidence, W-CALLS-11 names the language and the measured precision.',
         'Exactly one mode per request (callers, callees, rank, uncalled, modules, or the retired target and '
         'root), else exit 2 '
         'naming both. Exit 0 complete, 2 rejected before analysis or a name with no definition (callers: and '

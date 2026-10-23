@@ -2117,8 +2117,29 @@ public API with no in-repo caller, framework hooks, calls inside class-field ini
 `@command`-style decorators, calls from inline `<script>` in HTML, string-keyed or computed dispatch,
 and an arrow function reported under the name of the variable it is assigned to. The answer's
 `meta.confidence` is call-extraction recall and does not cover any of them, so `?uncalled` over
-JavaScript, TypeScript or TSX withholds it and says so (W-CALLS-11). Other languages are not yet
-measured (BACK-1899).
+JavaScript, TypeScript or TSX withholds it and says so (W-CALLS-11). Java and PHP follow below; other
+languages are not yet measured (BACK-1899).
+
+## `calls ?uncalled` precision, Java and PHP (2026-10-22)
+
+Same method and criteria as the JavaScript and TypeScript section above: 20 claims per corpus, stratified by
+top-level directory (Elasticsearch by package), one reviewer reading each claim against the whole checkout,
+public API, framework hooks and required interface methods counted as not dead. reveal 0.131.0.
+
+| Corpus | Dead / not dead / uncertain (population) | Stratified estimate | Conservative 95% interval |
+|---|---|---|---|
+| Java, Elasticsearch `server/src/main/java` | 1 / 19 / 0 (2,093) | 5.5% | 0.6-82% |
+| Java, Guava (whole repo) | 0 / 20 / 0 (2,870) | 0% | 0-50% |
+| PHP, WordPress | 0 / 20 / 0 (1,789) | 0% | 0-36.5% |
+
+One reviewer, one repository per row, no second rater; recall was not measured. All 19 not-dead Elasticsearch
+claims are used only outside the scanned directory (production code in `x-pack/` and `modules/`, tests, or the
+Painless allowlist), so that row measures the scan root: on a directory scan, read an uncalled list as
+candidates. The causes in Guava are general: JUnit 3 `test*` methods run reflectively (68% of its claims),
+serialization hooks, `@Subscribe` and `@JsMethod` dispatch, and methods looked up by name. In WordPress:
+hooks registered by string name (`add_action('x', 'fn')`), public plugin API, deprecated shims, interface
+methods and calls inside HTML templates. `meta.confidence` is call-extraction recall and covers none of them,
+so `?uncalled` over Java or PHP withholds it and says so (W-CALLS-11). Evidence and labels: BACK-1899.
 
 ## Re-running this yourself
 
