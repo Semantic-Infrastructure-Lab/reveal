@@ -28,6 +28,12 @@ from ...registry import language_for_extension
 logger = logging.getLogger(__name__)
 
 _WORD = re.compile(r'[A-Za-z_$][\w$]*')
+# A PHP literal prefix concatenated to a computed value: `'wp_ajax_' . $x` (BACK-2175). An
+# interpolated "name_{$x}" is not matched: that is a hook name being fired, not a callable built.
+_PHP_PREFIX = re.compile(r"""['"](\w*_)['"]\s*\.(?!\s*['"])""")
+# Shorter prefixes (`get_`, `is_`, `add_`) are bare verbs that any word literal completes by accident.
+_MIN_COMPUTED_PREFIX = 6
+_PHP_STRING = re.compile(r"""'([^'\\\n]*)'|"([^"\\\n$]*)\"""")
 # Families whose string literals name callbacks: PHP `add_action('x', 'fn')`, `[$this, 'm']`.
 _STRING_CALLBACK_FAMILIES = frozenset({'php'})
 # C/C++ name nodes a declarator can wrap (`Foo::run`, `~Foo`, `get<T>`).
@@ -197,7 +203,45 @@ def non_python_referenced_names(
         own = 0 if family == 'c' else definition_counts.get((family, name), 0)
         if count > own:
             referenced.setdefault(family, set()).add(name)
+    if candidates.get('php'):
+        computed = _computed_callback_names(file_paths, candidates['php'], on_read_error)
+        if computed:
+            referenced.setdefault('php', set()).update(computed)
     return referenced
+
+
+def _computed_callback_names(file_paths, names: Set[str],
+                             on_read_error: Optional[Callable[[str, OSError], None]]) -> Set[str]:
+    """Candidates a PHP file reaches by building the callback name at run time (BACK-2175).
+
+    `do_action('wp_ajax_' . str_replace('-', '_', $action))` over a list of action strings
+    never spells `wp_ajax_fetch_list`. A file that glues a literal prefix to a computed value
+    and also holds a string whose word characters, with every other character read as `_`,
+    complete a candidate (`fetch-list`) references `prefix + string`. Only that one file is
+    read for the strings: it is where the dispatcher and its action list sit together.
+    """
+    found: Set[str] = set()
+    for file_path in file_paths:
+        if family_for_path(file_path) == 'php':
+            text = _read_reference_text(file_path, on_read_error=on_read_error)
+            if text is not None:
+                found.update(_names_built_in(text, names))
+    return found
+
+
+def _built_prefixes(text: str, names: Set[str]) -> Set[str]:
+    found = {m.group(1) for m in _PHP_PREFIX.finditer(text)}
+    return {p for p in found if len(p) >= _MIN_COMPUTED_PREFIX
+            and any(n.startswith(p) and n != p for n in names)}
+
+
+def _names_built_in(text: str, names: Set[str]) -> Set[str]:
+    prefixes = _built_prefixes(text, names)
+    if not prefixes:
+        return set()
+    literals = {re.sub(r'\W', '_', m.group(1) or m.group(2) or '') for m in _PHP_STRING.finditer(text)}
+    return {n for n in names if any(n[:len(p)] == p and n[len(p):] in literals for p in prefixes)}
+
 
 
 def _smallest_containing(elements: List[Dict[str, Any]], line: int):

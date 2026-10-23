@@ -2161,8 +2161,9 @@ The Guava list shrank by three quarters and the WordPress list by a quarter, and
 Precision stays low because what remains is code kept on purpose with no reference inside the checkout: WordPress
 public API, deprecated shims and vendored library API (16 of 19 not-dead claims), Guava Caliper `@Benchmark` methods
 (about 240 of 711), methods dispatched by a project's own annotation (about 150) and fixtures read by reflection.
-One WordPress class is mechanical and still listed: 87 `wp_ajax_*` handlers called through
-`'wp_ajax_' . str_replace('-', '_', $action)`. Each dead label is a judgment call (a disabled theme shim in WordPress, a
+One WordPress class was mechanical and is fixed after the sample (BACK-2175): 87 `wp_ajax_*` handlers called through
+`'wp_ajax_' . str_replace('-', '_', $action)` no longer read as dead (2,571 to 2,473 claims on the whole checkout, 98
+removed, 0 added; the other 11 are `column_*` and similar names built the same way). The sample above predates it. Each dead label is a judgment call (a disabled theme shim in WordPress, a
 method of an uncompiled Lucene superclass in Elasticsearch); one reviewer, no second rater, recall not measured. The
 Guava one dead claim sits in a one-claim stratum, so it adds 0.1%. Evidence and labels: BACK-1899.
 

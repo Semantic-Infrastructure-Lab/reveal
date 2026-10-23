@@ -110,8 +110,8 @@ _UNCALLED_MEASURED_LOW = (
      'project annotation, methods looked up by name, fixtures read by reflection and callers outside the '
      'scanned directory read as dead.'),
     (frozenset({'php'}),
-     'PHP: 1 of 20 (WordPress) were dead; public API, deprecated shims, interface methods and AJAX '
-     'handlers reached by a computed name (wp_ajax_*) read as dead.'),
+     'PHP: 1 of 20 (WordPress) were dead; public API, deprecated shims and interface methods read as '
+     'dead.'),
 )
 UNCALLED_MEASURED_LOW_LANGUAGES = frozenset().union(*(langs for langs, _ in _UNCALLED_MEASURED_LOW))
 
