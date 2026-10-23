@@ -190,7 +190,7 @@ The most-used adapters; `reveal --adapters` lists every one.
 | `json://` | JMESPath queries, nested navigation, flatten |
 | `env://` | Environment variable analysis, `.env` validation |
 | `python://` | Runtime introspection of live Python modules |
-| `patches://` | Test patch pressure: repeated mocks, private patches, patch-heavy tests |
+| `patches://` | Test patch pressure: repeated mocks, private patches, patch-heavy tests; `?view=pressure` joins it with production boundary fan-out (was `testability://`) |
 | `xlsx://` | Excel data extraction and analysis |
 | `claude://` | AI session history, tool usage, file access patterns |
 | `codex://` | OpenAI Codex CLI session history, tool usage, per-session analysis |
