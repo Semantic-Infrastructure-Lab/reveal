@@ -2165,8 +2165,8 @@ Methods dispatched by a project-declared annotation that the scan reads through 
 after the sample (BACK-2176): Guava 715 to 562 claims, 153 removed, 0 added (147 in the two `FreshValueGenerator` copies);
 Caliper `@Benchmark` stays listed because nothing in the checkout reads it.
 One WordPress class was mechanical and is fixed after the sample (BACK-2175): 87 `wp_ajax_*` handlers called through
-`'wp_ajax_' . str_replace('-', '_', $action)` no longer read as dead (2,571 to 2,473 claims on the whole checkout, 98
-removed, 0 added; the other 11 are `column_*` and similar names built the same way). The sample above predates it. Each dead label is a judgment call (a disabled theme shim in WordPress, a
+`'wp_ajax_' . str_replace('-', '_', $action)` no longer read as dead (2,571 to 2,475 claims on the whole checkout, 96
+removed, 0 added; the other 9 are `column_*` and similar names built the same way). The sample above predates it. Each dead label is a judgment call (a disabled theme shim in WordPress, a
 method of an uncompiled Lucene superclass in Elasticsearch); one reviewer, no second rater, recall not measured. The
 Guava one dead claim sits in a one-claim stratum, so it adds 0.1%. Evidence and labels: BACK-1899.
 

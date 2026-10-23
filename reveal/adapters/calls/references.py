@@ -21,24 +21,21 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from ...core import get_tree, iter_tree, _zero_arg
+from ...core import get_tree, iter_tree, node_children, _zero_arg
 from ...conventions import family_for_path
 from ...registry import language_for_extension
 
 logger = logging.getLogger(__name__)
 
 _WORD = re.compile(r'[A-Za-z_$][\w$]*')
-# A PHP literal prefix concatenated to a computed value: `'wp_ajax_' . $x` (BACK-2175). An
-# interpolated "name_{$x}" is not matched: that is a hook name being fired, not a callable built.
-_PHP_PREFIX = re.compile(r"""['"](\w*_)['"]\s*\.(?!\s*['"])""")
 # Shorter prefixes (`get_`, `is_`, `add_`) are bare verbs that any word literal completes by accident.
 _MIN_COMPUTED_PREFIX = 6
-# Java: an annotation type the scan declares, and a reflection read of one (BACK-2176).
-_JAVA_ANNOTATION_DECL = re.compile(r'@interface\s+(\w+)')
-_JAVA_ANNOTATION_READ = re.compile(
-    r'\b(?:isAnnotationPresent|getAnnotation|getDeclaredAnnotation|getAnnotationsByType|'
-    r'getDeclaredAnnotationsByType)\s*\(\s*(\w+)\s*\.\s*class\b')
-_PHP_STRING = re.compile(r"""'([^'\\\n]*)'|"([^"\\\n$]*)\"""")
+# Java reflection calls that read an annotation type off a method or class (BACK-2176).
+_JAVA_ANNOTATION_READS = frozenset({
+    'isAnnotationPresent', 'getAnnotation', 'getDeclaredAnnotation', 'getAnnotationsByType',
+    'getDeclaredAnnotationsByType',
+})
+_PHP_STRING_KINDS = frozenset({'string', 'encapsed_string'})
 # Families whose string literals name callbacks: PHP `add_action('x', 'fn')`, `[$this, 'm']`.
 _STRING_CALLBACK_FAMILIES = frozenset({'php'})
 # C/C++ name nodes a declarator can wrap (`Foo::run`, `~Foo`, `get<T>`).
@@ -234,19 +231,57 @@ def _computed_callback_names(file_paths, names: Set[str],
     return found
 
 
-def _built_prefixes(text: str, names: Set[str]) -> Set[str]:
-    found = {m.group(1) for m in _PHP_PREFIX.finditer(text)}
-    return {p for p in found if len(p) >= _MIN_COMPUTED_PREFIX
-            and any(n.startswith(p) and n != p for n in names)}
+def _tree_of(text: str, language: str):
+    try:
+        return get_tree(language, text)
+    except Exception as e:  # noqa: BLE001 - unknown grammar or parse failure: this file adds no evidence
+        logger.debug("computed-callback: cannot parse (%s): %s", language, e)
+        return None
+
+
+def _string_text(node, content: bytes) -> Optional[str]:
+    """The text of a PHP string with no interpolation, else None."""
+    parts = [c for c in node_children(node) if _zero_arg(c, 'kind') not in ('"', "'")]
+    if any(_zero_arg(c, 'kind') != 'string_content' for c in parts) or len(parts) > 1:
+        return None
+    return b''.join(content[_zero_arg(c, 'start_byte'):_zero_arg(c, 'end_byte')] for c in parts).decode(
+        'utf-8', errors='replace')
+
+
+def _php_prefix_and_literals(text: str) -> Tuple[Set[str], Set[str]]:
+    """Code-only facts of a PHP file: literal prefixes concatenated to a computed value
+    (`'wp_ajax_' . $x`) and every plain string literal. Comments are not code."""
+    tree = _tree_of(text, 'php')
+    if tree is None:
+        return set(), set()
+    content = text.encode('utf-8')
+    prefixes: Set[str] = set()
+    literals: Set[str] = set()
+    for node in iter_tree(_zero_arg(tree, 'root_node')):
+        kind = _zero_arg(node, 'kind')
+        if kind in _PHP_STRING_KINDS:
+            literal = _string_text(node, content)
+            if literal is not None:
+                literals.add(re.sub(r'\W', '_', literal))
+        elif kind == 'binary_expression':
+            parts = node_children(node)
+            if len(parts) == 3 and _zero_arg(parts[1], 'kind') == '.' \
+                    and _zero_arg(parts[0], 'kind') in _PHP_STRING_KINDS \
+                    and _zero_arg(parts[2], 'kind') not in _PHP_STRING_KINDS:
+                prefix = _string_text(parts[0], content)
+                if prefix and prefix.endswith('_') and len(prefix) >= _MIN_COMPUTED_PREFIX:
+                    prefixes.add(prefix)
+    return prefixes, literals
 
 
 def _names_built_in(text: str, names: Set[str]) -> Set[str]:
-    prefixes = _built_prefixes(text, names)
+    if "_'" not in text and '_"' not in text:     # no string can end in `_`: skip the parse
+        return set()
+    prefixes, literals = _php_prefix_and_literals(text)
+    prefixes = {p for p in prefixes if any(n.startswith(p) and n != p for n in names)}
     if not prefixes:
         return set()
-    literals = {re.sub(r'\W', '_', m.group(1) or m.group(2) or '') for m in _PHP_STRING.finditer(text)}
     return {n for n in names if any(n[:len(p)] == p and n[len(p):] in literals for p in prefixes)}
-
 
 
 def _smallest_containing(elements: List[Dict[str, Any]], line: int):
@@ -380,7 +415,38 @@ def reflected_annotation_types(file_paths, *,
         if family_for_path(file_path) != 'java':
             continue
         text = _read_reference_text(file_path, on_read_error=on_read_error)
-        if text is not None:
-            declared.update(_JAVA_ANNOTATION_DECL.findall(text))
-            read.update(_JAVA_ANNOTATION_READ.findall(text))
+        if text is not None and ('@interface' in text or '.class' in text):
+            file_declared, file_read = _java_annotation_facts(text)
+            declared |= file_declared
+            read |= file_read
     return declared & read
+
+
+def _reflected_class_names(call, name: Callable) -> Set[str]:
+    """`X` of `recv.isAnnotationPresent(X.class)`, else nothing."""
+    parts = node_children(call)
+    callee = [c for c in parts if _zero_arg(c, 'kind') == 'identifier']
+    args = [c for c in parts if _zero_arg(c, 'kind') == 'argument_list']
+    if not (callee and args and name(callee[-1]) in _JAVA_ANNOTATION_READS):
+        return set()
+    literals = [c for c in node_children(args[0]) if _zero_arg(c, 'kind') == 'class_literal']
+    return {name(t) for lit in literals for t in node_children(lit) if _zero_arg(t, 'kind') == 'type_identifier'}
+
+
+def _java_annotation_facts(text: str) -> Tuple[Set[str], Set[str]]:
+    """Annotation types a Java file declares (`@interface X`) and reads reflectively
+    (`m.isAnnotationPresent(X.class)`), from the parse tree: comments and strings do neither."""
+    tree = _tree_of(text, 'java')
+    if tree is None:
+        return set(), set()
+    content = text.encode('utf-8')
+    name = lambda n: content[_zero_arg(n, 'start_byte'):_zero_arg(n, 'end_byte')].decode('utf-8', errors='replace')
+    declared: Set[str] = set()
+    read: Set[str] = set()
+    for node in iter_tree(_zero_arg(tree, 'root_node')):
+        kind = _zero_arg(node, 'kind')
+        if kind == 'annotation_type_declaration':
+            declared.update(name(c) for c in node_children(node) if _zero_arg(c, 'kind') == 'identifier')
+        elif kind == 'method_invocation':
+            read.update(_reflected_class_names(node, name))
+    return declared, read
