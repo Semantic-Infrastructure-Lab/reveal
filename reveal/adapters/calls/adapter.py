@@ -439,7 +439,7 @@ _ANSWER_FIELDS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], Tuple[str, ...
 # Required evidence lost to an unreadable file or directory (confidence.build_meta).
 _LOSS_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete'})
 # A name answer that can prove absence: the field it names and its observation count.
-_ABSENCE_TYPES = frozenset({'calls_query', 'calls_callees'})
+_ABSENCE_TYPES = frozenset({'calls_query', 'calls_callees', 'calls_callees_recursive'})
 _WALK_TOTALS = ('total_edges', 'total_resolved', 'total_unresolved', 'total_ambiguous')
 
 
@@ -456,7 +456,7 @@ def _calls_usage_rejection(result: Dict[str, Any]) -> bool:
 
 
 def _calls_absence_message(result: Dict[str, Any]) -> str:
-    return f"Function '{result['target']}' not found in {result['path']}"
+    return f"Function '{result.get('target', result.get('root'))}' not found in {result['path']}"
 
 
 def _calls_proof_error(result: Any) -> Optional[str]:
@@ -800,11 +800,12 @@ class CallsAdapter(ResourceAdapter):
         params = self.query_params
         depth = _DEPTH.read(params)
         source = callee_source(self.path)
-        data = callee_levels(walk_callees(self.path, root, depth=2 if depth is None else depth,
-                                          include_builtins=_BUILTINS.read(params), source=source))
+        walk = walk_callees(self.path, root, depth=2 if depth is None else depth,
+                            include_builtins=_BUILTINS.read(params), source=source)
+        data = callee_levels(walk)
         data['path'] = self.path
         return self._answer('calls_callees_recursive', data, query_format=_FORMAT.read(params) or '',
-                            census=source.language_census(self.path))
+                            census=source.language_census(self.path), absent=lambda: not walk.roots)
 
     def _usage(self, message: str) -> RevealResult:
         """Usage, not analysis: D6 exits 2 (it exited 1 before calls was declared, BACK-2066)."""

@@ -73,9 +73,7 @@ def test_a_real_file_with_no_importers_is_still_a_zero(project):
     assert json.loads(out.stdout)['importers'] == []
 
 
-# calls ?root= is the retired alias of callees&depth and still answers an absent name with an empty
-# walk (BACK-2167); strict, so the day it is fixed or removed this row has to go.
-KNOWN_GAPS = {('calls', 'root'): 'BACK-2167'}
+KNOWN_GAPS: dict = {}
 
 
 def _symbol_rows():
@@ -89,3 +87,11 @@ def test_a_symbol_target_that_matches_nothing_exits_2(project, noun, param):
     """The contract already held for calls; this pins it so the declaration cannot drift from it."""
     result = _run_reveal_direct(f'{noun}://proj?{param}=no_such_symbol_zz', '--no-gitignore', '--format', 'json')
     assert result.returncode == 2, (noun, param, result.stdout, result.stderr)
+
+
+def test_a_defined_root_with_no_calls_is_still_a_zero(project):
+    """Negative control (BACK-2167): the retired calls ?root= alias exits 2 only for an absent name."""
+    (project / 'pkg' / 'leaf.py').write_text('def leaf():\n    return 1\n', encoding='utf-8')
+    out = _run_reveal_direct('calls://proj?root=leaf', '--no-gitignore', '--format', 'json')
+    assert out.returncode == 0, (out.stdout, out.stderr)
+    assert json.loads(out.stdout)['total_edges'] == 0
