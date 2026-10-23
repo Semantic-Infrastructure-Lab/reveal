@@ -31,7 +31,7 @@ def codes(meta):
 @pytest.mark.parametrize('name', ['app.ts', 'app.tsx', 'app.js'])
 def test_uncalled_over_js_ts_withholds_confidence_and_names_the_measurement(tmp_path, name):
     meta = meta_of(tmp_path, {name: TS}, 'uncalled=true')
-    assert meta['confidence'] is None
+    assert meta.get('confidence') is None
     warning = next(w for w in meta['warnings'] if w.get('code') == 'W-CALLS-11')
     assert warning['type'] == 'not_measured'
     assert warning['languages'] == [{'app.ts': 'typescript', 'app.tsx': 'tsx', 'app.js': 'javascript'}[name]]
@@ -54,6 +54,6 @@ def test_callers_over_js_ts_keeps_its_confidence(tmp_path):
 
 def test_a_mixed_scan_names_only_the_js_ts_languages(tmp_path):
     meta = meta_of(tmp_path, {'app.ts': TS, 'tool.py': PY}, 'uncalled=true')
-    assert meta['confidence'] is None
+    assert meta.get('confidence') is None
     warning = next(w for w in meta['warnings'] if w.get('code') == 'W-CALLS-11')
     assert warning['languages'] == ['typescript']

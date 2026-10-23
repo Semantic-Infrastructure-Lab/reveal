@@ -96,16 +96,37 @@ def _unmeasured_language_warning(per_language: Dict[str, int]) -> Optional[Dict[
                         'no measured number covers their call edges.')}
 
 
-def _declines(per_language: Dict[str, int], unmeasured_walk: bool) -> List[Dict[str, Any]]:
-    """W-CALLS-9 for an unmeasured walk, W-CALLS-10 for unmeasured languages (rule 8)."""
+# ?uncalled dead-code precision, measured by source review (BACK-1899, VALIDATION.md): 20 claims per
+# corpus, one corpus per language. The calls confidence is extraction recall and says nothing about it.
+UNCALLED_MEASURED_LOW_LANGUAGES = frozenset({'javascript', 'typescript', 'tsx'})
+
+
+def _uncalled_measured_low_warning(per_language: Dict[str, int]) -> Optional[Dict[str, Any]]:
+    """W-CALLS-11, naming each scanned JS/TS-family language whose dead-code claims were measured
+    low, or None."""
+    named = sorted(lang for lang in per_language if lang in UNCALLED_MEASURED_LOW_LANGUAGES)
+    if not named:
+        return None
+    return {'code': 'W-CALLS-11', 'type': 'not_measured', 'languages': named,
+            'message': ('Confidence withheld: dead-code precision is measured low for JavaScript/TypeScript. '
+                        'In a 20-claim source review per corpus, 0 of 20 (three.js), 12 of 20 (VS Code) and '
+                        '1 of 20 (Excalidraw) uncalled claims were dead: public API, framework hooks, '
+                        'class-field initializers, decorators and string-keyed dispatch read as dead. '
+                        'Treat this as a review list, not findings.')}
+
+
+def _declines(per_language: Dict[str, int], unmeasured_walk: bool, uncalled: bool = False) -> List[Dict[str, Any]]:
+    """W-CALLS-9 for an unmeasured walk, W-CALLS-10 for unmeasured languages, W-CALLS-11 for
+    ?uncalled over a language whose dead-code claims were measured low (rule 8)."""
     declines = [dict(_UNMEASURED_WALK_WARNING)] if unmeasured_walk else []
     unmeasured = _unmeasured_language_warning(per_language)
-    return declines + ([unmeasured] if unmeasured else [])
+    measured_low = _uncalled_measured_low_warning(per_language) if uncalled else None
+    return declines + [w for w in (unmeasured, measured_low) if w]
 
 
 def _reported_confidence(confidence: float, known_loss: bool, declines: List[Dict[str, Any]]) -> Optional[float]:
     """No number while evidence was lost or a scanned call-source language has no recall snapshot."""
-    if known_loss or any(w['code'] == 'W-CALLS-10' for w in declines):
+    if known_loss or any(w['code'] in ('W-CALLS-10', 'W-CALLS-11') for w in declines):
         return None
     return confidence
 
@@ -141,7 +162,8 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
     vocabulary, printed unconditionally on every language) for the dominant
     language's own dispatch idioms. A scanned language in UNMEASURED_CALL_SOURCE_LANGUAGES
     makes the confidence null and is named (W-CALLS-10); *unmeasured_walk* adds the
-    W-CALLS-9 decline for a callee walk beyond depth 1 or --detail.
+    W-CALLS-9 decline for a callee walk beyond depth 1 or --detail; *uncalled* over a JS/TS-family
+    language makes it null and names it (W-CALLS-11).
 
     *census* is the per-language file count a caller already holds for this very *path* and scope
     (``CalleeSource.language_census``, BACK-2132); None walks the tree for it. A held census had
@@ -190,7 +212,7 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
         warnings.append({'code': 'W-CALLS-8', 'message': (
             'JSX component uses are typed jsx_reference relationships; runtime render scheduling is unresolved. '
             'Class-field initializer navigation, string/HTML/Angular templates and Vue/Svelte component relationships are outside this scope.')})
-    declines = _declines(per_language, unmeasured_walk)
+    declines = _declines(per_language, unmeasured_walk, uncalled)
     warnings.extend(declines)
     known_loss = bool(skipped or directory_failures)
     if uncalled:

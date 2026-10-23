@@ -430,6 +430,7 @@ A callee walk beyond depth 1 and `--detail` are not measured in any language: th
 W-CALLS-9 and its `walk_rule` (a `Rule:` line in text) says `beyond_depth_1: false, detail: false`.
 A language in PATH that yields call sources and has no recall snapshot (Elixir, Objective-C)
 withholds the confidence and is named (W-CALLS-10); shell, SQL and other files with no call edges do not.
+`?uncalled` over JavaScript, TypeScript or TSX also withholds it (W-CALLS-11): its dead-code claims were measured low, so read the list as candidates to review.
 
 A directory named `calls` in the current directory is shadowed by the verb: `reveal calls`
 prints `note: ./calls/ exists — use ./calls or calls/ to target it`; `reveal calls/` is the path.

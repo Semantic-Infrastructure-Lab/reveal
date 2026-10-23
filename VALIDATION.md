@@ -2095,6 +2095,31 @@ A new sample is reviewed before replacing the committed labels; the scoring
 command verifies the committed source hashes and pin. No baseline is rewritten
 by scheduled execution.
 
+## `calls ?uncalled` precision, JavaScript and TypeScript (2026-10-22)
+
+`calls://<corpus>?uncalled=true` was run on the whole of each pinned corpus (reveal 0.131.0; three.js
+`4a1f515d`, VS Code `71a83f43`, Excalidraw `53973c3a`). Claims in JS/TS-family files were sampled
+deterministically (seed `BACK-1899/2026-10-22`, strata by top-level directory), 20 per corpus, and each
+was read against the source and searched for references across the corpus. A claim is *dead* when
+nothing in the repository calls or references it and no declared surface reaches it (package exports,
+framework or test-runner hook, interface the method must implement); public API with no in-repo caller
+counts as not dead.
+
+| Corpus | Dead / not dead / uncertain (population) | Stratified estimate | Conservative 95% interval |
+|---|---|---|---|
+| JavaScript, three.js | 0 / 20 / 0 (710) | 0% | 0-60% |
+| TypeScript, VS Code | 12 / 8 / 0 (1,220) | 65% | 26-89% |
+| TSX, Excalidraw | 1 / 19 / 0 (96) | 5% | 1-36% |
+
+These are scoped estimates from one reviewer and one repository per language, not general accuracy
+claims; recall (dead code the tool misses) was not measured. The causes of false claims are general:
+public API with no in-repo caller, framework hooks, calls inside class-field initializers,
+`@command`-style decorators, calls from inline `<script>` in HTML, string-keyed or computed dispatch,
+and an arrow function reported under the name of the variable it is assigned to. The answer's
+`meta.confidence` is call-extraction recall and does not cover any of them, so `?uncalled` over
+JavaScript, TypeScript or TSX withholds it and says so (W-CALLS-11). Other languages are not yet
+measured (BACK-1899).
+
 ## Re-running this yourself
 
 Before corpus measurements, `pytest tests/test_import_precision_invariants.py` runs

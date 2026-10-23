@@ -417,6 +417,9 @@ Objective-C; the 19 measured pairs cover python, typescript/tsx, javascript, go,
 php, csharp, kotlin, swift, cpp, c, scala, zig, lua, gdscript and dart) withholds it: the envelope
 carries no `confidence`, and W-CALLS-10 names each such language with its file count, in text and
 JSON. Files that yield no call edge (shell, SQL, GraphQL, protobuf, YAML, ...) do not withhold it.
+`?uncalled` over a JavaScript, TypeScript or TSX scan withholds it as well, and W-CALLS-11 names the language: a
+source review of 20 claims per corpus found 0 of 20 (three.js), 12 of 20 (VS Code) and 1 of 20 (Excalidraw)
+dead, so the list is a review list, not findings.
 
 ### JSON
 
