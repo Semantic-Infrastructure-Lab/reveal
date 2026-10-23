@@ -49,7 +49,7 @@ export function blockShadows() {
   return blocked;
 }
 const viaMember = wrap((q: number) => helper(q));
-export const holder: any = { viaMember: () => 1 };
+export const holder: any = { viaMember: 1 };
 holder.viaMember();
 '''
 FUNCTIONS = {'onClick', 'Widget', 'cb', 'Memo', 'local', 'helper'}

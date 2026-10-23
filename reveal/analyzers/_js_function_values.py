@@ -32,6 +32,11 @@ _NAMED_OBJECT_HOLDERS = ('variable_declarator', 'assignment_expression', 'export
 # Calls whose first argument is the function they return or wrap, whatever follows it (``memo(fn, areEqual)``,
 # ``useCallback(fn, deps)``), also as a member call (``React.useCallback``; BACK-2169).
 _FUNCTION_WRAPPERS = frozenset({'memo', 'forwardRef', 'useCallback'})
+# Scope facts for "does this file call the name this declaration binds" (BACK-2174).
+_FUNCTION_SCOPES = frozenset({'function_declaration', 'function_expression', 'generator_function',
+                              'generator_function_declaration', 'arrow_function', 'method_definition'})
+_DECLARATIONS = ('lexical_declaration', 'variable_declaration')
+_NAMED_DECLARATIONS = ('function_declaration', 'generator_function_declaration', 'class_declaration')
 
 
 class JSFunctionValueMixin(_Base):
@@ -85,14 +90,17 @@ class JSFunctionValueMixin(_Base):
         `connect(...)(Component)` has no function literal at this level and is
         correctly left unmatched, not mis-attributed).
         """
-        name_node = value_node = None
+        name_node = value_node = call = None
         for ch in _children(variable_declarator_node):
             if _zero_arg(ch, 'kind') == 'identifier' and name_node is None:
                 name_node = ch
             elif _zero_arg(ch, 'kind') in ('arrow_function', 'function_expression', 'generator_function'):
                 value_node = ch
             elif _zero_arg(ch, 'kind') == 'call_expression' and value_node is None:
+                call = ch
                 value_node = self._call_wrapped_function_literal(ch)
+        if value_node is not None and call is not None and not self._plain_call_is_function(call, name_node):
+            value_node = None
         return name_node, value_node
 
     def _call_wrapped_function_literal(self, call_expression_node) -> Optional[Any]:
@@ -105,7 +113,7 @@ class JSFunctionValueMixin(_Base):
 
         BACK-2169: a member call (``xs.map(fn)``, ``items.find(fn)``) returns the method's value, not
         the function it is given, so it never wraps; ``React.memo`` / ``Object.assign`` are still
-        wrappers by name. Plain calls (``useCallback(fn)``, ``derived(fn)``) are unchanged for now.
+        wrappers by name. A plain call (``derived(fn)``) wraps only when the file calls the name it is assigned to (BACK-2174).
 
         BACK-726: supports the `HOC(...)((...) => {...})` shape — looks only
         at the call's own direct `arguments` list (not nested calls), so a
@@ -127,6 +135,103 @@ class JSFunctionValueMixin(_Base):
             if len(candidates) == 1:
                 return candidates[0]
         return None
+
+    def _plain_call_is_function(self, call, name_node) -> bool:
+        """Whether `const NAME = callee(fn)` binds a function.
+
+        BACK-2174: a declared wrapper (``memo``, ``useCallback``) returns its function. Any other plain call
+        (``setTimeout(fn)``, ``derived(fn)``, ``useMemo(fn)``) returns a value, and the file only shows it is a
+        function when it calls or constructs the name this declaration binds.
+        """
+        if self._is_wrapper_call(call):
+            return True
+        return name_node is not None and self._is_called_in_scope(
+            _zero_arg(name_node, 'parent'), self._get_node_text(name_node))
+
+    def _called_index(self) -> dict:
+        """name -> calls and `new` expressions whose callee is that bare identifier, built once per tree."""
+        index = getattr(self, '_call_index_cache', None)
+        if index is None:
+            index = {}
+            for kind in ('call_expression', 'new_expression'):
+                for call in self._find_nodes_by_type(kind):
+                    callee = call.child_by_field_name('function') or call.child_by_field_name('constructor')
+                    if callee is not None and _zero_arg(callee, 'kind') == 'identifier':
+                        index.setdefault(self._get_node_text(callee), []).append(call)
+            self._call_index_cache = index
+        return index
+
+    def _declaring_scope(self, declarator):
+        """The node whose span a declarator's name is visible in: its block (`let`/`const`), or the function
+        or program (`var`)."""
+        declaration = _zero_arg(declarator, 'parent')
+        hoisted = declaration is not None and _zero_arg(declaration, 'kind') == 'variable_declaration'
+        node = _zero_arg(declaration, 'parent') if declaration is not None else None
+        while node is not None:
+            kind = _zero_arg(node, 'kind')
+            if kind == 'program' or kind in _FUNCTION_SCOPES or (kind == 'statement_block' and not hoisted):
+                return node
+            node = _zero_arg(node, 'parent')
+        return None
+
+    def _is_called_in_scope(self, declarator, name: str) -> bool:
+        """Whether a call or `new` of NAME inside the declaration's scope refers to this declaration."""
+        scope = self._declaring_scope(declarator)
+        if scope is None:
+            return False
+        low, high = _zero_arg(scope, 'start_byte'), _zero_arg(scope, 'end_byte')
+        return any(low <= _zero_arg(call, 'start_byte') < high and not self._is_shadowed(call, scope, name)
+                   for call in self._called_index().get(name, ()))
+
+    def _is_shadowed(self, call, scope, name: str) -> bool:
+        """Whether something between `call` and `scope` binds NAME again (parameter, block declaration, catch
+        or loop variable, or a function's own name). Over-reports on a parameter default that merely reads NAME,
+        which can only withhold a function claim. A `var` in a nested block is not followed."""
+        span = (_zero_arg(scope, 'start_byte'), _zero_arg(scope, 'end_byte'))
+        node = _zero_arg(call, 'parent')
+        while node is not None and (_zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte')) != span:
+            if self._node_rebinds(node, name):
+                return True
+            node = _zero_arg(node, 'parent')
+        return False
+
+    def _node_rebinds(self, node, name: str) -> bool:
+        kind = _zero_arg(node, 'kind')
+        if kind in _FUNCTION_SCOPES:
+            own = node.child_by_field_name('name')
+            params = node.child_by_field_name('parameters') or node.child_by_field_name('parameter')
+            return (own is not None and self._get_node_text(own) == name) or self._mentions(params, name)
+        if kind == 'catch_clause':
+            return self._mentions(node.child_by_field_name('parameter'), name)
+        if kind == 'for_in_statement':
+            return self._mentions(node.child_by_field_name('left'), name)
+        if kind in ('statement_block', 'for_statement'):
+            return self._block_declares(node, name)
+        return False
+
+    def _block_declares(self, block, name: str) -> bool:
+        for child in _children(block):
+            kind = _zero_arg(child, 'kind')
+            if kind in _DECLARATIONS:
+                if any(self._mentions(d.child_by_field_name('name'), name)
+                       for d in _children(child) if _zero_arg(d, 'kind') == 'variable_declarator'):
+                    return True
+            elif kind in _NAMED_DECLARATIONS:
+                declared = child.child_by_field_name('name')
+                if declared is not None and self._get_node_text(declared) == name:
+                    return True
+        return False
+
+    def _mentions(self, node, name: str) -> bool:
+        """Whether an identifier spelled NAME occurs anywhere under `node`."""
+        stack = [node] if node is not None else []
+        while stack:
+            current = stack.pop()
+            if _zero_arg(current, 'kind') in ('identifier', 'shorthand_property_identifier_pattern') \
+                    and self._get_node_text(current) == name:
+                return True
+            stack.extend(_children(current))
+        return False
 
     def _callee_parts(self, call) -> Tuple[str, str]:
         """(object text, property or identifier name) of a call's callee, '' when not a plain name."""
