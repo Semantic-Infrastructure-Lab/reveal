@@ -1417,8 +1417,20 @@ def _record_non_python_reference_failure(skipped: List[Tuple[str, str]],
             to_posix(file_path), f'{type(error).__name__}: non-Python reference read failed: {error}'))
 
 
+def _reference_files(directory: Path, structures: List[Dict[str, Any]]) -> List[str]:
+    """Every code file the scan sees, not only those with a structure: a file of
+    top-level statements (`add_action('init', 'fn')` lists, `setInterval(fn)`) defines
+    nothing, so collect_structures omits it, yet it is where a name is used (BACK-2170)."""
+    files = [fs.get('file', '') for fs in structures]
+    seen = {os.path.normcase(f) for f in files}
+    files.extend(str(fp) for fp in _walk_code_files(directory)
+                 if is_code_file(fp) and os.path.normcase(str(fp)) not in seen)
+    return files
+
+
 def _drop_referenced(entries: List[Dict[str, Any]],
                      structures: List[Dict[str, Any]], *,
+                     directory: Path,
                      on_read_error: Optional[Callable[[str, OSError], None]] = None) -> List[Dict[str, Any]]:
     """BACK-1391: drop candidates a non-Python file uses without calling them
     (callbacks, function pointers, module/class-body calls, PHP hook strings,
@@ -1443,7 +1455,7 @@ def _drop_referenced(entries: List[Dict[str, Any]],
                 here[bare] = here.get(bare, 0) + 1
     from .references import non_python_referenced_names
     referenced = non_python_referenced_names(
-        (fs.get('file', '') for fs in structures), candidates, definition_counts, defined_in_file,
+        _reference_files(directory, structures), candidates, definition_counts, defined_in_file,
         on_read_error=on_read_error)
     return [e for e in entries
             if _bare_callee_name(e['name']) not in referenced.get(_lang_family(e['file']), ())]
@@ -1656,7 +1668,7 @@ def find_uncalled(
             })
 
     query_skipped = list(structures.skipped)
-    entries = _drop_referenced(entries, structures, on_read_error=partial(
+    entries = _drop_referenced(entries, structures, directory=directory, on_read_error=partial(
         _record_non_python_reference_failure, query_skipped))
     entries.sort(key=lambda e: (_uncalled_entry_mtime(e), e['file'], e['line']))
     total_uncalled = len(entries)
