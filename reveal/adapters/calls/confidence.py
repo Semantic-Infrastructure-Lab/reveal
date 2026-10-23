@@ -106,11 +106,12 @@ _UNCALLED_MEASURED_LOW = (
      'read as dead.'),
     (frozenset({'java'}),
      'Java: 1 of 20 (Elasticsearch server, scanned in server/src/main/java only; the other 19 are used '
-     'elsewhere in the repo) and 0 of 20 (Guava) were dead; JUnit 3 test methods, serialization hooks, '
-     'annotation dispatch, methods looked up by name and callers outside the scanned directory read as dead.'),
+     'elsewhere in the repo) and 1 of 20 (Guava) were dead; Caliper benchmarks, methods dispatched by a '
+     'project annotation, methods looked up by name, fixtures read by reflection and callers outside the '
+     'scanned directory read as dead.'),
     (frozenset({'php'}),
-     'PHP: 0 of 20 (WordPress) were dead; hooks registered by string name (add_action), public API, '
-     'deprecated shims and interface methods read as dead.'),
+     'PHP: 1 of 20 (WordPress) were dead; public API, deprecated shims, interface methods and AJAX '
+     'handlers reached by a computed name (wp_ajax_*) read as dead.'),
 )
 UNCALLED_MEASURED_LOW_LANGUAGES = frozenset().union(*(langs for langs, _ in _UNCALLED_MEASURED_LOW))
 

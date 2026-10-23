@@ -2143,6 +2143,29 @@ hooks registered by string name (`add_action('x', 'fn')`), public plugin API, de
 methods and calls inside HTML templates. `meta.confidence` is call-extraction recall and covers none of them,
 so `?uncalled` over Java or PHP withholds it and says so (W-CALLS-11). Evidence and labels: BACK-1899.
 
+### Re-draw after the BACK-2170 and BACK-2171 fixes (2026-10-23)
+
+Same seed, method and criteria; reveal 0.131.0 at the commit that carries both fixes. Surviving claims recur and
+keep their label after one re-check; claims the fixes removed are replaced by the next ranked. BACK-2170: a function
+named only in a file that defines nothing (a list of `add_action('x', 'fn')` calls, a `setInterval(fn)` line) now counts as
+referenced. BACK-2171: Java JUnit 3 `test*` methods of `TestCase` subclasses, serialization hooks, `@Subscribe` and
+`@JsMethod` are no longer listed.
+
+| Corpus | Dead / not dead / uncertain (population) | Stratified estimate | Conservative 95% interval |
+|---|---|---|---|
+| Java, Elasticsearch `server/src/main/java` | 1 / 19 / 0 (2,092) | 5.5% | 0.6-82% |
+| Java, Guava (whole repo) | 1 / 19 / 0 (711, was 2,870) | 0.1% | 0.1-53% |
+| PHP, WordPress | 1 / 19 / 0 (1,382, was 1,789) | 0.9% | 0.1-37% |
+
+The Guava list shrank by three quarters and the WordPress list by a quarter, and none of the removed claims was dead.
+Precision stays low because what remains is code kept on purpose with no reference inside the checkout: WordPress
+public API, deprecated shims and vendored library API (16 of 19 not-dead claims), Guava Caliper `@Benchmark` methods
+(about 240 of 711), methods dispatched by a project's own annotation (about 150) and fixtures read by reflection.
+One WordPress class is mechanical and still listed: 87 `wp_ajax_*` handlers called through
+`'wp_ajax_' . str_replace('-', '_', $action)`. Each dead label is a judgment call (a disabled theme shim in WordPress, a
+method of an uncompiled Lucene superclass in Elasticsearch); one reviewer, no second rater, recall not measured. The
+Guava one dead claim sits in a one-claim stratum, so it adds 0.1%. Evidence and labels: BACK-1899.
+
 ## Re-running this yourself
 
 Before corpus measurements, `pytest tests/test_import_precision_invariants.py` runs

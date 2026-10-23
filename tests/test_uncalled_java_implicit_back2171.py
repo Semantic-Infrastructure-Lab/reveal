@@ -65,3 +65,28 @@ def test_include_test_framework_keeps_junit3_methods(tmp_path):
 
 def test_serialization_hooks_and_annotation_dispatch_are_not_dead(tmp_path):
     assert reported(names(tmp_path, {'Hooks.java': HOOKS})) == ['readConfig']
+
+
+ANNOTATED = '''\
+public class CacheGwtTest {
+  @SuppressWarnings("deprecation")
+  @Test
+  public void loadingCache() {}
+
+  @Test
+  @J2ktIncompatible
+  public void mapMethods() {}
+
+  @SuppressWarnings({"a",
+      "b"})
+  @Test
+  public void multiLine() {}
+
+  public void orphan() {}
+}
+'''
+
+
+def test_junit4_test_after_another_annotation_is_not_dead(tmp_path):
+    """The claim line is the first annotation, so a marker scan from there never saw the @Test."""
+    assert reported(names(tmp_path, {'CacheGwtTest.java': ANNOTATED})) == ['orphan']

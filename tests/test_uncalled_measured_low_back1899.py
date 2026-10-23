@@ -2,8 +2,8 @@
 
 The meta confidence is call-extraction recall. For ?uncalled over JS/TS/TSX it read 0.9997 over claims
 a source review found 0 of 20 (three.js), 12 of 20 (VS Code) and 1 of 20 (Excalidraw) dead, so the
-number is withheld and W-CALLS-11 names the measurement (plan rule 8). Java (1 of 20 Elasticsearch, 0 of 20
-Guava) and PHP (0 of 20 WordPress) were measured the same way.
+number is withheld and W-CALLS-11 names the measurement (plan rule 8). Java (1 of 20 Elasticsearch, 1 of 20
+Guava) and PHP (1 of 20 WordPress) were measured the same way, re-drawn after BACK-2170 and BACK-2171.
 """
 import json
 
@@ -64,7 +64,7 @@ def test_a_mixed_scan_names_only_the_js_ts_languages(tmp_path):
 
 @pytest.mark.parametrize('name,text,language,figure', [
     ('A.java', JAVA, 'java', '1 of 20 (Elasticsearch server'),
-    ('app.php', PHP, 'php', '0 of 20 (WordPress)'),
+    ('app.php', PHP, 'php', '1 of 20 (WordPress)'),
 ])
 def test_uncalled_over_java_and_php_withholds_confidence_and_states_only_its_own_figures(
         tmp_path, name, text, language, figure):

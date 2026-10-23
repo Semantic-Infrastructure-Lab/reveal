@@ -466,6 +466,13 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             }),
             entry_point_decorators=JVM_ENTRY_POINT_DECORATORS,
             stdlib_key=_prefix_stdlib_key('java', 'javax', 'jdk'),
+            # The analyzer's own decorator list, not a text scan from the claim line: a method whose
+            # first annotation is @SuppressWarnings has its @Test below the line scanned (BACK-2171).
+            test_decorators=frozenset({
+                'Test', 'ParameterizedTest', 'RepeatedTest', 'TestFactory',
+                'BeforeEach', 'AfterEach', 'BeforeAll', 'AfterAll',
+                'Before', 'After', 'BeforeClass', 'AfterClass',
+            }),
             test_name_prefixes=('test',), test_prefixes_in_test_files_only=True,
             test_file_patterns=(re.compile(r'^(.+?)Tests?\.java$'), re.compile(r'^Test(.+)\.java$')),
             test_symbol_patterns=(re.compile(r'(?:void|fun)\s+`?test(\w+)', re.MULTILINE),),
