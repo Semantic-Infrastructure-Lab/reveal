@@ -106,8 +106,8 @@ _UNCALLED_MEASURED_LOW = (
      'read as dead.'),
     (frozenset({'java'}),
      'Java: 1 of 20 (Elasticsearch server, scanned in server/src/main/java only; the other 19 are used '
-     'elsewhere in the repo) and 1 of 20 (Guava) were dead; Caliper benchmarks, methods dispatched by a '
-     'project annotation, methods looked up by name, fixtures read by reflection and callers outside the '
+     'elsewhere in the repo) and 1 of 20 (Guava) were dead; Caliper benchmarks, methods dispatched by an '
+     'annotation read outside the scan, methods looked up by name, fixtures read by reflection and callers outside the '
      'scanned directory read as dead.'),
     (frozenset({'php'}),
      'PHP: 1 of 20 (WordPress) were dead; public API, deprecated shims and interface methods read as '

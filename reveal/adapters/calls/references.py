@@ -33,6 +33,11 @@ _WORD = re.compile(r'[A-Za-z_$][\w$]*')
 _PHP_PREFIX = re.compile(r"""['"](\w*_)['"]\s*\.(?!\s*['"])""")
 # Shorter prefixes (`get_`, `is_`, `add_`) are bare verbs that any word literal completes by accident.
 _MIN_COMPUTED_PREFIX = 6
+# Java: an annotation type the scan declares, and a reflection read of one (BACK-2176).
+_JAVA_ANNOTATION_DECL = re.compile(r'@interface\s+(\w+)')
+_JAVA_ANNOTATION_READ = re.compile(
+    r'\b(?:isAnnotationPresent|getAnnotation|getDeclaredAnnotation|getAnnotationsByType|'
+    r'getDeclaredAnnotationsByType)\s*\(\s*(\w+)\s*\.\s*class\b')
 _PHP_STRING = re.compile(r"""'([^'\\\n]*)'|"([^"\\\n$]*)\"""")
 # Families whose string literals name callbacks: PHP `add_action('x', 'fn')`, `[$this, 'm']`.
 _STRING_CALLBACK_FAMILIES = frozenset({'php'})
@@ -356,3 +361,26 @@ def jsx_owner_call_sites(analyzer, elements, references):
         sites.append({'callee': callee, 'line': _zero_arg(node, 'start_position').row + 1,
                       **_owner_fields(owner, deferred_line)})
     return sites
+
+
+def reflected_annotation_types(file_paths, *,
+                               on_read_error: Optional[Callable[[str, OSError], None]] = None) -> Set[str]:
+    """Annotation types the scan declares and some code reads through reflection (BACK-2176).
+
+    `FreshValueGenerator` keeps the methods where `isAnnotationPresent(Generates.class)` holds
+    and invokes them by return type, so no call names a `@Generates` method. A type that is
+    both declared here (`@interface X`) and read here (`X.class` handed to the reflection API)
+    marks its methods as entry points. An annotation the project does not declare (a library's
+    own) or never reads this way marks nothing; a framework that reads from outside the scan
+    (Caliper `@Benchmark`) stays out of reach of a rule that needs the reader in the scan.
+    """
+    declared: Set[str] = set()
+    read: Set[str] = set()
+    for file_path in file_paths:
+        if family_for_path(file_path) != 'java':
+            continue
+        text = _read_reference_text(file_path, on_read_error=on_read_error)
+        if text is not None:
+            declared.update(_JAVA_ANNOTATION_DECL.findall(text))
+            read.update(_JAVA_ANNOTATION_READ.findall(text))
+    return declared & read

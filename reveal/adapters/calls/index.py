@@ -1659,7 +1659,9 @@ def find_uncalled(
     # _python_referenced_names for why both were invisible to the index.
     called_names |= _python_referenced_names(directory, structures=structures)
     file_lines: Dict[str, List[str]] = {}
-    extra_implicit_decorators = _project_entry_point_decorators(directory)
+    from .references import reflected_annotation_types
+    extra_implicit_decorators = _project_entry_point_decorators(directory) | reflected_annotation_types(
+        _reference_files(directory, structures))
     cpp_overrides = _cpp_override_names(structures, file_lines)
 
     scope = _UncalledScope(
