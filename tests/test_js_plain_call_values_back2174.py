@@ -52,6 +52,13 @@ const viaMember = wrap((q: number) => helper(q));
 export const holder: any = { viaMember: 1 };
 holder.viaMember();
 '''
+JSX = '''\
+declare function withTheme(fn: (p: number) => any): any;
+const Card = withTheme((p: number) => null);
+const Unused = withTheme((p: number) => null);
+const lower = withTheme((p: number) => null);
+export const Page = () => <div><Card /><lower /></div>;
+'''
 FUNCTIONS = {'onClick', 'Widget', 'cb', 'Memo', 'local', 'helper'}
 VALUES = {'timer', 'store', 'memoValue', 'stopper', 'passed', 'local2', 'shadowed', 'blocked', 'viaMember'}
 
@@ -61,6 +68,7 @@ def project(tmp_path):
     root = tmp_path / 'proj'
     root.mkdir()
     (root / 'a.ts').write_text(SOURCE, encoding='utf-8')
+    (root / 'b.tsx').write_text(JSX, encoding='utf-8')
     return root
 
 
@@ -85,3 +93,9 @@ def test_callers_do_not_name_a_plain_call_value(project):
     callers = {c['caller'] for level in run(f'calls://{project}?callers=helper')['levels'] for c in level['callers']}
     assert {'onClick', 'cb'} <= callers
     assert not VALUES & callers
+
+
+def test_a_component_used_as_a_jsx_tag_is_a_function_and_an_unused_one_is_not(project):
+    names = {f['name'] for f in run(str(project / 'b.tsx'))['structure']['functions']}
+    assert {'Card', 'Page'} <= names
+    assert not {'Unused', 'lower'} & names

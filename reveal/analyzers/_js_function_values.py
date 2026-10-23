@@ -149,15 +149,21 @@ class JSFunctionValueMixin(_Base):
             _zero_arg(name_node, 'parent'), self._get_node_text(name_node))
 
     def _called_index(self) -> dict:
-        """name -> calls and `new` expressions whose callee is that bare identifier, built once per tree."""
+        """name -> the calls, `new` expressions and JSX tags that use that bare identifier as a function, built
+        once per tree. A JSX tag counts only when the name is capitalised (`<Card/>`; `<div/>` is intrinsic)."""
         index = getattr(self, '_call_index_cache', None)
         if index is None:
             index = {}
-            for kind in ('call_expression', 'new_expression'):
-                for call in self._find_nodes_by_type(kind):
-                    callee = call.child_by_field_name('function') or call.child_by_field_name('constructor')
-                    if callee is not None and _zero_arg(callee, 'kind') == 'identifier':
-                        index.setdefault(self._get_node_text(callee), []).append(call)
+            for kind in ('call_expression', 'new_expression', 'jsx_self_closing_element', 'jsx_opening_element'):
+                for use in self._find_nodes_by_type(kind):
+                    callee = (use.child_by_field_name('function') or use.child_by_field_name('constructor')
+                              or use.child_by_field_name('name'))
+                    if callee is None or _zero_arg(callee, 'kind') != 'identifier':
+                        continue
+                    text = self._get_node_text(callee)
+                    if kind.startswith('jsx_') and not text[:1].isupper():
+                        continue
+                    index.setdefault(text, []).append(use)
             self._call_index_cache = index
         return index
 
