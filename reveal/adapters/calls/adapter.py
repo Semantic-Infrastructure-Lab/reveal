@@ -62,7 +62,8 @@ def _calls_top(value: Any) -> int:
 
 def _name_spec(name: str, description: str, example: str) -> ParamSpec:
     return ParamSpec(name, 'string', description, None, _name_value(name), examples=(example,),
-                     role='operation', uri_codec='percent', cli=CliBinding((f'--{name}',), metavar='NAME'))
+                     role='operation', uri_codec='percent', names='symbol',
+                     cli=CliBinding((f'--{name}',), metavar='NAME'))
 
 
 def _flag_spec(name: str, description: str, role: str = 'analysis', dest: Optional[str] = None) -> ParamSpec:

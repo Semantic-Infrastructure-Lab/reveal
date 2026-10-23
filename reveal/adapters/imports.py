@@ -12,6 +12,7 @@ Usage:
     reveal 'imports://src?circular'          # Find cycles
 """
 
+import difflib
 import hashlib
 import os
 from collections import OrderedDict
@@ -390,7 +391,7 @@ _IMPORTERS = ParamSpec(
     'Who imports what: bare (or on a directory) lists every module under the path with its sorted '
     'importers; =FILE (relative to the path) or a file path lists that file\'s importers with the import '
     'line, scope and the cascade stage (via) of each edge',
-    None, _importers_value,
+    None, _importers_value, names='file',
     examples=('imports://src?importers', 'imports://src?importers=utils.py', 'imports://src/utils.py?importers'),
 )
 _REQUEST_SPECS = (_LAZY, _SCOPE, _TESTS, _ROOT, _MAX_FILES, _IMPORTERS)
@@ -434,7 +435,7 @@ PARAM_SPECS: Tuple[ParamSpec, ...] = (
                                metavar=spec.name.upper()))
       for spec in _REQUEST_SPECS if spec is not _IMPORTERS),
     ParamSpec(_IMPORTERS.name, _IMPORTERS.type, _IMPORTERS.description, None, _IMPORTERS.convert,
-              _IMPORTERS.examples, role='operation',
+              _IMPORTERS.examples, role='operation', names=_IMPORTERS.names,
               cli=CliBinding(('--importers',), nargs='?', metavar='FILE')),
 )
 _FLAG_NAMES = frozenset(spec.name for spec in PARAM_SPECS if spec.type == 'boolean')
@@ -1481,6 +1482,34 @@ def _typed_params(params: Any) -> QueryParams:
     return typed
 
 
+def _named_candidates(name: str, base_dir: Path, root: Path) -> List[Path]:
+    """The existing paths ``?importers=NAME`` can mean: relative to the requested directory and
+    relative to the scan root (two spellings of one file collapse; two files stay two), or the
+    absolute path itself. One owner for the answer and for the result type chosen before it."""
+    named = Path(name).expanduser()
+    found: List[Path] = []
+    for candidate in ([named] if named.is_absolute() else [base_dir / named, root / named]):
+        resolved = candidate.resolve()
+        if resolved.exists() and resolved not in found:
+            found.append(resolved)
+    return found
+
+
+def _scan_root_of(params: Any, target_path: Path) -> resolution.ScanRoot:
+    """Where a request resolves: the requested path itself under ``&scope=path``, else the project
+    root the shared climb finds (``resolution.choose_scan_root``: ``&root=``, markers, the inferred subtree)."""
+    raw_root = params.get(_ROOT.name)  # a read: the build applies it
+    if _SCOPE.read(params) == SCOPE_PATH:
+        rejected = f'?root={raw_root} is ignored under scope=path' if raw_root else None
+        return resolution.ScanRoot(target_path, 'path', override_rejected=rejected)
+    return resolution.choose_scan_root(target_path, raw_root)
+
+
+def _usage_rejection(result: Dict[str, Any]) -> bool:
+    """A request the caller got wrong (a target that matches nothing): usage, exit 2."""
+    return result.get('usage') is True and 'error' in result
+
+
 def _incomplete(result: Dict[str, Any]) -> bool:
     """Whether an imports answer is short of its input: a file parsed with errors or lost to a dead
     worker, a walk the file cap cut short, a directory it could not list (D6: exit 3)."""
@@ -1577,15 +1606,22 @@ class ImportsAdapter(ResourceAdapter):
         named = dict(_typed_params(params).peek_items()).get('importers')
         target = Path(path).expanduser()
         if isinstance(named, str):
-            target = Path(named).expanduser() if Path(named).is_absolute() else (
-                (target if target.is_dir() else target.parent) / named)
+            base = target if target.is_dir() else target.parent
+            found = _named_candidates(named, base, _scan_root_of(_typed_params(params), base.resolve()).root)
+            target = found[0] if len(found) == 1 else base
         return 'module_importers' if target.is_file() else 'importer_summary'
 
     @staticmethod
+    def public_diagnostic(result: Dict[str, Any]) -> Optional[str]:
+        return str(result['error']) if _usage_rejection(result) else None
+
+    @staticmethod
     def execution_facts(result: Any):
-        from ..utils.results import AnalysisCompleteness, result_execution_facts
+        from ..utils.results import AnalysisCompleteness, FailureCause, failure_execution_facts, result_execution_facts
         if not isinstance(result, dict):
             return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+        if _usage_rejection(result):
+            return failure_execution_facts(FailureCause.INVALID_REQUEST)
         state = AnalysisCompleteness.INCOMPLETE if _incomplete(result) else AnalysisCompleteness.COMPLETE
         return result_execution_facts(result, completeness=state)
 
@@ -1916,14 +1952,7 @@ class ImportsAdapter(ResourceAdapter):
         return all_imports
 
     def _scan_root_for(self, target_path: Path) -> resolution.ScanRoot:
-        """Where this request resolves: the requested path itself under ``&scope=path``, else the
-        project root the shared climb finds (``resolution.choose_scan_root``: ``&root=``, markers,
-        the inferred subtree)."""
-        raw_root = self._query_params.get(_ROOT.name)  # a read: the build applies it
-        if _SCOPE.read(self._query_params) == SCOPE_PATH:
-            rejected = f'?root={raw_root} is ignored under scope=path' if raw_root else None
-            return resolution.ScanRoot(target_path, 'path', override_rejected=rejected)
-        return resolution.choose_scan_root(target_path, raw_root)
+        return _scan_root_of(self._query_params, target_path)
 
     def _build_graph(
         self,
@@ -2429,8 +2458,10 @@ class ImportsAdapter(ResourceAdapter):
         """
         target = self._target_path or Path('.').resolve()
         if isinstance(importers, str):
-            named = Path(importers).expanduser()
-            target = (named if named.is_absolute() else self._base_dir() / named).resolve()
+            named, problem = self._named_importers_target(importers)
+            if named is None:
+                return self._build_response('importer_summary', error=problem, usage=True)
+            target = named
         if target.is_file():
             return self._format_file_importers(target)
         graph = self._edges(LAZY_INCLUDE)
@@ -2443,6 +2474,24 @@ class ImportsAdapter(ResourceAdapter):
         return self._build_response(
             'importer_summary', entries=entries, total=len(entries),
             edge_rule=self._edge_rule(LAZY_INCLUDE, 'importers are files whose static imports resolve here, among'))
+
+    def _named_importers_target(self, name: str) -> Tuple[Optional[Path], str]:
+        """The file or directory ``?importers=NAME`` names, or ``(None, why)``: a name that matches
+        nothing is a usage error, never the directory summary (surface plan rule 9, BACK-2161).
+
+        NAME is tried relative to the requested path and relative to the scan root; a name that
+        exists under both and differs is ambiguous, and absolute paths are taken as given."""
+        root = self._scan.root if self._scan else self._base_dir()
+        found = _named_candidates(name, self._base_dir(), root)
+        if len(found) == 1:
+            return found[0], ''
+        if found:
+            return None, (f'importers={name} is ambiguous: it names {" and ".join(to_posix(f) for f in found)}; '
+                          f'spell the path from the scan root {to_posix(root)}')
+        known = {os.path.relpath(f, root): f for f in self._edges(LAZY_INCLUDE).dependencies}
+        near = difflib.get_close_matches(name, [to_posix(k) for k in known], n=3, cutoff=0.5)
+        hint = f'; did you mean {", ".join(near)}?' if near else ''
+        return None, f'importers={name} matched no file under {to_posix(root)}{hint}'
 
     def _format_file_importers(self, target: Path) -> Dict[str, Any]:
         graph = self._edges(LAZY_INCLUDE)

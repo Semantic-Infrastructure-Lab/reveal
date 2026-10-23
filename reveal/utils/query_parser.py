@@ -294,6 +294,9 @@ class ParamSpec:
     cli: Optional[CliBinding] = None
     uri_codec: str = 'raw'
     required: bool = False
+    # What a value names: 'file' (a path under the scan) or 'symbol' (a definition name). A parameter that
+    # names a target exits 2 when it matches nothing (surface plan rule 9), never a clean zero.
+    names: Optional[str] = None
 
     def read(self, params: Dict[str, Any]) -> Any:
         raw = params.get(self.name)
@@ -336,6 +339,8 @@ class ParamSpec:
             result['choices'] = list(self.choices)
         if self.role is not None:
             result['role'] = self.role
+        if self.names is not None:
+            result['names'] = self.names
         if self.cli is not None:
             result['cli'] = {'flags': list(self.cli.flags), 'dest': self.cli.dest or self.name,
                              'nargs': self.cli.nargs, 'required': self.cli.required,
