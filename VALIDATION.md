@@ -2117,10 +2117,36 @@ public API with no in-repo caller, framework hooks, calls inside class-field ini
 `@command`-style decorators, calls from inline `<script>` in HTML, string-keyed or computed dispatch,
 and an arrow function reported under the name of the variable it is assigned to (fixed for member
 calls such as `xs.map(fn)`, which removed 159 of VS Code's 1,220 and 12 of Excalidraw's 96 claims; plain calls
-like `derived(fn)` remain, BACK-2169). The answer's
+like `derived(fn)` were fixed afterwards, see the next section, BACK-2174). The answer's
 `meta.confidence` is call-extraction recall and does not cover any of them, so `?uncalled` over
 JavaScript, TypeScript or TSX withholds it and says so (W-CALLS-11). Java and PHP follow below; other
 languages are not yet measured (BACK-1899).
+
+### Plain-call function values (BACK-2174, 2026-10-23)
+
+`const NAME = callee(fn)` with a plain callee used to be listed as a function named NAME. It is now listed only when the
+file calls or constructs NAME, or renders it as a capitalised JSX tag, and that use refers to the declaration; the declared
+wrappers (`memo`, `forwardRef`, `useCallback`, `Object.assign`) are unchanged. Precision was chosen over recall: a
+function that a project only exports or passes around is no longer listed.
+
+| Corpus | Declarators listed as functions, before to after | `?uncalled` claims, before to after |
+|---|---|---|
+| TypeScript, VS Code | 1,503 to 53 | 1,250 to 1,149 (101 removed, 0 added) |
+| TSX, Excalidraw | 69 to 8 | 84 to 46 (38 removed, 0 added) |
+| JavaScript, three.js | 465 to 309 | 707 to 707 |
+
+The claim counts include the class-field fix (BACK-2180): a class-field arrow method called once from a scope with no
+named caller was reported uncalled, and the plain-call change exposed it (one added claim in Excalidraw before the fix).
+Six of the 38 removed Excalidraw claims were re-checked by hand and all have a use in the corpus.
+
+Hand check, 50 declarators (25 listed, 25 dropped), one reviewer, no second rater: all 22 listed declarators that the
+new rule itself kept were functions (3 more sampled names were listed only because another function in the file shares
+the name). Of the 25 dropped, 16 were values and 9 were functions that the rule now loses: 0 of 10 in VS Code, 3 of 8 in
+Excalidraw (`debugRenderer`, exported and used in other files; `handleScroll`, passed to `addEventListener`;
+a `createNamedFunction` constructor) and 6 of 7 in three.js (`Fn(...)` nodes registered by name or exported). The
+Excalidraw function-returning check is 62 of 64, not 64 of 64. Recall of the rule on functions is therefore low where a
+project builds callables through a project helper and registers them elsewhere; BACK-2178 tracks the recovery. The sample
+is small and the labels are one reviewer's, so the rates are indicative only.
 
 ## `calls ?uncalled` precision, Java and PHP (2026-10-22)
 

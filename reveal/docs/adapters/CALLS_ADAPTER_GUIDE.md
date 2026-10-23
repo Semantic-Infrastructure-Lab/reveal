@@ -148,8 +148,11 @@ no component edge. Named render functions and `memo`/`forwardRef` function value
 retain their existing owners, including named function expressions whose inner
 name differs from the wrapped variable, `memo(fn, areEqual)` with a comparator,
 `React.memo`, `memo(forwardRef(fn))` and `Object.assign(wrapper(fn), {...})`. Any other
-call with exactly one function-literal argument (`withFallback("X", fn)`) also names that
-function after the variable; a callback passed to an array method (`xs.map(x => <B/>)`)
+plain call with exactly one function-literal argument (`withFallback("X", fn)`) names that
+function after the variable only when the same file calls or constructs the name, or uses it as
+a capitalised JSX tag (`<X/>`); otherwise the variable holds a value (`const t = setTimeout(fn)`,
+`const store = derived(fn)`) and is not listed as a function, so a function a project only
+exports or passes around is not listed either (BACK-2174). A callback passed to an array method (`xs.map(x => <B/>)`)
 is not a component, so its references belong to the function that runs the `map`. The nearest tracked function owns nested
 callback references, and an unnamed callback (`it`, `describe`, `beforeEach`, hooks)
 belongs to the smallest tracked element that contains it, as call sites do; a deferred
