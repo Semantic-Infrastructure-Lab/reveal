@@ -173,6 +173,8 @@ EXIT_CODE_WORDING: Dict[str, Dict[int, str]] = {
                3: 'a check failed, could not reach its target (a missing local path included), '
                   'or was incomplete'},
     'deps': {1: 'circular dependencies or unused imports matched --fail-on findings (default: none)'},
+    'imports': {1: 'the --circular, --unused or --violations view had a row and --fail-on findings was given '
+                   '(default: none)'},
     'hotspots': {1: 'file quality below 70 or function complexity above 20 matched '
                     '--fail-on findings (default: none)'},
 }

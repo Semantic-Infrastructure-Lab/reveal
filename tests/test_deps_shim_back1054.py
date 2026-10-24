@@ -219,6 +219,14 @@ def test_imports_fail_on_findings_exits_0_without_findings(no_findings, view):
     assert result.returncode == 0, result.stderr
 
 
+def test_an_incomplete_answer_exits_3_before_a_findings_gate(tmp_path):
+    """D6: incomplete beats findings, as deps' gate always did (a file that does not parse)."""
+    proj = _write(tmp_path / 'partial', {**PROJECT, 'pkg/bad.py': 'from pkg import a\ndef broken(\n'})
+    for command in (['imports', str(proj), '--circular', '--scope', 'path'], ['deps', str(proj)]):
+        result = _run_reveal_direct(*command, '--fail-on', 'findings')
+        assert result.returncode == 3, (command, result.stderr)
+
+
 # ── the old spellings: same shapes and exit codes, plus the note ─────────────────────────────
 
 def _retired(doc: dict) -> list:

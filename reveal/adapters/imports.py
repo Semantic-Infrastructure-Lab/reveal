@@ -1586,6 +1586,10 @@ def _usage_rejection(result: Dict[str, Any]) -> bool:
     return result.get('usage') is True and 'error' in result
 
 
+# The views whose rows are findings: `--fail-on findings` exits 1 when the answer has one (BACK-1054
+# slice S4: deps' gate over cycles and unused imports, on the imports views it composed).
+_FINDINGS_VIEWS = frozenset({'circular_dependencies', 'unused_imports', 'layer_violations'})
+
 # The parameters the build reads (where it resolves, under which file cap): one build, one value.
 _BUILD_KEYS = (_SCOPE.name, _ROOT.name, _MAX_FILES.name)
 
@@ -1628,8 +1632,9 @@ class ImportsAdapter(ResourceAdapter):
 
     # D6 (BACK-1054): imports is a declared command, so a usage error exits 2 and an incomplete
     # analysis (a file parsed with errors or lost, a capped walk, a lost directory) exits 3.
+    # --fail-on findings exits 1 when a findings view (_FINDINGS_VIEWS) has a row (slice S4).
     RESULT_TYPE = 'imports'
-    FINDINGS_POLICIES = ('none',)
+    FINDINGS_POLICIES = ('none', 'findings')
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     PARAM_SPECS = PARAM_SPECS
@@ -1710,7 +1715,8 @@ class ImportsAdapter(ResourceAdapter):
         if _usage_rejection(result):
             return failure_execution_facts(FailureCause.INVALID_REQUEST)
         state = AnalysisCompleteness.INCOMPLETE if _incomplete(result) else AnalysisCompleteness.COMPLETE
-        return result_execution_facts(result, completeness=state)
+        findings = result.get('type') in _FINDINGS_VIEWS and bool(result.get('count'))
+        return result_execution_facts(result, completeness=state, findings=findings)
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Analyze imports in directory or file.
@@ -1910,6 +1916,8 @@ class ImportsAdapter(ResourceAdapter):
             'query_params': _SCHEMA_QUERY_PARAMS,
             'elements': {},
             'cli_flags': ['--verbose'],
+            'execution_policy': {'default_fail_on': ImportsAdapter.DEFAULT_FAIL_ON,
+                                 'fail_on': list(ImportsAdapter.FINDINGS_POLICIES)},
             'supports_batch': False,
             'supports_advanced': False,
             'supported_languages': get_supported_languages(),
