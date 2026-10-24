@@ -335,8 +335,8 @@ def no_match_requests(scan: str, specs: Iterable[Dict[str, Any]]) -> List[Tuple[
     for spec in specs:
         value = NO_MATCH_VALUES[spec['names']]
         label = f"{spec['noun']}:{spec['name']}"
-        out.append((label, 'uri', value, [f"{spec['noun']}://{scan}?{spec['name']}={_quoted(value)}",
-                                          '--format', 'json']))
+        spelled = _quoted(value) if spec.get('uri_codec') == 'percent' else value
+        out.append((label, 'uri', value, [f"{spec['noun']}://{scan}?{spec['name']}={spelled}", '--format', 'json']))
         for flag in spec.get('flags') or ():
             out.append((label, 'cli', value, [spec['noun'], scan, flag, value, '--format', 'json']))
     return out
@@ -356,7 +356,14 @@ def check_no_match(results: List[Tuple[str, str, str, Dict[str, Any]]]) -> Dict[
 # ── requests ──────────────────────────────────────────────────────────────────
 
 def _quoted(text: str) -> str:
+    """A calls name for a parameter that percent-decodes its value (uri_codec 'percent')."""
     return urllib.parse.quote(text, safe='/')
+
+
+def _raw(text: str) -> Optional[str]:
+    """A value for a parameter read raw (uri_codec 'raw': imports ?importers= and ?root=): as
+    spelled, or None when it holds a character that would end the value (``&``, ``#``)."""
+    return None if set(text) & {'&', '#'} else text
 
 
 def partial_reason(answer: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -408,7 +415,7 @@ def _partial_label(log: List[Dict[str, Any]]) -> Optional[str]:
 
 
 def run_imports(req: Requests, scan: str, scan_dir: Path, only: Tuple[str, ...], citations: int) -> List[Dict[str, Any]]:
-    pinned = f'root={_quoted(scan)}'
+    pinned = f'root={scan}'
     wanted = [inv for inv in IMPORT_INVARIANTS if inv in only]
     if not wanted:
         return []
@@ -449,11 +456,14 @@ def per_file_spelling(scan_dir: Path, module: str) -> str:
 
 def run_citations(req: Requests, scan: str, scan_dir: Path, importers: Dict[str, Any],
                   default_view: Dict[str, Any], citations: int) -> Dict[str, Any]:
-    pinned = f'root={_quoted(scan)}'
+    pinned = f'root={scan}'
     per_target: Dict[str, Dict[str, Any]] = {}
     failed = []
     for target in citation_targets(importers, default_view, citations):
-        spelled = _quoted(per_file_spelling(scan_dir, target))
+        spelled = _raw(per_file_spelling(scan_dir, target))
+        if spelled is None:
+            failed.append(f'{target}: a raw ?importers= value cannot spell it')
+            continue
         answer, err = req.answer([f'imports://{scan}?importers={spelled}&{pinned}', '--format', 'json'])
         if answer is None:
             failed.append(err or '')
@@ -518,7 +528,7 @@ def declared_target_specs(env: Dict[str, str], cwd: Path) -> List[Dict[str, Any]
              'for noun in ("imports", "calls"):\n'
              '    for s in getattr(declared_adapter_class(noun), "PARAM_SPECS", ()):\n'
              '        if s.names:\n'
-             '            out.append({"noun": noun, "name": s.name, "names": s.names,\n'
+             '            out.append({"noun": noun, "name": s.name, "names": s.names, "uri_codec": s.uri_codec,\n'
              '                        "flags": list(s.cli.flags) if s.cli else []})\n'
              'print(json.dumps(out))\n')
     out = subprocess.run([sys.executable, '-c', probe], env=env, cwd=str(cwd), capture_output=True,
