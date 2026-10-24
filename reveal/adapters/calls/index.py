@@ -632,7 +632,7 @@ def find_callees(
             builtins_hidden += len(calls) - len(filtered)
             calls = filtered
         matches.append({
-            'file': definition.file,
+            'file': to_posix(definition.file),  # '/' on every OS (BACK-1586)
             'function': definition.name,
             'line': definition.line,
             'calls': calls,
