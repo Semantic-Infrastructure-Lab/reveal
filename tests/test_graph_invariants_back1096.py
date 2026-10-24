@@ -203,6 +203,22 @@ def test_a_package_directory_module_is_cited_through_one_of_its_files(tmp_path):
     assert [(r['invariant'], r['status'], r['population']) for r in rows] == [('importer_citations', 'green', 1)], rows
 
 
+def test_a_package_is_cited_through_a_file_that_does_not_import_it(tmp_path):
+    """A Go external test file (`package lib_test`) imports its own package; named as the package's
+    proxy, ?importers= leaves it out (a file is not its own importer), so it cannot stand for the
+    package: the runner picks a file of the package that is not among its importers."""
+    proj = tmp_path / 'gomod'
+    (proj / 'lib').mkdir(parents=True)
+    (proj / 'go.mod').write_text('module example.com/m\n\ngo 1.21\n', encoding='utf-8')
+    (proj / 'lib' / 'lib.go').write_text('package lib\n\nfunc Hello() string { return "hi" }\n', encoding='utf-8')
+    (proj / 'lib' / 'a_test.go').write_text('package lib_test\n\nimport "example.com/m/lib"\n\n'
+                                            'func use() { lib.Hello() }\n', encoding='utf-8')
+    (proj / 'main.go').write_text('package main\n\nimport "example.com/m/lib"\n\nfunc main() { lib.Hello() }\n',
+                                  encoding='utf-8')
+    rows = inv.run_imports(InProcessRequests({}, tmp_path, 60), 'gomod', proj, ('importer_citations',), 3)
+    assert [(r['invariant'], r['status'], r['population']) for r in rows] == [('importer_citations', 'green', 2)], rows
+
+
 def test_a_file_name_with_a_plus_is_named_as_spelled(tmp_path):
     """imports ?importers= reads its value raw (uri_codec 'raw'), so `Data+PKCE.swift` must go in as
     written: percent-encoded (`Data%2BPKCE.swift`) it matches no file and exits 2."""
