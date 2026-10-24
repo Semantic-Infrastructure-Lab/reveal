@@ -321,3 +321,57 @@ def test_dot_names_nodes_relative_to_the_path_with_slashes(monkeypatch, capsys):
     render_calls_structure(data, 'dot')
     out = capsys.readouterr().out
     assert '"pkg/a.py" -> "pkg/b.py";' in out, out
+
+
+# --- what the imports build loses, told apart (each guard mutation-checked) ------------------
+
+def test_the_three_kinds_of_failed_file_are_told_apart(tmp_path):
+    """imports puts every failed file in files_failed; ?modules discloses a partial parse, and names a
+    file never parsed (analysis_failed) and one a dead worker took (worker_lost) as lost evidence."""
+    from types import SimpleNamespace
+    from reveal.adapters.calls.adapter import _import_file_warnings
+    from reveal.analyzers.imports.types import ImportExtraction
+    lost, partial, unread = tmp_path / 'lost.py', tmp_path / 'partial.js', tmp_path / 'unread.py'
+    analysis = SimpleNamespace(files_lost=[lost], files_failed=[lost, partial, unread], extractions={
+        lost: ImportExtraction(parse_failed=True, worker_lost=True,
+                               diagnostics={'parse': {'status': 'unavailable', 'reason': 'BrokenProcessPool: x'}}),
+        partial: ImportExtraction(parse_failed=True, diagnostics={'parse': {'status': 'partial', 'reason': 'ERROR'}}),
+        unread: ImportExtraction(parse_failed=True, read_error='PermissionError',
+                                 diagnostics={'parse': {'status': 'unavailable', 'reason': 'denied'}})})
+    warnings = {w['type']: w for w in _import_file_warnings(SimpleNamespace(analysis=analysis), tmp_path)}
+    assert set(warnings) == {'partial_parse', 'worker_lost', 'analysis_failed'}
+    assert warnings['partial_parse']['files'] == ['partial.js']
+    assert warnings['worker_lost']['files'] == ['lost.py']
+    assert warnings['analysis_failed']['files'] == ['unread.py'] and 'PermissionError' in warnings['analysis_failed']['message']
+
+
+@pytest.mark.parametrize('kind,exit_state', [('partial_parse', 'complete'), ('worker_lost', 'incomplete'),
+                                             ('scan_capped', 'incomplete'), ('analysis_failed', 'incomplete')])
+def test_which_imports_warning_is_lost_evidence(fx2, kind, exit_state):
+    """A partial parse leaves the answer complete (exit 0); a lost worker, a capped walk and an unread file
+    make it incomplete (exit 3), as calls ?modules' own loss did."""
+    from reveal.adapters.calls.adapter import CallsAdapter as Adapter
+    result = Adapter(str(fx2), 'modules').get_structure()
+    result['meta']['warnings'].append({'type': kind, 'message': 'controlled'})
+    assert Adapter.execution_facts(result).completeness.value == exit_state
+
+
+def test_the_imports_answers_metadata_cut_is_not_repeated(tmp_path):
+    """imports keeps the first 50 failed files in metadata and says so; this answer has no metadata, so
+    that cut note is dropped (the partial_parse warning counts them all)."""
+    files = {'package.json': '{"name": "fx"}\n', 'src/a.js': 'export const a = 1;\n'}
+    files.update({f'src/bad{i}.js': "import { a } from './a';\nfunction broken( {\n" for i in range(51)})
+    root = _write(tmp_path / 'many', files)
+    result = CallsAdapter(str(root / 'src'), 'modules').get_structure()
+    assert not [w for w in result['meta']['warnings'] if str(w.get('field', '')).startswith('metadata.')]
+    (warning,) = [w for w in result['meta']['warnings'] if w.get('type') == 'partial_parse']
+    assert warning['count'] == 51
+    assert len(result['edges']) == 51
+
+
+def test_the_builder_drops_a_self_import():
+    """imports does not list a file among its own importers today; the builder keeps the old rule anyway."""
+    answer = {'entries': [{'file': 'app.py', 'fan_in': 2, 'importers': ['app.py', 'main.py']}]}
+    data = calls_index.module_graph_from_importers(answer, 'proj')
+    assert [(e['from'], e['to']) for e in data['edges']] == [('proj/main.py', 'proj/app.py')]
+    assert data['outside_path_edges'] == 0
