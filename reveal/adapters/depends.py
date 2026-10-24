@@ -2,6 +2,11 @@
 
 Answer "what depends on this module?" by inverting the import graph.
 
+A retired spelling (BACK-1054 slice S6, Q8): the graph is the one imports:// engine's build
+(``ImportsAdapter.analyze``, under depends' own scan root, file cap and extension family) and the
+answer keeps depends' shapes, warnings and exit code (0 on a partial answer, BACK-2181) until the
+cut; ``imports://<path>?importers`` is the replacement.
+
 Usage:
     reveal depends://src/utils.py          # Who imports utils.py?
     reveal depends://src/models/           # Who imports anything in models/?
@@ -13,13 +18,14 @@ from ..utils.query_control import ScanBudget
 
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional, Set
+from typing import Dict, Any, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
-from .imports import parse_failure_warning
+from .imports import ImportsAdapter, parse_failure_warning, worker_lost_warning
 from ..utils import print_json_result
 from ..analyzers.imports import ImportGraph, ImportStatement
+from ..analyzers.imports.types import ImportAnalysis
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
 from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
 from ..analyzers.imports import resolution
@@ -462,6 +468,9 @@ class DependsAdapter(ResourceAdapter):
         # What the cascade resolved (analyzers/imports/resolution.py, BACK-1054); empty until
         # _build_graph runs. Everything below it is this presenter's own request state.
         self._resolution = resolution.ProjectResolution()
+        self._analysis = ImportAnalysis()
+        # What this request's walk hid at the target (BACK-2065): the engine's, judged by this walk.
+        self._scope_hidden: Optional[Dict[str, Any]] = None
         self._target_path: Optional[Path] = Path(path).resolve() if path else None
         self._query_params = parse_query_params(query or '')
         self._warn_unknown_query_params(self._query_params)  # BACK-507
@@ -580,29 +589,35 @@ class DependsAdapter(ResourceAdapter):
     # ── Graph building (the cascade lives in analyzers/imports/resolution.py) ──
 
     def _build_graph(self, scan_root: Path, scan_extensions: Optional[frozenset] = None) -> None:
-        """Build import graph from scan_root.
+        """Build the import graph of scan_root through the one imports:// engine (BACK-1054 S6).
 
-        ``scan_extensions`` (BACK-525 layer 4): when given, restricts the
-        *parse corpus* (``files`` — what actually gets tree-sitter'd for
-        import statements) to this extension set, the target's own
-        extractor family (e.g. C's ``.c``/``.h``). This is where the cost
-        lives, so it's where the win is; ``file_index`` (the resolution
-        basename map) stays extension-agnostic regardless, since it needs
-        to hold non-source-extension include targets too (BACK-491:
-        ``.inc``/``.tcc``). A basename lookup only ever matches a file whose
-        name is extension-qualified to the *importing* language (verified
-        read-only, gate G1), so a file outside the target's family could
-        never satisfy a resolution anyway — narrowing the parse corpus to
-        it is correct-by-construction, not a heuristic, and dissolves the
-        file-count cap's non-determinism for single-language targets
-        (``None`` — directory targets, which may span languages — stays
-        unscoped across every supported extension, the pre-BACK-525 shape).
+        The engine (``ImportsAdapter.analyze``: its walk, per-file extraction, cascade and caches)
+        resolves at ``scan_root`` (passed as ``root``, the climb's own choice), under depends' file
+        cap (``_SCAN_FILE_CAP`` as ``max_files``) and over depends' extension family.
+
+        ``scan_extensions`` (BACK-525 layer 4): when given, restricts the *parse corpus* (``files``
+        — what actually gets tree-sitter'd for import statements) to this extension set, the
+        target's own extractor family (e.g. C's ``.c``/``.h``). This is where the cost lives, so
+        it's where the win is; ``file_index`` (the resolution basename map) stays
+        extension-agnostic regardless, since it needs to hold non-source-extension include targets
+        too (BACK-491: ``.inc``/``.tcc``). A basename lookup only ever matches a file whose name is
+        extension-qualified to the *importing* language (verified read-only, gate G1), so a file
+        outside the target's family could never satisfy a resolution anyway — narrowing the parse
+        corpus to it is correct-by-construction, not a heuristic, and dissolves the file-count
+        cap's non-determinism for single-language targets (``None`` — directory targets, which may
+        span languages — stays unscoped across every supported extension, the pre-BACK-525 shape).
+        The walk keeps only that family, so recognized code without an extractor is not counted
+        against the cap either (depends' pre-S6 build).
         """
         supported_exts = scan_extensions if scan_extensions is not None else frozenset(get_all_extensions())
         self._scan_root = scan_root
         self._scan_budget = ScanBudget(self._SCAN_FILE_CAP)
-        self._resolution = resolution.resolve_project(import_analysis.ScanScope(
-            scan_root, supported_exts, cap=self._scan_budget.limit, focus=self._target_path))
+        target = self._target_path or scan_root
+        engine = ImportsAdapter(str(target), params={'root': str(scan_root), 'max_files': self._SCAN_FILE_CAP},
+                                parse_extensions=supported_exts)
+        self._analysis = engine.analyze()
+        self._resolution = self._analysis.resolution or resolution.ProjectResolution()
+        self._scope_hidden = dict(engine.scope_hidden) if engine.scope_hidden else None
 
     def _build_meta(self) -> Dict[str, Any]:
         known_limits = [
@@ -799,8 +814,23 @@ class DependsAdapter(ResourceAdapter):
         warning = traversal_failed_warning(self._resolution.traversal_failures, self._scan_root)
         return dict(warning) if warning else None
 
+    def _parse_warning(self) -> Optional[Dict[str, Any]]:
+        """Files parsed with errors (BACK-1598), as a structured warning beside the ``warning``
+        line: the engine's verdict on them is exit 3 (D6), depends' is exit 0, so a JSON reader
+        finds the partial answer here (BACK-2181)."""
+        warning = parse_failure_warning(self._resolution.files_failed, self._scan_root)
+        return dict(warning) if warning else None
+
+    def _lost_warning(self) -> Optional[Dict[str, Any]]:
+        """Files a dead pool worker took down before they were parsed: the engine extracts in a
+        process pool on a large tree, and a lost file has no imports, so it is disclosed, never a
+        silent gap (its importers' edges are missing too)."""
+        warning = worker_lost_warning([str(fp) for fp in self._analysis.files_lost], self._scan_root)
+        return dict(warning) if warning else None
+
     def _undercount_possible(self, empty: bool) -> bool:
-        return bool(self._resolution.traversal_failures) or (empty and self._resolution.unresolved_intra > 0)
+        return (bool(self._resolution.traversal_failures) or bool(self._analysis.files_lost)
+                or (empty and self._resolution.unresolved_intra > 0))
 
     def _warnings(self, include_honest_decline: bool = False) -> str:
         """Join active disclosures (scan cap, inferred root, and — only when the
@@ -811,15 +841,17 @@ class DependsAdapter(ResourceAdapter):
         a corpus with a few unresolved imports doesn't append a caveat to every
         confident, non-empty answer (that would be the cry-wolf failure honest-
         decline is meant to prevent)."""
-        partial = parse_failure_warning(self._resolution.files_failed, self._scan_root)
+        partial = self._parse_warning()
         traversal = self._traversal_warning()
+        lost = self._lost_warning()
         parts = [
             self._root_override_warning(),
             self._scan_cap_warning(),
             self._root_inferred_warning(),
             f"⚠️  {partial['message']}" if partial else '',
             f"⚠️  {traversal['message']}" if traversal else '',
-            f"⚠️  {self._resolution.scope_hidden['message']}" if self._resolution.scope_hidden else '',
+            f"⚠️  {self._scope_hidden['message']}" if self._scope_hidden else '',
+            f"⚠️  {lost['message']}" if lost else '',
         ]
         if include_honest_decline:
             parts.append(self._honest_decline_warning())
@@ -832,54 +864,19 @@ class DependsAdapter(ResourceAdapter):
         if not self._graph:
             return {'error': 'Graph not built'}
 
-        importer_files: Set[Path] = set(self._graph.reverse_deps.get(target, set()))
-
-        # BACK-553: package-granularity languages (Go) resolve an import to
-        # the package DIRECTORY, not the individual file — `import "pkg/x"`
-        # pulls in every .go file under x's directory as one package
-        # (go.py's resolve_import returns the directory by design), so
-        # add_dependency/reverse_deps is keyed by that directory, never by
-        # any single file inside it. Without this fallback, EVERY file-level
-        # depends://<file>.go query hits the exact-file lookup above, finds
-        # nothing (the key that exists is the directory, not this file), and
-        # confidently reports zero dependents even when the package has
-        # hundreds of real importers — the archetypal BACK-542/BACK-547
-        # silent false negative, and it fires on 100% of Go file targets.
-        # Falling back to the containing directory is safe for every
-        # language: reverse_deps keys are never arbitrary directories, only
-        # values some extractor's resolve_import actually returned, so a hit
-        # here only ever means "an import resolved to this exact directory
-        # as its package."
-        dir_target = target.parent
-        dir_importers = self._graph.reverse_deps.get(dir_target)
-        used_dir_fallback = False
-        if dir_importers:
-            importer_files |= dir_importers
-            used_dir_fallback = True
-        # Package projection must not turn an importer into its own dependent.
-        importer_files.discard(target)
-
-        # Gather the actual ImportStatements pointing to target. Prefer the
-        # precise per-edge map (BACK-542: correct even when one statement
-        # resolves to several targets); fall back to resolved_paths, then to a
-        # bare importer entry if neither matches.
+        # BACK-553 (a package-granularity language, Go, resolves an import to the package
+        # DIRECTORY, so importers of the file's directory count) and BACK-542 (the exact statement
+        # behind each edge, correct even when one statement resolves to several targets): the one
+        # listing imports://?importers=FILE presents too (resolution.file_importers, BACK-1054 S6).
+        # Every cascade edge records its statement; an edge without one lists as 'unknown'.
         dependents = []
-        edge_statements = self._resolution.edge_statements
-        for importer in sorted(importer_files):
-            edge_stmt = edge_statements.get((importer, target))
-            if edge_stmt is None and used_dir_fallback:
-                edge_stmt = edge_statements.get((importer, dir_target))
-            if edge_stmt is not None:
-                dependents.append(_format_import_stmt(edge_stmt))
-                continue
-            matched = False
-            for stmt in self._graph.files.get(importer, []):
-                resolved = self._graph.resolved_paths.get(stmt.module_name)
-                if resolved == target or (used_dir_fallback and resolved == dir_target):
-                    dependents.append(_format_import_stmt(stmt))
-                    matched = True
-            if not matched:
-                dependents.append({'file': str(importer), 'line': 0, 'module': '', 'names': [], 'type': 'unknown', 'is_relative': False, 'alias': None})
+        for importer, _edge, stmt in resolution.file_importers(
+                self._graph, self._resolution.edge_statements, target):
+            if stmt is not None:
+                dependents.append(_format_import_stmt(stmt))
+            else:
+                dependents.append({'file': str(importer), 'line': 0, 'module': '', 'names': [], 'type': 'unknown',
+                                   'is_relative': False, 'alias': None})
 
         # BACK-1214: each dependent's 'file' came from _format_import_stmt's
         # str(stmt.file_path)/str(importer), always absolute -- never
@@ -912,7 +909,9 @@ class DependsAdapter(ResourceAdapter):
         # import policy still qualifies only empty answers (BACK-547).
         empty = not dependents
         note_warning(result, self._traversal_warning())
-        note_warning(result, self._resolution.scope_hidden)
+        note_warning(result, self._scope_hidden)
+        note_warning(result, self._parse_warning())
+        note_warning(result, self._lost_warning())
         result['undercount_possible'] = self._undercount_possible(empty)
         warnings = self._warnings(include_honest_decline=empty)
         if warnings:
@@ -970,7 +969,9 @@ class DependsAdapter(ResourceAdapter):
         note_truncation(result, 'modules', len(modules), total_modules, 'limit', hint='raise ?top=N')
         empty = not modules
         note_warning(result, self._traversal_warning())
-        note_warning(result, self._resolution.scope_hidden)
+        note_warning(result, self._scope_hidden)
+        note_warning(result, self._parse_warning())
+        note_warning(result, self._lost_warning())
         result['undercount_possible'] = self._undercount_possible(empty)
         warnings = self._warnings(include_honest_decline=empty)
         if warnings:

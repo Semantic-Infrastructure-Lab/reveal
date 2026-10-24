@@ -193,6 +193,10 @@ def test_normal_decorated_requests_repair_without_clears_and_keep_sibling_exact(
             return text
         return {key: value for key, value in json.loads(text).items() if key != 'execution'}
     clean = query(uri); baseline_sibling = query(sibling_uri)
+    # depends answers from the imports engine (BACK-1054 S6), whose validated memo would serve the
+    # clean build on an unchanged tree: the fault has to reach a cold build.
+    from reveal.adapters import imports as imports_adapter
+    imports_adapter._GRAPH_MEMO.clear()
     with monkeypatch.context() as context:
         fault(context, root, cores, 'manifest')
         lost = query(uri)

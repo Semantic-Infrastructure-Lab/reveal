@@ -76,7 +76,6 @@
   "reveal/adapters/contracts.py::_scan_contracts_python": 17,
   "reveal/adapters/cpanel/adapter.py::CpanelAdapter._get_ssl_structure": 18,
   "reveal/adapters/cpanel/renderer.py::CpanelRenderer._render_acl": 16,
-  "reveal/adapters/depends.py::DependsAdapter._format_file_dependents": 21,
   "reveal/adapters/domain/dns.py::check_ns_authority": 19,
   "reveal/adapters/domain/renderer.py::DomainRenderer._render_domain_ns_audit": 16,
   "reveal/adapters/git/adapter.py::GitAdapter._warn_view_scoped_query_params": 16,
