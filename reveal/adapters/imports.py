@@ -1510,6 +1510,10 @@ def _relativize_imports_paths(result: Dict[str, Any], base_path: Path, scan_root
                 imp['file'] = rel(imp['file'])
             if imp.get('resolved'):
                 imp['resolved'] = rel(imp['resolved'])
+            # A folded PHP constant include keeps its host path as the module; spell it as the
+            # ?importers=FILE row does. rel() leaves a path outside the scan as written.
+            if imp.get('module') and os.path.isabs(imp['module']):
+                imp['module'] = rel(imp['module'])
 
     result_type = result.get('type')
     if result_type == 'imports':
