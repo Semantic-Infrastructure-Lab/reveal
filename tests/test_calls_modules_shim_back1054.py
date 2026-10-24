@@ -15,6 +15,7 @@ disclosed, not a loss, as before), 3 when a directory or file could not be read,
 import json
 import ntpath
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -237,6 +238,23 @@ def test_an_unreadable_directory_exits_3_and_names_it(tmp_path, monkeypatch):
     assert run.returncode == 3, run.stderr
     (warning,) = [w for w in doc['meta']['warnings'] if w.get('type') == 'analysis_incomplete']
     assert warning['directories'] == ['included_child'] and warning['unit'] == 'directories'
+    assert _edges(doc, root) == {('entry.py', 'leaf.py')}
+
+
+@pytest.mark.skipif(sys.platform == 'win32' or os.geteuid() == 0, reason='chmod 000 denies reads on POSIX, not as root')
+def test_an_unreadable_file_exits_3_as_before(tmp_path):
+    """calls ?modules exited 3 for a file it could not read (analysis_failed); imports counts the file as
+    'parsed with errors'. The shim tells the two apart, so the old exit code holds (green on both)."""
+    root = _write(tmp_path / 'unr', {'entry.py': 'from leaf import leaf\n\nleaf()\n',
+                                     'leaf.py': 'def leaf():\n    return 1\n', 'secret.py': 'from leaf import leaf\n'})
+    (root / 'secret.py').chmod(0)
+    try:
+        run, doc = _json(f'calls://{root.as_posix()}?modules')
+    finally:
+        (root / 'secret.py').chmod(0o644)
+    assert run.returncode == 3, run.stderr
+    (warning,) = [w for w in doc['meta']['warnings'] if w.get('type') == 'analysis_failed']
+    assert warning['count'] == 1 and warning['files'][0].endswith('secret.py') and 'PermissionError' in warning['message']
     assert _edges(doc, root) == {('entry.py', 'leaf.py')}
 
 
