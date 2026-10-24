@@ -264,6 +264,9 @@ RETIREMENTS: Dict[str, Retirement] = {
     'subcommand:testability': Retirement('reveal testability', 'reveal patches <path> --view pressure (the same answer)'),
     'scheme:testability': Retirement('testability://', 'patches://<path>?view=pressure (the same answer)'),
     'scheme:classify': Retirement('classify://', 'metrics://<path>?view=provenance (the same answer)'),
+    # depends folded into imports (BACK-1054 slice S6, Q8): it answers from the imports:// engine's build with its old
+    # shapes and exit code (0 on a partial answer, BACK-2181) until the cut, which waits on BACK-2153.
+    'scheme:depends': Retirement('depends://', 'imports://<path>?importers (one file: ?importers=FILE)'),
     # deps folded into imports (BACK-1054 slice S4, Q5/Q8): both spellings answer from one imports:// build with deps'
     # old shapes and exit codes until the cut, which waits on a due-diligence consumer moving first (BACK-2153).
     'subcommand:deps': Retirement('reveal deps', 'reveal imports <path> --external, --circular or --unused'),
