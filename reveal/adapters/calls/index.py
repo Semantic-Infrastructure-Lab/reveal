@@ -562,7 +562,7 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
             if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):
                 continue
             record_base = {
-                'file': file_path,
+                'file': to_posix(file_path),  # '/' on every OS (BACK-1586)
                 'caller': elem.get('name', ''),
                 'line': elem.get('line', 0),
             }
@@ -1105,7 +1105,7 @@ def _build_forward_index(
         builtins = conventions_for(_lang_family(file_path)).builtins
         if not include_builtins and builtins:
             calls = [c for c in calls if c.split('.')[-1] not in builtins]
-        record = {'file': file_path, 'line': elem.get('line', 0), 'calls': calls,
+        record = {'file': to_posix(file_path), 'line': elem.get('line', 0), 'calls': calls,
                   'references': elem.get('references', []),
                   'reference_only_calls': elem.get('reference_only_calls', [])}
         for key in lookup_keys(name):
@@ -1695,7 +1695,7 @@ def find_uncalled(
 
             entries.append({
                 'name': name,
-                'file': file_path,
+                'file': to_posix(file_path),  # '/' on every OS (BACK-1586)
                 'line': candidate.line_no,
                 'category': 'methods' if candidate.is_method else 'functions',
                 'is_private': name.startswith('_'),
