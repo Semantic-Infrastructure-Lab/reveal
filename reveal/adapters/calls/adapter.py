@@ -35,6 +35,7 @@ from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.query_parser import (CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
                                    clamped_whole, nonempty_scalar, nonnegative_display_limit, param_schema,
                                    peek_query_items)
+from ...utils.path_utils import to_posix
 from ...utils.results import ResultBuilder, note_truncation
 
 
@@ -819,7 +820,7 @@ class CallsAdapter(ResourceAdapter):
         self._warn_top_ignored()
         self._warn_depth_ignored('modules')
         params = self.query_params
-        directory = str(self._directory())
+        directory = to_posix(self._directory())  # every path out of here is '/'-spelled, an error's too (BACK-2188)
         external = _EXTERNAL.read(params)
         query = 'importers' if external else 'importers&scope=path'
         child = ImportsAdapter(directory, query)
