@@ -10,14 +10,16 @@ import json
 import os
 import shutil
 import subprocess
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
 from conftest import _run_reveal_direct
 from reveal.adapters.depends import DependsAdapter
 from reveal.adapters.imports import ImportsAdapter
-from reveal.analyzers.imports.types import ImportExtraction
+from reveal.analyzers.imports.resolution import ProjectResolution
+from reveal.analyzers.imports.types import ImportAnalysis, ImportExtraction, ImportGraph, ImportStatement
+from reveal.utils import path_utils
 
 pytestmark = [pytest.mark.component]
 
@@ -195,3 +197,46 @@ def test_a_cached_build_does_not_carry_another_requests_hidden_scope(tmp_path, m
     monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
     cold = DependsAdapter(str(root / 'app')).get_structure()
     assert cold['modules'] == visible['modules'] and hidden(cold) == []
+
+
+class _WindowsPath(PureWindowsPath):
+    """A Windows spelling the shared serializer (path_utils.to_relative_display) can resolve on any
+    OS: Linux cannot produce a backslash-separated path from a real tree (BACK-2188)."""
+
+    def expanduser(self):
+        return self
+
+    def resolve(self):
+        return self
+
+    def is_file(self):
+        return False
+
+
+def test_every_record_and_warning_names_its_file_with_forward_slashes(monkeypatch):
+    """Each place a path leaves depends' answer (dependents, target, source, the directory rows,
+    the parse-failure and lost-file warnings) serializes it, here from Windows spellings."""
+    monkeypatch.setattr(path_utils, 'Path', _WindowsPath)
+    root = PureWindowsPath('C:/repo')
+    target, importer = root / 'pkg' / 'core.py', root / 'pkg' / 'a.py'
+    stmt = ImportStatement(file_path=importer, line_number=1, module_name='pkg.core', imported_names=['core'],
+                           is_relative=False, import_type='from_import')
+    graph = ImportGraph()
+    graph.files[importer] = [stmt]
+    graph.add_dependency(importer, target, None, via='direct')
+    record = ProjectResolution(scan_root=root, graph=graph, edge_statements={(importer, target): stmt},
+                               files_failed=[str(importer)])
+    adapter = DependsAdapter('.')
+    adapter._resolution, adapter._scan_root, adapter._target_path = record, root, target
+    adapter._analysis = ImportAnalysis(graph=graph, resolution=record, files_lost=[importer])
+
+    file_answer = adapter._format_file_dependents(target)
+    assert [d['file'] for d in file_answer['dependents']] == ['pkg/a.py']
+    assert (file_answer['target'], file_answer['source']) == ('pkg/core.py', 'pkg/core.py')
+    adapter._target_path = root / 'pkg'
+    dir_answer = adapter._format_directory_summary(root / 'pkg', None, 'text')
+    assert dir_answer['modules'] == [{'module': 'pkg/core.py', 'dependent_count': 1, 'dependents': ['pkg/a.py']}]
+    for answer in (file_answer, dir_answer):
+        files = [w['files'] for w in answer['meta']['warnings'] if w.get('type') in ('partial_parse', 'worker_lost')]
+        assert files == [['pkg/a.py'], ['pkg/a.py']]
+        assert '\\' not in answer['warning']
