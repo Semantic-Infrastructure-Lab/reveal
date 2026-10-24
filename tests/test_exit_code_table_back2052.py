@@ -27,9 +27,9 @@ def _help(command):
 def test_only_the_call_graph_and_review_spellings_are_retired():
     """Phase 1 retired no URI scheme, parameter or subcommand: the table held only the two older
     BACK-1906 flag notes. Phase 2b (BACK-2066) adds the call-graph spellings trace merged into calls, and
-    Phase 3 slice 3b (BACK-2068) adds `reveal review`, folded into check --changed plus diff; slice 3c adds a code path given to `reveal health`; step 5 (BACK-2069) adds stats:// and classify://, now metrics://; Phase 4 lane P4-B (BACK-2160) adds testability, now patches ?view=pressure; Phase 2 slice S4 (BACK-1054) adds deps, now imports ?external/?circular/?unused. Every row is validated and exercised in tests/test_retirements_back2066.py."""
+    Phase 3 slice 3b (BACK-2068) adds `reveal review`, folded into check --changed plus diff; slice 3c adds a code path given to `reveal health`; step 5 (BACK-2069) adds stats:// and classify://, now metrics://; Phase 4 lane P4-B (BACK-2160) adds testability, now patches ?view=pressure; Phase 2 slice S4 (BACK-1054) adds deps, now imports ?external/?circular/?unused; slice S6 adds depends://, now imports ?importers. Every row is validated and exercised in tests/test_retirements_back2066.py."""
     assert sorted(RETIREMENTS) == ['flag:--also-json', 'flag:--check', 'flag:--search', 'param:ast.callee_of', 'param:ast.calls',
-                                   'param:calls.root', 'param:calls.target', 'scheme:classify', 'scheme:deps', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:deps', 'subcommand:review', 'subcommand:testability',
+                                   'param:calls.root', 'param:calls.target', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:deps', 'subcommand:review', 'subcommand:testability',
                                    'subcommand:trace', 'target:health.code', 'value:ast.show=calls']
 
 
