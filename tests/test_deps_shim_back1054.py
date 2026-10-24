@@ -182,6 +182,15 @@ def test_external_json_holds_the_numbers_the_deps_text_prints(proj):
                                                                 len(doc['stdlib_packages']))
 
 
+def test_imports_external_tests_exclude_drops_test_files(proj):
+    _write(proj, {'tests/test_c.py': 'import pytest\nfrom pkg import c\n\n\ndef test_c():\n    assert c\n'})
+    every = ImportsAdapter(str(proj), 'external').get_structure()
+    no_tests = ImportsAdapter(str(proj), 'external&tests=exclude').get_structure()
+    assert 'pytest' in _packages(every['external_packages'])
+    assert _packages(no_tests['external_packages']) == {'requests': 1, 'yaml': 1}
+    assert every['total_files'] == no_tests['total_files'] + 1
+
+
 def test_imports_external_text_lists_the_packages(proj):
     result = _run_reveal_direct(f'imports://{proj}?external')
     assert result.returncode == 0, result.stderr
@@ -207,6 +216,7 @@ def test_imports_uri_takes_fail_on_findings(proj):
     ('--circular',),                              # off by default
     ('--rank', 'fan-in', '--fail-on', 'findings'),  # a view with no findings to gate
     ('--external', '--fail-on', 'findings'),
+    ('--importers', 'pkg/a.py', '--fail-on', 'findings'),  # a counted answer that is not a finding
 ])
 def test_imports_exits_0_when_no_gate_matches(proj, argv):
     result = _run_reveal_direct('imports', str(proj), '--scope', 'path', *argv)
