@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from conftest import _run_reveal_direct as run
+from reveal.adapters import imports as imports_adapter
 from reveal.adapters.depends import DependsAdapter
 from reveal.analyzers.imports import generic, service
 from reveal.analyzers.imports.resolution import ProjectResolver
@@ -120,6 +121,9 @@ def assert_risk(result, discoveries, loads, root, positive=False):
 def test_actual_cached_inventory_loss_is_required_risk_with_main_and_load_roots_healthy(tmp_path, mode, positive):
     target = tree(tmp_path, positive=positive)
     clean = request(target)
+    # depends answers from the imports engine (BACK-1054 S6), whose validated memo would serve the
+    # clean build on an unchanged tree: the fault has to reach a cold build.
+    imports_adapter._GRAPH_MEMO.clear()
     with inventory_fault(tmp_path, mode) as (events, discoveries, loads):
         lost = request(target)
     assert events and clean['count'] == lost['count'] == int(positive)

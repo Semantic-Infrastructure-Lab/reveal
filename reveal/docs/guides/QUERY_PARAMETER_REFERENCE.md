@@ -510,17 +510,22 @@ site). A scanned call-source language with no recall snapshot (Elixir, Objective
 
 **Purpose**: Find all files that import a given module ("what depends on this?")
 
+**Retired spelling** (BACK-1054): `depends://` prints a note and answers as before until the cut; the
+replacement is `imports://<path>?importers` (one file: `imports://<path>/<file>?importers`):
+```bash
+reveal 'imports://src?importers'            # every module under src with its sorted importers
+reveal 'imports://src?importers=utils.py'   # one file's importers, each with its import line
+```
+
 **Query Parameters**:
 
-- **`top=N`** (integer) - Limit to the N most-imported modules (directory) or the first N importers (file); `--limit N` maps here
+- **`top=N`** (integer) - Limit to the N most-imported modules (directory) or the first N importers (file); `--limit N` maps here. The ranking's replacement:
   ```bash
-  reveal 'depends://src?top=10'
+  reveal 'imports://src?rank=fan-in&top=10'
   ```
 
-- **`format=dot`** (string) - Output GraphViz DOT format for visualization (directory mode only — single-file targets ignore this param and return plain text)
-  ```bash
-  reveal 'depends://src?format=dot'
-  ```
+- **`format=dot`** (string) - Output GraphViz DOT format for visualization (directory mode only — single-file
+  targets ignore this param and return plain text): `depends://src?format=dot`, which has no `imports://` form yet
 
 ---
 

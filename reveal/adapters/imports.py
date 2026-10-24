@@ -65,14 +65,17 @@ def _candidate_set_fingerprint(candidates: List[Path],
 
 
 def _graph_cache_key(candidates: List[Path], file_index: Dict[str, List[Path]], root: Path,
-                     traversal_failures: Sequence[Tuple[Optional[str], str]], cap: Optional[int]) -> Optional[str]:
+                     traversal_failures: Sequence[Tuple[Optional[str], str]], cap: Optional[int],
+                     parsed: Optional[frozenset] = None) -> Optional[str]:
     """The whole-graph cache key: the resolution fingerprint of the scan root, plus the build's
-    identity (the file cap the walk ran under, the extensions it parsed). None: not cacheable."""
+    identity (the file cap the walk ran under, the extensions it parsed: every supported one unless
+    a caller narrowed them, ``parse_extensions``). None: not cacheable."""
     fingerprint = _candidate_set_fingerprint(candidates, file_index, root=root,
                                              traversal_failures=traversal_failures)
     if fingerprint is None:
         return None
-    identity = f'{fingerprint}|cap={cap}|exts={",".join(sorted(get_all_extensions()))}'
+    exts = parsed if parsed is not None else get_all_extensions()
+    identity = f'{fingerprint}|cap={cap}|exts={",".join(sorted(exts))}'
     return hashlib.sha256(identity.encode('utf-8')).hexdigest()
 
 
@@ -1644,13 +1647,17 @@ class ImportsAdapter(ResourceAdapter):
     PARAM_SPECS = PARAM_SPECS
 
     def __init__(self, resource: str = '.', query: Optional[str] = None, *,
-                 params: Optional[Any] = None):
+                 params: Optional[Any] = None, parse_extensions: Optional[frozenset] = None):
         """Initialize imports adapter.
 
         Args:
             resource: Directory or file path to analyze (e.g., 'src', '/abs/path')
             query: Query string portion (e.g., 'unused', 'circular=true')
             params: the subcommand's typed parameters (a flag left off is not supplied)
+            parse_extensions: the extensions the walk keeps and parses, for a caller with its own
+                build (depends://, a file target's own family: BACK-525 layer 4, BACK-1054 S6); None
+                keeps every extension with an extractor plus recognized code without one (counted
+                for the coverage warning, and against the file cap)
         """
         path = resource
         self.analysis = ImportAnalysis()
@@ -1672,6 +1679,7 @@ class ImportsAdapter(ResourceAdapter):
         # Where _build_graph resolved and under which file cap (BACK-1054).
         self._scan: Optional[resolution.ScanRoot] = None
         self._scan_budget = ScanBudget(_MAX_FILES.default)
+        self._parse_extensions = parse_extensions
 
     @staticmethod
     def result_type_for(params: Any) -> str:
@@ -1741,6 +1749,27 @@ class ImportsAdapter(ResourceAdapter):
         # Extract imports and build graph
         self._build_graph(target_path)
         return self._present(query_params, kwargs)
+
+    def analyze(self) -> ImportAnalysis:
+        """Build the graph this request resolves (its root, file cap and extension family) and return
+        it unpresented, for a presenter with its own answer shape over the one engine (depends://,
+        BACK-1054 S6). ``scan`` and ``scope_hidden`` describe this build; on a cache hit the
+        analysis is shared, so a caller reads it and never changes it."""
+        target_path = self._target_path or Path('.').resolve()
+        self._target_path = target_path
+        self._build_graph(target_path)
+        return self.analysis
+
+    @property
+    def scan(self) -> Optional[resolution.ScanRoot]:
+        """Where the last build resolved (None before one)."""
+        return self._scan
+
+    @property
+    def scope_hidden(self) -> Optional[WarningEntry]:
+        """What the last build's walk hid from the request's focus, judged by this request's walk
+        (BACK-2065), never read from a cached build."""
+        return self._scope_hidden
 
     def get_view(self, query: str) -> Dict[str, Any]:
         """Another view of the graph ``get_structure()`` built, without building it again: a
@@ -2079,6 +2108,15 @@ class ImportsAdapter(ResourceAdapter):
     def _scan_root_for(self, target_path: Path) -> resolution.ScanRoot:
         return _scan_root_of(self._query_params, target_path)
 
+    def _walk_extensions(self) -> Tuple[frozenset, frozenset]:
+        """The extensions the walk keeps and parses, and the recognized-code extensions without an
+        import extractor it also keeps, to warn honestly (instead of a silent 0) when a scan hits,
+        e.g., Swift or Scala. A caller's own family (``parse_extensions``, depends://) is kept
+        alone, so the file cap counts only it."""
+        if self._parse_extensions is not None:
+            return self._parse_extensions, frozenset()
+        return frozenset(get_all_extensions()), get_code_extensions()
+
     def _build_graph(
         self,
         target_path: Path,
@@ -2128,10 +2166,7 @@ class ImportsAdapter(ResourceAdapter):
         root alone, validated by the tree stamp). A build that lost a file for a reason its
         content did not cause is returned, never stored (BACK-2083).
         """
-        supported_exts = frozenset(get_all_extensions())
-        # Recognized-code extensions that lack an import extractor — used to warn
-        # honestly (instead of a silent 0) when a scan hits, e.g., Swift or Scala.
-        code_exts = get_code_extensions()
+        supported_exts, code_exts = self._walk_extensions()
         self._scan = scan = self._scan_root_for(target_path)
         root = scan.root
         self._scan_budget = ScanBudget(_MAX_FILES.read(self._query_params))
@@ -2150,7 +2185,7 @@ class ImportsAdapter(ResourceAdapter):
 
         cacheable = not collect_structures and on_file_processed is None
         key = _graph_cache_key(candidates, file_index, root, traversal_failures,
-                               self._scan_budget.limit) if cacheable else None
+                               self._scan_budget.limit, self._parse_extensions) if cacheable else None
         cached = _cached_graph(root, key)
         if cached is not None:
             self.analysis = cached
@@ -2644,15 +2679,8 @@ class ImportsAdapter(ResourceAdapter):
         graph = self._edges(LAZY_INCLUDE)
         record = self.analysis.resolution
         statements = record.edge_statements if record is not None else {}
-        sources = set(graph.reverse_deps.get(target, set()))
-        # BACK-553: a package-granularity language resolves an import to the package directory.
-        package_sources = graph.reverse_deps.get(target.parent, set())
-        sources |= package_sources
-        sources.discard(target)
         rows = []
-        for src in sorted(sources):
-            key = (src, target) if (src, target) in graph.edge_scopes else (src, target.parent)
-            stmt = statements.get(key)
+        for src, key, stmt in resolution.file_importers(graph, statements, target):
             row: Dict[str, Any] = {'file': str(src), 'line': 0, 'module': '', 'names': [], 'type': 'unknown',
                                    'is_relative': False, 'alias': None}
             if stmt is not None:

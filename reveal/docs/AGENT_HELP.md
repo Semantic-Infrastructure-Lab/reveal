@@ -1486,13 +1486,13 @@ Test entry points (Go `Test*`, Rust `#[test]`, JS/TS test callbacks, JUnit3 `tes
 reveal 'imports://src?rank=fan-in'
 reveal 'imports://src?rank=fan-in&top=10'
 
-# Who imports this specific file?
-reveal depends://src/utils.py
+# Who imports this specific file? (each importer with its import line)
+reveal 'imports://src/utils.py?importers'
 
 # Who imports anything in models/?
-reveal depends://src/models/
+reveal 'imports://src/models?importers'
 
-# Full reverse graph in GraphViz DOT format
+# Full reverse graph in GraphViz DOT format (depends:// is retired; DOT has no imports:// form yet)
 reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
 ```
 
@@ -1501,8 +1501,8 @@ reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
   - `imports://src?rank=fan-in` — ranks every file by importer count. High fan-in = core abstractions (change carefully); zero = entry points or dead code.
   - `imports://src?entrypoints` — lists only the fan-in=0 files, sorted by fan-out. High fan-out = real CLI/runner; zero = likely dead code.
   - `imports://src?components` — scores each directory as a component: cohesion (how self-contained), coupling (incoming/outgoing), top bridge file. Low cohesion = not a real component.
-- **Impact analysis before refactoring** — before changing `utils.py`, run `depends://src/utils.py` to see every direct importer
-- **Safe deletion** — verify `count: 0` (via `depends://`) before removing a module
+- **Impact analysis before refactoring** — before changing `utils.py`, run `imports://src/utils.py?importers` to see every direct importer
+- **Safe deletion** — verify `count: 0` (via `?importers`) before removing a module
 
 **How the tools relate:**
 
@@ -1511,11 +1511,11 @@ reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
 | `imports://src?rank=fan-in` | Which files are most central? | Codebase ranking |
 | `imports://src?entrypoints` | Where does execution start? | Fan-in=0 subset |
 | `imports://src?components` | Which directories are real components? | Per-directory |
-| `depends://src/module.py` | What exactly imports this file? | Per-file reverse |
+| `imports://src/module.py?importers` | What exactly imports this file? | Per-file reverse |
 | `imports://src` | What does each file import? | Forward, all files |
 | `calls://src/?callers=fn` | Who calls this function? | Function level |
 
-Use the three `imports://` views for orientation; `depends://` for targeted impact analysis before a specific change.
+Use the three `imports://` views for orientation; `?importers` for targeted impact analysis before a specific change. `depends://` is the retired spelling of `?importers`: it prints a note and answers as before (its shapes, exit 0 on a partial answer) until the cut.
 
 **Which edges count:** every view counts function-level (lazy) imports except `?circular` (and `metadata.has_cycles`), where a lazy back-edge is not an import-time cycle. `&lazy=exclude` gives the load-time (architecture) view, `&lazy=include` makes `?circular` count lazy edges, `&lazy=only` shows only them. Each answer prints its rule: a `Rule:` line in text, `edge_rule` in JSON. Python, JavaScript, TypeScript and TSX record import scope; the rule names any other language whose edges it could not classify.
 

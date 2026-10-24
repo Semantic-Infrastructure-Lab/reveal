@@ -205,6 +205,9 @@ PRODUCTION_CASES = {
     # proves the old spellings answer like the new one.
     'subcommand:testability': lambda f: ['testability', str(Path(f).parent), '--tests', str(Path(f).parent)],
     'scheme:testability': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}'],
+    # Phase 2 slice S6 (BACK-1054): depends answers from the imports:// engine's build; tests/test_depends_shim_back1054.py
+    # and tests/test_dd_call_exit_contract_back2181.py prove the old shapes and exit code are kept.
+    'scheme:depends': lambda f: [f'depends://{f}'],
     # Phase 2 slice S4 (BACK-1054): deps answers from one imports build; tests/test_deps_shim_back1054.py and
     # tests/test_dd_call_exit_contract_back2181.py prove the old shapes and exit codes are kept.
     'subcommand:deps': lambda f: ['deps', str(Path(f).parent)],

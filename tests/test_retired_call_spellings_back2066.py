@@ -72,7 +72,6 @@ NOT_RETIRED = {
     'calls ?callers=': lambda p: [f'calls://{p}?callers=helper'],
     'reveal calls --callers': lambda p: ['calls', p, '--callers', 'helper'],
     'reveal calls --callees --depth': lambda p: ['calls', p, '--callees', 'main', '--depth', '2'],
-    'depends ?root=': lambda p: [f'depends://{p}?root={p}'],
     'imports ?importers&scope=path': lambda p: [f'imports://{p}?importers&scope=path'],
     'ast ?callers>N': lambda p: [f'ast://{p}?callers>0'],
     'ast ?show=dict-heatmap': lambda p: [f'ast://{p}?show=dict-heatmap'],
@@ -146,6 +145,14 @@ def test_the_replacements_and_their_siblings_print_no_note(project, case):
     result = run(*NOT_RETIRED[case](project), '--format', 'json')
     assert 'deprecated' not in result.stderr, result.stderr
     assert not _retired(json.loads(result.stdout))
+
+
+def test_depends_root_notes_its_own_scheme_not_the_calls_parameter(project):
+    """depends:// is retired itself (BACK-1054 S6), but its ?root= is not calls' ?root=: the one
+    note is the scheme's."""
+    result = run(f'depends://{project}?root={project}', '--format', 'json')
+    assert [w['field'] for w in _retired(json.loads(result.stdout))] == ['scheme:depends']
+    assert result.stderr.count('deprecated') == 1 and 'calls ?root=' not in result.stderr
 
 
 @pytest.mark.parametrize('case', CASES)

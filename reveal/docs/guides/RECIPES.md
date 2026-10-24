@@ -657,31 +657,31 @@ reveal 'ast://src/auth.py?type=function' --format json
 
 ### Trace module-level dependencies (reverse import graph)
 
-`depends://` answers "what imports *this*?" — the complement of `imports://`.
+`imports://<path>?importers` answers "what imports *this*?" (`depends://` is its retired spelling: a note, the old answer, until the cut).
 
 ```bash
 # Who imports this module?
-reveal depends://src/utils.py
+reveal 'imports://src/utils.py?importers'
 
 # Who imports anything in models/?
-reveal depends://src/models/
+reveal 'imports://src/models?importers'
 
 # Most-imported (high-coupling) modules — change these carefully
-reveal 'depends://src?top=10'
+reveal 'imports://src?rank=fan-in&top=10'
 
-# Full reverse dependency graph (pipe to Graphviz)
+# Full reverse dependency graph (pipe to Graphviz; DOT has no imports:// form yet)
 reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
 ```
 
 **Key use cases:**
-- **Impact analysis before refactoring** — run `depends://src/utils.py` to see every importer before touching a module
+- **Impact analysis before refactoring** — run `imports://src/utils.py?importers` to see every importer before touching a module
 - **Safe deletion** — verify `count: 0` before removing a module
 - **Coupling audit** — `?top=N` ranks modules by fan-in; high fan-in = high blast radius if changed
 
 | Adapter | Question | Direction |
 |---------|----------|-----------|
 | `imports://src` | What does this code import? | Forward |
-| `depends://src/module.py` | What imports this module? | Reverse |
+| `imports://src/module.py?importers` | What imports this module? | Reverse |
 | `calls://src/?callers=fn` | Who calls this function? | Reverse (function level) |
 
 **Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked.
