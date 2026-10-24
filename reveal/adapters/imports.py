@@ -15,6 +15,7 @@ Usage:
 import difflib
 import hashlib
 import os
+import sys
 from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, Sequence, Tuple, cast
@@ -398,6 +399,15 @@ _IMPORTERS = ParamSpec(
     examples=('imports://src?importers', 'imports://src?importers=utils.py', 'imports://src/utils.py?importers'),
 )
 _REQUEST_SPECS = (_LAZY, _SCOPE, _TESTS, _ROOT, _MAX_FILES, _IMPORTERS)
+# BACK-2194: the Graphviz module view, the replacement for calls ?modules &format=dot. URI-only, as
+# on calls:// (dot has no --format spelling); it draws the edges ?importers lists for a directory.
+_FORMAT = ParamSpec(
+    'format', 'string',
+    'URI output override for ?importers on a directory: dot draws one importer -> module edge per '
+    'listed importer as Graphviz (pipe to dot -Tsvg); text and json follow --format',
+    None, _choice_value, examples=('imports://src?importers&scope=path&format=dot',),
+    choices=('text', 'json', 'dot'), role='presentation',
+)
 
 
 def _flag(name: str, description: str) -> ParamSpec:
@@ -441,6 +451,7 @@ PARAM_SPECS: Tuple[ParamSpec, ...] = (
     ParamSpec(_IMPORTERS.name, _IMPORTERS.type, _IMPORTERS.description, None, _IMPORTERS.convert,
               _IMPORTERS.examples, role='operation', names=_IMPORTERS.names,
               cli=CliBinding(('--importers',), nargs='?', metavar='FILE')),
+    _FORMAT,
 )
 _FLAG_NAMES = frozenset(spec.name for spec in PARAM_SPECS if spec.type == 'boolean')
 
@@ -501,6 +512,7 @@ _SCHEMA_QUERY_PARAMS = {
     'tests': _TESTS.schema(),
     'root': _ROOT.schema(),
     'max_files': _MAX_FILES.schema(),
+    'format': _FORMAT.schema(),
 }
 
 # BACK-2077: the counting rule every edge-derived answer carries (service.edge_rule).
@@ -1196,6 +1208,24 @@ class ImportsRenderer:
         print()
 
     @staticmethod
+    def _render_dot(result: dict) -> None:
+        """?importers&format=dot: one importer -> module edge per listed importer; warnings go to
+        stderr so stdout stays valid Graphviz (as every dot view does)."""
+        for line in meta_warning_lines(result):
+            print(line, file=sys.stderr)
+
+        def quoted(path: str) -> str:
+            return '"' + path.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+        print('digraph modules {')
+        print('  rankdir=LR;')
+        print('  node [shape=box fontname="monospace"];')
+        for entry in result.get('entries', []):
+            for importer in entry['importers']:
+                print(f'  {quoted(importer)} -> {quoted(entry["file"])};')
+        print('}')
+
+    @staticmethod
     def _render_external(result: dict, resource: str, verbose: bool) -> None:
         """Render ?external: the package table, most used first (20 per list unless --verbose)."""
         external, stdlib = result.get('external_packages', []), result.get('stdlib_packages', [])
@@ -1304,6 +1334,9 @@ class ImportsRenderer:
             verbose: Show detailed results
             resource: Resource path for display
         """
+        if result.get('_format') == 'dot':
+            ImportsRenderer._render_dot(result)
+            return
         if format == 'json':
             print_json_result(result)
             return
@@ -1610,6 +1643,8 @@ def _validate_params(params: QueryParams) -> None:
             raise ValueError(f'rank must be one of: {choices}; got {value!r}')
         if key == _LAZY.name:
             _LAZY.validate(value)
+        if key == _FORMAT.name:
+            _FORMAT.validate(value)
         for spec in _REQUEST_SPECS[1:] + PARAM_SPECS[3:5]:
             if key == spec.name:
                 spec.validate(value)
@@ -1797,6 +1832,9 @@ class ImportsAdapter(ResourceAdapter):
         target_path = self._target_path or Path('.').resolve()
         result = self._format_view(query_params, kwargs)
         _relativize_imports_paths(result, target_path, self._scan.root if self._scan else None)
+        # Read where the view draws: on any other view the key is unread, and says so.
+        if result.get('type') == 'importer_summary' and _FORMAT.read(query_params) == 'dot':
+            result['_format'] = 'dot'
         # Read where the view expands: on any other view the flag is unread, and says so.
         if result.get('type') in _VERBOSE_VIEWS and ('verbose' in query_params or kwargs.get('verbose', False)):
             result['verbose'] = True
