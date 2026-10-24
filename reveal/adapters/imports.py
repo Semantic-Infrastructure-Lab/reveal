@@ -2644,15 +2644,8 @@ class ImportsAdapter(ResourceAdapter):
         graph = self._edges(LAZY_INCLUDE)
         record = self.analysis.resolution
         statements = record.edge_statements if record is not None else {}
-        sources = set(graph.reverse_deps.get(target, set()))
-        # BACK-553: a package-granularity language resolves an import to the package directory.
-        package_sources = graph.reverse_deps.get(target.parent, set())
-        sources |= package_sources
-        sources.discard(target)
         rows = []
-        for src in sorted(sources):
-            key = (src, target) if (src, target) in graph.edge_scopes else (src, target.parent)
-            stmt = statements.get(key)
+        for src, key, stmt in resolution.file_importers(graph, statements, target):
             row: Dict[str, Any] = {'file': str(src), 'line': 0, 'module': '', 'names': [], 'type': 'unknown',
                                    'is_relative': False, 'alias': None}
             if stmt is not None:
