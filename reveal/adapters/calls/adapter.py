@@ -22,7 +22,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from reveal.reveal_types import CONTRACT_VERSION, RevealResult
+from reveal.reveal_types import CONTRACT_VERSION, RevealResult, WarningEntry
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .confidence import build_meta as _call_graph_meta
@@ -452,7 +452,7 @@ _ANSWER_FIELDS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], Tuple[str, ...
 _LOSS_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete', 'worker_lost', 'scan_capped'})
 
 
-def _import_file_warnings(child: Any, base: Path) -> List[Dict[str, Any]]:
+def _import_file_warnings(child: Any, base: Path) -> List[WarningEntry]:
     """The per-file facts of the imports build ?modules read (its answer's meta already names the lost
     directories). imports counts every such file as failed and exits 3; calls ?modules exited 3 only
     for a file it could not read, so the three kinds are told apart: a file tree-sitter recovered with
@@ -478,7 +478,7 @@ def _import_file_warnings(child: Any, base: Path) -> List[Dict[str, Any]]:
     warnings = [parse_failure_warning(partial, base), worker_lost_warning([str(p) for p in lost], base),
                 analysis_skipped_warning(unread, base, 'analysis is incomplete; its imports are missing from the '
                                                        'module graph')]
-    return [dict(w) for w in warnings if w]
+    return [w for w in warnings if w]
 
 
 # A name answer that can prove absence: the field it names and its observation count.
@@ -830,9 +830,10 @@ class CallsAdapter(ResourceAdapter):
         query_format = _FORMAT.read(params) or ''
         if query_format:
             data['_query_format'] = query_format
-        composed = self.composed_meta() or {}
-        warnings = [*composed.get('warnings', []), *_import_file_warnings(child, Path(directory))]
-        errors = composed.get('errors') or []
+        composed = self.composed_meta()
+        warnings: List[WarningEntry] = [*(composed.get('warnings', []) if composed else []),
+                                        *_import_file_warnings(child, Path(directory))]
+        errors: List[WarningEntry] = list(composed.get('errors', [])) if composed else []
         lost = bool(errors) or any(w.get('type') in _LOSS_WARNINGS for w in warnings)
         return ResultBuilder.create(
             result_type='calls_module_graph',
