@@ -45,8 +45,10 @@ def _assert_names_bad_py(warnings):
     assert 'ValueError' in warning['message']
 
 
+# ?modules reads no call structures since it answers from imports ?importers (BACK-1054 slice S5): a file the
+# imports engine cannot read is its analysis_failed (tests/test_calls_modules_shim_back1054.py).
 @pytest.mark.parametrize('query', [
-    'target=a', 'callees=a', 'root=a', 'uncalled', 'rank=callers', 'modules'])
+    'target=a', 'callees=a', 'root=a', 'uncalled', 'rank=callers'])
 def test_calls_modes_warn_about_the_skipped_file(tree, query):
     result = CallsAdapter(str(tree), query).get_structure()
     _assert_names_bad_py(result['meta']['warnings'])

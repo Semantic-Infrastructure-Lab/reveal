@@ -13,7 +13,9 @@ The forward queries (?callees=, depth, --detail, ?root=) read one CalleeSource p
 kept only inside host requests and validated by the tree stamp alone (BACK-2109).
 """
 
+import ntpath
 import os
+import posixpath
 import re
 import sys
 from collections import OrderedDict
@@ -23,13 +25,12 @@ from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, Iterator, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from ..ast.analysis import (
-    StructureList, collect_structures, environmental_failure, is_code_file, call_sources, unattributed_references,
+    StructureList, collect_structures, environmental_failure, is_code_file, call_sources,
 )
 from ...utils.pyparse import parse_python
 from ...utils.request_cache import in_host_request, register_request_cache, register_validated_cache
 from ..ast.call_graph import (
-    ClassAliasSpan, build_alias_map, build_class_attribute_aliases, build_symbol_map, class_attribute_alias,
-    resolve_callees as _resolve_callees,
+    ClassAliasSpan, build_alias_map, build_class_attribute_aliases, class_attribute_alias,
 )
 from .confidence import language_census
 from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
@@ -1810,104 +1811,31 @@ def rank_by_callers(
     }, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()))
 
 
-def _unattributed_sources(file_struct: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """One synthetic module-level source per deferred body whose JSX uses have no tracked owner.
+def module_graph_from_importers(answer: Dict[str, Any], directory: str) -> Dict[str, Any]:
+    """calls ?modules from an imports ?importers answer over *directory* (BACK-1054 slice S5, Q4).
 
-    The module graph is file-to-file: a dependency exists whichever scope renders the
-    component, so these uses are kept as edges instead of dropped (BACK-1831)."""
-    groups: Dict[Tuple[str, int], List[str]] = {}
-    for ref in unattributed_references(file_struct):
-        groups.setdefault((ref['owner'], ref['owner_line']), []).append(ref['callee'])
-    return [{'category': 'modules', 'name': owner, 'line': line, 'calls': list(dict.fromkeys(callees))}
-            for (owner, line), callees in groups.items()]
+    One edge per (importer, imported file) of the answer: the import edges imports counts, not only the
+    imports a call resolves through (the old graph, every edge of which was an import edge and which
+    missed an import used without a call). Edges have no call_count (Q4). Every path is *directory*
+    joined to the answer's spelling relative to it, '/'-spelled on every OS (BACK-2188); a self-import
+    is no edge. The shape is the old one (Q8) plus the answer's ``edge_rule``."""
+    base = to_posix(directory)
 
+    def spelled(path: str) -> str:
+        path = to_posix(path)
+        absolute = path.startswith('/') or bool(ntpath.splitdrive(path)[0])
+        return posixpath.normpath(path if absolute else posixpath.join(base, path))
 
-def build_module_dependency_graph(
-    path: str,
-    include_external: bool = False,
-) -> Dict[str, Any]:
-    """Build a module-level dependency graph using cross-file call resolution.
-
-    For each function call in the project, resolves the callee to its source
-    file via the import graph (``build_symbol_map`` + ``resolve_callees``).
-    Collapses the function-level edges to unique module → module edges with
-    a per-edge call count.
-
-    Args:
-        path: Root directory (or file) to scan.
-        include_external: When True, include edges where the callee resolves
-            to a file outside the project root (stdlib/third-party).  Default
-            False keeps the graph focused on project-internal dependencies.
-
-    Returns:
-        Dict with ``nodes`` (sorted list of module file paths that appear as
-        caller or callee), ``edges`` (list of ``{from, to, call_count}``
-        sorted descending by call_count), and summary counts.
-    """
-    path_obj = Path(path)
-    directory = path_obj if path_obj.is_dir() else path_obj.parent
-    dir_str = str(directory)
-    structures = collect_structures(dir_str)
-
-    # edge_counts: (from_file, to_file) → call count
-    edge_counts: Dict[Tuple[str, str], int] = {}
-    # symbol_map cache per file
-    sym_cache: Dict[str, Dict[str, Optional[str]]] = {}
-
-    for file_struct in structures:
-        from_file = file_struct.get('file', '')
-        if not from_file:
-            continue
-
-        if from_file not in sym_cache:
-            sym_cache[from_file] = build_symbol_map(from_file)
-        symbol_map = sym_cache[from_file]
-
-        for elem in [*call_sources(file_struct), *_unattributed_sources(file_struct)]:
-            # 'tests' included so a Zig test file's calls into other modules
-            # register as real module-dependency edges (BACK-663).
-            if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):
-                continue
-            raw_calls = elem.get('calls', [])
-            if not raw_calls:
-                continue
-
-            resolved = _resolve_callees(raw_calls, symbol_map)
-            for entry in resolved:
-                to_file = entry.get('resolved_file')
-                if not to_file:
-                    continue
-                if not include_external:
-                    # Skip files outside the project root
-                    try:
-                        Path(to_file).relative_to(directory)
-                    except ValueError:
-                        continue
-                # Skip self-loops
-                if to_file == from_file:
-                    continue
-                edge_key = (from_file, to_file)
-                edge_counts[edge_key] = edge_counts.get(edge_key, 0) + 1
-
-    # Build edges list
-    edges = [
-        {'from': frm, 'to': to, 'call_count': cnt}
-        for (frm, to), cnt in edge_counts.items()
-    ]
-    edges.sort(key=lambda e: e['call_count'], reverse=True)
-
-    # Nodes = all files that appear in any edge
-    node_set: Set[str] = set()
-    for e in edges:
-        node_set.add(e['from'])
-        node_set.add(e['to'])
-    nodes = sorted(node_set)
-
-    return _disclose_skipped({
+    pairs = {(spelled(src), spelled(entry['file'])) for entry in answer.get('entries') or []
+             for src in entry['importers']}
+    edges = sorted((frm, to) for frm, to in pairs if frm != to)
+    nodes = sorted({path for edge in edges for path in edge})
+    return {
         'query': 'module_graph',
-        'path': dir_str,
+        'path': base,
         'nodes': nodes,
-        'edges': edges,
+        'edges': [{'from': frm, 'to': to} for frm, to in edges],
         'total_nodes': len(nodes),
         'total_edges': len(edges),
-    }, structures.skipped, traversal_failures=getattr(structures, 'traversal_failures', ()))
+        'edge_rule': answer.get('edge_rule'),
+    }

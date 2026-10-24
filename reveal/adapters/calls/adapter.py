@@ -26,7 +26,7 @@ from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .confidence import build_meta as _call_graph_meta
-from .index import (find_callers, find_callees, find_uncalled, rank_by_callers, build_module_dependency_graph,
+from .index import (find_callers, find_callees, find_uncalled, rank_by_callers, module_graph_from_importers,
                     walk_callees, callee_levels, callee_source, CalleeWalk, _bare_callee_name, _split_root)
 from ..ast.analysis import collect_structures
 from ...core.definition_names import name_matches
@@ -102,8 +102,10 @@ _UNCALLED = _flag_spec('uncalled', 'List every function/method with no callers (
 _TYPE = ParamSpec('type', 'string', 'For uncalled: function (module-level functions only) or method', None,
                   nonempty_scalar, examples=('type=function',), choices=('function', 'method'), role='analysis',
                   cli=CliBinding(('--type',), metavar='KIND'))
-_MODULES = _flag_spec('modules', 'Module-level dependency graph instead of function-level', role='operation')
-_EXTERNAL = _flag_spec('external', 'Include external (non-project) modules in the modules graph')
+_MODULES = _flag_spec('modules', 'Module-level dependency graph: one edge per import that resolves under the path '
+                      '(retired: imports://<path>?importers&scope=path answers the same edges)', role='operation')
+_EXTERNAL = _flag_spec('external', 'With modules: also count importers from the rest of the project root '
+                       '(imports scope=root; retired with modules)')
 _BUILTINS = _flag_spec('builtins', 'Include language builtins (len, str, ValueError, ...) in callees (every '
                        'depth), root and rank output (default: false)')
 _DETAIL = _flag_spec('detail', 'Callees only: add params and effects to every definition the walk reaches '
@@ -206,6 +208,10 @@ _HELP: Dict[str, Any] = {
         'two exit 2 and name both, and so does the path:name shorthand with an explicit mode. '
         'A malformed value (depth=abc, top=-1, rank=other), callers=FILE:NAME or detail outside callees exits 2 '
         'naming the parameter; names are never coerced (callers=123 is the name 123).',
+        '?modules is retired (BACK-1054): it answers from imports://<path>?importers&scope=path, one edge per '
+        'import that resolves under the path (an import used without a call counts too; no call_count), and '
+        '&external counts importers from the whole project root (scope=root). A file parsed with errors is '
+        'disclosed (partial_parse) and still exits 0, as before.',
         'Exit codes: 0 complete; 2 rejected before analysis (bad request, missing path) or a name that names '
         'nothing (callees: no definition; callers: no definition and no call site); 3 required analysis '
         'or output incomplete (a file or directory could not be read; the answer is still printed). '
@@ -360,7 +366,8 @@ _SCHEMA: Dict[str, Any] = {
         },
         {
             'type': 'calls_module_graph',
-            'description': 'Module-level dependency graph derived from call relationships (?modules=true)',
+            'description': 'Module-level dependency graph (?modules=true, retired): one edge per import under the '
+                           'path, from imports ?importers&scope=path, with its edge_rule; no call_count',
         },
     ],
     'example_queries': [
@@ -417,6 +424,10 @@ _SCHEMA: Dict[str, Any] = {
         'definition an edge; not measured in any language (W-CALLS-9 in meta.warnings, walk_rule.measured).',
         'A call-source language with no recall snapshot in scope: no meta.confidence, W-CALLS-10 names it (languages). '
         '?uncalled over JS/TS/TSX, Java or PHP: no meta.confidence, W-CALLS-11 names the language and the measured precision.',
+        '?modules is retired (BACK-1054): it answers from imports://<path>?importers&scope=path, one edge per '
+        'import that resolves under the path (an import used without a call counts too; no call_count), and '
+        '&external counts importers from the whole project root (scope=root). A file parsed with errors is '
+        'disclosed (partial_parse) and still exits 0, as before.',
         'Exactly one mode per request (callers, callees, rank, uncalled, modules, or the retired target and '
         'root), else exit 2 '
         'naming both. Exit 0 complete, 2 rejected before analysis or a name with no definition (callers: and '
@@ -436,8 +447,40 @@ _ANSWER_FIELDS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], Tuple[str, ...
     'calls_uncalled': ((), ('entries',), ('total_uncalled',)),
     'calls_module_graph': ((), ('nodes', 'edges'), ('total_nodes', 'total_edges')),
 }
-# Required evidence lost to an unreadable file or directory (confidence.build_meta).
-_LOSS_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete'})
+# Required evidence lost to an unreadable file or directory (confidence.build_meta); for ?modules, also
+# the imports engine's own loss: files a dead pool worker took and a walk the file cap cut short.
+_LOSS_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete', 'worker_lost', 'scan_capped'})
+
+
+def _import_file_warnings(child: Any, base: Path) -> List[Dict[str, Any]]:
+    """The per-file facts of the imports build ?modules read (its answer's meta already names the lost
+    directories). imports counts every such file as failed and exits 3; calls ?modules exited 3 only
+    for a file it could not read, so the three kinds are told apart: a file tree-sitter recovered with
+    ERROR nodes (``partial_parse``, a disclosure: its recovered imports are edges), a file never parsed
+    (unreadable, no tree: ``analysis_failed``) and a file a dead pool worker took (``worker_lost``)."""
+    from ..imports import parse_failure_warning, worker_lost_warning
+    from ..ast.analysis import analysis_skipped_warning
+    analysis = child.analysis
+    lost = set(analysis.files_lost)
+    partial: List[str] = []
+    unread: List[Tuple[str, str]] = []
+    for path in analysis.files_failed:
+        if path in lost:
+            continue
+        extraction = analysis.extractions.get(path)
+        parse = (extraction.diagnostics.get('parse') or {}) if extraction is not None else {}
+        if parse.get('status') == 'partial':
+            partial.append(str(path))
+        else:
+            cause = (f'{extraction.read_error}: {parse.get("reason", "")}' if extraction is not None
+                     and extraction.read_error else str(parse.get('reason') or 'not parsed'))
+            unread.append((str(path), cause))
+    warnings = [parse_failure_warning(partial, base), worker_lost_warning([str(p) for p in lost], base),
+                analysis_skipped_warning(unread, base, 'analysis is incomplete; its imports are missing from the '
+                                                       'module graph')]
+    return [dict(w) for w in warnings if w]
+
+
 # A name answer that can prove absence: the field it names and its observation count.
 _ABSENCE_TYPES = frozenset({'calls_query', 'calls_callees', 'calls_callees_recursive'})
 _WALK_TOTALS = ('total_edges', 'total_resolved', 'total_unresolved', 'total_ambiguous')
@@ -764,10 +807,42 @@ class CallsAdapter(ResourceAdapter):
         )
 
     def _module_graph(self) -> RevealResult:
+        """A shim over imports ?importers (BACK-1054 slice S5, Q4/Q8): the import edges under the scanned
+        directory, resolved there (``scope=path``); ``&external`` counts importers from the whole project
+        root (``scope=root``). One import build, no call structures; the imports answer's warnings and
+        errors are the envelope, and a file parsed with errors is disclosed (``partial_parse``) without
+        counting as lost evidence, so the exit codes are calls ?modules' own (D6: 3 on a lost directory
+        or file). parse_mode says partial on a loss, as every calls answer does; there is no confidence:
+        calls' is its call-extraction estimate, and these edges are imports'."""
+        from ..imports import ImportsAdapter
+        from ...analyzers.imports import service as import_analysis
         self._warn_top_ignored()
         self._warn_depth_ignored('modules')
-        data = build_module_dependency_graph(self.path, include_external=_EXTERNAL.read(self.query_params))
-        return self._answer('calls_module_graph', data, query_format=_FORMAT.read(self.query_params) or '')
+        params = self.query_params
+        directory = str(self._directory())
+        query = 'importers' if _EXTERNAL.read(params) else 'importers&scope=path'
+        child = ImportsAdapter(directory, query)
+        with import_analysis.composed_rules('calls ?modules'):  # BACK-2087
+            # A cut of the imports answer's metadata (files_failed, first 50) is about a field this answer lacks.
+            answer = self.compose_answer(ImportsAdapter, directory, child.get_structure, default={},
+                                         omit_warnings=lambda w: str(w.get('field', '')).startswith('metadata.'))
+        data = module_graph_from_importers(answer if isinstance(answer, dict) else {}, directory)
+        query_format = _FORMAT.read(params) or ''
+        if query_format:
+            data['_query_format'] = query_format
+        composed = self.composed_meta() or {}
+        warnings = [*composed.get('warnings', []), *_import_file_warnings(child, Path(directory))]
+        errors = composed.get('errors') or []
+        lost = bool(errors) or any(w.get('type') in _LOSS_WARNINGS for w in warnings)
+        return ResultBuilder.create(
+            result_type='calls_module_graph',
+            source=self.path,
+            contract_version=CONTRACT_VERSION,
+            data=data,
+            parse_mode='tree_sitter_partial' if lost else 'tree_sitter_full',
+            warnings=warnings,
+            errors=errors,
+        )
 
     def _ranking(self) -> RevealResult:
         self._warn_depth_ignored('rank')

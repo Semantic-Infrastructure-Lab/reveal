@@ -13,7 +13,9 @@ from reveal.utils.exclusions import exclusion_scope
 from reveal.utils.path_utils import census_for_path
 
 pytestmark = pytest.mark.component
-MODES = ['target=leaf', 'callees=entry', 'root=entry', 'uncalled&top=1', 'rank=callers&top=1', 'modules']
+# ?modules answers from imports ?importers and runs no calls census (BACK-1054 slice S5): its directory
+# loss is the import walk's, pinned in tests/test_calls_modules_shim_back1054.py and test_calls_loss_back2011.py.
+MODES = ['target=leaf', 'callees=entry', 'root=entry', 'uncalled&top=1', 'rank=callers&top=1']
 
 
 def write(path, text):

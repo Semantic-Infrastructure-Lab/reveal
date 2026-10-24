@@ -199,7 +199,8 @@ def test_other_modes_never_consult_reference_read_channel(tmp_path, fault, query
     clean = owner.get_structure()
     fault['denied'] = {denied}
     assert owner.get_structure() == clean and not fault['events'] and not fault['passes']
-    assert fault['censuses'] == [{'c': 2}, {'c': 2}]
+    # ?modules answers from imports ?importers (BACK-1054 slice S5): no calls census, so no confidence.
+    assert fault['censuses'] == ([] if query == 'modules=true' else [{'c': 2}, {'c': 2}])
 
 
 def test_no_candidates_never_invents_failed_reference_read(tmp_path, fault):

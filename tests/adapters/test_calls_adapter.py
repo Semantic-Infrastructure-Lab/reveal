@@ -2678,8 +2678,8 @@ class TestCalleesRecursiveRenderer(unittest.TestCase):
         self.assertEqual(parsed['query'], 'callees_recursive')
 
 
-class TestBuildModuleDependencyGraph(unittest.TestCase):
-    """build_module_dependency_graph cross-file resolution tests."""
+class TestModuleDependencyGraph(unittest.TestCase):
+    """calls ?modules: the import edges under the path (imports ?importers&scope=path, BACK-1054 S5)."""
 
     def setUp(self):
         import shutil
@@ -2692,12 +2692,15 @@ class TestBuildModuleDependencyGraph(unittest.TestCase):
     def _write(self, name, content):
         path = os.path.join(self.tmp, name)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(textwrap.dedent(content))
         return path
 
+    def _graph(self):
+        from reveal.adapters.calls.adapter import CallsAdapter
+        return CallsAdapter(self.tmp, 'modules').get_structure()
+
     def test_cross_file_edge_detected(self):
-        from reveal.adapters.calls.index import build_module_dependency_graph
         self._write('utils.py', '''\
             def helper():
                 pass
@@ -2707,14 +2710,13 @@ class TestBuildModuleDependencyGraph(unittest.TestCase):
             def main():
                 helper()
         ''')
-        result = build_module_dependency_graph(self.tmp)
+        result = self._graph()
         edge_pairs = [(e['from'], e['to']) for e in result['edges']]
-        app_path = os.path.join(self.tmp, 'app.py')
-        utils_path = os.path.join(self.tmp, 'utils.py')
+        app_path = Path(self.tmp, 'app.py').as_posix()
+        utils_path = Path(self.tmp, 'utils.py').as_posix()
         self.assertIn((app_path, utils_path), edge_pairs)
 
     def test_self_loops_excluded(self):
-        from reveal.adapters.calls.index import build_module_dependency_graph
         self._write('app.py', '''\
             from app import helper
             def main():
@@ -2722,21 +2724,18 @@ class TestBuildModuleDependencyGraph(unittest.TestCase):
             def helper():
                 pass
         ''')
-        result = build_module_dependency_graph(self.tmp)
-        app_path = os.path.join(self.tmp, 'app.py')
+        result = self._graph()
         self_loops = [e for e in result['edges'] if e['from'] == e['to']]
         self.assertEqual(self_loops, [])
 
     def test_empty_project_returns_empty_graph(self):
-        from reveal.adapters.calls.index import build_module_dependency_graph
         self._write('app.py', 'def fn(): pass\n')
-        result = build_module_dependency_graph(self.tmp)
+        result = self._graph()
         self.assertEqual(result['total_edges'], 0)
         self.assertEqual(result['nodes'], [])
 
     def test_result_structure(self):
-        from reveal.adapters.calls.index import build_module_dependency_graph
-        result = build_module_dependency_graph(self.tmp)
+        result = self._graph()
         self.assertIn('query', result)
         self.assertEqual(result['query'], 'module_graph')
         self.assertIn('nodes', result)
@@ -2792,7 +2791,7 @@ class TestModuleGraphRenderer(unittest.TestCase):
             'total_nodes': 2,
             'total_edges': 1,
             'nodes': ['/proj/a.py', '/proj/b.py'],
-            'edges': [{'from': '/proj/a.py', 'to': '/proj/b.py', 'call_count': 3}],
+            'edges': [{'from': '/proj/a.py', 'to': '/proj/b.py'}],
         }
         base.update(kwargs)
         return base
@@ -2802,11 +2801,10 @@ class TestModuleGraphRenderer(unittest.TestCase):
         self.assertIn('2', out)  # nodes
         self.assertIn('1', out)  # edges
 
-    def test_edge_shown_with_count(self):
+    def test_edge_shown_importer_to_imported(self):
         out = self._capture(self._data())
-        self.assertIn('a.py', out)
-        self.assertIn('b.py', out)
-        self.assertIn('3', out)
+        self.assertIn('/proj/a.py → /proj/b.py', out)
+        self.assertNotIn('call', out)  # import edges have no call count (BACK-1054 Q4)
 
     def test_empty_edges_shows_message(self):
         out = self._capture(self._data(edges=[], total_edges=0, total_nodes=0, nodes=[]))
@@ -2817,9 +2815,10 @@ class TestModuleGraphRenderer(unittest.TestCase):
         self.assertIn('digraph', out)
         self.assertIn('->', out)
 
-    def test_dot_shows_edge_label_when_count_gt_1(self):
+    def test_dot_names_nodes_relative_to_the_path_without_labels(self):
         out = self._capture(self._data(), fmt='dot')
-        self.assertIn('label', out)
+        self.assertIn('"a.py" -> "b.py";', out)
+        self.assertNotIn('label', out)  # import edges have no call count (BACK-1054 Q4)
 
     def test_json_format(self):
         import json as _json

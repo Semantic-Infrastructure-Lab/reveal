@@ -188,8 +188,10 @@ def test_callback_that_computes_a_value_does_not_make_the_value_the_owner(tmp_pa
 
 def test_module_graph_keeps_jsx_dependency_with_no_tracked_owner(tmp_path):
     # BACK-1831: <Button/> sits in a deferred body passed to register(), with no enclosing
-    # element, so the use is <anonymous>. The file-to-file edge must not depend on that.
-    from reveal.adapters.calls.index import build_module_dependency_graph
+    # element, so the use is <anonymous>. The file-to-file edge must not depend on that. Since
+    # ?modules answers from imports ?importers (BACK-1054 slice S5, Q4) an edge is an import edge,
+    # whichever scope uses the name, and an import used by nothing is an edge too.
+    from reveal.adapters.calls import CallsAdapter
     (tmp_path / 'ui.tsx').write_text('export function Button() { return null; }\n'
                                      'export function Label() { return null; }\n', encoding='utf-8')
     (tmp_path / 'actions.tsx').write_text("import { Button } from './ui';\n"
@@ -198,10 +200,10 @@ def test_module_graph_keeps_jsx_dependency_with_no_tracked_owner(tmp_path):
                                          'export const x = 1;\n', encoding='utf-8')
     refs = analyze_file(str(tmp_path / 'actions.tsx'))['jsx_references']
     assert [r['owner'] for r in refs] == ['<anonymous>']
-    edges = {(Path(e['from']).name, Path(e['to']).name) for e in build_module_dependency_graph(str(tmp_path))['edges']}
+    edges = {(Path(e['from']).name, Path(e['to']).name)
+             for e in CallsAdapter(str(tmp_path), 'modules').get_structure()['edges']}
     assert ('actions.tsx', 'ui.tsx') in edges
-    # Control: an import with no use stays out of the graph.
-    assert ('unused.tsx', 'ui.tsx') not in edges
+    assert ('unused.tsx', 'ui.tsx') in edges
 
 
 def test_same_named_functions_on_one_line_share_an_owner_known_limit(tmp_path):

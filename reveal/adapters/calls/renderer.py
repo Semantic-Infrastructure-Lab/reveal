@@ -81,11 +81,12 @@ def _print_rule(data: Dict[str, Any]) -> None:
 
 
 def _leading_warnings(data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """The warnings printed above a view: every one for the per-definition callees view, which prints
-    no caveat of its own (lane D finding e: scope_hidden was dropped); else what the answer lost and
-    what no measurement covers."""
+    """The warnings printed above a view: every one for the per-definition callees view and the module
+    graph, which print no caveat of their own (lane D finding e: scope_hidden was dropped; the module
+    graph's are the imports engine's, a partial parse among them); else what the answer lost and what no
+    measurement covers."""
     warnings: List[Dict[str, Any]] = data.get('meta', {}).get('warnings', [])
-    if data.get('query') == 'callees':
+    if data.get('query') in ('callees', 'module_graph'):
         return warnings
     return [w for w in warnings if w.get('type') in _ALWAYS_SHOWN]
 
@@ -401,57 +402,49 @@ def _render_callees_recursive_dot(data: Dict[str, Any]) -> None:
 
 def _render_module_graph_text(data: Dict[str, Any]) -> None:
     path = data.get('path', '.')
-    nodes = data.get('nodes', [])
     edges = data.get('edges', [])
-    total_nodes = data.get('total_nodes', 0)
-    total_edges = data.get('total_edges', 0)
 
     print(f"Module dependency graph: {path}")
-    print(f"Nodes (modules):         {total_nodes}")
-    print(f"Edges (dependencies):    {total_edges}")
+    print(f"Nodes (modules):         {data.get('total_nodes', 0)}")
+    print(f"Edges (dependencies):    {data.get('total_edges', 0)}")
+    _print_edge_rule(data)
     print()
 
     if not edges:
         print("  No cross-module dependencies found.")
-        print("  Tip: ensure imports resolve within the project root, or use ?external=true")
+        print("  Tip: an edge is an import that resolves under this directory; ?external=true also counts "
+              "importers from the rest of the project root")
         return
 
-    print("Dependencies (sorted by call count):")
+    print("Dependencies (importer → imported):")
     for edge in edges:
-        frm = edge['from']
-        to = edge['to']
-        count = edge['call_count']
-        calls_str = f"  ({count} call{'s' if count != 1 else ''})"
-        print(f"  {frm} → {to}{calls_str}")
+        print(f"  {edge['from']} → {edge['to']}")
+
+
+def _print_edge_rule(data: Dict[str, Any]) -> None:
+    """The imports rule the edges were counted by (BACK-1054 slice S5), through the one rule renderer."""
+    from reveal.analyzers.imports.service import edge_rule_lines
+    for line in edge_rule_lines(data):
+        print(line)
 
 
 def _render_module_graph_dot(data: Dict[str, Any]) -> None:
-    path = data.get('path', '.')
-    edges = data.get('edges', [])
+    prefix = data.get('path', '.').rstrip('/') + '/'
 
-    # Shorten file paths to relative where possible
     def _short(p: str) -> str:
-        try:
-            import os
-            rel = os.path.relpath(p, path)
-            return rel if not rel.startswith('..') else p
-        except ValueError:
-            return p
+        """The node relative to the path (both '/'-spelled), else as written."""
+        return p[len(prefix):] if p.startswith(prefix) else p
 
     print("digraph modules {")
     print('  rankdir=LR;')
     print(f'  node [shape=box fontname="monospace"];')
 
     seen_edges: set = set()
-    for edge in edges:
-        frm = _short(edge['from'])
-        to = _short(edge['to'])
-        count = edge['call_count']
-        key = (frm, to)
+    for edge in data.get('edges', []):
+        key = (_short(edge['from']), _short(edge['to']))
         if key not in seen_edges:
             seen_edges.add(key)
-            label = f' [label="{count}"]' if count > 1 else ''
-            print(f'  "{frm}" -> "{to}"{label};')
+            print(f'  "{key[0]}" -> "{key[1]}";')
 
     print("}")
 
