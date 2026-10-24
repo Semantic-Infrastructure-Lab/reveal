@@ -354,11 +354,20 @@ class ResourceAdapter(ABC):
         if query is None and params:
             from urllib.parse import urlencode
             query = urlencode(params)
+        return self.compose_answer(adapter_cls, resource, lambda: adapter_cls(str(resource), query).get_structure(),
+                                   default=default, cut_as=cut_as, omit_warnings=omit_warnings)
 
+    def compose_answer(self, adapter_cls: type, resource: Any, answer: Callable[[], Any], *,
+                       default: Any = None, cut_as: Optional[Tuple[str, str]] = None,
+                       omit_warnings: Optional[Callable[[Any], bool]] = None) -> Any:
+        """``compose()`` for an answer of ``adapter_cls`` that this adapter obtains by calling
+        ``answer()`` instead of constructing a new child: a further view of a child it already ran
+        (deps:// reads three views of one imports:// build, BACK-1054). The same contract as
+        ``compose()``: a raised exception is recorded as an attributed error and ``default``
+        returned; a result's meta is folded, its source echoed, its ``error`` recorded."""
         child_name = getattr(adapter_cls, '__name__', str(adapter_cls))
         try:
-            child = adapter_cls(str(resource), query)
-            result = child.get_structure()
+            result = answer()
         except Exception as exc:  # boundary-ok: broad-except -- this is the composition seam: the child is any adapter (constructor and get_structure, including user plugins) and its failure set is not bounded; one failing section must not end the composite, and the failure is recorded in meta.errors with confidence 0 by record_composed_error and logged
             self.record_composed_error(child_name, resource, exc)
             return default
