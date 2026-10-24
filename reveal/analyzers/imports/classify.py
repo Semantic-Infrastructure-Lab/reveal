@@ -7,7 +7,8 @@ a fallback classifier for other languages -- that was exactly the confident-
 wrong failure BACK-1193 found and fixed in ``deps://``. This module is the
 one place that logic lives now; ``reveal/adapters/deps.py`` and
 ``reveal/adapters/imports.py`` both import from here instead of each keeping
-their own copy.
+their own copy. ``package_table`` counts the buckets over a whole import listing:
+the deps:// dashboard's package table and imports://?external (BACK-1054).
 
 Buckets:
     'internal' -- syntactically relative, resolved to a real in-tree file
@@ -23,10 +24,12 @@ Buckets:
                   claim positively which.
     'skip'     -- empty module string, nothing to classify.
 """
+from collections import Counter
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from ...conventions import conventions_for
+from ...conventions import conventions_for, family_for_path
+from ...utils.path_utils import _language_for_path, to_relative_display
 
 # Public field values for imports:// records' 'classification' field
 # (BACK-1190). Distinct from the internal bucket names above -- these are
@@ -121,3 +124,100 @@ def classify_import(
     if bucket == 'external' and is_intra is True:
         return INTRA_PROJECT
     return _BUCKET_TO_CLASSIFICATION[bucket]
+
+
+def _tally_import(
+    imp: Dict[str, Any], family: str, local_names: frozenset,
+    external_counts: Counter, stdlib_counts: Counter,
+    external_languages: Optional[Dict[str, set]] = None,
+    language: Optional[str] = None,
+) -> bool:
+    """Classify+count one import; returns True if it counts as internal.
+
+    BACK-1262: *external_languages* accumulates which source language each
+    unresolved package was imported from, so a mixed-stack repo's table can say
+    whether `react` came from npm and `pydantic` from Python instead of
+    interleaving both in one usage-sorted list with no way to tell.
+    """
+    if imp.get('is_relative') or imp.get('resolved'):
+        return True  # syntactically relative, or resolved in-tree (BACK-1193)
+    bucket, key = classify_module(imp.get('module') or '', family, local_names)
+    if bucket == 'external' and imp.get('classification') == INTRA_PROJECT:
+        # BACK-1236: imports://'s own is_intra_project_import verdict (BACK-1234,
+        # declared-namespace matching for Go/C#/Java/Kotlin/PHP) upgraded this
+        # import past the name-only heuristic above -- honor that here too,
+        # rather than still tallying it as an external package.
+        return True
+    if bucket == 'stdlib':
+        stdlib_counts[key] += 1
+    elif bucket == 'external':
+        external_counts[key] += 1
+        if external_languages is not None and language:
+            external_languages.setdefault(key, set()).add(language)
+    return bucket == 'internal'
+
+
+def package_table(files: Dict[str, List[Dict[str, Any]]], base_path: Path) -> Dict[str, Any]:
+    """Derive package counts and top importers from an import listing (imports://'s default
+    view ``files``: file -> formatted import records). Moved from deps:// (BACK-1054), whose
+    text renderer was its only reader; imports://?external now answers it as JSON.
+
+    BACK-1193: this classifier used to be Python-only in three ways — a
+    ``__init__.py``-based local-package heuristic, an unconditional check
+    against Python's own stdlib list, and a dot-only module split — applied
+    unconditionally to all 18 languages reveal supports. On Ruby it reported
+    local files and stdlib modules as "third-party" (`open3`, `fileutils`)
+    and manufactured a bogus stdlib count from name collisions with Python
+    (`json`, `socket`, ...). Fixed by classifying on resolution truth first:
+    ``imports://``'s ``resolved`` field (BACK-1193, real in-tree file or
+    None from ``resolve_import()``) is now the primary signal, with the
+    ``__init__.py`` heuristic kept only as a fallback for imports resolution
+    could not settle. Python-list stdlib is only ever checked for Python
+    files — never fall back to Python's list for a non-Python import (task's
+    own rule). Dart is the one other language classified as stdlib, because
+    its ``dart:`` import prefix (`dart:async`, `dart:io`, ...) is a
+    syntactic marker, not a name lookup that could collide the way a bare
+    list-membership check would — same rule, no list needed.
+    """
+    local_names = local_package_names(base_path)
+    external_counts: Counter = Counter()
+    external_languages: Dict[str, set] = {}
+    stdlib_counts: Counter = Counter()
+    relative_count = 0
+    importer_counts: Counter = Counter()
+    total_imports = 0
+
+    for filepath, imports in files.items():
+        if not isinstance(imports, list):
+            continue
+        importer_counts[filepath] += len(imports)
+        total_imports += len(imports)
+        family = family_for_path(filepath)
+        language = _language_for_path(Path(filepath))
+        for imp in imports:
+            if _tally_import(
+                imp, family, local_names, external_counts, stdlib_counts,
+                external_languages=external_languages, language=language,
+            ):
+                relative_count += 1
+
+    # Top importers as relative paths (BACK-1194: shared resolve()-aware
+    # helper — see to_relative_display()'s docstring for why the old
+    # lexical-only relative_to() let absolute paths leak through on
+    # relative CLI targets)
+    top_importers = []
+    for fp, count in importer_counts.most_common():
+        rel = to_relative_display(fp, base_path)
+        top_importers.append({'file': rel, 'count': count})
+
+    return {
+        'total_imports': total_imports,
+        'total_files': len(files),
+        'relative_count': relative_count,
+        'external_packages': external_counts.most_common(),
+        'external_package_languages': {
+            pkg: sorted(langs) for pkg, langs in external_languages.items()
+        },
+        'stdlib_packages': stdlib_counts.most_common(),
+        'top_importers': top_importers,
+    }

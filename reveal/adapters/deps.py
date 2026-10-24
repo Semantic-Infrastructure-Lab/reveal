@@ -6,7 +6,6 @@ The `reveal deps` command is generated from this adapter's declaration.
 
 from __future__ import annotations
 
-from collections import Counter
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -16,12 +15,6 @@ from reveal.reveal_types import CONTRACT_VERSION
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .imports import ImportsAdapter
 from ..analyzers.imports import service as import_analysis
-from ..analyzers.imports.classify import (
-    classify_module as _classify_module,
-    local_package_names as _local_package_names,
-)
-from ..conventions import family_for_path
-from ..utils.path_utils import _language_for_path
 from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..rendering.adapters.deps import DepsRenderer
@@ -30,7 +23,9 @@ from ..utils.results import AnalysisCompleteness, ExecutionFacts, ResultBuilder,
 # BACK-1190: the stdlib list, local-package heuristic, and classifier itself
 # now live in reveal/analyzers/imports/classify.py -- shared with
 # imports://'s own 'classification' field so the two adapters can't drift
-# apart the way BACK-1193 found them having already done.
+# apart the way BACK-1193 found them having already done. The package table the
+# text renderer prints (classify.package_table) moved there too: imports://?external
+# answers it as JSON (BACK-1054).
 
 
 # ── Data collectors ────────────────────────────────────────────────────────────
@@ -232,7 +227,7 @@ def _relativize_deps_paths(
     base_path: Path,
 ) -> None:
     """Relativize the file-path fields the text renderer already relativizes
-    (`_render_circular`/`_render_unused`/`_analyse_imports`'s `to_relative_display`
+    (`_render_circular`/`_render_unused`/`package_table`'s `to_relative_display`
     calls), but in the raw structures get_structure() serializes directly to
     JSON — those never routed through the text renderer, so `--format json`
     leaked absolute host paths (analyst's filesystem layout/username), same
@@ -259,102 +254,6 @@ def _relativize_deps_paths(
     for imp in unused:
         if imp.get('file'):
             imp['file'] = to_relative_display(imp['file'], base_path)
-
-
-def _tally_import(
-    imp: Dict[str, Any], family: str, local_names: frozenset,
-    external_counts: Counter, stdlib_counts: Counter,
-    external_languages: Optional[Dict[str, set]] = None,
-    language: Optional[str] = None,
-) -> bool:
-    """Classify+count one import; returns True if it counts as internal.
-
-    BACK-1262: *external_languages* accumulates which source language each
-    unresolved package was imported from, so a mixed-stack repo's table can say
-    whether `react` came from npm and `pydantic` from Python instead of
-    interleaving both in one usage-sorted list with no way to tell.
-    """
-    if imp.get('is_relative') or imp.get('resolved'):
-        return True  # syntactically relative, or resolved in-tree (BACK-1193)
-    bucket, key = _classify_module(imp.get('module') or '', family, local_names)
-    if bucket == 'external' and imp.get('classification') == 'intra_project':
-        # BACK-1236: imports://'s own is_intra_project_import verdict (BACK-1234,
-        # declared-namespace matching for Go/C#/Java/Kotlin/PHP) upgraded this
-        # import past the name-only heuristic above -- honor that here too,
-        # rather than still tallying it as an external package.
-        return True
-    if bucket == 'stdlib':
-        stdlib_counts[key] += 1
-    elif bucket == 'external':
-        external_counts[key] += 1
-        if external_languages is not None and language:
-            external_languages.setdefault(key, set()).add(language)
-    return bucket == 'internal'
-
-
-def _analyse_imports(files: Dict[str, List[Dict[str, Any]]], base_path: Path) -> Dict[str, Any]:
-    """Derive package counts and top importers from the raw files dict.
-
-    BACK-1193: this classifier used to be Python-only in three ways — a
-    ``__init__.py``-based local-package heuristic, an unconditional check
-    against Python's own stdlib list, and a dot-only module split — applied
-    unconditionally to all 18 languages reveal supports. On Ruby it reported
-    local files and stdlib modules as "third-party" (`open3`, `fileutils`)
-    and manufactured a bogus stdlib count from name collisions with Python
-    (`json`, `socket`, ...). Fixed by classifying on resolution truth first:
-    ``imports://``'s ``resolved`` field (BACK-1193, real in-tree file or
-    None from ``resolve_import()``) is now the primary signal, with the
-    ``__init__.py`` heuristic kept only as a fallback for imports resolution
-    could not settle. Python-list stdlib is only ever checked for Python
-    files — never fall back to Python's list for a non-Python import (task's
-    own rule). Dart is the one other language classified as stdlib, because
-    its ``dart:`` import prefix (`dart:async`, `dart:io`, ...) is a
-    syntactic marker, not a name lookup that could collide the way a bare
-    list-membership check would — same rule, no list needed.
-    """
-    local_names = _local_package_names(base_path)
-    external_counts: Counter = Counter()
-    external_languages: Dict[str, set] = {}
-    stdlib_counts: Counter = Counter()
-    relative_count = 0
-    importer_counts: Counter = Counter()
-    total_imports = 0
-
-    for filepath, imports in files.items():
-        if not isinstance(imports, list):
-            continue
-        importer_counts[filepath] += len(imports)
-        total_imports += len(imports)
-        family = family_for_path(filepath)
-        language = _language_for_path(Path(filepath))
-        for imp in imports:
-            if _tally_import(
-                imp, family, local_names, external_counts, stdlib_counts,
-                external_languages=external_languages, language=language,
-            ):
-                relative_count += 1
-
-    # Top importers as relative paths (BACK-1194: shared resolve()-aware
-    # helper — see to_relative_display()'s docstring for why the old
-    # lexical-only relative_to() let absolute paths leak through on
-    # relative CLI targets)
-    from ..utils.path_utils import to_relative_display
-    top_importers = []
-    for fp, count in importer_counts.most_common():
-        rel = to_relative_display(fp, base_path)
-        top_importers.append({'file': rel, 'count': count})
-
-    return {
-        'total_imports': total_imports,
-        'total_files': len(files),
-        'relative_count': relative_count,
-        'external_packages': external_counts.most_common(),
-        'external_package_languages': {
-            pkg: sorted(langs) for pkg, langs in external_languages.items()
-        },
-        'stdlib_packages': stdlib_counts.most_common(),
-        'top_importers': top_importers,
-    }
 
 
 @register_adapter('deps')

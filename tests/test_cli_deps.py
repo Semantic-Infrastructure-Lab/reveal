@@ -13,10 +13,9 @@ import pytest
 
 from functools import partial
 from reveal.cli.routing.declared import create_declared_parser, run_declared_command
+from reveal.analyzers.imports.classify import local_package_names as _local_package_names, package_table
 from reveal.adapters.deps import (
     DepsAdapter,
-    _analyse_imports,
-    _local_package_names,
     _run_base,
     _run_circular,
     _run_unused,
@@ -191,9 +190,9 @@ class TestLocalPackageNames(unittest.TestCase):
             self.assertNotIn('notapackage', result)
 
 
-# ── _analyse_imports tests ─────────────────────────────────────────────────────
+# ── package_table tests ─────────────────────────────────────────────────────
 
-class TestAnalyseImports(unittest.TestCase):
+class TestPackageTable(unittest.TestCase):
 
     def _files(self, imports_by_file):
         return imports_by_file
@@ -203,7 +202,7 @@ class TestAnalyseImports(unittest.TestCase):
             '/proj/a.py': [_make_import('os'), _make_import('yaml')],
             '/proj/b.py': [_make_import('sys')],
         }
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         self.assertEqual(result['total_imports'], 3)
 
     def test_counts_total_files(self):
@@ -211,26 +210,26 @@ class TestAnalyseImports(unittest.TestCase):
             '/proj/a.py': [_make_import('os')],
             '/proj/b.py': [],
         }
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         self.assertEqual(result['total_files'], 2)
 
     def test_stdlib_not_in_external(self):
         files = {'/proj/a.py': [_make_import('os'), _make_import('sys')]}
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         ext_names = [p for p, _ in result['external_packages']]
         self.assertNotIn('os', ext_names)
         self.assertNotIn('sys', ext_names)
 
     def test_third_party_in_external(self):
         files = {'/proj/a.py': [_make_import('requests'), _make_import('yaml')]}
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         ext_names = [p for p, _ in result['external_packages']]
         self.assertIn('requests', ext_names)
         self.assertIn('yaml', ext_names)
 
     def test_relative_imports_counted(self):
         files = {'/proj/a.py': [_make_import('.utils', is_relative=True)]}
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         self.assertEqual(result['relative_count'], 1)
 
     def test_self_imports_treated_as_internal(self):
@@ -241,7 +240,7 @@ class TestAnalyseImports(unittest.TestCase):
             (pkg / '__init__.py').touch()
             # Import of 'myapp' from outside should be treated as local
             files = {'/other/x.py': [_make_import('myapp')]}
-            result = _analyse_imports(files, Path(tmp))
+            result = package_table(files, Path(tmp))
             ext_names = [p for p, _ in result['external_packages']]
             self.assertNotIn('myapp', ext_names)
 
@@ -250,7 +249,7 @@ class TestAnalyseImports(unittest.TestCase):
             '/proj/heavy.py': [_make_import('os'), _make_import('sys'), _make_import('yaml')],
             '/proj/light.py': [_make_import('os')],
         }
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         self.assertEqual(result['top_importers'][0]['count'], 3)
 
     def test_top_importers_relative_when_base_path_is_unresolved(self):
@@ -269,7 +268,7 @@ class TestAnalyseImports(unittest.TestCase):
             old_cwd = os.getcwd()
             os.chdir(tmp)
             try:
-                result = _analyse_imports(files, Path("."))
+                result = package_table(files, Path("."))
             finally:
                 os.chdir(old_cwd)
         self.assertEqual(result['top_importers'][0]['file'], 'sub/heavy.py')
@@ -278,7 +277,7 @@ class TestAnalyseImports(unittest.TestCase):
         files = {
             '/proj/a.py': [_make_import('requests'), _make_import('requests'), _make_import('yaml')],
         }
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         packages = result['external_packages']
         self.assertEqual(packages[0][0], 'requests')
         self.assertEqual(packages[0][1], 2)
@@ -289,7 +288,7 @@ class TestAnalyseImports(unittest.TestCase):
         # `require "s3_helper"` -> lib/s3_helper.rb) -- must not land in
         # external_packages just because it isn't syntactically relative.
         files = {'/proj/a.rb': [_make_import('s3_helper', resolved='/proj/lib/s3_helper.rb')]}
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         ext_names = [p for p, _ in result['external_packages']]
         self.assertNotIn('s3_helper', ext_names)
         self.assertEqual(result['relative_count'], 1)
@@ -302,7 +301,7 @@ class TestAnalyseImports(unittest.TestCase):
         imp = _make_import('com.example.util.OtherThing')
         imp['classification'] = 'intra_project'  # BACK-1234 upgrade, not resolved
         files = {'/proj/Main.java': [imp]}
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         ext_names = [p for p, _ in result['external_packages']]
         self.assertNotIn('com', ext_names)  # classify_module's top-level-segment key
         self.assertEqual(result['relative_count'], 1)
@@ -312,7 +311,7 @@ class TestAnalyseImports(unittest.TestCase):
         # name only -- must not be reported as stdlib for a non-Python file
         # (no Ruby stdlib list exists, so "unresolved" is the honest answer).
         files = {'/proj/a.rb': [_make_import('socket'), _make_import('digest')]}
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         stdlib_names = [p for p, _ in result['stdlib_packages']]
         ext_names = [p for p, _ in result['external_packages']]
         self.assertEqual(stdlib_names, [])
@@ -323,7 +322,7 @@ class TestAnalyseImports(unittest.TestCase):
         # The gate gained in BACK-1193 is per-file-language, not a regression
         # for Python itself.
         files = {'/proj/a.py': [_make_import('socket')]}
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         stdlib_names = [p for p, _ in result['stdlib_packages']]
         self.assertIn('socket', stdlib_names)
 
@@ -332,7 +331,7 @@ class TestAnalyseImports(unittest.TestCase):
         # could collide -- Dart is the one other language deps:// classifies
         # as stdlib, with no per-language stdlib list needed.
         files = {'/proj/a.dart': [_make_import('dart:async'), _make_import('package:flutter/material')]}
-        result = _analyse_imports(files, Path('/proj'))
+        result = package_table(files, Path('/proj'))
         stdlib_names = [p for p, _ in result['stdlib_packages']]
         ext_names = [p for p, _ in result['external_packages']]
         self.assertIn('dart:async', stdlib_names)

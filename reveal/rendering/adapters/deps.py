@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..base import BaseRenderer, capped_section
+from ...analyzers.imports.classify import package_table
 from ...analyzers.imports.service import edge_rule_lines
 from ...utils.path_utils import to_relative_display
 from ...utils.results import outcome_of
@@ -179,7 +180,6 @@ def _render_next_steps(path: Path) -> List[str]:
 
 def _render_deps(report: Dict[str, Any], top: int) -> List[str]:
     lines: List[str] = []
-    from ...adapters.deps import _analyse_imports
 
     path_str = report['path']
     base = report['base']
@@ -187,7 +187,7 @@ def _render_deps(report: Dict[str, Any], top: int) -> List[str]:
     unused = report['unused']
 
     files = base.get('files', {})
-    analysis = _analyse_imports(files, Path(path_str))
+    analysis = package_table(files, Path(path_str))
 
     cycles = circular.get('cycles', [])
     evidence = report.get('analysis', {})

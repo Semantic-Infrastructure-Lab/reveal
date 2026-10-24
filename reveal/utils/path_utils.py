@@ -396,7 +396,7 @@ def to_relative_display(file_str: Union[str, PurePath], base_path: Union[str, Pa
     local filesystem layout/username into DD deliverables that get shared.
 
     Was duplicated as overview.py's `_relpath()` and inline in deps.py's
-    `_analyse_imports()` — same bug, same fix, now one shared helper.
+    `_analyse_imports()` (now `classify.package_table`) — same bug, same fix, now one shared helper.
     """
     if not base_path:
         return to_posix(file_str)
