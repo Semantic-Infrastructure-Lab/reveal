@@ -445,13 +445,25 @@ def run_imports(req: Requests, scan: str, scan_dir: Path, only: Tuple[str, ...],
     return rows
 
 
-def per_file_spelling(scan_dir: Path, module: str) -> str:
+def per_file_spelling(scan_dir: Path, module: str, importers: List[str]) -> str:
     """How to ask ?importers= for ``module``: itself, or for a package-directory module (Go answers
     per package) one file of it, which the graph maps to the package; ?importers=<dir> is the
-    summary of every module under that directory, not the module's importers."""
+    summary of every module under that directory, not the module's importers. The file is the first
+    of the package's main suffix that is not itself an importer (a Go external test imports its own
+    package, and ?importers=FILE leaves the named file out)."""
     path = scan_dir / module
-    rep = _representative_file(path) if path.is_dir() else None
-    return rep.relative_to(scan_dir).as_posix() if rep else module
+    if not path.is_dir():
+        return module
+    rep = _representative_file(path)
+    if rep is None:
+        return module
+    taken = set(importers)
+    for candidate in sorted(path.iterdir()):
+        spelled = candidate.relative_to(scan_dir).as_posix()
+        if candidate.is_file() and not candidate.name.startswith('.') and candidate.suffix == rep.suffix \
+                and spelled not in taken:
+            return spelled
+    return rep.relative_to(scan_dir).as_posix()
 
 
 def run_citations(req: Requests, scan: str, scan_dir: Path, importers: Dict[str, Any],
@@ -460,7 +472,7 @@ def run_citations(req: Requests, scan: str, scan_dir: Path, importers: Dict[str,
     per_target: Dict[str, Dict[str, Any]] = {}
     failed = []
     for target in citation_targets(importers, default_view, citations):
-        spelled = _raw(per_file_spelling(scan_dir, target))
+        spelled = _raw(per_file_spelling(scan_dir, target, importer_lists(importers).get(target, [])))
         if spelled is None:
             failed.append(f'{target}: a raw ?importers= value cannot spell it')
             continue
