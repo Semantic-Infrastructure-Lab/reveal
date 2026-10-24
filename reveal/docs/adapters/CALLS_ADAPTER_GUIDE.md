@@ -200,8 +200,8 @@ callee → [(file, caller_func, line), ...]
 | `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` at every depth, the retired `?root` and `?rank=callers`) |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot`; another value exits 2 |
 | `root` | string | — | Retired: use `callees=NAME&depth=N`, the same walk (`?root` defaults to depth 2). A replaced-by note is printed. Root function name (or `FILE:NAME`) for a level-by-level callee walk. Every matching definition is a starting point and each definition is expanded once, at the shallowest level it is reached. Every call site of an expanded definition is an edge (`call_expr`), including one to a definition already reached, which has `expanded: false`. A callee name that several definitions share, with none in the caller's file or imports, is listed as `ambiguous` with its candidates and not expanded. Totals count edges: `total_edges` = `total_resolved` (ambiguous included, also counted in `total_ambiguous`) + `total_unresolved` |
-| `modules` | boolean | `false` | Build a module-level dependency graph instead of function-level |
-| `external` | boolean | `false` | Include external (non-project) modules in the `?modules` graph |
+| `modules` | boolean | `false` | Retired: a module-level graph, one edge per import that resolves under the path (`imports://<path>?importers&scope=path`, no call count; see [Retired spellings](#retired-spellings)) |
+| `external` | boolean | `false` | Retired, with `modules`: importers from the whole project root (`scope=root`) |
 | `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?rank=callers`, and as dead-code candidates in `?uncalled` |
 
 > Exactly one of `callers`, `callees`, `rank`, `uncalled` or `modules` per request (the retired
@@ -803,7 +803,8 @@ A: No — `calls://` is a fast static analysis tool built on the same parse tree
 
 ## Retired spellings
 
-Phase 2b merged the older call-graph spellings into `calls://`. Until the cut release each one
+Phase 2b merged the older call-graph spellings into `calls://`, and `?modules` moved to `imports://`
+(BACK-1054). Until the cut release each one
 still answers exactly as before, prints one `note: <old> is deprecated; use <new>.` line on stderr,
 and carries a `retired_spelling` entry in JSON `meta.warnings` (MCP returns the note with the
 result). At the cut the same text becomes an exit-2 error.
@@ -816,6 +817,8 @@ result). At the cut the same text becomes an exit-2 error.
 | `ast://<path>?calls=NAME` | `calls://<path>?callers=NAME`; a pattern (`calls=*send*`) is a `reveal <path> --grep 'send'` text search |
 | `ast://<path>?callee_of=NAME` | `calls://<path>?callees=NAME` |
 | `ast://<path>?show=calls` | `calls://<path>?callers=NAME` or `?callees=NAME` |
+| `calls://<path>?modules`, `reveal calls --modules` | `imports://<path>?importers&scope=path`, `reveal imports <path> --importers --scope path` (BACK-1054). The old spelling already answers from it: one edge per import with both ends under the path, so an import used without a call is an edge too (on the celery corpus the call-resolved graph had 79 of its 1,453 import edges), and edges have no `call_count`. An import that resolves outside the path (an `import '../package.json'`) is counted in `outside_path_edges`, not listed. Its `calls_module_graph` shape is kept, with the imports `edge_rule`; a file parsed with errors is disclosed (`partial_parse`) and exits 0, an unreadable file or directory exits 3. `&format=dot` has no imports spelling yet |
+| `calls://<path>?modules&external`, `--external` | `imports://<path>?importers` (`scope=root`, the default): importers from the whole project root, spelled from the path. The old flag named no external module: on the 24 measured corpora every edge it added was a file under the path that the default had dropped for being spelled as a host path |
 
 ---
 

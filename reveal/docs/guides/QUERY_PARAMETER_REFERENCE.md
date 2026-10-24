@@ -425,22 +425,27 @@ reveal 'metrics://.?hotspots&code_only'
   reveal 'calls://src?callees=handle_request&depth=2&format=dot' | dot -Tsvg > graph.svg
   ```
 
-- **`modules=true`** - Module-level dependency graph (collapses function calls to file→file edges)
+- **`modules=true`** - Retired: the module graph answers from `imports://<path>?importers&scope=path`
+  (BACK-1054), one file→file edge per import with both ends under the path, an import used without a
+  call included, and no call count (an import resolving outside the path is counted in
+  `outside_path_edges`). It keeps its `calls_module_graph` shape (plus `edge_rule`) and prints
+  a replaced-by note until the cut. `&format=dot` has no imports spelling yet, so the Graphviz view stays
+  here until then.
   ```bash
-  reveal 'calls://src?modules=true'
-  reveal 'calls://src?modules=true&format=dot' | dot -Tsvg > deps.svg
-  reveal 'calls://src?modules=true&external=true'  # include stdlib/third-party edges
+  reveal 'imports://src?importers&scope=path'   # the same edges, as each module's importers
   ```
-  Outputs unique module→module edges with call counts. `--format dot` produces a Graphviz digraph with edge labels.
 
 One mode per request (`callers`, `callees`, `rank`, `uncalled`, `modules`, or the retired `target`
 and `root`); two exit 2.
 A name that names nothing exits 2 (`callees`: no definition; `callers`: no definition and no call
 site). A scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds `meta.confidence` and is named (W-CALLS-10). `?uncalled` over JavaScript, TypeScript, TSX, Java or PHP withholds it too (W-CALLS-11): dead-code precision was measured low there.
 
-- **`external=true`** - Include stdlib/third-party edges in `?modules=true` output (default: false)
+- **`external=true`** - Retired with `modules`: importers from the whole project root (imports'
+  default `scope=root`), not only those under the path. Import edges never reach stdlib or third-party
+  files; on the measured corpora every edge the old flag added was a file under the path that the
+  default had dropped for being spelled as a host path.
   ```bash
-  reveal 'calls://src?modules=true&external=true'
+  reveal 'imports://src?importers'   # importers from anywhere under the project root
   ```
 
 ---

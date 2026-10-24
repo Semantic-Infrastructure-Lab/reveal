@@ -408,8 +408,8 @@ reveal calls [PATH] --modules [--external]
 | `--top N` | `top` | Entries for `--rank` (default 10) or `--uncalled` (default all); 0 = all; negative values reject |
 | `--uncalled` | `uncalled` | Functions/methods with no callers (dead-code candidates) |
 | `--type KIND` | `type` | With `--uncalled`: `function` (module-level only) or `method` |
-| `--modules` | `modules` | Module-level dependency graph |
-| `--external` | `external` | With `--modules`: include non-project modules |
+| `--modules` | `modules` | Retired: module graph, one edge per import under PATH (`reveal imports PATH --importers --scope path`); prints a note |
+| `--external` | `external` | Retired, with `--modules`: importers from the whole project root (`reveal imports PATH --importers`) |
 | `--builtins` | `builtins` | Include language builtins in callees (every depth), the retired root and rank output |
 | `--test-framework` | `test-framework` | Count test-framework entrypoints (rank callers, uncalled candidates) |
 
@@ -444,7 +444,7 @@ reveal calls src --callees validate_item           # what it calls
 reveal calls src --callees main --depth 3 --detail # what that calls, 3 levels, params/effects
 reveal calls src --rank callers --top 20           # most-called functions
 reveal calls src --uncalled --type function        # dead-code candidates
-reveal calls src --modules --format json           # module graph, JSON
+reveal imports src --importers --scope path        # was: reveal calls src --modules (module graph)
 ```
 
 ### Side-effect tags

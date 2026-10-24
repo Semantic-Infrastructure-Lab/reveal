@@ -1323,8 +1323,8 @@ reveal 'imports://src/?rank=fan-in'
 # Named functions in the tree
 reveal 'ast://src/?type=function'
 
-# Module edges derived from calls, rather than imports
-reveal 'calls://src/?modules=true'
+# Module edges: each module under src/ with the files that import it (calls ?modules is its retired spelling)
+reveal 'imports://src/?importers&scope=path'
 ```
 
 For a class hierarchy within one file, use `reveal app.py --outline`.
