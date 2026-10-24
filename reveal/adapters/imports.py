@@ -29,7 +29,7 @@ from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.types import (
     LAZY_EXCLUDE, LAZY_INCLUDE, LAZY_MODES, ImportAnalysis, ImportExtraction,
 )
-from ..analyzers.imports.classify import classify_import, local_package_names
+from ..analyzers.imports.classify import classify_import, local_package_names, package_table
 from ..conventions import family_for_path
 from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
@@ -410,7 +410,7 @@ def _top_value(value: Any) -> int:
 
 # The answer types --verbose expands (the renderers that take it).
 _VERBOSE_VIEWS = frozenset({'unused_imports', 'circular_dependencies', 'layer_violations',
-                           'module_importers', 'importer_summary'})
+                           'module_importers', 'importer_summary', 'external_packages'})
 
 
 # The declaration the `reveal imports` subcommand and the declared URI route bind (BACK-1054, D6):
@@ -427,6 +427,7 @@ PARAM_SPECS: Tuple[ParamSpec, ...] = (
               cli=CliBinding(('--top',), metavar='N')),
     _flag('entrypoints', 'Files with fan-in 0 (entry points, scripts or dead code)'),
     _flag('components', 'Score each directory as a component'),
+    _flag('external', 'Package table: unresolved (third-party or unresolved-local) and stdlib packages by use'),
     ParamSpec('verbose', 'boolean', 'Show everything instead of a summary (same as --verbose)', False,
               boolean_value, ('imports://src?circular&verbose',), role='presentation'),
     *(ParamSpec(spec.name, spec.type, spec.description, spec.default, spec.convert, spec.examples,
@@ -477,9 +478,18 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Score each directory as a component: cohesion (internal/outgoing imports), coupling (incoming), top bridge file',
         'examples': ['imports://src?components']
     },
+    'external': {
+        'type': 'flag',
+        'description': ('Package table (the deps:// dashboard\'s, as JSON): every import of the files under the path '
+                        'classified on resolution truth first -- resolved in the tree (internal), stdlib (a '
+                        'language rule or marker, never Python\'s list for another language) or unresolved '
+                        '(third-party or an unresolved local) -- with uses per package, the languages importing '
+                        'each unresolved package, and import statements per file. &tests=exclude drops test files'),
+        'examples': ['imports://src?external', 'imports://src?external&scope=path'],
+    },
     'verbose': {
         'type': 'flag',
-        'description': 'Show everything instead of a summary: every file in a cycle group plus its cycle edges, all unused imports, all violations. Same as the CLI --verbose',
+        'description': 'Show everything instead of a summary: every file in a cycle group plus its cycle edges, all unused imports, all violations, every package. Same as the CLI --verbose',
         'examples': ['imports://src?circular&verbose']
     },
     'lazy': _LAZY.schema(),
@@ -752,6 +762,41 @@ _SCHEMA_OUTPUT_TYPES += [
     },
 ]
 
+_SCHEMA_OUTPUT_TYPES += [
+    {
+        'type': 'external_packages',
+        'description': 'Unresolved and stdlib packages by use (?external; deps:// printed it in text only)',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'external_packages'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string'},
+                'total_imports': {'type': 'integer', 'description': 'import statements counted'},
+                'total_files': {'type': 'integer', 'description': 'files with at least one import'},
+                'internal_imports': {'type': 'integer', 'description': 'relative, resolved in the tree, or a declared project namespace'},
+                'external_packages': {
+                    'type': 'array', 'description': 'most used first',
+                    'items': {'type': 'object', 'properties': {
+                        'package': {'type': 'string'}, 'uses': {'type': 'integer'},
+                        'languages': {'type': 'array', 'items': {'type': 'string'}}}},
+                },
+                'stdlib_packages': {
+                    'type': 'array',
+                    'items': {'type': 'object', 'properties': {
+                        'package': {'type': 'string'}, 'uses': {'type': 'integer'}}},
+                },
+                'top_importers': {
+                    'type': 'array', 'description': 'import statements per file, most first',
+                    'items': {'type': 'object', 'properties': {
+                        'file': {'type': 'string'}, 'imports': {'type': 'integer'}}},
+                },
+            },
+        },
+    },
+]
+
 _SCHEMA_EXAMPLE_QUERIES = [
     {
         'uri': 'imports://src',
@@ -810,6 +855,11 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'uri': 'imports://src?importers&tests=exclude',
         'description': 'Every module under src with its importers, test importers not counted',
         'output_type': 'importer_summary'
+    },
+    {
+        'uri': 'imports://src?external',
+        'description': 'Unresolved (third-party) and stdlib packages by use',
+        'output_type': 'external_packages'
     },
 ]
 
@@ -1143,6 +1193,30 @@ class ImportsRenderer:
         print()
 
     @staticmethod
+    def _render_external(result: dict, resource: str, verbose: bool) -> None:
+        """Render ?external: the package table, most used first (20 per list unless --verbose)."""
+        external, stdlib = result.get('external_packages', []), result.get('stdlib_packages', [])
+        print(f"\nPackages: {result.get('source', resource)}")
+        print(f"  {result.get('total_imports', 0)} import(s) in {result.get('total_files', 0)} file(s): "
+              f"{result.get('internal_imports', 0)} internal, {len(external)} unresolved package(s), "
+              f"{len(stdlib)} stdlib package(s)")
+        multi_stack = len({lang for entry in external for lang in entry.get('languages', [])}) > 1
+        for title, entries in (('Unresolved packages (third-party or unresolved-local)', external),
+                               ('Stdlib packages', stdlib)):
+            if not entries:
+                continue
+            shown = entries if verbose else entries[:20]
+            print(f"\n{title}: {len(entries)}")
+            for entry in shown:
+                langs = f"  [{', '.join(entry.get('languages') or []) or '?'}]" if multi_stack and 'languages' in entry else ''
+                print(f"  {entry['package']:<30} {entry['uses']:>4} use(s){langs}")
+            if len(entries) > len(shown):
+                print(f"  ... and {len(entries) - len(shown)} more (--verbose or --format json lists all)")
+        if not external and not stdlib:
+            print('\n  No unresolved or stdlib imports found.')
+        print()
+
+    @staticmethod
     def _render_entrypoints(result: dict, resource: str) -> None:
         """Render ?entrypoints output — files with fan-in=0 (nothing imports them)."""
         entries = result.get('entries', [])
@@ -1254,6 +1328,8 @@ class ImportsRenderer:
                 ImportsRenderer._render_components(result, resource)
             elif result_type in ('module_importers', 'importer_summary'):
                 ImportsRenderer._render_importers(result, resource, verbose)
+            elif result_type == 'external_packages':
+                ImportsRenderer._render_external(result, resource, verbose)
             else:
                 ImportsRenderer._render_import_summary(result, resource)
         else:
@@ -1605,6 +1681,8 @@ class ImportsAdapter(ResourceAdapter):
             return 'entrypoints'
         if 'components' in supplied:
             return 'components'
+        if 'external' in supplied:
+            return 'external_packages'
         return 'imports'
 
     @classmethod
@@ -1702,6 +1780,8 @@ class ImportsAdapter(ResourceAdapter):
             result = self._format_entrypoints()
         elif 'components' in query_params:
             result = self._format_components()
+        elif 'external' in query_params:
+            result = self._format_external()
         else:
             result = self._format_all()
         return result
@@ -2390,6 +2470,28 @@ class ImportsAdapter(ResourceAdapter):
         return self._build_response(
             'components', components=components, total=len(components),
             edge_rule=self._edge_rule(LAZY_INCLUDE, 'internal, outgoing and incoming count static imports between'))
+
+    def _format_external(self) -> Dict[str, Any]:
+        """The package table of the imports under the path (``classify.package_table``; deps://
+        computed it in its text renderer only, BACK-1054): uses per unresolved and stdlib package."""
+        if not self.analysis.graph:
+            return self._build_response('external_packages', external_packages=[], stdlib_packages=[],
+                                        internal_imports=0, total_imports=0, total_files=0, top_importers=[])
+        excluded = self._tests_excluded()
+        files = {str(path): [self._format_import(stmt) for stmt in imports]
+                 for path, imports in self.analysis.graph.files.items()
+                 if self._in_scope(path) and not (excluded and is_test_path(path))}
+        table = package_table(files, self._base_dir())
+        languages = table['external_package_languages']
+        return self._build_response(
+            'external_packages',
+            total_imports=table['total_imports'], total_files=table['total_files'],
+            internal_imports=table['relative_count'],
+            external_packages=[{'package': name, 'uses': uses, 'languages': languages.get(name, [])}
+                               for name, uses in table['external_packages']],
+            stdlib_packages=[{'package': name, 'uses': uses} for name, uses in table['stdlib_packages']],
+            top_importers=[{'file': row['file'], 'imports': row['count']} for row in table['top_importers']],
+        )
 
     def _format_unused(self) -> Dict[str, Any]:
         """Format unused imports."""
