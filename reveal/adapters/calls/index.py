@@ -1788,7 +1788,8 @@ def rank_by_callers(
             key = (rec['file'], rec['caller'])
             if key not in seen:
                 seen.add(key)
-                unique_records.append(rec)
+                # '/' on every OS, as find_callers writes it (BACK-1586): the index keeps the walker's spelling.
+                unique_records.append({**rec, 'file': to_posix(rec['file'])} if rec.get('file') else rec)
         entries.append({
             'name': callee_name,
             'caller_count': len(unique_records),
