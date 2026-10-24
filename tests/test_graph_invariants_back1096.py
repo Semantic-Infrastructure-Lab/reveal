@@ -203,6 +203,18 @@ def test_a_package_directory_module_is_cited_through_one_of_its_files(tmp_path):
     assert [(r['invariant'], r['status'], r['population']) for r in rows] == [('importer_citations', 'green', 1)], rows
 
 
+def test_a_file_name_with_a_plus_is_named_as_spelled(tmp_path):
+    """imports ?importers= reads its value raw (uri_codec 'raw'), so `Data+PKCE.swift` must go in as
+    written: percent-encoded (`Data%2BPKCE.swift`) it matches no file and exits 2."""
+    proj = tmp_path / 'jsproj'
+    proj.mkdir()
+    (proj / 'package.json').write_text('{"name": "p"}\n', encoding='utf-8')
+    (proj / 'a+b.js').write_text('export const x = 1;\n', encoding='utf-8')
+    (proj / 'main.js').write_text("import { x } from './a+b.js';\nconsole.log(x);\n", encoding='utf-8')
+    rows = inv.run_imports(InProcessRequests({}, tmp_path, 60), 'jsproj', proj, ('importer_citations',), 3)
+    assert [(r['invariant'], r['status'], r['population']) for r in rows] == [('importer_citations', 'green', 1)], rows
+
+
 # ── engine-level red control (imports) ────────────────────────────────────────
 
 def test_an_engine_that_loses_one_reverse_edge_turns_both_import_invariants_red(root, monkeypatch):
