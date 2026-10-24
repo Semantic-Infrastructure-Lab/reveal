@@ -1811,24 +1811,44 @@ def rank_by_callers(
     }, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()))
 
 
-def module_graph_from_importers(answer: Dict[str, Any], directory: str) -> Dict[str, Any]:
+def _posix_absolute(path: str) -> bool:
+    return path.startswith('/') or bool(ntpath.splitdrive(path)[0])
+
+
+def module_graph_from_importers(answer: Dict[str, Any], directory: str, *,
+                                keep_outside: bool = False) -> Dict[str, Any]:
     """calls ?modules from an imports ?importers answer over *directory* (BACK-1054 slice S5, Q4).
 
     One edge per (importer, imported file) of the answer: the import edges imports counts, not only the
     imports a call resolves through (the old graph, every edge of which was an import edge and which
     missed an import used without a call). Edges have no call_count (Q4). Every path is *directory*
-    joined to the answer's spelling relative to it, '/'-spelled on every OS (BACK-2188); a self-import
-    is no edge. The shape is the old one (Q8) plus the answer's ``edge_rule``."""
+    joined to its spelling relative to it, '/'-spelled on every OS (BACK-2188); a self-import is no edge.
+    Both ends lie under *directory*, as calls ?modules kept them: an edge with an end outside it (an
+    import of ../package.json, which imports spells as a host path) is counted in ``outside_path_edges``,
+    unless *keep_outside* (``&external``: importers from the rest of the project root). The shape is the
+    old one (Q8) plus the answer's ``edge_rule`` and that count."""
     base = to_posix(directory)
+    absolute_base = base if _posix_absolute(base) else to_posix(os.path.abspath(directory))
 
-    def spelled(path: str) -> str:
+    def relative(path: str) -> str:
+        """*path* relative to *directory*; a host path on another drive stays as written."""
         path = to_posix(path)
-        absolute = path.startswith('/') or bool(ntpath.splitdrive(path)[0])
-        return posixpath.normpath(path if absolute else posixpath.join(base, path))
+        if not _posix_absolute(path):
+            return posixpath.normpath(path)
+        if ntpath.splitdrive(path)[0].lower() != ntpath.splitdrive(absolute_base)[0].lower():
+            return path
+        return posixpath.relpath(path, absolute_base)
 
-    pairs = {(spelled(src), spelled(entry['file'])) for entry in answer.get('entries') or []
+    def outside(rel: str) -> bool:
+        return rel == '..' or rel.startswith('../') or _posix_absolute(rel)
+
+    pairs = {(relative(src), relative(entry['file'])) for entry in answer.get('entries') or []
              for src in entry['importers']}
-    edges = sorted((frm, to) for frm, to in pairs if frm != to)
+    kept = {(frm, to) for frm, to in pairs if frm != to and (keep_outside or not (outside(frm) or outside(to)))}
+    def spelled(rel: str) -> str:
+        return rel if _posix_absolute(rel) else posixpath.normpath(posixpath.join(base, rel))
+
+    edges = sorted({(spelled(frm), spelled(to)) for frm, to in kept})
     nodes = sorted({path for edge in edges for path in edge})
     return {
         'query': 'module_graph',
@@ -1837,5 +1857,6 @@ def module_graph_from_importers(answer: Dict[str, Any], directory: str) -> Dict[
         'edges': [{'from': frm, 'to': to} for frm, to in edges],
         'total_nodes': len(nodes),
         'total_edges': len(edges),
+        'outside_path_edges': sum(1 for frm, to in pairs if frm != to) - len(kept),
         'edge_rule': answer.get('edge_rule'),
     }

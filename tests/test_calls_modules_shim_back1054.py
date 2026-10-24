@@ -294,14 +294,20 @@ def test_mcp_reveal_query_carries_the_note(fx2):
 
 def test_a_backslash_spelling_from_the_engine_is_written_with_slashes():
     """Every path the module graph writes (path, nodes, from, to) is '/'-spelled, whatever separator the
-    importer answer and the directory carry (a Windows spelling, handed to the builder directly)."""
-    answer = {'entries': [{'file': 'pkg\\core.py', 'fan_in': 2, 'importers': ['pkg\\a.py', '..\\scripts\\run.py']}],
+    importer answer and the directory carry (a Windows spelling, handed to the builder directly): a
+    relative row, an importer above the path, a host path on the same drive and one on another drive."""
+    answer = {'entries': [{'file': 'pkg\\core.py', 'fan_in': 4,
+                           'importers': ['pkg\\a.py', '..\\scripts\\run.py', 'C:\\proj\\lib\\x.py', 'D:\\y.py']}],
               'edge_rule': {'text': 'Rule: x'}}
-    data = calls_index.module_graph_from_importers(answer, 'C:\\proj\\src')
-    written = [data['path'], *data['nodes'], *(f for e in data['edges'] for f in (e['from'], e['to']))]
-    assert written and all('\\' not in f for f in written), written
-    assert {(e['from'], e['to']) for e in data['edges']} == {
-        ('C:/proj/src/pkg/a.py', 'C:/proj/src/pkg/core.py'), ('C:/proj/scripts/run.py', 'C:/proj/src/pkg/core.py')}
+    inside = calls_index.module_graph_from_importers(answer, 'C:\\proj\\src')
+    wide = calls_index.module_graph_from_importers(answer, 'C:\\proj\\src', keep_outside=True)
+    for data in (inside, wide):
+        written = [data['path'], *data['nodes'], *(f for e in data['edges'] for f in (e['from'], e['to']))]
+        assert written and all('\\' not in f for f in written), written
+    assert {(e['from'], e['to']) for e in inside['edges']} == {('C:/proj/src/pkg/a.py', 'C:/proj/src/pkg/core.py')}
+    assert inside['outside_path_edges'] == 3 and wide['outside_path_edges'] == 0
+    assert {e['from'] for e in wide['edges']} == {'C:/proj/src/pkg/a.py', 'C:/proj/scripts/run.py',
+                                                  'C:/proj/lib/x.py', 'D:/y.py'}
 
 
 def test_dot_names_nodes_relative_to_the_path_with_slashes(monkeypatch, capsys):

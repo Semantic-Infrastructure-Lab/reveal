@@ -820,13 +820,15 @@ class CallsAdapter(ResourceAdapter):
         self._warn_depth_ignored('modules')
         params = self.query_params
         directory = str(self._directory())
-        query = 'importers' if _EXTERNAL.read(params) else 'importers&scope=path'
+        external = _EXTERNAL.read(params)
+        query = 'importers' if external else 'importers&scope=path'
         child = ImportsAdapter(directory, query)
         with import_analysis.composed_rules('calls ?modules'):  # BACK-2087
             # A cut of the imports answer's metadata (files_failed, first 50) is about a field this answer lacks.
             answer = self.compose_answer(ImportsAdapter, directory, child.get_structure, default={},
                                          omit_warnings=lambda w: str(w.get('field', '')).startswith('metadata.'))
-        data = module_graph_from_importers(answer if isinstance(answer, dict) else {}, directory)
+        data = module_graph_from_importers(answer if isinstance(answer, dict) else {}, directory,
+                                           keep_outside=external)
         query_format = _FORMAT.read(params) or ''
         if query_format:
             data['_query_format'] = query_format
