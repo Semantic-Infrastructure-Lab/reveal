@@ -483,6 +483,11 @@ primary JSON after execution facts exist. Text and human-primary artifacts retai
 the full map. Both spellings return `deps_scan`; `--fail-on findings` restores the
 previous text-mode findings gate. Whole-valued `top=3.0` and `top=1e2` are valid;
 CLI `--all` remains rejected, URI `--all` and both `--verbose` expand text only.
+Both deps spellings are retired (BACK-1054): each adds a `retired_spelling` warning and
+otherwise keeps this shape and these exit codes; the three components are views of one
+imports graph build. Imports declares default `none` and supports `findings`: exit 1 when
+the `?circular`, `?unused` or `?violations` answer has a row (an incomplete answer exits
+3 first); every other imports view has no findings to gate.
 
 Hotspots defaults to `none` and supports `findings` using the owner's pre-cap
 `summary.has_findings`: quality below 70 or complexity above 20. Stats coverage

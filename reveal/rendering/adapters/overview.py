@@ -315,7 +315,7 @@ def _render_next_steps(path: str) -> List[str]:
     return ["\nNext steps",
             f"  reveal hotspots {path}                    # Full hotspot breakdown",
             f"  reveal check {path}                       # Run quality rules",
-            f"  reveal deps {path}                        # Dependency graph",
+            f"  reveal 'imports://{path}?external'       # Third-party and stdlib packages",
             f"  reveal 'imports://{path}?rank=fan-in'     # Full fan-in ranking",
             f"  reveal 'imports://{path}?entrypoints'     # All entry points",
             f"  reveal pack {path}                        # Agent context snapshot",

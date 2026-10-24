@@ -93,7 +93,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses'),
     'deps':         _declared('deps',
                      'reveal deps [path]',
-                     'Dependency health: external packages, circular deps, unused imports'),
+                     'Retired: use reveal imports <path> --external, --circular or --unused (one graph build); '
+                     'dependency health: external packages, circular deps, unused imports'),
     'dev':          _spec('dev',
                      'reveal dev <command>',
                      'Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config',
@@ -263,6 +264,10 @@ RETIREMENTS: Dict[str, Retirement] = {
     'subcommand:testability': Retirement('reveal testability', 'reveal patches <path> --view pressure (the same answer)'),
     'scheme:testability': Retirement('testability://', 'patches://<path>?view=pressure (the same answer)'),
     'scheme:classify': Retirement('classify://', 'metrics://<path>?view=provenance (the same answer)'),
+    # deps folded into imports (BACK-1054 slice S4, Q5/Q8): both spellings answer from one imports:// build with deps'
+    # old shapes and exit codes until the cut, which waits on a due-diligence consumer moving first (BACK-2153).
+    'subcommand:deps': Retirement('reveal deps', 'reveal imports <path> --external, --circular or --unused'),
+    'scheme:deps': Retirement('deps://', 'imports://<path>?external, ?circular or ?unused'),
 }
 
 

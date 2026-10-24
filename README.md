@@ -155,7 +155,7 @@ reveal pack src/ --budget 8000 # token-budgeted snapshot for LLM context
 reveal pack src/ --architecture # pack + entry points + core abstractions brief
 reveal hotspots src/           # top complexity hotspots (✅/⚪ test-coverage per fn)
 reveal overview .              # one-glance dashboard: stats, quality, git activity
-reveal deps .                  # dependency health: circular imports, unused, packages
+reveal imports . --external    # third-party and stdlib packages (--circular, --unused)
 reveal architecture src/       # architectural brief: entry points, abstractions, risks
 reveal calls src/ --callees main --depth 2 --detail  # what main calls, level by level, with side effects
 reveal contracts src/          # ABC/Protocol/TypedDict/Pydantic inventory

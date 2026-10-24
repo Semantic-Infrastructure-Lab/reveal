@@ -678,6 +678,7 @@ Use `?flag` syntax for operations:
 | `top=N` | Limit results for `?rank` (default: all) | `imports://src?rank=fan-in&top=20` |
 | `entrypoints` | Files with fan-in=0 — entry points, scripts, or dead code; sorted by fan-out | `imports://src?entrypoints` |
 | `components` | Per-directory cohesion + coupling scores; top bridge file | `imports://src?components` |
+| `external` | Package table: unresolved (third-party or unresolved-local) and stdlib packages by use, the languages importing each, import statements per file (`external_packages`; the deps dashboard's table, now JSON) | `imports://src?external` |
 | `importers` | Who imports what: on a file (or `=FILE`, relative to the path) each importer with its import line, scope and cascade stage (`via`); on a directory every module under it with its sorted importers | `imports://src/utils.py?importers` |
 | `scope=root\|path` | `root` (default): resolve at the project root, rows under the path; `path`: the path itself is the scan root | `imports://src?rank=fan-in&scope=path` |
 | `tests=include\|exclude` | Count importers under a test path (`path_utils.is_test_path`), or not | `imports://src?importers&tests=exclude` |
@@ -954,6 +955,32 @@ last node. `count` = number of distinct groups, not simple paths.
 
 ---
 
+### 8. external_packages
+
+**Use case**: Which third-party and stdlib packages the code imports, and how often (`?external`,
+`reveal imports PATH --external`). This is the package table the retired `deps://` dashboard printed in
+text only; `deps://` read it at `&scope=path`, so add that for its numbers.
+
+```json
+{
+  "type": "external_packages",
+  "total_imports": 3412,
+  "total_files": 397,
+  "internal_imports": 1479,
+  "external_packages": [{"package": "kombu", "uses": 250, "languages": ["python"]}],
+  "stdlib_packages": [{"package": "unittest", "uses": 97}],
+  "top_importers": [{"file": "celery/app/base.py", "imports": 51}]
+}
+```
+
+**Fields**: every import of the files under the path is classified on resolution truth first: relative,
+resolved in the tree or a declared project namespace counts in `internal_imports`; stdlib needs a
+language rule or marker (Python's list is never applied to another language); the rest is an unresolved
+package, which may be third-party or an unresolved local. `top_importers` counts import statements per
+file. `&tests=exclude` drops the files under a test path.
+
+---
+
 ## Workflows
 
 ### Workflow 1: Clean Up Unused Imports
@@ -1183,6 +1210,14 @@ jobs:
 ```
 
 **Expected result**: CI fails on import quality issues
+
+The same gate without `jq`: `--fail-on findings` exits 1 when the `?circular`, `?unused` or `?violations`
+answer has a row (an incomplete answer exits 3 first; the default `--fail-on none` exits 0):
+
+```bash
+reveal 'imports://src?circular' --fail-on findings
+reveal imports src --unused --fail-on findings
+```
 
 ---
 

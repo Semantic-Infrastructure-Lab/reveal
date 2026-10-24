@@ -66,7 +66,7 @@ PLACEHOLDERS = (
 # A subcommand's own findings exit (its --help states it); anything else must exit 0. Exit 2 is usage
 # rejection and 3 is lost analysis for every command here, so neither is a findings exit (BACK-2051).
 FINDINGS_EXITS = {'review': {0, 1}, 'check': {0, 1}, 'hotspots': {0, 1}, 'deps': {0, 1},
-                  'health': {0, 1}}
+                  'health': {0, 1}, 'imports': {0, 1}}
 # Flag forms with the same findings exit: --check is `reveal check` (1 = issues found);
 # --validate-schema documents 1 = validation failures (SCHEMA_VALIDATION_HELP.md "Exit Codes").
 FINDINGS_FLAGS = {'--check': {0, 1}, '--validate-schema': {0, 1}}
@@ -593,7 +593,7 @@ def test_documentation_command_inventory_is_not_vacuous():
 # tree built under the names the docs use. A command runs only when every path, ref and
 # session it names exists there; the rest stay skips that say what they need.
 
-SUBCOMMANDS = {'check', 'review', 'pack', 'hotspots', 'overview', 'deps', 'surface',
+SUBCOMMANDS = {'check', 'review', 'pack', 'hotspots', 'overview', 'deps', 'imports', 'surface',
                'architecture', 'contracts', 'trace', 'testability', 'health', 'dev', 'scaffold'}
 # Path-less schemes: their target is the environment, the interpreter or the recorded homes.
 PATHLESS_SCHEMES = ('env://', 'python://', 'reveal://', 'adapter://', 'help://', 'claude://',

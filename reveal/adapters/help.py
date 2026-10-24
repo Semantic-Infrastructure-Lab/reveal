@@ -176,7 +176,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Get an overall quality score', 'query': 'metrics://src', 'description': 'Codebase-wide metrics — lines, functions, quality score — the raw numbers hotspots:// ranks against', 'output_type': 'stats_summary'},
             {'goal': 'Check code complexity', 'query': 'ast://src?complexity>10', 'description': 'High complexity functions', 'output_type': 'ast_query'},
             {'goal': 'Find long functions lacking simplicity', 'query': 'ast://src?type=function&lines>50&sort=-lines', 'description': 'Large functions sorted by size — prime documentation/refactor targets', 'output_type': 'ast_query'},
-            {'goal': 'Dependency health at a glance', 'query': 'deps://src', 'description': 'External packages, circular deps, unused imports — a dashboard composed from three imports:// queries, for when you want the summary not the raw graph', 'output_type': 'deps_scan'},
+            {'goal': 'Which third-party and stdlib packages the code uses', 'query': 'imports://src?external', 'description': 'Unresolved (third-party or unresolved-local) and stdlib packages by use, with the languages importing each — pair with ?circular and ?unused for the rest of a dependency health check', 'output_type': 'external_packages'},
             {'goal': 'Where test mocking hides real coupling', 'query': 'patches://src?view=pressure', 'description': 'Joins test patch/mock pressure with production boundary fan-out — over-mocked boundaries are untested boundaries', 'output_type': 'testability_report'},
         ]
     },
@@ -1637,7 +1637,7 @@ class HelpAdapter(ResourceAdapter):
                         ('metrics', 'hotspots', '?view=provenance tags the full population; hotspots tags its ranked subset'),
                         ('classify', 'metrics', 'classify is retired: metrics://?view=provenance gives the same report'),
                         ('stats', 'metrics', 'stats is retired: metrics:// is the same adapter under its new name'),
-                        ('deps', 'imports', 'dependency dashboard is composed entirely from imports:// queries'),
+                        ('deps', 'imports', 'deps is retired: imports://?external, ?circular and ?unused give its sections from one graph build'),
                         ('architecture', 'imports', 'entry points/core abstractions/cycles feed the architecture brief'),
                         ('architecture', 'ast', 'complexity ranking feeds the high-complexity-entry risk'),
                         ('overview', 'metrics', 'dashboard hotspots/quality pulse draw on the same quality score'),

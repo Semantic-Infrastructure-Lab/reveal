@@ -7,8 +7,18 @@ category: guide
 
 `deps://` is a dependency health dashboard: third-party package usage,
 circular dependency cycles, and unused imports for a directory. It is
-composed entirely from three `imports://` queries (base, `?circular`,
-`?unused`) — not an independent scan.
+composed entirely from three views of one `imports://` graph build of the
+requested path (the default view, `?circular`, `?unused`) — not an
+independent scan, and since BACK-1054 not three builds either.
+
+**Retired spelling.** `reveal deps` and `deps://` print a note naming their
+replacement (`reveal imports <path> --external, --circular or --unused`;
+`imports://<path>?external`, `?circular`, `?unused`) and otherwise answer as
+before: the same `deps_scan` shape, the same exit codes, until the cut. The
+package table this page's text derives from `base` is `imports://?external`
+as JSON (`external_packages`; add `&scope=path` for the numbers this dashboard
+prints, which scans the requested path), and `reveal imports --circular
+--fail-on findings` is the gate.
 
 ## Quick Start
 
@@ -66,7 +76,8 @@ detection (Python, JS/TS, Go, Rust); the rest are listed in
 with `no_circular`/`no_unused` (`["circular"]`, `["unused"]`), so an empty
 `circular`/`unused` there means "not checked", not "clean"; the text Health line
 says "not checked" for them instead of ✅. Text rendering additionally derives
-third-party/stdlib package usage counts and a "top importers" ranking from `base`.
+third-party/stdlib package usage counts and a "top importers" ranking from `base`
+(`imports://?external` answers the same table as JSON).
 The circular verdict counts load-time edges only (a function-level import cannot close an
 import-time cycle); the text prints that rule under the Health line (a `Rule:` line) and
 `circular.edge_rule` states it in JSON. `deps://` takes no `&lazy`; `imports://<dir>?circular&lazy=include`

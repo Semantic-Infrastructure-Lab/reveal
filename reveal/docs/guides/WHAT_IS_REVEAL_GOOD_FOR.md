@@ -254,7 +254,7 @@ Reveal is useful before deep investigation because it can give you a concise pic
 ```bash
 reveal overview .
 reveal hotspots src/
-reveal deps .
+reveal 'imports://.?external'
 reveal 'imports://src?circular'
 reveal 'imports://src?violations'
 reveal metrics://src/

@@ -32,6 +32,8 @@ CASES = {
     'trace': (['--from', 'serve'], '?from=serve'),
 }
 NOUNS = sorted(CASES)
+# A noun whose default answer is not a findings view gates the view that is (imports: BACK-1054 S4).
+FINDINGS_VIEWS = {'imports': (['--unused'], '?unused')}
 
 APP = '''\
 import os
@@ -119,7 +121,8 @@ def branchy(x):
 # A retired noun's note names the spelling used (``reveal trace`` vs ``trace://``), so it differs
 # between the two spellings by design. The rows are lifted here so the rest of the answer is
 # compared byte for byte; test_a_retired_nouns_spellings_differ_only_by_their_own_note puts them back.
-RETIRED_NOUN_ROWS = ('subcommand:trace', 'scheme:trace', 'subcommand:testability', 'scheme:testability')
+RETIRED_NOUN_ROWS = ('subcommand:trace', 'scheme:trace', 'subcommand:testability', 'scheme:testability',
+                     'subcommand:deps', 'scheme:deps')
 
 
 @pytest.fixture
@@ -224,7 +227,7 @@ def test_missing_resource_is_rejected_alike(project, noun, fmt):
 @pytest.mark.parametrize('noun', NOUNS)
 def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
     """The project carries an unused import and a branchy function, so a declared gate has something to match."""
-    cli, query = CASES[noun]
+    cli, query = FINDINGS_VIEWS.get(noun, CASES[noun])
     spellings = {
         'after': [noun, 'proj', *cli, '--fail-on', gate],
         'before': ['--fail-on', gate, noun, 'proj', *cli],
@@ -296,10 +299,10 @@ def test_a_harmless_warning_is_shown_and_never_makes_a_complete_answer_fail(proj
     assert_equal_answers(noun, *answers)
 
 
-@pytest.mark.parametrize('noun', ['trace', 'testability'])
+@pytest.mark.parametrize('noun', ['trace', 'testability', 'deps'])
 def test_a_retired_nouns_spellings_differ_only_by_their_own_note(project, monkeypatch, noun):
-    """trace (BACK-2066 slice D) and testability (BACK-2160): each spelling carries its own retired_spelling
-    warning and note; without them the two answers are equal."""
+    """trace (BACK-2066 slice D), testability (BACK-2160) and deps (BACK-1054 S4): each spelling carries its own
+    retired_spelling warning and note; without them the two answers are equal."""
     monkeypatch.undo()
     monkeypatch.chdir(project.parent)
     a, b = run(noun, 'cli', '--format', 'json'), run(noun, 'uri', '--format', 'json')

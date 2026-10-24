@@ -703,7 +703,7 @@ Stats/scope/Imports scope; global `--exclude` also filters AST complex functions
 ### See Also
 
 - `reveal hotspots` — Deep dive into complexity hotspots
-- `reveal deps` — Dependency health details
+- `reveal imports --external` — Third-party and stdlib packages (`--circular`, `--unused`)
 - `reveal overview --help` — Full flag reference
 
 ---
@@ -769,15 +769,18 @@ as entry points. High entry point counts often indicate dynamic loading patterns
 ### See Also
 
 - `reveal overview` — Full codebase health dashboard (stats, quality, git)
-- `reveal deps` — Dependency health: circular, unused, external packages
+- `reveal imports --external` — Third-party and stdlib packages (`--circular`, `--unused` for the rest of dependency health)
 - `reveal architecture --help` — Full flag reference
 
 ---
 
-## reveal deps — Dependency Health Dashboard
+## reveal deps — Dependency Health Dashboard (retired: use reveal imports)
 
-Wraps three `imports://` queries to give a dependency health summary: external
-package count, circular dependency detection, unused imports, top importers. The circular verdict counts
+`reveal deps` and `deps://` are retired spellings: each prints a replaced-by note and still answers with its
+old shape (`deps_scan`) and exit codes until the cut. Their sections are imports views: `reveal imports PATH
+--external` (the package table, now JSON too), `--circular` and `--unused`; `reveal imports PATH --circular
+--fail-on findings` is the gate. The dashboard reads all three from one import graph build of the requested
+path (`&scope=path`): external package count, circular dependency detection, unused imports, top importers. The circular verdict counts
 load-time edges only; the text prints that rule under the Health line (`Rule:`, `circular.edge_rule` in JSON).
 
 ### Usage
@@ -814,18 +817,17 @@ forms; `--all` remains available only on the URI form.
 ### Examples
 
 ```bash
-reveal deps                          # Current directory
-reveal deps ./src                    # Specific directory
-reveal deps . --no-unused            # Skip unused imports
-reveal deps . --format json          # Machine-readable for CI
-reveal deps . --fail-on findings      # Gate on complete circular/unused findings
+reveal imports . --external                     # The package table (deps' Unresolved/stdlib sections)
+reveal imports ./src --circular                 # Circular dependency groups
+reveal imports . --unused --format json         # Unused imports, machine-readable for CI
+reveal imports . --circular --fail-on findings  # Gate on complete circular findings
 ```
 
 ### See Also
 
-- `imports://` — Full import graph queries
+- `imports://` — Full import graph queries (`?external`, `?circular`, `?unused`)
 - `reveal overview` — Includes dependency summary
-- `reveal deps --help` — Full flag reference
+- `reveal imports --help` — Full flag reference
 
 ---
 

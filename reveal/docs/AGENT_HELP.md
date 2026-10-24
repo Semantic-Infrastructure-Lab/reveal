@@ -241,7 +241,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal overview [path]` | One-glance dashboard: languages, quality, hotspots, recent git | `reveal overview --help` |
 | `reveal architecture [path]` | Architectural brief: entry points, core abstractions, risks | `reveal architecture --help` |
 | `reveal imports [path]` | Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations | `reveal imports --help` |
-| `reveal deps [path]` | Dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
+| `reveal deps [path]` | Retired: use reveal imports <path> --external, --circular or --unused (one graph build); dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
 | `reveal hotspots [path]` | High-complexity files and functions that need attention | `reveal hotspots --help` |
 | `reveal metrics [path]` | Per-file lines, complexity and quality; --hotspots ranks files; --view provenance tags every file | `reveal metrics --help` |
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal contracts --help` |
@@ -1593,7 +1593,7 @@ reveal overview . --format json    # Machine-readable output
 
 **Output sections:** codebase stats (files, lines, functions, classes) · language breakdown · quality pulse (avg score, hotspot count) · top hotspots with `→ reveal <file>` hints · top complex functions · architecture (entry points, core abstractions, component cohesion bars, circular count) · recent git commits with age labels. Skip architecture with `--no-imports`. The architecture section states its counting rule (`Rule:` lines, `edge_rule` in JSON): all static import edges except `TYPE_CHECKING` ones, function-level imports included; circulars use the load-time view.
 
-**Use case:** Fast orientation for an unfamiliar codebase. Combined entry point before deciding which area to investigate with `reveal hotspots`, `reveal deps`, or `ast://`.
+**Use case:** Fast orientation for an unfamiliar codebase. Combined entry point before deciding which area to investigate with `reveal hotspots`, `reveal imports`, or `ast://`.
 
 ---
 
@@ -1651,15 +1651,15 @@ Core abstractions: utils/__init__.py(39)  base.py(27)  registry.py(14)
 
 **Pattern:**
 ```bash
-reveal deps .                      # Full dependency dashboard
-reveal deps ./src                  # Scope to a subdirectory
-reveal deps . --no-unused          # Skip unused imports (focus on structure)
-reveal deps . --format json        # Machine-readable for CI
+reveal imports . --external                     # Third-party and stdlib packages by use
+reveal imports ./src --circular                 # Circular dependency groups (load-time edges)
+reveal imports . --unused                       # Unused imports with file:line
+reveal imports . --circular --fail-on findings  # CI gate: exit 1 on a cycle
 ```
 
-**Output:** Third-party package summary · health line (circular deps + unused imports) · top packages by usage · circular dependency cycles · unused imports with file:line · top importers. The circular verdict counts load-time edges only and the text prints that rule (`Rule:` line, `circular.edge_rule` in JSON).
+**Output:** `--external` is the package table (`external_packages` in JSON: uses per package and the languages importing it) · `--circular` the cycle groups, with the rule they count (`Rule:` line, `edge_rule` in JSON) · `--unused` each unused import with file:line. `reveal deps` and `deps://` are retired spellings that still print the one-page dashboard of all three (`deps_scan`, from one graph build) with a replaced-by note until the cut.
 
-**Exit codes:** 0 (completed, default `--fail-on none`) · 1 (`--fail-on findings` matched circular groups or unused imports) · 2 (invalid request) · 3 (required analysis/output incomplete or failed). Gates use full counts before text or JSON projection.
+**Exit codes:** 0 (completed, default `--fail-on none`) · 1 (`--fail-on findings` and the `--circular`, `--unused` or `--violations` answer has a row; `reveal deps` gates cycles or unused imports) · 2 (invalid request) · 3 (required analysis/output incomplete or failed, before any gate). Gates use full counts before text or JSON projection.
 
 **Use case:** Before a release or major refactor — confirm no accidental circular imports crept in, surface unused imports to clean up, see dependency surface area at a glance.
 
@@ -3673,7 +3673,7 @@ reveal deep_dir/
 | `reveal health` | all targets pass | findings (warnings or failing checks, severe ones included) | usage error (no target) | a check failed, could not reach its target (a missing local path included) or was incomplete (a skipped oversized directory, a degraded parse) |
 | `ssl://… --check`, `domain://… --check` | pass | warning (e.g. cert expiring <30 days) | critical/failure (expired, <7 days, DNS/HTTP failure) | — |
 | nginx `--validate-nginx-acme` / `--check-acl` / `--cpanel-certs`, `cpanel://USER/full-audit`, `nginx:// --audit` | pass | — | failure / gaps found | — |
-| Direct `deps` / `hotspots` (subcommand or URI) | complete without an enabled gate matching | explicit `--fail-on findings` matches | invalid request | incomplete analysis/output failure |
+| Direct `deps` / `hotspots` / `imports` (subcommand or URI) | complete without an enabled gate matching | explicit `--fail-on findings` matches (imports: the `--circular`, `--unused` or `--violations` answer has a row) | invalid request | incomplete analysis/output failure |
 | Direct `surface` / `architecture` / `contracts` / `overview` / `pack` / `testability` / `trace` (subcommand or URI) | completed requested analysis | — | invalid resource/parameter or unsupported gate | required analysis/output incomplete or failed |
 | Other legacy commands given a path that doesn't exist | — | `Error: … not found` | — | — |
 | An argument the run would ignore: a path given to a mode that reads none (`reveal a.py --rules`, `--adapters`, `--languages`, `--list-schemas`, `--explain`, `--stdin`, ...), a second path given to a flag that reads no element (`reveal a.py b.py --check`, `reveal a.html b.html --metadata`, `--links`, `--typed`), an element beside `--section` (`reveal a.md b.md --section X`), `--stdin` beside `--section`, or `--stdin` beside `--decorator-stats`/`--explain-file`/`--capabilities`/`--show-ast` (those read one path; loop over the paths instead) | — | — | usage error: stderr names the flag and the ignored argument, nothing runs | — |
