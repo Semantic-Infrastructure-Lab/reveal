@@ -1669,6 +1669,10 @@ class ImportsAdapter(ResourceAdapter):
     HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    # --head/--tail/--range cut the module rows of ?importers (and the other ranked views) and say so;
+    # a directory ?importers answer is one row per module with ALL its importers, so this is the
+    # bound on a corpus with hundreds of thousands of edges (swift), not a per-edge cap (BACK-2192).
+    BUDGET_LIST_FIELD = 'entries'
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
     CLI_QUERY_FLAGS = {'verbose': 'verbose', 'respect_gitignore': 'respect_gitignore=false'}  # `--verbose` == `&verbose` (BACK-1361)
 
