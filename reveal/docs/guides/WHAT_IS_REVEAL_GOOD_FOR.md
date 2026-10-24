@@ -116,13 +116,13 @@ This is one of Reveal's clearest differentiators.
 
 Reveal is very good at answering "what else will this touch?"
 
-The two key tools are `calls://` and `depends://`:
+The two key tools are `calls://` and `imports://?importers`:
 
 ```bash
 reveal 'calls://src/?callers=validate_token&depth=3'
 reveal 'calls://src/?rank=callers&top=20'
-reveal depends://src/auth/tokens.py
-reveal 'depends://src?top=20'
+reveal 'imports://src/auth/tokens.py?importers'
+reveal 'imports://src?rank=fan-in&top=20'
 ```
 
 Why it is good for this:

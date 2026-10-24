@@ -15,6 +15,13 @@ beth_topics:
 **Type**: Analysis adapter (project-level index)
 **Output Formats**: text, json, dot (Graphviz)
 
+**Retired spelling** (BACK-1054). `depends://` prints a note naming its replacement,
+`imports://<path>?importers` (one file: `imports://<path>/<file>?importers`, which lists each importer
+with its import line, scope and cascade stage), and otherwise answers as before: the same
+`module_dependents` and `dependency_summary` shapes, warnings and exit code (0 also on a partial
+answer, where `imports://` exits 3) until the cut. The graph is the `imports://` engine's build,
+under depends' own scan root, 5,000-file cap and, for a file target, its own extension family.
+
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
