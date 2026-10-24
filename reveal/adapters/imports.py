@@ -250,6 +250,34 @@ def parse_failure_warning(failed_files: List[str], base: Optional[Path] = None) 
     }
 
 
+def file_loss_warnings(analysis: ImportAnalysis, base: Optional[Path] = None) -> List[WarningEntry]:
+    """The per-file facts of one import build, each under its own cause (BACK-2190).
+
+    ``files_failed`` holds three different things, and the user's next step differs: a file
+    tree-sitter recovered with ERROR nodes (``partial_parse``: its recovered imports are edges), a
+    file never parsed because it could not be read (``analysis_failed``, named by the OSError type:
+    no tree, its imports are missing) and a file a dead pool worker took (``worker_lost``)."""
+    from .ast.analysis import analysis_skipped_warning
+    lost = set(analysis.files_lost)
+    partial: List[str] = []
+    unread: List[Tuple[str, str]] = []
+    for path in analysis.files_failed:
+        if path in lost:
+            continue
+        extraction = analysis.extractions.get(path)
+        parse = (extraction.diagnostics.get('parse') or {}) if extraction is not None else {}
+        if parse.get('status') == 'partial':
+            partial.append(str(path))
+        else:
+            cause = (f'{extraction.read_error}: {parse.get("reason", "")}' if extraction is not None and extraction.read_error
+                     else str(parse.get('reason') or 'not parsed'))
+            unread.append((str(path), cause))
+    warnings = [parse_failure_warning(partial, base), worker_lost_warning([str(p) for p in lost], base),
+                analysis_skipped_warning(unread, base, 'analysis is incomplete; its imports are missing from the '
+                                                       'import graph')]
+    return [w for w in warnings if w]
+
+
 def detect_autoload_regime(path: Path) -> Optional[Dict[str, str]]:
     """Return {'framework': ..., 'evidence': ...} if `path` -- or an ancestor,
     up to _AUTOLOAD_REGIME_MAX_WALK_UP levels up -- looks like a
@@ -1897,12 +1925,9 @@ class ImportsAdapter(ResourceAdapter):
         (parse_failure_warning) and files a dead pool worker took down
         (worker_lost_warning), each under its own cause."""
         from .ast.analysis import analysis_skipped_warning, traversal_failed_warning
-        lost = set(self.analysis.files_lost)
-        parse_failed = [str(fp) for fp in self.analysis.files_failed if fp not in lost]
         traversal = getattr(self.analysis.graph, 'traversal_failures', ())
         warnings = [traversal_failed_warning(traversal, base),
-                    parse_failure_warning(parse_failed, base),
-                    worker_lost_warning([str(fp) for fp in lost], base),
+                    *file_loss_warnings(self.analysis, base),
                     analysis_skipped_warning(
                         self.analysis.structure_failures, base,
                         "analysis is incomplete; some functions and classes may be missing from the complexity and structure results")]

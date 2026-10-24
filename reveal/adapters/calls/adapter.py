@@ -459,27 +459,8 @@ def _import_file_warnings(child: Any, base: Path) -> List[WarningEntry]:
     for a file it could not read, so the three kinds are told apart: a file tree-sitter recovered with
     ERROR nodes (``partial_parse``, a disclosure: its recovered imports are edges), a file never parsed
     (unreadable, no tree: ``analysis_failed``) and a file a dead pool worker took (``worker_lost``)."""
-    from ..imports import parse_failure_warning, worker_lost_warning
-    from ..ast.analysis import analysis_skipped_warning
-    analysis = child.analysis
-    lost = set(analysis.files_lost)
-    partial: List[str] = []
-    unread: List[Tuple[str, str]] = []
-    for path in analysis.files_failed:
-        if path in lost:
-            continue
-        extraction = analysis.extractions.get(path)
-        parse = (extraction.diagnostics.get('parse') or {}) if extraction is not None else {}
-        if parse.get('status') == 'partial':
-            partial.append(str(path))
-        else:
-            cause = (f'{extraction.read_error}: {parse.get("reason", "")}' if extraction is not None
-                     and extraction.read_error else str(parse.get('reason') or 'not parsed'))
-            unread.append((str(path), cause))
-    warnings = [parse_failure_warning(partial, base), worker_lost_warning([str(p) for p in lost], base),
-                analysis_skipped_warning(unread, base, 'analysis is incomplete; its imports are missing from the '
-                                                       'module graph')]
-    return [w for w in warnings if w]
+    from ..imports import file_loss_warnings
+    return file_loss_warnings(child.analysis, base)
 
 
 # A name answer that can prove absence: the field it names and its observation count.
