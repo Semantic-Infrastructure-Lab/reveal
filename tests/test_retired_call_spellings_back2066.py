@@ -8,7 +8,9 @@ and go through the one ``RETIREMENTS`` table:
 - ``calls ?root=`` / ``--root`` -> ``?callees=FUNC&depth=N``;
 - ``calls ?target=`` / ``--target`` -> ``?callers=FUNC`` (an alias with a note, decision a);
 - ``ast://?calls=``, ``?callee_of=`` and ``?show=calls`` -> calls ``?callers=`` / ``?callees=`` or
-  ``--grep`` (decision e: retired, not kept as element filters).
+  ``--grep`` (decision e: retired, not kept as element filters);
+- ``calls ?modules`` / ``--modules`` -> ``imports ?importers&scope=path`` (BACK-1054 slice S5: the module
+  graph already answers from it, so the answer with and without the row is the same).
 
 Each prints one note on stderr, answers exactly as with the row removed, and carries one
 ``retired_spelling`` warning in JSON and MCP. The MCP tool ``reveal_trace`` keeps its name and
@@ -54,6 +56,9 @@ CASES = {
     'reveal calls --root': ('param:calls.root', lambda p: ['calls', p, '--root', 'main'], '--callees'),
     'calls ?target=': ('param:calls.target', lambda p: [f'calls://{p}?target=helper'], '?callers='),
     'reveal calls --target': ('param:calls.target', lambda p: ['calls', p, '--target', 'helper'], '--callers'),
+    # BACK-1054 slice S5: the module graph answers from imports ?importers&scope=path (Q4/Q8).
+    'calls ?modules': ('param:calls.modules', lambda p: [f'calls://{p}?modules'], '?importers&scope=path'),
+    'reveal calls --modules': ('param:calls.modules', lambda p: ['calls', p, '--modules'], '--importers'),
     'ast ?calls=': ('param:ast.calls', lambda p: [f'ast://{p}?calls=helper'], '?callers='),
     'ast ?callee_of=': ('param:ast.callee_of', lambda p: [f'ast://{p}?callee_of=main'], '?callees='),
     'ast ?show=calls': ('value:ast.show=calls', lambda p: [f'ast://{p}?show=calls'], '?callers='),
@@ -68,6 +73,7 @@ NOT_RETIRED = {
     'reveal calls --callers': lambda p: ['calls', p, '--callers', 'helper'],
     'reveal calls --callees --depth': lambda p: ['calls', p, '--callees', 'main', '--depth', '2'],
     'depends ?root=': lambda p: [f'depends://{p}?root={p}'],
+    'imports ?importers&scope=path': lambda p: [f'imports://{p}?importers&scope=path'],
     'ast ?callers>N': lambda p: [f'ast://{p}?callers>0'],
     'ast ?show=dict-heatmap': lambda p: [f'ast://{p}?show=dict-heatmap'],
     'ast ?name=': lambda p: [f'ast://{p}?name=helper'],
@@ -160,6 +166,7 @@ MCP_CASES = {
     'trace://': ('scheme:trace', lambda p: f'trace://{p}?from=main'),
     'calls ?root=': ('param:calls.root', lambda p: f'calls://{p}?root=main'),
     'calls ?target=': ('param:calls.target', lambda p: f'calls://{p}?target=helper'),
+    'calls ?modules': ('param:calls.modules', lambda p: f'calls://{p}?modules'),
     'ast ?calls=': ('param:ast.calls', lambda p: f'ast://{p}?calls=helper'),
 }
 

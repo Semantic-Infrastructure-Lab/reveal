@@ -250,6 +250,14 @@ RETIREMENTS: Dict[str, Retirement] = {
                                    '?callees=FUNC&depth=N (--callees FUNC --depth N), the same walk'),
     # Decision (a): an alias that answers identically until the cut.
     'param:calls.target': Retirement('calls ?target= (--target)', '?callers=FUNC (--callers FUNC), the same answer'),
+    # calls?modules folded into imports (BACK-1054 slice S5, Q4/Q8): the module graph is imports' edges, in the
+    # old shape without call_count, until the cut.
+    'param:calls.modules': Retirement('calls ?modules (--modules)',
+                                      'imports://<path>?importers&scope=path (reveal imports <path> --importers '
+                                      '--scope path), the same import edges as each module\'s importers'),
+    'param:calls.external': Retirement('calls ?external (--external)',
+                                       'imports://<path>?importers (scope=root, the default), importers from the '
+                                       'whole project root'),
     # Decision (e): ast's call filters are retired, not kept as element filters; calls= matched call
     # text in every scanned file instead of the callers index, so the two could disagree.
     'param:ast.calls': Retirement('ast://?calls=', "calls://<path>?callers=NAME, or --grep 'PATTERN' for a pattern"),
