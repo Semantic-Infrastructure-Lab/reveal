@@ -112,3 +112,74 @@ def test_depends_still_lists_the_importer_that_did_not_parse(partial):
 
 def test_depends_exits_0_on_complete_input(clean):
     assert _depends(clean, 'src/a.js').returncode == 0
+
+
+# --- the depends shim (BACK-1054 slice S6): depends answers from the imports:// engine's build ---
+# The engine's own verdict on the same input is exit 3 (test_imports_exits_3_on_the_partial_fixture);
+# depends keeps exit 0 and puts the partial verdict in meta.warnings, its `warning` string and the
+# text, with its old JSON shape and the one retired-spelling note.
+
+DEPENDENT_KEYS = {'file', 'line', 'module', 'names', 'type', 'is_relative', 'alias'}
+NOTE = 'note: depends:// is deprecated; use imports://<path>?importers'
+
+
+def _depends_json(target: Path, module: str = ''):
+    return _run_reveal_direct(f'depends://{target}/{module}', '--format', 'json')
+
+
+def _warning_types(doc: dict) -> set:
+    return {w.get('type') or w.get('code') for w in (doc.get('meta') or {}).get('warnings', [])}
+
+
+def test_depends_json_exits_0_with_the_partial_verdict_in_meta_warnings(partial):
+    result = _depends_json(partial, 'src/a.js')
+    assert result.returncode == 0, result.stderr
+    doc = json.loads(result.stdout)
+    assert doc['type'] == 'module_dependents'
+    assert {'target', 'dependents', 'count', 'edge_rule', 'metadata', '_meta', 'undercount_possible'} <= set(doc)
+    assert all(set(d) == DEPENDENT_KEYS for d in doc['dependents'])  # no imports-only row field leaks in
+    assert sorted(d['file'] for d in doc['dependents']) == ['src/b.js', 'src/bad.js']
+    assert {'partial_parse', 'retired_spelling'} <= _warning_types(doc)
+    assert 'parsed with errors' in doc['warning']
+    assert result.stderr.count(NOTE) == 1
+
+
+def test_depends_directory_json_exits_0_with_its_shape(partial):
+    result = _depends_json(partial, 'src')
+    assert result.returncode == 0, result.stderr
+    doc = json.loads(result.stdout)
+    assert doc['type'] == 'dependency_summary'
+    assert {'modules', 'total_modules', '_format', 'edge_rule', 'metadata', '_meta'} <= set(doc)
+    assert all(set(m) == {'module', 'dependent_count', 'dependents'} for m in doc['modules'])
+    assert 'partial_parse' in _warning_types(doc)
+
+
+def test_depends_text_names_the_partial_verdict(partial):
+    result = _depends(partial, 'src/a.js')
+    assert 'parsed with errors' in result.stdout
+    assert result.stderr.count(NOTE) == 1
+
+
+def test_depends_exits_0_on_a_capped_walk_where_imports_exits_3(clean, monkeypatch):
+    """A walk its file cap cut short is partial too: imports exits 3 (D6), depends 0 with
+    scan_capped and its cap warning."""
+    from reveal.adapters.depends import DependsAdapter
+    monkeypatch.setattr(DependsAdapter, '_SCAN_FILE_CAP', 1)
+    engine = _run_reveal_direct(f'imports://{clean}/src/a.js?importers&max_files=1', '--format', 'json')
+    assert engine.returncode == 3, engine.stderr
+    result = _depends_json(clean, 'src/a.js')
+    assert result.returncode == 0, result.stderr
+    doc = json.loads(result.stdout)
+    assert doc['metadata']['scan_capped'] is True
+    assert 'Scan capped at 1 files' in doc['warning']
+
+
+def test_mcp_depends_answers_with_the_note(partial):
+    """The MCP spelling: the answer, not a failure, with the note in the result."""
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_query
+    out = reveal_query(f'depends://{partial}/src/a.js')
+    assert 'src/bad.js' in out and 'parsed with errors' in out
+    assert out.count('depends:// is deprecated; use imports://<path>?importers') == 1
+    doc = json.loads(reveal_query(f'depends://{partial}/src/a.js', provenance=True))
+    assert doc['type'] == 'module_dependents' and 'retired_spelling' in _warning_types(doc)
