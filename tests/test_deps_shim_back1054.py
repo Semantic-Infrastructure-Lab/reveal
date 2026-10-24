@@ -109,6 +109,40 @@ def test_each_deps_component_is_the_imports_view_it_names(proj):
     assert deps['base']['metadata']['total_imports'] == base['metadata']['total_imports'] == 7
 
 
+def test_get_view_answers_like_a_fresh_adapter(proj):
+    built = ImportsAdapter(str(proj), 'scope=path')
+    built.get_structure()
+    for view in ('circular', 'unused', 'rank=fan-in'):
+        fresh = ImportsAdapter(str(proj), f'{view}&scope=path').get_structure()
+        assert built.get_view(f'{view}&scope=path') == fresh, view
+
+
+@pytest.mark.parametrize('query', ['circular', 'circular&scope=root', 'circular&scope=path&max_files=5',
+                                   'circular&scope=path&root=.'])
+def test_get_view_refuses_a_parameter_that_changes_the_build(proj, query):
+    built = ImportsAdapter(str(proj), 'scope=path')
+    built.get_structure()
+    with pytest.raises(ValueError, match='cannot change the build'):
+        built.get_view(query)
+
+
+def test_get_view_needs_a_build(proj):
+    with pytest.raises(ValueError, match='none was built'):
+        ImportsAdapter(str(proj), 'scope=path').get_view('circular&scope=path')
+
+
+def test_a_failed_build_fails_every_component_with_its_cause(proj, monkeypatch):
+    def broken(self, target_path, *args, **kwargs):
+        raise OSError('the tree went away')
+    monkeypatch.setattr(ImportsAdapter, '_build_graph', broken)
+    result = DepsAdapter(str(proj)).get_structure()
+    assert {name: c['completeness'] for name, c in result['analysis']['components'].items()} == \
+        {'base': 'failed', 'circular': 'failed', 'unused': 'failed'}
+    messages = [e['message'] for e in result['meta']['errors']]
+    assert any('the tree went away' in m for m in messages), messages
+    assert _run_reveal_direct('deps', str(proj)).returncode == 3
+
+
 # ── imports ?external: the package table as JSON ──────────────────────────────────────────────
 
 def _packages(entries) -> dict:

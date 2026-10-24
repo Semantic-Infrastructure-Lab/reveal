@@ -5,6 +5,7 @@ import pytest
 
 from reveal.adapters.deps import DepsAdapter, _run_base, _run_circular, _run_unused
 from reveal.adapters.imports import ImportsAdapter
+from reveal.utils.query import parse_query_params
 from reveal.utils.results import ResultBuilder, note_truncation
 
 pytestmark = pytest.mark.component
@@ -19,6 +20,16 @@ def child(component):
     return result
 
 
+def answer_with(monkeypatch, produce):
+    """The child's answers, by the view its query names: deps builds one ImportsAdapter
+    (get_structure, the default view) and reads ?circular and ?unused from it (get_view)."""
+    def view(self, query):
+        self._query_params = parse_query_params(query)
+        return produce(self)
+    monkeypatch.setattr(ImportsAdapter, 'get_structure', produce)
+    monkeypatch.setattr(ImportsAdapter, 'get_view', view)
+
+
 def install(monkeypatch, selected=None, replacement=None):
     def produce(self, **kwargs):
         component = 'unused' if 'unused' in self._query_params else 'circular' if 'circular' in self._query_params else 'base'
@@ -27,7 +38,7 @@ def install(monkeypatch, selected=None, replacement=None):
                 raise replacement
             return copy.deepcopy(replacement)
         return child(component)
-    monkeypatch.setattr(ImportsAdapter, 'get_structure', produce)
+    answer_with(monkeypatch, produce)
 
 
 def test_real_recovered_input_keeps_surviving_findings_and_exact_proof(tmp_path):
@@ -138,7 +149,7 @@ def test_findings_counts_keep_all_uncapped_arrays(tmp_path, monkeypatch):
         elif component == 'circular':
             result.update(cycles=[[f'a_{n}.py', f'b_{n}.py'] for n in range(23)], count=23)
         return result
-    monkeypatch.setattr(ImportsAdapter, 'get_structure', produce)
+    answer_with(monkeypatch, produce)
     answer = DepsAdapter(str(tmp_path), 'top=0').get_structure()
     assert answer['analysis']['findings'] == {'circular': 23, 'unused': 25}
     assert len(answer['unused']) == 25 and len(answer['circular']['cycles']) == 23

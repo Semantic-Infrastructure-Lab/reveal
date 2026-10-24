@@ -30,25 +30,44 @@ from ..utils.results import AnalysisCompleteness, ExecutionFacts, ResultBuilder,
 
 # ── Data collectors ────────────────────────────────────────────────────────────
 
+# BACK-1054: deps scans the requested path (imports://'s &scope=path).
+_SCAN = 'scope=path'
+
+
+def _build(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
+    """The default view, from the one import graph a deps request builds (kept for the other views)."""
+    adapter._imports = ImportsAdapter(str(path), _SCAN)
+    return adapter._imports.get_structure()
+
+
+def _view(adapter: 'DepsAdapter', view: str) -> Dict[str, Any]:
+    """A further view of the graph ``_build`` built: no second build (BACK-1054 slice S4; deps
+    composed imports:// three times and built the graph three times)."""
+    child = adapter.__dict__.get('_imports')
+    if child is None:
+        raise ValueError('the base component built no import graph (its error says why)')
+    return child.get_view(f'{view}&{_SCAN}')
+
+
 def _run_base(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
-    """Fetch base import map via ImportsAdapter."""
+    """Fetch base import map via ImportsAdapter (this builds the graph the other components read)."""
     with import_analysis.composed_rules('deps://'):  # BACK-2087
-        result = adapter.compose(ImportsAdapter, str(path), default={}, query='scope=path')  # BACK-1054: deps scans the requested path
+        result = adapter.compose_answer(ImportsAdapter, str(path), lambda: _build(adapter, path), default={})
     adapter._record_component('base', result)
     return result if isinstance(result, dict) and _valid_component_payload('base', result) else {}
 
 
 def _run_circular(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
-    """Fetch circular dependency cycles via ImportsAdapter."""
+    """Fetch circular dependency cycles: imports://?circular of the base component's graph."""
     with import_analysis.composed_rules('deps://'):  # BACK-2087
-        result = adapter.compose(ImportsAdapter, str(path), default={}, query='circular&scope=path')
+        result = adapter.compose_answer(ImportsAdapter, str(path), lambda: _view(adapter, 'circular'), default={})
     adapter._record_component('circular', result)
     return result if _valid_component_payload('circular', result, require_count=False) else {}
 
 
 def _run_unused(adapter: 'DepsAdapter', path: Path) -> List[Dict[str, Any]]:
-    """Fetch unused imports via ImportsAdapter."""
-    data = adapter.compose(ImportsAdapter, str(path), default={}, query='unused&scope=path')
+    """Fetch unused imports: imports://?unused of the base component's graph."""
+    data = adapter.compose_answer(ImportsAdapter, str(path), lambda: _view(adapter, 'unused'), default={})
     adapter._record_component('unused', data)
     return data['unused'] if _valid_component_payload('unused', data, require_count=False) else []
 
@@ -347,7 +366,8 @@ class DepsAdapter(ResourceAdapter):
                 'Top importers by file',
             ],
             'notes': [
-                'Composed entirely from imports:// — not an independent scan.',
+                'Composed entirely from imports:// — three views (the default, ?circular, ?unused) of one graph build, '
+                'not an independent scan.',
                 'The circular verdict counts load-time edges only; the text prints that rule (Rule: line) and '
                 'circular.edge_rule states it in JSON.',
                 'Default --fail-on none reports completed findings without failing; '
@@ -403,7 +423,7 @@ class DepsAdapter(ResourceAdapter):
                 {'uri': 'deps://src', 'description': 'Dependency dashboard for src/', 'output_type': 'deps_scan', 'task': 'quality'},
             ],
             'notes': [
-                'Composed from three imports:// queries (base, ?circular, ?unused) — not an independent scan.',
+                'Composed from three views (base, ?circular, ?unused) of one imports:// graph build — not an independent scan.',
             ],
         }
 
@@ -416,6 +436,7 @@ class DepsAdapter(ResourceAdapter):
             self._clear_request_evidence()
 
     def _clear_request_evidence(self) -> None:
+        self._imports: Optional[ImportsAdapter] = None  # the request's one import graph (BACK-1054)
         self._deps_components: Dict[str, Dict[str, Any]] = {}
         self._deps_findings: Dict[str, Optional[int]] = {}
         self._composed_errors = []

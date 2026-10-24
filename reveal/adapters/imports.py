@@ -1510,6 +1510,24 @@ def _usage_rejection(result: Dict[str, Any]) -> bool:
     return result.get('usage') is True and 'error' in result
 
 
+# The parameters the build reads (where it resolves, under which file cap): one build, one value.
+_BUILD_KEYS = (_SCOPE.name, _ROOT.name, _MAX_FILES.name)
+
+
+def _validate_params(params: QueryParams) -> None:
+    """Validate every supplied value; validation is not application (a preceding query mode may
+    take priority, and the view that applies a value reads it)."""
+    for key, value in params.peek_items():
+        if key == 'rank' and value not in _SCHEMA_QUERY_PARAMS['rank']['values']:
+            choices = ', '.join(_SCHEMA_QUERY_PARAMS['rank']['values'])
+            raise ValueError(f'rank must be one of: {choices}; got {value!r}')
+        if key == _LAZY.name:
+            _LAZY.validate(value)
+        for spec in _REQUEST_SPECS[1:] + PARAM_SPECS[3:5]:
+            if key == spec.name:
+                spec.validate(value)
+
+
 def _incomplete(result: Dict[str, Any]) -> bool:
     """Whether an imports answer is short of its input: a file parsed with errors or lost to a dead
     worker, a walk the file cap cut short, a directory it could not list (D6: exit 3)."""
@@ -1561,16 +1579,7 @@ class ImportsAdapter(ResourceAdapter):
         self._query_params = _typed_params(params) if params is not None else parse_query_params(query or '')
         self.query_params = self._query_params  # the name the declared route reads (D6)
         self._warn_unknown_query_params(self._query_params)  # BACK-507
-        # Validation is not application: a preceding query mode may take priority.
-        for key, value in self._query_params.peek_items():
-            if key == 'rank' and value not in _SCHEMA_QUERY_PARAMS['rank']['values']:
-                choices = ', '.join(_SCHEMA_QUERY_PARAMS['rank']['values'])
-                raise ValueError(f'rank must be one of: {choices}; got {value!r}')
-            if key == _LAZY.name:
-                _LAZY.validate(value)
-            for spec in _REQUEST_SPECS[1:] + PARAM_SPECS[3:5]:
-                if key == spec.name:
-                    spec.validate(value)
+        _validate_params(self._query_params)
         self._local_names_cache: Optional[frozenset] = None  # BACK-1190, lazy
         self._project_namespaces_cache: Optional[set] = None  # BACK-1234, lazy
         # A walk that hid every candidate says so (BACK-2065); set by _build_graph.
@@ -1643,8 +1652,32 @@ class ImportsAdapter(ResourceAdapter):
 
         # Extract imports and build graph
         self._build_graph(target_path)
+        return self._present(query_params, kwargs)
 
-        # Handle query parameters
+    def get_view(self, query: str) -> Dict[str, Any]:
+        """Another view of the graph ``get_structure()`` built, without building it again: a
+        composer that shows several views side by side reads them from one build (deps:// shows
+        the default view, ?circular and ?unused, BACK-1054). ``query`` chooses the view and how it
+        counts (``&lazy``, ``&tests``, ``&top``...); a parameter that would change the build
+        (``&scope``, ``&root``, ``&max_files``) must equal the built one, else ValueError."""
+        params = parse_query_params(query or '')
+        self._warn_unknown_query_params(params)
+        _validate_params(params)
+        changed = [key for key in _BUILD_KEYS
+                   if dict(params.peek_items()).get(key) != dict(self._query_params.peek_items()).get(key)]
+        if changed:
+            raise ValueError(f'get_view cannot change the build ({", ".join(changed)}): construct another adapter')
+        target_path = self._target_path or Path('.').resolve()
+        if not target_path.exists():
+            return self._build_response('imports_error', error=f"Path not found: {target_path}")
+        if self.analysis.graph is None:
+            raise ValueError('get_view reads the graph get_structure() builds, and none was built')
+        self._query_params = self.query_params = params
+        return self._present(params, {})
+
+    def _present(self, query_params: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """The answer the query asks for, from the built graph, with paths as the request spelled them."""
+        target_path = self._target_path or Path('.').resolve()
         result = self._format_view(query_params, kwargs)
         _relativize_imports_paths(result, target_path, self._scan.root if self._scan else None)
         # Read where the view expands: on any other view the flag is unread, and says so.

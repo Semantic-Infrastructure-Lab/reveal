@@ -363,17 +363,21 @@ class TestRunCircular(unittest.TestCase):
     def setUp(self):
         self.adapter = DepsAdapter('/project')
 
-    @patch('reveal.adapters.deps.ImportsAdapter')
-    def test_returns_cycles(self, MockAdapter):
-        MockAdapter.return_value.get_structure.return_value = json.loads(_CIRCULAR_JSON)
+    def test_returns_cycles(self):
+        # BACK-1054: a view of the graph the base component built, not a second build.
+        self.adapter._imports = MagicMock()
+        self.adapter._imports.get_view.return_value = json.loads(_CIRCULAR_JSON)
         result = _run_circular(self.adapter, Path('/project'))
         self.assertEqual(result['count'], 2)
         self.assertEqual(len(result['cycles']), 2)
-        MockAdapter.assert_called_once_with(str(Path('/project')), 'circular&scope=path')
+        self.adapter._imports.get_view.assert_called_once_with('circular&scope=path')
 
-    @patch('reveal.adapters.deps.ImportsAdapter')
-    def test_exception_returns_empty_dict(self, MockAdapter):
-        MockAdapter.return_value.get_structure.side_effect = Exception('fail')
+    def test_exception_returns_empty_dict(self):
+        self.adapter._imports = MagicMock()
+        self.adapter._imports.get_view.side_effect = Exception('fail')
+        self.assertEqual(_run_circular(self.adapter, Path('/project')), {})
+
+    def test_no_base_graph_returns_empty_dict(self):
         self.assertEqual(_run_circular(self.adapter, Path('/project')), {})
 
 
@@ -381,22 +385,20 @@ class TestRunUnused(unittest.TestCase):
 
     def setUp(self):
         self.adapter = DepsAdapter('/project')
+        self.adapter._imports = MagicMock()  # the base component's one build (BACK-1054)
 
-    @patch('reveal.adapters.deps.ImportsAdapter')
-    def test_returns_unused_list(self, MockAdapter):
-        MockAdapter.return_value.get_structure.return_value = json.loads(_UNUSED_JSON)
+    def test_returns_unused_list(self):
+        self.adapter._imports.get_view.return_value = json.loads(_UNUSED_JSON)
         result = _run_unused(self.adapter, Path('/project'))
         self.assertEqual(len(result), 2)
-        MockAdapter.assert_called_once_with(str(Path('/project')), 'unused&scope=path')
+        self.adapter._imports.get_view.assert_called_once_with('unused&scope=path')
 
-    @patch('reveal.adapters.deps.ImportsAdapter')
-    def test_exception_returns_empty_list(self, MockAdapter):
-        MockAdapter.return_value.get_structure.side_effect = Exception('fail')
+    def test_exception_returns_empty_list(self):
+        self.adapter._imports.get_view.side_effect = Exception('fail')
         self.assertEqual(_run_unused(self.adapter, Path('/project')), [])
 
-    @patch('reveal.adapters.deps.ImportsAdapter')
-    def test_missing_unused_key_returns_empty(self, MockAdapter):
-        MockAdapter.return_value.get_structure.return_value = {'other': 'data'}
+    def test_missing_unused_key_returns_empty(self):
+        self.adapter._imports.get_view.return_value = {'other': 'data'}
         self.assertEqual(_run_unused(self.adapter, Path('/project')), [])
 
 
@@ -600,8 +602,11 @@ class TestRunDeps(unittest.TestCase):
         for payload in (base_val, circ_val, unused_val):
             payload.setdefault('metadata', {}).update(files_failed_count=0, files_lost_count=0)
         def recorded(original, payload):
+            # deps reads the base view (get_structure) and two further views of the same
+            # build (get_view, BACK-1054); each collector's child answer is its payload.
             def collect(adapter, path):
-                with patch('reveal.adapters.deps.ImportsAdapter.get_structure', return_value=payload):
+                with patch('reveal.adapters.deps.ImportsAdapter.get_structure', return_value=payload), \
+                        patch('reveal.adapters.deps.ImportsAdapter.get_view', return_value=payload):
                     return original(adapter, path)
             return collect
         return (
