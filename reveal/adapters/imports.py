@@ -266,12 +266,14 @@ def file_loss_warnings(analysis: ImportAnalysis, base: Optional[Path] = None) ->
             continue
         extraction = analysis.extractions.get(path)
         parse = (extraction.diagnostics.get('parse') or {}) if extraction is not None else {}
-        if parse.get('status') == 'partial':
-            partial.append(str(path))
+        read_error = extraction.read_error if extraction is not None else None
+        # Only a file whose tree was never built is unreadable (status 'unavailable', or an OSError);
+        # a failed file with no such record is a parse failure, as it was before BACK-2190.
+        if read_error or parse.get('status') == 'unavailable':
+            unread.append((str(path), f'{read_error}: {parse.get("reason", "")}' if read_error
+                           else str(parse.get('reason') or 'not parsed')))
         else:
-            cause = (f'{extraction.read_error}: {parse.get("reason", "")}' if extraction is not None and extraction.read_error
-                     else str(parse.get('reason') or 'not parsed'))
-            unread.append((str(path), cause))
+            partial.append(str(path))
     warnings = [parse_failure_warning(partial, base), worker_lost_warning([str(p) for p in lost], base),
                 analysis_skipped_warning(unread, base, 'analysis is incomplete; its imports are missing from the '
                                                        'import graph')]
