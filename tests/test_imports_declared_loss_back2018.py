@@ -157,6 +157,10 @@ def test_loss_cli_uri_exit_and_provenance_agree(tmp_path, name):
     for side in (left, right):
         side['execution'].pop('command')
         side['execution'].pop('repo')
+        # A retired noun's two spellings each carry their own note (deps, BACK-1054).
+        warnings = (side.get('meta') or {}).get('warnings')
+        if warnings:
+            side['meta']['warnings'] = [w for w in warnings if w.get('code') != 'retired_spelling']
     assert left == right
 
 

@@ -25,8 +25,23 @@ def argv(transport, query='', cli=()):
     return ['deps', 'proj', *cli] if transport == 'cli' else ['deps://proj'+query]
 
 
+def without_retirement(doc, key):
+    """Each deps spelling is retired (BACK-1054) and carries its own retired_spelling warning;
+    the rest of the answer is compared."""
+    meta = doc.get('meta') or {}
+    retired = [w for w in meta.get('warnings', []) if w.get('code') == 'retired_spelling']
+    assert [w['field'] for w in retired] == [key]
+    meta['warnings'] = [w for w in meta['warnings'] if w.get('code') != 'retired_spelling']
+    if not meta['warnings']:
+        del meta['warnings']
+    if not meta:
+        doc.pop('meta', None)
+
+
 def equal_answers(left, right):
     left, right = copy.deepcopy(left), copy.deepcopy(right)
+    without_retirement(left, 'subcommand:deps')
+    without_retirement(right, 'scheme:deps')
     if 'execution' in left:
         assert left['execution']['command'].startswith('reveal deps ')
         assert right['execution']['command'].startswith('reveal deps://')
