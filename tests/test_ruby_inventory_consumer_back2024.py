@@ -14,6 +14,14 @@ from reveal.analyzers.imports.resolution import ProjectResolver
 pytestmark = pytest.mark.component
 
 
+@pytest.fixture(autouse=True)
+def _cold_build(monkeypatch):
+    """The loss is injected between two builds of one tree; a disk-cached clean graph would hide it.
+    ci-local.sh runs the cache off and CI on (BACK-2056), and depends builds through the engine's
+    disk graph cache since BACK-1054 S6."""
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
+
+
 def write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding='utf-8')

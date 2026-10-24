@@ -16,6 +16,14 @@ from reveal.analyzers.imports.file_index import load_path_manifests
 from reveal.utils.exclusions import exclusion_scope
 
 
+@pytest.fixture(autouse=True)
+def _cold_build(monkeypatch):
+    """The loss is injected between two builds of one tree; a disk-cached clean graph would hide it.
+    ci-local.sh runs the cache off and CI on (BACK-2056), and depends builds through the engine's
+    disk graph cache since BACK-1054 S6."""
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
+
+
 def write(path, source):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(source, encoding='utf-8')
