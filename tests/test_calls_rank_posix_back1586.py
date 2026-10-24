@@ -31,3 +31,25 @@ def test_rank_by_callers_keeps_a_forward_slash_file_as_it_is(monkeypatch):
     ranked = calls_index.rank_by_callers('.', top=0)
 
     assert [rec['file'] for entry in ranked['entries'] for rec in entry['callers']] == ['pkg/a.py']
+
+
+class _Source:
+    """The slice of CalleeSource ``find_callees`` reads."""
+
+    skipped = ()
+    traversal_failures = ()
+
+    def __init__(self, definitions):
+        self.definitions = definitions
+
+
+def test_find_callees_matches_name_their_file_with_forward_slashes():
+    from types import SimpleNamespace
+
+    # A definition as the walker records it on Windows: the native spelling.
+    definition = SimpleNamespace(name='run', file='pkg\\a.py', line=3, calls=['target'], family='python',
+                                 references=[], reference_only_calls=[])
+
+    found = calls_index.find_callees('.', 'run', source=_Source([definition]))
+
+    assert [m['file'] for m in found['matches']] == ['pkg/a.py']
