@@ -175,6 +175,34 @@ def test_a_convention_row_is_cited_by_the_line_that_names_the_constant(tmp_path)
     assert inv.check_importer_citations(importers, default_view, bad, tmp_path)['status'] == 'red'
 
 
+class InProcessRequests(inv.Requests):
+    """The runner's request layer answered in-process (no `python -m reveal` spawn per request)."""
+
+    def get(self, argv):
+        result = _run_reveal_in(self.cwd, *argv)
+        row = {'argv': argv, 'status': 'ok', 'exit_code': result.returncode, 'stderr': result.stderr}
+        try:
+            row['json'] = json.loads(result.stdout)
+        except ValueError:
+            row['status'] = 'no_json'
+        self.log.append({'argv': argv, 'exit_code': result.returncode, 'partial': None})
+        return row
+
+
+def test_a_package_directory_module_is_cited_through_one_of_its_files(tmp_path):
+    """Go answers per package: the directory view names the package directory (`lib`), and
+    ?importers=lib on a directory is the summary of everything under it, not that module's
+    importers. The runner asks for one file of the package, which the graph maps to the package."""
+    proj = tmp_path / 'gomod'
+    (proj / 'lib').mkdir(parents=True)
+    (proj / 'go.mod').write_text('module example.com/m\n\ngo 1.21\n', encoding='utf-8')
+    (proj / 'lib' / 'lib.go').write_text('package lib\n\nfunc Hello() string { return "hi" }\n', encoding='utf-8')
+    (proj / 'main.go').write_text('package main\n\nimport "example.com/m/lib"\n\nfunc main() { lib.Hello() }\n',
+                                  encoding='utf-8')
+    rows = inv.run_imports(InProcessRequests({}, tmp_path, 60), 'gomod', proj, ('importer_citations',), 3)
+    assert [(r['invariant'], r['status'], r['population']) for r in rows] == [('importer_citations', 'green', 1)], rows
+
+
 # ── engine-level red control (imports) ────────────────────────────────────────
 
 def test_an_engine_that_loses_one_reverse_edge_turns_both_import_invariants_red(root, monkeypatch):
