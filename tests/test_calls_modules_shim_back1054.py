@@ -375,3 +375,20 @@ def test_the_builder_drops_a_self_import():
     data = calls_index.module_graph_from_importers(answer, 'proj')
     assert [(e['from'], e['to']) for e in data['edges']] == [('proj/main.py', 'proj/app.py')]
     assert data['outside_path_edges'] == 0
+
+
+def test_a_failed_imports_build_names_the_directory_with_slashes(fx2, monkeypatch):
+    """The error path leaves the engine too: when the imports child fails, compose records it with the
+    directory it was asked about, which must be '/'-spelled (a Windows directory, simulated)."""
+    from pathlib import PureWindowsPath
+
+    def boom(self):
+        raise OSError('controlled imports failure')
+
+    monkeypatch.setattr(ImportsAdapter, 'get_structure', boom)
+    monkeypatch.setattr(CallsAdapter, '_directory', lambda self: PureWindowsPath('C:\\proj\\src'))
+    result = CallsAdapter(str(fx2), 'modules').get_structure()
+    (error,) = result['meta']['errors']
+    assert error['code'] == 'E_COMPOSE' and error['file'] == 'C:/proj/src', error
+    assert result['path'] == 'C:/proj/src' and result['edges'] == []
+    assert CallsAdapter.execution_facts(result).completeness.value == 'failed'
