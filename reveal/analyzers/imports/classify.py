@@ -148,6 +148,8 @@ def _tally_import(
         # import past the name-only heuristic above -- honor that here too,
         # rather than still tallying it as an external package.
         return True
+    if key is None:  # 'internal' or 'skip': nothing is counted by name
+        return bucket == 'internal'
     if bucket == 'stdlib':
         stdlib_counts[key] += 1
     elif bucket == 'external':
