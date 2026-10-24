@@ -65,8 +65,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from imports_fold_snapshot import (UNGATED, _git_head, corpus_root, gated_corpora, parse_corpus_spec,
-                                   request_env, reveal_location, run_request, scan_spelling, source_digest)
+from imports_fold_snapshot import (UNGATED, _git_head, _representative_file, corpus_root, gated_corpora,
+                                   parse_corpus_spec, request_env, reveal_location, run_request, scan_spelling,
+                                   source_digest)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FORMAT_VERSION = 1
@@ -430,20 +431,36 @@ def run_imports(req: Requests, scan: str, scan_dir: Path, only: Tuple[str, ...],
         if err1 or err3 or importers is None or default_view is None:
             rows.append(error_row('importer_citations', err1 or err3 or ''))
         else:
-            per_target: Dict[str, Dict[str, Any]] = {}
-            failed = []
-            for target in citation_targets(importers, default_view, citations):
-                answer, err = req.answer([f'imports://{scan}?importers={_quoted(target)}&{pinned}', '--format', 'json'])
-                if answer is None:
-                    failed.append(err)
-                else:
-                    per_target[target] = answer
-            row = check_importer_citations(importers, default_view, per_target, scan_dir)
-            rows.append(error_row('importer_citations', '; '.join(failed)) if failed else row)
+            rows.append(run_citations(req, scan, scan_dir, importers, default_view, citations))
     label = _partial_label(req.log[start:])
     for row in rows:
         row['partial'] = label
     return rows
+
+
+def per_file_spelling(scan_dir: Path, module: str) -> str:
+    """How to ask ?importers= for ``module``: itself, or for a package-directory module (Go answers
+    per package) one file of it, which the graph maps to the package; ?importers=<dir> is the
+    summary of every module under that directory, not the module's importers."""
+    path = scan_dir / module
+    rep = _representative_file(path) if path.is_dir() else None
+    return rep.relative_to(scan_dir).as_posix() if rep else module
+
+
+def run_citations(req: Requests, scan: str, scan_dir: Path, importers: Dict[str, Any],
+                  default_view: Dict[str, Any], citations: int) -> Dict[str, Any]:
+    pinned = f'root={_quoted(scan)}'
+    per_target: Dict[str, Dict[str, Any]] = {}
+    failed = []
+    for target in citation_targets(importers, default_view, citations):
+        spelled = _quoted(per_file_spelling(scan_dir, target))
+        answer, err = req.answer([f'imports://{scan}?importers={spelled}&{pinned}', '--format', 'json'])
+        if answer is None:
+            failed.append(err or '')
+        else:
+            per_target[target] = answer
+    row = check_importer_citations(importers, default_view, per_target, scan_dir)
+    return error_row('importer_citations', '; '.join(failed)) if failed else row
 
 
 def run_calls(req: Requests, scan: str, only: Tuple[str, ...], n_callers: int, n_names: int,
