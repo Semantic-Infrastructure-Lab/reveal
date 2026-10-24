@@ -157,6 +157,24 @@ def test_external_counts_importers_from_the_whole_project_root(tmp_path):
                                   for a, b in _import_edges(root / 'pkg', 'importers')}
 
 
+def test_an_import_resolved_outside_the_path_is_counted_not_an_edge(tmp_path):
+    """With scope=path imports also answers for a target above the scan root (src/a.ts imports
+    ../package.json), spelled as a host path. calls ?modules kept both ends under the path; the shim
+    does too, and counts what it left out instead of printing a host path (typescript/src: 9 edges)."""
+    root = _write(tmp_path / 'ts', {'package.json': '{"name": "fx", "version": "1"}\n',
+                                    'src/a.ts': "import pkg from '../package.json';\nimport { b } from './b';\n"
+                                                'export const a = () => [pkg, b];\n',
+                                    'src/b.ts': 'export const b = 1;\n'})
+    result = CallsAdapter(str(root / 'src'), 'modules').get_structure()
+    inside = (root / 'src').as_posix() + '/'
+    assert [e for e in result['edges'] if not (e['from'].startswith(inside) and e['to'].startswith(inside))] == []
+    assert _edges(result, root / 'src') == {('a.ts', 'b.ts')}
+    assert result['outside_path_edges'] == 1
+    assert 'package.json' not in json.dumps(result)  # no host path, no edge
+    # Positive control: imports itself has the edge to package.json under scope=path.
+    assert ('a.ts', 'package.json') in {(src, Path(f).name) for src, f in _import_edges(root / 'src')}
+
+
 def test_one_import_build_and_no_structure_walk(fx2, monkeypatch):
     """The shim builds the import graph once and never collects call structures (the old engine
     collected every file's structure and resolved every call)."""
