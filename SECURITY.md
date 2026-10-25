@@ -2,16 +2,15 @@
 title: Reveal Security Policy
 type: documentation
 category: security
-date: 2025-12-01
+date: 2026-10-25
 ---
 
 # Security Policy
 
 ## Reporting Security Issues
 
-If you discover a security vulnerability, please email: scottsen@users.noreply.github.com
-
-**Please do not open public issues for security vulnerabilities.**
+If you discover a security vulnerability, please file it as an issue:
+https://github.com/Semantic-Infrastructure-Lab/reveal/issues
 
 ## What Reveal Does
 
