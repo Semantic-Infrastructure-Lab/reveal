@@ -383,7 +383,8 @@ These gates run continuously alongside the steps above:
   Each of those rules came after its break. V026 now also follows a `.relative_to()` local into
   `str()`/f-strings (the largest class of the 15 macOS/Windows-only breaks since
   2026-09-01); still unlinted: output-boundary path keys (BACK-1740), a symlinked-TMPDIR run
-  (BACK-1741), shared-file appends from pool workers (BACK-1742).
+  (BACK-1741). Shared-file appends from pool workers need no rule: the scan found only
+  safe fork-only writers (BACK-1721; optional per-worker files are BACK-1730).
 - Dead pool workers: a dead worker must cost only its own files, never the run. `check`,
   `stats://`, `imports://`, I002 and `grep_files` hand work out through one helper
   (`utils.parallel.submit_each`). A lost file is disclosed as lost (`worker_lost`) in each of
