@@ -98,7 +98,7 @@ Classes (2):
 - What classes exist
 - Import dependencies
 
-**Token cost:** ~100 tokens (vs 7,500 for full file)
+**Token cost:** ~150 tokens (vs ~1,800 for the full file)
 
 **Next:** Extract a specific function to understand its logic.
 
@@ -127,7 +127,7 @@ app.py:15-27 | load_config
 - Line numbers (works with vim, IDEs, git)
 - Only saw what you needed (not 247 lines)
 
-**Token cost:** ~50 tokens (vs 7,500 for full file)
+**Token cost:** ~60 tokens (vs ~1,800 for the full file)
 
 **Also works with line numbers** — from a traceback, grep output, or GitHub link:
 ```bash
@@ -149,13 +149,13 @@ reveal README.md --section "Usage"   # Same thing, explicit flag
 **Problem:** Too many results? Filter them.
 
 ```bash
-# Show first 5 functions only
+# First 5 items in each section (imports, functions, classes)
 reveal src/app.py --head 5
 
-# Show last 3 classes only
+# Last 3 items in each section
 reveal src/app.py --tail 3
 
-# Show functions 10-20
+# Items 10-20 in each section
 reveal src/app.py --range 10-20
 ```
 
@@ -177,13 +177,13 @@ reveal src/app.py handle_request
 ```
 
 **Why this matters:**
-- **Token efficiency:** 100 tokens instead of 7,500
+- **Token efficiency:** ~150 tokens instead of ~1,800
 - **Cognitive clarity:** See structure before details
 - **Time savings:** Find what you need without reading everything
 
 ---
 
-## Subcommands (v0.57.0+, expanded through v0.87.0)
+## Subcommands
 
 Reveal includes intent-based subcommands for common workflows:
 
@@ -214,14 +214,14 @@ reveal hotspots src/ --format json | jq '.function_hotspots[] | select(.has_test
 reveal architecture src/          # Entry points, core abstractions, circular groups, risks
 reveal overview .                 # One-glance dashboard: stats, quality, architecture, git
 
-# Execution and boundary analysis (v0.85.0+)
+# Execution and boundary analysis
 reveal calls src/ --callees main --depth 2 --detail  # What main calls, level by level, with side effects
 reveal contracts src/             # ABC/Protocol/TypedDict/Pydantic contract inventory
 reveal surface src/               # External boundary map: CLI args, routes, env vars, I/O
 
 # Developer tools
-reveal dev new-adapter            # Scaffold a new adapter
-reveal dev new-rule               # Scaffold a quality rule
+reveal dev new-adapter <name>     # Scaffold a new adapter
+reveal dev new-rule <code> <name> # Scaffold a quality rule
 reveal dev inspect-config         # Show effective .reveal.yaml
 ```
 
@@ -235,7 +235,6 @@ reveal dev inspect-config         # Show effective .reveal.yaml
 ```bash
 git diff main..feature | cat
 # 15,000 lines of diff
-# 500,000 tokens
 # 10 minutes to read
 ```
 
@@ -262,7 +261,6 @@ reveal diff://git://main/.:git://feature/.
 find . -name "*.py" | xargs cat
 # Read everything
 # 100,000+ lines
-# 2,500,000+ tokens
 # Hours of work
 ```
 
@@ -323,11 +321,9 @@ reveal 'imports://./src'
 reveal 'diff://file1.py:file2.py'
 
 # Get codebase statistics
-reveal 'stats://.'
+reveal 'metrics://.'
 
 # SSL certificate inspection
-reveal autossl://latest         # cPanel AutoSSL run results (per-domain TLS status)
-
 reveal ssl://example.com              # Overview
 reveal ssl://example.com --check      # Health check
 
@@ -359,7 +355,7 @@ reveal help://ssl        # Learn about ssl:// adapter
 ```bash
 reveal --help                    # CLI help
 reveal help://quick              # AI agent compact intent router (~1,600 tokens)
-reveal --agent-help              # AI agent orientation (~1,200 tokens; help://agent/full for the rest)
+reveal --agent-help              # AI agent orientation (~1,500 tokens; help://agent/full for the rest)
 reveal help://                   # List all help topics
 reveal help://markdown           # Markdown analysis guide
 reveal help://tricks             # Power user workflows
@@ -395,8 +391,6 @@ reveal help://anti-patterns      # What NOT to do
 ---
 
 **Got 5 more minutes?** Read [RECIPES.md](guides/RECIPES.md) for practical workflows.
-
-**Ready to go deep?** Read [RECIPES.md](guides/RECIPES.md) for complete workflows and patterns.
 
 ---
 
