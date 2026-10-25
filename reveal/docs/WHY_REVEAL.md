@@ -315,7 +315,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 4. **`reveal overview` + `reveal imports`** — codebase orientation dashboard and dependency health. `reveal imports --circular` and `--unused` find circular import chains and unused imports across a full project, `--external` lists the packages it uses; `reveal overview` synthesises file count, language breakdown, quality score, and git velocity into a single output.
 
-5. **59 quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required. `reveal --rules` lists them live; `--all` adds reveal's own dogfooding self-checks.
+5. **Quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required. `reveal --rules` lists them live; `--all` adds reveal's own dogfooding self-checks.
 
 6. **`reveal pack --since <branch> --budget N`** — PR-aware codebase snapshots. Changed files boosted to priority tier 0; remaining budget fills with entry points and complexity leaders. Built for agents, not retrofitted.
 
