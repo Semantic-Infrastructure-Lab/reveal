@@ -135,7 +135,7 @@ reveal health --all
 # Check specific resources (SSL + domain in one pass)
 reveal health ssl://api.example.com domain://example.com
 
-# CI/CD pipeline: exit 0 clean, exit 1 warnings, exit 2 errors
+# CI/CD pipeline: exit 0 pass, 1 findings, 3 a check was lost or incomplete
 reveal health ssl://api.example.com && deploy.sh || alert_oncall.sh
 
 # JSON output for monitoring
@@ -299,7 +299,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 | Universal operators (`=`, `~=`, `>`, `!`, `..`, `*`) | Filter expressions transfer across adapters without learning new syntax |
 | `--stdin` piping | Output of one adapter is input to the next |
 | Structured JSON output | Every query is composable with `jq`, scripts, and AI agents |
-| Exit code discipline (0/1/2) | Every check is a valid CI gate with no configuration |
+| Exit code discipline (0 clean, 1 findings, 2 invalid input, 3 incomplete) | Every check is a valid CI gate with no configuration |
 | Token budgeting | First-class LLM context constraint, not a workaround |
 | `reveal://` self-reference | The tool introspects itself using its own syntax |
 
@@ -315,7 +315,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 4. **`reveal overview` + `reveal imports`** — codebase orientation dashboard and dependency health. `reveal imports --circular` and `--unused` find circular import chains and unused imports across a full project, `--external` lists the packages it uses; `reveal overview` synthesises file count, language breakdown, quality score, and git velocity into a single output.
 
-5. **97 quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required.
+5. **59 quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required. `reveal --rules` lists them live; `--all` adds reveal's own dogfooding self-checks.
 
 6. **`reveal pack --since <branch> --budget N`** — PR-aware codebase snapshots. Changed files boosted to priority tier 0; remaining budget fills with entry points and complexity leaders. Built for agents, not retrofitted.
 
@@ -337,7 +337,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 |---|---|
 | `ast://` | Functions, classes, complexity, decorators — every language `reveal --languages` lists |
 | `calls://` | Cross-file call graph with coupling metrics |
-| `stats://` | Codebase quality scores, hotspots, duplication |
+| `metrics://` | Codebase quality scores, hotspots, duplication (was `stats://`) |
 | `imports://` | Dependency graph, circular imports, unused imports |
 | `depends://` | Reverse import graph — find everything that depends on a module |
 | `diff://` | Structural diff between branches, commits, or files |

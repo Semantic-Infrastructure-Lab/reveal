@@ -39,7 +39,7 @@ design when run) — or, on ordinary commands, an automatic PyPI version check:
   `tree-sitter-language-pack` dependency does **not** ship all language
   grammars inside its wheel. The first time reveal parses a file in a
   language it hasn't parsed before on that machine, the pack downloads an
-  ~18–21MB platform-specific bundle from
+  platform-specific bundle (tens of MB, varying by pack version) from
   `github.com/xberg-io/tree-sitter-language-pack` (GitHub Releases),
   SHA256-verified, and caches it at
   `~/.cache/tree-sitter-language-pack/v<version>/`. Subsequent parses of any
@@ -105,7 +105,7 @@ Findings:
 
 - ✅ Read-only file access
 - ✅ No code execution from analyzed files
-- ✅ Minimal dependencies (pyyaml, rich, tree-sitter)
+- ✅ Small dependency set: pyyaml, jsonschema, rich, tree-sitter (with `tree-sitter-language-pack`), beautifulsoup4 and cryptography (see `pyproject.toml`); network and database adapters add optional extras
 - ✅ Path traversal protection via `pathlib`
 - ✅ UTF-8 encoding with error handling
 

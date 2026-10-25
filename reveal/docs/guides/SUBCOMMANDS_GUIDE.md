@@ -140,17 +140,14 @@ reveal health --all
 
 | Code | Meaning |
 |------|---------|
-| `0` | All checks pass |
-| `1` | Warnings (non-critical issues) |
-| `2` | Failures (action required) |
+| `0` | Every target checked and passed |
+| `1` | A finding matches the gate (`--fail-on findings`, the default) |
+| `3` | A check was lost: target not found, unsupported scheme, child error, signal, timeout or malformed answer |
 
-JSON records an `outcome` for each file, directory or URI target. A completed
-answer is `ok` (findings still determine its exit code); a capped, skipped or
-degraded answer is `partial`/`skipped` (exit 1); an inapplicable target is
-`not_applicable` (exit 1). Child errors, signals, timeouts and malformed successful
-answers are `failed` and can never report healthy. A single degraded source file
-and a directory containing it both warn with exit 1. `high` and `critical`
-findings retain separate labels and both require action (exit 2).
+`health` never exits 2. `--fail-on none` reports findings without failing. A lost
+check is never reported as healthy: the text summary says `INCOMPLETE` and the JSON
+carries `overall_exit: 3`. JSON also records an `outcome` for each file, directory or
+URI target.
 
 ### Examples
 
