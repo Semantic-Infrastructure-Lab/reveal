@@ -4,203 +4,127 @@ category: reference
 ---
 # Reveal Documentation Index
 
-**Complete catalog of all user-facing documentation**
+Every user-facing doc, one line each. The same material is browsable from the CLI:
+`reveal help://` lists every help topic and adapter live, and
+`reveal 'markdown://reveal/docs/?link-graph'` shows how these files link to each other.
+Line counts and file totals are deliberately not listed here; they drift.
 
-**Last Updated**: 2026-06-30
-**Total**: 56 markdown files, ~46,000 lines
-
----
-
-## Quick Navigation
+## Start here
 
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](guides/RECIPES.md)
-- **Adapters** → See [Adapter Guides](#adapter-guides-29-files) below
-- **nginx / cPanel operator** → [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md)
-- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (4,233 lines)
-- **Developers** → [Development Guides](#development-guides-4-files)
+- **AI agents** → [AGENT_HELP.md](AGENT_HELP.md) (or `reveal --agent-help`, `reveal help://quick`)
+- **nginx / cPanel operators** → [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md), [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md)
+- **Contributors** → [ARCHITECTURE.md](../../ARCHITECTURE.md), then [Development Guides](#development-guides)
+
+## User guides
+
+| File | Description |
+|------|-------------|
+| [README.md](README.md) | Documentation overview and navigation |
+| [QUICK_START.md](QUICK_START.md) | 5-minute introduction |
+| [WHY_REVEAL.md](WHY_REVEAL.md) | What makes Reveal powerful, with examples |
+| [WHAT_IS_REVEAL_GOOD_FOR.md](guides/WHAT_IS_REVEAL_GOOD_FOR.md) | Jobs-to-be-done guide: where Reveal is strongest |
+| [BENCHMARKS.md](BENCHMARKS.md) | Measured token reduction on real scenarios |
+| [INSTALL_GUIDE.md](guides/INSTALL_GUIDE.md) | Optional extras and network requirements (`reveal help://install`) |
+| [MCP_SETUP.md](guides/MCP_SETUP.md) | MCP server setup for Claude Code, Cursor, Windsurf |
+| [CI_RECIPES.md](guides/CI_RECIPES.md) | GitHub Actions and GitLab CI YAML: PR review, complexity gate, hotspot tracking, SSL checks |
+| [RECIPES.md](guides/RECIPES.md) | Task-based workflows and multi-adapter patterns |
+| [NAV_GUIDE.md](guides/NAV_GUIDE.md) | Deep-dive code navigation flags: `--boundary`, `--varflow`, `--sideeffects` |
+| [UX_GUIDE.md](guides/UX_GUIDE.md) | CLI flags vs URI query parameters: when to use each |
+| [SUBCOMMANDS_GUIDE.md](guides/SUBCOMMANDS_GUIDE.md) | Reference for the subcommands (`check`, `health`, `pack`, `dev`, and the retired names that map to new ones) |
+| [TESTABILITY_GUIDE.md](guides/TESTABILITY_GUIDE.md) | Test patch pressure joined with production boundary fan-out (`reveal patches --view pressure`) |
+
+## Adapter guides
+
+One guide per URI adapter, named `<ADAPTER>_ADAPTER_GUIDE.md` and served as `reveal 'help://<adapter>'`.
+They live in the `adapters/` directory.
+
+| File | Description |
+|------|-------------|
+| [ARCHITECTURE_ADAPTER_GUIDE.md](adapters/ARCHITECTURE_ADAPTER_GUIDE.md) | Entry points, core abstractions, risks |
+| [AST_ADAPTER_GUIDE.md](adapters/AST_ADAPTER_GUIDE.md) | Code analysis with complexity and size filtering |
+| [AUTOSSL_ADAPTER_GUIDE.md](adapters/AUTOSSL_ADAPTER_GUIDE.md) | cPanel AutoSSL run logs: per-domain TLS outcomes, DCV failures |
+| [CALLS_ADAPTER_GUIDE.md](adapters/CALLS_ADAPTER_GUIDE.md) | Cross-file call graph: callers, callees, coupling |
+| [CLAUDE_ADAPTER_GUIDE.md](adapters/CLAUDE_ADAPTER_GUIDE.md) | Claude Code session analysis and tool usage |
+| [CODEX_ADAPTER_GUIDE.md](adapters/CODEX_ADAPTER_GUIDE.md) | OpenAI Codex CLI session analysis |
+| [CONTRACTS_ADAPTER_GUIDE.md](adapters/CONTRACTS_ADAPTER_GUIDE.md) | Contracts and architectural seams |
+| [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md) | cPanel user environment: domains, SSL, ACL health |
+| [DEPENDS_ADAPTER_GUIDE.md](adapters/DEPENDS_ADAPTER_GUIDE.md) | Reverse module dependency graph: who imports this module |
+| [DEPS_ADAPTER_GUIDE.md](adapters/DEPS_ADAPTER_GUIDE.md) | Dependency health: third-party packages, circular and unused imports |
+| [DIFF_ADAPTER_GUIDE.md](adapters/DIFF_ADAPTER_GUIDE.md) | Git diff analysis and structural comparison |
+| [DOMAIN_ADAPTER_GUIDE.md](adapters/DOMAIN_ADAPTER_GUIDE.md) | Domain, DNS and WHOIS analysis |
+| [ENV_ADAPTER_GUIDE.md](adapters/ENV_ADAPTER_GUIDE.md) | Environment variable analysis and validation |
+| [GIT_ADAPTER_GUIDE.md](adapters/GIT_ADAPTER_GUIDE.md) | Commits, branches, tags, blame |
+| [HOTSPOTS_ADAPTER_GUIDE.md](adapters/HOTSPOTS_ADAPTER_GUIDE.md) | Files and functions most likely to need attention (complexity and churn) |
+| [IMPORTS_ADAPTER_GUIDE.md](adapters/IMPORTS_ADAPTER_GUIDE.md) | Import dependency analysis across languages |
+| [JSON_ADAPTER_GUIDE.md](adapters/JSON_ADAPTER_GUIDE.md) | JSON/JSONL analysis with JMESPath |
+| [LETSENCRYPT_ADAPTER_GUIDE.md](adapters/LETSENCRYPT_ADAPTER_GUIDE.md) | Let's Encrypt certificate inventory: orphan and duplicate detection |
+| [METRICS_ADAPTER_GUIDE.md](adapters/METRICS_ADAPTER_GUIDE.md) | Codebase metrics, file hotspots and provenance (replaces `stats://` and `classify://`) |
+| [MYSQL_ADAPTER_GUIDE.md](adapters/MYSQL_ADAPTER_GUIDE.md) | MySQL introspection and schema analysis |
+| [OVERVIEW_ADAPTER_GUIDE.md](adapters/OVERVIEW_ADAPTER_GUIDE.md) | One-glance dashboard: languages, quality, git |
+| [PATCHES_ADAPTER_GUIDE.md](adapters/PATCHES_ADAPTER_GUIDE.md) | Test patch pressure: repeated mocks, private patches |
+| [PYTHON_ADAPTER_GUIDE.md](adapters/PYTHON_ADAPTER_GUIDE.md) | Python runtime introspection |
+| [REVEAL_ADAPTER_GUIDE.md](adapters/REVEAL_ADAPTER_GUIDE.md) | Reveal introspection (analyzers, adapters, config); reference implementation |
+| [SQLITE_ADAPTER_GUIDE.md](adapters/SQLITE_ADAPTER_GUIDE.md) | SQLite introspection and schema analysis |
+| [SSL_ADAPTER_GUIDE.md](adapters/SSL_ADAPTER_GUIDE.md) | SSL/TLS certificate analysis and validation |
+| [SURFACE_ADAPTER_GUIDE.md](adapters/SURFACE_ADAPTER_GUIDE.md) | External boundary map: CLI args, HTTP routes, env vars, exported symbols |
+| [XLSX_ADAPTER_GUIDE.md](adapters/XLSX_ADAPTER_GUIDE.md) | Excel file analysis and data extraction |
+
+**Pointer stubs** (kept because rule V024 requires a guide file for every registered adapter):
+[CLASSIFY](adapters/CLASSIFY_ADAPTER_GUIDE.md) and [STATS](adapters/STATS_ADAPTER_GUIDE.md) are retired into `metrics://`;
+[TRACE](adapters/TRACE_ADAPTER_GUIDE.md) into `calls://?callees=&depth=&detail`;
+[TESTABILITY](adapters/TESTABILITY_ADAPTER_GUIDE.md) into `patches://`;
+[PACK](adapters/PACK_ADAPTER_GUIDE.md) points at the `pack` section of the Subcommands guide.
+
+**Adapters without a dedicated guide:** `markdown://` ([MARKDOWN_GUIDE.md](adapters/MARKDOWN_GUIDE.md)),
+`nginx://` ([NGINX_GUIDE.md](adapters/NGINX_GUIDE.md)), `help://` (use `reveal help://`), and
+`demo://` (scaffolding template only, not registered by default; see [SCAFFOLDING_GUIDE.md](development/SCAFFOLDING_GUIDE.md)).
+
+## Analyzer guides
+
+| File | Description |
+|------|-------------|
+| [ANALYZER_PATTERNS.md](development/ANALYZER_PATTERNS.md) | Code analysis patterns and best practices |
+| [ELIXIR_ANALYZER_GUIDE.md](development/ELIXIR_ANALYZER_GUIDE.md) | Elixir analyzer |
+| [HTML_GUIDE.md](adapters/HTML_GUIDE.md) | HTML analysis and template extraction |
+| [MARKDOWN_GUIDE.md](adapters/MARKDOWN_GUIDE.md) | Markdown analysis, headings, frontmatter |
+| [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) | `nginx://` adapter and config analyzer (N001–N012 rules, ACME/SSL audits) |
+
+## Reference
+
+| File | Description |
+|------|-------------|
+| [QUERY_SYNTAX_GUIDE.md](guides/QUERY_SYNTAX_GUIDE.md) | Universal query operators and result control |
+| [QUERY_PARAMETER_REFERENCE.md](guides/QUERY_PARAMETER_REFERENCE.md) | Query parameters for every adapter |
+| [FIELD_SELECTION_GUIDE.md](guides/FIELD_SELECTION_GUIDE.md) | Token reduction with `--fields` and budgets |
+| [ELEMENT_DISCOVERY_GUIDE.md](guides/ELEMENT_DISCOVERY_GUIDE.md) | Progressive disclosure with `available_elements` |
+| [OUTPUT_CONTRACT.md](development/OUTPUT_CONTRACT.md) | JSON output specification (adapter-author-facing) |
+| [CONTRACT_VERSIONS.md](development/CONTRACT_VERSIONS.md) | Output contract version policy |
+| [OUTPUT_DIAGNOSTICS_GUIDE.md](OUTPUT_DIAGNOSTICS_GUIDE.md) | `--format`, the meta trust envelope, `--provenance`, `--perf`: which one do I need |
+| [CONFIGURATION_GUIDE.md](guides/CONFIGURATION_GUIDE.md) | `.reveal.yaml`, configuration options, custom analyzer plugins |
+| [DUPLICATE_DETECTION_GUIDE.md](guides/DUPLICATE_DETECTION_GUIDE.md) | Duplicate detection algorithms |
+| [SCHEMA_VALIDATION_HELP.md](guides/SCHEMA_VALIDATION_HELP.md) | Frontmatter schema validation |
+| `rules/V026.md`, `rules/V036.md` to `rules/V042.md` | Per-rule pages for the validation rules of the same codes |
+
+## Development guides
+
+| File | Description |
+|------|-------------|
+| [ARCHITECTURE.md](../../ARCHITECTURE.md) | **Start here**: URI routing, adapter lifecycle, output contract, query pipeline, help tiers |
+| [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md) | Create custom adapters |
+| [ADAPTER_CONSISTENCY.md](development/ADAPTER_CONSISTENCY.md) | Adapter UX patterns and consistency |
+| [RULE_AUTHORING_GUIDE.md](development/RULE_AUTHORING_GUIDE.md) | Write your own quality rules (user-global and project-local) |
+| [CLI_INTEGRATION_GUIDE.md](development/CLI_INTEGRATION_GUIDE.md) | Add a top-level subcommand |
+| [SCAFFOLDING_GUIDE.md](development/SCAFFOLDING_GUIDE.md) | `reveal dev new-*` scaffolding |
+| [HELP_SYSTEM_GUIDE.md](development/HELP_SYSTEM_GUIDE.md) | Help system internals (`help://` adapter) |
+| [WINDOWS_SIGNING.md](development/WINDOWS_SIGNING.md) | Windows Application Control problem, SignPath Foundation plan, PyInstaller signing pipeline |
+
+## AI agent reference
+
+| File | Description |
+|------|-------------|
+| [AGENT_HELP.md](AGENT_HELP.md) | Complete AI agent reference (`reveal help://agent/full`; `reveal --agent-help` prints the orientation section) |
 
 ---
 
-## User Guides (8 files)
-
-| File | Lines | Description |
-|------|-------|-------------|
-| [README.md](README.md) | 147 | Documentation overview and navigation |
-| [WHY_REVEAL.md](WHY_REVEAL.md) | — | What makes Reveal powerful — key capabilities with examples |
-| [QUICK_START.md](QUICK_START.md) | 374 | 5-minute introduction for new users |
-| [WHAT_IS_REVEAL_GOOD_FOR.md](guides/WHAT_IS_REVEAL_GOOD_FOR.md) | — | Organized jobs-to-be-done guide: where Reveal is strongest |
-| [BENCHMARKS.md](BENCHMARKS.md) | — | Measured 3.9–33x token reduction — 5 real scenarios with exact numbers |
-| [MCP_SETUP.md](guides/MCP_SETUP.md) | — | MCP server setup for Claude Code, Cursor, Windsurf — 10 tools, stdio/SSE transports |
-| [CI_RECIPES.md](guides/CI_RECIPES.md) | — | GitHub Actions and GitLab CI ready-to-paste YAML: PR review, complexity gate, hotspot tracking, SSL checks |
-| [RECIPES.md](guides/RECIPES.md) | — | Task-based workflows, multi-adapter patterns, and real-world scenarios |
-| [TESTABILITY_GUIDE.md](guides/TESTABILITY_GUIDE.md) | — | Test patch pressure joined with production boundary fan-out (`reveal patches --view pressure`, was `reveal testability`) |
-
----
-
-## Adapter Guides (29 files)
-
-Complete guides for all URI protocol adapters.
-
-| File | Lines | Purpose |
-|------|-------|---------|
-| [ARCHITECTURE_ADAPTER_GUIDE.md](adapters/ARCHITECTURE_ADAPTER_GUIDE.md) | 75 | Targeted architectural briefing: entry points, core abstractions, risks |
-| [AST_ADAPTER_GUIDE.md](adapters/AST_ADAPTER_GUIDE.md) | 1329 | AST-based code analysis with complexity/size filtering |
-| [AUTOSSL_ADAPTER_GUIDE.md](adapters/AUTOSSL_ADAPTER_GUIDE.md) | 255 | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |
-| [CALLS_ADAPTER_GUIDE.md](adapters/CALLS_ADAPTER_GUIDE.md) | 622 | Cross-file call graph queries (calls://) |
-| [CLAUDE_ADAPTER_GUIDE.md](adapters/CLAUDE_ADAPTER_GUIDE.md) | 2321 | Claude CLI session analysis and tool usage tracking |
-| [CODEX_ADAPTER_GUIDE.md](adapters/CODEX_ADAPTER_GUIDE.md) | 326 | OpenAI Codex CLI session analysis — SQLite index + per-session JSONL |
-| [CONTRACTS_ADAPTER_GUIDE.md](adapters/CONTRACTS_ADAPTER_GUIDE.md) | 91 | Contracts and architectural seams: public APIs, event buses, config surfaces |
-| [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md) | 328 | cPanel user environment: domains, SSL, ACL health |
-| [DEPENDS_ADAPTER_GUIDE.md](adapters/DEPENDS_ADAPTER_GUIDE.md) | — | Reverse module dependency graph — who imports this module? |
-| [DEPS_ADAPTER_GUIDE.md](adapters/DEPS_ADAPTER_GUIDE.md) | 65 | Dependency health dashboard: third-party package usage, circular/unused |
-| [HOTSPOTS_ADAPTER_GUIDE.md](adapters/HOTSPOTS_ADAPTER_GUIDE.md) | 73 | Files/functions most likely to need attention (complexity × churn) |
-| [DIFF_ADAPTER_GUIDE.md](adapters/DIFF_ADAPTER_GUIDE.md) | 1948 | Git diff analysis and structure comparison |
-| [DOMAIN_ADAPTER_GUIDE.md](adapters/DOMAIN_ADAPTER_GUIDE.md) | 2297 | Domain/DNS/WHOIS information analysis |
-| [ENV_ADAPTER_GUIDE.md](adapters/ENV_ADAPTER_GUIDE.md) | 1351 | Environment variable analysis and validation |
-| [GIT_ADAPTER_GUIDE.md](adapters/GIT_ADAPTER_GUIDE.md) | 1880 | Git repository analysis (commits, branches, tags) |
-| [IMPORTS_ADAPTER_GUIDE.md](adapters/IMPORTS_ADAPTER_GUIDE.md) | 1639 | Import dependency analysis across languages |
-| [JSON_ADAPTER_GUIDE.md](adapters/JSON_ADAPTER_GUIDE.md) | 1327 | JSON/JSONL data analysis with JMESPath queries |
-| [LETSENCRYPT_ADAPTER_GUIDE.md](adapters/LETSENCRYPT_ADAPTER_GUIDE.md) | — | Let's Encrypt cert inventory — orphan/duplicate detection |
-| [MYSQL_ADAPTER_GUIDE.md](adapters/MYSQL_ADAPTER_GUIDE.md) | 2116 | MySQL database introspection and schema analysis |
-| [OVERVIEW_ADAPTER_GUIDE.md](adapters/OVERVIEW_ADAPTER_GUIDE.md) | 71 | One-glance codebase dashboard: language breakdown, quality, git |
-| [PYTHON_ADAPTER_GUIDE.md](adapters/PYTHON_ADAPTER_GUIDE.md) | 464 | Python runtime introspection (modules, objects) |
-| [REVEAL_ADAPTER_GUIDE.md](adapters/REVEAL_ADAPTER_GUIDE.md) | 536 | Reveal introspection (analyzers, adapters, config) |
-| [SQLITE_ADAPTER_GUIDE.md](adapters/SQLITE_ADAPTER_GUIDE.md) | 1161 | SQLite database introspection and schema analysis |
-| [SSL_ADAPTER_GUIDE.md](adapters/SSL_ADAPTER_GUIDE.md) | 1488 | SSL/TLS certificate analysis and validation |
-| [METRICS_ADAPTER_GUIDE.md](adapters/METRICS_ADAPTER_GUIDE.md) | 1995 | Codebase metrics, file hotspots and provenance (was stats:// and classify://) |
-| [STATS_ADAPTER_GUIDE.md](adapters/STATS_ADAPTER_GUIDE.md) | 31 | Retired: stats:// is metrics:// |
-| [SURFACE_ADAPTER_GUIDE.md](adapters/SURFACE_ADAPTER_GUIDE.md) | 89 | External boundary map: CLI args, HTTP routes, env vars, exported symbols |
-| [TRACE_ADAPTER_GUIDE.md](adapters/TRACE_ADAPTER_GUIDE.md) | 43 | Retired: trace:// and `reveal trace` map to `calls://?callees=&depth=&detail` |
-| [XLSX_ADAPTER_GUIDE.md](adapters/XLSX_ADAPTER_GUIDE.md) | 651 | Excel/XLSX file analysis and data extraction |
-| [PATCHES_ADAPTER_GUIDE.md](adapters/PATCHES_ADAPTER_GUIDE.md) | — | Test patch pressure: repeated mocks, private patches, patch-heavy tests |
-
-**Adapters without dedicated guides** (covered elsewhere or minimal):
-- `markdown://` — see [MARKDOWN_GUIDE.md](adapters/MARKDOWN_GUIDE.md) under Analyzer Guides
-- `nginx://` — see [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md)
-- `demo://` — scaffolding template only; not registered by default (see [SCAFFOLDING_GUIDE.md](development/SCAFFOLDING_GUIDE.md))
-- `help://` — meta-adapter for in-tool help; use `reveal help://` to explore
-
----
-
-## Analyzer Guides (5 files)
-
-Language and infrastructure analyzer guides:
-
-| File | Lines | Description |
-|------|-------|-------------|
-| [ANALYZER_PATTERNS.md](development/ANALYZER_PATTERNS.md) | 821 | Code analysis patterns and best practices |
-| [ELIXIR_ANALYZER_GUIDE.md](development/ELIXIR_ANALYZER_GUIDE.md) | 76 | Elixir language analyzer guide |
-| [HTML_GUIDE.md](adapters/HTML_GUIDE.md) | 401 | HTML analysis and template extraction |
-| [MARKDOWN_GUIDE.md](adapters/MARKDOWN_GUIDE.md) | 852 | Markdown analysis, headings, and frontmatter |
-| [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) | — | nginx:// adapter + config file analyzer (N001–N012 rules, ACME/SSL audits) |
-
-**Total**: ~2,555 lines
-
----
-
-## Reference Documentation (11 files)
-
-Core reference and technical specifications:
-
-| File | Lines | Description |
-|------|-------|-------------|
-| [QUERY_SYNTAX_GUIDE.md](guides/QUERY_SYNTAX_GUIDE.md) | 762 | Universal query operators and result control |
-| [QUERY_PARAMETER_REFERENCE.md](guides/QUERY_PARAMETER_REFERENCE.md) | 363 | Query parameters for all adapters |
-| [FIELD_SELECTION_GUIDE.md](guides/FIELD_SELECTION_GUIDE.md) | 658 | Token reduction with --fields and budgets |
-| [ELEMENT_DISCOVERY_GUIDE.md](guides/ELEMENT_DISCOVERY_GUIDE.md) | 701 | Progressive disclosure with available_elements |
-| [OUTPUT_CONTRACT.md](development/OUTPUT_CONTRACT.md) | 678 | JSON output specification (adapter-author-facing schema) |
-| [CONTRACT_VERSIONS.md](development/CONTRACT_VERSIONS.md) | 151 | Output contract version policy — versions in use, adding a field |
-| [OUTPUT_DIAGNOSTICS_GUIDE.md](OUTPUT_DIAGNOSTICS_GUIDE.md) | 83 | `--format`/meta trust envelope/`--provenance`/`--perf` — which one do I need? (CLI-user-facing) |
-| [CONFIGURATION_GUIDE.md](guides/CONFIGURATION_GUIDE.md) | 662 | Configuration options and .reveal.yaml |
-| [CLI_INTEGRATION_GUIDE.md](development/CLI_INTEGRATION_GUIDE.md) | 281 | CLI integration patterns |
-| [HELP_SYSTEM_GUIDE.md](development/HELP_SYSTEM_GUIDE.md) | 397 | Help system internals (help:// adapter) |
-| [DUPLICATE_DETECTION_GUIDE.md](guides/DUPLICATE_DETECTION_GUIDE.md) | 499 | Duplicate detection algorithms |
-| [SCHEMA_VALIDATION_HELP.md](guides/SCHEMA_VALIDATION_HELP.md) | 620 | Frontmatter schema validation |
-
-**Total**: ~6,300 lines
-
----
-
-## Subcommand Guides (2 files)
-
-Reference guides for all reveal subcommands (`architecture`, `check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold`, `testability`):
-
-| File | Lines | Description |
-|------|-------|-------------|
-| [SUBCOMMANDS_GUIDE.md](guides/SUBCOMMANDS_GUIDE.md) | — | All subcommand reference: `architecture`, `check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold` |
-| [TESTABILITY_GUIDE.md](guides/TESTABILITY_GUIDE.md) | — | `reveal patches --view pressure` workflow: joins test patch pressure with production boundary profiles |
-
----
-
-## Development Guides (4 files)
-
-For contributors and adapter authors:
-
-| File | Lines | Description |
-|------|-------|-------------|
-| [../../ARCHITECTURE.md](../../ARCHITECTURE.md) | 312 | **Start here**: URI routing, adapter lifecycle, output contract, query pipeline, help tiers, subcommand model |
-| [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md) | 454 | Create custom adapters |
-| [ADAPTER_CONSISTENCY.md](development/ADAPTER_CONSISTENCY.md) | 388 | Adapter UX patterns and consistency |
-| [SCAFFOLDING_GUIDE.md](development/SCAFFOLDING_GUIDE.md) | 390 | CLI scaffolding system |
-| [WINDOWS_SIGNING.md](development/WINDOWS_SIGNING.md) | — | Windows ACP problem, SignPath Foundation plan, PyInstaller signing pipeline |
-
-**Total**: ~1,542 lines
-
----
-
-## AI Agent Reference (1 file)
-
-Complete reference for AI agent integration:
-
-| File | Lines | Description |
-|------|-------|-------------|
-| [AGENT_HELP.md](AGENT_HELP.md) | 4233 | Complete AI agent reference (~160KB) |
-
-**Total**: 4,233 lines
-
----
-
-## Documentation Statistics
-
-**By Category**:
-- Adapter Guides: 22 files, ~23,300 lines
-- Reference: 10 files, ~5,800 lines
-- User Guides: 8 files, ~4,100 lines
-- AI Agent: 1 file, ~4,233 lines
-- Analyzer Guides: 5 files, ~2,800 lines
-- Development: 4 files, ~1,600 lines
-- Subcommand Guides: 2 files, ~1,000 lines
-
-**Total**: 56 markdown files
-
-**Last Updated**: 2026-06-30 (v0.101.0 release)
-
----
-
-## Finding Documentation
-
-**By Task**:
-- "How do I start?" → [QUICK_START.md](QUICK_START.md)
-- "What is Reveal good for?" → [WHAT_IS_REVEAL_GOOD_FOR.md](guides/WHAT_IS_REVEAL_GOOD_FOR.md)
-- "What makes Reveal different?" → [WHY_REVEAL.md](WHY_REVEAL.md)
-- "What can Reveal do?" → [RECIPES.md](guides/RECIPES.md)
-- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-29-files)
-- "How do queries work?" → [QUERY_SYNTAX_GUIDE.md](guides/QUERY_SYNTAX_GUIDE.md)
-- "For AI agents?" → [AGENT_HELP.md](AGENT_HELP.md)
-- "How does Reveal work internally?" → [ARCHITECTURE.md](../../ARCHITECTURE.md)
-- "Create custom adapter?" → [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md)
-
-**By Adapter**:
-Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-29-files) above.
-
----
-
-## Maintenance Notes
-
-**Internal Documentation**:
-Internal maintainer documentation (planning, research, architecture) is maintained separately outside the public repository.
-
----
-
-**Last Updated**: 2026-06-30 (v0.101.0 release)
 **Navigation**: [README](README.md) | [Project Root](../../README.md)

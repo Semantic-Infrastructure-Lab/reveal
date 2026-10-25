@@ -149,7 +149,7 @@ When adapter syntax is uncertain:
 
 ```bash
 reveal check src/              # quality check (complexity, maintainability, links)
-reveal review main..HEAD       # PR review: diff + check + hotspots, one pass
+reveal check --changed main..HEAD  # PR review: rules on the files the range changed
 reveal health ssl://site.com   # health check: exit 0 pass, 1 findings, 3 incomplete/failed
 reveal pack src/ --budget 8000 # token-budgeted snapshot for LLM context
 reveal pack src/ --architecture # pack + entry points + core abstractions brief
