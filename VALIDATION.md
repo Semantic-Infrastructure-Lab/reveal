@@ -1395,10 +1395,10 @@ every sample matched the published target and edge counts.
   this result is qualified to the inspected population. The historical 24-edge
   snapshot has a different importer and remains distinct.
 
-  Restore with `python scripts/fetch_corpus.py scala-cats-effect`. The existing
-  maintainer-internal `scala-member-import-oracle/build_oracle_corpus2.py` and
-  `diff_recall_full.py --checkout-root` run against that source; this corpus is
-  not yet part of the scheduled recall gate. The measurement used Python 3.12.15,
+  Restore the source with `python scripts/fetch_corpus.py scala-cats-effect`. The
+  oracle builder and diff script that ran against it were maintainer-internal and
+  have since been retired, so this figure cannot be re-run from the published
+  tooling; this corpus is not yet part of the scheduled recall gate. The measurement used Python 3.12.15,
   tree-sitter 0.25.2 and tree-sitter-language-pack 1.22.1. Missing/unreadable source,
   an empty oracle and nonzero Reveal query exits fail the measurement.
 - **Historical import figures that cannot currently be re-run (BACK-1461):**
