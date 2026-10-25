@@ -563,11 +563,11 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
     def _heading_to_slug(self, heading: str) -> str:
         """Convert a heading to a URL-safe anchor slug.
 
-        Uses GitHub-style slug generation:
+        Uses GitHub's algorithm, so a link that works on GitHub verifies here:
         - Lowercase the heading
-        - Replace spaces and underscores with hyphens
-        - Remove special characters (except hyphens)
-        - Collapse multiple hyphens into one
+        - Drop punctuation (keep word characters, underscores and hyphens)
+        - Turn EACH space into its own hyphen, with no collapsing: "A & B" is
+          `a--b` and `foo_bar` stays `foo_bar`
 
         Args:
             heading: The heading text
@@ -575,16 +575,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Returns:
             URL-safe anchor slug
         """
-        slug = heading.lower()
-        # Replace spaces and underscores with hyphens
-        slug = re.sub(r'[\s_]+', '-', slug)
-        # Remove special characters except hyphens and alphanumerics
-        slug = re.sub(r'[^\w-]', '', slug)
-        # Collapse multiple hyphens
-        slug = re.sub(r'-+', '-', slug)
-        # Strip leading/trailing hyphens
-        slug = slug.strip('-')
-        return slug
+        slug = re.sub(r'[^\w\s-]', '', heading.lower()).strip()
+        return re.sub(r'\s', '-', slug)
 
     def _is_broken_link(self, url: str) -> bool:
         """Check if an internal link is broken.
