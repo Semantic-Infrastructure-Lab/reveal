@@ -2,7 +2,7 @@
 title: Reveal Installation Guide
 type: documentation
 category: installation
-date: 2026-01-04
+date: 2026-10-24
 ---
 
 # Installation Guide
@@ -12,11 +12,6 @@ date: 2026-01-04
 **From PyPI (stable release):**
 ```bash
 pip install reveal-cli
-```
-
-**From GitHub (latest development):**
-```bash
-pip install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
 ```
 
 That's it! The `reveal` command is now available globally.
@@ -40,22 +35,19 @@ pip install -e .
 ```
 
 The `-e` flag installs in "editable" mode - changes to the code take effect immediately.
+To install the latest development version without cloning:
+`pip install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git`.
 
 ### Specific Version
 
 ```bash
-# Install specific tag/release
-pip install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git@v0.1.0
-
-# Install specific branch
-pip install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git@main
+pip install reveal-cli==<version>
 ```
 
 ### Using pipx (Isolated Environment)
 
 ```bash
-# Install with pipx for isolated environment
-pipx install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
+pipx install reveal-cli
 ```
 
 ## Requirements
@@ -67,7 +59,7 @@ pipx install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
 
 Just `pip install reveal-cli` gives you everything:
 
-**Languages (85 total — run `reveal --languages` for the live breakdown):**
+**Languages (51 — run `reveal --languages` for the live breakdown):**
 - Explicit analyzers: Python, JavaScript, TypeScript, Rust, Go, C, C++, C#, Java, Ruby, PHP, Kotlin, Swift, Dart, Zig, Scala, Lua, GDScript, Bash, SQL, and more
 - Markdown, JSON, JSONL, YAML, TOML, HCL/Terraform, GraphQL, Protobuf
 - Nginx configs, Dockerfiles
@@ -102,21 +94,6 @@ What each extra unlocks, and the error you get without it, is in the
 [install guide](reveal/docs/guides/INSTALL_GUIDE.md#optional-extras) -- also searchable
 from the CLI: `reveal help://install` or `reveal 'help://search?search=extras'`.
 
-## Migration Note
-
-**If you previously used `[treesitter]` extra:**
-
-Tree-sitter is now included by default (since v0.8.0, Nov 2025). You can safely remove `[treesitter]` from your install commands - it's no longer needed, but old commands still work for backward compatibility.
-
-**Example:**
-```bash
-# Old (still works, but unnecessary)
-pip install "reveal-cli[treesitter]"
-
-# New (recommended)
-pip install reveal-cli
-```
-
 ## Network Requirements
 
 `pip install reveal-cli` needs PyPI. After that, reveal only touches the network for
@@ -140,7 +117,7 @@ The egress allowlist, cache location, failure behavior and the full container re
 
 If you get permission errors, try:
 ```bash
-pip install --user git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
+pip install --user reveal-cli
 ```
 
 ### Command Not Found
@@ -156,10 +133,13 @@ Then reload your shell:
 source ~/.bashrc  # or source ~/.zshrc
 ```
 
+On a locked-down Windows machine where the `reveal.exe` launcher is blocked, run
+`python -m reveal` instead.
+
 ### Upgrade to Latest
 
 ```bash
-pip install --upgrade git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
+pip install --upgrade reveal-cli
 ```
 
 ### Uninstall
@@ -168,40 +148,19 @@ pip install --upgrade git+https://github.com/Semantic-Infrastructure-Lab/reveal.
 pip uninstall reveal-cli
 ```
 
-## Custom Plugin Directory
+## Custom Analyzers
 
-Create custom plugins in `~/.config/reveal/plugins/`:
-
-```bash
-mkdir -p ~/.config/reveal/plugins
-cd ~/.config/reveal/plugins
-
-# Create your plugin
-cat > rust.yaml << 'EOF'
-extension: .rs
-name: Rust Source
-icon: 🦀
-levels:
-  0: {name: metadata, description: "File stats"}
-  1: {name: structure, description: "Code structure"}
-  2: {name: preview, description: "Code preview"}
-  3: {name: full, description: "Complete source"}
-EOF
-```
-
-Custom plugins are automatically loaded alongside built-in plugins.
+Drop a `*_analyzer.py` file into `.reveal/analyzers/` (one project) or `~/.reveal/plugins/`
+(all projects) and reveal loads it at startup. The file format and a worked example are in the
+[Configuration Guide](reveal/docs/guides/CONFIGURATION_GUIDE.md) (also `reveal help://config`).
 
 ## For Projects
 
-Add to `requirements.txt`:
-```txt
-reveal-cli @ git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
-```
+Add `reveal-cli` to `requirements.txt`, or to `dependencies` under `[project]` in
+`pyproject.toml`:
 
-Or `pyproject.toml`:
-```toml
-[project.dependencies]
-reveal-cli = {git = "https://github.com/Semantic-Infrastructure-Lab/reveal.git"}
+```txt
+reveal-cli
 ```
 
 ## CI/CD Integration
@@ -233,7 +192,7 @@ After installation:
 
 - **Issues:** https://github.com/Semantic-Infrastructure-Lab/reveal/issues
 - **Discussions:** https://github.com/Semantic-Infrastructure-Lab/reveal/discussions
-- **Documentation:** https://github.com/Semantic-Infrastructure-Lab/reveal/tree/main/docs
+- **Documentation:** https://github.com/Semantic-Infrastructure-Lab/reveal/tree/main/reveal/docs
 
 ---
 
