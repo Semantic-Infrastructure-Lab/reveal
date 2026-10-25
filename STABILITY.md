@@ -2,12 +2,12 @@
 title: Reveal Stability Policy
 type: documentation
 category: policy
-date: 2026-08-01
+date: 2026-10-25
 ---
 
 # Stability Policy
 
-**Last updated:** 2026-08-01 (see `reveal --version` for the current release; this
+**Last updated:** 2026-10-25 (see `reveal --version` for the current release; this
 policy doc is checked for adapter/language count drift by V012/V013, but its
 prose — version numbers, dates, blocker status — is not machine-verified and
 can still go stale between refreshes)
@@ -29,13 +29,13 @@ This document defines what users and AI agents can safely depend on in reveal. I
 **What's Stable:**
 - **Core modes:** directory → file → element pattern
 - **Output format:** `filename:line` format for all text output
-- **CLI interface:** Basic flags (`--format`, `--check`, `--outline`, `--stdin`)
+- **CLI interface:** Basic flags (`--format`, `--outline`, `--stdin`) and quality checking (`reveal check <path>`; the older `--check` flag spelling still works but is deprecated)
 - **Adapters:**
   - `help://` - Self-documenting help system
   - `env://` - Environment variable inspection
   - `ast://` - Code queries and structure analysis
   - `python://` - Python runtime inspection
-- **Quality rules (core):** B001-B005 (bugs), S701 (security), C901 (complexity), E501 (line length) — run `reveal --rules` for the full current set (55 rules as of v0.112.0, growing)
+- **Quality rules (core):** B001-B005 (bugs), S701 (security), C901 (complexity), E501 (line length) — run `reveal --rules` for the full current set
 - **Languages (full support):** Python, JavaScript, TypeScript, Rust, Go, Java, C, C++ — see [Language Support Stability](#language-support-stability) below; conformance is now tracked per-language via `reveal --language-info <lang>` (BACK-444), not a hand-maintained tier list
 
 **Backward compatibility:** Guaranteed within major versions (v0.x → v0.y is safe for stable features).
@@ -54,7 +54,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
   - `depends://` - Inverse module dependency graph
   - `sqlite://` - SQLite database inspection
   - `mysql://` - MySQL database inspection
-  - `stats://` - Code quality metrics
+  - `metrics://` - Code quality metrics (was `stats://`)
   - `json://` - JSON navigation
   - `markdown://` - Frontmatter queries
   - `git://` - Git repository inspection
@@ -62,7 +62,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
 - **Infra/ops adapters** (production-quality, domain-scoped — cPanel/hosting stack): `nginx://`, `ssl://`, `letsencrypt://`, `autossl://`, `cpanel://`, `domain://`
 - **Session-analysis adapters:** `claude://` (Claude Code sessions), `codex://` (OpenAI Codex CLI sessions)
 - **Test-hygiene adapters:** `patches://` (mock/patch pressure scanning)
-- **Quality rules (extended):** the majority of the current 55-rule set (D, I, L, M, N, R, T, U, F, V series) — run `reveal --rules` for the live list; only the core set above is Stable
+- **Quality rules (extended):** the majority of the current rule set (D, I, L, M, N, R, T, U, F, V series) — run `reveal --rules` for the live list; only the core set above is Stable
 - **Languages (full support):** C#, Scala, PHP, Ruby, Lua, Kotlin, Swift, Dart, HCL/Terraform, GraphQL, Protobuf, Zig, GDScript, Bash, SQL — see `reveal --languages` for the current full roster (explicit analyzers + tree-sitter fallback)
 - **Features:**
   - Schema validation (`--validate-schema`)
@@ -80,7 +80,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
 
 **What's Experimental:**
 - Features not yet documented in README.md
-- Internal V-series rules (self-validation only, hidden by default — pass `--all` to `reveal --rules` to see them; the set has grown well past the original V016-V022 range, now up to V030+)
+- Internal V-series rules (self-validation only, hidden by default — pass `--all` to `reveal --rules` to see them; dozens of checks, well past the original V016-V022 range)
 - Undocumented query parameters on adapters
 - Features marked "experimental" in help text
 - Languages with only tree-sitter extraction (basic structure only, no dedicated analyzer — run `reveal --languages` for the live "Tree-sitter Fallback" list)
@@ -103,7 +103,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
 **Blockers for v1.0:**
 1. ✅ Output contract specification (structured return values) - **COMPLETE** (2026-01-17)
 2. ✅ JSON schema versioning - **COMPLETE** (2026-01-17, via Output Contract v1.0)
-3. 🟡 Comprehensive integration test suite - **IN PROGRESS** (11,600+ tests passing as of v0.112.0, expanding coverage; Output Contract v1.1 rollout to remaining analyzers still open, see ROADMAP.md)
+3. 🟡 Comprehensive integration test suite - **IN PROGRESS** (over 27,000 tests pass in the full push gate)
 4. 🟡 Documentation completeness (all adapters have help:// guides) - **IN PROGRESS** (V024 now lints this — `reveal reveal:// --check --select V024` is clean as of this writing, i.e. every registered adapter has a guide)
 5. ❌ 6 months without breaking changes to Stable features - **NOT MET, window reset**: the original 2026-01-17 start was invalidated by a Stable-tier breaking change on 2026-05-22 (v0.95.0, tree-sitter-language-pack 1.x migration — dropped Alpine/musl and Ubuntu 20.04/Debian 11 support for all Tier-1 languages). No further breaking changes to Stable features have landed since; the clean window is running from 2026-05-22, not from January. Verify via `grep -A2 "^### Breaking Changes" CHANGELOG.md` before trusting this without a re-check.
 
@@ -180,7 +180,7 @@ v0.37.0: Feature X removed (documented in CHANGELOG)
 | `imports://` | 🟡 Beta | Query syntax stable, multi-language support growing |
 | `calls://` | 🟡 Beta | Query syntax stable; multi-language coverage still expanding |
 | `depends://` | 🟡 Beta | Inverse of imports:// — same maturity profile |
-| `stats://` | 🟡 Beta | Metrics may be added/renamed |
+| `metrics://` | 🟡 Beta | Metrics may be added/renamed (replaces `stats://`) |
 | `git://` | 🟡 Beta | Core features stable (blame, history, diff), new query params may be added |
 | `sqlite://` | 🟡 Beta | Format stabilizing |
 | `mysql://` | 🟡 Beta | Requires `[database]` extra, tuning ratios may change |
@@ -225,12 +225,12 @@ These adapters are **teaching implementations** that solve real problems for spe
 
 - **B001-B005:** Bug detection (assert False, bare except, etc.)
 - **S701:** Security (hardcoded passwords)
-- **C901:** Cyclomatic complexity (the same per-function score `ast://` and `stats://` report; counts boolean operators, so Python scores run higher than Ruff's C901)
+- **C901:** Cyclomatic complexity (the same per-function score `ast://` and `metrics://` report; counts boolean operators, so Python scores run higher than Ruff's C901)
 - **E501:** Line length
 
 ### Beta Rules (May Evolve)
 
-All other rules (B006+, C902/C905, D, I, L, M, N, R, T, U, F, V series) are Beta. Thresholds may be adjusted, detection may improve, new rules may be added. Run `reveal --rules` for the current full set (55 rules as of v0.112.0, 2 opt-in) with per-rule language verification status (BACK-432); pass `--all` to also see the internal V-series self-check rules, which are Experimental (below), not Beta.
+All other rules (B006+, C902/C905, D, I, L, M, N, R, T, U, F, V series) are Beta. Thresholds may be adjusted, detection may improve, new rules may be added. Run `reveal --rules` for the current full set (some rules are opt-in) with per-rule language verification status (BACK-432); pass `--all` to also see the internal V-series self-check rules, which are Experimental (below), not Beta.
 
 ### Configuration Stability
 
@@ -286,13 +286,13 @@ languages get promoted to Tier 2 with a dedicated analyzer).
 - All adapters return consistent error formats
 - Breaking changes require major version bump
 
-**Known gap (in progress, not yet uniform):** Output Contract v1.1
-(`meta.parse_mode`/`meta.confidence`) is rolling out per-analyzer via
-`ResultBuilder.create(..., contract_version='1.1')`, but a majority of
-analyzers are still hardcoded at `contract_version: '1.0'` with no `meta`
-block — tracked as `BACK-885` (large effort, open). Don't assume every
-adapter carries v1.1 fields yet; check the specific adapter's output or
-`grep contract_version` in its source.
+**Two contract versions are in use, by design:** adapters with parse
+uncertainty report `contract_version: '1.1'` with a `meta` block
+(`parse_mode`, `confidence`, `warnings`, `errors`); deterministic adapters
+(json, env, ssl cert read, mysql DDL) stay at `'1.0'`. Don't assume every
+adapter carries `meta`; check the `contract_version` field in its JSON output.
+See [CONTRACT_VERSIONS.md](reveal/docs/development/CONTRACT_VERSIONS.md)
+(`reveal help://contract-versions`).
 
 ---
 
@@ -300,7 +300,7 @@ adapter carries v1.1 fields yet; check the specific adapter's output or
 
 **Stable flags:**
 - `--format` (text, json, grep)
-- `--check` (quality analysis)
+- `reveal check <path>` (quality analysis; the `--check` flag is a deprecated spelling of it)
 - `--outline` (hierarchical view)
 - `--stdin` (read file paths from stdin)
 - `--help`, `--version`
@@ -341,7 +341,7 @@ covers the ones worth calling out, not every flag.
 ### For CI/CD Pipelines
 
 **Stable:**
-- `reveal --check` exit codes (0 = pass, 1 = violations found)
+- `reveal check` exit codes (0 = clean, 1 = findings, 2 = invalid input, 3 = incomplete analysis)
 - `--format=grep` output format
 - `--format=json` schema (Output Contract v1.0)
 - Rule selection (`--select B,S`)
