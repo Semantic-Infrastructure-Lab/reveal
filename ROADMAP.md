@@ -141,8 +141,8 @@ becomes `--exits`, and so on).
   CHANGELOG entry for that release carries the full old-to-new table, generated from the
   same list. There is one breaking release, not one per change.
 - **Hosting-operations adapters** (`cpanel`, `autossl`, `letsencrypt`, the nginx live probes,
-  `mysql`, `ssl`, `domain`) move to `pip install reveal-ops` at the cut; an old scheme then
-  exits 2 naming that install. nginx config analysis and its rules stay in core. `python://`
+  `mysql`, `ssl`, `domain`) move to a separate `reveal-ops` package at the cut, published
+  before that release; an old scheme then exits 2 and says how to install it. nginx config analysis and its rules stay in core. `python://`
   is removed; `env://` stays.
 
 ### Exit codes
