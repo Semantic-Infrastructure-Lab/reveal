@@ -1,13 +1,164 @@
 # Reveal Roadmap
-> **Last updated**: 2026-10-07 (v0.131.0 release: silent answers refused or disclosed, special modes and `--stdin`, install hints, cross-platform self-checks)
+> **Last updated**: 2026-10-25
 
-This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
+Where reveal is going and what will change for the people who use it. What has already
+shipped is in [CHANGELOG.md](CHANGELOG.md); measured accuracy per language is in
+[VALIDATION.md](VALIDATION.md); how to help is in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## What reveal is for
+
+Reveal shows the structure of code, docs and data before their content, so an AI agent or
+an engineer reads only what a question needs. It is for agents and engineers who need to
+understand a codebase, and it works as a set of primitives that due-diligence and review
+work can build on.
+
+Everything reveal does sits on one ladder, and the docs teach it in this order:
+
+| Rung | Question | Code | Docs and data |
+|---|---|---|---|
+| 0. Orient | What is here? | `reveal DIR`, `reveal overview DIR` | `reveal DIR --ext md` |
+| 1. Structure | What does this contain? | `reveal FILE` | `reveal DOC.md` |
+| 2. Content | Show me this one thing | `reveal FILE NAME`, `reveal FILE :N-M`, `--grep` | `reveal DOC.md "Heading"` |
+| 3. Relations | What connects to it? | `calls`, `imports`, `git` | `markdown` links and backlinks |
+| 4. Behaviour | What does this function touch? | `--boundary` and the element flags | |
+| 5. Judgment inputs | Where are risk, debt and boundaries? | `metrics`, `check`, `surface`, `contracts`, `patches`, `diff` | `check` (links, front matter) |
+
+### The core tier: a promise
+
+About 90% of real use is five operations: extract an element (`reveal FILE NAME`), extract
+a markdown section (`reveal DOC.md "Heading"`), `--grep`, outline a file (`reveal FILE`), and
+read a line range (`reveal FILE :N-M`). A bug in one of them outranks all other work, and
+none of the changes below touches them.
+
+Their bar is `tests/test_core_tier_golden.py`: text output pinned byte for byte across the
+tier-1 languages and markdown, in three views (breadcrumbs off, a first run with
+breadcrumbs on, and a later run once the show-once hints are spent), and each operation's
+`--format json` carrying the same items as its text. A golden diff is a change agents will
+see: accept an intended one with `REVEAL_UPDATE_GOLDEN=1 pytest tests/test_core_tier_golden.py -n0`
+and review the diff like code.
+
+---
+
+## Current focus: one name per question, answers you can trust
+
+Two problems shape the current work.
+
+1. **Too many ways in, and some disagreed.** A newcomer met about 70 entry points for about
+   15 capabilities: URI adapters, subcommands that were second spellings of adapters, 22
+   element flags and 17 discovery entry points. In several places two names for the same
+   question gave different numbers, because each counted with its own unstated rule.
+2. **Most fixes were the same few bugs, repeated.** Across 0.122-0.129, fixes outnumbered
+   features about five to one, and they fell into about 15 recurring classes with five
+   causes: flags reaching adapters by seven different paths, results that could not say
+   "failed" or "truncated" (so a failure read as a clean zero), shared code copied instead
+   of called, per-language tables typed by hand, and help that nothing ever ran.
+
+### How we work
+
+- **Remove the cause, don't add a guard.** Removing a second implementation retired its bug
+  class every time we did it; a guard over a listed set of cases leaked just outside its
+  list. Each cause gets a ratchet first (a check that counts violations and lets the count
+  only fall), then the removal.
+- **Every number states its rule.** A count with a scope or counting choice names it in the
+  text and the JSON output.
+- **Honest beats complete.** Failure, truncation and unsupported input are visible in the
+  answer. No confidence is printed without a measurement behind it. A heuristic whose error
+  rate cannot be bounded is narrowed or retired, not tuned: `calls ?uncalled` (dead-code
+  candidates) is retiring for that reason, after labelled samples found 0 or 1 real dead
+  function in 20 candidates on most libraries measured ([VALIDATION.md](VALIDATION.md)). Use
+  `?callers=NAME` to ask whether one function is used, and your language's own dead-code tool
+  for the rest.
+- **Every language, not just Python.** A change to an engine is measured per language
+  before it ships, and no language may get worse. Each capability-language pair is in one
+  of three tiers: *gated* (independent oracle, checked on change), *measured* (published
+  figure) or *structure-only* (graph and judgment claims decline in the output).
+- **The help moves with the code** and is run in CI.
+
+**Next, in priority order**
+
+1. **The first screen teaches only current names.** The README, `--agent-help` and
+   `help://quick` teach only spellings that are not retiring, enforced by a test that reads
+   the retired-names table (BACK-2196); `--adapters` marks retired schemes from the same table
+   (BACK-2197); `calls ?uncalled` prints its replacement and no confidence figure (BACK-2195).
+2. **Call-graph recall back to its baseline for JavaScript and TypeScript.** Two precision
+   fixes for function values moved what counts as a caller; recover the real functions they
+   drop and re-baseline what remains with each lost edge classified (BACK-2198, BACK-2178,
+   BACK-2199, BACK-2191).
+3. **One import graph.** `depends`, `deps` and `calls ?modules` already answer through
+   `imports`; finish per-language parity before the old names stop working (BACK-2063,
+   BACK-2064, BACK-1054), measure through the public request path (BACK-2062), and keep the
+   oracle-free graph invariants green in every language (BACK-1096).
+4. **One quality family.** `metrics` absorbs `hotspots` (BACK-2069, BACK-2149); repeatable
+   `--output FORMAT[=PATH]` sinks replace `--also-json` (BACK-2089); `overview` absorbs
+   `architecture` (BACK-2070); commands share their parses instead of repeating them
+   (BACK-1889, BACK-1890, BACK-1885).
+5. **The rest of the result contract.** Typed outcomes at the remaining adapter and analyzer
+   boundaries (BACK-1059, BACK-1857), one rendering layer (BACK-916), one scan-budget policy
+   (BACK-1052).
+6. **A smaller core and a public adapter framework.** The hosting-operations adapters move
+   to a separate `reveal-ops` package installed through pip entry points, and a "write your
+   own adapter" guide with one contract test every adapter passes (BACK-2162, BACK-2165).
+   Help discovery folds into `help://` (BACK-1055).
+7. **Measure what is still judgment.** Decide per heuristic output whether to measure,
+   narrow or retire it (BACK-2202); precision oracles for the element flags from
+   independent tools (BACK-2203); rule precision beyond Python (BACK-1095); more languages
+   in the recall gate (BACK-1518); a language scorecard generated from data (BACK-1900).
+8. **Docs that cannot drift.** Every example in the README, the agent guide and
+   `help://examples` runs in CI (BACK-1365); consumers move to the new names before the cut
+   (BACK-2071).
+
+Not on this list: new adapters, new languages and new flags, which wait until the work
+above lands.
+
+---
+
+## What changes for users
+
+### One name per question
+
+| Question | Use | Replaces |
+|---|---|---|
+| Where do I start? | `reveal overview DIR` | `architecture` (being absorbed) |
+| Who calls this, what does it call? | `reveal calls DIR --callers F` / `--callees F --depth N [--detail]` | `trace`, `trace://`, `?root=`, `?target=` |
+| Who imports this, what does it import? | `reveal imports DIR --importers [FILE]`, `--external`, `--circular`, `--unused` | `depends://`, `deps`, `calls ?modules` |
+| Per-file size, complexity, churn, provenance | `reveal metrics DIR`, `?view=provenance` | `stats://`, `classify://`, file `hotspots` (being absorbed) |
+| Rule findings, including only what a diff changed | `reveal check PATH`, `--changed RANGE` | `--check`, `review`, `health` on code |
+| How honest is the test suite? | `reveal patches DIR --view pressure` | `testability` |
+| Find elements by name | `--name PATTERN` | `--search` |
+
+The element flags are next: about 22 become about 12, and no flag will share a name with a
+command (`--deps` becomes `--inputs`, `--sideeffects` becomes `--effects`, `--returns`
+becomes `--exits`, and so on).
+
+### How a name retires
+
+- **Now:** the old spelling still works and prints one line naming its replacement. The
+  retired-names table in `reveal/cli/invocation.py` is the one list; `reveal --adapters` and
+  this page follow it.
+- **At the cut release:** every old spelling exits 2 with its replacement named. The
+  CHANGELOG entry for that release carries the full old-to-new table, generated from the
+  same list. There is one breaking release, not one per change.
+- **Hosting-operations adapters** (`cpanel`, `autossl`, `letsencrypt`, the nginx live probes,
+  `mysql`, `ssl`, `domain`) move to `pip install reveal-ops` at the cut; an old scheme then
+  exits 2 naming that install. nginx config analysis and its rules stay in core. `python://`
+  is removed; `env://` stays.
+
+### Exit codes
+
+One contract for every command: 0 completed, 1 completed with findings when a findings gate
+is on, 2 invalid invocation or resource, 3 analysis or output failed or was incomplete.
+Incomplete wins over findings. `check` gates on findings by default; `--fail-on none`
+reports them without exit 1.
 
 ---
 
 ## What We've Shipped
 
-Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+The release process adds an entry here for each version; the three most recent are kept.
+Everything is in [CHANGELOG.md](CHANGELOG.md), and unreleased work on master is under its
+`[Unreleased]` heading.
 
 ### v0.131.0 — Silent answers refused or disclosed, special modes and `--stdin`, install hints, cross-platform self-checks
 
@@ -29,893 +180,37 @@ Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
 
 ### v0.129.0 — Result-control flags honored or rejected, .gitignore correctness, member/route resolution, cache keyed on code
 
-- ✅ `--limit`, `--head/--tail/--range`, `--format` and `--also-json` are applied or rejected with a note, never silently dropped: `--limit` maps to the native `top=` on hotspots/calls/depends/testability, and unsupported `sort=`/`limit=`/`offset=` warn and run (BACK-1385, 1425, 1496, 1497).
+- ✅ `--limit`, `--head/--tail/--range`, `--format` and `--also-json` are applied or rejected with a note, never silently dropped: unsupported `sort=`/`limit=`/`offset=` warn and run (BACK-1385, 1425, 1496, 1497).
 - ✅ Every walker skips what git ignores and no longer drops tracked files; `--no-gitignore` works everywhere (BACK-1386, 1485). A package marker above the nearest `.git` belongs to another project (BACK-1434).
 - ✅ Element/member resolution: C++ out-of-line methods and operators, ambiguous names disclose every definition, and enums/traits/type aliases/`#private` JS methods/config elements are listed and extractable (BACK-1400, 1409–1412).
 - ✅ `surface://` reads Rails `routes.draw`, WordPress REST routes and Spring/C# controller prefixes, and discloses error-recovered regions (BACK-1417, 1418, 1480).
 - ✅ The disk cache is keyed on the code that built it, not just the version, so an edit cannot serve stale results (BACK-1294, BACK-1328); a huge file's outline is capped and says so (BACK-1424).
-- ⚠️ Changes a script may notice: an unsupported `--format` or `--also-json` exits 2 instead of printing text (BACK-1425); git-ignored files drop out of every walker, so counts fall (BACK-1386); the text outline stops at 500 items per category (`--format json` is uncapped, BACK-1424); `help://languages` JSON lists one entry per language (51, not 81) with an `extensions` list (BACK-1441).
-
-### v0.128.0 — Language neutrality, one complexity score, surface:// rule tables, silent-failure sweep
-
-- ✅ Per-language conventions profile: `calls://?uncalled`, stdlib classification, test detection, `hotspots` test hints and `pack` entry points follow each language's rules instead of Python's; callee extraction has one shared implementation for `calls://` and `ast://` nav (BACK-1273–1310).
-- ✅ One complexity score across C901, `ast://`, `stats://` and `hotspots` for every language (the `mccabe` dependency is gone), with per-construct counting fixed language by language (BACK-1081, BACK-1284–1325).
-- ✅ `surface://` runs on one rule-table engine for 10 languages: subprocess detection in 8 more languages, socket clients, Ruby/Swift fs, a coverage matrix that says "not implemented" instead of 0, and `--by dir` (BACK-1319–1347).
-- ✅ Silent-failure sweep: about 20 CLI flags that were silently ignored now work (`--all`, `--verbose`, `--copy`, `--since`, `REVEAL_FORMAT`, `ignore:`), a typo'd path exits 1, `review` is a trustworthy CI gate, and Windows/non-UTF-8 crashes are fixed (BACK-1321–1401).
-- ✅ A file with a syntax error keeps its imports and symbols again — a regression present in 0.121.0–0.127.0 that cut import recall to 47% on curl, 56% on Godot and 79% on TigerBeetle (BACK-1460).
-- ⚠️ Complexity numbers change for most languages; `.reveal.yaml` thresholds tuned against the old scores may need a nudge.
-
-### v0.127.0 — 2026-09-01 external handoff batch (12 items) + adversarial re-review follow-ups
-
-- ✅ 12 items from the 2026-09-01 external handoff fixed: `--also-json` on `check`, pool-worker logging prefix (macOS/Windows), `--exclude` on every `uri://` adapter, provenance tagging on `ast://`/`calls://?uncalled`, M102 false positives on `src/` layouts, `surface://` AI-vendor SDK detection, meta-warnings caveats reaching the text renderer (3 sites), `deps://` mixed-ecosystem labelling, `imports://?entrypoints` test-suite false negatives, a `specs/`-directory doc-tagging bug, and `calls://?uncalled` precision fixes (BACK-1248–1265).
-- ✅ Adversarial re-review of that batch found and closed 2 undisclosed gaps (`trace.py` missing the BACK-1178 parity fix; `ast://`'s new warning not reaching text) plus 4 more previously-deferred items, including a 3-layer import-cache bug that silently suppressed partial-parse warnings on warm runs (BACK-1266–1270).
-- ⚠️ `contract_version` moves 1.0 → 1.1 on 6 subcommand-form adapters — consumer-visible if anything pins the literal (BACK-1178).
-
-### v0.126.0 — External wishlist batch-6 fixes, multi-language test-detection gap
-
-- ✅ 11 external-reporter wishlist items fixed: `classify://` exclusion disclosure, vendor-tag false positives, `architecture://` JS/TS cohesion always-0.00, non-deterministic `check` rendering, `surface://` test-route disclosure, import-graph convention-autoloading disclosure, `reveal-mcp` friendly install error, plus 4 smaller CLI/adapter silent-no-op fixes (BACK-1241–1251).
-- ✅ Class-of-issue audit found and fixed a real multi-language test-detection gap spanning `is_test_dir()`, `is_test_filename()`, and `surface.py`'s own duplicate check (BACK-1252).
-
-### v0.125.0 — I007/I008 dependency reconciliation, classify:// in-tree-vendoring detection
-
-- ✅ New `I007`/`I008` check rules — declared-vs-imported dependency reconciliation for Python + Rust (BACK-1191).
-- ✅ `classify://` detects in-tree-vendored files via banner + locale-fan-out content signals (BACK-1238).
-
-### v0.124.0 — classify:// adapter, --also-json, manifest-informed import resolution, classification-field wiring
-
-- ✅ New `classify://` adapter — full-population provenance (test/vendor/minified/first-party), independent of any other adapter's ranking (BACK-1233).
-- ✅ `--also-json PATH` — one call now produces both a human-readable and a machine-readable artifact (BACK-1184).
-- ✅ Manifest-informed `is_intra_project_import` for Python/Rust/Ruby completes BACK-1189 (Java/Kotlin/C#/Go already covered) — 0%→83.5%/92.3%/45.4% of previously-unclassifiable imports now get a confident verdict on real-world corpora.
-- ✅ `imports://`/`deps://`'s public `classification` field now consults the same declared-namespace inventory `depends://` already builds, fixing it for Go/C#/Java/Kotlin/PHP (BACK-1234, BACK-1236).
-- ✅ `overview://` disclosure fixes: directory-target git history no longer errors and drops silently (BACK-1225), Components/Entry-points/Hotspots/Language-breakdown now honor `--all`/`--verbose` (BACK-1226); directory tree now discloses suppressed entries instead of silently hiding them (BACK-1224).
-- ✅ `pack://`'s config-file entry-point bonus no longer lets a monorepo's per-package config files dominate a budget (BACK-1206); M102's `__init__.py` fallback no longer false-positives on a bare substring match (BACK-1101); stderr warnings now carry a visible severity prefix (BACK-1231).
-
-### v0.123.0 — Disclosure-surface sweep round 2, MCP resources + tool parity, check/pack ergonomics, silent-CLI-flag audit
-
-- ✅ Absolute host-path leaks (BACK-1194's original scope, extended in two more sweeps) closed across `overview://`, `deps://`, `imports://`, `architecture://`, `hotspots://`, `depends://`, and `surface://` (BACK-1212, BACK-1213/1214/1215, BACK-1178 follow-up, BACK-1222) — consolidated onto one shared `to_relative_display()` helper.
-- ✅ A systematic audit of CLI flags accepted by argparse but silently dropped on the floor closed 8 confirmed instances: `--since`/`--until`, `--exclude`, `--no-gitignore`, `--max-items`/`--max-snippet-chars` on bare files, `--head`/`--tail`/`--range` on URI results, `--severity`/`--only-failures` for `ssl://`/`domain://`/`mysql://` `--check`, and `REVEAL_IGNORE` for `check`/`overview://` (BACK-1192/1187/1202/1203/1204/1207/1205/1219/1201/1221).
-- ✅ `reveal-mcp` gained 4 Resources for its self-description surface, `reveal_pack --architecture` parity, and an opt-in access log (BACK-1171, BACK-1170, BACK-1144); adapter errors now emit a valid envelope instead of 0 bytes and not-applicable results are distinguishable from real failures (BACK-1209, BACK-1210).
-- ✅ `reveal check` gained `--exit-zero`/`--max-items`/`--max-snippet-chars`/`--no-snippets`; `deps://`/`calls://`'s per-language trust signals consolidated into a shared capability table, with `calls://` confidence now measured per-language instead of a flat `0.85` (BACK-1186/1181/1182, BACK-1093, BACK-1198).
-- ✅ `pack://`'s entry-point scoring no longer lets empty barrel files dominate a budget (84%→8% on one real corpus); ranked results across `overview://`/`hotspots://`/`pack://` now disclose vendor/generated/minified provenance (BACK-1196, BACK-1195).
-- ✅ `help://quick`'s decision tree now derives from the adapter registry itself instead of a hand-maintained dict, closing a 15-of-33-adapters unreachability gap (BACK-1156/1157/1154).
-
-### v0.122.0 — Python 3.14 support restored, exit-code contract, MCP hardening + tool parity, disclosure-surface sweep
-
-- ✅ Python 3.14 support restored (GitHub #23) — `requires-python` cap lifted now that ~750 tree-sitter call sites are migrated onto the core accessor API; verified clean against both ends of the supported `tree-sitter-language-pack` range, CI compat-matrix promoted to a real merge gate (BACK-573/620/1158/1125).
-- ✅ `reveal check` exit-code contract: new exit `3` for a scan that couldn't parse/check a file, no longer indistinguishable from a genuinely clean `0` — full audit of ~130 `sys.exit()` sites documented (BACK-1099).
-- ✅ `reveal-mcp` hardened: closed path-traversal/CLI-argument-injection gaps across `cpanel://`/`autossl://`/git-ref handling (BACK-1141, BACK-1137); fixed a concurrent-tool-call crash from tree-sitter objects shared across threads (BACK-1136, BACK-1146); all 10 tools now signal real failures via `isError` (BACK-REVEAL-1) and gained `reveal_health`/`reveal_review` (BACK-1138).
-- ✅ `ast://` decorator/annotation extraction, previously Python-only, now also covers Java, C#, TypeScript, Kotlin, PHP, Rust, and Swift (BACK-1087, partial); degraded per-language conformance now disclosed instead of a uniform `confidence:1.0` (BACK-1086).
-- ✅ Disclosure-surface sweep: `git://`/`stats://` no longer silently degrade when git/pygit2 are unavailable (BACK-1166); a corrupt `.xlsx` sheet no longer renders byte-identical to a genuinely empty one (BACK-1167); `ast://`/`markdown://`/`json://` disclose unknown filter keys instead of a silent empty result (BACK-1111, BACK-1165).
-- ✅ `B003`'s documented threshold no longer drifts from what it enforces (BACK-1063); `StatsAdapter.get_structure()` no longer false-positives `V023` (BACK-1064); `help://quick`'s top command block no longer silently drops ranked-but-overflow adapters (BACK-1155).
-
-### v0.121.0 — parse-error/recovery disclosure round, nginx comment-awareness + cert inheritance, silent-ignore fixes (--limit, git:// inert params)
-
-- ✅ `get_structure()`/`check` no longer fabricate or silently pass on syntactically broken or rule-crashed files with no error signal — recovery artifacts and rule crashes now surface additively in the output contract (BACK-1084, BACK-1083, BACK-1082).
-- ✅ `S001` fixed on two fronts: never scanned bare `.env*` files (BACK-1104); false-positived on version-pinned deps whose name contains "token" like `tiktoken-rs` (BACK-1105).
-- ✅ nginx rules (`N002`/`N003`/`N008`/`N009`/`N012`) gained comment-awareness (commented-out `server{}` no longer reads as live) and `N002` now recognizes `http{}`-level certificate inheritance (BACK-1102, BACK-1103).
-- ✅ `imports://`/`depends://` no longer fabricate phantom circular deps from stdlib-shadowed local packages (BACK-1080); `--links` no longer silently drops valid markdown links on some documents (BACK-1119).
-- ✅ CLI `--limit` now actually applies to URI-scheme resources (`ast://`, `git://`, etc.), not just a URI's own `?limit=` (BACK-1108); `git://` now warns when a recognized param is inert on the resolved view instead of staying silent (BACK-1127).
-- ✅ `--version`/`--provenance` resolve from the real install root instead of a `sys.path` name scan that could report a different version depending on cwd (BACK-1126); `--explain-file` no longer hides known per-language conformance limits (BACK-1107).
-- ✅ Documented threat model: prompt injection via source content — no injection risk beyond any other code-reading tool (BACK-1131).
-
-### v0.120.0 — Kotlin @Composable ERROR-node recovery, silent-exception visibility round, check/overview --exclude/gitignore
-
-- ✅ Kotlin `@Composable (() -> Unit)`-style parenthesized function-type parameters no longer swallow the entire enclosing declaration into a silently-dropped ERROR node — recovered with `recovered_from_error` flagging, unrecovered cases surfaced via `parse_warnings` (BACK-738).
-- ✅ Silent/debug-level exception handlers bumped to visible warnings across `diff/git.py`, `markdown/files.py`, `reveal/operations.py`, `stats/metrics.py`, `testability/patches.py`, `utils/parallel.py`, and `adapters/git/files.py`'s element-content lookup (BACK-989).
-- ✅ `check`/`overview` gained `--exclude`, `--respect-gitignore`, `--no-gitignore` (BACK-1042); `I002` preload root now resolves from the target file, not a bare directory (BACK-1041).
-
-### v0.119.0 — overview/check census parity, check text-output dedup, deps summary-only
-
-- ✅ `overview`'s scope census silently disagreed with `check`'s on the same target — dot-directory source files and no-analyzer languages (e.g. Objective-C) could appear in one but not the other (BACK-1038).
-- ✅ `check --format text` no longer repeats full rule-remediation guidance per occurrence — once per rule code per run instead (BACK-1039).
-- ✅ `reveal deps --format json --summary-only` strips the full per-file import graph, keeping only totals (BACK-1040).
-
-### v0.118.0 — provenance fixed on every CLI subcommand, check flags unscoped rule categories
-- ✅ `--provenance` was silently a no-op on every `reveal <subcommand> <path>` invocation (12 subcommands) — chain-of-custody metadata now actually attaches (BACK-1034).
-- ✅ `check`'s JSON output flags `scope.unscoped_categories` — languages present in a scan with zero verified rule coverage for an active category, distinguishing "genuinely clean" from "never checked" (BACK-1021).
-- ✅ `pack --content`/`ast://`'s colon-syntax heuristic no longer silently drop whole languages via a hardcoded extension list (BACK-1032, BACK-1033); `check --format grep` is no longer byte-identical to `--format text` (BACK-1035).
-
-### v0.117.0 — help://search, release-gap self-check, DD-relevant git pickaxe fix
-- ✅ `help://search?search=<term>` — full-text search over static guides, adapter descriptions, and `help://examples` recipes, referenced from all 4 top-level help entry points (BACK-1023).
-- ✅ `V032`, a self-check flagging when `origin/master` has run ahead of the latest PyPI release past a threshold — closes the exact blind spot that let ~19 DD-accuracy fixes sit unpublished for 36+ hours before v0.116.0 (BACK-1022).
-- ✅ `git://` pickaxe/diff search (`?content~=`) no longer silently drops non-UTF-8 commits — DD-relevant, one of the 10 DD-critical adapters (BACK-1030).
-- ✅ `help://schemas/<CLI-subcommand>` redirect + top-loaded token-cost banner correction (BACK-1027, BACK-1028); stale `INDEX.md` anchor refs in 2 adapter guides fixed, doc-hygiene baseline ratcheted 92 → 91 (BACK-1031).
-
-### v0.116.0 — cross-language bug-rule ports, trust-envelope closure round 3, ~ expansion fix
-- ✅ B001/B003/B005/B006 ported across 7 additional languages (C#, C++, Java, JS/TS, PHP, Kotlin, Swift) via tree-sitter, verified live against real open-source corpora (Jellyfin, Elasticsearch, VS Code, WordPress, Godot, Tivi, Kickstarter iOS) (BACK-1011).
-- ✅ B007, an internal-only adapter-scoped envelope-blind handler detector, closes the structural gap that let BACK-1016's sites survive the prior remediation sweep (BACK-1017).
-- ✅ `~` in URI resource paths (`markdown://~/...`, `git://~/...`, etc.) now expands consistently across every adapter — only 15 of 44 called `expanduser()` themselves before, missing 4 of the 10 DD-critical commands (BACK-1024).
-- ✅ Trust-envelope closure round 3 — `overview`/`architecture`'s scope+git-log crash paths now reach `meta.errors` instead of rendering as fully trusted (BACK-1016); `calls://?uncalled=true&top=N` no longer reports the truncated count as the true total; S001 secret detection, circular-import severity, and TS/JS dead-constructor false positives fixed (BACK-1002–1010).
-- ✅ Doc-hygiene pre-release check now ratchets against a tracked baseline instead of failing on all pre-existing issues every release, mirroring B006's CI gate pattern.
-
-### v0.115.0 — silent-exception-swallowing audit round 2, help-system recipe-coverage + payload-size fixes
-- ✅ Second full pass of the "infrastructure failure renders as a clean/healthy result" bug class (BACK-979–992): most user-facing, malformed YAML frontmatter no longer reported as "no frontmatter"; `reveal health`'s code-check no longer reports false "healthy"; composite adapters (`hotspots://`, `architecture://`, `deps://`, `overview://`) now attribute sub-scan crashes via a new `ResourceAdapter.compose()` instead of swallowing them into an empty section; corrupted git `HEAD`/malformed config no longer silently identical to "nothing there"; explicit `0` in a numeric query param no longer treated as absent.
-- ✅ B006 detector generalized to recognize deferred error-variable use, helper-call/dict-literal/`ResultBuilder.create_error` signals, and logged-but-silent handlers — 121 false positives cleared with zero per-site changes; real tracked hits on reveal's own source 200 → 79 (BACK-983, 992, 989). Wired into CI as a regression gate (BACK-988).
-- ✅ `reveal offline` subcommand to pre-download tree-sitter grammars for air-gapped use (BACK-980).
-- ✅ `help://` discoverability and payload-size fixes: bare `help://examples --format=json` gets its own success type instead of overloading the error shape (BACK-998); `static_guides` deduped 33,029 → 14,164 bytes (BACK-999); 11 previously-uncovered adapters gained a recipe under `help://examples/<task>` (BACK-1000); `deps://`/`depends://`/`imports://` and `help://tricks`↔`help://examples` cross-linked (BACK-996, 997); 15 pre-existing wrong `output_type` values corpus-wide fixed after a hardcoded 6-of-11 test task list was found masking them. Full detail in CHANGELOG.md.
-
-### v0.114.0 — CLI report envelope migration complete, help-system coherence pass, canonical adapter constructors, codex:// parity, security hardening
-- ✅ Every remaining hand-rolled CLI report now emits through `ResultBuilder`/the Output Contract — `surface://`, `contracts://`, `hotspots://`, `deps://`, `architecture://`, `overview://`, `testability://`, `trace://`, `pack://`, `check --format json`, plus `claude://`/`codex://`/`depends://`/`patches://` (BACK-904, 905, 955–962, 949) — closing out the architecture initiative Output Contract v1.1 (v0.113.0) started.
-- ✅ Help-system coherence pass — unified `help://` signposting, `see_also` reachability, alias marking, guide-index parity, a schema-corruption bug fix (BACK-926–936).
-- ✅ Canonical `ResourceAdapter.__init__` signature for all 25 adapters, `factory.py`'s try-chain retired to a deprecated shim (BACK-907, BACK-948).
-- ✅ `codex://` primitive-parity pass (`/digest`, `/exchanges`, `/message/<n>`, skills, plugins) with a breaking query-param rename (`?search=`/`?content=` → `?filter=`/`?search=`, BACK-943–947).
-- ✅ `claude://` `/user`+`/assistant` consolidated into `?raw`, two real defects fixed alongside it (BACK-937, 939).
-- ✅ Security: SQL injection hardening in `mysql://`/`sqlite://` (BACK-896, 897); `types.py` renamed off a stdlib-shadowing name (BACK-900); `analyzers/`↔`adapters/` import cycle broken (BACK-911).
-- ✅ New detection capabilities: hardcoded-collection-literal rule M104 (BACK-750), project-configurable `?uncalled` entry points (BACK-952), Dart `--keys` map-subscript support (BACK-582).
-- ✅ `patches://testability` boundary-join oracle found and fixed 2 real defects (BACK-974); Go `contracts://` implementer matching now requires signature, not just name (BACK-816); directory listings honor `--format json` (BACK-975). Full detail in CHANGELOG.md.
-
-### v0.113.0 — Output Contract v1.1 complete, --provenance, scope census, capability validation data, mcp 2.0 migration
-- ✅ Output Contract v1.1 migration complete — all `analyzers/` (BACK-885) and `adapters/` (BACK-891) files, plus `xlsx.py`'s separate gap (BACK-892), migrated onto `ResultBuilder`.
-- ✅ `--provenance` flag attaches an execution-metadata block to JSON output (BACK-881), built on a JSON-emission consolidation prerequisite (BACK-893).
-- ✅ Scope/completeness census block on `overview`/`architecture`/`surface`/`check` (BACK-884), plus a real dir-skip correctness fix found along the way (BACK-887).
-- ✅ Capability validation-status data — measured recall/precision now queryable via `--capabilities`/`--language-info` (BACK-880).
-- ✅ `reveal-mcp` migrated off `FastMCP` to mcp 2.0's `MCPServer` API (BACK-895).
-- ✅ Custom-rule authoring guide (BACK-858); `tasks://` plugin-adapter worked example (BACK-878); `STABILITY.md` refresh (BACK-886); assorted UX/error-message fixes (BACK-864, BACK-894, BACK-619 follow-up, CLI not-found hint). Full detail in CHANGELOG.md.
-
-### v0.112.0 — markdown:// ranked search + lint queue + persistent link-graph cache
-- ✅ `markdown://` `?body-contains=` search now ranks best-first by `relevance_score` (term frequency + heading-proximity boost), and `?explain` adds a per-term `term_counts`/`heading_hits` breakdown (BACK-869).
-- ✅ `markdown://` `--related` falls back to the computed link graph when a doc has no `related`/`see_also`/`references` frontmatter, closing one of the three Beth-parity gaps (BACK-813/870).
-- ✅ `markdown://` `?lint`/`?lint-fields=` surfaces malformed YAML and missing-frontmatter files as a single maintenance queue, mirroring Beth's frontmatter-lint view (BACK-871).
-- ✅ Persistent disk cache for `build_link_graph` (BACK-866) — fingerprints and caches the link graph, invalidating on edit/add/delete; `?link-graph`, `?backlinks=`, and `--related`'s fallback all benefit from warm-cache stat-only passes.
-- ✅ Windows path-separator bug in the related-links fallback fixed (BACK-876); two pre-existing bugs surfaced and fixed once CI actually ran against BACK-865/866/869-871 after a 22h local-only gap (BACK-877).
-
-### v0.111.0 — contracts/cli/http recall-oracle program complete across all 9 remaining languages + mysql:// CLI bug + diff:// phantom-match bug
-- ✅ `contracts`/`cli`/`http` recall-oracle program (BACK-791) complete — Go, Rust, C++, C#, PHP, Swift, Kotlin, Ruby, Java each measured against an independently-derived ground-truth oracle on a large real corpus. 15 real scanner defects found and fixed; all 9 languages now 100%/100% recall+precision on every measured category. Biggest single find: Java heritage clauses with type arguments or package qualification (`extends Bar<Baz>`, `extends pkg.Bar`) were silently dropped entirely — 20.5% of real implementer relationships missing on a real corpus before the fix (BACK-812).
-- ✅ `reveal mysql://localhost` — reveal's own primary documented example — never actually used the host you typed: the CLI factory strips the `mysql://` scheme before construction, breaking `urlparse()`'s netloc parsing, and silently falling back to `~/.my.cnf` with no warning. Found dogfooding the mysql connection-error hint (BACK-863).
-- ✅ `diff://` directory/git comparisons matched functions/classes by name alone, merging unrelated same-named functions in different files into phantom "modified" entries — `reveal diff://git://HEAD/.:.`, reveal's own suggested pre-commit command, showed 2000+ lines of noise on a clean tree (BACK-861).
-- ✅ help:// navigation hygiene fully closed out, `pack --focus` gained import-graph relevance ranking, `markdown://` gained targeted `?backlinks=` queries, and reveal-mcp was audited against MCP best practices (tool trimming, annotations, 2 new tools). Full detail in CHANGELOG.md.
-
-### v0.110.0 — calls:// call-graph recall complete across all 19 languages + side-effects taxonomy sweep + TS import resolution deepened
-- ✅ `calls://` recall-oracle program (BACK-730) complete — all 19 supported languages now measured against independent-oracle ground truth at 89–100% recall. Biggest find: Dart had no dedicated call-expression node kind at all, so every call site was invisible to `calls://` (BACK-760/761/763-767/769).
-- ✅ Side-effect taxonomy recall sweep closes BACK-718 — Zig, Scala, Dart, and GDScript brought from partial to near-complete recall, plus cross-language `classify_call` false-positive fixes.
-- ✅ TS/JS import resolution deepened — tsconfig `extends` chains, `paths`/`baseUrl` aliases, project references, and monorepo `package.json` exports maps (BACK-705/694/772/773).
-- ✅ BACK-775 hotspot thresholds now honor per-project `.reveal.yaml` rule config instead of a hardcoded second copy; BACK-776 C902 no longer counts docstrings toward function length.
-- ✅ `pytest-xdist` parallel tests by default; `release.sh` gates on GitHub Actions CI status for HEAD (BACK-578); a missing `pytest-xdist` dev-dependency that had been failing CI on every push since xdist went default, root-caused and fixed.
-
-### v0.109.0 — contracts/surface 11-language coverage complete + persistent disk-cache program + depends:// scan-root rewrite + master CI red recovery
-- ✅ `contracts`/`surface` reach all 11 languages — Go, Rust, C++ added, plus C++ `.h`-only classes and plain JS/JSX residuals closed (BACK-403 pt 2 / BACK-588).
-- ✅ Persistent disk caching for structure, import graph, churn, and imports extraction — up to ~100x on repeat invocations; I002 auto-skips above 2,000 files instead of hanging (BACK-535/536/608/614/615/624/625/626/627).
-- ✅ `depends://` scan-root resolution rewrite — explicit `.reveal.yaml root: true`, `?root=` override, all 5 divergent project-root resolvers consolidated onto one (BACK-609/610/612).
-- ✅ BACK-547 `--sideeffects`/`--boundary` recall-oracle program continued across Go/Python/Java/Ruby/PHP/C#, closing real structural bugs (Ruby `singleton_method` invisible to `--outline`, Java/C# constructor effects leaking the whole class body) alongside taxonomy gaps.
-- ✅ `master` CI red 11h+ across 2 pushes restored to green — treesitter-accessor ratchet migration, stale test line ranges, a taxonomy-mirroring gap, and a dead-code CI-only failure all root-caused and fixed.
-
-### v0.108.1 — critical fix: v0.108.0 broke on every fresh install (tree-sitter-language-pack 1.12.5 incompatibility)
-- ✅ Capped `tree-sitter-language-pack` to `<1.12.5` — 1.12.5 changed `Parser.parse()`'s required type and `Tree.root_node`'s calling convention, silently breaking parsing for every language on every OS on any fresh `pip install` (BACK-573).
-- ✅ Fixed a Windows-only regression in PHP `__DIR__`/constant-anchor import resolution (path vs. namespace-separator collision).
-- ✅ CI "Tests" workflow green on all 6 platform/Python combinations for the first time in ~2 days.
-
-### v0.108.0 — contracts/surface 8-language coverage + --transitive blast-radius + architecture --against + BACK-547 recall-oracle program complete
-- ✅ `contracts`/`surface` extended from 2 to 8 languages — Java, C#, PHP, Swift, Kotlin, Ruby added, matching Python/TypeScript (BACK-403 pt 2).
-- ✅ `--sideeffects --transitive` / `--boundary --transitive` — interprocedural blast-radius walk into project-local helpers (BACK-545/546).
-- ✅ `reveal architecture <path> --against REF` — architectural diff against a git ref (BACK-441).
-- ✅ **BACK-547 DD-correctness recall-oracle program complete** — 11 independent-oracle measurement loops (TS, Java, Go, Python, Ruby, Kotlin, Scala, Rust, C#, PHP, Swift), all 11 found and fixed real false-negative bugs; worst were Swift SwiftPM module resolution (~0%→100%, BACK-567) and PHP require/include concatenation (0%→100% on WordPress core, BACK-564/565). See [VALIDATION.md](VALIDATION.md).
-- ✅ `_build_graph` complexity 68→21 decomposition, `nav_surface_*.py` duplicate-helper cleanup (BACK-566, BACK-570).
-
-### v0.107.1 — Windows crash fix + due-diligence-sweep bugfixes + check --limit/--profile-rules
-- ✅ **0.107.0 crashed on every Windows invocation** (even `--version`) due to an unconditional POSIX-only `import resource` — fixed (BACK-541).
-- ✅ `check`'s per-tree I002 warning deduped across `ProcessPoolExecutor` workers, and its import-graph build parallelized (2.3x on large trees) (BACK-531, BACK-536).
-- ✅ `reveal review <git-range>` now scopes its quality pass to the diff's changed files instead of the whole auto-walked tree (BACK-538).
-- ✅ `surface` crash on bare-name decorators (e.g. `@property`) fixed; `pack` no longer misprioritizes data/test files; arrow-function class properties now resolve; L004 `IndexError` on docs-only directories fixed (BACK-533, BACK-526, BACK-527, BACK-528).
-- ✅ New `check --limit N` caps unbounded text output on huge corpora (default 50, `--limit 0` disables); new `check --profile-rules` prints a per-rule wall-time cost breakdown (BACK-539, BACK-540).
-
-### v0.107.0 — Import-graph coverage for 5 more languages + coverage-warning disclosure + depends:// scan-root resolution rewrite
-- ✅ Import-graph coverage added for Scala, Dart, GDScript, Lua, and Zig — these five previously built a confidently-wrong graph out of vendored/incidental files with no warning (BACK-514).
-- ✅ Coverage-warning disclosure when a project's dominant language has no import-graph support, across `surface`/`contracts`/`architecture`/`overview` (BACK-518).
-- ✅ `depends://`'s "hang" on some files root-caused as an unbounded ancestor-repo scan, fixed via a widened project-root marker table, a scan-file cap safety net, and a full rewrite to tiered, ceiling-bounded, deterministic scan-root resolution (BACK-515/524/525).
-- ✅ `overview`'s "Recent changes" now discloses when the shown git history belongs to an enclosing repo rather than the target directory itself (BACK-516).
-- ✅ Class-field arrow-function methods (`private foo = () => {}`) were invisible file-wide to structure extraction — fixed (BACK-519).
-- ✅ INI/TOML fixes: repeated-key data loss, `:?` line-number rendering bug, `.service`/`.timer` extension mapping (BACK-520/521/523).
-- ✅ `/digest` and `/exchanges` composed views added to `claude://` (BACK-513); new `--perf` flag for CLI timing/RSS logging.
-
-### v0.106.0 — --section bug fix + unknown-query-param warnings + git activity timelines + tier-1 language expansion
-- ✅ `reveal file.md --section NAME` fixed — was silently dumping the whole file instead of the named section, a user-reported CLI-only regression (BACK-508).
-- ✅ Closed-param adapters now warn on unrecognized query params instead of silently returning a base result with no signal (BACK-507).
-- ✅ Git activity timelines — `?type=history&bucket=week|month` returns bucketed commit/author counts over time, for file/dir/repo scope (BACK-484).
-- ✅ Commit churn folded into hotspot scoring, so complex files under constant churn rank above equally complex but untouched files (BACK-483).
-- ✅ Kotlin, Swift, Ruby, and PHP promoted to tier-1 verified conformance — every catalogued nav-layer gap closed and regression-pinned, growing verified-language coverage from 9 to 13 (BACK-477).
-- ✅ `diff://REF/path` git resolution rewritten from `git` CLI subprocess calls to in-process `pygit2` (BACK-505).
-
-### v0.105.0 — Import-graph edges for 5 more languages + depends:// cross-module fix + Kotlin/Swift/Ruby nav bugs
-- ✅ `reveal architecture` now produces a real fan-in/fan-out graph for Java, PHP, Ruby, Swift, and Kotlin, up from Python/JS/TS/Go/Rust-only (BACK-487/488).
-- ✅ `depends://` fixed for Java/Kotlin/C#/PHP/Swift — cross-package-directory dependents were silently under-reported due to a project-root/file-discovery mismatch with `imports://` (BACK-498).
-- ✅ Elixir structure extraction — `reveal file.ex` now extracts functions/modules instead of byte/line counts only (BACK-480).
-- ✅ Kotlin/Swift bare-`throw` exit detection + full throw-text rendering, Ruby statement-modifier gates/`case`-`when`/`raise`/compound-ivar-write nav fixes (BACK-497/499/500).
-- ✅ HTML CSS-selector/id/tag/positional extraction fixed — was erroring "Element not found" on all of it (BACK-481).
-- ✅ `reveal architecture` no longer hangs on repos with large dependency cycles — exponential cycle-path search rewritten as BFS (BACK-496).
-
-### v0.104.0 — Multi-language nav-layer conformance + rule-correctness matrix complete + help-system coherence
-- ✅ Nav-layer flags (`--varflow`/`--sideeffects`/`--catchmap`/`--fanout`/`--statewrites`/`--loopmap`, `Class.method`) closed every catalogued gap for Kotlin/Swift/Ruby/PHP, now regression-pinned in the conformance matrix (BACK-476/477/478).
-- ✅ Rule-correctness matrix complete: all 77 `--check` rules verified to fire *correctly* (not just avoid hanging) across languages — 12 real bugs found and fixed across 8 tranches (BACK-432).
-- ✅ Cross-language taxonomy fixes: Go/Rust struct extraction, PHP/Kotlin import detection, C++/PHP/TS/Rust `--scope` class/struct/impl detection, Kotlin/Swift assignment & fluent-call-chain classification (BACK-474/475/478).
-- ✅ Per-rule verified-language coverage now surfaced in `--rules`/`--explain`, so users see where each rule is trustworthy vs. best-effort before relying on it (BACK-466 part 1).
-- ✅ Full 52-file help-system content-accuracy sweep plus help-index coherence fixes — ~28 files had real drift corrected, 15 previously-invisible guides now indexed (BACK-479).
-
-### v0.103.0 — Agent onboarding sprint complete (M1–M4)
-- ✅ `help://quick` command block now derived live from the adapter registry instead of hand-maintained, fixing drift risk and surfacing project-local plugin adapters for the first time (BACK-391, M4 — last open item of the onboarding strategy).
-- ✅ Breadcrumbs teach the outline≠content mental model, not just extraction mechanics — markdown output now frames its "Next:" hint honestly and suggests `--section '<first heading>'` by name (BACK-390, M1).
-- ✅ `--agent-help` / `help://agent` now obey progressive disclosure instead of dumping the full ~40K-token guide regardless of need; the CLI flag and `help://` adapter now share one code path (BACK-389).
-
-### v0.102.0 — Render-mode registry refactor + doc/help count corrections
-- ✅ `ElementRenderMode` registry replaces the 87-line render-mode if/elif chain in `_render_element` (BACK-360). No behavior change.
-- ✅ Heading-aware markdown outline collapse in default text mode — indents by level, auto-collapses past 25 headings (BACK-387).
-- ✅ E501 no longer false-flags data/doc files (BACK-386).
-- ✅ Doc/help honesty pass: corrected adapter count (→25), language count (→84), AGENT_HELP token estimate (→~40K) across 13 docs + 3 code files; rewrote the language-count integrity test to assert against `reveal --languages` instead of the raw tree-sitter pack. Filed BACK-388 to generate these counts instead of hand-typing them.
-
-### v0.101.0 — Commit-share ownership queries + production-only surface scan
-- ✅ `git://<path>?type=ownership` — commit-share authorship for file / directory / whole repo: primary author, per-author %, contributor count, last-touch date. Foundation for bus-factor / key-person reads; scope extends to directories and the whole repo (subtree oid comparison). `?merges=1`, `?limit=N`, shallow-clone warning (BACK-383).
-- ✅ `reveal surface --source-only` — excludes test files and directories from surface scans so security reviews see only production surface. Prunes `tests/`, `__tests__/`, `test_*.py`, `*.test.ts`, etc. Dogfood: 2248 → 286 entries (BACK-380).
-- ✅ Bug fixes: `mock.patch` decorators no longer misclassified as HTTP PATCH routes (BACK-377); `imports://` flood on committed `venv/` fixed via `os.walk` + `SKIP_DIRECTORIES` (BACK-378); shallow-clone warning for `?type=blame` (BACK-379).
-
-Earlier highlights (newest first):
-
-| Version | Headline |
-|---------|----------|
-| v0.100.2 | TypeScript-aware `contracts`/`surface`/`patches://`, confidence metadata, letsencrypt snap fix |
-| v0.100.1 | TypeScript/TSX class method extraction by name |
-| v0.100.0 | Data-driven audit (BACK-366–369), D005 cross-file literal duplication, help-system overhaul |
-| v0.99.1  | `claude://` remote-session fixes + URI routing correctness |
-| v0.99.0  | `claude://` adapter quality pass |
-| v0.98.0  | Zig analyzer fixes + `check`/`hotspots` hang fix |
-| v0.97.0  | `codex://` adapter + agent discoverability |
-| v0.96.0  | Named profiles, PHP call graphs, import-rule false-positive fixes |
-| v0.95.0  | tree-sitter-language-pack 1.x migration (+140 languages) |
-| v0.94.0  | `reveal testability` + `patches://` adapter + frontmatter help metadata |
-| v0.93.0  | `--grep` text search |
-| v0.92.0  | Architecture hardening sweep |
-
-Earlier releases (v0.33–v0.91) and full per-item notes: [CHANGELOG.md](CHANGELOG.md).
+- ⚠️ Changes a script may notice: an unsupported `--format` or `--also-json` exits 2 instead of printing text (BACK-1425); git-ignored files drop out of every walker, so counts fall (BACK-1386); the text outline stops at 500 items per category (`--format json` is uncapped, BACK-1424).
 
 ---
 
-## Current Focus: Path to v1.0
+## Validation
 
-### Core tier — the five operations agents use
-
-About 90% of real use is five operations: extract an element (`reveal FILE NAME`), extract
-a markdown section (`reveal DOC.md "Heading"`), `--grep`, outline a file (`reveal FILE`,
-`--outline`), and read a line range (`reveal FILE :N-M`). A bug in one of them outranks
-adapter work and new surface.
-
-Their bar is `tests/test_core_tier_golden.py`:
-- The text output is pinned byte for byte across the 13 tier-1 languages and markdown,
-  in three views: the default (breadcrumbs off, as an agent's piped call gets it), a first
-  run with breadcrumbs on, and a later run once the show-once hints are spent.
-- Each operation's `--format json` must carry the same items as its text view (for
-  `--grep`, each hit's line number and text).
-
-A golden diff is a change agents will see. Accept an intended one with
-`REVEAL_UPDATE_GOLDEN=1 pytest tests/test_core_tier_golden.py -n0` and review the diff like
-code.
-
-### Reliability program — the priority track (BACK-1512)
-
-This is the first priority. It ranks above new adapters and new language breadth.
-
-Recent releases have been mostly fixes: 0.122.0–0.129.0 shipped 155 "Fixed" entries and 31
-"Added". Those fixes fall into about 15 recurring bug classes, which come from five
-structural causes:
-
-1. **Flags reach adapters through 7 separate mechanisms.** A flag can work on one
-   invocation form and be silently dropped on another. This is the largest class, with
-   45+ fixes.
-2. **Results can't express "failed", "not applicable" or "truncated".** A failure then
-   renders as a clean zero or ✅. This is the most harmful class, with 35+ fixes.
-3. **Shared infrastructure is copied instead of called.** There are 24 directory walkers,
-   25 parser-setup sites and about 70 path-rendering sites.
-4. **Per-language node-kind tables are typed by hand** and never checked against the
-   grammar.
-5. **Help and docs are never run against actual behavior.**
-
-Each cause had been diagnosed several times, but only guarded against, never removed. This
-repo already shows what works:
-- Removing a second implementation retired its bug class: single callee extraction, the
-  encoding ratchet, and one complexity score.
-- Adding a check around a cause did not. The routing matrix covered 5 flags, and 9
-  silent-flag bugs were filed after it.
-
-So this track works in two steps per cause. First a ratchet stops the class from growing:
-a check that counts violations and lets the count only fall. Then the cause is removed.
-
-**Next, in priority order**
-
-Steps 1 and 2 are done; steps 3 and 4 hold the open work, and the gates below run alongside.
-What landed, and when, is in CHANGELOG `[0.130.0]`.
-
-1. **The ratchets are in place (2026-09-30).** The walker, parser-import, print/exit,
-   display-path, silent-except (0 since 2026-10-02), argv and complexity ratchets live in
-   `scripts/check_boundaries.py` and `scripts/check_complexity.py`; the grammar-coverage test
-   and the registry-driven contract harness (`tests/test_output_contract_compliance.py`) check
-   every adapter and subcommand's envelope, path spelling and disclosed cuts. Counts only fall.
-2. **The largest class (flags dropped between invocation forms) is retired at its cause.**
-   The flag ledger (`reveal/cli/routing/ledger.py`) and one parsed `Invocation` replaced the
-   seven forwarding mechanisms. Its last follow-up, the flag/adapter pairs read with no visible
-   effect on the fixture, was resolved 2026-10-06 (every known-silent pair now shows its effect),
-   and a flag that reads no element refuses a second path instead of dropping it.
-3. **The result contract.** One failed result and one cut marker are in place for the URI
-   router, the subcommands and the file view. BACK-1059 (typed outcomes at adapter and
-   analyzer boundaries) has landed its main parts: both silent-handler gates and the
-   `broad-except` ratchet are 0. On 2026-10-15 the ratchet went from 246 handlers that caught
-   `Exception` without a reason to 0: each now narrows to what its body raises, or states why
-   it is a boundary (`# boundary-ok: broad-except -- <why>`) and still discloses the failure.
-   `reveal check` leaves through the subcommand seam in both its directory and single-file
-   forms, and `review` is the one remaining boundary site. A file that could not be analyzed
-   or read, or a config that could not load, now reaches the result instead of a log line for
-   ast://, imports, review, calls://, trace://, contracts://, testability://, diff:// on a git
-   directory, markdown:// reads, xlsx sheets, the git content search, the DNS checks and
-   record listing, nav `--transitive` effects and config loading. What is open is the rest of
-   that class: a few rare sites (BACK-1857); `contracts` coverage no longer counts a file whose
-   analysis raised as analyzed. Also open: BACK-916 (one
-   rendering layer: patches, nginx://, the nginx file-flag handlers, surface://, overview://,
-   testability://, deps, contracts, pack, architecture and hotspots return their output; remaining
-   inline/adapter rendering and shared capture/JSON ownership stay open) and BACK-1052 (shared scan policy now used by depends,
-   I002, D005 and health; broader defaults/environment policy remains).
-4. **One seam per concern.** The parser, path, root-finder and walker seams are done. Open:
-   BACK-1054 (import resolution: imports and depends share scope and dispatch; depends'
-   indexing/fallback and extraction-cache ownership remain; I002 already uses the service,
-   and the graph keeps every edge with its scope so views filter at presentation).
-
-These gates run continuously alongside the steps above:
-- BACK-1365: executable docs. The first gate runs offline recipes as text and JSON,
-  checks positive findings and grep pipelines, and executes documentation discovery
-  commands; named-target examples still need fixtures.
-- BACK-1518: a recall-regression gate that turns the Validation & Trust oracles below into
-  scheduled checks. The existing gate now includes JS/TS/TSX compiler oracles alongside
-  C/C++/Python/Rust/Java; pinned populations and reviewed baselines are owned by
-  [VALIDATION.md](VALIDATION.md#re-running-this-yourself) and the corpus manifest.
-  Deliberately dropping an import edge fails the gate. The corpora are optional test inputs,
-  never runtime dependencies or services. Go is now included through its native toolchain; other language promotions remain.
-  Passing means no regression against each scoped baseline; it does not establish
-  runtime resolution or component-reference correctness. The separate local
-  [mixed-framework matrix](VALIDATION.md#bounded-mixed-framework-source-matrix-2026-10-14)
-  checks selected JSX tag extraction, owner scopes, contract and configuration answers. The
-  expanded scheduled corpus workflow is remotely qualified at the revision recorded in
-  [VALIDATION.md](VALIDATION.md#bounded-reliability-corpus-loops-2026-10-14); the later
-  gate and baseline changes are locally verified only, and remote qualification of them is pending.
-- BACK-1096: cross-subsystem invariants. Registry-wide import recovery, citation and
-  copy/rename controls now run without external corpora. Slice 2 added structure invariants
-  over 31 analyzers and agreement tests between subsystems (stats vs M101 vs ast line counts,
-  imports vs depends edges); it found the line-separator bug (line numbers now count `\n` only), and the
-  remaining disagreements are strict expected failures tied to their tasks.
-- BACK-1055: one source of truth for help.
-- BACK-1703: platform classes caught before CI. V036-V042 in `reveal reveal:// --check` lint
-  fork-only tests, POSIX-only calls, raw newline assertions, POSIX path literals, tree-sitter
-  accessors the 1.8.1 floor lacks, text I/O without `encoding=` and POSIX-only env variables.
-  Each of those rules came after its break. V026 now also follows a `.relative_to()` local into
-  `str()`/f-strings (the largest class of the 15 macOS/Windows-only breaks since
-  2026-09-01); still unlinted: output-boundary path keys (BACK-1740), a symlinked-TMPDIR run
-  (BACK-1741). Shared-file appends from pool workers need no rule: the scan found only
-  safe fork-only writers (optional per-worker files: BACK-1730).
-- Dead pool workers: a dead worker must cost only its own files, never the run. `check`,
-  `stats://`, `imports://`, I002 and `grep_files` hand work out through one helper
-  (`utils.parallel.submit_each`). A lost file is disclosed as lost (`worker_lost`) in each of
-  them, and in the architecture view, markdown `body-contains`, claude `?search=` and
-  `claude://files/` file-touch search (`track_file_sessions`).
-
-**Working rules while the track runs:**
-- A fix in one of these classes goes through the shared seam. It must not add another
-  walker, forwarding path or hand-typed table.
-- New adapters and flags must pass the contract harness.
-- The success measure is Fixed entries per class trending to zero across releases, with
-  each ratchet's count only falling. The raw number of fixes is not the measure, and it
-  is expected to rise while step 1 surfaces existing violations.
-- Full evidence and past decisions to respect: the maintainer design note
-  RELIABILITY_PROGRAM_2026-09-26 (not shipped). The task list is `tt list --tag
-  reliability`.
+*Supported* ("the command runs on this language") is not *validated* ("we have shown the
+answer is right"). A silent false negative, such as a load-bearing module reported with zero
+importers, is the failure a reviewer cannot detect, because a wrong answer looks like a
+checked one. So each cross-file signal is measured per language against an independent
+ground-truth oracle (the real toolchain where one exists, otherwise a from-spec oracle that
+shares no code with reveal), on real open-source codebases pinned to exact commits, and every
+miss is root-caused. The figures, which signal was measured in which language, and how to
+re-run every measurement are in [VALIDATION.md](VALIDATION.md); the pinned corpora are in
+`tests/corpus/manifest.yaml`.
 
 ---
 
-### Test Coverage & Quality
-- Test count: see the CI run for the current release. It isn't hand-maintained here (BACK-388).
-- Coverage: **~68%** — target 90%+
-- UX query/navigation surface: complete (query operators, field selection, element discovery, `--outline`/`--scope`/`--varflow`/`--calls` range)
-
-### Stability & Polish (open)
-- Output contract v1.1 enforcement complete: `analyzers/` (BACK-885, 19
-  files), `adapters/` (BACK-891, 31 files), and `xlsx.py`'s 11
-  ResultBuilder call sites that never passed `contract_version` (BACK-892)
-  all closed. Zero hardcoded `contract_version: '1.0'` literals or
-  parameter-less `ResultBuilder.create()` calls remain.
-- JSON result emission consolidated behind one funnel, `print_json_result()`
-  (BACK-893), enabling an opt-in `--provenance` flag (BACK-881) that attaches
-  reveal_version/repo-state/config-digest metadata to JSON adapter output.
-- Performance on very large codebases (multi-process `check`/`hotspots` landed; profiling continues)
-- Windows signed-binary distribution (see Technical Debt below)
-- TypeScript/React depth — JSX component tree (`react://`) held pending demand (BACK-337)
-
-### Validation & Trust — DD correctness (active track)
-The distinction that matters for due-diligence use: *supported* ("the command
-runs on this language") is not *validated* ("we have proven the answer is
-right"). Silent false negatives — a load-bearing module reported as having zero
-importers, a db-writing function reported as pure — are the one failure mode a
-DD reviewer cannot tolerate, because a wrong answer looks exactly like a
-checked one. The program that closes this is documented in
-[VALIDATION.md](VALIDATION.md): per language, build an **independent
-ground-truth oracle** (the real toolchain where one exists — `go list`,
-`swift package dump-package`, `ts.resolveModuleName` — else a from-spec oracle
-that shares no code with reveal), diff it against reveal's output on a **real
-open-source codebase**, root-cause every miss, fix, and re-measure.
-
-- **Done:** import/dependency recall measured on **19 languages** (Python,
-  TypeScript, Java, Go, Ruby, Kotlin, Rust, C#, PHP, Swift, Scala, C, C++, Lua,
-  Dart, GDScript, Zig, TSX, plain JS), **each against two independent corpora**;
-  side-effect / boundary recall now measured on **all of them, and every one
-  at the full six-category sweep** (BACK-718 fully closed — GDScript
-  20.00%→69.33% on Pixelorama, TSX/plain-JS 90.16%→98.36% on Excalidraw, the
-  last two breadth gaps; Kotlin's original `db`-only sample deepened to
-  82.5%→92.9%, Swift's original `http`-only sample deepened to
-  43.3%→100.0%, the two narrow-depth gaps, both now closed). Every baseline
-  loop found a real bug except Zig's and C's (both clean 100% on first
-  measurement); every found bug is fixed, and three documented residuals
-  remain tracked (BACK-681, BACK-704 residual, BACK-703) — BACK-772
-  (package.json exports-map resolution) fixed stormy-mistral-0723. **The
-  single-corpus overfit-guard sweep is complete** — BACK-669 for the
-  original eleven languages, and BACK-708 with children BACK-709–715 for C,
-  C++, Lua, Dart, GDScript, Zig, and TSX/plain-JS (closed
-  merging-universe-0720). BACK-621's original six-language breadth plan is
-  fully closed. Honest-decline invariant shipped (reveal caveats an
-  unresolved result instead of asserting a false "nothing here"), and
-  release is now gated on CI (BACK-578). `contracts`/`surface` correctness:
-  a polyglot-repo dispatch bug that silently dropped every non-winning
-  language's contracts (BACK-780), plus 5 further Python taxonomy bugs found
-  by direct probing — subscripted generic bases, metaclass keyword-arg ABCs,
-  BaseModel subclass linking, `os.environ[...]` subscript access, non-file
-  `.write()` false positives (BACK-777/778/781/782/783) — all fixed; one
-  further finding (BACK-779) ruled a taxonomy-completeness gap rather than a
-  bug, deferred to a dedicated sweep. **BACK-719 (surface/contracts
-  ground-truth oracle methodology) is now fully closed**: `contracts`
-  (Dagster corpus, 100%/100% both languages, BACK-784 found+fixed) and
-  `surface`'s `cli`/`mcp` (MCP-SDK/click/typer/commander corpus, 100%/100%
-  both languages, BACK-787/788 found+fixed) and `http` routes (Flask/
-  FastAPI/Express corpus, 100%/100% both languages via a static
-  approximation — the execution-based-oracle question was raised and
-  resolved by the static attempt succeeding, no `flask routes`/Django
-  `show_urls` harness needed) all have real-corpus recall measurement now.
-- **BACK-815 — second-corpus overfit guard for surface/contracts — ✅
-  complete (calm-thaw-0724).** Every other recall program above (import,
-  side-effect, call-graph) was re-run against a second, unrelated real
-  corpus before being trusted (see Done, above), and that pass found real
-  bugs in 6+ languages. The surface/contracts program has now had the same
-  treatment across all 10 language/category slices — Go (BACK-816:
-  `contracts-structs` precision 93.15% on a second corpus, the disclosed
-  name-only-matching tradeoff — since fixed, implementer matching now
-  requires name+signature text, not just name), Rust (all 4 categories true
-  100%/100% after fixing 1 oracle-only bug), C++ (2 new defects filed,
-  BACK-827/828), Java, C# (both clean 100%/100%), PHP, Ruby (1 oracle bug
-  each, fixed), Swift (1 new defect filed, BACK-829), Kotlin (1 new defect
-  filed, BACK-830), and HTTP-routes Python+TS/JS (BACK-825, the closing
-  slice: Python 100%/100%, TS/JS 66.67% recall tracing to 1 new defect
-  filed as BACK-831). Detail: `tt show BACK-815` for the full ten-slice
-  rollup, `VALIDATION.md`'s Scope section for the promoted confidence-tier
-  summary, and each language's own
-  harness notes.
-- **`patches://`/testability's ground-truth oracle loops complete for both
-  implemented languages (BACK-972 Python, BACK-973 TypeScript/JavaScript).**
-  Python: all 10 real `unittest.mock`/pytest-`monkeypatch` call shapes
-  measured against an independent oracle on the Home Assistant test corpus
-  (19,235 oracle call sites) — 6 of the 10
-  (`monkeypatch.setitem`/`delitem`/`delattr`/`setenv`/`delenv`,
-  `patch.multiple`) were entirely unrecognized before this loop, 48.5% of
-  real monkeypatch call sites invisible; found and fixed, now 100% recall
-  on all 10 shapes. TypeScript/JavaScript: `jest.mock`/`vi.mock`/`spyOn`/`fn`
-  measured against an independent TypeScript-compiler-API oracle on two
-  corpora with different mocking frameworks (Excalidraw/vitest,
-  react-router/jest — 577 combined call sites) — clean on both, no bug
-  found.
-- **The production-side boundary-classification JOIN is now measured too
-  (BACK-974)** — the one gap the call-site-recall loops above named as
-  separate and unmeasured. 1,384 patch/profile join checks across 15 Home
-  Assistant integrations (759 independently resolvable) found and fixed two
-  real defects: a false negative where every patch targeting a package-root
-  `__init__.py` entry point (the highest-volume target shape —
-  `async_setup_entry`/`async_setup`/`async_unload_entry`) silently joined to
-  nothing (49/49 misses), and a false-positive class where an unbounded
-  module-name search matched a coincidental word anywhere in an unrelated
-  target's dotted path (12/14 pre-existing spurious matches). Both fixed in
-  `reveal/testability/boundaries.py`/`report.py`; `tests/test_testability.py`
-  23/23 passing (3 new regression tests).
-- **Next.** Import recall, side-effect recall, call-graph recall, and
-  surface/contracts recall (now including its second-corpus pass) are all
-  measured (see Done, above), including the TypeScript/nest import-recall
-  residual — fixed (81.21% → 99.93%) and re-measured and confirmed against
-  nest (super-overlord-0723); it no longer appears in VALIDATION.md's
-  residual table. `patches://`/testability's oracle programs (call-site
-  recall for both implemented languages, and now the boundary-join) are all
-  complete — see Done, above.
-
-  *Not on this list, deliberately:* `patches://`/testability language breadth
-  past Python + TS is filed as an idea rather than committed work — see
-  `tt show BACK-632`. That ticket is about extending coverage to more
-  languages, which is a step *after* a first ground-truth loop exists for
-  that language (both Python's and TS's are now done). Note that
-  `surface`/`contracts`
-  themselves already reached 11-language *coverage* parity (BACK-588/630/631)
-  — real recall validation is the item above, not this note. Swift's
-  `_RopeModule` residual is closed by design (BACK-704):
-  resolving it would require evaluating arbitrary `Package.swift` code, which
-  the buildless architecture will not do. PHP/osCommerce 74.65% (BACK-681,
-  CWD/chdir-dependent bare-literal `require`/`include`) and C#/Newtonsoft.Json
-  99.36% (BACK-703, blocked on a `#if`-branch tree-sitter grammar limitation)
-  are both documented as deliberately out of scope for a generic resolver —
-  not queued work, revisit only if a corpus shows either shape is commoner
-  than measured.
-
-- **Trust beyond extraction — the second axis (BACK-1093's program; nine more
-  instances added 2026-08-26).** This is not a new track: **BACK-1093** (filed
-  2026-08-10, unstarted) already names it from the validation methodology's
-  pillar 3 — *"the output either carries a validated answer or an explicit
-  not-fully-covered-here marker… a reviewer cannot work with a wrong 'nothing
-  here'"* — and proposes the right fix, lifting `depends://`'s
-  `True`/`False`/`None` containment pattern into a shared result-envelope
-  contract. The oracle
-  program above validates one thing: *did we extract the right edges*. It
-  cannot catch a wrong answer produced **downstream** of correct extraction.
-  Proof that this is a real gap rather than a theoretical one: Ruby `calls://`
-  is measured at **100.00% recall / 0 FPs** (VALIDATION.md fn39) and the same
-  adapter on the same corpus reports **37.3% of the codebase as dead code** —
-  because `.new` → `initialize` is not a source-level edge, the confidence
-  label is a hardcoded constant identical to Python's 7.2% run, and the printed
-  disclaimer lists Python's exclusions on a Ruby scan. Extraction was perfect;
-  the derived signal, the confidence, and the presentation were all wrong.
-  Four uncovered axes: **scope honesty** (did the caller's flag actually
-  apply — BACK-1187, BACK-1192), **derived signals** (BACK-1193, BACK-1197,
-  BACK-1198), **presentation** (BACK-1194, BACK-1198), and **selection** (is
-  the ranked/packed code the code they care about — BACK-1195, BACK-1196).
-  Root cause under four of five: **per-language correctness was pursued in the
-  extractors and assumed everywhere else** — `deps.py`, `calls/renderer.py`,
-  `calls/adapter.py`, and `M102.py` each hardcode a Python assumption reached
-  from language-generic code paths. Fix direction: a per-language capability
-  table derived from VALIDATION.md's own measured figures, plus a ratchet guard
-  per BACK-620's precedent — neither of which a containment envelope alone
-  provides, which is what BACK-1093's scope does not yet cover. Note BACK-1188
-  is a containment failure **inside `depends://`**, the one adapter where
-  BACK-1093 records the invariant as shipped: the design is right, one branch
-  was never wired to it. Track extension, not a new program — same premise
-  (a wrong answer that looks like a checked one is the intolerable failure),
-  different entry point. The remaining instances are tracked as BACK-1093 follow-ups.
-
----
-
-## Architecture Hardening Track — ✅ Complete (cukite-0512)
-
-All 12 items (the v0.92.0 hardening sweep) shipped in a single session. See the v0.92.0 entry in [CHANGELOG.md](CHANGELOG.md) for per-ticket detail.
-
-Remaining hotspots from the original review that were **not in scope** for this sweep (deferred to future sessions, will be tackled when their adapters need maintenance):
-- `_run_fleet_audit` in `nginx/adapter.py` (cx:31)
-- `get_structure` in `ssl/adapter.py` (cx:31)
-- `get_structure` in `claude/adapter.py` (cx:30)
-- `get_file_blame` in `git/files.py` (cx:30)
-- `_infer_shape` in `ast/nav_reveal_type.py` (cx:29)
-
-The kernel (mcp_server, adapters/base, file_handler) and the worst complexity offenders (`reveal_pack`, `_handle_if`, `find_callees_recursive`) are now in much better shape.
-
----
-
-## Design Specs & Open Backlog
-
-Shipped capabilities (BACK-071 through BACK-294) are recorded in [CHANGELOG.md](CHANGELOG.md);
-their original design notes remain in git history. The specs below are the ones still worth
-keeping inline — one open item and one reference spec.
-
-
-### BACK-295: Extend `get_structure()` to collect module-level variable assignments as `type=variable`
-
-**Status**: Open (hold — BACK-294 shipped in v0.91.3; revisit if hint proves insufficient)
-**Value**: Medium | **Lift**: Medium
-**Filed**: burning-asteroid-0510 (2026-05-10)
-
-Full root-cause fix for the BACK-294 class of bug. Adds a `variables` category to the element collection layer so `--search`, `name~=`, and `--type variable` work for module-level constants.
-
-```bash
-reveal bot.py --search "LIVE_SIGNALS"   # finds it after this fix
-reveal src/ --type variable             # all module-level constants across project
-reveal 'ast://src/?name~=^[A-Z_]+$'    # all SCREAMING_SNAKE constants
-```
-
-**Implementation:**
-
-- `treesitter.py`: add `_extract_variables()` — walk top-level nodes for `assignment` and `augmented_assignment` where LHS is a simple identifier. Scope to module-level only (depth 0) to avoid function-local noise. Populate a `variables` list in the structure dict returned by `get_structure()`.
-- `adapters/ast/filtering.py`: add `'variable'` / `'variables'` to `normalize_type_condition()`.
-- Default unfiltered output: **do not** include variables in the default listing (too noisy); require `--type variable` or explicit `name~=` to surface them. Or include only when querying a single file.
-- `ELEMENT_TYPE_MAP` in `treesitter.py`: add `'variable': ('assignment', 'augmented_assignment')`.
-
-**Risk:** Python `assignment` nodes are extremely common — naive extraction would flood directory-mode output. The depth-0 guard (module-level only) is essential. May still be too noisy for `reveal src/` without `--type variable`.
-
-**Revisit trigger:** BACK-294 ships and users still hit the wall (hint alone not enough), or a second distinct user asks to search for constants.
-
----
-
-### BACK-296: `codex://` adapter — Codex CLI session analysis
-
-**Status:** ✅ Phase 1/2/3 all shipped (Phase 1 v0.97.0; Phase 2/3 depth — `/tools`, `/shell`, `/errors`, `?tokens`, `/workflow`, `/timeline`, `?goal`, content search — landed by v0.114.0, plus `/digest`, `/exchanges`, `/message/<n>`, `skills`, `plugins` beyond the original plan, BACK-943-947). Retained below as the `claude://`-vs-`codex://` structural reference.
-**Live schema:** `reveal help://schemas/codex` — source of truth for current query params/output types, don't hand-maintain the list here.
-
-A peer adapter to `claude://` for navigating [OpenAI Codex CLI](https://github.com/openai/codex) sessions. Codex stores sessions differently from Claude Code — SQLite index + per-session JSONL with a typed event envelope — so this is a new adapter, not a fork of `claude://`.
-
-**What it enables:**
-
-```bash
-reveal 'codex://'                            # list sessions from SQLite threads table
-reveal 'codex://sessions/?filter=auth-refactor'     # fast metadata search (SQLite)
-reveal 'codex://sessions/?search=auth-refactor'     # full-text content search (JSONL scan)
-reveal 'codex://019e5cc5'                    # session overview (turns, tools, tokens, duration)
-reveal 'codex://019e5cc5?last'               # last agent message — recovery pattern
-reveal 'codex://info'                        # resolved paths, DB stats
-reveal 'codex://history'                     # ~/.codex/history.jsonl
-reveal 'codex://config'                      # ~/.codex/config.toml (secrets masked)
-reveal 'codex://memories'                    # ~/.codex/memories/ (MEMORY.md + summaries)
-reveal 'codex://rules'                       # ~/.codex/rules/*.rules (Starlark permission rules)
-```
-
-BACK-947 renamed the query params to match `claude://`'s split: old `?search=` (metadata) is now `?filter=`, old `?content=` (full-text) is now `?search=` — the old names now surface reveal's unknown-query-param warning instead of silently matching.
-
-**Key structural differences from `claude://`:**
-
-| Dimension | Claude | Codex |
-|---|---|---|
-| Session ID | Named slug (`amber-fire-0425`) | UUID — surface `threads.title` for display |
-| Primary index | Filesystem scan of `~/.claude/projects/` | SQLite `threads` table — use this first |
-| Tool calls | `tool_use`/`tool_result` inside message blocks | `function_call`/`function_call_output` as separate JSONL lines linked by `call_id` |
-| Reasoning | `thinking` blocks — readable | `encrypted_content` — opaque; show count only |
-| Shell execution | Bash tool call | Dedicated `exec_command_begin/end` events with exit code + duration |
-| Config | JSON | TOML |
-| Goals | None | `goals_1.sqlite/thread_goals` — per-thread objective + token budget |
-| Memory citation | None | `agent_message.memory_citation` — names the memory file cited |
-
-**JSONL record types** (Rust source: `codex-rs/protocol/src/protocol.rs`):
-- `session_meta` — id, cwd, model_provider, git state, thread_source
-- `turn_context` — model, sandbox_policy, approval_policy, effort (per-turn)
-- `event_msg` — user_message, agent_message, task_started, task_complete, exec_command_begin/end, token_count, error, warning, request_permissions
-- `response_item` — message, reasoning (encrypted), function_call, function_call_output, local_shell_call, web_search_call
-
-**Shared infrastructure to build first:**
-
-`reveal/adapters/agent_base.py` — `pair_tool_calls(calls, outputs, call_id_field)` utility. Structurally identical logic needed in both `claude://` (matches `tool_use` → `tool_result` by `id`) and `codex://` (matches `function_call` → `function_call_output` by `call_id`). Build once, test once.
-
-**File layout** (mirrors `claude/` exactly):
-
-```
-reveal/adapters/codex/
-  __init__.py
-  adapter.py               ← routing, SQLite path resolution, dispatch
-  handlers/
-    sessions.py            ← list (SQLite-first), metadata search, content search
-    system.py              ← history, config (TOML), rules, memories
-  analysis/
-    messages.py            ← user/agent turns, memory citations
-    tools.py               ← function_call pairing, shell tracking, success rates
-    errors.py              ← error/warning/guardian_warning events
-    overview.py            ← session metrics, duration, goal status
-    search.py              ← cross-session content search
-    timeline.py            ← chronological event stream
-  renderer.py + render_*.py
-```
-
-**Environment overrides:** `REVEAL_CODEX_HOME` (default `~/.codex`), `REVEAL_CODEX_DB` (default `~/.codex/state_5.sqlite`).
-
-**Do not** build a unified `agent://` namespace yet — wait until a third agent adapter (Gemini CLI, etc.) makes the abstraction earn its keep.
-
----
-
-### BACK-297: `xlsx://` — pivot table inspection (`?pivots=list/schema`)
-
-**Status**: Open
-**Value**: High | **Lift**: Medium
-**Filed**: infinite-antimatter-0628 (2026-06-28)
-
-Add `?pivots=list` and `?pivots=schema` query params to the xlsx adapter. Discovered need while analysing BMD thin workbooks — 8 pivot tables in a single thin had to be extracted by manually unzipping and parsing `xl/pivotTables/*.xml` and `xl/pivotCache/pivotCacheDefinition*.xml`. This is the core of understanding how any thin workbook wires to a Power Pivot / SSAS model.
-
-**What it enables:**
-```bash
-reveal "xlsx:///path/thin.xlsx?pivots=list"    # names, sheet locations, cache ids
-reveal "xlsx:///path/thin.xlsx?pivots=schema"  # full field breakdown per pivot
-```
-
-**Expected output (`?pivots=schema`):**
-```
-Pivot Tables (8):
-  pivotTable1  →  cache 1  (Daily Flash, A8:Y267)
-    Rows:    [Warehouses].[Division], [Warehouses].[Desc FIN Whs]
-    Cols:    [Measures].[Sales SEL], [Budgeted Sales], [GM Pct SEL] ...
-    Filters: [Periods].[Period with Current]
-
-  pivotTable2  →  cache 2  (As of Current Date, B7:D10)
-    Rows:    [Periods].[Period with Current]
-    Cols:    [Measures].[Current As Of Date], [Workdays SEL] ...
-```
-
-**Implementation sources:**
-- `xl/pivotTables/pivotTable*.xml` — `<pivotField>` with `axis=axisRow/axisCol/axisPage`; field names resolved via cache index
-- `xl/pivotCache/pivotCacheDefinition*.xml` — `<cacheField name="[Measures].[Sales SEL]">` — the MDX field references
-- `xl/workbook.xml` — `<pivotCache cacheId>` links pivot table → cache definition
-
----
-
-### BACK-298: `xlsx://` — expose full OLAP connection string in `?connections=show`
-
-**Status**: Open
-**Value**: High | **Lift**: Low
-**Filed**: infinite-antimatter-0628 (2026-06-28)
-
-`?connections=show` currently returns name and type but silently drops the actual connection string from `dbPr/@connection`. For OLAP-connected workbooks (type 5, MSOLAP.5) this is the essential fact — it identifies which model and instance the file queries.
-
-**Fix:** Surface the full `dbPr/@connection` string and `dbPr/@command` in `?connections=show` output. Also surface `olapPr` attributes (sendLocale, rowDrillCount).
-
-**Example of what's currently missing:**
-```
-Provider=MSOLAP.5;Integrated Security=SSPI;
-Initial Catalog=BMD_Core_<guid>_SSPM;
-Data Source=https://bmdbi.portalfront.com/Shared%20Documents/Cores/BMD_Core.xlsx;
-MDX Compatibility=1;Safety Options=2;command=Sandbox
-```
-
-Discovered by having to read `xl/connections.xml` raw to find which core model a thin was pointed at.
-
----
-
-### BACK-299: `xlsx://` — explain empty Power Pivot schema on OLAP-connected thin files
-
-**Status**: Open
-**Value**: Medium | **Lift**: Low
-**Filed**: infinite-antimatter-0628 (2026-06-28)
-
-When `?powerpivot=schema` is run on an OLAP-connected thin (no embedded `xl/model`), the adapter returns `Tables (0)` with no explanation. This is confusing — the workbook clearly has a Power Pivot connection but the model lives externally.
-
-**Fix:** Detect the "thin" pattern — MSOLAP external connection + no embedded xl/model — and return a diagnostic instead:
-
-```
-⚡ Power Pivot model: externally connected (no embedded tables)
-   OLAP source: BMD_Core_<guid>_SSPM
-   Data Source: https://bmdbi.portalfront.com/.../BMD_Core.xlsx
-   → Run ?pivots=schema to see what this file queries from the model
-   → Run ?connections=show for full connection string
-```
-
-Detection heuristic: `xl/customData/item1.data` present (Power Pivot flag) + `xl/connections.xml` has a type-5 (OLAP) connection + `Tables (0)` after parsing.
-
----
-
-### Additional Subcommands
-
-Eight subcommands (`check`, `review`, `pack`, `health`, `dev`, `hotspots`, `overview`, `deps`) shipped. Remaining subcommand ideas:
-
-```bash
-reveal onboarding            # First-day guide for unfamiliar codebases
-```
-*(`reveal audit` was listed here — dropped: "audit" names the consumer's activity, not data (see [Scope Test](#scope-test-what-belongs-in-reveal)), and it's already `check --profile security` from BACK-321.)*
-
-#### Structural Egress & Ownership Queries (field notes: yenifada-0629; reframed flux-carnage-0629)
-
-Field-validated on 6 real codebases (Saleor ~909K LOC, LiteLLM ~4.6K py files, 4 internal repos) during a security/architecture review. The use-case validated cleanly **on the primitives reveal already has** (`overview`, `architecture`, `surface`, `git://blame`). These items extend those primitives with new *data categories* — they do not add verdicts. The interpretive layer (AI-washing call, exposure verdict, debt valuation, review playbook) lives in the **consumer's** tooling, not reveal — see [Scope Test](#scope-test-what-belongs-in-reveal).
-
-| Item | BACK | Pri | Data revealed (reveal's half) | Judgment (consumer's half) |
-|------|------|-----|-------------------------------|----------------------------|
-| `surface --source-only` | BACK-380 | ✅ | Scope flag: drop test files/dirs in one pass | — (pure scoping) |
-| `git://?type=ownership` | BACK-383 | ✅ | Per-file/dir/repo commit-share ownership: primary author, commit-share %, contributor count, last-touch | "bus-factor risk" ranking + key-person call |
-
-This whole track is now shipped or closed. `git://?type=ownership` (commit-share, file/dir/repo) builds on the BACK-379 shallow-clone detection. The bus-factor ranking is a consumer recipe composing it with `imports://`/`calls://` fan-in.
-
-`reveal dd`, `reveal debt --rate`, vendor-specific `surface` sub-categories (BACK-381/382), and other consumer workflows are **out of charter** — moved to [Explicitly Not Planned](#explicitly-not-planned).
-
-### Relationship Queries (Call Graphs)
-- ✅ **`calls://` shipped v0.62.0** — `?target=fn`, `?callees=fn`, `?depth=N`, `?rank=callers`, `?format=dot`. See [CALLS_ADAPTER_GUIDE.md](reveal/docs/adapters/CALLS_ADAPTER_GUIDE.md).
-- ✅ **`depends://src/module/`** — inverse module dependency graph (what depends *on* this module, not just what this module imports). Different from `imports://` which is forward-only. **Shipped v0.73.0 (yaponuxo-0406)**.
-
-### Git-Aware Defaults
-```bash
-reveal .                    # Defaults to changed files on branch
-reveal --since HEAD~3       # Changes since commit
-reveal --pr                 # PR context auto-detection
-```
-**Why valuable**: Makes tool instantly relevant to daily workflows.
-
----
-
----
-
-## Lower Priority / Speculative
-
-| Feature | Notes |
-|---------|-------|
-| PostgreSQL adapter | mysql:// proves pattern; diminishing returns |
-| Docker adapter | `docker inspect` already exists |
-| LSP integration | Big effort; IDEs have good tools |
-| --watch mode | Nice UX but not core; use `watch reveal file.py` |
-
----
-
-## Technical Debt & Planned Infrastructure
-
-### Windows Code Signing (SignPath Foundation)
-
-**Status**: 🔬 Planned — application to SignPath Foundation not yet submitted
-**Value**: High | **Lift**: Medium
-**Doc**: [`reveal/docs/development/WINDOWS_SIGNING.md`](reveal/docs/development/WINDOWS_SIGNING.md)
-
-pip generates `reveal.exe` unsigned at install time — structurally unresolvable through pip. On Windows machines with ACP/WDAC enabled, upgrades break the tool. Observed concretely 2026-05-25 (hidden-sword-0525).
-
-Plan:
-1. **Phase 1** — Apply to [SignPath Foundation](https://signpath.org/) (free Authenticode signing for OSS, HSM-backed, GitHub Actions native)
-2. **Phase 2** — Add `reveal/__main__.py` so `python -m reveal` works as ACP-safe fallback (one-file fix, no cert needed)
-3. **Phase 3** — PyInstaller `--onedir` `reveal.exe` (folder, not `--onefile` — onefile's temp extraction is an AV heuristic; BACK-495), signed in GitHub Actions, distributed as GitHub Release binary — build side shipped (`windows-binary.yml`), signing still to enable
-4. **Phase 4** — Document signed binary as the recommended Windows install path in README/QUICK_START
-
-Discovery: hidden-sword-0525 (2026-05-25)
-
----
-
-### tree-sitter-language-pack 1.x Migration
-
-**Status**: ✅ **Complete** (lightning-sphinx-0522, 2026-05-22) — pin lifted, all 8700 tests passing on 1.8.1
-**Value delivered**: +140 languages (165 → 305), active maintenance, security patches
-**Approach taken**: Direct migration (no compat shim) — 28 production files updated, mechanical API renames + 3 consolidated helpers in `reveal/core/treesitter_compat.py` (`node_children`, `node_prev_sibling`, `node_next_sibling`)
-**Investigated**: enigmatic-helix-0522 (2026-05-22)
-**Migrated**: lightning-sphinx-0522 (2026-05-22)
-
-#### Background
-
-`tree-sitter-language-pack` 0.x (last release: 0.13.0, late 2024) is frozen and abandoned — no security patches, no new languages, unlikely to get Python 3.14 wheels. The 1.x series (kreuzberg-dev, Rust/PyO3 rewrite) is actively maintained with releases every 2–3 weeks.
-
-The 1.x package is **not API-compatible** with 0.x. It is a completely different Rust/PyO3 implementation. `get_parser()` returns `builtins.Parser` (not `tree_sitter.Parser`), and every Node attribute became a method call instead of a property:
-
-| API | 0.x (current) | 1.x |
-|-----|--------------|-----|
-| Parse input | `parser.parse(bytes)` | `parser.parse(str)` |
-| Root node | `tree.root_node` *(property)* | `tree.root_node()` *(method)* |
-| Node type | `node.type` | `node.kind()` |
-| Children list | `node.children` | `[node.child(i) for i in range(node.child_count())]` |
-| Named children | `node.named_children` | `[node.named_child(i) for i in range(node.named_child_count())]` |
-| Node text | `node.text` | `src[node.start_byte():node.end_byte()]` |
-| Byte offsets | `node.start_byte` *(property)* | `node.start_byte()` *(method)* |
-| Position | `node.start_point` → `(row, col)` | `node.start_position()` → `Point` |
-| Predicates | `node.is_named` *(property)* | `node.is_named()` *(method)* |
-
-#### Platform compatibility (1.x)
-
-- **Linux wheels tagged `manylinux_2_34`** — excludes Ubuntu 20.04 (glibc 2.31) and Debian 11 (glibc 2.31). Both are past or near EOL (Ubuntu 20.04 standard support ended April 2025). Low severity for reveal's developer-skewing user base; not a blocker.
-- **Alpine/musl**: no musllinux wheels — Alpine Docker images unsupported.
-- **macOS**: Intel (10.12+) and Apple Silicon (11.0+) both supported.
-- **Windows**: `win_amd64` and `win_arm64` — full support.
-- **Python**: single `abi3` wheel covers 3.10–3.14+.
-
-#### Offline/CI story (1.x)
-
-Grammars are downloaded on first use and cached (`~/.cache/tree-sitter-language-pack` on Linux). Pre-fetch at Docker build time or CI setup:
-
-```python
-from tree_sitter_language_pack import download_all
-download_all()  # fetch all 305 grammars; no-op if already cached
-```
-
-Cache directory is configurable (`PackConfig(cache_dir="/path")`). Cache is keyed to grammar ABI version, not library version — minor upgrades don't force re-downloads.
-
-#### Migration plan (4 phases)
-
-**Phase 1 — Investigation** ✅ Complete (enigmatic-helix-0522)
-
-**Phase 2 — Direct migration** ✅ Complete (lightning-sphinx-0522)
-
-Compat shim was rejected in favor of direct migration once the real scope was understood: ~25 production files use tree-sitter node APIs directly (not just `treesitter.py`), so a shim wrapping nodes at `_parse_tree()` would have required wrapping every node returned through every internal API — same blast radius as direct migration, with extra indirection.
-
-Mechanical changes applied across 28 files:
-- `node.type` → `node.kind()`
-- `node.children` → `node_children(node)` helper (aliased `_children`)
-- `node.start_point[0]` → `node.start_position().row`
-- `node.start_byte`/`end_byte`/`root_node`/`is_named`/`child_count` → method calls
-- `node.parent` → `node.parent()` (tree-sitter only — pathlib `.parent` untouched)
-- `node.prev_sibling`/`next_sibling` (removed in 1.x) → `node_prev_sibling`/`node_next_sibling` helpers (walk parent's children by `start_byte()` since 1.x node equality is unreliable)
-- `node.text` (removed) → byte-slice from source
-- `parser.parse(bytes)` → `parser.parse(str)`
-- `parent.children[0] == node` (broken equality) → `parent.child(0).start_byte() == node.start_byte()`
-
-Helpers consolidated in `reveal/core/treesitter_compat.py`. Two new regression tests guard against drift: `tests/test_treesitter_compat.py` (14 helper tests) and `tests/test_no_tree_sitter_0x_api_leak.py` (greps production tree for 0.x API patterns; fails CI if reintroduced).
-
-**Phase 3 — Lift the pin** ✅ Complete
-
-`tree-sitter-language-pack>=1.8.1` in `pyproject.toml`. All 8700 tests pass on 1.8.1.
-
-**Phase 4 — Native migration (optional, not yet done)**
-
-1.x's `process()` API does structured extraction (functions, classes, imports) natively — may allow deleting large chunks of reveal's own extraction logic. Defer until there's a concrete win to chase.
+## Distribution
+
+- **Windows code signing.** pip generates `reveal.exe` unsigned at install time, so machines
+  with application control enabled can break on upgrade. Plan: apply to the SignPath
+  Foundation for free open-source Authenticode signing, then sign the PyInstaller `--onedir`
+  build in GitHub Actions (the build side exists in `windows-binary.yml`) and document it as
+  the recommended Windows install. Details:
+  [WINDOWS_SIGNING.md](reveal/docs/development/WINDOWS_SIGNING.md).
 
 ---
 
@@ -944,87 +239,32 @@ These violate reveal's mission ("reveal reveals, doesn't modify") or fail the [S
 | Feature | Why Not |
 |---------|---------|
 | `--fix` auto-fix | Mission violation. Use Ruff/Black for formatting/fixes. |
-| `reveal dd` & other consumer-workflow composites | Named after a consumer's process, not the data; orchestrates a named multi-step playbook. Reveal composes via pipes — it doesn't run playbooks. Build the DD first-pass in consumer tooling over the existing primitives (`overview`→`architecture`→`surface`→`hotspots`→`git://blame`→`pack`). Decision: flux-carnage-0629 (BACK-384). |
-| `reveal debt --rate N` / debt-in-dollars scoring | A business opinion (dollar rate) layered on structural metrics. The inputs (`hotspots`/`circular`/`check`/`overview` counts) are already JSON-exportable; compute the valuation in the consumer's script. Decision: flux-carnage-0629 (BACK-385). |
-| Vendor-specific `surface` sub-categories (`ai-provider`, `agent-framework`, etc.) | A curated vendor list names the *vendor identity*, not the *coupling type* — breaking the pattern of every other category (`network`, `db`, `sdk`, `env`). The data is already in `surface --type sdk`; the list would be stale the week a new framework ships. Use `reveal surface . --type sdk \| grep -E 'openai\|anthropic\|litellm'`. Decision: poxinuku-0629 (BACK-381/382). |
-| `--no-fail` / `--exit-zero` | `\|\| true` is the Unix idiom. The flag conflates "checking" with "what to do about findings" — callers decide that, not the tool. Documented in AGENT_HELP under "Exit code 2 is breaking my pipeline." |
+| `reveal dd` & other consumer-workflow composites | Named after a consumer's process, not the data; orchestrates a named multi-step playbook. Reveal composes via pipes. Due diligence is a recipe over the core commands (`help://examples/due-diligence`), each step one question answered by one command. Decision: BACK-384. |
+| `reveal debt --rate N` / debt-in-dollars scoring | A business opinion (dollar rate) layered on structural metrics. The inputs (`metrics`, `check`, `imports --circular`, `overview`) are JSON-exportable; compute the valuation in the consumer's script. Decision: BACK-385. |
+| Vendor-specific `surface` sub-categories (`ai-provider`, `agent-framework`, etc.) | A curated vendor list names the *vendor identity*, not the *coupling type* — breaking the pattern of every other category (`network`, `db`, `sdk`, `env`). The data is already in `surface --type sdk`; the list would be stale the week a new framework ships. Use `reveal surface . --type sdk \| grep -E 'openai\|anthropic\|litellm'`. Decision: BACK-381/382. |
+| A `--no-fail` flag on every command | Exit policy is one contract: `--fail-on none` reports findings without failing where a command gates on findings, and `\|\| true` is the Unix idiom elsewhere. |
+| `calls ?uncalled` dead-code lists | Retiring: bare-name matching cannot reach useful precision across languages. Use `?callers=NAME` for one function and the language's own tools (vulture, knip, staticcheck, rustc's `dead_code`) for the rest. |
 | `semantic://` embedding search | Requires ML infrastructure; over-engineered |
-| Runtime execution traces (recorded runs) | Wrong domain (debugging tools). The shipped `trace://` is a static call-graph narrative, not a runtime trace. |
+| Runtime execution traces (recorded runs) | Wrong domain (debugging tools). `calls --callees F --detail` is a static call-graph narrative, not a runtime trace. |
 | `live://` real-time monitoring | Wrong domain (observability tools) |
-| `ssh://user@host/adapter://` meta-adapter (SSH proxy mode) | Wrong layer. Filesystem adapters (`cpanel://`, `autossl://`, `letsencrypt://`) read local files — SSH is a transport workaround, not a native protocol like TLS or TCP. Solve it at the SSH config layer: `ProxyJump` in `~/.ssh/config` eliminates the double-hop quoting hell in 3 lines without touching Reveal. Decision: cataclysmic-eagle-0410. |
+| `ssh://user@host/adapter://` meta-adapter (SSH proxy mode) | Wrong layer: SSH is a transport, not a resource. Use `ProxyJump` in `~/.ssh/config`. |
+| PostgreSQL, Docker and LSP adapters, `--watch` mode | Diminishing returns or other tools do it well (`docker inspect`, IDEs, `watch reveal file.py`). Not before the current focus lands. |
 | Parquet/Arrow | Binary formats, not human-readable. Use pandas. |
 
 ---
 
-## Language Support Status
+## Languages and adapters
 
-**Current counts drift with every language/adapter addition — this section is qualitative only.**
-Run `reveal --languages` for the live explicit-vs-fallback breakdown and exact count (source of truth, same one README.md quotes).
-
-**Supported ≠ recall-validated.** The list below is *coverage* — the command
-runs and extracts structure. It is a separate question from whether a
-cross-file signal's *answer* has been measured correct against a ground-truth
-oracle; for that per-language status — and, just as importantly, *which signal*
-was measured, since import recall covers 19 languages while side-effect recall
-covers 11 and `surface`/`contracts` none — see [VALIDATION.md](VALIDATION.md).
-
-### Production-Ready (structure & nav coverage)
-Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Ruby, PHP, Kotlin, Swift, Dart, Zig, Scala, Lua, GDScript, Bash, SQL
-
-### Config & Data
-Nginx, Dockerfile, TOML, YAML, JSON, JSONL, Markdown, HTML, CSV, XML, INI, HCL/Terraform, GraphQL, Protobuf
-
-### Office Formats
-Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
-
-### Tree-Sitter Fallback
-Remaining tree-sitter grammars get basic structure extraction with no dedicated analyzer: Perl, R, Haskell, Elixir, OCaml, and more.
-
----
-
-## Adapter Status
-
-**Current count drifts with every adapter addition — run `reveal --adapters` for the live, current list (source of truth).**
-
-| Adapter | Description |
-|---------|-------------|
-| `ast://` | Query code as database (complexity, size, type filters) |
-| `autossl://` | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |
-| `calls://` | Cross-file call graph — callers, callees, coupling metrics, Graphviz export |
-| `claude://` | Claude conversation analysis and install introspection |
-| `codex://` | OpenAI Codex CLI session analysis |
-| `cpanel://` | cPanel user environments — domains, SSL certs, ACL health |
-| `depends://` | Reverse module dependency graph — find everything that imports a given module |
-| `diff://` | Compare files or git revisions |
-| `domain://` | Domain registration, DNS records, health status + HTTP response check |
-| `env://` | Environment variable inspection |
-| `git://` | Repository history, blame, commits |
-| `help://` | Built-in documentation |
-| `imports://` | Dependency analysis, circular detection |
-| `json://` | JSON/JSONL deep inspection |
-| `letsencrypt://` | Let's Encrypt certificate inventory — orphan detection, duplicate SAN detection |
-| `markdown://` | Markdown document inspection and related-file discovery |
-| `mysql://` | MySQL database schema inspection |
-| `nginx://` | Nginx vhost inspection — config file, ports, upstreams, auth, locations, fleet audit |
-| `patches://` | Structured patch/diff generation |
-| `python://` | Python runtime inspection |
-| `reveal://` | Reveal's own codebase (internal self-inspection) |
-| `sqlite://` | SQLite database inspection |
-| `ssl://` | SSL/TLS certificate inspection |
-| `stats://` | Codebase statistics |
-| `xlsx://` | Excel spreadsheet inspection and data extraction |
-
-### Planned
-| Adapter | Notes |
-|---------|-------|
+These lists change with every release, so this page does not copy them:
+- `reveal --languages`: every language, with explicit analyzers vs tree-sitter fallback.
+- `reveal --adapters` (and `help://adapters`): every URI scheme, with retired ones marked.
+- [VALIDATION.md](VALIDATION.md): which signal is measured in which language.
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add analyzers, adapters, or rules.
-
-**Good first contributions:**
-- Language analyzer improvements
-- Pattern detection rules
-- Documentation and examples
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add analyzers, adapters, or rules. Good
+first contributions: language analyzer improvements, pattern detection rules, documentation
+and examples. A proposal for a new feature should pass the [Scope Test](#scope-test-what-belongs-in-reveal)
+first.
