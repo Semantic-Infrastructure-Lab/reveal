@@ -105,7 +105,7 @@ all = [
 [project.urls]
 Homepage = "https://github.com/Semantic-Infrastructure-Lab/reveal"
 Repository = "https://github.com/Semantic-Infrastructure-Lab/reveal"
-Documentation = "https://github.com/Semantic-Infrastructure-Lab/reveal/tree/main/docs"
+Documentation = "https://github.com/Semantic-Infrastructure-Lab/reveal/tree/master/reveal/docs"
 "Bug Tracker" = "https://github.com/Semantic-Infrastructure-Lab/reveal/issues"
 Discussions = "https://github.com/Semantic-Infrastructure-Lab/reveal/discussions"
 Changelog = "https://github.com/Semantic-Infrastructure-Lab/reveal/releases"

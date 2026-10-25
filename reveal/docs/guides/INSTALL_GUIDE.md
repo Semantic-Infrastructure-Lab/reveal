@@ -17,7 +17,7 @@ help_category: getting_started
 `pip install reveal-cli` is enough for structure, outline, extraction, nav flags, `check`,
 and most adapters. This guide covers what it does NOT include (the optional extras) and what
 needs the network (air-gapped and CI setups). For the quick install steps, platforms and
-troubleshooting see [INSTALL.md](https://github.com/Semantic-Infrastructure-Lab/reveal/blob/main/INSTALL.md).
+troubleshooting see [INSTALL.md](https://github.com/Semantic-Infrastructure-Lab/reveal/blob/master/INSTALL.md).
 
 ## Optional extras
 

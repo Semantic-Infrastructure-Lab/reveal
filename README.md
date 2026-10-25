@@ -163,7 +163,7 @@ reveal surface src/            # external boundary map: CLI args, routes, env va
 reveal dev new-adapter <name>  # scaffold new adapters/rules
 ```
 
-`architecture`, `overview`, `pack --architecture` and `deps` rank by the import graph and print the counting rule they used (a `Rule:` line, `edge_rule` in JSON), as `imports://` does.
+`architecture`, `overview` and `pack --architecture` rank by the import graph and print the counting rule they used (a `Rule:` line, `edge_rule` in JSON), as `imports://` does.
 
 ## Adapters
 

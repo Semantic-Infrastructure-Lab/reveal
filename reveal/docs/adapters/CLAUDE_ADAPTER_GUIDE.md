@@ -27,7 +27,7 @@ category: guide
 13. [Performance Considerations](#performance-considerations)
 14. [Limitations](#limitations)
 15. [Error Messages](#error-messages)
-16. [Tips & Best Practices](#tips-best-practices)
+16. [Tips & Best Practices](#tips--best-practices)
 17. [Integration Examples](#integration-examples)
 18. [Install Introspection Resources](#install-introspection-resources)
 19. [Related Documentation](#related-documentation)

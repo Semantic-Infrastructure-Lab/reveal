@@ -25,7 +25,7 @@ beth_topics:
 6. [Workflows](#workflows)
 7. [Call Graph in ast://](#call-graph-in-ast)
 8. [Limitations](#limitations)
-9. [Performance & Caching](#performance-caching)
+9. [Performance & Caching](#performance--caching)
 10. [FAQ](#faq)
 11. [Retired spellings](#retired-spellings)
 12. [Related Documentation](#related-documentation)

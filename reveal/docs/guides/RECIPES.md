@@ -17,10 +17,10 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
 
 - [Start Here: Distinctive Capabilities](#start-here-distinctive-capabilities)
 - [Code Review](#code-review)
-- [Onboarding & Exploration](#onboarding-exploration)
-- [Debugging & Troubleshooting](#debugging-troubleshooting)
+- [Onboarding & Exploration](#onboarding--exploration)
+- [Debugging & Troubleshooting](#debugging--troubleshooting)
 - [Large-Function Navigation](#large-function-navigation)
-- [Refactoring & Quality](#refactoring-quality)
+- [Refactoring & Quality](#refactoring--quality)
   - [Trace call relationships](#trace-call-relationships)
   - [Find testability pressure](#find-testability-pressure)
 - [Documentation Maintenance](#documentation-maintenance)
