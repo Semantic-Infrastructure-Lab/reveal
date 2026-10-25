@@ -231,8 +231,8 @@ def _show_hint_once(hint_id: str, lines: list) -> bool:
     lesson regardless of file content (e.g. "you can extract by name") —
     lines that vary with what's actually in the file (a real class/heading
     name, a computed line number) should stay unconditional `_emit()` calls
-    instead. Neither carries the "Next:" lead; the block adds it. See BREADCRUMB_HINT_THROTTLING_2026-08-02.md for the full
-    classification.
+    instead. Neither carries the "Next:" lead; the block adds it.
+    See _show_hint_once for the mechanism.
 
     Returns:
         True if `lines` were printed (first time), False if suppressed —
@@ -257,7 +257,7 @@ def _show_hint_once(hint_id: str, lines: list) -> bool:
 # format-specific hint while reveal some.graphql did).
 #
 # Each entry is (category_id, predicate, structure_lines, typed_lines).
-# category_id feeds _show_hint_once (BREADCRUMB_HINT_THROTTLING_2026-08-02.md:
+# category_id feeds _show_hint_once (hint throttling:
 # this is boilerplate — the same lesson for every file of a given type —
 # so it's shown once per (category, context) rather than on every call.
 # typed_lines=None means "same as structure" (the common case). Where they

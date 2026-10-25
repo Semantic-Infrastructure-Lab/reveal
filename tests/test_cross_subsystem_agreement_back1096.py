@@ -2,7 +2,7 @@
 
 Two implementations answering the same question must agree; a disagreement
 proves one is wrong without saying which.  Pairs from the consistency audit's
-"Not assessed" list (REVEAL_CROSS_SUBSYSTEM_CONSISTENCY_AUDIT_2026-08-10.md).
+"Not assessed" list (2026-08-10).
 """
 import re
 from collections import Counter

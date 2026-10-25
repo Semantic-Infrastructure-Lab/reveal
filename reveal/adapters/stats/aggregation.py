@@ -6,8 +6,8 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.results import ResultBuilder
 
-# Calibrated against this repo + samples/python + samples/typescript (see
-# BACK483_CHURN_COMPLEXITY_HOTSPOTS_2026-07-07.md "Threshold calibration"):
+# Calibrated against this repo + samples/python + samples/typescript (BACK-483
+# threshold calibration):
 # files touched more than 20 times in scope start contributing to the score,
 # weighted low relative to complexity/quality so churn alone on a small,
 # simple file doesn't outrank genuinely complex files.

@@ -154,7 +154,7 @@ EPILOG_ORDER = ('overview', 'architecture', 'imports', 'deps', 'hotspots', 'metr
                 'scaffold', 'offline')
 
 
-# What each exit code means for a command on the D6 outcome policy (EXIT_CODE_CONTRACT.md). The one
+# What each exit code means for a command on the D6 outcome policy (the exit-code contract). The one
 # home for the wording help prints; a command words a code more specifically in EXIT_CODE_WORDING.
 EXIT_CODES: Dict[int, str] = {
     0: 'completed; no enabled findings gate matched',

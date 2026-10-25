@@ -672,7 +672,7 @@ def _check_answer(adapter, renderer_class: type[Any], args: 'Namespace',
 
 
 def _emit_check(result: Any, adapter, renderer_class: type[Any], args: 'Namespace') -> NoReturn:
-    """Print a check result and exit with its own exit_code (EXIT_CODE_CONTRACT); 3 when a requested sink failed."""
+    """Print a check result and exit with its own exit_code (exit-code contract); 3 when a requested sink failed."""
     failure = write_requested_artifact(lambda: write_also_json(result, args), result)
 
     # Render check results

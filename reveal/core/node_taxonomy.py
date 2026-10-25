@@ -465,7 +465,7 @@ JUMP_WRAPPER_NODES: frozenset = frozenset({'jump_expression', 'control_transfer_
 # ---------------------------------------------------------------------------
 # Not control-flow constructs, so not part of FUNCTION_TYPES/SCOPE_NODES/
 # EXIT_NODES/KEYWORD_LABEL below — this is the second, independently-drifting
-# taxonomy Finding 1 (MULTI_LANGUAGE_FORWARD_DIRECTION_2026-07-05.md) named:
+# taxonomy named in the 2026-07-05 multi-language review:
 # treesitter.py's element-extraction node-kind lists. IMPORT_NODES is the
 # first one pulled in here; tests/adapters/test_node_taxonomy.py pins that
 # treesitter.py's IMPORT_NODE_TYPES/CLASS_NODE_TYPES/STRUCT_NODE_TYPES stay

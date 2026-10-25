@@ -251,7 +251,7 @@ def test_every_dd_surface_command_exits_clean_and_emits_json(desc, argv):
 def test_dd_surface_is_ten_commands():
     """A tripwire on the contract itself: the DD-critical source-tree surface is
     exactly the 10 commands the readiness doc enumerates. If someone adds or
-    removes a DD command, they must update DD_READINESS_2026-07-04.md and this
+    removes a DD command, they must update the DD readiness contract and this
     count together — the guard should never silently cover a different set than
     the contract it claims to protect."""
     assert len(DD_SURFACE) == 10, (

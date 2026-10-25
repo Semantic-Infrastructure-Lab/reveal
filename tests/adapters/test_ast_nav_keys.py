@@ -1,6 +1,6 @@
 """Tests for BACK-439d: --keys VAR dynamic key/property access surface.
 
-Acceptance cases from design/PROBE_DERIVED_GENERIC_NAV_2026-07-04.md:
+Acceptance cases (BACK-439d):
   Python: config["x"], config.get("x"), if config['enabled']
   PHP:    $row['id'], writes, isset($row['x'])
   JS/TS:  payload.id, payload["id"], optional chaining

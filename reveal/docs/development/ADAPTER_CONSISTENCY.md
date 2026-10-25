@@ -500,7 +500,7 @@ Document adapter-specific query params in `get_schema()` under `query_params` an
 
 Planned improvements:
 
-1. **Query params for remaining URI adapters** — `ssl://`, `cpanel://`, `letsencrypt://`, and `autossl://` are done. Only `claude://?base-path=` remains. See UX_CONSISTENCY_PLAN.md.
+1. **Query params for remaining URI adapters** — `ssl://`, `cpanel://`, `letsencrypt://`, and `autossl://` are done. Only `claude://?base-path=` remains.
 2. **Argument groups in --help** - Surface the existing flag taxonomy visually in `--help` output
 3. **Flag applicability warnings** - Warn when an adapter-specific flag is applied to a non-matching target
 4. **Element discovery hints** - Show available elements in overview

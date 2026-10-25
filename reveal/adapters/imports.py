@@ -1431,8 +1431,7 @@ from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supp
 # structure) is independent across files — an embarrassingly-parallel map whose
 # only shared step is the cheap graph-assembly reduce that follows. On large
 # repos this map is ~94% of `reveal architecture`'s cost and is otherwise
-# single-threaded (see design/BACK489_ARCHITECTURE_PERF_FINDINGS_2026-07-06.md
-# §8). We fan it out across processes (tree-sitter parsing is fork-safe;
+# single-threaded (BACK-489). We fan it out across processes (tree-sitter parsing is fork-safe;
 # measured 4.6x on a 12-core box for a 852-file TS subset). Results are
 # consumed in submission order (ProcessPoolExecutor.map preserves order), so
 # the assembled graph and structure list are byte-identical to the serial path.

@@ -1152,7 +1152,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     The result leaves through the subcommand seam like every other ``reveal
     <name>`` (emit_subcommand_result, BACK-1545): JSON gets its envelope there,
     text and grep are rendered by it, and a --max-items cut is printed once after
-    the render. The exit code stays check's own (EXIT_CODE_CONTRACT, BACK-1099):
+    the render. The exit code stays check's own (exit-code contract, BACK-1099):
     0 clean, 1 issues found, 2 usage error, 3 scan incomplete.
 
     Args:

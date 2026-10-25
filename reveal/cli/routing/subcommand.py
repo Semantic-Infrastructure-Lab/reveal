@@ -14,7 +14,7 @@ says what ``overview://`` says about a failed or cut answer (BACK-1059, BACK-154
 
 What it does not unify, deliberately: the runners keep their own output contracts (a JSON
 ``type`` named for the subcommand, ``deps``/``hotspots`` exiting 1 on findings as a CI gate --
-EXIT_CODE_CONTRACT). Both forms share one parse-and-dispatch path (``main._dispatch_and_run``),
+exit-code contract). Both forms share one parse-and-dispatch path (``main._dispatch_and_run``),
 not one handler.
 """
 
@@ -108,7 +108,7 @@ def emit_subcommand_result(result: Dict[str, Any], args: Namespace, *, name: str
 
     ``error_exit_code`` permits an explicit usage error (2); default failures remain 1.
     It returns otherwise, so a runner still applies its own findings exit
-    (EXIT_CODE_CONTRACT).
+    (exit-code contract).
     """
     outcome = outcome_of(result)
     if outcome == 'failed':

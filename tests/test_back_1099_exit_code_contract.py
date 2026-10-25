@@ -173,7 +173,7 @@ class TestExitZeroFlag:
 
 class TestStdinCheckExitCode:
     """`reveal --stdin --check` -- BACK-1099's originally-deferred follow-up
-    (documented in EXIT_CODE_CONTRACT.md's "not yet fixed" section): the
+    (documented as "not yet fixed" in the exit-code contract): the
     stdin file-list path dropped run_pattern_detection()'s `degraded` signal
     entirely, so a piped-in file with a syntax error exited identically to
     an all-clean run. Same fix pattern as TestDirectoryCheckExitCode above,

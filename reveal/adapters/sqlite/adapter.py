@@ -520,7 +520,7 @@ class SQLiteAdapter(ResourceAdapter):
         The schema, ``--check`` help and the overview's next step all promised this and the
         adapter had no ``check()``, so the flag was dropped with a "no effect" note.
 
-        Exit codes (EXIT_CODE_CONTRACT): 0 clean, 1 foreign-key violations only (a warning),
+        Exit codes (exit-code contract): 0 clean, 1 foreign-key violations only (a warning),
         2 the integrity check failed (corruption).
         """
         self._get_connection()

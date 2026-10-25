@@ -335,7 +335,7 @@ class TestShowBreadcrumbHintOnce:
 
 # ==============================================================================
 # _show_hint_once Tests — the generalized, keyed version of the mechanism
-# above (BACK-926 companion / BREADCRUMB_HINT_THROTTLING_2026-08-02.md)
+# above (BACK-926 companion)
 # ==============================================================================
 
 class TestShowHintOnce:

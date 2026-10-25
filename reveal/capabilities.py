@@ -873,7 +873,7 @@ _SMOKE: Dict[str, LanguageCapability] = {
 # ---------------------------------------------------------------------------
 # Tier C — structure-only (tests/test_tier_c.py): confirmed via
 # --language-info to expose only "File structure", no nav-flag surface at
-# all. Each maps to a real corpus file per LANGUAGE_DOGFOOD_CORPUS_2026-07-02.md.
+# all. Each maps to a real corpus file in the language dogfood corpus.
 # ---------------------------------------------------------------------------
 
 _STRUCTURE_ONLY_NOTE = (
