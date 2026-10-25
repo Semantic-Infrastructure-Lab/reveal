@@ -8,7 +8,7 @@ edges, rounded to four places) over the snapshot's callers, depth 2 and callees 
 language**, so the one number an answer reports never exceeds the worst measured direction.
 
 The snapshot lives in the private repository, so the pin test below runs only where it is
-reachable (the sibling ``internal-docs`` of a full checkout, or ``REVEAL_CALLS_ORACLE_SNAPSHOT``)
+reachable (a sibling private checkout, or ``REVEAL_CALLS_ORACLE_SNAPSHOT``)
 and skips everywhere else, CI included. The arithmetic test and the table-shape test always run.
 """
 import json

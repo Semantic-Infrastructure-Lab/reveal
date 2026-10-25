@@ -1,6 +1,6 @@
 # Real-corpus dogfood manifest — the single source of truth for the large
 # open-source repos used for exploratory, real-world validation of reveal's
-# analyzers (Layer 3 of internal-docs/planning/POPULAR_LANGUAGE_VALIDATION_STRATEGY_2026-07-03.md).
+# analyzers (Layer 3 of the popular-language validation strategy).
 #
 # WHY THIS FILE EXISTS
 # Previously these repos were cloned by hand into a gitignored `samples/`

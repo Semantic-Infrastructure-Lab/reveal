@@ -200,7 +200,7 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     # BACK-1099: at least one --check'd file didn't parse cleanly / a rule
     # raised. total_file_violations alone isn't a trustworthy signal when
     # this is True — same shape as the directory-mode bug already fixed in
-    # reveal/cli/file_checker.py; see internal-docs/design/EXIT_CODE_CONTRACT.md.
+    # reveal/cli/file_checker.py.
     any_file_degraded = False
     any_artifact_failed = False  # BACK-1939: a requested artifact write failed (exit 3, even under --exit-zero)
     uri_exit = 0  # the worst exit of a URI answered one at a time (BACK-1556)

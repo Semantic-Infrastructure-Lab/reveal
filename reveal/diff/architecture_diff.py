@@ -5,9 +5,8 @@
 Answers "what became structurally different between revision A and revision
 B" — fan-in/fan-out shifts, introduced/resolved circular-import groups,
 component-cohesion drift, complexity-centroid shift, and entry-point
-churn. See internal-docs/design/ARCHITECTURAL_DIFF_DESIGN_2026-07-06.md for
-the full design and the two-part (materialization / delta-logic) framing
-this module implements Part B (and the Option-5 materializer) of.
+churn. This module implements Part B (and the Option-5 materializer) of the
+two-part (materialization / delta-logic) design.
 
 Base snapshot = ``<ref>``, materialized read-only via pygit2 into a scoped
 ``TemporaryDirectory`` (only analyzable files are written — same filter

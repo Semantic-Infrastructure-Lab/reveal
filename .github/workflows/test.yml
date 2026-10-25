@@ -78,7 +78,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python scripts/check_complexity.py
 
-      - name: Doc hygiene ratchet (broken links, internal-docs refs)
+      - name: Doc hygiene ratchet (broken links, private-repo path refs)
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         env:
           REVEAL_PRIVATE_TERMS: ${{ secrets.REVEAL_PRIVATE_TERMS }}
@@ -128,7 +128,6 @@ jobs:
           echo "B006 issues: $COUNT (baseline: $BASELINE)"
           if [ "$COUNT" -gt "$BASELINE" ]; then
             echo "❌ B006 issue count increased ($BASELINE -> $COUNT) — a new silent broad-exception handler was introduced."
-            echo "   See internal-docs/case-studies/bugs-2026-08-06-silent-exception-swallowing-audit.md."
             exit 1
           elif [ "$COUNT" -lt "$BASELINE" ]; then
             echo "✅ B006 count decreased ($BASELINE -> $COUNT) — update .github/b006_baseline.txt to $COUNT to lock in the improvement."

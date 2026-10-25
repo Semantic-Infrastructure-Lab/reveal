@@ -17,8 +17,6 @@ This rule keeps it removed: it flags any help_data yaml that reintroduces a
 top-level `query_params`/`query_parameters` key, pointing the fix back at the
 two real surfaces. reveal:// self-check only (internal=True), same shape as
 V024/V027.
-
-See internal-docs/design/HELP_SYSTEM_ARCHITECTURE.md §5 for the full surface map.
 """
 
 import logging
@@ -93,8 +91,7 @@ class V028(BaseRule):
                         suggestion=(
                             f"Remove the `{key}:` block. Document {scheme}://'s params "
                             f"in get_schema()['query_params'] (source of truth) and its "
-                            f"markdown guide (V027-checked); see "
-                            f"internal-docs/design/HELP_SYSTEM_ARCHITECTURE.md §5"
+                            f"markdown guide (V027-checked)"
                         ),
                         context=f"file={yaml_path.name}, key={key}",
                     ))

@@ -9,7 +9,7 @@ inheriting a broken import graph) — this formalizes that into a repeatable
 suite. `pack` has its own deep suite (BACK-435, test_pack_validation.py); it
 is only smoke-checked here for completeness of the composite list.
 
-Acceptance (per internal-docs/BACKLOG.md BACK-436): exits 0 or documented
+Acceptance (BACK-436): exits 0 or documented
 non-fatal 1; JSON valid where supported (progress/status text must go to
 stderr, not interleave with stdout JSON); output includes source
 language/count metadata; unsupported languages are explicit, not silent

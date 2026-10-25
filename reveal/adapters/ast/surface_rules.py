@@ -19,8 +19,6 @@ Semantics worth knowing:
     sp.run()` is `subprocess.run`), and only when the call's root name was imported;
   * every rule carries an `example` that must match and `counter_examples` that must not;
     `tests/test_surface_rules.py` generates its tests from these rows.
-
-See internal-docs/design/SURFACE_RULE_TABLE_ARCHITECTURE_2026-09-20.md.
 """
 
 import ast

@@ -5,7 +5,7 @@ correctly per language" — several (I001/I002/I005, C901/C902/C905) advertise
 universal or multi-language scope with zero non-Python test coverage. This
 file adds at least one real, on-disk non-Python positive test (the rule
 correctly fires) and one negative test (the rule correctly stays silent) per
-rule in this first tranche, per the acceptance bar in internal-docs/BACKLOG.md
+rule in this first tranche, per the acceptance bar in
 BACK-432: "no rule silently claims universal scope unless it has at least one
 non-Python positive and one non-Python negative test."
 
@@ -537,9 +537,8 @@ class TestI003ArchitecturalLayerNonPython(_TempDirMixin, unittest.TestCase):
 
 
 class TestPythonOnlyByDesignRulesHonestlySkipNonPython(_TempDirMixin, unittest.TestCase):
-    """BACK-432 tranche 5, "Python-only by design" applicability class (per
-    internal-docs/planning/POPULAR_LANGUAGE_VALIDATION_STRATEGY_2026-07-03.md's
-    validation-style table: "Assert non-Python files are skipped honestly").
+    """BACK-432 tranche 5, "Python-only by design" applicability class (per the
+    popular-language validation strategy's validation-style table: "Assert non-Python files are skipped honestly").
 
     Unlike I003/BACK-461/M501 (rules that claimed universal file_patterns but
     only worked on Python), these rules already declare a narrow .py-scoped

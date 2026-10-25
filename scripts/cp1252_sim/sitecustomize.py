@@ -8,7 +8,7 @@ PYTHONIOENCODING yourself.
     PYTHONUTF8=0 PYTHONPATH=scripts/cp1252_sim reveal check some.conf
 
 Sanity check: a bare read_text() of a UTF-8 file containing '→' must print
-mojibake ('â†’').  See internal-docs/design/ENCODING_ROBUSTNESS_2026-09-21.md.
+mojibake ('â†’').
 """
 import builtins
 import io

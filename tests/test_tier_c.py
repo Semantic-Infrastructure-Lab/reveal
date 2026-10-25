@@ -1,7 +1,6 @@
 """BACK-431 Issue G tier C — repository-surface smoke coverage for the 8
 structure-only languages (Shell, Dockerfile, SQL, HCL, PowerShell, Batch,
-HTML, Jupyter). See internal-docs/planning/LANGUAGE_DOGFOOD_CORPUS_2026-07-02.md
-(Tier C section) for the corpus mapping this test exercises.
+HTML, Jupyter).
 
 Unlike tests/test_smoke_tier.py's full-analysis languages (which get
 --outline/--varflow/--exits/etc.), every tier C analyzer advertises only

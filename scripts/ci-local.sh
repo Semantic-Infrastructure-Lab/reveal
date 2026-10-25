@@ -317,7 +317,7 @@ if [[ $PRIMARY -eq 1 ]]; then
     }
     bg_step "mypy ratchet (system python3)" _mypy_ratchet
 
-    # Runs only in pre-release-check.sh otherwise, so internal-docs references and
+    # Runs only in pre-release-check.sh otherwise, so private-repo path references and
     # broken links slipped into shipped docs between releases (BACK-1474).
     bg_step "Doc hygiene ratchet" "$PY" scripts/check_doc_hygiene.py --baseline .github/doc_hygiene_baseline.txt
 

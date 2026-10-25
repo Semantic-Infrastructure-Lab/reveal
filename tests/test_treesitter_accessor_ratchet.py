@@ -9,8 +9,7 @@ language-pack >=1.12.5 hands back the *installed* parser) they are properties
 (``node.kind``), and ``Parser.parse()`` requires ``bytes``. Reveal has ~700 call
 sites still written against the old method-call form; the migration to route them
 through ``reveal.core.treesitter_compat`` is BACK-573, deliberately deferred until
-there's a driver (Python 3.14 support) — see
-``internal-docs/design/BACK573_TREESITTER_1125_FORWARD_COMPAT_2026-07-13.md``.
+there's a driver (Python 3.14 support).
 
 What this guards
 ----------------

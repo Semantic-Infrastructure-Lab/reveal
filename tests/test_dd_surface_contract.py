@@ -10,8 +10,8 @@ surface *as a set*: that `overview` / `architecture` / `surface` / `ast://` /
 A silent regression — a schema field renamed, a category dropped, a `--format
 json` path that starts crash-dumping — would break the cross-repo DD playbook
 with *no CI signal*, and a due-diligence consumer would discover it
-mid-engagement. This suite converts the DD-critical-surface contract in
-`internal-docs/research/DD_READINESS_2026-07-04.md` into an executable one.
+mid-engagement. This suite converts the DD-critical-surface contract (the 2026-07-04
+DD readiness assessment) into an executable one.
 
 Scope, deliberately: exit 0 + *minimal* shape (only the fields a due-diligence
 capability map actually reads), not exact values — the estimators/counts are
@@ -256,5 +256,5 @@ def test_dd_surface_is_ten_commands():
     the contract it claims to protect."""
     assert len(DD_SURFACE) == 10, (
         f"DD surface set is {len(DD_SURFACE)} commands, contract says 10 — "
-        "reconcile with internal-docs/research/DD_READINESS_2026-07-04.md"
+        "reconcile with the DD readiness contract"
     )

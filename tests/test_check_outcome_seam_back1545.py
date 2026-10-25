@@ -6,7 +6,7 @@ with note_truncation and disclosed the same way in JSON (``meta.warnings``) and 
 (``⚠ Truncated ...``). check kept its own spelling of the --max-items cut: a
 ``summary.items_truncated`` bool in JSON and its own text footer. It now records the cut
 through note_truncation too. Kept for compatibility: ``summary.items_truncated``, the
-0/1/2/3 exit contract (internal-docs EXIT_CODE_CONTRACT), --also-json being the document
+0/1/2/3 exit contract, --also-json being the document
 --format json prints, and --limit as the text report's own density footer.
 """
 

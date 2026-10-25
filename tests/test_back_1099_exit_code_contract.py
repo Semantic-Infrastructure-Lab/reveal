@@ -16,7 +16,6 @@ to the actual process exit code. `check_exit_code()`
       -- takes priority over 1 even if issues were also reported, because
       the issue count itself may be wrong/incomplete.
 
-See internal-docs/design/EXIT_CODE_CONTRACT.md for the full contract.
 """
 
 from io import StringIO

@@ -319,7 +319,7 @@ a check that counts violations and lets the count only fall. Then the cause is r
 **Next, in priority order**
 
 Steps 1 and 2 are done; steps 3 and 4 hold the open work, and the gates below run alongside.
-What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_LEDGER.md`.
+What landed, and when, is in CHANGELOG `[0.130.0]`.
 
 1. **The ratchets are in place (2026-09-30).** The walker, parser-import, print/exit,
    display-path, silent-except (0 since 2026-10-02), argv and complexity ratchets live in
@@ -469,7 +469,6 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   approximation — the execution-based-oracle question was raised and
   resolved by the static attempt succeeding, no `flask routes`/Django
   `show_urls` harness needed) all have real-corpus recall measurement now.
-  Design doc: `internal-docs/planning/BACK-719-surface-contracts-oracle-design.md`.
 - **BACK-815 — second-corpus overfit guard for surface/contracts — ✅
   complete (calm-thaw-0724).** Every other recall program above (import,
   side-effect, call-graph) was re-run against a second, unrelated real
@@ -487,7 +486,7 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   filed as BACK-831). Detail: `tt show BACK-815` for the full ten-slice
   rollup, `VALIDATION.md`'s Scope section for the promoted confidence-tier
   summary, and each language's own
-  `internal-docs/planning/dogfood-findings/*-surface-contracts-recall-oracle/README.md`.
+  harness notes.
 - **`patches://`/testability's ground-truth oracle loops complete for both
   implemented languages (BACK-972 Python, BACK-973 TypeScript/JavaScript).**
   Python: all 10 real `unittest.mock`/pytest-`monkeypatch` call shapes
@@ -500,8 +499,7 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   measured against an independent TypeScript-compiler-API oracle on two
   corpora with different mocking frameworks (Excalidraw/vitest,
   react-router/jest — 577 combined call sites) — clean on both, no bug
-  found. Detail for both:
-  `internal-docs/planning/dogfood-findings/testability-patches-recall-oracle/`.
+  found.
 - **The production-side boundary-classification JOIN is now measured too
   (BACK-974)** — the one gap the call-site-recall loops above named as
   separate and unmeasured. 1,384 patch/profile join checks across 15 Home
@@ -513,8 +511,7 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   module-name search matched a coincidental word anywhere in an unrelated
   target's dotted path (12/14 pre-existing spurious matches). Both fixed in
   `reveal/testability/boundaries.py`/`report.py`; `tests/test_testability.py`
-  23/23 passing (3 new regression tests). Detail:
-  `internal-docs/planning/dogfood-findings/testability-boundary-join-oracle/`.
+  23/23 passing (3 new regression tests).
 - **Next.** Import recall, side-effect recall, call-graph recall, and
   surface/contracts recall (now including its second-corpus pass) are all
   measured (see Done, above), including the TypeScript/nest import-recall
@@ -630,7 +627,6 @@ reveal 'ast://src/?name~=^[A-Z_]+$'    # all SCREAMING_SNAKE constants
 ### BACK-296: `codex://` adapter — Codex CLI session analysis
 
 **Status:** ✅ Phase 1/2/3 all shipped (Phase 1 v0.97.0; Phase 2/3 depth — `/tools`, `/shell`, `/errors`, `?tokens`, `/workflow`, `/timeline`, `?goal`, content search — landed by v0.114.0, plus `/digest`, `/exchanges`, `/message/<n>`, `skills`, `plugins` beyond the original plan, BACK-943-947). Retained below as the `claude://`-vs-`codex://` structural reference.
-**Design doc:** `internal-docs/design/CODEX_ADAPTER_DESIGN_2026-05-24.md`
 **Live schema:** `reveal help://schemas/codex` — source of truth for current query params/output types, don't hand-maintain the list here.
 
 A peer adapter to `claude://` for navigating [OpenAI Codex CLI](https://github.com/openai/codex) sessions. Codex stores sessions differently from Claude Code — SQLite index + per-session JSONL with a typed event envelope — so this is a new adapter, not a fork of `claude://`.

@@ -57,8 +57,7 @@ def get_churn_counts(
 
     One walk over history, tallying which paths each commit's diff touches
     (against its first parent), rather than one history walk per file —
-    O(total historical file-touches) instead of O(files x commits). See
-    internal-docs/design/BACK483_CHURN_COMPLEXITY_HOTSPOTS_2026-07-07.md.
+    O(total historical file-touches) instead of O(files x commits). (BACK-483).
 
     The walk result is disk-cached (BACK-624) keyed on the resolved HEAD
     commit, since, and no_merges — repo-history walks on a real repo (one

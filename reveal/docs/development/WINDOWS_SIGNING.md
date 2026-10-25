@@ -2,7 +2,6 @@
 title: "Windows Code Signing — SignPath Foundation Plan"
 type: architecture
 status: superseded
-superseded_by: internal-docs/releasing/WINDOWS_TRUST_AND_DISTRIBUTION.md
 beth_topics:
   - reveal
   - windows

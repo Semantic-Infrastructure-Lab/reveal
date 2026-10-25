@@ -3,7 +3,6 @@
 Each test runs a child interpreter with ``scripts/cp1252_sim`` on PYTHONPATH, which
 makes any encoding-less open()/read_text() decode as cp1252 (what Windows does) on
 every OS.  Fixtures contain U+2764 (bytes e2 9d a4; 0x9d is undefined in cp1252).
-See internal-docs/design/ENCODING_ROBUSTNESS_2026-09-21.md.
 """
 import os
 import subprocess

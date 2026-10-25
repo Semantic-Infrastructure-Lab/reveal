@@ -2,9 +2,8 @@
 # BACK-1048 prerequisite tool #2: isolated-venv verification harness for
 # BACK-620 (tree-sitter-language-pack>=1.12.5 forward-compat migration).
 #
-# Automates the per-batch verification protocol from
-# internal-docs/design/BACK573_TREESITTER_1125_FORWARD_COMPAT_2026-07-13.md
-# ("Recommended approach", step 5): after migrating a batch of call sites to
+# Automates the per-batch verification protocol
+# (BACK-573, step 5): after migrating a batch of call sites to
 # reveal.core.treesitter_compat._zero_arg(...), re-run this in a fresh
 # isolated venv with tree-sitter-language-pack forced past the pyproject.toml
 # ceiling, so no batch is trusted without dogfooding it against the real new

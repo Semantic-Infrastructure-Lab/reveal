@@ -10,9 +10,7 @@ already used by the ~700 BACK-620 sites migrated (see
 ``reveal/analyzers/kotlin.py`` for a live example) and counted by
 ``tests/test_treesitter_accessor_ratchet.py``.
 
-DRY-RUN ONLY. This script never writes to disk. Per the diligence protocol in
-internal-docs/design/BACK573_TREESITTER_1125_FORWARD_COMPAT_2026-07-13.md
-("Effort estimate + tooling recommendation"), real batches are applied one
+DRY-RUN ONLY. This script never writes to disk. Per the diligence protocol (BACK-573), real batches are applied one
 file (or tightly related small batch) at a time, each followed by the
 verification harness (verify_treesitter_migration.sh) -- never a blind
 whole-tree pass. This tool's job is to make each batch's edit mechanical and

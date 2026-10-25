@@ -26,7 +26,6 @@ Examples:
 
 See also:
     docs/OUTPUT_CONTRACT.md - Full specification
-    internal-docs/research/OUTPUT_CONTRACT_ANALYSIS.md - Design rationale
 """
 
 import logging

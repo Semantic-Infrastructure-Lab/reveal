@@ -104,11 +104,10 @@ for doc in README.md CHANGELOG.md ROADMAP.md; do
     fi
 done
 
-# 6. Doc Hygiene (broken links, internal-docs refs, TIA leaks)
-# Ratcheted against a tracked baseline, not a zero-issues gate — most of the
-# current count is pre-existing debt (VALIDATION.md links into internal-docs/,
-# intentionally moved out of the public repo) that a single pass won't clear,
-# and a permanently-red check gets ignored instead of catching new leaks.
+# 6. Doc Hygiene (broken links, private-tree path refs, TIA leaks)
+# Broken links and leak patterns are ratcheted against a tracked baseline, not a
+# zero-issues gate: a permanently-red check gets ignored instead of catching new
+# leaks. A path into the private maintainer tree fails outright, baseline or not.
 check_step "Doc Hygiene (Links + Leak Detection)" 6 12
 
 if python3 "$SCRIPT_DIR/check_doc_hygiene.py" --baseline "$SCRIPT_DIR/../.github/doc_hygiene_baseline.txt"; then

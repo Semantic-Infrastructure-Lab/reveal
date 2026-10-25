@@ -28,8 +28,6 @@ Usage:
     # Walk all elements
     for el in structure.walk():
         print(el.path)
-
-Design: internal-docs/planning/CONTAINMENT_MODEL_DESIGN.md
 """
 
 from __future__ import annotations

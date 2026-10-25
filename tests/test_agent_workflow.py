@@ -45,8 +45,7 @@ CORE_ADAPTERS = ("ast", "calls", "imports", "metrics", "git", "diff", "help")
 # hardcoded — so a newly-added adapter is swept automatically instead of
 # silently sitting outside test_schema_is_valid_and_names_itself /
 # test_schema_example_queries_are_well_formed the way 17 of 24 adapters did
-# before this list existed (found auditing the discovery contract, see
-# internal-docs/research/REVEAL_GOALS_PRIORITY_ASSESSMENT_2026-07-05.md).
+# before this list existed (found auditing the discovery contract).
 ALL_PUBLIC_ADAPTERS = tuple(sorted(
     name for name, cls in _ADAPTER_REGISTRY.items()
     if not getattr(cls, "internal", False)

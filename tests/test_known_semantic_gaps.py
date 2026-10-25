@@ -1,8 +1,7 @@
 """BACK-437: make accepted-hard semantic gaps VISIBLE in test output.
 
 Non-Python ``--narrow`` is a real, open-by-design gap: it needs per-language
-annotation/guard semantics, not a mechanical node-kind addition. See
-``internal-docs/design/MULTI_LANGUAGE_ARCHITECTURE_2026-07-03.md``.
+annotation/guard semantics, not a mechanical node-kind addition.
 
 (BACK-421 parts 2/3 and BACK-428 — qualifier-preserving name extraction,
 macro-hidden early returns, and Rust's `?`/tail-expression implicit exits —

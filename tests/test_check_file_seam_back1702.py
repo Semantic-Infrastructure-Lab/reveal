@@ -5,7 +5,7 @@ form kept its own spelling of the --max-items cut (``meta.total_available`` and 
 ``… +N more issue(s) hidden`` footer) and a hand-built envelope. It now records the cut with
 note_truncation (``meta.warnings`` in JSON, one ``⚠ Truncated ...`` line in text). Kept for
 compatibility: ``meta.truncated/total_available/returned``, top-level ``total``, the
-0/1/2/3 exit contract (internal-docs EXIT_CODE_CONTRACT), and --also-json being the document
+0/1/2/3 exit contract, and --also-json being the document
 --format json prints.
 """
 

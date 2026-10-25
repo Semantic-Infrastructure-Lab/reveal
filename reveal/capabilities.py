@@ -11,10 +11,7 @@ agent or user could query "is --varflow safe to trust for Rust?".
 
 This module is that place. It does not re-derive facts — every field here is
 grounded in a specific test file or design-doc finding, cited in each entry's
-``known_limitations`` or in the per-tier comments below. See
-``internal-docs/design/MULTI_LANGUAGE_ARCHITECTURE_2026-07-03.md`` (Issue G)
-for the full narrative and ``internal-docs/BACKLOG.md`` (BACK-444) for the
-originating request.
+``known_limitations`` or in the per-tier comments below. (Issue G, BACK-444).
 
 Conformance tiers (``conformance_level``), from strongest to weakest evidence:
 
@@ -24,7 +21,7 @@ Conformance tiers (``conformance_level``), from strongest to weakest evidence:
 * ``smoke-tested``      — one of the 6 languages in
   ``tests/test_smoke_tier.py``: asserts every nav flag produces non-empty,
   non-crashing, structurally sane output, backed by at least one real-corpus
-  dogfood pass (see ``internal-docs/planning/LANGUAGE_DOGFOOD_CORPUS_2026-07-02.md``).
+  dogfood pass.
   Not full ground truth — absence of a *known* bug is not proof of none.
 * ``structure-only``    — one of the 8 "tier C" languages in
   ``tests/test_tier_c.py``: confirmed via ``--language-info`` to expose only
@@ -240,7 +237,7 @@ class LanguageCapability:
     """A machine-readable profile of what reveal actually knows to be true
     about one language's analysis quality.
 
-    Fields match the shape specified in BACK-444 (internal-docs/BACKLOG.md).
+    Fields match the shape specified in BACK-444.
     """
 
     language: str

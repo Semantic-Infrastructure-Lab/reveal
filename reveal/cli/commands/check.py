@@ -274,7 +274,7 @@ def run_check(args: Namespace) -> None:
         # means `violations` isn't a trustworthy signal -- "0 issues" here
         # can mean "clean" or "couldn't actually check it". Exit 3 makes
         # that distinguishable from clean (0) and from real issues (1) at
-        # the shell level; see internal-docs/design/EXIT_CODE_CONTRACT.md.
+        # the shell level.
         from reveal.cli.file_checker import check_exit_code
         from reveal.utils.results import requested_fail_on
         complete(args)  # the exit code is the result: the flag ledger still reports

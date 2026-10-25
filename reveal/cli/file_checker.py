@@ -575,8 +575,7 @@ def check_exit_code(
         against a degraded/error-recovery parse (files_degraded) or a rule
         itself raised, or a rule-wide scan was capped/skipped. Takes priority over 1 even when issues were also
         found, because a degraded scan means the issue *count* itself may
-        be wrong or incomplete -- see
-        internal-docs/design/EXIT_CODE_CONTRACT.md.
+        be wrong or incomplete.
 
     fail_on (BACK-2051, D6): ``findings`` (the default) keeps 1 for issues; ``none``
     reports them without failing but never hides lost or degraded analysis (3).

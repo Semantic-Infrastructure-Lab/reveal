@@ -11,8 +11,8 @@ BACK-427-class total blindness (a flag silently returning nothing for an
 entire language) at ~30 minutes per language, reserving full expected.yaml
 ground truth for languages that earn it by usage.
 
-Priority order (popularity x predicted-breakage, from
-internal-docs/design/MULTI_LANGUAGE_ARCHITECTURE_2026-07-03.md's Issue G):
+Priority order (popularity x predicted-breakage, from the
+multi-language architecture review's Issue G):
 
 Tier A — Kotlin, Swift, Ruby, PHP, Scala — all expression-oriented or
 statement-modifier grammars, the exact shape that already broke Rust

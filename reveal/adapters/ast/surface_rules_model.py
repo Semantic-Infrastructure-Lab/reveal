@@ -5,8 +5,7 @@ A leaf module. It depends only on `surface_facts`, so every rule-table module
 engine (`surface_rules`) can import them, without a cycle. Table modules must NOT import
 `surface_rules`; `tests/test_surface_rules.py` enforces that.
 
-See `surface_rules.py` for the semantics of each field, and
-internal-docs/design/SURFACE_RULE_TABLE_ARCHITECTURE_2026-09-20.md.
+See `surface_rules.py` for the semantics of each field.
 """
 
 from dataclasses import dataclass

@@ -1513,8 +1513,7 @@ class TestDependsAdapterGoPackageGranularity:
     lookup where target is always a file — a key that can never exist for
     Go — so EVERY single-file Go query silently returned zero dependents,
     unconditionally, even when the package had real importers. Confirmed on
-    real Kubernetes source (BACK-547 Go recall-oracle loop,
-    internal-docs/planning/dogfood-findings/go-recall-oracle/): a
+    real Kubernetes source (BACK-547 Go recall-oracle loop): a
     284-importer target reported 0 before the fix."""
 
     @pytest.fixture

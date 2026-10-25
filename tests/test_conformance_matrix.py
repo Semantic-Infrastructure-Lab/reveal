@@ -9,8 +9,7 @@ Ships regression-proofing for exactly the class of bug the dogfood sweep found
 one at a time (BACK-410/411/413/414/415/416/418/420): reveal was built
 Python-first, and Python-shaped assumptions leak into code paths that are
 supposed to be language-agnostic. Full Tier 1 language set (python, c, cpp,
-csharp, go, java, javascript, rust, typescript) — see
-internal-docs/planning/BACK-422-conformance-matrix-design.md.
+csharp, go, java, javascript, rust, typescript), BACK-422.
 """
 
 import inspect
@@ -150,8 +149,8 @@ def test_decorators_extracted_for_annotated_construct(lang):
     not-supported shape (empty) rather than silently passing for the wrong
     reason (BACK-398 precedent, same as imports_unused above).
 
-    Matrix finding D1 (internal-docs/research/
-    REVEAL_LANGUAGE_CONSISTENCY_MATRIX_2026-08-10.md): `ast://` emits a
+    Matrix finding D1 (2026-08-10 language
+    consistency matrix): `ast://` emits a
     `decorators` field for every language but only Python's analyzer
     populates it. Confirmed-broken languages are xfail'd with a BACK-1087
     pointer rather than encoded as `not_supported` -- the construct is real

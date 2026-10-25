@@ -21,8 +21,6 @@ Usage:
     # Walk all descendants
     for el in my_class.walk():
         print(el.path)
-
-Design: internal-docs/planning/CONTAINMENT_MODEL_DESIGN.md
 """
 
 from __future__ import annotations

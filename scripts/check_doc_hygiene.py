@@ -3,11 +3,14 @@
 
 Catches:
   1. Broken markdown links (via reveal --links --format json)
-  2. References to internal-docs/ (files that don't ship)
+  2. References to internal-docs/ (files that don't ship) in markdown; baselined
   3. TIA/personal leaks (beth_topics, tia commands, /home/scottsen)
   4. Private names (clients, partners, people) in ANY tracked file -- code, tests,
      fixtures, CHANGELOG included. The term list comes from the environment, never
      from this repo. Not covered by --baseline: one hit fails the run.
+  5. Paths into the private maintainer tree (internal-docs/) in ANY tracked file. The
+     public repo must stand alone: a pointer there is dead for every outside reader.
+     Not covered by --baseline: one hit fails the run. See PRIVATE_PATH_ALLOWED.
 
 Usage:
   python scripts/check_doc_hygiene.py                       # check, exit 1 on any problem
@@ -163,6 +166,35 @@ def _tracked_files():
     return [PROJECT_ROOT / p for p in out.stdout.decode('utf-8').split('\0') if p]
 
 
+# Tracked files that may name the private tree: history, the ignore rule, this checker,
+# and the one test that reads a maintainer-only oracle snapshot when it is present.
+PRIVATE_PATH_ALLOWED = {
+    'CHANGELOG.md',
+    '.gitignore',
+    'scripts/check_doc_hygiene.py',
+    'tests/test_call_graph_confidence_back2105.py',
+}
+
+
+def check_private_path_refs(files):
+    """Find 'internal-docs' in any tracked text file outside PRIVATE_PATH_ALLOWED."""
+    hits = []
+    for path in files:
+        rel = path.relative_to(PROJECT_ROOT).as_posix()
+        if rel in PRIVATE_PATH_ALLOWED:
+            continue
+        try:
+            text = path.read_bytes().decode('utf-8')
+        except (OSError, UnicodeDecodeError):
+            continue  # binary or unreadable
+        if 'internal-docs' not in text:
+            continue
+        for i, line in enumerate(text.split('\n'), 1):
+            if 'internal-docs' in line:
+                hits.append({'file': rel, 'line': i, 'content': line.strip()[:120]})
+    return hits
+
+
 def check_private_names(files, terms):
     """Find any private term in any file. A hit reports file and line only: printing the
     line would put the term into public CI logs."""
@@ -216,7 +248,9 @@ def main():
 
     total = len(all_broken) + len(all_internal) + len(all_leaks)
     terms = _private_terms()
-    private = check_private_names(_tracked_files(), terms) if terms else []
+    tracked = _tracked_files()
+    private = check_private_names(tracked, terms) if terms else []
+    private_paths = check_private_path_refs(tracked)
 
     if as_json:
         json.dump({
@@ -225,6 +259,7 @@ def main():
             'leak_patterns': all_leaks,
             'private_names_checked': terms is not None,
             'private_names': private,
+            'private_path_refs': private_paths,
             'total_issues': total,
         }, sys.stdout, indent=2)
         print()
@@ -264,6 +299,15 @@ def main():
         else:
             print(f'{total} issue(s) found. Fix before release.')
 
+    if private_paths:
+        print(f"\n=== PRIVATE-TREE PATHS ({len(private_paths)}) -- never allowed, not baselined ===",
+              file=sys.stderr)
+        for p in private_paths:
+            print(f"  ! {p['file']}:{p['line']}  {p['content']}", file=sys.stderr)
+        print("❌ the public repo must not point into internal-docs/; state the fact in place "
+              "or cite the BACK-NNN id.", file=sys.stderr)
+        sys.exit(1)
+
     if private:
         print(f"\n❌ {len(private)} private name(s) in the public repo -- use a generic term.",
               file=sys.stderr)
@@ -274,9 +318,10 @@ def main():
 
     # Ratchet mode (mirrors .github/b006_baseline.txt): only a regression above
     # the tracked baseline fails release prep. The baseline itself is known,
-    # pre-existing debt (mostly VALIDATION.md links into internal-docs/, which
-    # was intentionally moved out of the public repo) that isn't being cleared
+    # pre-existing debt (broken links and leak patterns) that isn't being cleared
     # in a single pass — a permanently-red check gets ignored, a ratchet doesn't.
+    # Paths into internal-docs/ are NOT part of this debt: check_private_path_refs
+    # fails on the first one.
     if total > baseline:
         print(f"\n❌ Doc hygiene issue count increased ({baseline} -> {total}) — "
               f"a new broken link/internal-docs leak was introduced.", file=sys.stderr)

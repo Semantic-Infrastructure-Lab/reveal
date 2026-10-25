@@ -8,8 +8,6 @@ only split here into `receiver` + `name`.
 
 No behavior change: the per-language `nav_surface_*` scanners keep running until a
 category migrates onto rules. Nothing imports this module yet except its tests.
-
-See internal-docs/design/SURFACE_RULE_TABLE_ARCHITECTURE_2026-09-20.md.
 """
 
 import ast

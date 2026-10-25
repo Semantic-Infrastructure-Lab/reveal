@@ -2312,7 +2312,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         Java ``import a.b.Outer.Inner`` (nested type) and
         ``import static a.b.Outer.CONST`` (static member, the ``static`` keyword
         already stripped so it arrives here as ``a.b.Outer.CONST``). The Java
-        measurement loop (dogfood-findings/java-recall-oracle) found these
+        measurement loop found these
         silently dropped: the resolver looked for ``Inner.java``/``CONST.java``,
         which don't exist, and never fell back to ``Outer.java``. Peel trailing
         components down to the enclosing class and retry — gated to languages
@@ -2804,8 +2804,7 @@ _KOTLIN_SPEC = _ImportSpec(
 # BACK-514: Lua/Scala/Dart/Zig/GDScript were absent from the table entirely —
 # `imports://`, `architecture`, `surface`, and `pack` silently built their
 # picture from zero files of these five languages. Node kinds verified against
-# real parses (2026-07-09, session apricot-tapestry-0709); see
-# internal-docs/planning/BACK-514-import-coverage-implementation.md.
+# real parses (2026-07-09, session apricot-tapestry-0709); BACK-514.
 _SCALA_SPEC = _ImportSpec(
     # `import a.b.C` / `import a.b.{C, D}` / `import a.b._` are all one node
     # kind; selector/wildcard forms are recognised and skipped in

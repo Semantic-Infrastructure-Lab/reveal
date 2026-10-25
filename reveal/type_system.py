@@ -15,8 +15,6 @@ Usage:
     # Look up by extension or scheme
     reveal_type = TypeRegistry.from_extension('.py')
     reveal_type = TypeRegistry.from_scheme('py')
-
-Design: internal-docs/planning/CONTAINMENT_MODEL_DESIGN.md
 """
 
 from __future__ import annotations

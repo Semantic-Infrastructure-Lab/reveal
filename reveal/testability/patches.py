@@ -525,8 +525,7 @@ def _patch_call_targets(node: ast.Call) -> List[tuple[str, str, float]]:
     keyword argument is an independent patched attribute (BACK-834 recall
     finding: real corpora use monkeypatch's item/env/delattr methods and
     patch.multiple as heavily as setattr; measured 37.6% of monkeypatch
-    call sites invisible before this fix, see
-    internal-docs/planning/dogfood-findings/testability-patches-recall-oracle/).
+    call sites invisible before this fix).
     """
     name = _call_name(node.func)
 

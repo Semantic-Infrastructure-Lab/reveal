@@ -47,8 +47,7 @@ from ..utils.path_utils import (
 # reveal.utils.path_utils (the single home shared with config/I002/D005) —
 # imported above. Kept here: the back-compat union alias
 # (`_PROJECT_ROOT_MARKERS`, "is there ANY marker in this one dir") and the
-# `_has_project_marker` helper the depends tests import. See
-# internal-docs/design/SCAN_ROOT_RESOLUTION_2026-07-09.md.
+# `_has_project_marker` helper the depends tests import.
 _PROJECT_ROOT_MARKERS = _PACKAGE_ROOT_MARKERS + _VCS_ROOT_MARKERS
 
 # BACK-675: C and C++ share one #include header namespace and the same

@@ -5,7 +5,7 @@ walks, two skip predicates and four pattern matchers, so ``--exclude`` needed 6 
 and REVEAL_IGNORE 4. Migrating every walker onto the seam is the fix; this test is the guard that
 says when it is done, and that stays true after. One fixture carries every hazard, every command
 runs over it with the same ``--exclude`` flags and REVEAL_IGNORE, and each command's file set
-must equal its purpose's (internal-docs/design/WALKER_SEAM_2026-09-30.md):
+must equal its purpose's:
 
 - analysis: the files the user wants analyzed. Dot-dirs are source (BACK-1038).
 - display: what a reader sees of the tree, so also what ``--grep`` searches and pack:// packs.

@@ -5,7 +5,7 @@ Prevents broken references in ROADMAP.md, planning docs, etc.
 
 Example violation:
     - File: ROADMAP.md
-    - Link: [spec](internal-docs/planning/PRACTICAL_CODE_ANALYSIS_ADAPTERS.md)
+    - Link: [spec](docs/PRACTICAL_CODE_ANALYSIS_ADAPTERS.md)
     - Issue: Target file doesn't exist
     - Suggestion: Create file or update link
 """

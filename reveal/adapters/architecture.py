@@ -214,8 +214,7 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
 
     Running these as two independent full-repo walk+parse passes (the original
     shape) double-parses every file on any repo bigger than the tree-sitter
-    parse cache (128 entries) — see BACK-489,
-    internal-docs/design/BACK489_ARCHITECTURE_PERF_FINDINGS_2026-07-06.md.
+    parse cache (128 entries) — see BACK-489.
     Piggybacking the AST/complexity collection onto the imports walk's
     per-file callback keeps each file's parse-cache entry warm between the
     two uses instead of it getting evicted by the rest of a large repo.

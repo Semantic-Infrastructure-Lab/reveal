@@ -653,8 +653,8 @@ def _display_name_for_language(lang: str) -> str:
 class WalkPurpose:
     """Why a walk walks, which decides what it leaves out (BACK-1223).
 
-    One predicate serves every walk; the purpose, not the call site, picks the skip causes
-    (internal-docs/design/WALKER_SEAM_2026-09-30.md). *noise* ``'all'`` prunes
+    One predicate serves every walk; the purpose, not the call site, picks the skip causes.
+    *noise* ``'all'`` prunes
     ``is_noise_dir`` directories; ``'reserved'`` prunes only names that are never source
     (``SKIP_DIRECTORIES``: ``.git``, ``.venv``, ``node_modules``, caches), keeping ``build/``
     or ``dist/`` whatever they hold. *honor_exclude* False is for
@@ -1401,8 +1401,7 @@ def find_project_root(
 # discovery, and the I002/D005 rules — replacing five hand-rolled climbers
 # that had diverged on their marker sets, on the unsafe-root guard (config
 # even kept a stale hand-copy of it), and on whether an explicit
-# `.reveal.yaml root:true` was honored at all. Design of record:
-# internal-docs/design/SCAN_ROOT_RESOLUTION_2026-07-09.md.
+# `.reveal.yaml root:true` was honored at all.
 # ---------------------------------------------------------------------------
 
 # BACK-525: a package/build marker is *positive project-unit evidence*; a bare

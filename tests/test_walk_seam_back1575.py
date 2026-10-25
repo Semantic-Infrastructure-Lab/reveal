@@ -1,7 +1,7 @@
 """BACK-1575: the walk seam -- purposes, on_hidden, sort, list_dir.
 
 Every walker moves onto one predicate (``walk_filter``); a walk's purpose decides which skip
-causes apply (internal-docs/design/WALKER_SEAM_2026-09-30.md).
+causes apply.
 """
 import pytest
 
