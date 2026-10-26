@@ -165,7 +165,7 @@ EXIT_CODES: Dict[int, str] = {
 EXIT_CODE_WORDING: Dict[str, Dict[int, str]] = {
     'check': {0: 'no issues', 1: 'issues found',
               3: 'scan incomplete (a file could not be parsed/checked), or a requested '
-                 '--also-json artifact could not be written'},
+                 '--output json=PATH artifact could not be written'},
     'review': {0: 'pass',
                1: 'findings (warnings, or a blocking high/critical issue, told apart by overall_status)',
                2: 'invalid target',

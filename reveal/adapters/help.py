@@ -1570,6 +1570,9 @@ class HelpAdapter(ResourceAdapter):
         # 'help' is the page being read — pointing help://quick at itself
         # via help://relationships is circular, not a useful discovery path.
         mentioned.add('help')
+        # A retired scheme still answers but is not a tool to point a new reader at.
+        from ..cli.handlers.introspection import retired_schemes
+        mentioned.update(retired_schemes())
 
         gaps = []
         for cluster, schemes in sorted(self._cluster_membership().items()):

@@ -1086,11 +1086,14 @@ class TestDecisionTreeClusterCoverage(unittest.TestCase):
     def test_every_registered_adapter_is_reachable(self):
         from reveal.adapters.help import HelpAdapter
         from reveal.adapters.registry import _ADAPTER_REGISTRY
+        from reveal.cli.handlers.introspection import retired_schemes
         reachable = self._reachable_schemes()
+        retired = set(retired_schemes())  # still answer, but help://quick does not route a reader to them
         missing = [
             scheme for scheme in _ADAPTER_REGISTRY
             if scheme not in _SCAFFOLD_SCHEMES
             and scheme not in reachable
+            and scheme not in retired
             and scheme != 'help'  # the page being viewed; always implicitly reachable
         ]
         self.assertEqual(missing, [], f"adapters unreachable from help://quick: {missing}")
@@ -1100,10 +1103,22 @@ class TestDecisionTreeClusterCoverage(unittest.TestCase):
         reachable = self._reachable_schemes()
         previously_missing = {
             'architecture', 'overview', 'pack', 'hotspots', 'contracts',
-            'depends', 'surface', 'testability', 'patches', 'trace', 'deps',
+            'surface', 'patches',
             'autossl', 'letsencrypt', 'json', 'reveal',
         }
         self.assertTrue(previously_missing.issubset(reachable), reachable)
+
+    def test_retired_adapters_are_not_routed_to(self):
+        # testability, trace, deps, stats and classify still answer but are RETIREMENTS rows:
+        # a "tooling not named above" line must not send a new reader to them.
+        from reveal.adapters.help import HelpAdapter
+        from reveal.cli.handlers.introspection import retired_schemes
+        result = HelpAdapter('help://quick').get_element('quick')
+        named = set()
+        for entry in result['decision_tree']:
+            if entry['use'] == 'help://relationships':
+                named.update(entry['want'].rsplit(':', 1)[-1].replace(' ', '').split(','))
+        self.assertEqual(named & set(retired_schemes()), set())
 
     def test_decision_tree_gaps_dont_repeat_ranked_commands(self):
         # A scheme already shown with a concrete example in the top-N
