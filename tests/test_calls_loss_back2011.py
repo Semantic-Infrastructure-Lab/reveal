@@ -153,8 +153,10 @@ def test_clean_empty_is_full_and_warning_only_controls_keep_score(tmp_path, quer
     assert result[count] == 0
     assert not required(result)
     assert result['meta']['parse_mode'] == 'tree_sitter_full'
-    # ?modules' edges are imports' (BACK-1054 slice S5): no calls extraction estimate; ?uncalled carries none (BACK-2195).
-    assert result['meta'].get('confidence') == (None if query == 'modules' or query.startswith('uncalled') else 0.85)
+    # ?modules' edges are imports' (BACK-1054 slice S5): no calls extraction estimate; ?uncalled carries none (BACK-2195);
+    # an empty scope counts no file, so no mode has a figure to report (BACK-2106).
+    assert result['meta'].get('confidence') is None
+    assert ('W-CALLS-12' in [w.get('code') for w in result['meta']['warnings']]) == (query != 'modules')
 
 
 @pytest.mark.parametrize('unknown', [False, True])

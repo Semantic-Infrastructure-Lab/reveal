@@ -194,6 +194,7 @@ _HELP: Dict[str, Any] = {
         '(W-CALLS-9).',
         'A scanned language that yields call sources and has no recall snapshot (Elixir, Objective-C) withholds '
         'meta.confidence and is named (W-CALLS-10); shell, SQL and other files with no call edges do not. '
+        'A scope with no source file counted withholds it too (W-CALLS-12). '
         '?uncalled is retired (D8) and answers unchanged until the cut, with a note and no meta.confidence in any '
         'language; over JavaScript, TypeScript, TSX, Java or PHP W-CALLS-11 also names the measured precision.',
         '?uncalled: web/CLI framework routes (Flask, FastAPI, Click, …) are dispatched by the '
@@ -419,6 +420,7 @@ _SCHEMA: Dict[str, Any] = {
         '?callees depth=2-5 and detail: the callee walk under calls_callees, every call site of an expanded '
         'definition an edge; not measured in any language (W-CALLS-9 in meta.warnings, walk_rule.measured).',
         'A call-source language with no recall snapshot in scope: no meta.confidence, W-CALLS-10 names it (languages). '
+        'No source file counted in scope: no meta.confidence, W-CALLS-12. '
         '?uncalled (retired, D8): no meta.confidence in any language; over JS/TS/TSX, Java or PHP W-CALLS-11 names the language and the measured precision.',
         '?modules is retired (BACK-1054): it answers from imports://<path>?importers&scope=path, one edge per '
         'import that resolves under the path (an import used without a call counts too; no call_count), and '

@@ -191,7 +191,8 @@ def test_empty_unmeasured_and_single_file_default_contracts_stay_clean(tmp_path)
     _write(unknown / 'notes.txt', 'No supported source in this scope.\n')
     for root in (empty, unknown):
         result = CallsAdapter(str(root), 'target=target').get_structure()
-        assert result['meta']['confidence'] == 0.85
+        # No file counted: the confidence is withheld, not the 0.85 default (BACK-2106).
+        assert 'confidence' not in result['meta']
         assert result['meta']['parse_mode'] == 'tree_sitter_full'
         assert not any(entry.get('unit') == 'directories' for entry in result['meta']['warnings'])
     source = tmp_path / 'single.py'

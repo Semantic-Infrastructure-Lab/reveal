@@ -16,7 +16,6 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ...analyzers._capability_table import calls_extraction_confidence
 from ...defaults import (
-    CALL_GRAPH_DEFAULT_CONFIDENCE,
     CALL_GRAPH_DYNAMIC_DISPATCH_VOCAB,
     CALL_GRAPH_DEFAULT_DISPATCH_VOCAB,
     CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB,
@@ -98,6 +97,16 @@ def _unmeasured_language_warning(per_language: Dict[str, int]) -> Optional[Dict[
                         'no measured number covers their call edges.')}
 
 
+# No source file counted in scope (an empty directory, only non-code files, or every file hidden by
+# .gitignore): the confidence is a file-weighted mean, and with no file there is nothing to weight,
+# so the language-agnostic default would read as measured (BACK-2106).
+_EMPTY_CENSUS_WARNING = {
+    'code': 'W-CALLS-12', 'type': 'not_measured',
+    'message': ('Confidence withheld: the language census counted no source file in scope, '
+                'so no measured recall figure applies.'),
+}
+
+
 # ?uncalled dead-code precision, measured by source review (BACK-1899, VALIDATION.md): 20 claims per
 # corpus, one to three corpora per language. The calls confidence is extraction recall and says nothing
 # about it. Each family contributes one sentence, shown only when a language of that family is in scope.
@@ -132,18 +141,25 @@ def _uncalled_measured_low_warning(per_language: Dict[str, int]) -> Optional[Dic
 
 def _declines(per_language: Dict[str, int], unmeasured_walk: bool, uncalled: bool = False) -> List[Dict[str, Any]]:
     """W-CALLS-9 for an unmeasured walk, W-CALLS-10 for unmeasured languages, W-CALLS-11 for
-    ?uncalled over a language whose dead-code claims were measured low (rule 8)."""
+    ?uncalled over a language whose dead-code claims were measured low, W-CALLS-12 for a census
+    that counted no file (rule 8)."""
     declines = [dict(_UNMEASURED_WALK_WARNING)] if unmeasured_walk else []
     unmeasured = _unmeasured_language_warning(per_language)
     measured_low = _uncalled_measured_low_warning(per_language) if uncalled else None
-    return declines + [w for w in (unmeasured, measured_low) if w]
+    empty = None if sum(per_language.values()) else dict(_EMPTY_CENSUS_WARNING)
+    return declines + [w for w in (unmeasured, measured_low, empty) if w]
 
 
-def _reported_confidence(confidence: float, known_loss: bool, declines: List[Dict[str, Any]],
+# The declines that withhold the number (W-CALLS-9 qualifies the walk, not the figure).
+_WITHHOLDING_DECLINES = frozenset({'W-CALLS-10', 'W-CALLS-11', 'W-CALLS-12'})
+
+
+def _reported_confidence(confidence: Optional[float], known_loss: bool, declines: List[Dict[str, Any]],
                          uncalled: bool = False) -> Optional[float]:
-    """No number while evidence was lost, a scanned call-source language has no recall snapshot, or the
-    request is ?uncalled (the figure is call-extraction recall, not a measure of dead code; D8)."""
-    if uncalled or known_loss or any(w['code'] in ('W-CALLS-10', 'W-CALLS-11') for w in declines):
+    """No number while evidence was lost, a scanned call-source language has no recall snapshot, the
+    census counted no file, or the request is ?uncalled (the figure is call-extraction recall, not a
+    measure of dead code; D8)."""
+    if uncalled or known_loss or any(w['code'] in _WITHHOLDING_DECLINES for w in declines):
         return None
     return confidence
 
@@ -182,6 +198,7 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
     makes the confidence null and is named (W-CALLS-10); *unmeasured_walk* adds the
     W-CALLS-9 decline for a callee walk beyond depth 1 or --detail; *uncalled* makes it null in every
     language (BACK-2195) and, over a family whose dead-code claims were measured low, names it (W-CALLS-11).
+    A census that counted no file has nothing to weight: no confidence, and W-CALLS-12 says so (BACK-2106).
 
     *census* is the per-language file count a caller already holds for this very *path* and scope
     (``CalleeSource.language_census``, BACK-2132); None walks the tree for it. A held census had
@@ -198,6 +215,7 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
         path, on_error=_record_census_error, on_hidden=hidden)
     directory_failures = (*traversal_failures, *census_failures)
     total = sum(per_language.values())
+    confidence: Optional[float] = None
     if total:
         confidence = round(
             sum(
@@ -212,8 +230,8 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
             dominant, CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB
         )
     else:
+        # Nothing counted, nothing to weight: _declines adds W-CALLS-12 and the number is withheld.
         dominant = ''
-        confidence = CALL_GRAPH_DEFAULT_CONFIDENCE
         vocab = CALL_GRAPH_DEFAULT_DISPATCH_VOCAB
         implicit_vocab = CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB
 

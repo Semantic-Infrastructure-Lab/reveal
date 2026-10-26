@@ -437,7 +437,7 @@ reveal 'metrics://.?hotspots&code_only'
 One mode per request (`callers`, `callees`, `rank`, `modules`, or the retired `uncalled`, `target`
 and `root`); two exit 2.
 A name that names nothing exits 2 (`callees`: no definition; `callers`: no definition and no call
-site). A scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds `meta.confidence` and is named (W-CALLS-10). The retired `?uncalled` withholds it in every language (W-CALLS-11 also names the measured precision for JavaScript, TypeScript, TSX, Java and PHP); use `?callers=NAME`.
+site). A scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds `meta.confidence` and is named (W-CALLS-10); a scope with no source file counted withholds it too (W-CALLS-12). The retired `?uncalled` withholds it in every language (W-CALLS-11 also names the measured precision for JavaScript, TypeScript, TSX, Java and PHP); use `?callers=NAME`.
 
 - **`external=true`** - Retired with `modules`: importers from the whole project root (imports'
   default `scope=root`), not only those under the path. Import edges never reach stdlib or third-party

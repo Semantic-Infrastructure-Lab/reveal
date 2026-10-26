@@ -428,6 +428,8 @@ Objective-C; the 19 measured pairs cover python, typescript/tsx, javascript, go,
 php, csharp, kotlin, swift, cpp, c, scala, zig, lua, gdscript and dart) withholds it: the envelope
 carries no `confidence`, and W-CALLS-10 names each such language with its file count, in text and
 JSON. Files that yield no call edge (shell, SQL, GraphQL, protobuf, YAML, ...) do not withhold it.
+A scope whose census counts no source file (an empty directory, only non-code files, or every file
+hidden by `.gitignore`) has nothing to weight: no `confidence`, and W-CALLS-12 says so.
 `?uncalled` (retired) withholds it in every language, because the figure is call-extraction recall and
 says nothing about dead code; over a JavaScript, TypeScript, TSX, Java or PHP scan W-CALLS-11 also names the
 language and states the figures of the languages in scope: a source review of 20 claims per corpus found 0 of 20

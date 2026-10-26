@@ -177,7 +177,8 @@ def test_normal_decorated_requests_repair_census_score_and_keep_sibling_exact(tm
 def test_clean_empty_single_file_and_default_census_shapes_remain_compatible(tmp_path):
     empty = tmp_path / 'empty'; empty.mkdir()
     result = CallsAdapter(str(empty), 'target=leaf').get_structure()
-    assert result['meta']['confidence'] == 0.85 and result['meta']['parse_mode'] == 'tree_sitter_full'
+    # No file counted: the confidence is withheld, not the 0.85 default (BACK-2106).
+    assert 'confidence' not in result['meta'] and result['meta']['parse_mode'] == 'tree_sitter_full'
     assert confidence.language_census(str(empty)) == {}
     assert confidence.language_census(str(tmp_path / 'missing')) == {}
     file = write(tmp_path / 'single.py', 'def leaf():\n    return 1\n')
@@ -192,7 +193,8 @@ def test_unqualified_nonwalk_oserror_keeps_existing_fallback_without_directory_m
     monkeypatch.setattr(confidence, 'census_for_path', fail)
     assert confidence.language_census(str(file)) == {}
     result = confidence.build_meta(str(file))
-    assert result['confidence'] == 0.85 and result['parse_mode'] == 'tree_sitter_full'
+    # The fallback census is empty, so no figure is measured for this scope (BACK-2106).
+    assert result['confidence'] is None and result['parse_mode'] == 'tree_sitter_full'
     assert not any(entry.get('unit') == 'directories' for entry in result['warnings'])
 
 

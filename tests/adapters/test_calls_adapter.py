@@ -2889,13 +2889,15 @@ class TestCallGraphMeta(unittest.TestCase):
         self.assertNotIn('W-CALLS-5', codes_default)
         self.assertIn('W-CALLS-5', codes_uncalled)
 
-    def test_unmeasured_language_falls_back_to_default_confidence(self):
+    def test_empty_census_withholds_confidence(self):
+        """BACK-2106: no file counted, nothing to weight; the 0.85 default is not reported as measured."""
         from reveal.adapters.calls.confidence import build_meta
 
         empty_dir = os.path.join(self.tmpdir, 'empty')
         os.makedirs(empty_dir)
         meta = build_meta(empty_dir)
-        self.assertEqual(meta['confidence'], 0.85)
+        self.assertIsNone(meta['confidence'])
+        self.assertIn('W-CALLS-12', {w['code'] for w in meta['warnings']})
 
     def test_ruby_uncalled_exclusion_vocab_names_ruby_not_python(self):
         """BACK-1197: the ?uncalled exclusion-vocab warning (W-CALLS-6)
