@@ -935,6 +935,16 @@ _SCHEMA_NOTES = [
 ]
 
 
+def _shown_path(path: str, source: Optional[str]) -> str:
+    """A row's path as the text views print it. The adapter's answer is already spelled from the
+    requested directory (``_path_display``) and is printed as it is: re-spelling it against a FILE
+    target turned that file's directory ``.`` into the file's name (BACK-2183). Only an absolute path
+    (a result built by hand, BACK-1194) is relativized here."""
+    if source and os.path.isabs(path):
+        return to_relative_display(path, Path(source))
+    return path
+
+
 class ImportsRenderer:
     """Renderer for import analysis results."""
 
@@ -1190,14 +1200,12 @@ class ImportsRenderer:
             print("  No import data found.")
             return
 
-        source_path = Path(source) if source else None
-        col_w = min(60, max(len(e['file']) for e in entries) - (len(source) + 1 if source_path else 0) + 2)
-        col_w = max(col_w, 20)
+        shown = [_shown_path(e['file'], source) for e in entries]
+        col_w = max(min(60, max(len(fpath) for fpath in shown) + 2), 20)
 
         print(f"  {'FILE':<{col_w}}  {'FAN-IN':>7}  {'FAN-OUT':>8}")
         print(f"  {'-'*col_w}  {'-'*7}  {'-'*8}")
-        for e in entries:
-            fpath = to_relative_display(e['file'], source_path) if source_path else e['file']
+        for e, fpath in zip(entries, shown):
             print(f"  {fpath:<{col_w}}  {e['fan_in']:>7}  {e['fan_out']:>8}")
         print()
         regime = result.get('metadata', {}).get('autoload_regime')
@@ -1308,14 +1316,12 @@ class ImportsRenderer:
                 print("  No entry points found (every file is imported by at least one other).")
             return
 
-        source_path = Path(source) if source else None
-        col_w = min(60, max(len(e['file']) for e in entries) - (len(source) + 1 if source_path else 0) + 2)
-        col_w = max(col_w, 20)
+        shown = [_shown_path(e['file'], source) for e in entries]
+        col_w = max(min(60, max(len(fpath) for fpath in shown) + 2), 20)
 
         print(f"  {'FILE':<{col_w}}  {'FAN-OUT':>8}")
         print(f"  {'-'*col_w}  {'-'*8}")
-        for e in entries:
-            fpath = to_relative_display(e['file'], source_path) if source_path else e['file']
+        for e, fpath in zip(entries, shown):
             print(f"  {fpath:<{col_w}}  {e['fan_out']:>8}")
         print()
         regime = result.get('metadata', {}).get('autoload_regime')
@@ -1341,19 +1347,14 @@ class ImportsRenderer:
             print("  No components found.")
             return
 
-        source_path = Path(source) if source else None
-
-        def rel(p: str) -> str:
-            return to_relative_display(p, source_path) if source_path else p
-
-        col_w = max(max(len(rel(c['component'])) for c in components) + 2, 20)
+        col_w = max(max(len(_shown_path(c['component'], source)) for c in components) + 2, 20)
         col_w = min(col_w, 55)
 
         print(f"  {'COMPONENT':<{col_w}}  {'FILES':>5}  {'INTERNAL':>8}  {'OUT':>5}  {'IN':>5}  {'COHESION':>9}")
         print(f"  {'-'*col_w}  {'-'*5}  {'-'*8}  {'-'*5}  {'-'*5}  {'-'*9}")
 
         for c in components:
-            name = rel(c['component'])
+            name = _shown_path(c['component'], source)
             bridge = c.get('top_bridge')
             bridge_note = f"  ← {Path(bridge).name}" if bridge else ''
             cohesion_pct = f"{c['cohesion'] * 100:.0f}%"
