@@ -204,7 +204,7 @@ class JSFunctionValueMixin(_Base):
     def _node_rebinds(self, node, name: str) -> bool:
         kind = _zero_arg(node, 'kind')
         if kind in _FUNCTION_SCOPES:
-            own = node.child_by_field_name('name')
+            own = node.child_by_field_name('name') if kind != 'method_definition' else None  # a method name is a property key
             params = node.child_by_field_name('parameters') or node.child_by_field_name('parameter')
             return (own is not None and self._get_node_text(own) == name) or self._mentions(params, name)
         if kind == 'catch_clause':
