@@ -80,7 +80,7 @@ def test_every_calls_mode_discloses_the_drops_once(project, query):
     result = run(f'calls://{project}?{query}')
     (warning,) = dropped_warnings(result)
     assert warning['count'] == 3
-    assert warning['files'] == ['a.js'] or warning['files'] == [str(project / 'a.js')]
+    assert warning['files'] == ['a.js'] or warning['files'] == [(project / 'a.js').as_posix()]
     assert warning['imported_callees'] == {'Fn': 1}
     assert warning['other_callees'] == {'derived': 1, 'setTimeout': 1}
     assert 'Fn' in warning['message'] and '3' in warning['message']
