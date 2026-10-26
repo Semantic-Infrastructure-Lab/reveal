@@ -687,7 +687,7 @@ class SSLAdapter(ResourceAdapter):
             )
 
         if self._cert_file_path:
-            return self._check_cert_file(warn_days, critical_days)
+            return self._check_cert_file(self._cert_file_path, warn_days, critical_days)
 
         if not self.host:
             return {'type': 'ssl_check', 'error': 'No host specified', 'exit_code': 2}
@@ -808,13 +808,13 @@ class SSLAdapter(ResourceAdapter):
             **({'files_skipped': skipped} if skipped else {}),
         }
 
-    def _check_cert_file(self, warn_days: int, critical_days: int) -> Dict[str, Any]:
+    def _check_cert_file(self, cert_path: str, warn_days: int, critical_days: int) -> Dict[str, Any]:
         """ssl://file://PEM --check: validate the one certificate file on disk (no network)."""
-        results = [self._validate_cert_file(self._cert_file_path, [], warn_days, critical_days)]
+        results = [self._validate_cert_file(cert_path, [], warn_days, critical_days)]
         summary = self._build_cert_validation_summary(results)
         return {
             'type': 'ssl_cert_file_validation',
-            'source': f'ssl://file://{self._cert_file_path}',
+            'source': f'ssl://file://{cert_path}',
             'certs_checked': summary['total'],
             'status': summary['overall'],
             'summary': {k: v for k, v in summary.items() if k != 'overall'},

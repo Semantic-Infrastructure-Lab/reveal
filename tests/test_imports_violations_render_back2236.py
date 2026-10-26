@@ -23,10 +23,10 @@ architecture:
 def project(tmp_path):
     for pkg in ('src', 'src/models', 'src/db'):
         (tmp_path / pkg).mkdir(exist_ok=True)
-        (tmp_path / pkg / '__init__.py').write_text('')
-    (tmp_path / 'src/db/session.py').write_text('x = 1\n')
-    (tmp_path / 'src/models/user.py').write_text('from src.db import session\n')
-    (tmp_path / '.reveal.yaml').write_text(_CONFIG)
+        (tmp_path / pkg / '__init__.py').write_text('', encoding='utf-8')
+    (tmp_path / 'src/db/session.py').write_text('x = 1\n', encoding='utf-8')
+    (tmp_path / 'src/models/user.py').write_text('from src.db import session\n', encoding='utf-8')
+    (tmp_path / '.reveal.yaml').write_text(_CONFIG, encoding='utf-8')
     return tmp_path
 
 

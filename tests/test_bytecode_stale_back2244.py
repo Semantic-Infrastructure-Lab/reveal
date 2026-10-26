@@ -21,7 +21,7 @@ def _types(root):
 
 def test_a_freshly_compiled_pyc_that_is_newer_than_its_source_is_clean(tmp_path):
     src = tmp_path / 'mod.py'
-    src.write_text('x = 1\n')
+    src.write_text('x = 1\n', encoding='utf-8')
     os.utime(src, (1_700_000_000, 1_700_000_000))  # source is old; the pyc is brand new
     _compile(src)
     assert check_bytecode(str(tmp_path))['status'] == 'clean'
@@ -29,9 +29,9 @@ def test_a_freshly_compiled_pyc_that_is_newer_than_its_source_is_clean(tmp_path)
 
 def test_a_pyc_compiled_from_different_source_is_stale(tmp_path):
     src = tmp_path / 'mod.py'
-    src.write_text('x = 1\n')
+    src.write_text('x = 1\n', encoding='utf-8')
     _compile(src)
-    src.write_text('x = 22222\n')  # the recorded size no longer matches
+    src.write_text('x = 22222\n', encoding='utf-8')  # the recorded size no longer matches
     issues = check_bytecode(str(tmp_path))['issues']
     assert [i['type'] for i in issues] == ['stale_bytecode']
     assert 'older version of the source' in issues[0]['problem']
@@ -39,7 +39,7 @@ def test_a_pyc_compiled_from_different_source_is_stale(tmp_path):
 
 def test_a_pyc_whose_source_mtime_changed_is_stale(tmp_path):
     src = tmp_path / 'mod.py'
-    src.write_text('x = 1\n')
+    src.write_text('x = 1\n', encoding='utf-8')
     _compile(src)
     st = src.stat()
     os.utime(src, (st.st_atime, st.st_mtime + 100))  # same size, newer mtime
@@ -48,7 +48,7 @@ def test_a_pyc_whose_source_mtime_changed_is_stale(tmp_path):
 
 def test_a_hash_based_pyc_is_not_judged_by_mtime(tmp_path):
     src = tmp_path / 'mod.py'
-    src.write_text('x = 1\n')
+    src.write_text('x = 1\n', encoding='utf-8')
     _compile(src, py_compile.PycInvalidationMode.CHECKED_HASH)
     st = src.stat()
     os.utime(src, (st.st_atime, st.st_mtime + 100))
