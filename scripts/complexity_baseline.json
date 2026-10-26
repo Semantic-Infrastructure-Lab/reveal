@@ -50,7 +50,6 @@
   "reveal/adapters/autossl/adapter.py::AutosslAdapter._domain_history_structure": 18,
   "reveal/adapters/autossl/adapter.py::_apply_autossl_filters": 17,
   "reveal/adapters/autossl/parser.py::_process_indent3": 16,
-  "reveal/adapters/calls/index.py::build_callers_index": 19,
   "reveal/adapters/calls/references.py::_count_occurrences": 20,
   "reveal/adapters/claude/adapter.py::ClaudeAdapter._find_conversation": 21,
   "reveal/adapters/claude/adapter.py::ClaudeAdapter._route_by_resource": 21,
