@@ -115,7 +115,7 @@ _DETAIL = _flag_spec('detail', 'Callees only: add params and effects to every de
 _TEST_FRAMEWORK = _flag_spec('test-framework', 'Include test-framework entrypoints: as callers in rank, and as '
                              'dead-code candidates in uncalled (default: false)', dest='test_framework')
 _FORMAT = ParamSpec('format', 'string', 'URI output override: text, json or dot (Graphviz; dot has no --format '
-                    'spelling)', None, nonempty_scalar, examples=('format=dot',), choices=('text', 'json', 'dot'),
+                    'spelling; it draws callers, a callees walk, root and modules, and exits 2 on the other views)', None, nonempty_scalar, examples=('format=dot',), choices=('text', 'json', 'dot'),
                     role='presentation')
 
 _RESOURCE = ResourceSpec(uri_codec='existing-path-first')
@@ -146,6 +146,23 @@ def _selected_modes(params: Any) -> List[str]:
     """The modes a request selects, read without counting any key as applied."""
     supplied = dict(peek_query_items(params))
     return [name for name in _MODES if name in supplied and _selects(name, supplied[name])]
+
+
+# The views format=dot draws a graph for. Callees at depth 1 (a per-definition call list without edge
+# resolution), rank and uncalled (tables) have no dot renderer and printed text under format=dot (BACK-2108).
+_DOT_REJECTION = ('format=dot draws a graph for callers, a callees walk (depth=2-5 or detail), root and modules; '
+                  '{view} has none: use format=text or format=json')
+
+
+def _dot_rejection(mode: str, supplied: Dict[str, Any]) -> Optional[str]:
+    """Why format=dot cannot answer *mode* as supplied, or None when the view draws a graph."""
+    if mode == 'callees':
+        walked = ('detail' in supplied and _selects('detail', supplied['detail'])
+                  or 'depth' in supplied and _calls_depth(supplied['depth']) > 1)
+        return None if walked else _DOT_REJECTION.format(view='callees at depth 1')
+    if mode in ('rank', 'uncalled'):
+        return _DOT_REJECTION.format(view=mode)
+    return None
 
 
 _HELP: Dict[str, Any] = {
@@ -631,7 +648,8 @@ class CallsAdapter(ResourceAdapter):
     @staticmethod
     def validate_request(params: Any, args: Any = None) -> None:
         """Exactly one mode per request: two used to resolve by a hidden precedence (BACK-2066).
-        callers takes no FILE:NAME and detail belongs to callees: both would be new capabilities."""
+        callers takes no FILE:NAME and detail belongs to callees: both would be new capabilities.
+        format=dot on a view with no graph is rejected, not answered in text (BACK-2108)."""
         modes = _selected_modes(params)
         if len(modes) > 1:
             named = ', '.join(modes[:-1]) + ' and ' + modes[-1]
@@ -646,6 +664,9 @@ class CallsAdapter(ResourceAdapter):
         if modes and modes[0] != 'callees' and 'detail' in supplied and _selects('detail', supplied['detail']):
             raise ValueError(f'detail applies to callees only, not {modes[0]}: '
                              f'calls://<path>?callees=NAME&detail adds params and effects')
+        dot_rejection = _dot_rejection(modes[0], supplied) if modes and supplied.get('format') == 'dot' else None
+        if dot_rejection:
+            raise ValueError(dot_rejection)
 
     def answer_requirement_error(self, result: Any, expected_type: str, prior_facts: Any = None) -> Optional[str]:
         error = _calls_proof_error(result)

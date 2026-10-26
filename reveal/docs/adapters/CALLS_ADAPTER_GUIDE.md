@@ -494,7 +494,9 @@ reveal 'calls://src/?callers=validate_item' --format=json
 
 ### Dot (Graphviz)
 
-Directed graph format for visualisation:
+Directed graph format for visualisation. It draws callers, a callees walk (`depth=2-5` or `detail`), the
+retired `?root` and `?modules`; `?callees=NAME` at depth 1, `?rank=callers` and `?uncalled` have no graph,
+and `format=dot` on them exits 2 naming the views that have one.
 
 ```bash
 # Text preview

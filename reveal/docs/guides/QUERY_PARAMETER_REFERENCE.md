@@ -408,7 +408,9 @@ reveal 'metrics://.?hotspots&code_only'
   reveal 'calls://src?callers=validate_item&depth=2'  # callers-of-callers
   ```
 
-- **`format`** - Output format: `text` (default), `json`, `dot` (Graphviz)
+- **`format`** - Output format: `text` (default), `json`, `dot` (Graphviz). `dot` draws callers, a
+  callees walk (`depth=2-5` or `detail`), `root` and `modules`; callees at depth 1, `rank` and `uncalled`
+  have no graph and exit 2
   ```bash
   reveal 'calls://src?callers=main&format=dot' | dot -Tsvg > graph.svg
   ```
