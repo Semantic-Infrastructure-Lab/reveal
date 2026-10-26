@@ -93,3 +93,20 @@ def test_js_iife_control_is_unchanged(tmp_path):
     root = str(write(tmp_path, 'boot.js', JS))
     calls = CallsAdapter(root, 'callees=boot').get_structure()['matches'][0]['calls']
     assert sorted(calls) == ['setup', 'start', 'teardown'], calls
+
+
+# The same class in the other grammars whose closure literal can be invoked where it is written: the
+# literal's source was the callee name (found while fixing Go; one seam, so one change).
+SIBLINGS = {
+    'a.rs': 'fn outer() {\n    (|| inner())();\n}\nfn inner() {}\n',
+    'b.cpp': 'void inner() {}\nvoid outer() {\n    [](){ inner(); }();\n}\n',
+    'c.kt': 'fun inner() {}\nfun outer() {\n    (fun() { inner() })()\n}\n',
+    'd.php': '<?php\nfunction inner() {}\nfunction outer() {\n    (function() { inner(); })();\n}\n',
+}
+
+
+@pytest.mark.parametrize('name', sorted(SIBLINGS))
+def test_sibling_language_closure_names_no_callee(tmp_path, name):
+    root = str(write(tmp_path, name, SIBLINGS[name]))
+    calls = CallsAdapter(root, 'callees=outer').get_structure()['matches'][0]['calls']
+    assert calls == ['inner'], calls
