@@ -846,10 +846,9 @@ class NginxUriAdapter(ResourceAdapter):
         AdapterFlag(
             attr=attr,
             flag=flag,
-            examples=(
-                f"  reveal nginx.conf {flag}                    # with a .conf file\n"
-                f"  reveal 'nginx://nginx.conf?{attr.replace('_', '-')}=true'  # URI param"
-            ),
+            # nginx:// takes a domain, not a file, and ignores query parameters (BACK-2226),
+            # so the only working form is the flag on a file path.
+            examples=f"  reveal nginx.conf {flag}                    # with a .conf file",
         )
         for attr, flag in (
             ('check_acl', '--check-acl'),

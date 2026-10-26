@@ -1306,7 +1306,8 @@ class HelpAdapter(ResourceAdapter):
                 'description': 'nginx is a file-based analyzer — pass a config file path directly',
                 'note': (
                     'nginx is a file-based analyzer — pass config file paths directly. '
-                    'The nginx:// URI scheme is not yet implemented.'
+                    'The nginx:// URI scheme looks up the vhost for a domain (nginx://example.com); '
+                    'it does not take a file path or query parameters.'
                 ),
                 'examples': [
                     {'uri': 'reveal /etc/nginx/nginx.conf', 'description': 'See all server blocks'},
