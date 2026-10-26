@@ -59,12 +59,24 @@ def test_ignores_stale_distribution_elsewhere_on_sys_path(tmp_path, monkeypatch)
 
 def test_falls_back_when_no_install_root_metadata_found(tmp_path, monkeypatch):
     """No egg-info/dist-info next to the package (e.g. a plain checkout
-    with no metadata at all) -- must not raise, degrade gracefully."""
+    with no metadata at all) -- must not raise, degrade gracefully.
+
+    The name-based lookup is made to miss the way importlib really misses
+    (PackageNotFoundError); otherwise the reveal-cli installed in the test
+    venv answers and the fallback branch never runs."""
+    from importlib.metadata import PackageNotFoundError
+
     package_dir = tmp_path / "reveal"
     package_dir.mkdir()
 
+    def not_installed(name):
+        raise PackageNotFoundError(name)
+
     monkeypatch.setattr("reveal.version._PACKAGE_DIR", package_dir)
-    # No reveal-cli distribution anywhere -> old name-based lookup also
-    # fails -> dev fallback string, not an exception.
-    result = _resolve_version()
-    assert isinstance(result, str) and result
+    monkeypatch.setattr("importlib.metadata.version", not_installed)
+    assert _resolve_version() == "0.42.0-dev"
+
+
+def test_module_version_is_a_nonempty_string():
+    from reveal.version import __version__
+    assert isinstance(__version__, str) and __version__

@@ -1078,27 +1078,3 @@ class TestM103Extended(unittest.TestCase):
         result = rule._find_pyproject(subdir / '__init__.py')
         assert result is not None
         assert result == self.tmpdir / 'pyproject.toml'
-
-
-# ---------------------------------------------------------------------------
-# version.py tests
-# ---------------------------------------------------------------------------
-
-class TestVersionFallback(unittest.TestCase):
-    """Cover version.py exception fallback (lines 10-12)."""
-
-    def test_version_string_is_set(self):
-        from reveal import version as ver_module
-        assert hasattr(ver_module, '__version__')
-        assert isinstance(ver_module.__version__, str)
-        assert len(ver_module.__version__) > 0
-
-    def test_version_fallback_on_metadata_failure(self):
-        from unittest.mock import patch
-        with patch('importlib.metadata.version', side_effect=Exception('not installed')):
-            import importlib
-            import reveal.version as ver_module
-            importlib.reload(ver_module)
-            assert hasattr(ver_module, '__version__')
-            # Either real version or fallback — both are valid strings
-            assert isinstance(ver_module.__version__, str)
