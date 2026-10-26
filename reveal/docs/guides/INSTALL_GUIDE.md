@@ -88,8 +88,7 @@ succeed and the first real parse of a new language hang or fail.
 
 reveal reports the failure rather than degrading silently: a `WARNING`-level log before the fetch
 attempt, `--explain-file` reports the grammar is not cached instead of claiming full support, and
-`--format json` carries an explicit `"error"` key instead of an ambiguous empty structure
-(BACK-979).
+`--format json` carries an explicit `"error"` key instead of an ambiguous empty structure.
 
 ## See also
 

@@ -142,9 +142,9 @@ their own failure outcome.
 - Static imports only for the architecture section — dynamically loaded
   files (plugins, registries) may appear as spurious entry points.
 - `?exclude=` reaches the `stats`/hotspots, `scope` and `architecture`
-  sections (BACK-1042, BACK-1495); `complex_functions` (`ast://`) still
+  sections; `complex_functions` (`ast://`) still
   scans the whole tree. `respect_gitignore` applies to
-  every section (BACK-1386).
+  every section.
 - A directory without its own `.git` inherits the enclosing repo's history
   (disclosed via `git_foreign_root`, not silently hidden).
 

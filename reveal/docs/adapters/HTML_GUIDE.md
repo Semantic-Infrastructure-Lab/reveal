@@ -24,8 +24,7 @@ reveal page.html --links
 reveal page.html --metadata
 ```
 
-> **Positional selector/ID/tag extraction works** (BACK-481, fixed
-> extragalactic-journey-0706): `reveal page.html "#search-form"`,
+> **Positional selector/ID/tag extraction works**: `reveal page.html "#search-form"`,
 > `reveal page.html ".hero-section"`, `reveal page.html "nav ul li"`, and
 > `reveal page.html title` all resolve to the matching element with its source
 > and line range. (Previously these errored "Element not found" — the
@@ -100,7 +99,7 @@ reveal page.html --links --link-type external
 reveal page.html --links --domain example.com
 
 # Check for broken links (local files only)
-reveal page.html --links --broken
+reveal page.html --links --broken-only
 ```
 
 **Link types detected:**
@@ -228,7 +227,7 @@ done
 
 ```bash
 # Check for broken internal links
-reveal site/**/*.html --links --broken
+reveal site/**/*.html --links --broken-only
 
 # Find all external links
 reveal page.html --links --link-type external
@@ -369,7 +368,7 @@ reveal layouts/_default/baseof.html --metadata
 
 ```bash
 # Validate all internal links
-reveal public/**/*.html --links --broken
+reveal public/**/*.html --links --broken-only
 
 # Extract all images for optimization
 reveal public/**/*.html --semantic media

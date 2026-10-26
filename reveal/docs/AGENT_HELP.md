@@ -23,8 +23,8 @@ help_category: ai_guides
 
 **For progressive, low-token discovery** (one topic at a time), use `reveal 'help://<topic>'`:
 - `reveal help://` — index of all topics
-- `reveal help://ast` — ast:// quick start (first section only; ~600 tokens)
-- `reveal help://ast/full` — complete ast:// guide (~9,400 tokens)
+- `reveal help://ast` — ast:// quick start (first section only; ~750 tokens)
+- `reveal help://ast/full` — complete ast:// guide (~10,000 tokens)
 - `reveal help://tricks` — RECIPES guide first section
 - `reveal help://tricks/full` — complete RECIPES guide
 - `reveal 'help://schemas/<adapter>'` — machine-readable adapter schema
@@ -65,12 +65,12 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 
 - **Limit results:** `--limit N` becomes `?limit=N` on ast/markdown/json/git/stats and `?top=N` on hotspots/calls/depends/testability; elsewhere a note says it has no effect. `--head N` slices any list result.
 - **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
-- **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~12,500 tokens); rules are `reveal --rules`.
+- **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~15,000 tokens); rules are `reveal --rules`.
 - **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `check --changed RANGE` uses `check`'s codes, with 2 for an unusable range; `imports` defaults to no findings gate, with `--fail-on findings` for exit 1 on a `--circular`, `--unused` or `--violations` row, usage 2 and incomplete/output failure 3; `hotspots` (retiring into `metrics --hotspots`, which has no `--fail-on findings` gate yet) defaults to no findings gate; `--fail-on findings` exits 1 for file quality below 70 or function complexity above 20, usage exits 2, and incomplete/output failure exits 3.
 
 ---
 
-## Agent Introspection (v0.56.0+ - Complete Coverage)
+## Agent Introspection (Complete Coverage)
 
 **Auto-discover capabilities programmatically.** Three discovery surfaces:
 
@@ -406,7 +406,7 @@ src/processor/main.py:
 
 ---
 
-### Task: "Search within a single file" (NEW - v0.47.3)
+### Task: "Search within a single file"
 
 **Ergonomic convenience flags for within-file operations:**
 
@@ -508,7 +508,7 @@ cap, and `--head/--tail/--range` pick hits. `--format json` gives every group's 
 
 ### Task: "Review code quality"
 
-**Pattern (v0.57.0+: use subcommand form):**
+**Pattern (use the subcommand form):**
 ```bash
 # Subcommand form (preferred — own --help, clean namespace)
 reveal check src/                      # Check directory recursively
@@ -516,7 +516,7 @@ reveal check file.py                   # Check single file
 reveal check src/ --select B,S         # Bugs & security only
 reveal check src/ --format json        # JSON for CI/CD gating
 
-# Named profiles (v0.96.0+)
+# Named profiles
 reveal check src/ --profile maintenance   # complexity, duplication, structure
 reveal check src/ --profile security      # S001 secrets + link validity
 reveal check src/ --profile ci-strict     # all rules, strict thresholds
@@ -546,7 +546,7 @@ reveal check Dockerfile                # Docker best practices (S701)
 **List all rules (including opt-in):** `reveal --rules`
 **Explain specific rule:** `reveal --explain B001`
 
-**Rules that can't run are disclosed, not silently passed (BACK-1466).** When a selected rule doesn't apply to a file's language, `check` (single-file and recursive) prints a disclosure before the verdict, and JSON carries it in `scan_disclosures` (`[]` when every selected rule applied):
+**Rules that can't run are disclosed, not silently passed.** When a selected rule doesn't apply to a file's language, `check` (single-file and recursive) prints a disclosure before the verdict, and JSON carries it in `scan_disclosures` (`[]` when every selected rule applied):
 ```
 sample.java: ⚠️  W-CAP-1: T006 analyzes Python only; 1 file(s) in other languages were not checked by it: java (1).
 sample.java: ⚠️  W-CAP-2: I001 has no unused-import detection for these languages; 1 file(s) were not checked by it: .java (1).
@@ -615,8 +615,8 @@ rules:
 | Rule | False positive trigger | Root cause |
 |------|------------------------|------------|
 | **M102** | Workers, plugins, blueprints, rule discovery modules | Module loaded dynamically via registry/factory — M102 sees no call sites at analysis time |
-| **B005** | `try/except ImportError: …` optional deps | Fixed in v0.67.0+: B005 now skips imports inside `try/except ImportError` blocks |
-| **I001** | `__init__.py` re-exports | Fixed in v0.61+: I001 now skips `__all__`-listed names |
+| **B005** | `try/except ImportError: …` optional deps | B005 skips imports inside `try/except ImportError` blocks |
+| **I001** | `__init__.py` re-exports | I001 skips `__all__`-listed names |
 
 **M102 heuristic detail:** M102 (unused module members) scans call sites within the same file and across the project. It cannot follow `getattr(module, name)()` dispatch, `importlib.import_module` loading, or registration patterns like `RULES = {k: v for k, v in globals().items() if isinstance(v, BaseRule)}`. When you see M102 on a file full of small classes with no direct callers, check whether a registry or factory loads them.
 
@@ -742,7 +742,7 @@ reveal models.py --outline
 
 ---
 
-### Task: "Navigate inside a function — outline, scope, variable flow, calls, and more" (v0.72.0+, extended v0.78.0+)
+### Task: "Navigate inside a function — outline, scope, variable flow, calls, and more"
 
 Progressive disclosure flags for navigating inside functions and flat procedural files. Use when a function (or a large flat file like a PHP controller) is too large to read in full.
 
@@ -785,7 +785,7 @@ reveal flat_file.php :1-2000 --varflow errormsg  # flat procedural file
 ```
 Shows every place the variable is assigned (WRITE), read (READ), or tested in a condition (READ/COND). Works on both named functions and flat/procedural files without a function wrapper.
 
-**`--varflow VAR --cross-calls` → follow variable across function boundaries (v0.84.0+)**
+**`--varflow VAR --cross-calls` → follow variable across function boundaries**
 ```bash
 reveal app.py process_batch --varflow results --cross-calls
 
@@ -797,7 +797,7 @@ reveal app.py process_batch --varflow results --cross-calls
 ```
 When the tracked variable appears as an argument in a call, recursion enters the callee and tracks the corresponding parameter. DFS with cycle guard. Reveals end-to-end data flow across module boundaries.
 
-**`--narrow VAR` → type-narrowing path for a variable (v0.84.0+)**
+**`--narrow VAR` → type-narrowing path for a variable**
 ```bash
 reveal app.py process_request --narrow response
 
@@ -807,7 +807,7 @@ reveal app.py process_request --narrow response
 ```
 Parses `Optional[X]`, `Union[X,Y,None]`, `X|Y` annotations and classifies `isinstance`, `not isinstance`, `is None`, `is not None` guards. Shows the type at each branch. Useful before editing code that handles nullable types.
 
-> **PHP support (v0.81.0+)**: All nav flags including `--varflow`, `--deps`, `--mutations`, `--sideeffects`, `--returns`, and `--boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
+> **PHP support**: All nav flags including `--varflow`, `--deps`, `--mutations`, `--sideeffects`, `--returns`, and `--boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
 
 **`--calls` → call sites in a line range**
 ```bash
@@ -822,7 +822,7 @@ reveal app.py process_batch --calls               # all calls in the function
 ```
 > **Disambiguation**: `--calls` (this flag) lists call sites *within a line range* — it's a sub-element analysis tool. `calls://` (the URI adapter) is a project-level call graph — use `reveal 'calls://file.py?callers=myfunc'` to find which functions *across the project* call `myfunc`. Different scope, different question.
 
-**`--around N` → verbatim context centered on a line (v0.78.0+)**
+**`--around N` → verbatim context centered on a line**
 ```bash
 reveal app.py :123 --around      # ±20 lines (default)
 reveal app.py :123 --around 10  # ±10 lines
@@ -835,7 +835,7 @@ reveal app.py :123 --around 10  # ±10 lines
 ```
 Eliminates the mental arithmetic of picking a line range when you just know a line number. The `▶` marker points to the target line.
 
-**`--ifmap` → branching skeleton (IF/ELIF/ELSE) (v0.78.0+)**
+**`--ifmap` → branching skeleton (IF/ELIF/ELSE)**
 ```bash
 reveal flat_file.php :878-2130 --ifmap
 reveal app.py process_batch --ifmap
@@ -847,7 +847,7 @@ reveal app.py process_batch --ifmap
 ```
 Filtered view of `--outline` showing only conditional branches. Useful before committing to reading a large if/elif/else chain.
 
-**`--catchmap` → exception skeleton (TRY/CATCH/FINALLY) (v0.78.0+)**
+**`--catchmap` → exception skeleton (TRY/CATCH/FINALLY)**
 ```bash
 reveal flat_file.php :470-525 --catchmap
 reveal app.py process_batch --catchmap
@@ -858,7 +858,7 @@ reveal app.py process_batch --catchmap
 #   EXCEPT  Exception  L516→L554
 ```
 
-**`--exits` → exit nodes in a range (v0.78.0+)**
+**`--exits` → exit nodes in a range**
 ```bash
 reveal flat_file.php :657-2200 --exits
 reveal app.py process_batch --exits
@@ -869,7 +869,7 @@ reveal app.py process_batch --exits
 ```
 Lists all return/raise/break/continue/die nodes. Useful for auditing where a large block can exit.
 
-**`--flowto` → exits + reachability verdict (v0.78.0+)**
+**`--flowto` → exits + reachability verdict**
 ```bash
 reveal flat_file.php :2928-3663 --flowto
 
@@ -880,7 +880,7 @@ reveal flat_file.php :2928-3663 --flowto
 ```
 Verdict: `✓ CLEAR` (no exits), `~ CONDITIONAL` (only loop breaks/continues), `⚠ BLOCKED` (hard return/raise).
 
-**`--deps` → candidate inputs to a range (v0.78.0+)**
+**`--deps` → candidate inputs to a range**
 
 Undefined reads are candidate inputs, not a complete extraction contract. Recognized binders include closure parameters, with/except/catch targets, comprehension targets, and range-loop variables. Closures, comprehensions, and catch bodies retain lexical ownership so their bindings do not hide genuine outer reads. Defaults remain outer reads. Other variable tracking remains name-based; same-named loop or flat-file bindings may merge. Python builtins from the registered vocabulary remain visible as `BUILTIN` (JSON `kind: builtin`); explicit lexical shadows remain candidate inputs. Other languages use only their registered builtin vocabulary. Review source for dynamic names, aliases, and unsupported binding shapes.
 ```bash
@@ -893,7 +893,7 @@ reveal app.py process_batch --deps --range 20-80
 ```
 Shows which variables the range depends on — what would become function parameters if you extracted this block.
 
-**`--mutations` → variables written in range and read after (v0.78.0+)**
+**`--mutations` → variables written in range and read after**
 ```bash
 reveal flat_file.php :1136-1463 --mutations
 reveal app.py process_batch --mutations --range 20-80
@@ -906,7 +906,7 @@ Suggests variables the caller may need back — what would become return values 
 
 > `--writes` is an alias for `--mutations` — use whichever reads more naturally. Empty-result message says "No read-after-write hazards" with a `--varflow` hint.
 
-**`--sideeffects` → classified side-effect calls (db/http/cache/log/file/sleep/hard_stop) (v0.81.0+)**
+**`--sideeffects` → classified side-effect calls (db/http/cache/log/file/sleep/hard_stop)**
 ```bash
 reveal flat_file.php :477-531 --sideeffects
 reveal app.py myfunc --sideeffects
@@ -922,11 +922,11 @@ reveal app.py myfunc --sideeffects
 ```
 Shows what external systems a range touches. Useful for assessing blast radius, spotting unexpected I/O, or understanding retry safety. Works on every language in reveal's conformance matrix: Python, PHP, JavaScript, TypeScript, Go, Rust, Java, Kotlin, C#, C, C++, Swift, Ruby.
 
-Two channels feed this. Most effects are **calls**, classified by callee name. But a language's env-read idiom is often a bare **property/subscript access** with no call node anywhere in it — `process.env.FOO` / `process.env['FOO']` (JS/TS), `ENV['FOO']` (Ruby), `os.environ['FOO']` (Python) — which no callee-name taxonomy can ever see. Those are detected by a separate property channel (BACK-644) and render without a `()` suffix, since they are not calls; `--format=json` tags each finding `"via": "call"` or `"via": "property"`.
+Two channels feed this. Most effects are **calls**, classified by callee name. But a language's env-read idiom is often a bare **property/subscript access** with no call node anywhere in it — `process.env.FOO` / `process.env['FOO']` (JS/TS), `ENV['FOO']` (Ruby), `os.environ['FOO']` (Python) — which no callee-name taxonomy can ever see. Those are detected by a separate property channel and render without a `()` suffix, since they are not calls; `--format=json` tags each finding `"via": "call"` or `"via": "property"`.
 
 The property channel is deliberately narrow: it matches an explicit allowlist of env bases, case-sensitively, rather than treating member access as an effect by shape. So Ruby's `ENV['X']` (process environment) is reported while `env['X']` (Rack's request hash) is not, and `config.process.env.X` is not mistaken for Node's `process.env`. A bare `process.env` passed as an argument is not itself a key read and is not reported. Call-form env reads (`os.environ.get('X')`, `getenv('X')`, `System.getenv()`) are the call channel's job and are reported once, not twice.
 
-**`--transitive` → follow calls into project-local helpers (BACK-545/546)**
+**`--transitive` → follow calls into project-local helpers**
 ```bash
 reveal app.py handle_request --sideeffects --transitive
 reveal app.py handle_request --boundary --transitive --depth 3
@@ -970,9 +970,9 @@ reveal file.php :1-800 --statewrites
 # L193     field    self.ref
 # L196     field    self.subpath
 ```
-`--mutations` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented (plus an env property channel, BACK-644) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. Module-bound container writes such as `STATE[k] = v` and explicit Python/PHP `global` assignments are classified as `global`; explicit Python `nonlocal` mutations and rebindings are `nonlocal`. Python/JS module bindings use lexical declarations, including JS function-hoisted `var` and block-local `let`/`const`; ordinary local containers and parameters stay local. PHP requires an explicit `global` declaration or `$GLOBALS`. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, imported-object resolution, and dynamic names remain outside this analysis. DB column/table extraction is not provided; an empty result does not establish the absence of shared-state writes. Works on PHP, Python, and JS/TS.
+`--mutations` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented (plus an env property channel) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. Module-bound container writes such as `STATE[k] = v` and explicit Python/PHP `global` assignments are classified as `global`; explicit Python `nonlocal` mutations and rebindings are `nonlocal`. Python/JS module bindings use lexical declarations, including JS function-hoisted `var` and block-local `let`/`const`; ordinary local containers and parameters stay local. PHP requires an explicit `global` declaration or `$GLOBALS`. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, imported-object resolution, and dynamic names remain outside this analysis. DB column/table extraction is not provided; an empty result does not establish the absence of shared-state writes. Works on PHP, Python, and JS/TS.
 
-**`--keys VAR` → dynamic key/property access surface (BACK-439d)**
+**`--keys VAR` → dynamic key/property access surface**
 ```bash
 reveal file.py normalize --keys config
 reveal file.php :1-500 --keys '$row'
@@ -985,7 +985,7 @@ reveal file.ts handler --keys payload
 ```
 `--varflow` traces a variable's own reads/writes but collapses everything the variable's keys/properties are used for into generic READ lines on the enclosing statement — `rules.get('enabled', ...)` never shows that the key is `enabled`. `--keys` fills that gap: for the given base variable, it finds subscript access (`config['x']`, `$row['id']`, `payload["id"]`), member/attribute access (`payload.id`, `$obj->x`, optional chaining `payload?.id`), and the dict-get idiom (`config.get('x', default)`, key = first argument, not the method name), then classifies each occurrence as `READ`, `WRITE` (assignment target), or `COND` (used directly in an `if`/`while` condition, including PHP's `isset()`/`empty()` wrapping a subscript). Output groups by key in first-seen order. Works on Python, PHP, and JS/TS.
 
-**`--returns` → return/exit paths with gate chains (v0.81.0+)**
+**`--returns` → return/exit paths with gate chains**
 ```bash
 reveal app.py process_order --returns
 reveal flat_file.php :120-340 --returns
@@ -1021,7 +1021,7 @@ reveal flat_file.php handleRequest --boundary
 ```
 Composes `--deps`, `--sideeffects`, and assignment writes from `--statewrites` into a single boundary-contract report: what the code receives (INPUTS), what environment state it reads (ENVIRONMENT — PHP superglobals `$_GET`, `$_POST`, `$_SESSION`, etc.), and what it does to the world (EFFECTS). Unshadowed registered builtins appear separately in BUILTINS, omitted when empty; JSON uses findings with `kind: builtin`. Assignment effects include `via: assignment` and render their target without call parentheses. The ENVIRONMENT section is omitted when empty (Python files rarely have superglobals). The highest-value single-flag summary for understanding an unfamiliar code range.
 
-**Most flags work on flat/procedural files (v0.78.0+):**
+**Most flags work on flat/procedural files:**
 ```bash
 # Flat PHP file — no named function required
 reveal legacy_controller.php :878-2130 --ifmap
@@ -1031,7 +1031,7 @@ reveal legacy_controller.php :477-531 --sideeffects
 reveal legacy_controller.php :120-340 --returns
 reveal legacy_controller.php :477-531 --boundary
 ```
-All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE`. All variable-tracking flags (`--varflow`, `--deps`, `--mutations`) now work on PHP as well as Python (fixed in v0.81.0, BACK-203).
+All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE`. All variable-tracking flags (`--varflow`, `--deps`, `--mutations`) now work on PHP as well as Python.
 
 **Combining with `--range` to narrow scope:**
 ```bash
@@ -1233,7 +1233,7 @@ git diff --name-only --diff-filter=A | reveal --stdin --check --select S
 
 ---
 
-### Task: "Investigate git history, blame, and commit diffs (git://)" (v0.90.0+)
+### Task: "Investigate git history, blame, and commit diffs (git://)"
 
 **git:// adapter — structured git archaeology without leaving reveal-land.**
 
@@ -1250,28 +1250,28 @@ reveal 'git://src/auth.py@abc1234?raw=1'                         # previous raw 
 # File history — commits that touched a file
 reveal 'git://src/auth.py?type=history&limit=20'
 reveal 'git://src/auth.py?type=history&author=Alice&limit=10'
-reveal 'git://src/auth.py?type=history&no_merges=1'             # exclude merge commits (v0.91.0+)
+reveal 'git://src/auth.py?type=history&no_merges=1'             # exclude merge commits
 
-# Pickaxe search — history where a string appears in the diff (v0.91.0+)
+# Pickaxe search — history where a string appears in the diff
 reveal 'git://src/auth.py?type=history&content~=AuditLog'       # commits that added/removed AuditLog
 reveal 'git://src/auth.py?type=history&content~=CURLOPT_TIMEOUT&no_merges=1'
 
-# Element-scoped history — commits that actually changed a specific function (v0.90.0+)
+# Element-scoped history — commits that actually changed a specific function
 # Runs analyzer per commit — use ?limit=N to keep it fast
 reveal 'git://src/auth.py?type=history&element=process_payment'
 reveal 'git://src/auth.py?type=history&element=process_payment&limit=10'
 
-# Date filtering (already worked pre-v0.90.0; now documented)
+# Date filtering
 reveal 'git://src/auth.py?type=history&date>2026-04-01'
 reveal 'git://src/auth.py?type=history&since=2026-01-01&author=Priya'
 
 # Blame — who owns which lines
 reveal 'git://src/auth.py?type=blame'                            # summary by contributor
 reveal 'git://src/auth.py?type=blame&element=process_payment'   # blame scoped to function
-reveal 'git://src/auth.py?type=blame&element=L128-L162'         # blame for explicit line range (v0.91.0+)
+reveal 'git://src/auth.py?type=blame&element=L128-L162'         # blame for explicit line range
 
 # Noise-commit suppression — strip mass-formatting commits from blame
-# Auto-ignored by default (v0.91.0+): .git-blame-ignore-revs + noise heuristic (>50% hunks, noise message)
+# Auto-ignored by default: .git-blame-ignore-revs + noise heuristic (>50% hunks, noise message)
 reveal 'git://src/auth.py?type=blame&ignore=off'                # disable auto-ignore, see raw blame
 reveal 'git://src/auth.py?type=blame&ignore=69b0093'            # explicit suppress (stacks with auto)
 reveal 'git://src/auth.py?type=blame&ignore=69b0093,f5fcac0'    # multiple explicit
@@ -1279,7 +1279,7 @@ reveal 'git://src/auth.py?type=blame&ignore=69b0093,f5fcac0'    # multiple expli
 # The motivating combined pattern: who really changed this function, ignoring formatting?
 reveal 'git://src/auth.py?type=blame&element=process_payment&ignore=off'
 
-# Ownership — commit-share over a file, directory, or whole repo (v0.101.0+)
+# Ownership — commit-share over a file, directory, or whole repo
 reveal 'git://src/auth.py?type=ownership'                        # primary author, contributor count, last touch
 reveal 'git://src/?type=ownership'                              # aggregate ownership of a directory
 reveal 'git://.?type=ownership'                                # whole-repo ownership
@@ -1312,7 +1312,7 @@ Use each view for its question:
 reveal imports://src/
 
 # Reverse imports: what depends on this module?
-reveal 'depends://src/database.py?depth=1'
+reveal 'imports://src/?importers=validators.py'
 
 # Declared contracts and their implementations (for supported contract kinds)
 reveal contracts src/
@@ -1422,7 +1422,7 @@ frames (the same walk), with a note naming `reveal calls --callees FUNC --depth 
 
 ---
 
-### Task: "Add a custom analyzer for a new file type" (plugin auto-discovery, v0.87.0+)
+### Task: "Add a custom analyzer for a new file type" (plugin auto-discovery)
 
 Create a file named `*_analyzer.py` in `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global):
 
@@ -1470,8 +1470,8 @@ reveal 'imports://src/utils.py?importers'
 # Who imports anything in models/?
 reveal 'imports://src/models?importers'
 
-# Full reverse graph in GraphViz DOT format (depends:// is retired; DOT has no imports:// form yet)
-reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
+# Full module graph in GraphViz DOT format
+reveal 'imports://src?importers&format=dot' | dot -Tsvg > deps.svg
 ```
 
 **Key use cases:**
@@ -1520,7 +1520,7 @@ Output: one line per violation with file, line, and direction. Clean output = �
 
 **Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked (same as `imports://`); function-level `import` statements are counted. Static resolution can miss edges or infer false edges, especially through name-based fallbacks. Confirm consequential relationships in source.
 
-**Interpreting absence of evidence:** `count: 0` from `depends://` means no *static* importer was found in the scanned path. Dynamic imports (plugin loaders, `importlib.import_module`, `__import__`) are not tracked and will not appear here; an `import` statement inside a function is tracked. Confirm a module is truly unused before deleting it if the codebase uses runtime import patterns.
+**Interpreting absence of evidence:** An empty `?importers` answer means no *static* importer was found in the scanned path. Dynamic imports (plugin loaders, `importlib.import_module`, `__import__`) are not tracked and will not appear here; an `import` statement inside a function is tracked. Confirm a module is truly unused before deleting it if the codebase uses runtime import patterns.
 
 ---
 
@@ -1583,18 +1583,18 @@ reveal architecture src/           # Entry points, core abstractions, risks, nex
 reveal architecture src/auth/      # Target a specific subdirectory
 reveal architecture . --format json  # Machine-readable: {facts, risks[], next_commands[]}
 reveal architecture src/ --no-imports  # Skip import analysis (faster, no graph)
-reveal architecture src/ --against main  # Diff against a git ref (BACK-441)
+reveal architecture src/ --against main  # Diff against a git ref
 ```
 
 **Output sections:** entry points (fan-in=0, by fan-out) · core abstractions (most imported) · component cohesion bars · risks (circular groups, high-complexity entry points, load-bearing files) · next commands (dynamically generated from findings). Every count states its rule (`Rule:` lines, `edge_rule` and `edge_rule_sections` in JSON): all static import edges except `TYPE_CHECKING` ones, function-level imports included (entry points ignore importers under a test path); cycles use the load-time view.
 
-**`--against REF` → architectural diff against a git ref (BACK-441)**
+**`--against REF` → architectural diff against a git ref**
 ```bash
 reveal architecture src/ --against main
 reveal architecture src/ --against v1.2.0 --format json
 reveal 'architecture://src?against=main' --format json
 ```
-Base = `REF` (materialized read-only via git, working tree untouched), head = the current working tree. Reports fan-in/fan-out deltas, circular-dependency groups introduced or resolved, component-coupling changes, complexity-centroid shift, and entry-point changes — "what did this branch actually change architecturally" instead of diffing file-by-file. Both snapshots are counted by one stated rule (`edge_rule` beside `deltas`; function-level imports included, cycles on the load-time view). Deltas are only meaningful for graph-backed languages (Python/JS/TS/Go/Rust/C/C++ today — see BACK-487/488).
+Base = `REF` (materialized read-only via git, working tree untouched), head = the current working tree. Reports fan-in/fan-out deltas, circular-dependency groups introduced or resolved, component-coupling changes, complexity-centroid shift, and entry-point changes — "what did this branch actually change architecturally" instead of diffing file-by-file. Both snapshots are counted by one stated rule (`edge_rule` beside `deltas`; function-level imports included, cycles on the load-time view). Deltas are only meaningful for graph-backed languages (Python/JS/TS/Go/Rust/C/C++ today).
 
 Both forms preserve `architecture_diff` identity on success and failure. Diff rejects explicit `no_imports`/`verbose`, including false URI values. `top` is an analysis population control: ordinary `top*4`, diff `max(top,1)*4`. Ordinary `--verbose` expands analysis and text on both forms; URI `--all` stays text-only. URI ref values percent-decode once and preserve plus; encode literal percent as `%25`. Architecture exits 0 for completed answers, 2 for invalid requests and 3 for required incomplete analysis/output failures. Only `--fail-on none` is supported, and it cannot suppress required failures. See [the adapter guide](adapters/ARCHITECTURE_ADAPTER_GUIDE.md) for encoding and evidence limits.
 
@@ -1651,7 +1651,7 @@ reveal surface .                        # CLI commands, HTTP routes, env vars, n
 reveal surface src/ --type http         # Filter to HTTP routes only
 reveal surface src/ --type env          # Filter to env-var reads only
 reveal surface . --format json          # Machine-readable, for diffing across versions
-reveal surface . --source-only          # Production surface only — excludes test files/dirs (v0.101.0+)
+reveal surface . --source-only          # Production surface only — excludes test files/dirs
 reveal surface src/ --source-only --type sdk  # SDK egress, production code only (security review)
 reveal surface . --by dir --depth 2     # Which layers touch which boundary kinds (per-directory counts)
 reveal surface src/ --type subprocess   # Shell/process execution only (subprocess, exec, system, popen, ...)
@@ -1668,7 +1668,7 @@ Not implemented for scanned languages (a 0 here is not a clean result):
 Files that could not be parsed are named, not counted as clean: `N file(s) could not be parsed and contribute no entries: …` (JSON `unparsed_files`, warning `W-SURFACE-2`).
 Files tree-sitter parsed only by guessing across an ERROR region are named too (`recovered_files`, warning `W-SURFACE-3`); each entry inside such a region carries `in_error_region` (text: `[parse-recovered]`) -- treat it as possibly fabricated.
 
-**`--source-only` (v0.101.0+):** Prunes test directories (`tests/`, `test/`, `spec/`, `__tests__/`, any dir starting with `test` or `spec`) and test files (`test_*.py`, `*_test.py`, `conftest.py`, `*.test.ts`, `*.spec.ts`, etc.) before scanning. Useful for security/architecture reviews where test scaffolding adds noise. `_meta.known_limits` in JSON output records the exclusion.
+**`--source-only`:** Prunes test directories (`tests/`, `test/`, `spec/`, `__tests__/`, any dir starting with `test` or `spec`) and test files (`test_*.py`, `*_test.py`, `conftest.py`, `*.test.ts`, `*.spec.ts`, etc.) before scanning. Useful for security/architecture reviews where test scaffolding adds noise. `_meta.known_limits` in JSON output records the exclusion.
 
 Both surface spellings emit `type: surface_scan` and support human-primary
 `--output json=PATH`. Direct requests follow the
@@ -1704,7 +1704,7 @@ reveal dev new-rule C001 deep-nesting          # New quality rule (category C, I
 reveal dev inspect-config                      # Show effective .reveal.yaml resolution
 ```
 
-**Plugin discovery:** Custom adapters/analyzers placed in `<cwd>/.reveal/adapters/` or `~/.reveal/adapters/` are auto-discovered on first use (BACK-247/BACK-256). No registration needed beyond the `register_*` decorator.
+**Plugin discovery:** Custom adapters/analyzers placed in `<cwd>/.reveal/adapters/` or `~/.reveal/adapters/` are auto-discovered on first use. No registration needed beyond the `register_*` decorator.
 
 **Use case:** Reveal is intentionally extensible — when an agent needs to navigate a domain reveal doesn't yet understand (a custom DSL, a proprietary file format, an internal service), scaffold an adapter rather than hand-rolling parsing logic. The scaffolds include test stubs and follow the contract enforced by reveal's own quality rules.
 
@@ -2931,7 +2931,7 @@ Any cut list is disclosed the same way, whatever cut it (`--max-items`, `--head`
 
 ### JSON Format Details
 
-**Standard JSON output (v0.40.0+):**
+**Standard JSON output:**
 ```json
 {
   "file": "src/main.py",
@@ -3498,7 +3498,7 @@ reveal app.py missing_function
 # Available: validate_token, refresh_token, create_session, ... (and 3 more)
 ```
 
-**v0.67.0+:** The error message itself lists available names — use one directly and skip the full-file roundtrip.
+The error message itself lists available names — use one directly and skip the full-file roundtrip.
 
 **Causes & Solutions:**
 
@@ -3890,7 +3890,7 @@ def process():
 **I001: Unused import**
 - Import is never referenced in the file
 - Applies to Python, JS/TS, Rust, Go (multi-language)
-- Other languages with an import extractor (Java, C#, Kotlin, PHP, ...) are not checked: `imports://?unused`/`deps` say "Unused imports not checked", `check` (single-file and recursive) adds a W-CAP-2 note (BACK-1398, BACK-1466)
+- Other languages with an import extractor (Java, C#, Kotlin, PHP, ...) are not checked: `imports://?unused`/`deps` say "Unused imports not checked", `check` (single-file and recursive) adds a W-CAP-2 note
 
 **I002: Circular dependency**
 - Module A imports B which imports A (directly or transitively)
@@ -4579,52 +4579,6 @@ Note `:LINE --around` is *not* the fix here — it's a fixed ±N line window (de
 mechanically the same padding trick as `grep -A/-B/-C`, just centered. Use `--scope` to find
 the real enclosing unit first; reach for `--around`/`:START-END` only when you deliberately
 want an arbitrary range (e.g. spanning multiple functions).
-
----
-
-## What Changed in This Guide
-
-This is the redesigned complete AI agent reference (Dec 2025). Changes:
-
-- **Task-oriented** - "When you need to do X, use Y" structure
-- **Example-heavy** - Concrete commands that actually work
-- **Real-world scenarios** - Actual situations you'll encounter
-- **Complete coverage** - All adapters, all rules, all features
-- **2026-09-24 refresh (post-v0.127.0)** - Every example re-run against the live CLI. Exit codes are now a per-command table (`check` 0/1/2/3 + `--exit-zero`, `review` 0/1/2/3 + `overall_status`/`exit_code`, a missing path exits 1). New coverage: `?uncalled` per-language exclusions + `test_entrypoints_excluded`/`?test-framework=true`; `trace` one frame per definition + `--from FILE:NAME`; surface "Not implemented" block, unparsed-file warning, `--type subprocess`; Python-only `ast://` features (W-CAP-1) and `--language-info`; `check` disclosures (W-CAP-1/W-CAP-2, `scan_disclosures`); parse-recovery/partial-outline notices; `REVEAL_FORMAT`; `--copy` on subcommands; I007/I008. Fixed examples: `python://syspath`, calls:// budget flags need a query, `diff://` has no `?context=`, jq `.file`/`.content`/`.total`, typed JSON shape, JSONL `--range N-N`, claude `/prompts`/`/messages`, `reveal-cli[whois]`/`[dns]`, E501 default 100.
-- **v0.101.0** - `git://?type=ownership` — commit-share ownership for a file, directory, or whole repo (primary author, per-author %, contributor count, last-touch date; `?merges=1` includes merges, `?limit=N` caps history walk). `surface --source-only` — excludes test files/dirs from surface scans (production-only read for security review). Both carry the shallow-clone warning.
-- **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `metrics://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `metrics://` complexity no longer stuck at 1.00
-- **v0.96.0** - `reveal check --profile NAME` (built-in presets: `maintenance`, `security`, `ci-strict`; project-defined via `.reveal.yaml`); S001 hardcoded secrets rule (opt-in — `sk-proj-`/`ghp_`/`AKIA*` + secret-named vars); PHP `calls://` OO support (`$obj->method()`, `new ClassName()` callers indexed cross-file); `reveal --rules` shows opt-in rules with `○` icon; I002 false positives 143→0 (TYPE_CHECKING + function-body imports excluded from cycle graph); I005 TYPE_CHECKING false positive fixed; `reveal hotspots`/`testability` perf: 74s→10.5s / 3min→9s via gitignore pruning + ProcessPoolExecutor + lru_cache; V025 relationship drift rule (`reveal:// --check`); L001 resolves directory links to index file, L003 ignores local citations.
-- **v0.95.0** - tree-sitter-language-pack 1.x migration: 300+ grammars available in the pack (was ~165), single abi3 wheel for Python 3.10–3.14+. (reveal wires up analyzers/fallback for 84 of these — see `reveal --languages`.) **Breaking**: glibc floor raised to manylinux_2_34 (Ubuntu 22.04+, Debian 12+); Alpine/musl and Ubuntu 20.04 no longer supported. `reveal/core/treesitter_compat.py` for 1.x API shims.
-- **v0.94.0** - `reveal testability` subcommand: per-target patch pressure joined with production fan-out (which seams look contained in tests but are fan-out hubs in production). `patches://tests?group=target` URI adapter. Frontmatter-driven help metadata (`help_topic`, `help_category`, `help_token_estimate` fields replace parallel Python dicts).
-- **v0.93.0** - `--grep PATTERN` text search with structural context: hits grouped by enclosing function/heading, `--ignore-case`, directory mode. `--name` canonical flag (`--search` kept as alias).
-- **v0.92.0** - Architecture hardening: `adapters/base.py` split into `factory.py`/`registry.py`/ABC; nav handlers extracted to `nav_handlers.py`; ast↔calls circular import broken; `_default_args` centralized in `cli/defaults.py`. All changes backward-compatible.
-- **v0.91.x** - `reveal --help` epilog expanded to all 13 subcommands + discovery flags; AGENT_HELP coverage gaps closed (env://, contracts, surface, mysql://, sqlite://); `--agent-help-full` removed (was no-op alias); `--search` 0-results hint now fires on non-Python files; gitignore directory pattern fix in `should_skip_file` (was generating ~3500 spurious M501 on htmlcov/).
-- **v0.90.x** - `git://` comprehensive history/blame: element-scoped history, `?type=diff` per-commit structure diff, blame with noise-commit suppression (`?ignore=sha`, `.git-blame-ignore-revs`), `?content~=` pickaxe search, `?no_merges=1`. `reveal pack --architecture` boost. `claude://` base-path env var (`REVEAL_CLAUDE_BASE_PATH`).
-- **v0.88.0–v0.89.0** - `reveal trace --json` flag (BACK-251); `reveal surface` env-var false positives fixed (dict `.get()` no longer misclassified); hotspot test-coverage heuristic improvements (private `_` functions, `Test*` class names, reverse-match fallback).
-- **v0.87.0** - Plugin auto-discovery: drop a `*_analyzer.py` with a `@register`-decorated `FileAnalyzer` subclass into `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global) — it loads automatically on the next `reveal` run. Zero registration boilerplate. `reveal pack --architecture`: fan-in-ranked entry points + top-5 core abstractions appended to pack output. `claude/renderer.py` split into 4 thematic submodules (BACK-241).
-- **v0.86.0** - `reveal trace` subcommand: depth-indented execution narrative from a named entry point. Combines `calls://` recursive callees walk with per-function params and classified side-effects (hard_stop, db, http, cache, file, log, sleep). `--depth N` (1–5, default 2), `--format json` output. Prunes builtins and external callees by default.
-- **v0.85.0** - 5 new features: `reveal hotspots` test-coverage heuristic (✅/⚪ per function, scans `tests/`/`test/`/`spec/`); `calls://?root=fn&depth=N` recursive callees walk (BFS, cap 5, resolved vs external); `reveal contracts src/` (ABCs, Protocols, TypedDicts, @dataclass, Pydantic BaseModels, `--abstract-only`); `reveal surface src/` (CLI args, HTTP routes, MCP tools, env vars, network/DB/SDK imports, filesystem writes, `--type` filter); `calls://?modules=true` module dependency graph (191 nodes / 248 edges on reveal's own codebase, `?external=true`, dot format).
-- **v0.84.0** - `--varflow --cross-calls` (follow variable across function boundaries); `--narrow VAR` (type-narrowing path); `ast://` new filters: `param_type=`, `return_type=`, `has_decorator=`, `has_annotations=`, `callers>N`, `reveal_type=`, `show=dict-heatmap`, `depth>N`; `imports://?circular&verbose` (cycle edge paths); T005 (annotation coverage), T006 (TypedDict suggestion) rules; `--writes` alias for `--mutations`; `reveal/types.py` Output Contract TypedDicts; `_NAV_DISPATCH` dispatch table refactor; `VarFlowWalker` dataclass.
-- **v0.79.0** - documented PHP limitation: `--varflow`, `--deps`, `--mutations` silently return empty on PHP files (BACK-203 — `variable_name` node type vs `identifier`); PHP-safe nav flags: `--calls`, `--exits`, `--flowto`, `--ifmap`, `--catchmap`, `--around`, `--scope`; added `--calls` / `calls://` disambiguation; clarified `--outline` dual-mode behavior
-- **v0.78.0** - probe-inspired nav flags: `--around N` (verbatim context ±N lines around a target), `--ifmap` (branching skeleton), `--catchmap` (exception skeleton), `--exits` (exit-node list), `--flowto` (exit list + CLEAR/CONDITIONAL/BLOCKED verdict), `--deps` (refactoring pre-flight: variables flowing in), `--mutations` (variables written in range and read after); flat-file support for `--varflow` and `--calls` (no named function required — use with `:LINE-RANGE` syntax or no element for whole-file)
-- **v0.72.1** - M501 rule (TODO/FIXME/HACK/XXX marker detection, LOW severity, all file types); `--max-bytes` and `--max-depth` removed (were misleading/unimplemented); Complete Rules Reference now covers L, M, F, T categories (18 previously undocumented rules); adapter count corrected to 22
-- **v0.72.0** - nav flags released: `--outline` (element mode → control-flow skeleton), `--scope` (ancestor scope at a line), `--varflow` (read/write trace), `--calls` (call sites in a range); `--broken-only` and `--inline` documented; `--section NAME` flag; budget flags (`--max-items`, `--max-snippet-chars`) for token management
-- **v0.67.0** - B005 skip `try/except ImportError` optional-dep pattern; element-not-found lists available names; `--analyzer text` false suggestion removed; M102 suppress patterns + dynamic-load heuristics in agent-help; OR-pattern failure hints `--search`
-- **v0.64.0** - `reveal overview` + `reveal deps` subcommands; `reveal-mcp` MCP server (5 tools); `pack --content` tiered emission; `xlsx://` Power Pivot extraction (`?powerpivot=tables/schema/measures/dax/relationships`); `calls://?uncalled` dead code candidates; `diff://` per-function complexity delta; `claude://sessions/?search=`; Output contract compliance tests; ARCHITECTURE.md; `--discover` flag
-- **v0.63.0** - `calls://` complete: `?callees=`, `?rank=callers`, `?builtins=` filtering; I005 + I006 import rules; `reveal hotspots` subcommand; B006 false-positive fixes; cpanel `full-audit`, `?domain_type=`
-- **v0.61.0** - markdown cross-file link graph; claude:// cross-session file tracking + content search; json:// `?flatten` fix; domain:// task section; cpanel `--only-failures` for acl-check; I001 `__init__.py` re-export fix; B006 multi-attempt fallback fix; M102 dynamic dispatch fix
-- **v0.60.0** - `nginx://` URI adapter (21st adapter); nginx vhost inspection by domain name; nginx bug fixes (glob + nesting); N007 rule
-- **v0.59.0** - `--help` argument groups (12 named sections, no more flag wall); 20 adapters support `help://schemas/`; CLI flag taxonomy documented
-- **v0.58.0** - `autossl://` adapter (20th URI adapter); cPanel AutoSSL run log inspection
-- **v0.57.0** - `reveal dev/review/health/pack` subcommands; error-with-hint guards; claude:// workflow filtering, /messages route, truncation fix
-- **v0.56.0** - `reveal check` subcommand; parser foundation with shared global opts
-- **v0.55.0** - `--files`, `--ext`, `--sort`/`--desc`/`--asc`, `--meta` on directories
-- **v0.54.7** - Added claude:// task section (session analysis, workflow, files, thinking, errors)
-- **Pipeline workflows** - Advanced composition patterns
-- **Troubleshooting** - Common issues and solutions
-- **Performance data** - Benchmarks and optimization tips
-
-The old version organized by "Use Cases" and "Workflows" - this version organizes by tasks with progressive complexity.
 
 ---
 

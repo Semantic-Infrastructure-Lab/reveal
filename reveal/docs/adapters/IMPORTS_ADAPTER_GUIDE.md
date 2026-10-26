@@ -602,8 +602,7 @@ Support comes in tiers — be aware of which query modes actually work per langu
 Every resolver above resolves **only to a file that exists in the tree** and
 skips (never fabricates) when the import names a package/namespace/gem/system
 module with no single backing file — the same honest-skip contract as C/C++
-angle-bracket includes. (Java/PHP/Ruby edge resolution added in BACK-487;
-Swift/Kotlin in BACK-488; Scala/Dart/Lua/Zig/GDScript in BACK-514.)
+angle-bracket includes.
 
 > **Note on the long tail:** the coverage above is broad but not exhaustive —
 > other tree-sitter-parseable code files may not have an import extractor yet.
@@ -683,11 +682,14 @@ Use `?flag` syntax for operations:
 | `scope=root\|path` | `root` (default): resolve at the project root, rows under the path; `path`: the path itself is the scan root | `imports://src?rank=fan-in&scope=path` |
 | `tests=include\|exclude` | Count importers under a test path (`path_utils.is_test_path`), or not | `imports://src?importers&tests=exclude` |
 | `root=DIR` | Pin the scan root (must contain the path; not a filesystem/home/system root; a refused value is a warning) | `imports://src/app.py?importers&root=.` |
+| `lazy=include\|exclude\|only` | Function-level (lazy) import edges: include them, exclude them (load-time edges only) or show only them. Default: `?circular` excludes, every other view includes | `imports://src?rank=fan-in&lazy=exclude` |
+| `format=text\|json\|dot` | Output override for `?importers` on a directory: `dot` draws one importer -> module edge per listed importer as Graphviz | `imports://src?importers&format=dot` |
+| `verbose` | Show everything instead of a summary: every file in a cycle group, all unused imports, all violations, every package (same as the CLI `--verbose`) | `imports://src?circular&verbose` |
 | `max_files=N` | Source files the walk may keep (default 20000); a cut is `metadata.scan_budget.capped` and a `scan_capped` warning | `imports://.?importers&max_files=50000` |
 
 **Note**: `unused`, `circular`, and `violations` are flags (no `=value` needed). `rank` and `top` take values.
 
-**Where an answer is resolved** (BACK-1054): at the project root the shared climb finds (`&root=`,
+**Where an answer is resolved**: at the project root the shared climb finds (`&root=`,
 `.reveal.yaml` `root: true`, the nearest package marker, the VCS root, else the requested directory),
 through the same resolution cascade `depends://` uses (direct, PHP `define()` constants, namespaces,
 members, Swift modules, Ruby Zeitwerk naming). Rows are the requested path's files; importers come from

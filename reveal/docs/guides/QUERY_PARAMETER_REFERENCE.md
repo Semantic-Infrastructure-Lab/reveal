@@ -425,8 +425,7 @@ reveal 'metrics://.?hotspots&code_only'
   reveal 'calls://src?callees=handle_request&depth=2&format=dot' | dot -Tsvg > graph.svg
   ```
 
-- **`modules=true`** - Retired: the module graph answers from `imports://<path>?importers&scope=path`
-  (BACK-1054), one file→file edge per import with both ends under the path, an import used without a
+- **`modules=true`** - Retired: the module graph answers from `imports://<path>?importers&scope=path`, one file→file edge per import with both ends under the path, an import used without a
   call included, and no call count (an import resolving outside the path is counted in
   `outside_path_edges`). It keeps its `calls_module_graph` shape (plus `edge_rule`) and prints
   a replaced-by note until the cut. `&format=dot` has no imports spelling yet, so the Graphviz view stays
@@ -510,7 +509,7 @@ site). A scanned call-source language with no recall snapshot (Elixir, Objective
 
 **Purpose**: Find all files that import a given module ("what depends on this?")
 
-**Retired spelling** (BACK-1054): `depends://` prints a note and answers as before until the cut; the
+**Retired spelling**: `depends://` prints a note and answers as before until the cut; the
 replacement is `imports://<path>?importers` (one file: `imports://<path>/<file>?importers`):
 ```bash
 reveal 'imports://src?importers'            # every module under src with its sorted importers

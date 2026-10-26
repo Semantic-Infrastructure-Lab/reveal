@@ -533,7 +533,7 @@ properties, shell variables, ...) is compared by element name, and an element wh
 than its position changed is `modified`. JSON `summary` and `diff` carry one key per category either
 side has.
 
-It never reports a silent clean (BACK-1732). When two files differ in nothing it compares, for
+It never reports a silent clean. When two files differ in nothing it compares, for
 example a Python module-level constant (`X = 1` vs `X = 2`; Python's analyzer extracts no constants)
 or a body edit below the function change thresholds, the text output still says "No structural
 changes detected" and then warns that the files differ (`meta.warnings` entry of type
@@ -729,7 +729,7 @@ reveal diff://git://abc123/app.py:app.py
 reveal diff://app.py:old.py/handle_request
 
 # Compare function across git versions (with a git:// right side,
-# pass the element as a separate argument -- BACK-1494)
+# pass the element as a separate argument)
 reveal diff://git://main/app.py:git://feature/app.py handle_request
 
 # Compare function in working tree vs HEAD
@@ -1730,7 +1730,7 @@ echo "Release notes saved: RELEASE_NOTES_$TO_TAG.md"
 ### Reveal Adapter Guides
 Related adapters are shown live via `reveal help://diff` (see its `## Next`
 section) — sourced from reveal's adapter-relationship registry, so this
-list can't go stale the way a hand-maintained one did (BACK-928).
+list can't go stale the way a hand-maintained one did.
 
 ### Reveal Core Documentation
 

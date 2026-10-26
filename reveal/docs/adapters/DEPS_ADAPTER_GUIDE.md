@@ -9,7 +9,7 @@ category: guide
 circular dependency cycles, and unused imports for a directory. It is
 composed entirely from three views of one `imports://` graph build of the
 requested path (the default view, `?circular`, `?unused`) — not an
-independent scan, and since BACK-1054 not three builds either.
+independent scan, and not three graph builds either.
 
 **Retired spelling.** `reveal deps` and `deps://` print a note naming their
 replacement (`reveal imports <path> --external, --circular or --unused`;

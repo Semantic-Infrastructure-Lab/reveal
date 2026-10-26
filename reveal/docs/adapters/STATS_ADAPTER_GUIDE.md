@@ -5,7 +5,7 @@ category: guide
 
 # stats:// Adapter Guide (retired)
 
-`stats://` is retired: it was renamed `metrics://` (BACK-2069), the same adapter with the same
+`stats://` is retired: it was renamed `metrics://`, the same adapter with the same
 answers. Everything it does is documented once, in
 [METRICS_ADAPTER_GUIDE.md](METRICS_ADAPTER_GUIDE.md).
 

@@ -2677,7 +2677,7 @@ Hook storage can be either:
 ### Reveal Adapter Guides
 Related adapters are shown live via `reveal help://claude` (see its `## Next`
 section) — sourced from reveal's adapter-relationship registry, so this
-list can't go stale the way a hand-maintained one did (BACK-928).
+list can't go stale the way a hand-maintained one did.
 
 ### Reveal Core Documentation
 

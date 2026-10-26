@@ -35,7 +35,7 @@ per-rule-code tally isn't in its text summary, only in `detections[]`.
 result as "nothing found." A composite adapter (`overview`, `architecture`,
 `hotspots`, `deps` — anything built from several sub-scans via
 `ResourceAdapter.compose()`) attributes a failed sub-scan to `meta.errors`
-instead of silently rendering an empty section (BACK-984). `meta.confidence`
+instead of silently rendering an empty section. `meta.confidence`
 on a composite result is the *minimum* of all its parts — a composite is
 only as trustworthy as its weakest sub-scan. Always non-`None`-checked, never
 opt-in: if you're only reading the primary result and skipping `meta`, you

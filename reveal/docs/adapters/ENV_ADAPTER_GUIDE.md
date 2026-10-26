@@ -1185,7 +1185,7 @@ reveal env:// --format=json | \
 ### Reveal Adapters
 Related adapters are shown live via `reveal help://env` (see its `## Next`
 section) — sourced from reveal's adapter-relationship registry, so this
-list can't go stale the way a hand-maintained one did (BACK-928).
+list can't go stale the way a hand-maintained one did.
 
 ### Reveal Core
 - **[Quick Start](../QUICK_START.md)** - Getting started with reveal

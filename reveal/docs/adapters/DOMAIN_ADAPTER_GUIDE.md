@@ -684,7 +684,6 @@ reveal domain://example.com --check --advanced
 ```bash
 reveal ssl://example.com --check --advanced
 reveal ssl://example.com/chain
-reveal ssl://example.com --check-revocation
 ```
 
 **Token cost**: ~800-2000 tokens
@@ -2010,7 +2009,7 @@ docker run --rm domain-checker reveal domain://example.com --check
 ### Reveal Adapter Guides
 Related adapters are shown live via `reveal help://domain` (see its `## Next`
 section) — sourced from reveal's adapter-relationship registry, so this
-list can't go stale the way a hand-maintained one did (BACK-928).
+list can't go stale the way a hand-maintained one did.
 
 ### Reveal Core Documentation
 

@@ -127,7 +127,7 @@ adapter's own `?key=value` vocabulary — check `reveal_query('help://schemas/
 <adapter>')` for what a given scheme accepts, or use a dedicated typed tool
 (`reveal_check` has `severity`/`select`/`ignore`).
 
-`--provenance` (BACK-1135, fixed): the one exception to the CLI-flag-passthrough
+`--provenance`: the one exception to the CLI-flag-passthrough
 rule above, exposed as a real `provenance` bool parameter rather than a URI
 query param. Set `provenance=True` to attach a `--provenance` execution
 manifest (git state, command, timestamp) to the result, e.g. for a DD finding
@@ -363,7 +363,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | reveal-mcp
 ### Access logging
 
 reveal-mcp does not confine which paths/URIs a tool call can read — every
-`path`/`uri`/`target` argument is trusted as-is (`BACK-1144`). For a
+`path`/`uri`/`target` argument is trusted as-is. For a
 post-hoc audit trail of what every tool call actually touched (useful if a
 prompt-injection-driven call is suspected), opt in:
 
@@ -381,7 +381,7 @@ a tool call even if the log write itself fails.
 Earlier releases could hit a server crash — the client reporting
 `Connection closed`, or several in-flight tool calls failing at once — under
 sustained heavy parallel `reveal_*` calls. This is fixed as of the
-`tree-sitter-language-pack>=1.8.1` / `tree-sitter<0.26.0` pins (`BACK-1161`)
+`tree-sitter-language-pack>=1.8.1` / `tree-sitter<0.26.0` pins
 and no longer needs a workaround; kept here for anyone debugging an older
 install.
 
@@ -396,8 +396,8 @@ and handled from Python.
 **Fix.** Moving past the `tree-sitter-language-pack<1.12.5` pin hands reveal
 the core `tree-sitter` C binding (no thread-affinity constraint) instead of
 the vendored pyo3 parser this bug depended on. `pyproject.toml` now requires
-`tree-sitter-language-pack>=1.8.1` (no upper bound) — verified fixed
-(`BACK-1146` note #7): fresh venv, `tree-sitter-language-pack==1.14.3`, the
+`tree-sitter-language-pack>=1.8.1` (no upper bound) — verified fixed:
+fresh venv, `tree-sitter-language-pack==1.14.3`, the
 original concurrent-GC repro (previously ~4,900 errors + `SIGABRT`) now exits
 clean. If you still hit a crash on a current install, restart the MCP server
 and file an issue — see [PyO3 #3688](https://github.com/PyO3/pyo3/issues/3688)

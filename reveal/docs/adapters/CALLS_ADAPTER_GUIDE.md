@@ -99,7 +99,7 @@ calls://<path>?rank=callers[&top=N]
 
 ### Colon Shorthand
 
-The colon syntax `calls://path:name` is equivalent to `calls://path?callers=name`. Reveal detects that the portion before the colon is an existing filesystem path and the portion after is a bare name (no slashes), and automatically routes it as the callers mode. With an explicit mode (`calls://src/a.py:main?callees=x`) it names a second mode and exits 2; it used to ignore `:main` silently (BACK-2102):
+The colon syntax `calls://path:name` is equivalent to `calls://path?callers=name`. Reveal detects that the portion before the colon is an existing filesystem path and the portion after is a bare name (no slashes), and automatically routes it as the callers mode. With an explicit mode (`calls://src/a.py:main?callees=x`) it names a second mode and exits 2; it used to ignore `:main` silently:
 
 ```bash
 # These are equivalent:
@@ -152,14 +152,14 @@ plain call with exactly one function-literal argument (`withFallback("X", fn)`) 
 function after the variable only when the same file calls or constructs the name, or uses it as
 a capitalised JSX tag (`<X/>`); otherwise the variable holds a value (`const t = setTimeout(fn)`,
 `const store = derived(fn)`) and is not listed as a function, so a function a project only
-exports or passes around is not listed either (BACK-2174). A callback passed to an array method (`xs.map(x => <B/>)`)
+exports or passes around is not listed either. A callback passed to an array method (`xs.map(x => <B/>)`)
 is not a component, so its references belong to the function that runs the `map`. The nearest tracked function owns nested
 callback references, and an unnamed callback (`it`, `describe`, `beforeEach`, hooks)
 belongs to the smallest tracked element that contains it, as call sites do; a deferred
 body with no tracked element around it is marked
 `<anonymous>` and excluded from module callers. Only references outside deferred
 bodies belong to `<module>`. Class-field initializer references keep class
-source ownership and are outside JSX reference navigation (calls in the initializer have the field as caller, BACK-2230); render methods remain indexed. Imported aliases are resolved through the shared
+source ownership and are outside JSX reference navigation (calls in the initializer have the field as caller); render methods remain indexed. Imported aliases are resolved through the shared
 name-resolution seam. Callees and trace use the same references; callees text labels a name that is only rendered
 `(JSX reference)` and a name that is both called and rendered `(includes JSX reference)`. Callers text
 names each kind of site: `[call line 3, JSX line 4]` (JSON: `call_lines` and `reference_lines`), `[JSX line 6]`,
@@ -244,7 +244,7 @@ a file that only holds such calls. The callback runs later, not at load: `<modul
 In JS/TS the initializer of a class field (`x = helper()`, `_save = debounce(async () => helper())`) is a scope of its
 own: the field is the caller, named like a method (`x`, `_save`), never `<module>`. The record has `caller_kind: class_field`,
 the field's line as `line`, and the calls inside the initializer as `call_lines`. A field that holds a function
-(`f = () => helper()`) is a listed method as before, and a call inside a method stays that method's (BACK-2230).
+(`f = () => helper()`) is a listed method as before, and a call inside a method stays that method's.
 
 ### `callees`
 
@@ -710,7 +710,7 @@ trigger() {
 
 `?uncalled` is retired (D8) and answers unchanged until the cut. It uses static name matching and cannot see runtime dispatch. Common sources of false positives: framework entry points (`@mcp.tool()`, `@app.route()`), console scripts wired in `pyproject.toml`, dispatch table functions (`_RENDERERS = {'key': fn}`), and unsupported top-level/class-body call shapes.
 
-A function used without being called is not listed, in any language: passed as a value, callback or function pointer (C `qsort(..., cmp)`, C++ `&Class::method` in Godot's `ClassDB::bind_method`, Go `wg.Go(l.run)`, Java `X::m`, a JS callback, object-literal value, `export` or JSX `<Button/>`), called outside a function body (module level, a Kotlin `init {}` block, a Scala class body), named in a PHP hook string or callable array (`add_action('init', 'fn')`, `[$this, 'm']`) or a Ruby symbol (`before_action :authenticate`). The rule is by name, like the rest of `calls://`: any other occurrence of the name counts, so an unrelated variable of the same name can hide a dead function (BACK-1391). A function referenced only from a non-code file (Redis's `commands.def` table) is still listed. Constructors are excluded in Java, C#, C++ and Dart (recognized by their declaration: no return type), as are overrides wherever the language marks them (`override` in C#/Kotlin/Swift/C++, including a C++ `override` on the in-class declaration of an out-of-line definition, and `@Override`/`@override` in Java/Dart), framework-registered methods (Spring/JAX-RS/Dagger annotations, ASP.NET `[HttpGet]`/`[Route]`, ASP.NET `Invoke`/`Configure` by name), Swift `init`/`deinit`/operators, C/C++ `main`, operators, destructors and GoogleTest/Catch2 `TEST(...)` bodies, and Godot's GDCLASS hooks (`_bind_methods`, `_notification`, ...) in classes that declare `GDCLASS` (BACK-1392). The exact list for the scanned language is printed with the result. Rust calls inside macro arguments (`format!("{}", h())`) are recovered best-effort from the macro's token tree (BACK-1393).
+A function used without being called is not listed, in any language: passed as a value, callback or function pointer (C `qsort(..., cmp)`, C++ `&Class::method` in Godot's `ClassDB::bind_method`, Go `wg.Go(l.run)`, Java `X::m`, a JS callback, object-literal value, `export` or JSX `<Button/>`), called outside a function body (module level, a Kotlin `init {}` block, a Scala class body), named in a PHP hook string or callable array (`add_action('init', 'fn')`, `[$this, 'm']`) or a Ruby symbol (`before_action :authenticate`). The rule is by name, like the rest of `calls://`: any other occurrence of the name counts, so an unrelated variable of the same name can hide a dead function. A function referenced only from a non-code file (Redis's `commands.def` table) is still listed. Constructors are excluded in Java, C#, C++ and Dart (recognized by their declaration: no return type), as are overrides wherever the language marks them (`override` in C#/Kotlin/Swift/C++, including a C++ `override` on the in-class declaration of an out-of-line definition, and `@Override`/`@override` in Java/Dart), framework-registered methods (Spring/JAX-RS/Dagger annotations, ASP.NET `[HttpGet]`/`[Route]`, ASP.NET `Invoke`/`Configure` by name), Swift `init`/`deinit`/operators, C/C++ `main`, operators, destructors and GoogleTest/Catch2 `TEST(...)` bodies, and Godot's GDCLASS hooks (`_bind_methods`, `_notification`, ...) in classes that declare `GDCLASS`. The exact list for the scanned language is printed with the result. Rust calls inside macro arguments (`format!("{}", h())`) are recovered best-effort from the macro's token tree.
 
 Add `# noqa: uncalled` to a `def` line to exclude a specific function from results. The suppression is narrow — the function still appears in all other `calls://` queries.
 
@@ -820,8 +820,7 @@ A: No — `calls://` is a fast static analysis tool built on the same parse tree
 
 ## Retired spellings
 
-Phase 2b merged the older call-graph spellings into `calls://`, and `?modules` moved to `imports://`
-(BACK-1054). Until the cut release each one
+Phase 2b merged the older call-graph spellings into `calls://`, and `?modules` moved to `imports://`. Until the cut release each one
 still answers exactly as before, prints one `note: <old> is deprecated; use <new>.` line on stderr,
 and carries a `retired_spelling` entry in JSON `meta.warnings` (MCP returns the note with the
 result). At the cut the same text becomes an exit-2 error.
@@ -834,8 +833,8 @@ result). At the cut the same text becomes an exit-2 error.
 | `ast://<path>?calls=NAME` | `calls://<path>?callers=NAME`; a pattern (`calls=*send*`) is a `reveal <path> --grep 'send'` text search |
 | `ast://<path>?callee_of=NAME` | `calls://<path>?callees=NAME` |
 | `ast://<path>?show=calls` | `calls://<path>?callers=NAME` or `?callees=NAME` |
-| `calls://<path>?uncalled`, `reveal calls --uncalled` | `?callers=NAME`, `--callers NAME` for one function, or the language's own dead-code tool (vulture, knip, staticcheck/deadcode, rustc `dead_code`, Roslyn IDE0051, Periphery, Psalm). It still answers, unchanged in shape and with no `meta.confidence` in any language, until the cut (D8): a 20-claim source review found 0 to 12 real dead functions per corpus (BACK-1899) |
-| `calls://<path>?modules`, `reveal calls --modules` | `imports://<path>?importers&scope=path`, `reveal imports <path> --importers --scope path` (BACK-1054). The old spelling already answers from it: one edge per import with both ends under the path, so an import used without a call is an edge too (on the celery corpus the call-resolved graph had 79 of its 1,453 import edges), and edges have no `call_count`. An import that resolves outside the path (an `import '../package.json'`) is counted in `outside_path_edges`, not listed. Its `calls_module_graph` shape is kept, with the imports `edge_rule`; a file parsed with errors is disclosed (`partial_parse`) and exits 0, an unreadable file or directory exits 3. `&format=dot` is `imports://<path>?importers&scope=path&format=dot` (BACK-2194) |
+| `calls://<path>?uncalled`, `reveal calls --uncalled` | `?callers=NAME`, `--callers NAME` for one function, or the language's own dead-code tool (vulture, knip, staticcheck/deadcode, rustc `dead_code`, Roslyn IDE0051, Periphery, Psalm). It still answers, unchanged in shape and with no `meta.confidence` in any language, until the cut (D8): a 20-claim source review found 0 to 12 real dead functions per corpus |
+| `calls://<path>?modules`, `reveal calls --modules` | `imports://<path>?importers&scope=path`, `reveal imports <path> --importers --scope path`. The old spelling already answers from it: one edge per import with both ends under the path, so an import used without a call is an edge too (on the celery corpus the call-resolved graph had 79 of its 1,453 import edges), and edges have no `call_count`. An import that resolves outside the path (an `import '../package.json'`) is counted in `outside_path_edges`, not listed. Its `calls_module_graph` shape is kept, with the imports `edge_rule`; a file parsed with errors is disclosed (`partial_parse`) and exits 0, an unreadable file or directory exits 3. `&format=dot` is `imports://<path>?importers&scope=path&format=dot` |
 | `calls://<path>?modules&external`, `--external` | `imports://<path>?importers` (`scope=root`, the default): importers from the whole project root, spelled from the path. The old flag named no external module: on the 24 measured corpora every edge it added was a file under the path that the default had dropped for being spelled as a host path |
 
 ---

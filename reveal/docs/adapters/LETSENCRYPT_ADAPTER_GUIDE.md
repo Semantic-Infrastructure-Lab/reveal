@@ -233,8 +233,8 @@ reveal letsencrypt:// --check-duplicates
   point to `/var/cpanel/ssl/apache_tls/DOMAIN/`, not `/etc/letsencrypt/`. All LE certs
   appear orphaned even when in active use. Use `reveal cpanel://USER/ssl` to check actual
   cert health on cPanel.
-- **No OCSP revocation check**: expiry and SANs only. Revocation status requires
-  `ssl://` with `--health` flags.
+- **No OCSP revocation check**: expiry and SANs only. reveal has no revocation check; use `openssl s_client`
+  or your CA's tooling.
 
 ---
 

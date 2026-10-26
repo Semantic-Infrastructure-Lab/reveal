@@ -36,7 +36,7 @@ category: guide
 
 ## Overview
 
-The **metrics adapter** (`metrics://`, called `stats://` before BACK-2069) analyzes codebase metrics to help you:
+The **metrics adapter** (`metrics://`, formerly `stats://`) analyzes codebase metrics to help you:
 
 - **Understand codebase size and structure** (lines, functions, classes, complexity)
 - **Identify quality hotspots** (files needing refactoring attention)
@@ -569,7 +569,7 @@ Starting score: **100 points**
 - Penalty per issue: CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts
 - Combined penalty capped at 40 points
 - Example: 2 HIGH + 5 MEDIUM issues → `2×5 + 5×2 = 20 points`
-- Issue count exposed as `quality.local_check_issues` in file output (named `quality.check_issues` before BACK-1884)
+- Issue count exposed as `quality.local_check_issues` in file output (formerly `quality.check_issues`)
 - Configurable via the `local_check_issues` section in `.reveal/stats-quality.yaml` (the old `check_issues` section is still read and reported as a `deprecated_config_key` warning)
 
 **Final score**: `max(0, 100 - total_penalties)`
@@ -599,12 +599,12 @@ runs. A rule that crashes is unchanged: `check_rules_failed` marks the file's co
 lower bound and `overview` and `hotspots` exit 3. Directory enumeration loss
 (`analysis_incomplete`, `unit: directories`) is unchanged too.
 
-**Score change (BACK-1884).** Where no cross-file rule detects, nothing changes (the celery
+**Score change.** Where no cross-file rule detects, nothing changes (the celery
 package's stats and overview JSON are identical apart from the renamed field and the new
 `meta.issue_count`; Go `pkg/kubelet` is unchanged). Scores only rise. Rust `crates` (659
 files): 160 files change score (142 `.rs`, 17 `Cargo.toml`, 1 `.md`), the files under 70
 fall from 171 to 144 (27 cross up, none cross down), the average rises from 80.9 to 82.6,
-mostly because `I002` reported the module tree as import cycles (BACK-2129). TypeScript
+mostly because `I002` reported the module tree as import cycles. TypeScript
 `src/vs/platform`: 18 files change, 5 Markdown files cross 70 upward. The old
 `quality.check_issues` is gone; a filter or `?sort=` on `quality.check_issues` is still
 answered and carries a `deprecated_field` warning.

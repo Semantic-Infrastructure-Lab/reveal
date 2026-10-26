@@ -200,7 +200,7 @@ other changed files are not added to a single-file selection.
 | `--budget N` | Token budget (e.g., `--budget 4000`). Default: 2000 |
 | `--budget N-lines` | Line budget instead of tokens (e.g., `--budget 500-lines`) |
 | `--since REF` | Boost files changed since `REF` (branch, commit, or `HEAD~N`) to top priority |
-| `--focus TOPIC` | Emphasize files matching this name pattern (e.g., `--focus auth`), plus files structurally related to a match via the import/dependency graph (BACK-833: a personalized-PageRank relevance score, so a helper a matching file imports ranks above an unrelated file even without a name match) |
+| `--focus TOPIC` | Emphasize files matching this name pattern (e.g., `--focus auth`), plus files structurally related to a match via the import/dependency graph (a personalized-PageRank relevance score, so a helper a matching file imports ranks above an unrelated file even without a name match) |
 | `--content` | Emit content for the selected files: changed files raw (first 500 lines), key files as structure, the rest by name only |
 | `--architecture` | Boost high fan-in (core abstraction) files; prepend architecture brief |
 | `--verbose` | Show per-file token/line counts |
@@ -313,7 +313,7 @@ reveal pack src/ --since HEAD~3 --budget 4000  # Since 3 commits ago
 reveal pack . --architecture              # Boost core abstractions; show architecture hint
 reveal pack . --format json               # For agent consumption
 
-# pack:// is also a queryable URI in its own right (BACK-961)
+# pack:// is also a queryable URI in its own right
 reveal 'pack://.?budget=4000'
 reveal 'pack://.?since=main&content=true'
 ```
@@ -579,7 +579,7 @@ reveal surface . --format json       # Machine-readable output
 
 ### Known Limitations
 
-- **`env` type false positives (BACK-250):** Any dict `.get()` call (`cache.get("key")`, `config.get("val")`) is currently misclassified as an environment variable read. Until fixed, `--type env` output will be noisy on codebases that use dict `.get()` heavily. Cross-check with `grep -r 'os.getenv\|os.environ' <path>` to identify true env var reads.
+- **`env` type false positives:** Any dict `.get()` call (`cache.get("key")`, `config.get("val")`) is currently misclassified as an environment variable read. Until fixed, `--type env` output will be noisy on codebases that use dict `.get()` heavily. Cross-check with `grep -r 'os.getenv\|os.environ' <path>` to identify true env var reads.
 - **Python-only** — surface scans `.py` files only.
 
 ### See Also

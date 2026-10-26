@@ -5,7 +5,7 @@ category: guide
 
 # classify:// Adapter Guide (retired)
 
-`classify://` is retired: `metrics://` absorbed it as `?view=provenance` (BACK-2069), the same
+`classify://` is retired: `metrics://` absorbed it as `?view=provenance`, the same
 report from the same owner. The view, its heuristics and its exclusion counts are documented
 once, in [METRICS_ADAPTER_GUIDE.md](METRICS_ADAPTER_GUIDE.md#provenance-view).
 
