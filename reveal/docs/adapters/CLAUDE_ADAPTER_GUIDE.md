@@ -89,9 +89,9 @@ Get high-level session summary (messages, tools, duration):
 reveal claude://session/infernal-earth-0118
 ```
 
-> `infernal-earth-0118` is a placeholder session name. Your actual session directories are most likely UUIDs (e.g. `reveal claude://session/2627362f-6f72-45e1-b7bb-d5a61519a388`, or the short form `reveal claude://session/2627362`) unless you use a friendly-naming layer. See [Error: "Invalid session name"](#error-invalid-session-name) for both formats.
+> `infernal-earth-0118` is a placeholder session name. Your actual session directories are most likely UUIDs (e.g. `reveal claude://session/2627362f-6f72-45e1-b7bb-d5a61519a388`, or the 8-character short form `reveal claude://session/2627362f`) unless you use a friendly-naming layer. See [Error: "Conversation not found"](#error-conversation-not-found-for-session) for the accepted formats.
 
-**Returns**: Session name, message count, tool calls, duration, tool summary, next steps
+**Returns**: Session title, message counts (user/assistant), duration, files touched, tool counts, token totals and cache-hit rate, cwd/branch, last assistant snippet, conversation file path
 
 ### 2. Session Summary
 
@@ -101,7 +101,7 @@ Get comprehensive summary with key events:
 reveal 'claude://session/infernal-earth-0118?summary'
 ```
 
-**Returns**: Overview + timeline + critical events + recommendations
+**Returns**: Overview plus per-tool success rates, average/max message size and thinking-block count
 
 ### 3. Tool Usage Analysis
 
@@ -352,33 +352,20 @@ Chronological sequence of tool operations:
 ```json
 {
   "type": "claude_workflow",
-  "session_name": "infernal-earth-0118",
-  "operations": [
-    {
-      "step": 1,
-      "timestamp": "2026-01-18T10:15:23",
-      "tool": "Read",
-      "params": {"file_path": "/path/to/file.py"},
-      "result": "success"
-    },
-    {
-      "step": 2,
-      "timestamp": "2026-01-18T10:16:45",
-      "tool": "Edit",
-      "params": {"file_path": "/path/to/file.py", "old_string": "...", "new_string": "..."},
-      "result": "success"
-    },
-    {
-      "step": 3,
-      "timestamp": "2026-01-18T10:17:30",
-      "tool": "Bash",
-      "params": {"command": "pytest tests/"},
-      "result": "failure",
-      "error": "Test failed: AssertionError"
-    }
+  "session": "infernal-earth-0118",
+  "total_steps": 40,
+  "collapsed_steps": 36,
+  "displayed_steps": 36,
+  "workflow": [
+    {"step": 1, "message_index": 7, "tool": "Bash", "detail": "Run TIA boot sequence",
+     "timestamp": "2026-01-18T10:15:23", "outcome": "success"},
+    {"step": 2, "message_index": 9, "tool": "Edit", "detail": "/path/to/file.py",
+     "timestamp": "2026-01-18T10:16:45", "outcome": "success"}
   ]
 }
 ```
+
+`detail` is the Bash description or the file path, not the full tool parameters. Consecutive identical steps are collapsed (text output shows `(×2)`).
 
 **Use cases**:
 - Understand sequence of operations
@@ -441,27 +428,15 @@ Extract and analyze all thinking blocks:
 ```json
 {
   "type": "claude_thinking",
-  "session_name": "infernal-earth-0118",
-  "thinking_blocks": [
-    {
-      "message_id": 12,
-      "content": "Let me analyze this error...",
-      "token_estimate": 156,
-      "length_chars": 624
-    },
-    {
-      "message_id": 34,
-      "content": "I need to check if...",
-      "token_estimate": 89,
-      "length_chars": 356
-    }
-  ],
-  "total_thinking_tokens": 245,
-  "analysis": {
-    "avg_thinking_block_size": 122,
-    "largest_thinking_block": 156,
-    "thinking_frequency": "High"
-  }
+  "session": "infernal-earth-0118",
+  "thinking_block_count": 25,
+  "blocks_without_text": 24,
+  "total_chars": 187,
+  "total_tokens_estimate": 46,
+  "blocks": [
+    {"message_index": 12, "content": "Let me analyze this error...", "char_count": 624,
+     "token_estimate": 156, "timestamp": "2026-01-18T10:15:40"}
+  ]
 }
 ```
 
@@ -477,29 +452,19 @@ Extract and analyze all thinking blocks:
 
 Track directory and branch changes during session:
 
-**What it tracks**:
-- Working directory changes (cd commands)
-- Git branch changes (git checkout, git switch)
-- Repository switches
+**What it tracks**: the `cwd` and `gitBranch` fields Claude Code writes on each record. An entry is emitted whenever either value differs from the previous record (the first record always counts). It does not parse `cd` or `git checkout` commands.
 
 **Example output**:
 ```json
 {
   "type": "claude_context",
-  "session_name": "infernal-earth-0118",
-  "context_changes": [
-    {
-      "type": "directory",
-      "from": "/home/user/project",
-      "to": "/home/user/project/tests",
-      "message_id": 23
-    },
-    {
-      "type": "branch",
-      "from": "main",
-      "to": "feature/new-api",
-      "message_id": 45
-    }
+  "session": "infernal-earth-0118",
+  "total_changes": 2,
+  "final_cwd": "/home/user/project/tests",
+  "final_branch": "feature/new-api",
+  "changes": [
+    {"message_index": 5, "type": "cwd", "value": "/home/user/project", "timestamp": "2026-01-18T10:00:01"},
+    {"message_index": 45, "type": "branch", "value": "feature/new-api", "timestamp": "2026-01-18T10:30:12"}
   ]
 }
 ```
@@ -730,12 +695,12 @@ reveal claude://session/infernal-earth-0118/messages
 
 ### 10. message/\<n\>
 
-**Description**: Read a single message by index with full content — text, tool_use params, and tool_result output all shown
+**Description**: Read a single message by index: text in full, tool_use name and key params (a Write's `content` is shown as a size only), tool_result first 500 chars (`--verbose` for all). Use `--format json` to see exactly what a Write or Edit sent
 
 **Syntax**:
 ```bash
 reveal 'claude://session/<session-name>/message/<index>'
-reveal 'claude://session/<session-name>/message/-1'      # last message
+reveal 'claude://session/<session-name>/message/-1'      # last raw record (may be a metadata record; use ?last for the last assistant turn)
 ```
 
 **Example**:
@@ -796,7 +761,7 @@ reveal 'claude://session/<session-name>/agents'
 reveal claude://session/infernal-earth-0118/agents
 ```
 
-**Output**: Per-agent breakdown with `agent_type`, `status`, `duration_ms`, `token_count`, `tool_count`, and `usage` (input/output/cache tokens). Session-level aggregates: `total_agent_tokens`, `total_agent_duration_ms`.
+**Output**: Per-agent `agent_id`, `agent_type`, `status`, `prompt` (first 200 chars) and `timestamp`. Foreground (completed) agents add `duration_ms`, `token_count` and `tool_count`; background launches (`status: async_launched`) have none of these and do not count toward the session-level totals `total_agent_tokens` and `total_agent_duration_ms`.
 
 **Use when**: Understand subagent cost, identify slow or expensive agent invocations, audit agent behavior within a session
 
@@ -813,7 +778,7 @@ reveal 'claude://session/<session-name>/chain'
 
 **Example**:
 ```bash
-reveal claude://session/revealed-sphinx-0407/chain --base-path ~/projects/my-sessions
+REVEAL_SESSIONS_DIR=~/projects/my-sessions reveal claude://session/revealed-sphinx-0407/chain
 ```
 
 **Output**: Ordered list of sessions from HEAD back to the root, each showing `session`, `date`, `badge`, `continuing_from`, `tests_start`, `tests_end`, and `commits`. Chain length capped at 50 to prevent cycles.
@@ -822,7 +787,7 @@ reveal claude://session/revealed-sphinx-0407/chain --base-path ~/projects/my-ses
 - Follows `continuing_from:` frontmatter in `README*.md` files (most recent README wins if multiple exist)
 - Cycle detection prevents infinite loops
 - Missing README → entry still included with `null` fields; `readme: null` shown in output
-- Set `REVEAL_SESSIONS_DIR` or pass `--base-path` so the adapter can locate sibling sessions
+- Set `REVEAL_SESSIONS_DIR` so the adapter can locate sibling sessions (`--base-path` locates the transcript but does not feed the chain walk)
 
 **Use when**: Understand a session's development lineage, audit what changed across a multi-session feature, verify test count progression over time
 
@@ -1023,7 +988,7 @@ reveal 'claude://session/infernal-earth-0118?search=credential'
 
 ### ?contains=<text>
 
-**Description**: Filter messages containing specific text
+**Description**: A modifier, not a stand-alone filter. On `/messages` it filters narrative turns; combined with `tools=` or `errors` it filters tool-result content. On its own at the session root it is ignored (use `?search=<term>` for a whole-session search)
 
 **Syntax**:
 ```bash
@@ -1032,12 +997,12 @@ reveal 'claude://session/<session-name>?contains=<text>'
 
 **Examples**:
 ```bash
-reveal 'claude://session/infernal-earth-0118?contains=reveal'
-reveal 'claude://session/infernal-earth-0118?contains=error'
-reveal 'claude://session/infernal-earth-0118?contains='"import pandas"
+reveal 'claude://session/infernal-earth-0118/messages?contains=reveal'
+reveal 'claude://session/infernal-earth-0118?tools=Bash&contains=error'
+reveal 'claude://session/infernal-earth-0118/messages?contains=import pandas'
 ```
 
-**Output**: Only messages containing specified text (case-insensitive)
+**Output**: Case-insensitive match. On `/messages`, the narrative turns that contain the text; with `tools=`, the results of that tool whose output contains it (tool inputs are not searched)
 
 **Use when**: Find specific topics, track keyword usage, search conversations
 
@@ -1720,11 +1685,11 @@ for session in $(ls -1t $SESSION_DIR | head -10); do
 
   # Get success rate
   SUCCESS_RATE=$(reveal claude://session/$session/tools --format json | \
-    jq -r '.overall_success_rate')
+    jq -r '([.tools[] | .success] | add) / ([.tools[] | .count] | add) * 100')
 
   # Get error count
   ERROR_COUNT=$(reveal "claude://session/$session?errors" --format json | \
-    jq -r '.count // 0')
+    jq -r '.error_count // 0')
 
   echo "Success Rate: $SUCCESS_RATE%"
   echo "Errors: $ERROR_COUNT"
@@ -1820,7 +1785,7 @@ Use JSON format for programmatic analysis:
 
 ```bash
 # Parse with jq for efficient filtering
-reveal claude://session/my-session/tools --format json | jq '.tools[] | select(.success_rate < 80)'
+reveal claude://session/my-session/tools --format json | jq '.tools | to_entries[] | select((.value.success_rate | rtrimstr("%") | tonumber) < 80)'
 ```
 
 **Benefit**: Client-side filtering, reduced output, easier parsing
@@ -1848,10 +1813,8 @@ reveal claude://session/my-session/tools --format json | jq '.tools[] | select(.
    - **Impact**: Token counts are estimates, not precise
    - **Workaround**: Use for relative comparison, not absolute values
 
-4. **No live session analysis**
-   - **Limitation**: Only analyzes completed conversation files
-   - **Impact**: Can't analyze current/ongoing session
-   - **Workaround**: Wait for session to complete and save
+4. **Live sessions are read as written**
+   - Results reflect the transcript up to the last record written, so a running session can be analyzed
 
 5. **No session modification**
    - **Limitation**: Read-only analysis (can't edit conversations)
@@ -1876,20 +1839,20 @@ reveal claude://session/my-session/tools --format json | jq '.tools[] | select(.
 
 ### Common Errors and Solutions
 
-#### Error: "Session not found"
+#### Error: "Conversation not found for session"
 
-**Meaning**: Conversation file doesn't exist for specified session
+**Meaning** (exit 1): no transcript matched the name by directory name, full UUID, first 8 hex characters, or any trailing part of the UUID. Invalid names and empty session directories give the same message.
 
 **Solutions**:
 ```bash
-# Check session directory exists
-ls ~/.claude/projects/my-project/
-
 # List available sessions
 reveal claude://
 
-# Verify session name spelling
+# Check the base path
+reveal claude://session/<name> --base-path ~/src/tia/sessions
 ```
+
+A stock Claude Code install stores transcripts at `~/.claude/projects/<project-dir>/<uuid>.jsonl`.
 
 ---
 
@@ -1930,44 +1893,15 @@ reveal 'claude://sessions/?search=auth&word'
 
 ---
 
-#### Error: "Invalid session name"
+#### Short session IDs
 
-**Meaning**: Session name format not recognized
-
-**Solutions**:
-- Use the exact session directory name. Two formats are supported:
-  - **UUID** (standard Claude Code layout): `2627362f-6f72-45e1-b7bb-d5a61519a388`, or just the first 7+ hex characters (`2627362`)
-  - **Friendly name** (used by session-naming layers like TIA): `infernal-earth-0118`
-- Check for typos
-- Ensure session name matches directory name pattern
+Use the full UUID, its first 8 hex characters (`2627362f`), or any trailing part of it. Shorter prefixes such as 7 characters do not resolve. A friendly name (`infernal-earth-0118`) works where a session-naming layer provides one.
 
 ---
 
-#### Error: "Conversation file not found"
+#### Malformed transcript lines
 
-**Meaning**: Session directory exists but no conversation.jsonl file
-
-**Solutions**:
-```bash
-# Check if conversation file exists
-ls ~/.claude/projects/my-project/infernal-earth-0118/conversation.jsonl
-
-# Ensure session completed and saved
-```
-
----
-
-#### Error: "Invalid JSON in conversation file"
-
-**Meaning**: Conversation file corrupted or malformed
-
-**Solutions**:
-```bash
-# Check file integrity
-jq . ~/.claude/projects/my-project/session/conversation.jsonl
-
-# If corrupted, file may need recovery from backups
-```
+Lines that are not valid JSON are skipped silently (exit 0). A file with no valid lines reports `Messages: 0`.
 
 ---
 
@@ -2056,15 +1990,15 @@ reveal claude://session/my-session/workflow
 ```bash
 # Extract success rates
 reveal claude://session/my-session/tools --format json | \
-  jq '.tools[] | select(.success_rate < 80)'
+  jq '.tools | to_entries[] | select((.value.success_rate | rtrimstr("%") | tonumber) < 80)'
 
 # Extract error messages
 reveal 'claude://session/my-session?errors' --format json | \
-  jq '.errors[].error'
+  jq '.errors[].content_preview'
 
 # Count specific tool usage
 reveal claude://session/my-session/tools --format json | \
-  jq '.tools[] | select(.name == "Bash") | .count'
+  jq '.tools.Bash.count'
 ```
 
 ---
@@ -2076,7 +2010,7 @@ reveal claude://session/my-session/tools --format json | \
 # Compare success rates across recent sessions
 
 for session in $(ls -1t ~/.claude/projects/my-project | head -5); do
-  RATE=$(reveal claude://session/$session/tools --format json | jq -r '.overall_success_rate')
+  RATE=$(reveal claude://session/$session/tools --format json | jq -r '([.tools[] | .success] | add) / ([.tools[] | .count] | add) * 100')
   echo "$session: $RATE%"
 done
 ```
@@ -2088,7 +2022,7 @@ done
 ```bash
 # Find excessive thinking
 reveal claude://session/my-session/thinking --format json | \
-  jq '.thinking_blocks[] | select(.token_estimate > 500)'
+  jq '.blocks[] | select(.token_estimate > 500)'
 ```
 
 **If thinking tokens >30% of session**: Consider clearer prompts, more context upfront
@@ -2125,7 +2059,7 @@ ERROR_LOG="error-trends.csv"
 echo "Date,Session,Error Count,Success Rate" > $ERROR_LOG
 
 for session in $(ls -1t ~/.claude/projects/my-project | head -20); do
-  ERRORS=$(reveal "claude://session/$session?errors" --format json | jq -r '.count // 0')
+  ERRORS=$(reveal "claude://session/$session?errors" --format json | jq -r '.error_count // 0')
   SUCCESS=$(reveal claude://session/$session/tools --format json | jq -r '.overall_success_rate // 0')
   DATE=$(stat -c %y ~/.claude/projects/my-project/$session | cut -d' ' -f1)
 
@@ -2230,7 +2164,7 @@ reveal claude://session/$SESSION/tools --format json | \
 
 # Error count
 echo -e "\n## Errors"
-ERROR_COUNT=$(reveal "claude://session/$SESSION?errors" --format json | jq -r '.count // 0')
+ERROR_COUNT=$(reveal "claude://session/$SESSION?errors" --format json | jq -r '.error_count // 0')
 echo "Total errors: $ERROR_COUNT"
 
 if [ "$ERROR_COUNT" -gt 0 ]; then
@@ -2275,7 +2209,7 @@ while true; do
     SUCCESS=$(reveal claude://session/$session/tools --format json 2>/dev/null | \
       jq -r '.overall_success_rate // "N/A"')
     ERRORS=$(reveal "claude://session/$session?errors" --format json 2>/dev/null | \
-      jq -r '.count // 0')
+      jq -r '.error_count // 0')
 
     printf "%-30s | Success: %5s%% | Errors: %2s\n" "$session" "$SUCCESS" "$ERRORS"
   done
@@ -2309,9 +2243,9 @@ jobs:
         id: analyze
         run: |
           SUCCESS_RATE=$(reveal claude://session/${{ inputs.session_name }}/tools --format json | \
-            jq -r '.overall_success_rate')
+            jq -r '([.tools[] | .success] | add) / ([.tools[] | .count] | add) * 100')
           ERROR_COUNT=$(reveal claude://session/${{ inputs.session_name }}?errors --format json | \
-            jq -r '.count // 0')
+            jq -r '.error_count // 0')
 
           echo "success_rate=$SUCCESS_RATE" >> $GITHUB_OUTPUT
           echo "error_count=$ERROR_COUNT" >> $GITHUB_OUTPUT
@@ -2349,8 +2283,8 @@ jobs:
 SESSION="$1"
 WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 
-SUCCESS_RATE=$(reveal claude://session/$SESSION/tools --format json | jq -r '.overall_success_rate')
-ERROR_COUNT=$(reveal "claude://session/$SESSION?errors" --format json | jq -r '.count // 0')
+SUCCESS_RATE=$(reveal claude://session/$SESSION/tools --format json | jq -r '([.tools[] | .success] | add) / ([.tools[] | .count] | add) * 100')
+ERROR_COUNT=$(reveal "claude://session/$SESSION?errors" --format json | jq -r '.error_count // 0')
 
 if (( $(echo "$SUCCESS_RATE < 70" | bc -l) )) || [ "$ERROR_COUNT" -gt 10 ]; then
   MESSAGE="{
@@ -2423,7 +2357,7 @@ Environment overrides:
 
 ### `claude://history` — Prompt History
 
-Browse your full prompt history from `~/.claude/history.jsonl`. Streams line-by-line — safe for large files (50MB+). Results are grouped by session, newest-first.
+Browse your full prompt history from `~/.claude/history.jsonl`. Streams line-by-line — safe for large files (50MB+). Consecutive entries are grouped under their project path, newest first.
 
 ```bash
 # Recent 50 prompts (default)
@@ -2495,7 +2429,7 @@ reveal 'claude://settings?key=cleanupPeriodDays'
 
 ### `claude://plans` — Saved Plans
 
-List or read saved plans from `~/.claude/plans/`. Plans are Markdown files created by Claude Code's built-in plan mode, named after session IDs.
+List or read saved plans from `~/.claude/plans/`. Plans are Markdown files created by Claude Code's built-in plan mode, with random slug names (for example `goofy-churning-island`).
 
 ```bash
 # List all plans (sorted by most recent)
