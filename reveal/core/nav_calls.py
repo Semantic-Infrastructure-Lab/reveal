@@ -206,6 +206,11 @@ def _decorator_arg_hits(
     return hits
 
 
+def _skips_scope(node: Any, skip_kinds: frozenset, owned_scope: Optional[Callable[[Any], bool]]) -> bool:
+    """A deferred scope is skipped unless `owned_scope` says nothing else reports its calls (BACK-2191)."""
+    return is_deferred_scope(node, skip_kinds) and (owned_scope is None or owned_scope(node))
+
+
 def range_calls(
     func_node: Any,
     from_line: int,
@@ -243,7 +248,7 @@ def range_calls(
         line = _zero_arg(node, 'start_position').row + 1
         if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
-        if is_deferred_scope(node, skip_kinds) and (owned_scope is None or owned_scope(node)):
+        if _skips_scope(node, skip_kinds, owned_scope):
             continue
         children = _children(node)
         results.extend(_generic_call_hits(node, call_node_types, get_text, from_line, to_line,
@@ -258,7 +263,7 @@ def range_calls(
         parent = _zero_arg(node, 'parent')
         skipped = False
         while parent is not None and skip_kinds:
-            if is_deferred_scope(parent, skip_kinds) and (owned_scope is None or owned_scope(parent)):
+            if _skips_scope(parent, skip_kinds, owned_scope):
                 skipped = True
                 break
             parent = _zero_arg(parent, 'parent')
