@@ -35,7 +35,12 @@ _UNNAMEABLE_CALLEE_KINDS = frozenset({
     'class', 'conditional_expression', 'ternary_expression', 'await_expression',
     'binary_expression',
     'lambda_literal',  # Swift/Kotlin closure literal: `{ ... }()` (BACK-2074)
+    'func_literal',  # Go closure literal: `(func() { ... })()` (BACK-2097)
 })
+
+# Closure literals invoked where they are written: Swift/Kotlin `{ ... }()` (BACK-2074) and Go
+# `defer func() { ... }()` / `go func(n int) { ... }(3)` (BACK-2097).
+_CLOSURE_LITERAL_KINDS = frozenset({'lambda_literal', 'func_literal'})
 
 # What a wrapper callee does when its operand names nothing: fall through to the raw
 # text, decline only when there is no operand at all, or always decline.
@@ -165,10 +170,11 @@ def callee_name_from_node(
     if call_node_types and kind in call_node_types:
         return None
 
-    # Swift/Kotlin `{ ... }()` invokes a closure literal: no name of its own, and raw text
-    # would emit the closure's whole source as a callee. Its body's calls are their own
-    # nodes (BACK-2074, same policy as a parenthesized JS IIFE, BACK-1305).
-    if kind == 'lambda_literal':
+    # A closure literal invoked in place (Swift/Kotlin `{ ... }()`, Go `defer func() { ... }()`):
+    # no name of its own, and raw text would emit the closure's whole source as a callee. Its
+    # body's calls are their own nodes (BACK-2074, BACK-2097; same policy as a parenthesized JS
+    # IIFE, BACK-1305).
+    if kind in _CLOSURE_LITERAL_KINDS:
         return None
 
     # A callee wrapping the node that names it: name the operand (see _callee_operand).

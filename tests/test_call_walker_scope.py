@@ -115,8 +115,9 @@ def test_js_callbacks_bleed_into_the_enclosing_function_in_both_paths(tmp_path):
 def test_go_function_literal_is_not_a_leaf_in_either_path(tmp_path):
     per_function, nav = _walk(tmp_path, '.go', 'go',
                               "package p\nfunc outer(){ top(); func(){ lit() }(); top() }\n")
-    assert per_function['outer'] == ['top', 'func(){ lit() }', 'lit']
-    assert nav == [(2, 'top', None), (2, 'func(){ lit() }', None), (2, 'lit', None), (2, 'top', None)]
+    # The literal invoked in place names no callee (its source was one, BACK-2097); its body's call is walked.
+    assert per_function['outer'] == ['top', 'lit']
+    assert nav == [(2, 'top', None), (2, 'lit', None), (2, 'top', None)]
 
 
 def test_ruby_implicit_calls_are_appended_by_analyzer_but_line_ordered_by_nav(tmp_path):
