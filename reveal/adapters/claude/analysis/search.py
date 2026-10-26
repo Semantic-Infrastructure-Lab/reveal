@@ -157,12 +157,13 @@ def search_sessions_for_term(
             'modified':      session['modified'],
             'project':       session.get('project', ''),
             'size_kb':       session.get('size_kb', 0),
-            'readme_present': session.get('readme_present', False),
             'excerpt':       snippet['excerpt'],
             'role':          snippet['role'],
             'timestamp':     snippet['timestamp'],
             'message_index': snippet.get('message_index'),
         })
+        if session.get('readme_present'):
+            results[-1]['readme_present'] = True
 
     results.sort(key=lambda x: x['modified'], reverse=True)
     return results

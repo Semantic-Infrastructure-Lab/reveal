@@ -27,7 +27,7 @@ def _render_claude_session_list(result: dict) -> None:
         if len(name) > 36:
             name = name[:33] + '...'
         mod = s.get('modified', '')[:16].replace('T', ' ')
-        readme = '✓' if s.get('readme_present') else '✗'
+        readme = '✓' if s.get('readme_present') else ' '
         project = (s.get('project', '') or '')[:12]
         title = s.get('title', '') or ''
         if len(title) > 25:
@@ -54,8 +54,9 @@ def _render_claude_session_overview(result: dict) -> None:
     title = result.get('title')
     if title:
         print(f"Title: {title}")
-    print(f"Messages: {result.get('message_count', 0)}")
-    print(f"User: {result.get('user_messages', 0)} | Assistant: {result.get('assistant_messages', 0)}")
+    print(f"Messages: {result.get('message_count', 0)} records")
+    print(f"User: {result.get('user_messages', 0)} | Assistant: {result.get('assistant_messages', 0)}"
+          f" | Tool results: {result.get('tool_result_messages', 0)}")
     if 'duration' in result:
         print(f"Duration: {result['duration']}")
 

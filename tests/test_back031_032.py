@@ -222,9 +222,10 @@ class TestGetOverviewNewFields:
         result = self._run_overview(messages)
         assert result['last_assistant_snippet'] == 'done!'
 
-    def test_readme_present_field_exists(self):
+    def test_readme_present_field_omitted_without_a_transcript_readme(self):
+        # BACK-1624: no README beside the transcript is not an "absent" verdict
         result = self._run_overview([])
-        assert 'readme_present' in result
+        assert 'readme_present' not in result
 
 
 # ─── _collapse_workflow_runs ─────────────────────────────────────────────────

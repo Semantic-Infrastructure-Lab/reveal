@@ -82,7 +82,8 @@ class TestCollectSessionsDirFields:
         )
         sessions = ClaudeAdapter._collect_sessions_from_dir(project_dir)
         assert len(sessions) == 1
-        assert sessions[0]['readme_present'] is False
+        # BACK-1624: a stock layout has no README concept, so the flag is omitted, not False
+        assert 'readme_present' not in sessions[0]
 
     def test_readme_present_readme_with_suffix(self, tmp_path):
         project_dir = tmp_path / '-home-user-src-myapp'
@@ -216,11 +217,11 @@ class TestRendererListColumns:
         out = _render_list(sessions)
         assert '✓' in out
 
-    def test_readme_absent_shows_x(self):
+    def test_readme_absent_shows_no_mark(self):
         sessions = [{'session': 'bar-0314', 'modified': '2026-03-14T10:00:00',
-                     'size_kb': 10, 'readme_present': False, 'project': 'myapp', 'title': 'Test'}]
+                     'size_kb': 10, 'project': 'myapp', 'title': 'Test'}]
         out = _render_list(sessions)
-        assert '✗' in out
+        assert '✗' not in out and '✓' not in out
 
     def test_project_column_shown(self):
         sessions = [{'session': 'baz-0314', 'modified': '2026-03-14T10:00:00',
@@ -241,12 +242,12 @@ class TestRendererListColumns:
         out = _render_list(sessions)
         assert 'superlongproject' not in out  # truncated to 12
 
-    def test_readme_column_missing_field_shows_x(self):
-        """Sessions without readme_present field → ✗ (falsy default)."""
+    def test_readme_column_missing_field_shows_no_mark(self):
+        """Sessions without readme_present field get no mark (BACK-1624)."""
         sessions = [{'session': 'old-session', 'modified': '2026-03-10T00:00:00',
                      'size_kb': 3, 'title': None}]
         out = _render_list(sessions)
-        assert '✗' in out
+        assert '✗' not in out
 
     def test_since_hint_in_header(self):
         out = _render_list([])

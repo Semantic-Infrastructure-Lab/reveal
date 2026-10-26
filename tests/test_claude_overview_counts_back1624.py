@@ -33,7 +33,7 @@ def test_overview_text_labels_the_counts(monkeypatch, tmp_path):
     install(monkeypatch, tmp_path, _session())
     text = run_text(f'claude://session/{SESSION}')
     assert 'User: 2 | Assistant: 3 | Tool results: 1' in text
-    assert 'Messages: 8' in text
+    assert 'Messages: 8 records' in text
 
 
 def test_readme_present_omitted_when_no_readme_beside_transcript(monkeypatch, tmp_path):

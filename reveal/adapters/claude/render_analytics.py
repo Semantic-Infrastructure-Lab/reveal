@@ -10,9 +10,10 @@ def _render_claude_analytics(result: dict) -> None:
     duration = result.get('duration')
     if duration:
         print(f"Duration: {duration}")
-    print(f"Messages: {result.get('message_count', 0)} "
+    print(f"Messages: {result.get('message_count', 0)} records "
           f"(user: {result.get('user_messages', 0)}, "
-          f"assistant: {result.get('assistant_messages', 0)})")
+          f"assistant: {result.get('assistant_messages', 0)}, "
+          f"tool results: {result.get('tool_result_messages', 0)})")
     print()
 
     files_touched = result.get('files_touched', [])

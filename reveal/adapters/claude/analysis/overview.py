@@ -5,6 +5,7 @@ from typing import Dict, List, Any, Optional
 from collections import defaultdict
 from datetime import datetime
 
+from .prompts import _content_to_blocks, _is_real_prompt
 from .tools import calculate_tool_success_rate
 
 
@@ -239,7 +240,12 @@ def _collect_context(messages: List[Dict]) -> Optional[Dict[str, Any]]:
 
 
 def _check_readme_present(conversation_path: str) -> bool:
-    """Check if README*.md exists in the session directory (parent of conversation file)."""
+    """Check if README*.md exists in the session directory (parent of conversation file).
+
+    Only a True answer means something: a stock Claude Code layout has no README beside
+    a transcript, so False there is "this layout has no README concept", not "absent".
+    Callers report the flag only when it is True.
+    """
     try:
         from pathlib import Path as _Path
         session_dir = _Path(conversation_path).parent
@@ -271,15 +277,29 @@ def _collect_message_stats(messages: List[Dict]) -> Dict[str, Any]:
     tools_used: Dict[str, int] = defaultdict(int)
     thinking_chars = 0
     user_messages = 0
-    assistant_messages = 0
+    tool_result_messages = 0
+    assistant_ids = set()
+    assistant_without_id = 0
     file_operations: Dict[str, int] = defaultdict(int)
 
     for msg in messages:
         msg_type = msg.get('type')
         if msg_type == 'user':
-            user_messages += 1
+            # Typed prompts and tool results are both role=user records; only the
+            # first are things the human said.
+            if _is_real_prompt(msg):
+                user_messages += 1
+            elif any(isinstance(b, dict) and b.get('type') == 'tool_result'
+                     for b in _content_to_blocks(msg.get('message', {}).get('content', []))):
+                tool_result_messages += 1
         elif msg_type == 'assistant':
-            assistant_messages += 1
+            # One API message is written as one record per content block, all sharing
+            # message.id (see _iter_message_usage); a record without an id stands alone.
+            message_id = (msg.get('message') or {}).get('id')
+            if message_id:
+                assistant_ids.add(message_id)
+            else:
+                assistant_without_id += 1
             thinking_chars += _process_content_list(
                 msg.get('message', {}).get('content', []), tools_used, file_operations
             )
@@ -288,7 +308,8 @@ def _collect_message_stats(messages: List[Dict]) -> Dict[str, Any]:
         'tools_used': dict(tools_used),
         'thinking_chars': thinking_chars,
         'user_messages': user_messages,
-        'assistant_messages': assistant_messages,
+        'tool_result_messages': tool_result_messages,
+        'assistant_messages': len(assistant_ids) + assistant_without_id,
         'file_operations': dict(file_operations),
     }
 
@@ -320,7 +341,6 @@ def get_overview(messages: List[Dict], session_name: str, conversation_path: str
 
     files_touched = _collect_files_touched(messages)
     last_snippet = _get_last_assistant_snippet(messages)
-    readme_present = _check_readme_present(conversation_path)
     token_summary = _collect_token_usage(messages)
     context = _collect_context(messages)
 
@@ -329,6 +349,7 @@ def get_overview(messages: List[Dict], session_name: str, conversation_path: str
         'title': title,
         'message_count': len(messages),
         'user_messages': stats['user_messages'],
+        'tool_result_messages': stats['tool_result_messages'],
         'assistant_messages': stats['assistant_messages'],
         'tools_used': stats['tools_used'],
         'file_operations': stats['file_operations'],
@@ -337,13 +358,14 @@ def get_overview(messages: List[Dict], session_name: str, conversation_path: str
         'duration': duration,
         'files_touched': files_touched,
         'files_touched_count': len(files_touched),
-        'readme_present': readme_present,
         'last_assistant_snippet': last_snippet,
         'conversation_file': conversation_path,
         'token_summary': token_summary,
     })
     if context:
         base['context'] = context
+    if _check_readme_present(conversation_path):
+        base['readme_present'] = True
 
     return base
 

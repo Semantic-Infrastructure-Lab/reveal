@@ -186,7 +186,8 @@ class TestOverviewGeneration:
         overview = adapter.get_structure()
 
         assert overview['message_count'] == 13
-        assert overview['user_messages'] == 7  # 3 actual user + 4 tool_results
+        assert overview['user_messages'] == 3  # real prompts only (BACK-1624)
+        assert overview['tool_result_messages'] == 4
         assert overview['assistant_messages'] == 6
 
     @patch.object(ClaudeAdapter, '_find_conversation')

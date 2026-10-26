@@ -188,9 +188,10 @@ def _collect_sessions_from_dir(project_dir: Path) -> List[Dict[str, Any]]:
             'path': str(jsonl_file),
             'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
             'size_kb': stat.st_size // 1024,
-            'readme_present': readme_present,
             'project': project,
         })
+        if readme_present:
+            sessions[-1]['readme_present'] = True
     return sessions
 
 
