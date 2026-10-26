@@ -69,3 +69,13 @@ def test_a_directory_target_keeps_its_spelling(tmp_path):
     resolved = {(f, s['line']): s['resolved'] for f, stmts in data['files'].items() for s in stmts}
     assert resolved == {('a.py', 1): 'b.py', ('a.py', 2): 'sub/__init__.py', ('a.py', 3): '../top.py',
                         ('b.py', 1): 'a.py'}
+
+
+def test_the_text_view_names_a_file_targets_component_as_the_json_does(tmp_path):
+    """The text renderer re-spelled the answer's paths against the requested FILE, which turned the
+    component '.' (the file's directory) into 'a.py'; it prints the answer's own spelling."""
+    _project(tmp_path)
+    result = _run_reveal_in(tmp_path, 'imports://proj/pkg/a.py?components')
+    assert result.returncode == 0, result.stderr
+    rows = [line.split() for line in result.stdout.splitlines() if line.strip().endswith('← a.py')]
+    assert [row[0] for row in rows] == ['.'], result.stdout
