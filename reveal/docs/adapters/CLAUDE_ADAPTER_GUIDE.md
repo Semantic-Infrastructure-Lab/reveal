@@ -1849,7 +1849,7 @@ reveal claude://session/my-session/tools --format json | jq '.tools | to_entries
 reveal claude://
 
 # Check the base path
-reveal claude://session/<name> --base-path ~/src/tia/sessions
+reveal 'claude://session/<name>' --base-path ~/src/tia/sessions
 ```
 
 A stock Claude Code install stores transcripts at `~/.claude/projects/<project-dir>/<uuid>.jsonl`.
