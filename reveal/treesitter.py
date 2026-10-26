@@ -781,6 +781,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # BACK-1558: computed here and cached with the structure, not in
         # get_structure() -- reading self.tree there parsed every file on a hit.
         structure['_has_errors'] = self._has_recovery_artifacts()
+        if not self._outline_only:
+            structure['_dropped_function_values'] = self._dropped_function_values()
 
         # A failure the file's content did not cause (BACK-2136) leaves the stat key unchanged, so
         # the structure built around it is returned and disclosed but not stored (BACK-2138).
@@ -903,6 +905,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # outline listed a @property at :5 above the plain method at :2.
         functions.sort(key=lambda f: f.get('line') or 0)
         return functions
+
+    def _dropped_function_values(self) -> List[Dict[str, Any]]:
+        """Declarations bound to a call that were left out of the functions, for the languages whose rule
+        leaves some out (JS family, BACK-2229); none elsewhere. Cached with the structure, empty is dropped."""
+        return []
 
     def _extract_language_specific_functions(self) -> List[StructureItem]:
         """Hook for a language whose functions-as-values carry their name on a parent

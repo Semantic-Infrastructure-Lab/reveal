@@ -55,6 +55,55 @@ def parse_recovered_warning(structures: Sequence[Dict[str, Any]]) -> Optional[Wa
     }
 
 
+def dropped_values_summary(structures: Sequence[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The declarations bound to a call that no file's rule listed as a function (BACK-2229), counted over
+    *structures*: ``count``, up to five ``files``, and the callees, an import of the file apart from the rest.
+    ``names`` (every declared name, for the absence check; not in the warning) is private. None when nothing was
+    left out."""
+    files: List[str] = []
+    imported: Dict[str, int] = {}
+    other: Dict[str, int] = {}
+    names: List[str] = []
+    count = 0
+    for file_struct in structures:
+        records = file_struct.get('function_values_dropped')
+        if not records:
+            continue
+        files.append(to_posix(file_struct['file']))
+        for record in records:
+            count += 1
+            names.append(record['name'])
+            tally = imported if record['imported'] else other
+            tally[record['callee']] = tally.get(record['callee'], 0) + 1
+    if not count:
+        return None
+    def top(tally: Dict[str, int]) -> Dict[str, int]:
+        return dict(sorted(tally.items(), key=lambda kv: (-kv[1], kv[0]))[:10])
+    return {'count': count, 'file_count': len(files), 'files': sorted(files)[:5],
+            'imported_callees': top(imported), 'other_callees': top(other), 'names': sorted(set(names))}
+
+
+def function_values_dropped_warning(summary: Optional[Dict[str, Any]]) -> Optional[WarningEntry]:
+    """One ``function_values_dropped`` meta warning from a ``dropped_values_summary``: not a loss of evidence,
+    a statement of what the function-value rule left out, so a name that is missing may be one of them."""
+    if not summary:
+        return None
+    named = ', '.join(f"{name} x{n}" for name, n in summary['imported_callees'].items())
+    detail = f"; imported callees: {named}" if named else ''
+    shown = ', '.join(summary['files'])
+    more = f" and {summary['file_count'] - len(summary['files'])} more" if summary['file_count'] > len(summary['files']) else ''
+    return cast(WarningEntry, {
+        'type': 'function_values_dropped',
+        'count': summary['count'],
+        'files': summary['files'],
+        'imported_callees': summary['imported_callees'],
+        'other_callees': summary['other_callees'],
+        'message': f"{summary['count']} declaration(s) bound to a call were not treated as functions in "
+                   f"{summary['file_count']} file(s) ({shown}{more}){detail}; a function they define is missing "
+                   f"from this answer (`const NAME = callee(fn)` is listed only when the file calls NAME)",
+    })
+
+
 def try_add_file_structure(file_path: str, structures: StructureList, outline: bool = False,
                            needle: Optional[str] = None) -> None:
     """Keep usable structure and attribute required loss in ``structures.skipped``.
@@ -332,6 +381,8 @@ def _flatten_structure(file_path: str, structure: Dict[str, Any], analyzer, outl
     result: Dict[str, Any] = {'file': file_path, 'elements': []}
     if structure.get('_has_errors'):
         result['parse_recovered'] = True  # BACK-1847: the tree has syntax it could not read
+    if structure.get('_dropped_function_values'):
+        result['function_values_dropped'] = structure['_dropped_function_values']  # BACK-2229
 
     # Build import symbol map for cross-file call resolution (Phase 3).
     # build_symbol_map is cheap for already-parsed files (import extractor caches).

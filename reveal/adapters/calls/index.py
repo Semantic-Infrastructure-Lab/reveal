@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, Iterator, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from ..ast.analysis import (
-    StructureList, collect_structures, environmental_failure, is_code_file, call_sources,
+    StructureList, collect_structures, dropped_values_summary, environmental_failure, is_code_file, call_sources,
 )
 from ...utils.pyparse import parse_python
 from ...utils.request_cache import in_host_request, register_request_cache, register_validated_cache
@@ -442,14 +442,19 @@ class CallersIndex(Dict[str, List[Dict[str, Any]]]):
 
     skipped: List[Tuple[str, str]]
     traversal_failures: List[Tuple[Optional[str], str]]
+    dropped: Optional[Dict[str, Any]] = None
 
 
 def _disclose_skipped(result: Dict[str, Any], skipped: Sequence[Tuple[str, str]], *,
-                      traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Dict[str, Any]:
-    """Carry file and directory loss separately for adapter metadata construction.
+                      traversal_failures: Sequence[Tuple[Optional[str], str]] = (),
+                      dropped: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Carry file and directory loss separately for adapter metadata construction, and the function values
+    the JS rule left out (``dropped``, BACK-2229: not a loss, a statement of scope).
 
     Private carriers are absent when empty and consumed before building the envelope.
     """
+    if dropped:
+        result['function_values_dropped'] = dropped
     if skipped:
         result['analysis_skipped'] = [list(item) for item in skipped]
     if traversal_failures:
@@ -542,6 +547,7 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
     structures = _structures_or_collect(structures, directory)
     index = CallersIndex()
     index.skipped = list(structures.skipped)
+    index.dropped = dropped_values_summary(structures)
     index.traversal_failures = list(getattr(structures, 'traversal_failures', ()))
 
     for file_struct in structures:
@@ -648,7 +654,8 @@ def find_callees(
         'total_calls': sum(len(m['calls']) for m in matches),
         '_builtins_hidden': builtins_hidden,
     }
-    return _disclose_skipped(result, source.skipped, traversal_failures=source.traversal_failures)
+    return _disclose_skipped(result, source.skipped, traversal_failures=source.traversal_failures,
+                             dropped=getattr(source, 'dropped', None))
 
 
 # Root selection and per-definition detail for the forward walk (moved from trace.py).
@@ -790,15 +797,16 @@ class CalleeSource:
     ``skipped``/``traversal_failures`` are the collection's loss evidence; ``scope`` is the
     walk scope a cached one was collected under (``CalleeScope``), None when uncached."""
 
-    __slots__ = ('definitions', 'skipped', 'traversal_failures', 'scope', '_census', '_census_walked')
+    __slots__ = ('definitions', 'skipped', 'traversal_failures', 'scope', 'dropped', '_census', '_census_walked')
 
     def __init__(self, definitions: Tuple[CallSource, ...], skipped: Sequence[Tuple[str, str]] = (),
                  traversal_failures: Sequence[Tuple[Optional[str], str]] = (),
-                 scope: Optional['CalleeScope'] = None) -> None:
+                 scope: Optional['CalleeScope'] = None, dropped: Optional[Dict[str, Any]] = None) -> None:
         self.definitions = definitions
         self.skipped: Tuple[Tuple[str, str], ...] = tuple(skipped)
         self.traversal_failures: Tuple[Tuple[Optional[str], str], ...] = tuple(traversal_failures)
         self.scope = scope
+        self.dropped = dropped
         self._census: Optional[Dict[str, int]] = None
         self._census_walked = False
 
@@ -819,7 +827,7 @@ class CalleeSource:
             tuple(elem.get('reference_only_calls', [])),
             family(file_path)) for file_path, name, elem in _call_definitions(structures))
         return cls(definitions, getattr(structures, 'skipped', ()), getattr(structures, 'traversal_failures', ()),
-                   scope)
+                   scope, dropped_values_summary(structures))
 
     def language_census(self, path: str) -> Optional[Dict[str, int]]:
         """The per-language file counts ``confidence.build_meta`` weights an answer by, walked at
@@ -844,7 +852,7 @@ class CalleeSource:
     def in_file(self, file_filter: str) -> 'CalleeSource':
         """The definitions of the files FILE:NAME selects, keeping the collection's loss evidence."""
         return CalleeSource(tuple(d for d in self.definitions if _path_matches(d.file, file_filter)),
-                            self.skipped, self.traversal_failures)
+                            self.skipped, self.traversal_failures, dropped=self.dropped)
 
 
 # BACK-2109: the forward queries' collection, kept across host requests while the tree stamp
@@ -980,6 +988,7 @@ class CalleeWalk:
     levels: List[Dict[str, Any]]
     skipped: List[Tuple[str, str]]
     traversal_failures: List[Tuple[Optional[str], str]]
+    dropped: Optional[Dict[str, Any]] = None
 
 
 def _callee_node(record: Dict[str, Any], name: str, level: int, depth: int) -> CalleeNode:
@@ -1073,7 +1082,8 @@ def walk_callees(path: str, root: str, depth: int = 2, include_builtins: bool = 
         if not frontier:
             break
     return CalleeWalk(root=root, root_name=root_name, depth=depth, roots=roots, levels=levels,
-                      skipped=list(source.skipped), traversal_failures=list(source.traversal_failures))
+                      skipped=list(source.skipped), traversal_failures=list(source.traversal_failures),
+                      dropped=source.dropped)
 
 
 def callee_levels(walk: CalleeWalk) -> Dict[str, Any]:
@@ -1091,7 +1101,7 @@ def callee_levels(walk: CalleeWalk) -> Dict[str, Any]:
         'total_unresolved': len(edges) - resolved,
         'total_edges': len(edges),
         'total_ambiguous': sum(1 for edge in edges if edge.get('ambiguous')),
-    }, walk.skipped, traversal_failures=walk.traversal_failures)
+    }, walk.skipped, traversal_failures=walk.traversal_failures, dropped=walk.dropped)
 
 
 def _build_forward_index(
@@ -1156,7 +1166,8 @@ def find_callers(
         'total_callers': total,
         'levels': levels,
     }
-    _disclose_skipped(result, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()))
+    _disclose_skipped(result, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()),
+                      dropped=getattr(index, 'dropped', None))
 
     if total == 0:
         parent = str(Path(path).parent)
@@ -1726,7 +1737,8 @@ def find_uncalled(
             excluded_by_reason.get(r, 0) for r in _TEST_ENTRYPOINT_REASONS),
         'excluded_by_reason': excluded_by_reason,
         'entries': entries,
-    }, query_skipped, traversal_failures=getattr(structures, 'traversal_failures', ()))
+    }, query_skipped, traversal_failures=getattr(structures, 'traversal_failures', ()),
+        dropped=dropped_values_summary(structures))
 
 
 def rank_by_callers(
@@ -1808,7 +1820,7 @@ def rank_by_callers(
         'top': shown,
         'total_unique_callees': len(entries),
         'entries': entries[:shown],
-    }, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()))
+    }, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()), dropped=getattr(index, 'dropped', None))
 
 
 def _posix_absolute(path: str) -> bool:

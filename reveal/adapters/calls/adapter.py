@@ -765,14 +765,17 @@ class CallsAdapter(ResourceAdapter):
         if query_format:
             # Query-string format= (dot/json) applies whatever the CLI --format flag says.
             data['_query_format'] = query_format
+        dropped = data.pop('function_values_dropped', None)
         meta = _call_graph_meta(self.path, uncalled=uncalled, unmeasured_walk=unmeasured_walk,
                                 skipped=data.pop('analysis_skipped', ()),
                                 traversal_failures=data.pop('analysis_traversal_failures', ()),
-                                census=census)
+                                census=census, dropped=dropped)
         if rule is not None:
             declined: List[str] = next((w['languages'] for w in meta['warnings'] if w.get('code') == 'W-CALLS-10'), [])
             data['walk_rule'] = rule(declined)
         clean = not any(w.get('type') in (*_LOSS_WARNINGS, 'scope_hidden') for w in meta['warnings'])
+        # A queried name the function-value rule left out is declared, just not listed: absence is not claimable (BACK-2229).
+        clean = clean and not (dropped and data.get('target') in dropped['names'])
         if absent is not None and clean and absent():
             data['error'] = _calls_absence_message(data)
         return ResultBuilder.create(

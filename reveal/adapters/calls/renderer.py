@@ -8,8 +8,9 @@ from reveal.utils import print_json_result
 from reveal.utils.warning_render import meta_warning_lines
 
 _REQUIRED_LOSS_TYPES = frozenset({'analysis_failed', 'analysis_incomplete'})
-# Printed above every view: what the answer lost, and what no measurement covers (W-CALLS-9/10).
-_ALWAYS_SHOWN = _REQUIRED_LOSS_TYPES | {'not_measured'}
+# Printed above every view: what the answer lost, what no measurement covers (W-CALLS-9/10) and what the
+# function-value rule left out (BACK-2229).
+_ALWAYS_SHOWN = _REQUIRED_LOSS_TYPES | {'not_measured', 'function_values_dropped'}
 
 
 def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:

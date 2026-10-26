@@ -148,6 +148,46 @@ class JSFunctionValueMixin(_Base):
         return name_node is not None and self._is_called_in_scope(
             _zero_arg(name_node, 'parent'), self._get_node_text(name_node))
 
+    def _imported_names(self) -> frozenset:
+        """The local names this file's ES imports bind (default, namespace, named and aliased), built once per tree."""
+        names = getattr(self, '_imported_names_cache', None)
+        if names is None:
+            found = set()
+            for clause in self._find_nodes_by_type('import_clause'):
+                for ch in _children(clause):
+                    kind = _zero_arg(ch, 'kind')
+                    if kind == 'identifier':
+                        found.add(self._get_node_text(ch))
+                    elif kind == 'namespace_import':
+                        found.update(self._get_node_text(g) for g in _children(ch) if _zero_arg(g, 'kind') == 'identifier')
+                    elif kind == 'named_imports':
+                        for spec in _children(ch):
+                            bound = spec.child_by_field_name('alias') or spec.child_by_field_name('name')
+                            if _zero_arg(spec, 'kind') == 'import_specifier' and bound is not None:
+                                found.add(self._get_node_text(bound))
+            names = self._imported_names_cache = frozenset(found)
+        return names
+
+    def _dropped_function_values(self) -> List[dict]:
+        """The `const NAME = callee(fn)` declarators the BACK-2174 rule leaves out of the functions (BACK-2229):
+        one record per declarator with its name, line, callee and whether the callee is an import of this file.
+        What the rule keeps (a wrapper, a name the file calls) is not here, and a member call never wraps."""
+        records = []
+        for kind in ('lexical_declaration', 'variable_declaration'):
+            for decl_node in self._find_nodes_by_type(kind):
+                for child in _children(decl_node):
+                    if _zero_arg(child, 'kind') != 'variable_declarator':
+                        continue
+                    name_node = next((c for c in _children(child) if _zero_arg(c, 'kind') == 'identifier'), None)
+                    call = next((c for c in _children(child) if _zero_arg(c, 'kind') == 'call_expression'), None)
+                    if (name_node is None or call is None or self._call_wrapped_function_literal(call) is None
+                            or self._plain_call_is_function(call, name_node)):
+                        continue
+                    callee = self._callee_parts(call)[1] or '<computed>'  # a curried or computed callee has no name
+                    records.append({'name': self._get_node_text(name_node), 'line': _zero_arg(child, 'start_position').row + 1,
+                                    'callee': callee, 'imported': callee in self._imported_names()})
+        return sorted(records, key=lambda r: r['line'])
+
     def _called_index(self) -> dict:
         """name -> the calls, `new` expressions and JSX tags that use that bare identifier as a function, built
         once per tree. A JSX tag counts only when the name is capitalised (`<Card/>`; `<div/>` is intrinsic)."""

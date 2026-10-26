@@ -23,7 +23,7 @@ from ...defaults import (
     CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB,
 )
 from ...utils.path_utils import HiddenTally, OnHidden, census_for_path, hidden_entries_warning, to_posix
-from ..ast.analysis import analysis_skipped_warning, traversal_failed_warning
+from ..ast.analysis import analysis_skipped_warning, function_values_dropped_warning, traversal_failed_warning
 
 # Capability metadata for v1.1 contract (BACK-307).
 # Call-graph analysis is static — these limitations are universal across queries.
@@ -168,7 +168,8 @@ def language_census(path: str, *,
 def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = False,
                skipped: Sequence[Tuple[str, str]] = (),
                traversal_failures: Sequence[Tuple[Optional[str], str]] = (),
-               census: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+               census: Optional[Dict[str, int]] = None,
+               dropped: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Per-request calls:// meta kwargs (BACK-1198).
 
     Replaces the prior flat ``confidence: 0.85`` (identical for a language
@@ -255,19 +256,16 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
         "classifications incorrect or incomplete"
         if uncalled else "analysis is incomplete; some callers, callees or uncalled results may be missing")
     failed = analysis_skipped_warning(list(skipped), None, consequence)
-    if failed:
-        warnings.append(failed)
 
     path_obj = Path(path)
     directory = path_obj if path_obj.is_dir() else path_obj.parent
     traversal_warning = traversal_failed_warning(directory_failures, directory)
-    if traversal_warning:
-        warnings.append(traversal_warning)
     # The census walks the tree the index walked: no code file left and something hidden
     # means the empty answer is gitignore's, not the code's (BACK-2065).
     scope_hidden = hidden_entries_warning(hidden, total)
-    if scope_hidden:
-        warnings.append(scope_hidden)
+    # Not a loss: what the JS function-value rule left out of the answer, named (BACK-2229).
+    left_out = function_values_dropped_warning(dropped)
+    warnings.extend(w for w in (failed, traversal_warning, scope_hidden, left_out) if w)
 
     return {
         'parse_mode': 'tree_sitter_partial' if known_loss else 'tree_sitter_full',

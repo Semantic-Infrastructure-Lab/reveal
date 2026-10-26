@@ -426,6 +426,17 @@ language and states the figures of the languages in scope: a source review of 20
 (three.js), 12 of 20 (VS Code), 1 of 20 (Excalidraw), 1 of 20 (Elasticsearch server, one directory scanned),
 0 of 20 (Guava) and 0 of 20 (WordPress) dead, so the list is a review list, not findings.
 
+**Function values left out.** In JavaScript and TypeScript, `const NAME = callee(fn)` is listed as a function only
+when the file calls `NAME` (or `callee` is `memo`, `forwardRef` or `useCallback`): `setTimeout(fn)` and `derived(fn)`
+return a value, not `fn`. The rule cannot see a callee that returns a function but is defined in another file, so
+such a declaration is left out and a caller of it is missing. Every `calls` answer over a tree with any says so in one
+`function_values_dropped` warning (not a loss: the exit code, `confidence` and `parse_mode` are unchanged). It gives the
+count, up to five files, and the callees, those the file imports apart from the rest (`imported_callees`: a function
+factory such as `Fn` is among them; `other_callees` is mostly `setTimeout` and the like, which are values). The count
+is declarations the rule did not list, not functions lost. A `?callers=NAME` or `?callees=NAME` for a name that is one
+of those declarations does not answer "not found" (exit 2): the name is declared, so the answer is empty and the
+warning stands beside it.
+
 ### JSON
 
 Structured data for programmatic processing:
