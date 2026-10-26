@@ -677,6 +677,14 @@ the architecture diff use). `edge_rule` adds `root` (relative to the path), `roo
 `tests_param`, `via` (counted edges by stage) and `ungated_languages`/`ungated_edges` (languages no recall
 oracle measures). Swift module and Zeitwerk convention edges count as importers but never close a cycle.
 
+**How paths are spelled**: every path in an answer (rows, `resolved`, cycle members, components,
+`metadata.files_failed`, `files_lost` and `extraction_diagnostics`, failed-directory warnings) is relative to
+the requested directory, which for a file target is the file's own directory: `imports://pkg/a.py` names
+itself `a.py`, a sibling `b.py` and a module above it `../top.py`. A file outside the requested path is
+spelled with `../`, including a target outside a pinned `&root=` or a `&scope=path` root
+(`../assets/x.css`). These fields never print a host path; a module the source itself writes as an absolute
+path outside the project (`#include "/opt/vendor/x.h"`) is shown as written.
+
 ```bash
 # Correct
 reveal 'imports://src?unused'
