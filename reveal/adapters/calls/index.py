@@ -566,7 +566,7 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
             # (BACK-334): a function called only from a test previously
             # reported zero callers — indistinguishable from dead code,
             # BACK-660's exact failure mode, just one hop further in.
-            if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):
+            if elem.get('category') not in _CALL_SOURCE_CATEGORIES:
                 continue
             record_base = {
                 'file': to_posix(file_path),  # '/' on every OS (BACK-1586)
@@ -760,7 +760,7 @@ def _effects_from_calls(calls: List[str], classify_call, language=None) -> List[
 # callees vanished); ?root dropped the edge itself once its target had been seen, across root
 # definitions too. Call sites resolve through calls.resolve.CallResolver, unchanged.
 
-_CALL_SOURCE_CATEGORIES = ('functions', 'methods', 'tests', 'modules')
+_CALL_SOURCE_CATEGORIES = ('functions', 'methods', 'tests', 'modules', 'class_fields')
 
 
 def _call_definitions(structures: Sequence[Dict[str, Any]]) -> Iterator[Tuple[str, str, Dict[str, Any]]]:

@@ -322,6 +322,45 @@ def module_call_sites(file_path: str, analyzer, elements: Sequence[Dict[str, Any
                        implicit_nodes=implicit, skip_kinds=DEFERRED_SCOPE_KINDS, include_jsx=True, owned_scope=owned)
 
 
+_CLASS_FIELD_KINDS = frozenset({'public_field_definition', 'field_definition'})
+_FUNCTION_VALUE_KINDS = frozenset({'arrow_function', 'function_expression', 'function', 'generator_function'})
+
+
+def class_field_call_sites(file_path: str, analyzer) -> List[Dict[str, Any]]:
+    """JS/TS: one record per class field whose initializer calls something (BACK-2230).
+
+    A field holding a function is already listed as a method; any other field (``x = helper()``,
+    ``_save = debounce(async () => ...)``) is a scope no one lists, so its calls had no caller."""
+    from ...conventions import family_for_path
+    from ...registry import language_for_extension
+    from ...core import get_tree, _zero_arg, node_children
+    from ...core.nav_calls import range_calls
+    if family_for_path(file_path) != 'js':
+        return []
+    language = language_for_extension(Path(file_path).suffix)
+    if language is None:
+        return []
+    tree = getattr(analyzer, 'tree', None) or get_tree(language, analyzer.content, filename=file_path)
+    content = analyzer.content.encode('utf-8')
+    def text(node):
+        return content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8', errors='replace')
+    out: List[Dict[str, Any]] = []
+    stack = [_zero_arg(tree, 'root_node')]
+    while stack:
+        node = stack.pop()
+        if _zero_arg(node, 'kind') in _CLASS_FIELD_KINDS:
+            value = node.child_by_field_name('value')
+            name = node.child_by_field_name('name') or node.child_by_field_name('property')
+            if value is not None and name is not None and _zero_arg(value, 'kind') not in _FUNCTION_VALUE_KINDS:
+                start = _zero_arg(node, 'start_position').row + 1
+                sites = range_calls(node, start, _zero_arg(node, 'end_position').row + 1, text)
+                if sites:
+                    out.append({'name': text(name), 'line': start, 'sites': sites})
+            continue
+        stack.extend(node_children(node))
+    return out
+
+
 def _listed_scope_test(elements: Sequence[Dict[str, Any]]):
     """Whether a deferred scope starts inside a listed function, method or class (its calls are that element's)."""
     from ...core import _zero_arg
@@ -353,6 +392,9 @@ def call_sources(file_struct: Dict[str, Any]):
                    'call_lines': _owner_call_lines(file_struct, elem)}
         else:
             yield elem
+    for field in file_struct.get('class_field_call_sites', []):
+        yield {'category': 'class_fields', 'name': field['name'], 'line': field['line'], 'caller_kind': 'class_field',
+               'calls': list(dict.fromkeys(s['callee'] for s in field['sites'])), 'call_sites': field['sites']}
     sites = [s for s in file_struct.get('module_call_sites', []) if s.get('relationship') != 'jsx_reference']
     references = [r for r in refs if r['owner'] == '<module>']
     if sites or references:
@@ -423,6 +465,8 @@ def _call_site_layer_complete(layer: Dict[str, Any], family: Optional[str]) -> b
     """A stored layer is whole: JS carries its JSX extras in the same entry or the layer is a miss."""
     if not isinstance(layer.get('module_call_sites'), list):
         return False
+    if family == 'js' and not isinstance(layer.get('class_field_call_sites'), list):
+        return False
     return family != 'js' or all(isinstance(layer.get(k), list) for k in ('jsx_references', 'jsx_call_sites'))
 
 
@@ -443,16 +487,19 @@ def _add_call_sites(result: Dict[str, Any], file_path: str, analyzer) -> None:
             if family == 'js':
                 result['jsx_references'] = layer['jsx_references']
                 result['jsx_call_sites'] = layer['jsx_call_sites']
+                result['class_field_call_sites'] = layer['class_field_call_sites']
             return
     result['module_call_sites'] = module_call_sites(file_path, analyzer, result['elements'])
     if family == 'js':
+        result['class_field_call_sites'] = class_field_call_sites(file_path, analyzer)
         from ..calls.references import jsx_component_references, jsx_owner_call_sites
         result['jsx_references'] = jsx_component_references(analyzer, result['elements'])
         result['jsx_call_sites'] = jsx_owner_call_sites(analyzer, result['elements'], result['jsx_references'])
     if persist:
         stored = {'module_call_sites': result['module_call_sites']}
         if family == 'js':
-            stored.update(jsx_references=result['jsx_references'], jsx_call_sites=result['jsx_call_sites'])
+            stored.update(jsx_references=result['jsx_references'], jsx_call_sites=result['jsx_call_sites'],
+                          class_field_call_sites=result['class_field_call_sites'])
         analyzer.store_call_site_layer(form, stored)
 
 

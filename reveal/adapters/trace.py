@@ -85,7 +85,7 @@ def _trace_elements(values: Any, file: str, problems: List[Dict[str, str]],
         if not _trace_projection_calls_valid(element, references):
             _trace_problem(problems, file, 'Trace JSX projection consumes malformed element calls')
             continue
-        if element['category'] in ('functions', 'methods', 'tests', 'modules'):
+        if element['category'] in ('functions', 'methods', 'tests', 'modules', 'class_fields'):
             if not _trace_callable_valid(element):
                 _trace_problem(problems, file, 'Required trace callable name, line or calls are missing or malformed')
                 continue
