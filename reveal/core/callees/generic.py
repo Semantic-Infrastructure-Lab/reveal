@@ -25,6 +25,12 @@ from reveal.utils.lines import split_lines
 CHAIN_FULL = 'full'
 CHAIN_COLLAPSE = 'collapse'
 
+# Closure literals invoked where they are written name nothing, bare or parenthesized: Swift/Kotlin
+# `{ ... }()` (BACK-2074); Go `defer func() { ... }()`, Rust `(|| f())()`, C++ `[](){ f(); }()`,
+# Kotlin `(fun() { f() })()` and PHP `(function() { f(); })()` (BACK-2097).
+_CLOSURE_LITERAL_KINDS = frozenset({
+    'lambda_literal', 'func_literal', 'closure_expression', 'lambda_expression', 'anonymous_function',
+})
 # Callee expressions that have no name of their own: `(a = b)(x)`, an inline
 # function/IIFE, a ternary. Emitting their raw text produced junk callees like
 # `_malloc = wasmExports["O"]` (BACK-1305); any calls inside an IIFE body are
@@ -34,13 +40,7 @@ _UNNAMEABLE_CALLEE_KINDS = frozenset({
     'function_expression', 'function', 'generator_function', 'arrow_function', 'lambda',
     'class', 'conditional_expression', 'ternary_expression', 'await_expression',
     'binary_expression',
-    'lambda_literal',  # Swift/Kotlin closure literal: `{ ... }()` (BACK-2074)
-    'func_literal',  # Go closure literal: `(func() { ... })()` (BACK-2097)
-})
-
-# Closure literals invoked where they are written: Swift/Kotlin `{ ... }()` (BACK-2074) and Go
-# `defer func() { ... }()` / `go func(n int) { ... }(3)` (BACK-2097).
-_CLOSURE_LITERAL_KINDS = frozenset({'lambda_literal', 'func_literal'})
+}) | _CLOSURE_LITERAL_KINDS
 
 # What a wrapper callee does when its operand names nothing: fall through to the raw
 # text, decline only when there is no operand at all, or always decline.
@@ -170,10 +170,10 @@ def callee_name_from_node(
     if call_node_types and kind in call_node_types:
         return None
 
-    # A closure literal invoked in place (Swift/Kotlin `{ ... }()`, Go `defer func() { ... }()`):
-    # no name of its own, and raw text would emit the closure's whole source as a callee. Its
-    # body's calls are their own nodes (BACK-2074, BACK-2097; same policy as a parenthesized JS
-    # IIFE, BACK-1305).
+    # A closure literal invoked in place (Swift/Kotlin `{ ... }()`, Go `defer func() { ... }()`,
+    # C++ `[](){ ... }()`): no name of its own, and raw text would emit the closure's whole source
+    # as a callee. Its body's calls are their own nodes (BACK-2074, BACK-2097; same policy as a
+    # parenthesized JS IIFE, BACK-1305).
     if kind in _CLOSURE_LITERAL_KINDS:
         return None
 
