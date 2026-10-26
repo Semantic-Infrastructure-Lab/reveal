@@ -282,6 +282,7 @@ Use `/element` to drill into specific areas:
 | `storage/<db>` | Specific database tables | Analyze individual database size breakdown |
 | `errors` | Error indicators | Check for connection errors, aborted clients |
 | `variables` | Server configuration variables | Review key settings (max_connections, buffer pool) |
+| `health` | Comprehensive health check | Full health overview (same as default view) |
 | `tables` | Table I/O statistics and hotspots | Find the busiest tables |
 | `databases` | Database list | Enumerate all databases |
 | `indexes` | Index usage statistics | Find unused indexes, optimize queries |
@@ -715,8 +716,8 @@ checks:
 | Code | Status | Meaning |
 |------|--------|---------|
 | `0` | Pass | All checks passed |
-| `1` | Warning | One or more warnings (also: the check could not run, for example the connection failed; the JSON then has `error` and no `status`) |
-| `2` | Failure | One or more failures |
+| `1` | Warning | One or more warnings |
+| `2` | Failure | One or more failures, or the server could not be reached (the JSON then has `error` and no checks) |
 
 **Use in CI/CD**:
 
@@ -728,7 +729,7 @@ rc=$?
 if [ $rc -eq 0 ]; then
   echo "✅ All health checks passed"
 elif [ $rc -eq 1 ]; then
-  echo "⚠️ Health warnings detected (or the check could not connect: JSON has an error and no status)"
+  echo "⚠️ Health warnings detected"
   exit 1
 elif [ $rc -eq 2 ]; then
   echo "❌ Health check failures"

@@ -358,6 +358,9 @@ class MySQLRenderer(TypeDispatchRenderer):
         print(f"\nSummary: {summary['passed']}/{summary['total']} passed, {summary['warnings']} warnings, {summary['failures']} failures")
         print()
 
+        if result.get('error'):
+            print(f"Error: {result['error']}\n")
+
         # Group checks by status
         failures, warnings, passes = cls._group_checks_by_status(result['checks'])
 

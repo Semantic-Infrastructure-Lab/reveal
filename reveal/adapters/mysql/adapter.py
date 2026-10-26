@@ -340,7 +340,10 @@ class MySQLAdapter(ResourceAdapter):
             if result:
                 return result
             # Fall through to overview if element not recognized
+        return self._build_overview()
 
+    def _build_overview(self) -> Dict[str, Any]:
+        """The health overview itself, never an element dispatch (so `/health` cannot recurse)."""
         # Get timing context for snapshot
         timing = self.conn.get_snapshot_context()
 
@@ -711,8 +714,7 @@ class MySQLAdapter(ResourceAdapter):
 
     def _get_health(self) -> Dict[str, Any]:
         """Comprehensive health check."""
-        # Reuse get_structure for now
-        return self.get_structure()
+        return self._build_overview()
 
     def _get_databases(self) -> Dict[str, Any]:
         """Get database list with snapshot timing context."""
@@ -1124,8 +1126,17 @@ class MySQLAdapter(ResourceAdapter):
         only_failures = kwargs.get('only_failures', False)
         severity = kwargs.get('severity')
 
-        # Collect all health metrics using extracted helper
-        metrics = self._collect_health_metrics()
+        # A server that cannot be reached answers nothing: that is a failure (exit 2), not a warning
+        try:
+            metrics = self._collect_health_metrics()
+        except MYSQL_ERRORS as e:
+            return {
+                'status': 'failure',
+                'exit_code': 2,
+                'error': str(e),
+                'checks': [],
+                'summary': {'total': 0, 'passed': 0, 'warnings': 0, 'failures': 0},
+            }
 
         # Load health check configuration
         config = self._load_health_check_config()
