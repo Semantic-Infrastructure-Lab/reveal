@@ -91,7 +91,9 @@ reveal claude://session/infernal-earth-0118
 
 > `infernal-earth-0118` is a placeholder session name. Your actual session directories are most likely UUIDs (e.g. `reveal claude://session/2627362f-6f72-45e1-b7bb-d5a61519a388`, or the 8-character short form `reveal claude://session/2627362f`) unless you use a friendly-naming layer. See [Error: "Conversation not found"](#error-conversation-not-found-for-session) for the accepted formats.
 
-**Returns**: Session title, message counts (user/assistant), duration, files touched, tool counts, token totals and cache-hit rate, cwd/branch, last assistant snippet, conversation file path
+**Returns**: Session title, message counts, duration, files touched, tool counts, token totals and cache-hit rate, cwd/branch, last assistant snippet, conversation file path
+
+`message_count` is the number of JSONL records (it includes tool results and metadata records). The role counts are messages: `user_messages` is the typed prompts, `tool_result_messages` the tool-result turns (also role `user` in the file), and `assistant_messages` the API messages (the records of one reply share a `message.id` and count once). `readme_present` appears (as `true`) only when a `README*.md` sits beside the transcript, a layout a stock `~/.claude/projects` install does not have; without one the field is omitted, not reported as absent. The session list and cross-session search follow the same rule.
 
 ### 2. Session Summary
 
@@ -617,7 +619,7 @@ reveal 'claude://session/<session-name>/timeline'
 reveal claude://session/infernal-earth-0118/timeline
 ```
 
-**Output**: Message sequence with timestamps, roles, brief content summaries
+**Output**: Events in order, each with an index and timestamp: `user_message` (typed prompts, as the `/prompts` view defines them, whether stored as a plain string or a block list), `assistant_message`, `thinking`, `tool_call` and `tool_result`, each with a short content preview
 
 **Use when**: Understand conversation flow, identify timing patterns
 
@@ -761,7 +763,7 @@ reveal 'claude://session/<session-name>/agents'
 reveal claude://session/infernal-earth-0118/agents
 ```
 
-**Output**: Per-agent `agent_id`, `agent_type`, `status`, `prompt` (first 200 chars) and `timestamp`. Foreground (completed) agents add `duration_ms`, `token_count` and `tool_count`; background launches (`status: async_launched`) have none of these and do not count toward the session-level totals `total_agent_tokens` and `total_agent_duration_ms`.
+**Output**: Per-agent `agent_id`, `agent_type`, `status`, `prompt` (first 200 chars) and `timestamp`. `agent_type` is the result's `agentType`, else the `subagent_type` the call asked for (`unknown` when neither is recorded). Foreground (completed) agents add `duration_ms`, `token_count`, `tool_count` and `usage` (`input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_created_tokens`); background launches (`status: async_launched`) have none of these and do not count toward the session-level totals `total_agent_tokens` and `total_agent_duration_ms`.
 
 **Use when**: Understand subagent cost, identify slow or expensive agent invocations, audit agent behavior within a session
 
