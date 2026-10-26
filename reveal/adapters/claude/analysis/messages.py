@@ -216,8 +216,8 @@ def get_message(messages: List[Dict], msg_id: int, session_name: str,
     if msg_type == 'file-history-snapshot':
         result['hint'] = (
             'This is a Claude Code metadata record, not a conversation message. '
-            'Use /user or /assistant to browse real messages, '
-            'or /message/2 to jump to the first user prompt.'
+            'Use /prompts or /messages to browse real messages, '
+            'or ?last for the last assistant turn.'
         )
 
     base.update(result)

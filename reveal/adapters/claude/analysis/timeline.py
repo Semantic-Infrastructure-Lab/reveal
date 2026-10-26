@@ -2,6 +2,8 @@
 
 from typing import Dict, List, Any
 
+from .messages import _content_to_blocks, _is_real_prompt
+
 
 def _create_tool_result_event(i: int, timestamp: str, content: Dict) -> Dict[str, Any]:
     """Create a tool result timeline event.
@@ -28,24 +30,29 @@ def _create_tool_result_event(i: int, timestamp: str, content: Dict) -> Dict[str
     }
 
 
-def _process_user_message(i: int, timestamp: str, content_blocks: List) -> List[Dict[str, Any]]:
-    """Process user message content blocks into timeline events.
+def _process_user_message(i: int, timestamp: str, msg: Dict) -> List[Dict[str, Any]]:
+    """Process a user record into timeline events.
+
+    A typed prompt is a bare string in Claude Code's JSONL, or a list of blocks when it
+    carries an image; `_is_real_prompt` is the one definition (the /prompts view's), so
+    a harness-injected wrapper or a tool-result record's synthetic text is not a prompt.
 
     Args:
         i: Message index
         timestamp: Event timestamp
-        content_blocks: List of content blocks from user message
+        msg: The user record
 
     Returns:
         List of timeline events
     """
     events = []
+    content_blocks = _content_to_blocks(msg.get('message', {}).get('content', []))
 
     # User text messages
     text_parts = [c.get('text', '') for c in content_blocks
                   if isinstance(c, dict) and c.get('type') == 'text']
     text = ' '.join(text_parts)
-    if text:
+    if text and _is_real_prompt(msg):
         events.append({
             'index': i,
             'timestamp': timestamp,
@@ -135,7 +142,7 @@ def get_timeline(messages: List[Dict], session_name: str,
         content_blocks = msg.get('message', {}).get('content', [])
 
         if msg_type == 'user':
-            timeline.extend(_process_user_message(i, timestamp, content_blocks))
+            timeline.extend(_process_user_message(i, timestamp, msg))
         elif msg_type == 'assistant':
             timeline.extend(_process_assistant_message(i, timestamp, content_blocks))
 
