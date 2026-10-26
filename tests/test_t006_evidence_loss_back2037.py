@@ -49,9 +49,22 @@ def _project(root, survivor=True, local=False, children=1):
     checked = root / 'consumer.py'
     checked.write_text(content, encoding='utf-8')
     aged = time.time_ns() - 60_000_000_000  # request-cache stamps skip files newer than the request; Windows' clock is coarse
-    for source in root.rglob('*.py'):
-        os.utime(source, ns=(aged, aged))
+    # Every file, not just *.py: the tree stamp also reads pyproject.toml, and a fresh one made the
+    # sealed stamp untrusted on Windows runners (the 'newer: [pyproject.toml]' flake, BACK-2057).
+    for entry in root.rglob('*'):
+        if entry.is_file():
+            os.utime(entry, ns=(aged, aged))
     return checked, hidden
+
+
+def test_project_fixture_leaves_no_file_newer_than_the_request_clock_can_resolve(tmp_path):
+    """Deterministic guard for the Windows flake: no fixture file may be fresh enough for a
+    coarse clock to place it at or after the request start."""
+    root = tmp_path / 'project'
+    _project(root)
+    cutoff = time.time_ns() - 30_000_000_000
+    fresh = [str(p) for p in root.rglob('*') if p.is_file() and p.stat().st_mtime_ns > cutoff]
+    assert fresh == []
 
 
 def _why_untrusted(root, started_ns):
