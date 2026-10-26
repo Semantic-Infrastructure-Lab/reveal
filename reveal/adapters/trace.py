@@ -558,8 +558,7 @@ class TraceAdapter(ResourceAdapter):
     def get_help() -> Dict[str, Any]:
         return {
             'name': 'trace',
-            'description': ('Retired: use calls://<path>?callees=<FUNC>&depth=N&detail, the same walk (trace:// '
-                            'prints a replaced-by note). Walks the call graph from a named entry point and prints '
+            'description': ('Walks the call graph from a named entry point and prints '
                             'a depth-indented execution narrative.'),
             'syntax': 'trace://<path>?from=<FUNC>[&depth=2]',
             'examples': [

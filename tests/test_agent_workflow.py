@@ -124,11 +124,15 @@ def test_discover_entries_conform_to_the_discovery_api_shape():
         "cli_flags", "cli_only_flags", "supports_batch", "supports_advanced",
         "example_queries", "notes",
     }
+    # A scheme in the RETIREMENTS table also carries `retired` and `replaced_by` (BACK-2197), and no other does.
+    from reveal.cli.invocation import RETIREMENTS
+    retired_schemes = {k.split(":", 1)[1] for k in RETIREMENTS if k.startswith("scheme:")}
     for scheme, entry in data["adapters"].items():
-        assert set(entry.keys()) == DISCOVERY_ENTRY_KEYS, (
+        expected_keys = DISCOVERY_ENTRY_KEYS | ({"retired", "replaced_by"} if scheme in retired_schemes else set())
+        assert set(entry.keys()) == expected_keys, (
             f"--discover entry {scheme!r} shape drifted: "
-            f"missing {DISCOVERY_ENTRY_KEYS - set(entry)}, "
-            f"extra {set(entry) - DISCOVERY_ENTRY_KEYS}"
+            f"missing {expected_keys - set(entry)}, "
+            f"extra {set(entry) - expected_keys}"
         )
         assert entry["scheme"] == scheme, (
             f"--discover entry keyed {scheme!r} self-names as {entry['scheme']!r}"

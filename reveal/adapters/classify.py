@@ -59,8 +59,7 @@ class ClassifyAdapter(ResourceAdapter):
     def get_help() -> Dict[str, Any]:
         return {
             'name': 'classify',
-            'description': ('Retired: use metrics://<dir>?view=provenance, the same answer (classify:// prints a '
-                            'replaced-by note). Provenance tag (first_party/test/vendor/minified) for every ANALYZABLE '
+            'description': ('Provenance tag (first_party/test/vendor/minified) for every ANALYZABLE '
                             'file in a directory, over the full unranked population of those files.'),
             'syntax': 'classify://<dir>',
             'examples': [

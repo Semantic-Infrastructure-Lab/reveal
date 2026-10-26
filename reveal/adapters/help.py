@@ -1763,7 +1763,9 @@ class HelpAdapter(ResourceAdapter):
 
     def _get_all_adapter_help(self) -> Dict[str, Any]:
         """Get help for all adapters."""
+        from ..cli.handlers.introspection import adapter_group, retired_schemes
         public_schemes = list_public_schemes()
+        retired = retired_schemes()
         all_help: Dict[str, Any] = {
             'type': 'adapter_summary',
             'count': len(public_schemes),
@@ -1780,8 +1782,11 @@ class HelpAdapter(ResourceAdapter):
                 all_help['adapters'][scheme] = {
                     'description': help_data.get('description', ''),
                     'syntax': help_data.get('syntax', ''),
-                    'example': example
+                    'example': example,
+                    'group': adapter_group(scheme),
                 }
+                if scheme in retired:
+                    all_help['adapters'][scheme]['replaced_by'] = retired[scheme].replacement
 
         # BACK-841: this page was one of four measured dead ends — 6.4KB of
         # adapter names with no onward pointer. The obvious next questions are

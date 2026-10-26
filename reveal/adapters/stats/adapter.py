@@ -850,8 +850,7 @@ class StatsAdapter(MetricsAdapter):
         help_data = dict(MetricsAdapter.get_help())
         help_data.update(
             name='stats',
-            description=('Retired: use metrics://<path>, the same answer (stats:// prints a replaced-by note). '
-                         + help_data.get('description', '')),
+            description=help_data.get('description', ''),
             syntax='stats://<path>[?<filters>]',
         )
         return help_data

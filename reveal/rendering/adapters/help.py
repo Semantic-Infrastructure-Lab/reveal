@@ -274,16 +274,28 @@ def _render_help_static_guide(data: Dict[str, Any]) -> None:
 
 
 def _render_help_adapter_summary(data: Dict[str, Any]) -> None:
-    """Render summary of all adapters."""
+    """Render summary of all adapters, code nouns first, then the ops family, then the retired schemes."""
+    from ...cli.handlers.introspection import ADAPTER_GROUP_HEADINGS
     print(f"# URI Adapters ({data['count']} total)")
     print()
-    for scheme, info in sorted(data['adapters'].items()):
-        print(f"## {scheme}://")
-        print(f"{info['description']}")
-        print(f"Syntax: {info['syntax']}")
-        if info.get('example'):
-            print(f"Example: {info['example']}")
-        print()
+    adapters = data['adapters']
+    for group in ('code', 'ops', 'retired'):
+        members = sorted(s for s, info in adapters.items() if info.get('group', 'code') == group)
+        if members and group in ADAPTER_GROUP_HEADINGS:
+            print(f"# {ADAPTER_GROUP_HEADINGS[group]} ({len(members)})")
+            print()
+        for scheme in members:
+            info = adapters[scheme]
+            print(f"## {scheme}://")
+            if group == 'retired':
+                print(f"Use {info['replaced_by']}")
+                print()
+                continue
+            print(f"{info['description']}")
+            print(f"Syntax: {info['syntax']}")
+            if info.get('example'):
+                print(f"Example: {info['example']}")
+            print()
     _render_schema_next(data)
 
 

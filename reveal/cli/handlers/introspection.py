@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Optional, Dict, List, Any
 from ...utils.formatting import shell_command
 
 if TYPE_CHECKING:
+    from ..invocation import Retirement
     from argparse import Namespace
 
 
@@ -50,6 +51,53 @@ def handle_languages(fmt: str = 'text'):
     sys.exit(0)
 
 
+# The hosting-ops family: adapters that inspect a server, not the user's code (BACK-2197, the cheap part of BACK-1055).
+OPS_SCHEMES = ('autossl', 'cpanel', 'domain', 'letsencrypt', 'mysql', 'nginx', 'ssl')
+
+ADAPTER_GROUP_HEADINGS = {
+    'ops': 'Hosting and server operations',
+    'retired': 'Retired adapters',
+}
+
+
+def retired_schemes() -> 'Dict[str, Retirement]':
+    """The scheme:* rows of RETIREMENTS, keyed by scheme: the one place a scheme is called retired."""
+    from ..invocation import RETIREMENTS
+    return {key.split(':', 1)[1]: row for key, row in RETIREMENTS.items() if key.startswith('scheme:')}
+
+
+def _mark_retired(entry: dict, scheme: str) -> None:
+    """Add ``retired`` and ``replaced_by`` to a discover entry whose scheme is a RETIREMENTS row."""
+    row = retired_schemes().get(scheme)
+    if row:
+        entry['retired'] = True
+        entry['replaced_by'] = row.replacement
+
+
+def adapter_group(scheme: str) -> str:
+    """``retired`` (a RETIREMENTS row), ``ops`` (OPS_SCHEMES) or ``code``."""
+    if scheme in retired_schemes():
+        return 'retired'
+    return 'ops' if scheme in OPS_SCHEMES else 'code'
+
+
+def _adapter_description(adapter_class) -> str:
+    try:
+        help_data = adapter_class.get_help()
+    except (AttributeError, TypeError):
+        help_data = None
+    return (help_data or {}).get('description') or 'No description available'
+
+
+def _adapter_example(adapter_class) -> str:
+    try:
+        help_data = adapter_class.get_help()
+    except (AttributeError, TypeError):
+        help_data = None
+    examples = (help_data or {}).get('examples') or []
+    return str(examples[0]['uri']) if examples else ''
+
+
 def handle_adapters(show_all: bool = False, fmt: str = 'text'):
     """Handle --adapters flag.
 
@@ -77,30 +125,25 @@ def handle_adapters(show_all: bool = False, fmt: str = 'text'):
     if not show_all and len(schemes) < len(list_public_schemes(include_internal=True)):
         lines.append("(reveal's internal self-inspection adapters are hidden — pass --all to include them)\n")
 
-    # Sort adapters by name
-    for scheme in sorted(schemes):
-        adapter_class = _ADAPTER_REGISTRY[scheme]
-
-        # Try to get help data from adapter class
-        description = ''
-        example = ''
-        try:
-            help_data = adapter_class.get_help()  # type: ignore[attr-defined]
-            if help_data:
-                description = help_data.get('description', '')
-                examples = help_data.get('examples', [])
-                example = examples[0]['uri'] if examples else ''
-        except (AttributeError, TypeError):
-            pass
-
-        if not description:
-            description = 'No description available'
-
-        lines.append(f"  {scheme}://")
-        lines.append(f"    {description}")
-        if example:
-            lines.append(f"    Example: {shell_command(example)}")
-        lines.append("")
+    retired = retired_schemes()
+    for group in ('code', 'ops', 'retired'):
+        members = sorted(s for s in schemes if adapter_group(s) == group)
+        if not members:
+            continue
+        if group in ADAPTER_GROUP_HEADINGS:
+            lines.append(f"{ADAPTER_GROUP_HEADINGS[group]} ({len(members)})")
+            lines.append("-" * 70)
+        for scheme in members:
+            lines.append(f"  {scheme}://")
+            if group == 'retired':
+                lines.append(f"    Use {retired[scheme].replacement}")
+                lines.append("")
+                continue
+            lines.append(f"    {_adapter_description(_ADAPTER_REGISTRY[scheme])}")
+            example = _adapter_example(_ADAPTER_REGISTRY[scheme])
+            if example:
+                lines.append(f"    Example: {shell_command(example)}")
+            lines.append("")
 
     lines.append("=" * 70)
     lines.append("\n💡 Usage:")
@@ -501,6 +544,7 @@ def build_discover_payload(show_all: bool = False) -> dict:
             notes = help_data.get('notes', [])
             entry['notes'] = notes if isinstance(notes, list) else [notes]
 
+        _mark_retired(entry, scheme)
         adapters[scheme] = entry
 
     result = {
