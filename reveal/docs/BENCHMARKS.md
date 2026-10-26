@@ -15,7 +15,7 @@ beth_topics:
 
 > **Measured, not estimated.** Every number below is an actual measurement on reveal's own codebase (v0.64.x, 357 Python files). Token counts use the standard approximation of 1 token ≈ 4 characters — actual LLM tokenization varies ±10%.
 
-The core claim: reveal's progressive disclosure reduces token usage **3.9–15x** compared to reading files directly on typical tasks. Below are five real scenarios with exact numbers.
+The core claim: reveal's progressive disclosure reduces token usage **3.9–15x** compared to reading files directly on typical tasks. Below are four real scenarios with exact numbers.
 
 ---
 
@@ -103,34 +103,6 @@ Total:      4
 
 ---
 
-## Scenario 5: Rough Dead Code Scan (retired)
-
-> **Retired measurement.** `calls ?uncalled` is retired (D8): its bare-name matching measured too imprecise
-> to list dead-code candidates (see [VALIDATION.md](../../VALIDATION.md)). Use `?callers=NAME` for one
-> function and the language's own dead-code tool for a project-wide list. The numbers below are kept as
-> the record of this measurement and are re-measured, or dropped, with the benchmark refresh (BACK-1618).
-
-**Goal**: Get a list of uncalled function candidates for post-refactor inspection.
-
-| Approach | Tokens | How |
-|----------|--------|-----|
-| `reveal 'ast://reveal/?show=functions'` then manual review | 7,196 | Get all 2,542 function names, cross-reference manually |
-| `reveal 'calls://reveal/?uncalled&top=10'` | 220 | Direct answer: 10 uncalled candidates from 2,542 functions |
-| **Reduction** | **33x** | — |
-
-```bash
-reveal 'calls://reveal/?uncalled'        # all uncalled functions
-reveal 'calls://reveal/?uncalled&top=10' # top 10 by file recency
-```
-
-Output (220 tokens, 15 lines) lists exactly the uncalled candidates with file and line — no manual cross-referencing needed.
-
-The 33x reduction is real: Reveal eliminates the manual cross-reference work. What it doesn't eliminate is the inspection step — each candidate still needs 30 seconds of human review.
-
-> **Note on accuracy**: Functions called via dynamic dispatch (e.g., registered via decorator, looked up by name at runtime) may appear as "uncalled". Treat results as candidates requiring 30 seconds of inspection, not confirmed dead code.
-
----
-
 ## Summary Table
 
 | Scenario | Old approach | Reveal approach | Reduction |
@@ -139,11 +111,10 @@ The 33x reduction is real: Reveal eliminates the manual cross-reference work. Wh
 | Understand focused module | cat: 4,128 tokens | struct: 275 tokens | **15x** |
 | PR context (24 changed files) | git diff \| cat: 12,000+ | pack --content: ~4,000 | **3–4x** |
 | Find callers of a function | grep: 560 tokens | calls://?callers: 84 tokens | **6.7x** |
-| Uncalled function scan (retired) | ast:// all + manual: 7,196 tokens | calls://?uncalled: 220 tokens | **33x** *(candidates, not confirmed; `?uncalled` is retired)* |
 
-**The typical range is 3.9–15x** for file inspection and call graph queries. Scenario 5 reaches 33x but requires human verification of results. The gap widens when:
+**The typical range is 3.9–15x** for file inspection and call graph queries. The gap widens when:
 - The file is large and only part of it matters (structure vs cat)
-- The question has a direct answer (uncalled, callers) vs requiring synthesis (manual cross-reference)
+- The question has a direct answer (callers) vs requiring synthesis (manual cross-reference)
 
 **On the retired "10–150x" claim.** Earlier docs headlined a 10–150x range. These
 measurements do not support it at either end: the floor is 3.9x, not 10x (the
@@ -151,13 +122,13 @@ most ordinary case — reading one large file — is the *worst* ratio, not a
 mid-range one), and nothing here approaches 150x. That number came from
 comparing unlike operations — a directory-structure listing against `cat` of a
 whole file — which measures the difference between two questions, not the
-saving on one. **3.9–33x measured, typically 3.9–15x, is the claim this file
+saving on one. **3.9–15x measured is the claim this file
 supports, and this file is the only source for it.** If a number appears
 elsewhere in the docs, it is either sourced here or it is wrong.
 
 What actually moves the ratio: how large the file is relative to the part you
-need, and whether the question has a direct structural answer (callers,
-uncalled) versus requiring you to read and synthesize.
+need, and whether the question has a direct structural answer (callers)
+versus requiring you to read and synthesize.
 
 ---
 
@@ -185,9 +156,6 @@ reveal reveal/file_handler.py handle_file | wc -c      # element bytes
 grep -r 'handle_file' reveal/ --include='*.py' | wc -c
 reveal 'calls://reveal/?callers=handle_file' | wc -c
 
-# Scenario 5
-reveal 'ast://reveal/?show=functions' | wc -c
-reveal 'calls://reveal/?uncalled' | wc -c
 ```
 
 ---
