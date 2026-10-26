@@ -161,16 +161,16 @@ reveal 'imports://src?unused'
 Unused Imports: 12
 ============================================================
 
-  src/api/routes.py:3 - typing.Dict
-  src/api/routes.py:5 - datetime
-  src/models/user.py:8 - typing.Optional
-  src/utils/helpers.py:2 - sys
-  src/db/session.py:4 - sqlalchemy.orm
-  src/config.py:7 - pathlib.Path
-  src/services/auth.py:12 - jwt.exceptions
-  src/handlers/errors.py:5 - traceback
-  src/middleware/logging.py:3 - json
-  src/tests/test_api.py:15 - pytest.fixture
+  api/routes.py:3 - typing (unused: Dict)
+  api/routes.py:5 - datetime
+  models/user.py:8 - typing (unused: Optional)
+  utils/helpers.py:2 - sys
+  db/session.py:4 - sqlalchemy.orm
+  config.py:7 - pathlib (unused: Path)
+  services/auth.py:12 - jwt.exceptions
+  handlers/errors.py:5 - traceback
+  middleware/logging.py:3 - json
+  tests/test_api.py:15 - pytest (unused: fixture)
 
   ... and 2 more unused imports
   Run with --verbose to see all 12 unused imports
@@ -193,7 +193,7 @@ reveal 'imports://src?unused' --format=json
 **Returns**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "unused_imports",
   "source": "src",
   "source_type": "directory",
@@ -279,7 +279,7 @@ cycling through a shared registry appear as 1 group, not 30 separate paths.
 reveal 'imports://src?circular' --verbose
 ```
 
-**Returns**: All groups, all files shown (no truncation)
+**Returns**: All groups and all files (no truncation), plus each group's cycle edge sequence (`cycle: a.py → b.py → c.py → a.py`)
 
 ### JSON Output
 
@@ -290,7 +290,7 @@ reveal 'imports://src?circular' --format=json
 **Returns**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "circular_dependencies",
   "source": "src",
   "source_type": "directory",
@@ -393,7 +393,7 @@ reveal 'imports://src?rank=fan-in' --format=json
 **Returns**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "fan_in_ranking",
   "source": "src",
   "source_type": "directory",
@@ -442,7 +442,7 @@ JavaScript, TypeScript and TSX record import scope (positionally: an import, `im
 `require()` in a function, method, arrow or function expression is function-level; a class field
 initializer or static block is module level). Other languages' edges count as load-time under
 every value, and the rule names those languages and the number of edges. An unknown value is an error.
-`architecture://`, `overview://`, `pack` and `deps://` print the same rule for the numbers they take from this
+`architecture://`, `overview://` and `pack` print the same rule for the numbers they take from this
 graph; none of them accepts `&lazy`.
 
 ```bash
@@ -450,14 +450,14 @@ reveal 'imports://src?rank=fan-in&lazy=exclude'   # module-level imports only
 reveal 'imports://src?circular&lazy=include'      # a lazy back-edge closes a cycle too
 ```
 
-**When to use `imports://rank=fan-in` vs `depends://`:**
+**When to use `rank=fan-in` vs `importers`:**
 
-| Tool | Question | Granularity |
-|------|----------|-------------|
+| Query | Question | Granularity |
+|-------|----------|-------------|
 | `imports://src?rank=fan-in` | Which files are most central? (ranked list) | Codebase-wide |
-| `depends://src/utils.py` | What exactly imports this one file? | Per-file |
+| `imports://src?importers=utils.py` | What exactly imports this one file? | Per-file |
 
-Use `rank=fan-in` for orientation; use `depends://` for targeted impact analysis.
+Use `rank=fan-in` for orientation; use `?importers` for targeted impact analysis.
 
 ---
 
@@ -474,66 +474,41 @@ reveal 'imports://src?violations'
 ```yaml
 architecture:
   layers:
-    # Layer definitions (higher layers can import lower, not vice versa)
     - name: presentation
-      paths:
-        - src/api
-        - src/cli
+      paths: [api, cli]                     # prefixes, relative to the path you pass to imports://
+      allow_imports: [services, handlers, models]   # if set, every import target must match one of these
 
     - name: application
-      paths:
-        - src/services
-        - src/handlers
+      paths: [services, handlers]
+      allow_imports: [models, entities]
 
     - name: domain
-      paths:
-        - src/models
-        - src/entities
+      paths: [models, entities]
+      deny_imports: [db, external, api]     # targets this layer must not reach
 
     - name: infrastructure
-      paths:
-        - src/db
-        - src/external
-
-  rules:
-    # Presentation layer can import application and domain
-    - layer: presentation
-      can_import:
-        - application
-        - domain
-
-    # Application layer can import domain only
-    - layer: application
-      can_import:
-        - domain
-
-    # Domain layer has no dependencies (pure business logic)
-    - layer: domain
-      can_import: []
-
-    # Infrastructure layer can import domain
-    - layer: infrastructure
-      can_import:
-        - domain
+      paths: [db, external]
+      allow_imports: [models, entities]
 ```
+
+A layer has `name`, `paths`, `allow_imports` and `deny_imports`. There is no `rules:` or
+`can_import` key: unknown keys are ignored, so a config written in another shape passes with
+0 violations instead of failing. `paths`, `allow_imports` and `deny_imports` are prefixes
+relative to the path given to `imports://`: for `imports://src?violations` write `models`,
+not `src/models`; for `imports://.?violations` write `src/models`.
 
 ### Example Output
 
-**Returns** (~400 tokens):
+Use `--format=json` to read the violations (rows carry no line number):
 
-```
-============================================================
-Layer Violations: 5
-============================================================
-
-  src/models/user.py:3 - Layer violation: domain importing infrastructure (src.db.session)
-  src/handlers/users.py:8 - Layer violation: application importing infrastructure (src.db.models)
-  src/api/routes.py:12 - Layer violation: presentation importing infrastructure (src.db.connection)
-  src/services/auth.py:15 - Layer violation: application importing presentation (src.api.schemas)
-  src/models/product.py:5 - Layer violation: domain importing application (src.services.pricing)
-
-  ... and 0 more violations
-  Run with --verbose to see all 5 violations
+```json
+{
+  "count": 1,
+  "violations": [
+    {"from_file": "models/user.py", "to_file": "db/session.py",
+     "layer": "domain", "reason": "domain layer cannot import from db"}
+  ]
+}
 ```
 
 ### Without Configuration
@@ -546,11 +521,9 @@ reveal 'imports://src?violations'
 
 **Returns**:
 ```
-============================================================
-Layer Violations: 0
-============================================================
-
-  ✅ Layer violation detection requires .reveal.yaml configuration (coming in Phase 4)
+Layer Violations: NOT CONFIGURED
+  ℹ️  Layer violation detection requires .reveal.yaml configuration
+  Add layer rules to .reveal.yaml to enable this check.
 ```
 
 **Use cases**:
@@ -608,7 +581,7 @@ angle-bracket includes.
 > other tree-sitter-parseable code files may not have an import extractor yet.
 > Rather than silently reporting zero imports for such a file, `imports://`
 > prints a "code file(s) skipped — no import support for: …" note so a low count
-> is never mistaken for a clean result. Likewise `?unused`, `deps`, and `check`
+> is never mistaken for a clean result. Likewise `?unused`, `?external`, and `check`
 > (W-CAP-2, single-file and recursive) say "Unused imports not checked" for the 📦/📝 languages
 > instead of reporting ✅ (metadata field `unused_not_checked_extensions`).
 
@@ -691,7 +664,7 @@ Use `?flag` syntax for operations:
 
 **Where an answer is resolved**: at the project root the shared climb finds (`&root=`,
 `.reveal.yaml` `root: true`, the nearest package marker, the VCS root, else the requested directory),
-through the same resolution cascade `depends://` uses (direct, PHP `define()` constants, namespaces,
+through the shared resolution cascade (also behind `?importers`: direct, PHP `define()` constants, namespaces,
 members, Swift modules, Ruby Zeitwerk naming). Rows are the requested path's files; importers come from
 anywhere under the root, so `imports://pkg?rank=fan-in` counts `tests/` and `scripts/` importers of
 `pkg/core.py`. `&scope=path` resolves at the path itself (what `architecture://`, `overview://`, `pack` and
@@ -742,7 +715,7 @@ reveal 'imports://src?unused' | grep "api/"
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "imports",
   "source": "src",
   "source_type": "directory",
@@ -763,7 +736,7 @@ reveal 'imports://src?unused' | grep "api/"
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "unused_imports",
   "source": "src",
   "source_type": "directory",
@@ -793,7 +766,7 @@ referenced (`["b"]`). The decision is shared with rule I001
 (`reveal/analyzers/imports/unused.py`), so `?unused` and `check --select I001`
 flag the same lines: per-name for `from` imports, honoring `# noqa`,
 `// eslint-disable`, `// nolint` and `#[allow(unused)]`, and skipping star/glob
-imports, `TYPE_CHECKING` imports and `__init__.py` re-exports.
+imports, `TYPE_CHECKING` imports and names re-exported via `__all__` or an `__init__.py`.
 
 ### 3. circular_dependencies
 
@@ -802,7 +775,7 @@ imports, `TYPE_CHECKING` imports and `__init__.py` re-exports.
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "circular_dependencies",
   "source": "src",
   "source_type": "directory",
@@ -830,7 +803,7 @@ last node. `count` = number of distinct groups, not simple paths.
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "layer_violations",
   "source": "src",
   "source_type": "directory",
@@ -857,7 +830,7 @@ last node. `count` = number of distinct groups, not simple paths.
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "fan_in_ranking",
   "source": "src",
   "source_type": "directory",
@@ -889,7 +862,7 @@ last node. `count` = number of distinct groups, not simple paths.
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "entrypoints",
   "source": "src",
   "source_type": "directory",
@@ -917,7 +890,7 @@ last node. `count` = number of distinct groups, not simple paths.
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "components",
   "source": "src",
   "source_type": "directory",
@@ -953,7 +926,7 @@ last node. `count` = number of distinct groups, not simple paths.
 - `components[].cohesion` — `internal / (internal + outgoing)`; 1.0 = fully self-contained; 0.0 = all imports cross boundaries
 - `components[].top_bridge` — file in this directory with the most outgoing cross-boundary edges (null if none)
 
-**Scan root matters**: `imports://src?components` only groups files directly under the scan path. If your imports use absolute package paths (e.g. `from myapp.src.utils import x`), scan from the project root, not a subdirectory — otherwise the resolver can't match the import strings to files and edges are missed.
+**Scan root**: rows are the directories under the requested path (nested directories at any depth). Edges resolve at the project root (the default `&scope=root`), so scanning a subdirectory still sees absolute-package imports and importers from outside it. With `&scope=path` the subdirectory is the scan root and those edges are missed.
 
 ---
 
@@ -1021,7 +994,7 @@ git commit -m "refactor: Remove unused imports"
 reveal 'imports://src?circular'
 
 # Example output:
-# 1. src/models/user.py -> src/services/auth.py -> src/models/user.py
+# 1. 2 files  user.py, auth.py   (add &verbose for the edge sequence: cycle: user.py → auth.py → user.py)
 
 # 2. Analyze the cycle
 reveal imports://src/models/user.py
@@ -1274,11 +1247,11 @@ reveal 'imports://src?unused' --format=json | \
 
 # List unused imports from specific module
 reveal 'imports://src?unused' --format=json | \
-  jq -r '.unused[] | select(.file | startswith("src/api")) | "\(.file):\(.line) - \(.module)"'
+  jq -r '.unused[] | select(.file | startswith("api")) | "\(.file):\(.line) - \(.module)"'
 
 # Extract circular dependency chains
 reveal 'imports://src?circular' --format=json | \
-  jq -r '.cycles[] | join(" -> ")'
+  jq -r '.cycle_paths[] | join(" -> ")'
 ```
 
 ### Integration 2: Automated Cleanup Script
@@ -1300,7 +1273,9 @@ fi
 
 echo "Found $COUNT unused imports"
 
-# Group by file
+# Group by file (paths are relative to the scanned directory, so run from there: cd src)
+# Only whole-statement rows are safe to delete; partly-used `from x import a, b` rows keep their used names
+UNUSED=$(echo "$UNUSED" | jq -c '{unused: [.unused[] | select((.unused_names // .names) == .names)]}')
 FILES=$(echo "$UNUSED" | jq -r '.unused[] | .file' | sort -u)
 
 for file in $FILES; do
@@ -1460,7 +1435,7 @@ echo "" >> imports.dot
 echo "  // Edges (imports)" >> imports.dot
 
 # Add edges from cycles
-jq -r '.cycles[] | . as $cycle | range(0; length-1) | "\($cycle[.]) -> \($cycle[.+1])"' cycles.json | while read edge; do
+jq -r '.cycle_paths[] | . as $cycle | range(0; length-1) | "\($cycle[.]) -> \($cycle[.+1])"' cycles.json | while read edge; do
   echo "  $edge [color=red];" >> imports.dot
 done
 
@@ -1636,14 +1611,11 @@ cat > .reveal.yaml <<EOF
 architecture:
   layers:
     - name: presentation
-      paths: [src/api]
+      paths: [api]
+      allow_imports: [models]
     - name: domain
-      paths: [src/models]
-  rules:
-    - layer: presentation
-      can_import: [domain]
-    - layer: domain
-      can_import: []
+      paths: [models]
+      deny_imports: [api]
 EOF
 
 # Then run check
@@ -1694,13 +1666,12 @@ private builders outside the host request boundary retain their invocation memo.
 
 3. **Type-only imports**
    - `TYPE_CHECKING` imports are not counted as cycles
-   - Type-only imports may be flagged as unused (false positive)
-   - Workaround: Use `# noqa` comments
+   - `?unused` skips `TYPE_CHECKING` imports, names listed in `__all__` and lines marked `# noqa`
 
 4. **Layer violations**
    - Requires `.reveal.yaml` configuration
-   - Phase 4 feature (not fully implemented yet)
-   - Manual rule definition required
+   - Manual rule definition required (`allow_imports` / `deny_imports` per layer)
+   - Violations carry no line number
 
 5. **Performance**
    - Large codebases (10k+ files) can be slow
@@ -1787,9 +1758,9 @@ reveal 'imports://src?unused' --verbose | \
 
 ```bash
 # Find complex files with circular dependencies
-reveal 'ast://src/**/*.py?complexity>10' --format=json | \
-  jq -r '.matches[].path' | while read file; do
-    reveal imports://$file
+reveal 'ast://src?complexity>10' --format=json | \
+  jq -r '.results[].file' | sort -u | while read file; do
+    reveal "imports://src/$file"
   done
 ```
 
@@ -1798,9 +1769,9 @@ reveal 'ast://src/**/*.py?complexity>10' --format=json | \
 ## Related Documentation
 
 - **AST Adapter**: `AST_ADAPTER_GUIDE.md` - Code structure analysis (find complex code)
-- **Stats Adapter**: `STATS_ADAPTER_GUIDE.md` - Codebase metrics and hotspots
+- **Metrics Adapter**: [METRICS_ADAPTER_GUIDE.md](METRICS_ADAPTER_GUIDE.md) - Codebase metrics and hotspots
 - **Python Adapter**: `PYTHON_ADAPTER_GUIDE.md` - Runtime inspection
-- **Reveal Overview**: `../../README.md` - Full reveal documentation
+- **Reveal Overview**: `../../../README.md` - Full reveal documentation
 
 ---
 
@@ -1811,8 +1782,7 @@ reveal 'ast://src/**/*.py?complexity>10' --format=json | \
 **A**: Very accurate for most cases:
 - ✅ Detects: `import os` (never used)
 - ✅ Detects: `from typing import Dict` (never used)
-- ❌ False positive: Type-only imports (use `# noqa`)
-- ❌ False positive: Re-exports in `__all__` (handled correctly)
+- ✅ Skipped: `TYPE_CHECKING` imports, names listed in `__all__`, lines marked `# noqa`
 - ❌ False negative: Dynamic imports (`__import__("module")`)
 
 ### Q: Can I ignore specific unused imports?
@@ -1876,7 +1846,7 @@ reveal 'imports://services/cmd?unused'
 
 The practical effect: files loaded this way appear with lower fan-in than their true importer count, and show up as false positives in `?entrypoints`. This is a fundamental property of static analysis — every import analysis tool shares this limitation.
 
-If you know a file is dynamically loaded (not dead code), the output note flags it: `static imports only — files loaded via dynamic dispatch are false positives here.`
+Every `?entrypoints` run ends with a reminder: `Note: static imports only — files loaded via dynamic dispatch (importlib, require(), Class.forName, autoload, etc.) are false positives here.` It does not say which files those are.
 
 ### Q: How often should I check import health?
 

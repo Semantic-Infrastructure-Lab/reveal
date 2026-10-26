@@ -86,10 +86,19 @@ reveal metrics://./src
 
 **Output**:
 ```
-Statistics Summary: ./src
-  Files: 42 | Lines: 8,543 (6,234 code) | Functions: 187 | Classes: 34
-  Avg Complexity: 4.2 | Avg Quality: 78.5/100
+Codebase Statistics: ./src
+
+Files:      42
+Lines:      8,543 (6,234 code)
+Functions:  187
+Classes:    34
+Complexity: 4.20 (avg)
+Quality:    78.5/100
+
+Issue count (local_check_issues): file-local rules only -- 37 rules, set b10cb2ea; cross-file rules run under reveal check
 ```
+
+Text output is the aggregate only. Per-file detail (comments, empty lines, max/min complexity, the long and deeply nested function names) is in `--format=json` under `files[]`.
 
 ### Example 2: Identify Hotspots
 
@@ -107,18 +116,17 @@ reveal 'metrics://./src?hotspots=true'
 
 **Output**:
 ```
-Quality Hotspots (Top 10 worst files):
-  1. src/core.py (score: 45.2, hotspot: 85.3)
-     - Quality: 45.2/100
-     - Avg complexity: 12.5
-     - 3 function(s) >100 lines
-     - 2 function(s) depth >4
+Top Hotspots (10):
+  1. core.py
+     Quality: 45.2/100 | Score: 15.0
+     Issues: 3 long function(s), 2 deeply nested function(s)
 
-  2. src/legacy/parser.py (score: 52.1, hotspot: 67.8)
-     - Quality: 52.1/100
-     - Avg complexity: 15.2
-     - 5 function(s) >100 lines
+  2. legacy/parser.py
+     Quality: 52.1/100 | Score: 11.2
+     Issues: Touched 51 times in scope
 ```
+
+File paths are relative to the path you scanned (`./src`).
 
 ### Example 3: File-Level Statistics
 
@@ -130,14 +138,17 @@ reveal metrics://./src/app.py
 
 **Output**:
 ```
-File Statistics: src/app.py
-  Lines: 342 (289 code, 28 comments, 25 empty)
-  Elements: 12 functions, 3 classes, 8 imports
-  Complexity: avg 5.2, max 12, min 1
-  Quality: 82.5/100
-    - 1 long function (process_data: 120 lines)
-    - 0 deeply nested functions
+Codebase Statistics: src/app.py
+
+Files:      1
+Lines:      342 (289 code)
+Functions:  12
+Classes:    3
+Complexity: 5.20 (avg)
+Quality:    82.5/100
 ```
+
+A file target prints the same block with `Files: 1`. The comment/empty split, max/min complexity and long-function names are in `--format=json` under `files[0]`.
 
 ### Example 4: Filter by Complexity
 
@@ -216,7 +227,7 @@ Uses AST parsing for accurate analysis (not regex-based line counting).
 ### 3. Quality Scoring
 
 Quality score (0-100, higher is better) based on:
-- **Cyclomatic complexity** - Decision point count (if/for/while/try/and/or)
+- **Cyclomatic complexity** - Decision point count (if/for/while/except/and/or)
 - **Function length** - Long functions (>100 lines) are harder to understand
 - **Deep nesting** - Functions with >4 nesting levels
 - **Ratios** - Proportion of problematic functions in file
@@ -527,7 +538,7 @@ The summary aggregates only the files shown.
 
 **When**: Analyzing a specific file (path points to a file)
 
-**Structure**: Same as individual file entry in `files` array above, but returned as standalone result.
+**Structure**: Same envelope as `stats_summary`: `summary` for the one file and a one-element `files` array. The file's numbers are under `files[0]` (for example `.files[0].quality.score`), not at the top level.
 
 **Example**:
 ```bash
@@ -700,22 +711,14 @@ reveal 'metrics://./src?hotspots=true'
 
 **Result**:
 ```
-Quality Hotspots (Top 10 worst files):
-  1. src/core.py (score: 45.2, hotspot: 85.3)
-     - Quality: 45.2/100
-     - Avg complexity: 12.5
-     - 3 function(s) >100 lines
-     - 2 function(s) depth >4
+Top Hotspots (10):
+  1. core.py
+     Quality: 45.2/100 | Score: 15.0
+     Issues: 3 long function(s), 2 deeply nested function(s)
 
-  2. src/legacy/parser.py (score: 52.1, hotspot: 67.8)
-     - Quality: 52.1/100
-     - Avg complexity: 15.2
-     - 5 function(s) >100 lines
-
-  3. src/utils/converter.py (score: 58.4, hotspot: 42.6)
-     - Quality: 58.4/100
-     - Avg complexity: 18.7
-     - 1 function(s) >100 lines
+  2. legacy/parser.py
+     Quality: 52.1/100 | Score: 11.2
+     Issues: Touched 51 times in scope
 ```
 
 ### Using Hotspots
@@ -723,7 +726,7 @@ Quality Hotspots (Top 10 worst files):
 **Workflow**:
 1. **Identify** hotspots: `reveal hotspots ./src`
 2. **Inspect** top file: `reveal metrics://./src/core.py` (detailed stats)
-3. **Analyze** structure: `reveal 'ast://./src/core.py?functions'` (see functions)
+3. **Analyze** structure: `reveal 'ast://./src/core.py?type=function'` (see functions)
 4. **Review** code: `reveal ./src/core.py` (read implementation)
 5. **Refactor** prioritizing highest hotspot scores
 
@@ -754,7 +757,7 @@ Quality Hotspots (Top 10 worst files):
 
 4. **Inspect code structure**:
    ```bash
-   reveal 'ast://./src/core.py?functions'
+   reveal 'ast://./src/core.py?type=function'
    ```
 
 5. **Review implementation**:
@@ -919,7 +922,7 @@ Quality Hotspots (Top 10 worst files):
 3. **Identify high-risk changes**:
    ```bash
    # Extract quality scores
-   jq -r '.quality.score' changed-stats.json | sort -n | head -5
+   jq -r '.files[0].quality.score' changed-stats.json | sort -n | head -5
    ```
 
 4. **Prioritize review**:
@@ -948,7 +951,7 @@ Quality Hotspots (Top 10 worst files):
 3. **Refactor one file**:
    ```bash
    # Pick worst file
-   FILE=$(jq -r '.hotspots[0].file' hotspots-baseline.json)
+   FILE="./src/$(jq -r '.hotspots[0].file' hotspots-baseline.json)"   # hotspot paths are relative to the scanned path
 
    # Get detailed stats
    reveal metrics://"$FILE"
@@ -964,7 +967,7 @@ Quality Hotspots (Top 10 worst files):
    ```bash
    # Before/after comparison
    BEFORE=$(jq --arg f "$FILE" '.files[] | select(.file==$f) | .quality.score' hotspots-baseline.json)
-   AFTER=$(reveal metrics://"$FILE" --format=json | jq '.quality.score')
+   AFTER=$(reveal metrics://"$FILE" --format=json | jq '.files[0].quality.score')
 
    echo "Quality improved: $BEFORE → $AFTER"
    ```
@@ -1192,7 +1195,7 @@ for file in $FILES; do
   fi
 
   # Extract quality score
-  QUALITY=$(echo $STATS | jq '.quality.score')
+  QUALITY=$(echo $STATS | jq '.files[0].quality.score')
 
   # Fail if quality <60
   if (( $(echo "$QUALITY < 60" | bc -l) )); then
@@ -1329,7 +1332,7 @@ reveal metrics://./src/core
 
 The metrics adapter supports **custom quality thresholds** via `.reveal/stats-quality.yaml`:
 
-**Location**: `.reveal/stats-quality.yaml` (project root)
+**Location**: `<scanned directory>/.reveal/stats-quality.yaml` (for a file, its directory), else `~/.config/reveal/stats-quality.yaml`. It is not searched upward: `reveal metrics://./src` reads `./src/.reveal/stats-quality.yaml`, not `./.reveal/stats-quality.yaml`.
 
 **Default config** (if file doesn't exist):
 ```yaml
@@ -1404,7 +1407,7 @@ penalties:
 
 ### Using Config
 
-Config is **automatically loaded** from `.reveal/stats-quality.yaml` if present:
+Config is **automatically loaded** from the scanned directory's `.reveal/stats-quality.yaml` if present:
 
 ```bash
 # Uses custom config if exists, otherwise defaults
@@ -1423,14 +1426,13 @@ No CLI flag needed - config is detected automatically.
 - Python, JavaScript, TypeScript, Go, Rust, Java, C/C++, C#, Ruby, PHP
 
 **Not supported**:
-- Assembly, shell scripts, SQL, HTML/CSS, configuration files
-- These are skipped during analysis (excluded from metrics)
+- Assembly, shell scripts, SQL, HTML/CSS (skipped during analysis)
+
+Every file with a registered analyzer is counted, including Markdown, YAML/TOML and notebooks; they add lines and a quality score but no functions. `code_only=true` drops data/config files (YAML, JSON, TOML), not Markdown. `.ipynb` is counted as raw text with 0 functions.
 
 ### 2. Complexity Estimation
 
-**Cyclomatic complexity** is estimated using decision point counting:
-- Counts: `if`, `elif`, `else`, `for`, `while`, `and`, `or`, `try`, `except`, `case`, `when`
-- Heuristic-based (not full AST analysis)
+**Cyclomatic complexity** comes from the tree-sitter AST: 1 plus one per decision node (`if`/`elif`, loops, `except`/`catch` arms, `case`/match arms, `and`/`or`, ternaries). `else` and `try` add nothing. Languages without a tree-sitter complexity fall back to a text heuristic.
 - May differ slightly from tools like `mccabe` or `radon`
 
 **Limitation**: Cannot detect all complexity forms (e.g., nested comprehensions, lambda complexity).
@@ -1500,10 +1502,10 @@ reveal metrics://./
 reveal metrics://./src/file.py
 
 # Check issues section
-reveal metrics://./src/file.py --format=json | jq '.issues'
+reveal metrics://./src/file.py --format=json | jq '.files[0].issues'
 
 # Review specific functions
-reveal 'ast://./src/file.py?functions'
+reveal 'ast://./src/file.py?type=function'
 ```
 
 ### Issue 3: Analysis too slow
@@ -1539,14 +1541,12 @@ reveal 'metrics://./src?lines>100'
 
 **Solution**:
 ```bash
-# ❌ Bad: Shell interprets >
+# ❌ Bad: without quotes the shell treats > as a redirect (it writes a file named 100)
+
+# ✅ Good: quote the URI (single or double quotes)
 reveal 'metrics://./src?lines>100'
 
-# ✅ Good: Quote the URI
-reveal "metrics://./src?lines>100"
-
-# ✅ Alternative: Escape >
-reveal 'metrics://./src?lines\>100'
+# ❌ A backslash does not help: 'lines\>100' matches 0 files, silently
 ```
 
 ### Issue 5: Hotspots missing
@@ -1557,7 +1557,7 @@ reveal 'metrics://./src?hotspots=true'
 # No hotspots section in output
 ```
 
-**Cause**: No files have quality issues (all scores >70)
+**Cause**: No file scores above 0 on any hotspot factor (quality < 70, average complexity > 10, a long or deeply nested function, or > 20 commits in scope); the section is then omitted
 
 **Solution**:
 ```bash
@@ -1629,7 +1629,7 @@ jq -s '.[0].summary.avg_complexity as $main | .[1].summary.avg_complexity as $fe
 
 **Files with extreme complexity**:
 ```bash
-# 3× standard deviation above mean
+# 3× the mean
 reveal metrics://./src --format=json | \
   jq '.files | map(.complexity.average) | add / length as $mean | map(select(. > $mean * 3))'
 ```
@@ -1743,7 +1743,7 @@ CHANGED=$(git log --since="1 month ago" --name-only --pretty=format: | sort -u |
 
 # Analyze each file
 for file in $CHANGED; do
-  QUALITY=$(reveal metrics://"$file" --format=json 2>/dev/null | jq '.quality.score')
+  QUALITY=$(reveal metrics://"$file" --format=json 2>/dev/null | jq '.files[0].quality.score')
   if [ "$QUALITY" != "null" ] && (( $(echo "$QUALITY < 70" | bc -l) )); then
     echo "⚠️  $file - Quality: $QUALITY"
   fi
@@ -1904,7 +1904,7 @@ jq -s '.[0].summary as $a | .[1].summary as $b | {
 
 **A**: Yes! Stats adapter is designed for CI/CD:
 - **JSON output**: `--format=json` for machine parsing
-- **Exit codes**: Always 0 (stats are informational, not errors)
+- **Exit codes**: 0 when every file was counted, 2 for a rejected request (unknown view, bad `top`, missing path, `--fail-on`), 3 when files were lost or not analyzed. There is no findings gate: a low score never fails the run.
 - **Deterministic**: Same code → same stats
 - **Fast**: 1000 files analyzed in ~5 seconds
 
@@ -1912,7 +1912,7 @@ See [Workflow 2: CI/CD Quality Gate](#workflow-2-cicd-quality-gate) for examples
 
 ### Q9: How do I customize quality thresholds?
 
-**A**: Create `.reveal/stats-quality.yaml` in project root:
+**A**: Create `.reveal/stats-quality.yaml` in the directory you scan (`./src/.reveal/` for `metrics://./src`):
 ```yaml
 thresholds:
   complexity_target: 15    # Custom target
@@ -1954,7 +1954,7 @@ For **duplication detection**, use specialized tools like:
 **A**: Stats adapter shows **aggregate metrics** (file-level, directory-level). For **function-level details**, use:
 ```bash
 # Function-level structure
-reveal 'ast://./src/file.py?functions'
+reveal 'ast://./src/file.py?type=function'
 
 # Then manually inspect specific functions
 reveal ./src/file.py
@@ -1992,7 +1992,7 @@ git commit -m "chore: weekly stats snapshot"
 
 ### Q15: Can stats analyze Jupyter notebooks (.ipynb)?
 
-**A**: Not directly. Stats analyzer looks for `.py` files. Options:
+**A**: Not directly. A notebook is counted as raw text with 0 functions. Options:
 1. **Export to .py**: `jupyter nbconvert --to script notebook.ipynb`
 2. **Analyze exported .py**: `reveal metrics://notebook.py`
 
