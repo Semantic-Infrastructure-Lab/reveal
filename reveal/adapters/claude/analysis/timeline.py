@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Any
 
-from .messages import _content_to_blocks, _is_real_prompt
+from .prompts import _content_to_blocks, _is_real_prompt
 
 
 def _create_tool_result_event(i: int, timestamp: str, content: Dict) -> Dict[str, Any]:
