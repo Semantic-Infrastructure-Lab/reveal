@@ -193,7 +193,7 @@ reveal diff://git://main/.:git://HEAD/. --format json | \
   jq '.diff.functions[] | select(.complexity_delta > 5)'
 ```
 
-**What the two commands give you:** `check --changed` runs the quality rules on the changed files, and the `diff://` adapter reports the structural change under the same exit codes. Every changed function carries `complexity_before`, `complexity_after`, and `complexity_delta`.
+**What the two commands give you:** `check --changed` runs the quality rules on the changed files, and the `diff://` adapter reports the structural change (exit 0 whether or not anything changed; 1 on a bad ref or path). Every changed function carries `complexity_before`, `complexity_after`, and `complexity_delta`.
 
 ---
 
@@ -334,8 +334,7 @@ reveal env://DATABASE_URL
 
 ```bash
 # Use reveal to extract reveal's own implementation (plain file+element syntax,
-# run from a reveal checkout — reveal://<path> <element> only shows the overview,
-# it does not extract elements)
+# or from anywhere: reveal:// paths are relative to the installed package)
 reveal reveal/rules/links/L001.py _extract_anchors_from_markdown
 
 # Extract a class definition
@@ -654,14 +653,14 @@ reveal 'imports://src/models?importers'
 # Most-imported (high-coupling) modules — change these carefully
 reveal 'imports://src?rank=fan-in&top=10'
 
-# Full reverse dependency graph (pipe to Graphviz; DOT has no imports:// form yet)
-reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
+# Full reverse dependency graph (pipe to Graphviz)
+reveal 'imports://src?importers&format=dot' | dot -Tsvg > deps.svg
 ```
 
 **Key use cases:**
 - **Impact analysis before refactoring** — run `imports://src/utils.py?importers` to see every importer before touching a module
 - **Safe deletion** — verify `count: 0` before removing a module
-- **Coupling audit** — `?top=N` ranks modules by fan-in; high fan-in = high blast radius if changed
+- **Coupling audit** — `?rank=fan-in&top=N` ranks modules by fan-in; high fan-in = high blast radius if changed
 
 | Adapter | Question | Direction |
 |---------|----------|-----------|
@@ -1192,7 +1191,7 @@ reveal 'claude://?search=deployment&since=2026-03-01'
 reveal 'claude://search/migration'
 ```
 
-**Why:** With 2,000+ sessions, scanning manually doesn't scale. `?search=` pre-filters with parallel byte-scan (~0.7s for 2,700 files).
+**Why:** With 2,000+ sessions, scanning manually doesn't scale. `?search=` pre-filters with a parallel byte scan; add `since=` to bound the scan on large histories.
 
 ### Track file history across sessions
 
@@ -1284,13 +1283,13 @@ git diff --name-only origin/main | reveal --stdin --check --format=grep
 
 ```bash
 # Extract function info
-reveal src/app.py --format=json | jq '.functions'
+reveal src/app.py --format=json | jq '.structure.functions'
 
 # Find large functions
-reveal src/ --format=json | jq '.functions[] | select(.line_count > 100)'
+reveal 'ast://src?type=function&lines>100' --format=json | jq '.results[] | {file, name, line_count}'
 
 # Get complexity metrics
-reveal metrics://src/ --format=json | jq '.quality_score'
+reveal metrics://src/ --format=json | jq '.summary.avg_quality_score'
 ```
 
 ### Batch operations
@@ -1321,7 +1320,7 @@ grep -h "server_name" /etc/nginx/sites-enabled/* | awk '{print $2}' | \
 
 # Batch SSL health checks with JSON output
 cat domains.txt | sed 's/^/ssl:\/\//' | reveal --stdin --format=json | \
-  jq 'select(.status.health != "healthy")'
+  jq 'select(.health_status != "HEALTHY")'
 ```
 
 ### Extract-then-batch pipeline
@@ -1351,7 +1350,7 @@ reveal check src/ --severity high
 
 # Full pipeline: extract domains → batch SSL → JSON → filter failures
 reveal nginx.conf --extract domains | sed 's/^/ssl:\/\//' | \
-  reveal --stdin --format=json | jq 'select(.status.health != "healthy")'
+  reveal --stdin --format=json | jq 'select(.health_status != "HEALTHY")'
 ```
 
 ### Clipboard integration
@@ -1374,13 +1373,13 @@ reveal app.py --format=json
 reveal app.py --format=json | jq '.structure.functions | length'
 reveal app.py --format=json | jq '.structure.imports[].content'
 
-# Typed JSON (with relationships)
+# Typed JSON (containment tree: classes -> methods, with per-node category and depth)
 reveal app.py --format=typed
 
 # Grep-compatible output
 reveal app.py --format=grep
-# Output: file:line:content
-# Perfect for: reveal ... | grep pattern | cut -d: -f1-2
+# Output: a File: header and section headings, then one file:line:name(signature) row per element
+# Filter the rows with: reveal ... | grep -E '^[^ ]+:[0-9]+:' | cut -d: -f1-2
 ```
 
 ---
@@ -1419,7 +1418,7 @@ reveal 'ast://./src?complexity>10'  # Just complex ones (~100 tokens)
 ### Semantic slicing
 
 ```bash
-# First 5 functions only
+# First 5 elements of each section (imports, functions, classes)
 reveal large_module.py --head 5
 
 # Last 3 functions (bugs cluster at the bottom!)
@@ -1478,10 +1477,10 @@ reveal --list-supported
 reveal nginx.conf
 
 # Filter output to a single domain (essential for large cPanel user configs)
-reveal /etc/nginx/conf.d/users/USERNAME.conf --domain example.com
+reveal /etc/nginx/conf.d/users/USERNAME.conf --server-name example.com
 
 # Extract specific server block by name
-reveal nginx.conf server_myapp
+reveal nginx.conf example.com   # a server block, named by its server_name
 
 # Find all upstreams
 reveal nginx.conf --format=json | jq '.structure.upstreams'
@@ -1494,6 +1493,7 @@ reveal check /etc/nginx/nginx.conf
 # N004: ACME challenge path inconsistency (cert renewal failures)
 # N005: Timeout/buffer values outside safe ranges
 # N006: send_timeout too short for client_max_body_size (HIGH — silent uploads)
+# N007-N012: OCSP stapling, HSTS, server_tokens, X-XSS-Protection, http2, rate limiting (reveal --rules lists all)
 
 # Large generated configs collapse repeated rules by default
 reveal check ea-nginx.conf          # N003 x2,685 shown as one summary line
@@ -1567,14 +1567,14 @@ reveal 'git://src/module_b.py?type=history'
 ```
 
 ### Pattern 3: The Config Drift Detector
-**Combine**: `json://` → `diff://` → `env://`
+**Combine**: `json://` → shell `diff` → `env://`
 
 ```bash
 # 1. Understand config structure
 reveal 'json://config.json?schema'
 
 # 2. Compare environments
-reveal diff://json://config.dev.json:json://config.prod.json
+diff <(reveal 'json://config.dev.json?flatten') <(reveal 'json://config.prod.json?flatten')
 
 # 3. Check environment variables
 reveal env://
@@ -1584,7 +1584,7 @@ reveal env://
 **Combine**: `ast://` → `git://` → `env://`
 
 ```bash
-# 1. Check for code-level security issues (B001-B006, S701)
+# 1. Check for code-level security issues (B001-B006, S001, S701)
 reveal check src/ --select B,S
 
 # 2. Who wrote insecure code?
@@ -1631,7 +1631,7 @@ reveal src/hotspot.py --outline
 reveal src/hotspot.py complex_function
 ```
 
-~1,000 tokens total vs ~500,000 for full file reads. **500x improvement.**
+Each layer costs hundreds of tokens instead of whole files; measured savings are typically 3.9-15x (`reveal help://benchmarks`).
 
 ### Strategy 2: Query-Driven Exploration
 
@@ -1652,10 +1652,10 @@ reveal diff://v1.py:v2.py
 ### Strategy 3: Semantic Slicing
 
 ```bash
-# First 10 functions (entry points)
+# First 10 elements of each section (entry points)
 reveal app.py --head 10
 
-# Last 5 functions (utilities)
+# Last 5 elements of each section (utilities)
 reveal app.py --tail 5
 ```
 
@@ -1802,18 +1802,23 @@ reveal python://doctor                   # Python health check
 | **S** | Security vulnerabilities |
 | **C** | Complexity metrics |
 | **D** | Duplicate code detection |
-| **E** | Errors and syntax issues |
+| **E** | Style (line length) |
 | **F** | Frontmatter validation |
 | **I** | Import analysis |
 | **L** | Link validation |
 | **M** | Maintainability issues |
 | **N** | Nginx configuration |
-| **V** | Validation rules |
+| **R** | Refactoring signals (argument count) |
+| **T** | Type annotations |
+| **U** | URL hygiene |
+| **V** | Adapter authoring (get_help, output contract) |
+
+Run `reveal --rules` for the live list.
 
 ### Performance tips
 
 ```bash
-# Fast mode (skip line counting, ~6x faster)
+# Fast mode (skip line counting; helps on very large or cold trees)
 reveal src/ --fast
 
 # Per-directory limit (stops node_modules from dominating)

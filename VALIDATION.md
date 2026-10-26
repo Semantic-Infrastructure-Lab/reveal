@@ -12,8 +12,9 @@ occasionally reports "nothing imports this" about a load-bearing module is
 worse than no tool at all, because it looks like a confident, checked answer.
 This document is the audit trail proving how that failure mode was found,
 measured, and closed — with the corpus, oracle method and figures for each
-loop, so a result can be challenged rather than taken on faith. The harness
-scripts themselves live in the maintainers' workspace and are not published
+loop, so a result can be challenged rather than taken on faith. The per-language
+harnesses behind the historical loops live in the maintainers' workspace and are not published; the scheduled
+recall gate, corpus fetcher and rule-precision runner are published under `scripts/`
 (see [Re-running this yourself](#re-running-this-yourself)).
 
 Three signals have been through this treatment so far, each as its own
@@ -48,7 +49,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | ✅ 96.26%⁴⁴ (assimp) | **Measured** |
 | C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | ✅ 89.52%→100%⁴⁶ (Redis, BACK-756 open — grammar bug, not fixable in reveal) | **Measured** |
 | Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | ✅ 100.00%⁴⁷ (Kong, BACK-757/758 fixed) | **Measured** |
-| Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | ✅ 84.9%³¹ (AppFlowy, bare `File`/`Directory` declined) | ✅ 100%→97.55%⁴⁹ (AppFlowy, BACK-760/761/763/764/765/766/767/769 fixed; BACK-768 open — grammar bug, not fixable in reveal) | **Measured** |
+| Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | ✅ 84.9%³¹ (AppFlowy, bare `File`/`Directory` declined) | ✅ 100%→97.55%⁴⁹ (AppFlowy, BACK-760/761/763/764/765/766/767/769 fixed; BACK-768 since fixed) | **Measured** |
 | GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | ✅ 69.3%³² (Pixelorama, bare `print`/`request` declined) | ✅ 100.00%⁴⁸ (Pixelorama, BACK-759 fixed) | **Measured** |
 | Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | ✅ 98.4%²⁹ (TigerBeetle) | ✅ 92.28%→99.98% (ghostty, BACK-753/754/755 fixed) | **Measured** |
 | TSX, plain JS | ✅ 100%⁷ (Excalidraw, three.js), 100%²⁵ (react-router) | ✅ 98.4%³³ (Excalidraw) | ✅ 100% (three.js + Excalidraw, BACK-751/752 fixed) | **Measured** |
@@ -1052,8 +1053,8 @@ the sampled pool as a URL-encoding edge case but verified faithful via direct
 `calls://` bugs) mirrored established precedent: secondary constructors named
 `this`, and primary-constructor parameter-default calls not counted as caller
 scopes (the Kotlin-oracle rule). Also surfaced **BACK-748**, a separate,
-broader bug filed not fixed: `calls://` forward-lookup (`?callees=`) and
-`--rank` apply the Python-builtins filter to *all* languages, silently dropping
+broader bug (since fixed, `402e73d5`): `calls://` forward-lookup (`?callees=`) and
+`?rank=callers` applied the Python-builtins filter to *all* languages, silently dropping
 `.map`/`.filter`/`.zip`/`.min`/`.sum` etc. in Scala/Java/Ruby/…; the
 reverse-lookup path this measurement uses is unaffected.
 
@@ -1587,8 +1588,9 @@ mechanism 3, but large enough to name and watch rather than average away.
 Both commands count an importer by the rule the gate's oracles use: every static import
 except `TYPE_CHECKING` ones, function-level imports and tests included (the python-ast oracle
 recurses into function bodies). Each answer prints its rule, a `Rule:` line in text and
-`edge_rule` in JSON. They differ in scope: `imports://<dir>` sees only importers inside
-`<dir>`, `depends://<file>` scans from the project root. `imports://<dir>?rank=fan-in&lazy=exclude`
+`edge_rule` in JSON. At the time they differed in scope (`imports://<dir>` saw only importers inside
+`<dir>`; `depends://<file>`, now retired for `imports://<file>?importers`, scanned from the project root). Both now
+resolve importers from the project scan root and `<dir>` only limits which files are listed as rows. `imports://<dir>?rank=fan-in&lazy=exclude`
 is the architecture view (load-time edges only); `?circular` uses it by default, because a
 function-level import runs after every module has loaded and cannot close an import-time
 cycle. Python, JavaScript, TypeScript and TSX record where an import sits; for other languages
@@ -1999,9 +2001,9 @@ assertions (`assertThat(caught).isEqualTo(...)`, `expect(e).toBeInstanceOf(Error
 into responses, callbacks and `postMessage`, and console calls. None of the 17 false positives Sprint 1
 removed from Celery, Guava, three.js `src/` and Excalidraw returned, with no corpus-specific name in the
 rule; across the full pinned corpora one Sprint 1 removal returned, `TDSLoader.js:836`
-(`this.debugMessage(e + ...)`, a debug-level log, which the review read as a true swallow). Known
-remaining gaps are tracked in BACK-1836 (Python name-only and assertion-shape exemptions, return-position
-payloads in JavaScript and Java such as `return err` and `return { error: err }`, JavaScript `err()`).
+(`this.debugMessage(e + ...)`, a debug-level log, which the review read as a true swallow). BACK-1836
+(closed) later made JS/TS/Java `return err`, `[null, err]` and `{ error: err }` count as forwarding and stopped
+counting a bare `err()` as a report; the per-corpus counts here predate it.
 PHP, C# and Kotlin have no forwarding recognition at all, so their synthetic broad catches producing one
 finding each is not a measurement of the forwarding direction (BACK-1698).
 
@@ -2212,8 +2214,8 @@ not); a baseline or measurement without the field is listed under `notes` in the
 not compared. Precision here covers fan-in to oracle-listed targets only; edges to
 other targets are outside its denominator (nine such Celery edges, one ripgrep and
 one curl edge in the reviewed snapshot, none in Go). The Go file projection is
-`depends://<file>`'s package view. One knob is still set on the adapter class rather than per
-request: VS Code's 20,000-file scan cap, which `depends://` has no query parameter for. Missing
+`imports://<file>?importers`' package view. VS Code's 20,000-file scan cap is passed per
+request as `&max_files=` from the manifest's `scan_file_cap`. Missing
 GCC, missing corpora, changed populations, zero measurements, a file the Python oracle
 cannot parse, an ambiguous Java type or metric drops fail loudly. `--corpus ID` measures
 a subset against its own baseline rows; `--write-baseline` is for reviewed local
@@ -2249,7 +2251,7 @@ What you can reproduce today:
 - **The method.** Each row of the tables above names the oracle mechanism (a from-scratch
   regex/AST scan, a build-system manifest, a real preprocessor or toolchain) and the sample
   design, so a result can be re-derived and challenged line by line.
-- **The reveal side.** The measured commands (`depends://`, `imports://`, `--sideeffects`,
+- **The reveal side.** The measured commands (`imports://<file>?importers`, formerly `depends://`; `imports://`, `--sideeffects`,
   `--boundary`, `calls://`) are ordinary reveal invocations; run them on the pinned corpus
   and compare against your own oracle.
 
@@ -2281,9 +2283,9 @@ TypeScript, Go, Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX,
 Zig, C, Lua, GDScript, and Dart — the eighteenth and final language, see
 [Cross-File Call-Graph Recall](#cross-file-call-graph-recall)) — all now
 clean or fixed-and-reverified, save a handful of documented,
-upstream-grammar-level residuals (Kotlin's BACK-738, Swift's BACK-742, C++'s
-BACK-745, C's BACK-756, and Dart's BACK-768), none fixable in reveal's Python
-extraction layer. This closes the full calls:// recall sweep BACK-730 opened.
+upstream-grammar-level residuals (Swift's BACK-742 and C's BACK-756; Kotlin's
+BACK-738, C++'s BACK-745 and Dart's BACK-768 have since been fixed in reveal's Python
+extraction layer). This closes the full calls:// recall sweep BACK-730 opened.
 The historical surface/contracts extension is described below.
 
 **Historical update (calm-thaw-0724): `surface`/`contracts` recall completed
