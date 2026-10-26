@@ -26,8 +26,7 @@ from ..analyzers.imports import service as import_analysis
 from ..utils.entry_points import entry_point_filter
 from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
-from ..utils.path_utils import (as_spelled, display_name_for_path, to_posix,
-                               traversal_failed_warning)
+from ..utils.path_utils import as_spelled, display_name_for_path, traversal_failed_warning, failure_of
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..rendering.adapters.overview import (  # noqa: F401 -- the render helpers are re-exported
     OverviewRenderer,
@@ -318,7 +317,7 @@ def _with_scope_warning(meta: Optional[RevealMeta], failures: List[OSError],
                         path: Path) -> Optional[RevealMeta]:
     """Append optional census disclosure only after required-source validation."""
     warning = traversal_failed_warning([
-        (to_posix(exc.filename) if exc.filename else None, f'{type(exc).__name__}: {exc}')
+        failure_of(exc)
         for exc in failures], path)
     if warning:
         warning['message'] = 'Independent scope/language census is incomplete; ' + warning['message']

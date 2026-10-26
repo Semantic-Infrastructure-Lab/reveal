@@ -745,7 +745,7 @@ def _check_tls_version(host: str, port: int, timeout: float) -> Tuple[Dict[str, 
                 'cipher_name': cipher_name, 'cipher_bits': cipher_bits}, failed
     except (OSError, ValueError) as e:  # connect/handshake errors, or a bad hostname
         return {'name': 'tls_version', 'status': 'warning', 'value': 'Unknown',
-                'threshold': 'TLS 1.2+', 'message': f'Could not determine TLS version: {e}',
+                'threshold': 'TLS 1.2+', 'message': f'Could not determine TLS version: {e}',  # boundary-ok: oserror-cause -- a connect or handshake error names a host and port, never a filesystem path
                 'severity': 'low'}, False
 
 

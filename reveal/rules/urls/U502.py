@@ -18,6 +18,7 @@ from ..base_mixins import toml_table
 from ...registry import extensions_for_languages
 from ...utils.request_cache import register_request_cache
 from reveal.utils.lines import split_lines
+from ...utils.path_utils import failure_of
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +180,7 @@ class U502(BaseRule):
             logger.warning(f"Error reading {pyproject_path}: {e}")
             self.unavailable(
                 f"pyproject.toml could not be read, URLs not compared: "
-                f"{type(e).__name__}: {e}", str(pyproject_path))
+                f"{failure_of(e).cause}", str(pyproject_path))
             return urls
 
         # Check [project.urls] section and [tool.poetry.urls] (Poetry projects)

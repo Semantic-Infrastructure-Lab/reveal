@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
+from .path_utils import failure_of
+
 
 def git_range_error(git_range: str) -> Optional[str]:
     """Why `git_range` can't be reviewed, or None. Without this an unknown
@@ -26,7 +28,7 @@ def git_range_error(git_range: str) -> Optional[str]:
                    f'{rev}^{{commit}}').returncode != 0:
                 return f"unknown revision: {rev!r}"
     except (OSError, subprocess.SubprocessError) as e:
-        return f"could not run git: {e}"
+        return f"could not run git: {failure_of(e).cause}"
     return None
 
 
@@ -60,5 +62,5 @@ def changed_files(git_range: str) -> List[Path]:
                 files.append(candidate.resolve())
         return files
     except (OSError, subprocess.SubprocessError, ValueError) as e:
-        print(f"Warning: could not determine changed files for {git_range!r}: {e}", file=sys.stderr)  # boundary-ok: print -- the git failure line, moved with the helper from review.py
+        print(f"Warning: could not determine changed files for {git_range!r}: {failure_of(e).cause}", file=sys.stderr)  # boundary-ok: print -- the git failure line, moved with the helper from review.py
         return []

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
+from ...utils.path_utils import failure_of
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ class M105(BaseRule):
                 logger.warning(f"Could not read {source}: {e}")
                 self.unavailable(
                     f"wiring source could not be read, handlers' wiring unchecked against it: "
-                    f"{type(e).__name__}: {e}", str(source))
+                    f"{failure_of(e).cause}", str(source))
         main_content = '\n'.join(main_content_parts)
         if not main_content:
             return detections

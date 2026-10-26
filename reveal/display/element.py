@@ -17,6 +17,7 @@ from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_bre
 from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import to_posix
 from reveal.utils.results import note_truncation, slice_items, truncations_of
+from ..utils.path_utils import failure_of
 
 if TYPE_CHECKING:
     from reveal.analyzers.markdown import MarkdownAnalyzer
@@ -787,7 +788,7 @@ def _extract_line_range(analyzer, start_line: int, end_line: int):
             'source': source,
         }
     except (OSError, ValueError) as e:  # unreadable or not UTF-8
-        print(f"Warning: could not extract lines {start_line}-{end_line} from {to_posix(analyzer.path)}: {e}",
+        print(f"Warning: could not extract lines {start_line}-{end_line} from {to_posix(analyzer.path)}: {failure_of(e).cause}",
               file=sys.stderr)
         return None
 
@@ -953,7 +954,7 @@ def _read_lines(path, start_line, end_line):
             return None
         return ''.join(lines[start_line - 1:end_line]).rstrip('\n')
     except (OSError, ValueError) as e:  # unreadable or not UTF-8
-        print(f"Warning: could not read lines {start_line}-{end_line} from {to_posix(path)}: {e}", file=sys.stderr)
+        print(f"Warning: could not read lines {start_line}-{end_line} from {to_posix(path)}: {failure_of(e).cause}", file=sys.stderr)
         return None
 
 

@@ -35,9 +35,9 @@ from ..utils.path_utils import (
     hidden_entries_warning,
     is_test_dir,
     is_test_file_name,
-    to_posix,
     traversal_failed_warning,
     walk_tree,
+    failure_of,
 )
 from ..utils.query_parser import (
     CliBinding, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema,
@@ -49,6 +49,7 @@ from .ast.nav_surface_common import ROUTE_CLASSES_KEY, resolve_inherited_route_p
 from .ast.nav_surface_rails import resolve_engine_mounts
 from ..utils.results import ResultBuilder
 from ..defaults import TEST_DIR_PREFIX as _TEST_DIR_PREFIX
+from ..reveal_types import PathFailure
 
 # Test file patterns pruned by --source-only
 
@@ -194,8 +195,8 @@ def _rollup_by_dir(surfaces: Dict[str, List[Dict[str, Any]]], depth: int = 0) ->
     return sorted(rows, key=lambda r: (-r['total'], r['dir']))
 
 
-def _record_traversal_error(failures: List[Tuple[Optional[str], str]], error: OSError) -> None:
-    failures.append((to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
+def _record_traversal_error(failures: List[PathFailure], error: OSError) -> None:
+    failures.append(failure_of(error))
 
 
 def _surface_row_valid(row: Any) -> bool:
@@ -258,8 +259,8 @@ def _scan_collected_surface(
 
 
 def _surface_discovery_error(
-    surfaces: Dict[str, List[Dict[str, Any]]], source_failures: List[Tuple[Optional[str], str]],
-    census_failures: List[Tuple[Optional[str], str]], malformed: Optional[str],
+    surfaces: Dict[str, List[Dict[str, Any]]], source_failures: List[PathFailure],
+    census_failures: List[PathFailure], malformed: Optional[str],
 ) -> Optional[str]:
     if not source_failures and not census_failures:
         return None
@@ -272,7 +273,7 @@ def _surface_discovery_error(
 
 
 def _surface_traversal_warnings(
-    source_failures: List[Tuple[Optional[str], str]], census_failures: List[Tuple[Optional[str], str]], path: Path,
+    source_failures: List[PathFailure], census_failures: List[PathFailure], path: Path,
 ) -> List[WarningEntry]:
     warnings: List[WarningEntry] = []
     for failures, attribution in (
@@ -289,8 +290,8 @@ def _surface_traversal_warnings(
 def _scan_surface(
     path: Path, type_filter: str = '', source_only: bool = False, by: str = '', depth: int = 0,
 ) -> Dict[str, Any]:
-    source_failures: List[Tuple[Optional[str], str]] = []
-    census_failures: List[Tuple[Optional[str], str]] = []
+    source_failures: List[PathFailure] = []
+    census_failures: List[PathFailure] = []
     collected = _collect_source_files(path, source_only=source_only,
                                      on_error=partial(_record_traversal_error, source_failures))
 

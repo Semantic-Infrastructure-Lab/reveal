@@ -13,7 +13,7 @@ Adapter-specific data fields are spread at the top level via result.update(data)
 so RevealResult is a minimum contract, not an exhaustive schema.
 """
 
-from typing import Any, Dict, List, TypedDict
+from typing import Any, Dict, List, NamedTuple, Optional, TypedDict
 
 
 # Current Output Contract version emitted by adapters/analyzers that opt into
@@ -162,3 +162,12 @@ class VarFlowEvent(TypedDict, total=False):
     line: int
     node: Any
     text: str
+
+
+class PathFailure(NamedTuple):
+    """One filesystem failure as ``(path, cause)``: the shape every traversal and read loss is recorded in
+    and ``traversal_failed_warning`` consumes (BACK-2249). ``path`` is the failing path as a ``/`` string
+    (``None`` when the error names none); ``cause`` never contains it, so the consumer's relative spelling
+    of ``path`` is the only spelling of it in the output."""
+    path: Optional[str]
+    cause: str

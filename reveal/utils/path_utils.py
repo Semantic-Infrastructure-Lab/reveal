@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from itertools import islice
 from pathlib import Path, PurePath
 from typing import (
-    Any, Callable, Dict, FrozenSet, Iterable, Iterator, Mapping, NamedTuple, Optional, List, Sequence, Set, Tuple,
+    Any, Callable, Dict, FrozenSet, Iterable, Iterator, Mapping, Optional, List, Sequence, Set, Tuple,
     Union,
 )
 
@@ -27,7 +27,7 @@ from ..defaults import (
     MINIFIED_FILENAME_RE,
     DisplayDefaults,
 )
-from ..reveal_types import WarningEntry
+from ..reveal_types import PathFailure, WarningEntry
 from .request_cache import register_request_cache
 from ..registry import _is_cpp_header_content, display_name_for_extension, language_for_extension, LANGUAGE_DISPLAY_NAMES
 
@@ -756,15 +756,6 @@ def hidden_entries_warning(hidden: Mapping[str, int], analyzed: int) -> Optional
     if 'gitignore' in counts:
         warning['suggestion'] = '--no-gitignore'
     return warning
-
-
-class PathFailure(NamedTuple):
-    """One filesystem failure as ``(path, cause)``: the shape every traversal and read loss is recorded in
-    and ``traversal_failed_warning`` consumes (BACK-2249). ``path`` is the failing path as a ``/`` string
-    (``None`` when the error names none); ``cause`` never contains it, so the consumer's relative spelling
-    of ``path`` is the only spelling of it in the output."""
-    path: Optional[str]
-    cause: str
 
 
 def failure_of(error: BaseException) -> PathFailure:

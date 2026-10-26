@@ -15,6 +15,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tupl
 
 from ...registry import DECLARATION_ONLY_EXTENSIONS
 from ...utils.path_utils import RESOLUTION, OnHidden, walk_with_causes
+from ...reveal_types import PathFailure
 
 
 class FileIndex(Dict[str, List[Path]]):
@@ -88,7 +89,7 @@ def load_path_manifests(root: Path, pattern: str, *,
 
 def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Path]],
                            excluded_root: Optional[Path] = None, *, root: Path,
-                           traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Optional[str]:
+                           traversal_failures: Sequence[PathFailure] = ()) -> Optional[str]:
     """Hash the scan root, source membership and the complete resolution target set (BACK-1755).
     The target set is every indexed file and, when *index* is a :class:`FileIndex`, every
     directory the walk descended, by path alone: a file's stat covers its content, and a

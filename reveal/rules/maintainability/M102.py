@@ -9,15 +9,23 @@ import logging
 import re
 from ...utils.request_cache import register_request_cache, register_validated_cache
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Set, Iterable, Sequence, Tuple
+from typing import List, Dict, Any, Optional, Set, Iterable, Sequence
 
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...utils.gitignore import gitignore_enabled
 from ...utils.path_utils import (
-    EVIDENCE, _walk_code_files, is_test_path, is_unsafe_scan_root, python_package_top,
-    resolve_project_root, to_posix, traversal_failed_warning,
+    EVIDENCE,
+    _walk_code_files,
+    is_test_path,
+    is_unsafe_scan_root,
+    python_package_top,
+    resolve_project_root,
+    to_posix,
+    traversal_failed_warning,
+    failure_of,
 )
 from ...utils.pyparse import parse_python
+from ...reveal_types import PathFailure
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +38,7 @@ class _ImportSet(set):
     """The existing mutable import set with picklable discovery facts."""
 
     def __init__(self, values: Iterable[str] = (), *,
-                 traversal_failures: Sequence[Tuple[Optional[str], str]] = ()):
+                 traversal_failures: Sequence[PathFailure] = ()):
         super().__init__(values)
         self.traversal_failures = tuple(traversal_failures)
         # The walk honours the gitignore switch, so the import set depends on it.
@@ -383,7 +391,7 @@ class M102(BaseRule):
                                                on_error=enumeration_errors.append)
                       if f.suffix == '.py']
         imports = _ImportSet(traversal_failures=tuple(
-            (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
+            failure_of(error)
             for error in enumeration_errors))
 
         for py_file in candidates:

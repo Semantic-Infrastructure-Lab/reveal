@@ -19,7 +19,7 @@ import sys
 from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, Sequence, Tuple, cast
-from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
+from reveal.reveal_types import CONTRACT_VERSION, PathFailure, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
@@ -59,14 +59,14 @@ _ADAPTER_IMPORT_GRAPH_NAMESPACE = "adapter_import_graph"
 
 def _candidate_set_fingerprint(candidates: List[Path],
                                file_index: Optional[Dict[str, List[Path]]] = None, *, root: Path,
-                               traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Optional[str]:
+                               traversal_failures: Sequence[PathFailure] = ()) -> Optional[str]:
     """Shared root/source/target fingerprint; preserve the private source-only call shape."""
     return resolution_fingerprint(candidates, {} if file_index is None else file_index, excluded_root=disk_cache.cache_root(),
                                   root=root, traversal_failures=traversal_failures)
 
 
 def _graph_cache_key(candidates: List[Path], file_index: Dict[str, List[Path]], root: Path,
-                     traversal_failures: Sequence[Tuple[Optional[str], str]], cap: Optional[int],
+                     traversal_failures: Sequence[PathFailure], cap: Optional[int],
                      parsed: Optional[frozenset] = None) -> Optional[str]:
     """The whole-graph cache key: the resolution fingerprint of the scan root, plus the build's
     identity (the file cap the walk ran under, the extensions it parsed: every supported one unless
@@ -1969,7 +1969,7 @@ class ImportsAdapter(ResourceAdapter):
         name = _spelled(spell)
         if spell is not None:
             base = None
-        traversal = [(name(path) if path else path, cause)
+        traversal = [PathFailure(name(path) if path else path, cause)
                      for path, cause in getattr(self.analysis.graph, 'traversal_failures', ())]
         structure_failures = [(name(path), cause) for path, cause in self.analysis.structure_failures]
         warnings = [traversal_failed_warning(traversal, base),
@@ -2136,7 +2136,7 @@ class ImportsAdapter(ResourceAdapter):
     @staticmethod
     def _discover_candidate_files(
         target_path: Path, supported_exts: frozenset, code_exts: frozenset, *,
-        traversal_failures: Optional[List[Tuple[Optional[str], str]]] = None,
+        traversal_failures: Optional[List[PathFailure]] = None,
         hidden: Optional[Dict[str, int]] = None,
     ) -> Tuple[List[Path], Dict[str, List[Path]]]:
         """Walk target_path for candidate code files (serial, cheap: no parsing).
@@ -2392,6 +2392,10 @@ class ImportsAdapter(ResourceAdapter):
         if self._scan is not None:
             view = view.within_root(self._scan.root)
         return view.without_test_importers() if self._tests_excluded() else view
+
+    def outside_root_edge_count(self) -> int:
+        """The edges the answer left out because their target is outside the scan root (BACK-2251)."""
+        return self._graph().outside_root_edges(self._scan.root) if self._scan is not None else 0
 
     def _tests_excluded(self) -> bool:
         return bool(_TESTS.read(self._query_params) == 'exclude')
@@ -2788,13 +2792,14 @@ class ImportsAdapter(ResourceAdapter):
         found = _named_candidates(name, self._base_dir(), root)
         if len(found) == 1:
             return found[0], ''
+        show = _path_display(self._base_dir())  # BACK-2250: the root is a host path in an error text
         if found:
-            return None, (f'importers={name} is ambiguous: it names {" and ".join(to_posix(f) for f in found)}; '
-                          f'spell the path from the scan root {to_posix(root)}')
+            return None, (f'importers={name} is ambiguous: it names {" and ".join(str(show(str(f))) for f in found)}; '
+                          f'spell the path from the scan root {show(str(root))}')
         known = {os.path.relpath(f, root): f for f in self._edges(LAZY_INCLUDE).dependencies}
         near = difflib.get_close_matches(name, [to_posix(k) for k in known], n=3, cutoff=0.5)
         hint = f'; did you mean {", ".join(near)}?' if near else ''
-        return None, f'importers={name} matched no file under {to_posix(root)}{hint}'
+        return None, f'importers={name} matched no file under the scan root ({show(str(root))}){hint}'
 
     def _format_file_importers(self, target: Path) -> Dict[str, Any]:
         graph = self._edges(LAZY_INCLUDE)

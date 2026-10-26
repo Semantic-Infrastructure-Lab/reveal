@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 
-from ...utils.path_utils import to_posix
+from ...utils.path_utils import to_posix, failure_of
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +235,7 @@ def _load_yaml_layers(config_file: Path) -> Optional[LayerConfig]:
         with open(config_file, encoding='utf-8') as f:
             config_dict = yaml.safe_load(f)
     except (OSError, yaml.YAMLError, ValueError) as e:  # ValueError: UnicodeDecodeError, impossible scalars
-        raise LayerConfigError(f"{config_file}: cannot read layer configuration: {e}") from e
+        raise LayerConfigError(f"{config_file}: cannot read layer configuration: {failure_of(e).cause}") from e
     return LayerConfig.from_dict(config_dict, source=str(config_file)) if config_dict else None
 
 

@@ -16,7 +16,7 @@ from ..conventions import conventions_for_path
 from ..registry import language_for_extension
 from ..rendering.adapters.architecture import ArchitectureRenderer
 from ..utils.entry_points import active_entry_points, entry_point_filter
-from ..utils.path_utils import to_posix, traversal_failed_warning
+from ..utils.path_utils import traversal_failed_warning, failure_of
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
                                   nonnegative_display_limit, param_schema, peek_query_items)
@@ -117,7 +117,7 @@ def _with_scope_warning(meta: Optional[RevealMeta], failures: List[OSError],
                         path: Path) -> Optional[RevealMeta]:
     """Append optional census disclosure only after required-source validation."""
     warning = traversal_failed_warning([
-        (to_posix(exc.filename) if exc.filename else None, f'{type(exc).__name__}: {exc}')
+        failure_of(exc)
         for exc in failures], path)
     if warning:
         warning['message'] = 'Independent scope/language census is incomplete; ' + warning['message']

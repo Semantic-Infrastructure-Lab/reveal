@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
 
+from ...utils.path_utils import failure_of
 from ...utils.results import ResultBuilder, note_truncation
 from .commits import (commit_filter, disclose_timeline_cut, history_sort, timeline_fields,
                       walk_history)
@@ -442,7 +443,7 @@ def _commit_diff_contains(
     except (OSError, subprocess.SubprocessError, pygit2.GitError, KeyError) as e:
         logger.warning("pattern search failed for commit %s: %s", commit.id, e)
         _content_search_error = (
-            f"content-pattern search degraded: {e} "
+            f"content-pattern search degraded: {failure_of(e).cause} "
             "(results may be missing matches, not confirmed absent)"
         )
         return False
@@ -558,7 +559,6 @@ def _resolve_blame_commit(repo: 'pygit2.Repository', ref: str) -> 'pygit2.Commit
 
 def _read_blob_lines(repo: 'pygit2.Repository', commit: 'pygit2.Commit', subpath: str) -> List[str]:
     """Read file lines from a blob in the given commit's tree."""
-    import pygit2
     tree = commit.tree
     entry = tree[subpath]
     blob = cast('pygit2.Blob', repo[entry.id])
@@ -567,7 +567,6 @@ def _read_blob_lines(repo: 'pygit2.Repository', commit: 'pygit2.Commit', subpath
 
 def _format_blame_hunks(repo: 'pygit2.Repository', blame: Any) -> List[Dict[str, Any]]:
     """Convert pygit2 blame hunks to serializable dicts."""
-    import pygit2
     hunks: List[Dict[str, Any]] = []
     for hunk in blame:
         commit_obj = cast('pygit2.Commit', repo[hunk.final_commit_id])

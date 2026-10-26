@@ -19,9 +19,15 @@ from .file_index import load_path_manifests
 from .generic import RubyImportExtractor
 from .types import ImportGraph, ImportStatement
 from .._capability_table import depends_intra_project_classification_supported
-from ...utils.path_utils import (hidden_entries_warning, is_unsafe_scan_root, resolve_project_root,
-                                 search_parents, to_posix)
+from ...utils.path_utils import (
+    hidden_entries_warning,
+    is_unsafe_scan_root,
+    resolve_project_root,
+    search_parents,
+    failure_of,
+)
 from ...utils.query_control import BudgetAccounting, ScanBudget
+from ...reveal_types import PathFailure
 
 
 # Where a scan root came from, in the climb's precedence order: a validated ``?root=``, then
@@ -150,7 +156,7 @@ class ProjectResolution:
     edge_statements: Dict[Tuple[Path, Path], ImportStatement] = field(default_factory=dict)
     capped: bool = False
     scan_accounting: BudgetAccounting = field(default_factory=lambda: ScanBudget(None).accounting(0))
-    traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
+    traversal_failures: Tuple[PathFailure, ...] = ()
     # A scan whose walk hid every candidate says so (BACK-2065).
     scope_hidden: Optional[Dict[str, Any]] = None
     # BACK-1598: files whose extractor set parse_failed, disclosed once.
@@ -439,8 +445,7 @@ class ProjectResolver:
 
     def _record_manifest_failure(self, error: OSError) -> None:
         """Resolution loss joins graph diagnostics without changing the source census."""
-        failure = (to_posix(error.filename) if error.filename else None,
-                   f'{type(error).__name__}: {error}')
+        failure = failure_of(error)
         self.result.traversal_failures += (failure,)
 
     @staticmethod

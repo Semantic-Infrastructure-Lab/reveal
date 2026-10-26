@@ -36,8 +36,9 @@ from .confidence import language_census
 from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
 from ...utils.gitignore import gitignore_enabled
-from ...utils.path_utils import _walk_code_files, is_unsafe_scan_root, to_posix
+from ...utils.path_utils import _walk_code_files, is_unsafe_scan_root, to_posix, failure_of
 from ...core.definition_names import lookup_keys, name_matches
+from ...reveal_types import PathFailure
 
 # Module-level LRU cache: directory → (cache_key, index)
 # cache_key combines the hashable directory-mtime key with active scope.
@@ -324,11 +325,10 @@ def _python_referenced_names(directory: Path, *,
         return cached[1]
 
     skipped: List[Tuple[str, str]] = []
-    traversal_failures: List[Tuple[Optional[str], str]] = []
+    traversal_failures: List[PathFailure] = []
 
     def on_error(error: OSError) -> None:
-        traversal_failures.append((
-            to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
+        traversal_failures.append(failure_of(error))
 
     referenced: Set[str] = set()
     for py_file in _iter_python_files(directory, on_error=on_error):
@@ -337,7 +337,7 @@ def _python_referenced_names(directory: Path, *,
                 continue
             tree = parse_python(py_file.read_text(encoding='utf-8', errors='ignore'), str(py_file))
         except (OSError, SyntaxError, ValueError, RecursionError) as error:
-            skipped.append((to_posix(py_file), f'{type(error).__name__}: {error}'))
+            skipped.append((to_posix(py_file), failure_of(error).cause))
             continue
 
         referenced.update(_python_tree_referenced_names(tree))
@@ -386,7 +386,7 @@ def _python_tree_referenced_names(tree: Any) -> Set[str]:
 
 
 def _record_reference_failures(structures: StructureList, skipped: List[Tuple[str, str]],
-                               traversal_failures: List[Tuple[Optional[str], str]]) -> None:
+                               traversal_failures: List[PathFailure]) -> None:
     """Merge required reference loss into the existing collection's diagnostic channels."""
     identified = {os.path.normcase(os.path.realpath(path)) for path, _ in structures.skipped}
     for path, cause in skipped:
@@ -441,12 +441,12 @@ class CallersIndex(Dict[str, List[Dict[str, Any]]]):
     analysis failed, so the cached index keeps saying what it is missing (BACK-1860)."""
 
     skipped: List[Tuple[str, str]]
-    traversal_failures: List[Tuple[Optional[str], str]]
+    traversal_failures: List[PathFailure]
     dropped: Optional[Dict[str, Any]] = None
 
 
 def _disclose_skipped(result: Dict[str, Any], skipped: Sequence[Tuple[str, str]], *,
-                      traversal_failures: Sequence[Tuple[Optional[str], str]] = (),
+                      traversal_failures: Sequence[PathFailure] = (),
                       dropped: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Carry file and directory loss separately for adapter metadata construction, and the function values
     the JS rule left out (``dropped``, BACK-2229: not a loss, a statement of scope).
@@ -468,7 +468,7 @@ def _structures_or_collect(structures: Optional[StructureList], directory: Path)
 
 
 def _environmental_loss(skipped: Sequence[Tuple[str, str]],
-                        traversal_failures: Sequence[Tuple[Optional[str], str]]) -> bool:
+                        traversal_failures: Sequence[PathFailure]) -> bool:
     """Whether a collection lost input for a reason a validated cache cannot see recover.
 
     Directory mtimes cannot prove recovery after an included subtree was unreadable, nor
@@ -811,11 +811,11 @@ class CalleeSource:
     __slots__ = ('definitions', 'skipped', 'traversal_failures', 'scope', 'dropped', '_census', '_census_walked')
 
     def __init__(self, definitions: Tuple[CallSource, ...], skipped: Sequence[Tuple[str, str]] = (),
-                 traversal_failures: Sequence[Tuple[Optional[str], str]] = (),
+                 traversal_failures: Sequence[PathFailure] = (),
                  scope: Optional['CalleeScope'] = None, dropped: Optional[Dict[str, Any]] = None) -> None:
         self.definitions = definitions
         self.skipped: Tuple[Tuple[str, str], ...] = tuple(skipped)
-        self.traversal_failures: Tuple[Tuple[Optional[str], str], ...] = tuple(traversal_failures)
+        self.traversal_failures: Tuple[PathFailure, ...] = tuple(traversal_failures)
         self.scope = scope
         self.dropped = dropped
         self._census: Optional[Dict[str, int]] = None
@@ -998,7 +998,7 @@ class CalleeWalk:
     roots: List[CalleeNode]
     levels: List[Dict[str, Any]]
     skipped: List[Tuple[str, str]]
-    traversal_failures: List[Tuple[Optional[str], str]]
+    traversal_failures: List[PathFailure]
     dropped: Optional[Dict[str, Any]] = None
 
 
@@ -1436,8 +1436,8 @@ def _record_non_python_reference_failure(skipped: List[Tuple[str, str]],
     """Keep first-cause file identity on this query's diagnostic copy only."""
     identity = os.path.normcase(os.path.realpath(file_path))
     if not any(os.path.normcase(os.path.realpath(path)) == identity for path, _ in skipped):
-        skipped.append((
-            to_posix(file_path), f'{type(error).__name__}: non-Python reference read failed: {error}'))
+        kind, _, reason = failure_of(error).cause.partition(': ')
+        skipped.append((to_posix(file_path), f'{kind}: non-Python reference read failed: {reason}'))
 
 
 def _reference_files(directory: Path, structures: List[Dict[str, Any]]) -> List[str]:
@@ -1865,7 +1865,7 @@ def _import_pairs(answer: Dict[str, Any], absolute_base: str) -> Set[Tuple[str, 
 
 
 def module_graph_from_importers(answer: Dict[str, Any], directory: str, *,
-                                keep_outside: bool = False) -> Dict[str, Any]:
+                                keep_outside: bool = False, outside_root: int = 0) -> Dict[str, Any]:
     """calls ?modules from an imports ?importers answer over *directory* (BACK-1054 slice S5, Q4).
 
     One edge per (importer, imported file) of the answer: the import edges imports counts, not only the
@@ -1874,7 +1874,9 @@ def module_graph_from_importers(answer: Dict[str, Any], directory: str, *,
     joined to its spelling relative to it, '/'-spelled on every OS (BACK-2188); a self-import is no edge.
     Both ends lie under *directory*, as calls ?modules kept them: an edge with an end outside it (an
     import of ../package.json, which imports spells as a host path) is counted in ``outside_path_edges``,
-    unless *keep_outside* (``&external``: importers from the rest of the project root). The shape is the
+    unless *keep_outside* (``&external``: importers from the rest of the project root). ``outside_root`` adds
+    the edges imports itself left out because their target lies outside its scan root (BACK-2251), which
+    it no longer returns. The shape is the
     old one (Q8) plus the answer's ``edge_rule`` and that count."""
     base = to_posix(directory)
     absolute_base = base if _posix_absolute(base) else to_posix(os.path.abspath(directory))
@@ -1889,6 +1891,6 @@ def module_graph_from_importers(answer: Dict[str, Any], directory: str, *,
         'edges': [{'from': frm, 'to': to} for frm, to in edges],
         'total_nodes': len(nodes),
         'total_edges': len(edges),
-        'outside_path_edges': len(pairs) - len(kept),
+        'outside_path_edges': len(pairs) - len(kept) + outside_root,
         'edge_rule': answer.get('edge_rule'),
     }

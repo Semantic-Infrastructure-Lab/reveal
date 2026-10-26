@@ -831,7 +831,8 @@ class CallsAdapter(ResourceAdapter):
             answer = self.compose_answer(ImportsAdapter, directory, child.get_structure, default={},
                                          omit_warnings=lambda w: str(w.get('field', '')).startswith('metadata.'))
         data = module_graph_from_importers(answer if isinstance(answer, dict) else {}, directory,
-                                           keep_outside=external)
+                                           keep_outside=external,
+                                           outside_root=0 if external else child.outside_root_edge_count())
         query_format = _FORMAT.read(params) or ''
         if query_format:
             data['_query_format'] = query_format

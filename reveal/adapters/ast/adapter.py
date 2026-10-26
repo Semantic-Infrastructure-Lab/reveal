@@ -14,7 +14,7 @@ from .queries import (
     extract_reveal_type_param as _extract_reveal_type_param,
 )
 from .analysis import (
-    analysis_skipped_warning, analyze_file_outcome, collect_structures, parse_recovered_warning,
+    analysis_skipped_warning, collect_structures, parse_recovered_warning,
     traversal_failed_warning,
     StructureList, try_add_file_structure,
 )
@@ -32,7 +32,7 @@ from ...utils.query import (
     ResultControl
 )
 from ...utils.results import ResultBuilder, note_truncation
-from ...utils.path_utils import to_posix
+from ...utils.path_utils import failure_of
 
 # Filter aliases that name a differently-named element field (see filtering.py).
 _SORT_FIELD_ALIASES = {'lines': 'line_count'}
@@ -61,7 +61,7 @@ def _capability_hint_warnings(feature: str, path: Path) -> List[WarningEntry]:
 def _directory_event_warning(failures: List[OSError], path: Path) -> Optional[WarningEntry]:
     """Use the shared directory formatter for actual events from one population."""
     return traversal_failed_warning([
-        (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
+        failure_of(error)
         for error in failures], path)
 
 

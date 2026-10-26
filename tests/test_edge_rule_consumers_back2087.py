@@ -89,7 +89,8 @@ def _assert_rule(rule, expected):
 
 # imports://'s own rule fields (BACK-1054): where it resolved and with which &scope/&tests. A
 # composing command takes none of those parameters and prints none of them.
-RESOLUTION_KEYS = {'root', 'root_source', 'scope_param', 'tests_param', 'via', 'ungated_languages', 'ungated_edges'}
+RESOLUTION_KEYS = {'root', 'root_source', 'scope_param', 'tests_param', 'via', 'ungated_languages', 'ungated_edges',
+                   'outside_root_edges'}
 
 
 def _same_rule(rule, imports_rule, noun):

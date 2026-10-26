@@ -21,8 +21,9 @@ from ...defaults import (
     CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB,
     CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB,
 )
-from ...utils.path_utils import HiddenTally, OnHidden, census_for_path, hidden_entries_warning, to_posix
+from ...utils.path_utils import HiddenTally, OnHidden, census_for_path, hidden_entries_warning, failure_of
 from ..ast.analysis import analysis_skipped_warning, function_values_dropped_warning, traversal_failed_warning
+from ...reveal_types import PathFailure
 
 # Capability metadata for v1.1 contract (BACK-307).
 # Call-graph analysis is static — these limitations are universal across queries.
@@ -183,7 +184,7 @@ def language_census(path: str, *,
 
 def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = False,
                skipped: Sequence[Tuple[str, str]] = (),
-               traversal_failures: Sequence[Tuple[Optional[str], str]] = (),
+               traversal_failures: Sequence[PathFailure] = (),
                census: Optional[Dict[str, int]] = None,
                dropped: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Per-request calls:// meta kwargs (BACK-1198).
@@ -204,11 +205,10 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
     (``CalleeSource.language_census``, BACK-2132); None walks the tree for it. A held census had
     no walk error and kept files, so there is neither a census failure nor a hidden tree to report.
     """
-    census_failures: List[Tuple[Optional[str], str]] = []
+    census_failures: List[PathFailure] = []
 
     def _record_census_error(error: OSError) -> None:
-        census_failures.append((to_posix(error.filename) if error.filename else None,
-                                f'{type(error).__name__}: {error}'))
+        census_failures.append(failure_of(error))
 
     hidden = HiddenTally()
     per_language = census if census is not None else language_census(

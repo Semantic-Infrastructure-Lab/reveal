@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from .defaults import DisplayDefaults
 from .utils.lines import split_lines
 from .utils.results import note_truncation, slice_items
+from .utils.path_utils import failure_of
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +265,7 @@ def grep_file(path: str, pattern: str, args: Namespace) -> Dict[str, Any]:
     try:
         lines = _read_lines(file_path)
     except OSError as e:
-        result['error'] = f"cannot read {path}: {e}"
+        result['error'] = f"cannot read {path}: {failure_of(e).cause}"
         return result
 
     hit_lines = _hit_lines(lines, compiled)

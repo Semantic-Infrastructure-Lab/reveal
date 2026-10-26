@@ -23,7 +23,7 @@ import os
 import re
 from ...utils.request_cache import register_request_cache, register_validated_cache
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import ASTParsingMixin
@@ -40,8 +40,13 @@ from ...analyzers._python_dict_usage import (
 )
 from ...utils.gitignore import gitignore_enabled
 from ...utils.path_utils import (
-    EVIDENCE, cross_file_scan_root, scan_roots, to_posix, traversal_failed_warning,
+    EVIDENCE,
+    cross_file_scan_root,
+    scan_roots,
+    traversal_failed_warning,
+    failure_of,
 )
+from ...reveal_types import PathFailure
 
 logger = logging.getLogger(__name__)
 
@@ -242,11 +247,10 @@ def _build_index(project_root: Path) -> Dict[str, Any]:
     cross-module matching was skipped instead of implying none exists.
     """
     ceiling = _max_project_files()
-    failures: List[Tuple[Optional[str], str]] = []
+    failures: List[PathFailure] = []
 
     def on_error(error: OSError) -> None:
-        failures.append((to_posix(error.filename) if error.filename else None,
-                         f'{type(error).__name__}: {error}'))
+        failures.append(failure_of(error))
 
     files = []
     for file_path in iter_python_files(str(project_root), purpose=EVIDENCE, on_error=on_error):

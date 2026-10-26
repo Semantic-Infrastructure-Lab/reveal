@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, cast
 
 from ...registry import get_markdown_extensions
-from ...utils.path_utils import _walk_code_files, to_posix, to_relative_display
+from ...utils.path_utils import _walk_code_files, to_posix, to_relative_display, failure_of
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def read_body_outcome(path: Path) -> Tuple[str, Optional[str]]:
         content = path.read_text(encoding='utf-8')
     except (OSError, UnicodeDecodeError) as e:
         logger.warning(f"Failed to read {path}, treating body as empty: {e}")
-        return '', f"{type(e).__name__}: {e}"
+        return '', failure_of(e).cause
 
     if not content.startswith('---'):
         return content, None
@@ -126,7 +126,7 @@ def extract_internal_links_outcome(path: Path, base_path: Path) -> Tuple[List[st
         content = path.read_text(encoding='utf-8')
     except (OSError, UnicodeDecodeError) as e:
         logger.warning(f"Failed to read {path}, reporting no internal links: {e}")
-        return [], f"{type(e).__name__}: {e}"
+        return [], failure_of(e).cause
 
     # [text](url) — grab the URL portion
     pattern = re.compile(r'\[([^\]]*)\]\(([^)\s]+)[^)]*\)')
@@ -203,7 +203,7 @@ def extract_frontmatter_diagnostic(path: Path) -> Dict[str, Any]:
     try:
         content = path.read_text(encoding='utf-8')
     except (OSError, UnicodeDecodeError) as exc:
-        return {'frontmatter': None, 'status': 'missing', 'error': f'unreadable: {exc}'}
+        return {'frontmatter': None, 'status': 'missing', 'error': f'unreadable: {failure_of(exc).cause}'}
 
     if not content.startswith('---'):
         return {'frontmatter': None, 'status': 'missing', 'error': None}

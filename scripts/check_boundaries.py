@@ -60,6 +60,17 @@ Rules (home = where the concern is allowed to live):
     already a ``/`` string (a URI, a relative name built with ``as_posix()``) takes
     ``# boundary-ok: display-path -- <why>``.
 
+``oserror-cause`` (BACK-2249)
+    An f-string that interpolates an ``OSError``-family exception bound by ``except`` or annotated on a
+    parameter (``{error}``, ``{type(error).__name__}: {error}``). ``str(OSError)`` embeds the absolute
+    filename (``[Errno 13] Permission denied: '/abs/dir'``), so the host path reached ``causes`` and
+    ``message`` beside a path field spelled relative. Home: ``reveal/utils/path_utils.py::failure_of``,
+    which records an exception as a ``PathFailure`` (path field apart, cause = class and ``strerror``).
+    A logging call is not output (the log is a debugging sink), and ``reveal/rules/validation/`` holds
+    reveal's own source self-checks, which run on a maintainer's checkout and have no path argument to
+    carry the file apart, so both are out of scope. A site whose error has no filename to leak (a network socket, a DNS lookup) takes
+    ``# boundary-ok: oserror-cause -- <why>``.
+
 ``silent-except`` (BACK-1638 -> BACK-1059)
     Uses B006's Python handler policy for broad catches, including computed fallbacks,
     assignments and debug-only logs. Required failures must be re-raised, returned as
@@ -102,7 +113,7 @@ import json
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from reveal.rules.bugs.B006 import B006
 
@@ -151,6 +162,13 @@ RULES: Dict[str, Dict[str, Any]] = {
         'home': (),
         'scope': (('prefix', 'reveal/display/'), ('prefix', 'reveal/cli/routing/')),
     },
+    'oserror-cause': {
+        'skip': (('prefix', 'reveal/rules/validation/'),),
+        'task': 'BACK-2249',
+        'fix': 'record the failure with reveal.utils.path_utils.failure_of(error) (a PathFailure: the path '
+               'apart, the cause without it); str(OSError) embeds the absolute filename',
+        'home': (('func', 'reveal/utils/path_utils.py', 'failure_of'),),
+    },
     'silent-except': {
         'task': 'BACK-1614 (removal: BACK-1059)',
         'fix': 'log it (logger.debug), narrow the exception type, or return a result marker -- '
@@ -196,6 +214,8 @@ def _is_home(rule: str, rel: str, funcs: List[str], classes: List[str]) -> bool:
 
 
 def _in_scope(rule: str, rel: str) -> bool:
+    if any(kind == 'prefix' and rel.startswith(spec[0]) for kind, *spec in RULES[rule].get('skip', ())):
+        return False
     scope = RULES[rule].get('scope')
     if scope is None:
         return True
@@ -205,6 +225,20 @@ def _in_scope(rule: str, rel: str) -> bool:
 
 
 _PATH_NAMES = frozenset({'path', 'file_path', 'filepath', 'target_path'})
+_LOGGER_NAMES = frozenset({'logger', 'logging', 'log', '_logger'})
+_OSERROR_NAMES = frozenset({
+    'OSError', 'IOError', 'EnvironmentError', 'PermissionError', 'FileNotFoundError', 'FileExistsError',
+    'NotADirectoryError', 'IsADirectoryError', 'InterruptedError', 'BlockingIOError', 'TimeoutError',
+})
+
+
+def _names_oserror(node: Optional[ast.AST]) -> bool:
+    """Whether an ``except`` type or an annotation names an OSError-family class (alone or in a tuple)."""
+    if isinstance(node, ast.Name):
+        return node.id in _OSERROR_NAMES
+    if isinstance(node, ast.Tuple):
+        return any(_names_oserror(element) for element in node.elts)
+    return False
 
 
 def _is_bare_path(node: ast.AST) -> bool:
@@ -267,6 +301,8 @@ class _Scanner(ast.NodeVisitor):
         self.walk_listings: Set[int] = set()
         self.parent_map: Dict[ast.AST, ast.AST] = {}
         self.silent_rule = B006()
+        self.oserror_names: List[str] = []
+        self.logging_calls = 0
 
     # -- bookkeeping --------------------------------------------------------
     def _add(self, rule: str, node: Any) -> None:
@@ -292,7 +328,11 @@ class _Scanner(ast.NodeVisitor):
 
     def _visit_func(self, node) -> None:
         self.func_stack.append(node.name)
+        bound = [a.arg for a in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+                 if _names_oserror(a.annotation)]
+        self.oserror_names.extend(bound)
         self.generic_visit(node)
+        del self.oserror_names[len(self.oserror_names) - len(bound):]
         self.func_stack.pop()
 
     visit_FunctionDef = _visit_func
@@ -353,9 +393,19 @@ class _Scanner(ast.NodeVisitor):
 
     visit_TryStar = visit_Try
 
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        bound = bool(node.name) and _names_oserror(node.type)
+        if bound:
+            self.oserror_names.append(str(node.name))
+        self.generic_visit(node)
+        if bound:
+            self.oserror_names.pop()
+
     def visit_FormattedValue(self, node: ast.FormattedValue) -> None:
         if _is_bare_path(node.value):
             self._add('display-path', node)
+        if isinstance(node.value, ast.Name) and node.value.id in self.oserror_names and not self.logging_calls:
+            self._add('oserror-cause', node)
         self.generic_visit(node)
 
     def visit_Raise(self, node: ast.Raise) -> None:
@@ -385,7 +435,10 @@ class _Scanner(ast.NodeVisitor):
             self._add('splitlines', node)
         if name.rsplit('.', 1)[-1] == 'add_cli_contract_fields':
             self._add('subcommand-output', node)
+        logging_call = name.split('.', 1)[0] in _LOGGER_NAMES and '.' in name
+        self.logging_calls += logging_call
         self.generic_visit(node)
+        self.logging_calls -= logging_call
 
 
 def _calls_name(call: ast.Call, name: str) -> bool:

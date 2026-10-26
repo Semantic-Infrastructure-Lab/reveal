@@ -24,12 +24,14 @@ from ..utils.path_utils import (
     detect_non_python_language,
     to_posix,
     traversal_failed_warning,
+    failure_of,
 )
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
                                   nonnegative_display_limit, param_schema)
 from ..utils.results import ResultBuilder
 from ..rendering.adapters.contracts import ContractsRenderer
+from ..reveal_types import PathFailure
 
 _CONTRACT_PATH_HINTS: frozenset = frozenset({
     'base', 'schema', 'contract', 'protocol', 'interface',
@@ -124,8 +126,8 @@ _CONTRACT_LANGUAGES: Tuple[Tuple[str, Callable[[Path], bool]], ...] = (
 )
 
 
-def _record_traversal_error(failures: List[Tuple[Optional[str], str]], error: OSError) -> None:
-    failures.append((to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
+def _record_traversal_error(failures: List[PathFailure], error: OSError) -> None:
+    failures.append(failure_of(error))
 
 
 def _record_scan_error(skipped: List[Tuple[str, str]], file: str, exc: Exception) -> None:
@@ -177,7 +179,7 @@ def _scan_contracts(
     unchanged — only the polyglot case gets the new `by_language` shape,
     since that case was never correct before and had no shape to preserve.
     """
-    traversal_failures: List[Tuple[Optional[str], str]] = []
+    traversal_failures: List[PathFailure] = []
     on_error = partial(_record_traversal_error, traversal_failures)
     active = [name for name, matches in _CONTRACT_LANGUAGES if _has_files(path, matches, on_error=on_error)]
 
@@ -187,7 +189,7 @@ def _scan_contracts(
     # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
     # BACK-DD-1: reuse surface.py's single source of truth rather than a
     # second hardcoded literal that can silently drift from it.
-    coverage_failures: List[Tuple[Optional[str], str]] = []
+    coverage_failures: List[PathFailure] = []
     coverage = assess_language_coverage(
         path,
         _supported_coverage_languages(),
@@ -906,7 +908,7 @@ def _contract_observations(report: Dict[str, Any]) -> bool:
 
 
 def _discovery_error(
-    report: Dict[str, Any], failures: List[Tuple[Optional[str], str]], *,
+    report: Dict[str, Any], failures: List[PathFailure], *,
     coverage_only: bool = False,
 ) -> Optional[str]:
     if not failures:

@@ -187,7 +187,8 @@ def test_unknown_directory_and_capped_known_directory_counts_are_separate(tmp_pa
         result = StatsAdapter(str(tmp_path)).get_structure()
     diagnostic, = warnings(result)
     assert diagnostic['count'] == 7 and diagnostic['unit'] == 'directories'
-    assert len(diagnostic['directories']) == 5 and len(diagnostic['causes']) == 5
+    # BACK-2249: the cause no longer carries the path, so five directories lost to one error are one cause
+    assert len(diagnostic['directories']) == 5 and diagnostic['causes'] == ['PermissionError: controlled Stats child traversal failure']
     with monkeypatch.context() as context:
         deny_stats(context, directories, named=False)
         unknown, = warnings(StatsAdapter(str(tmp_path)).get_structure())

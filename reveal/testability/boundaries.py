@@ -15,6 +15,7 @@ from dataclasses import asdict, dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+from ..reveal_types import PathFailure
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,7 @@ class BoundaryProfiles(List[BoundaryProfile]):
     """The profiles found, plus ``skipped``: ``(file, cause)`` for every file whose
     analysis failed, so a report can say its profiles are incomplete (BACK-1860)."""
 
-    traversal_failures: List[Tuple[Optional[str], str]]
+    traversal_failures: List[PathFailure]
     skipped: List[Tuple[str, str]]
     recovered_files: List[str]
 

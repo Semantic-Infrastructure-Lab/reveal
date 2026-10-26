@@ -23,8 +23,14 @@ from ...core import disk_cache
 from ...utils.query_control import ScanBudget
 from ...utils.parallel import pool_worker_count, submit_each
 from ...utils.path_utils import (
-    EVIDENCE, _walk_code_files, cross_file_scan_root, scan_roots, to_posix, traversal_failed_warning,
+    EVIDENCE,
+    _walk_code_files,
+    cross_file_scan_root,
+    scan_roots,
+    traversal_failed_warning,
+    failure_of,
 )
+from ...reveal_types import PathFailure
 
 logger = logging.getLogger(__name__)
 
@@ -476,7 +482,7 @@ class I002(BaseRule):
                 _graph_cache[directory] = cached
                 return cached
 
-        traversal_failures: List[Tuple[Optional[str], str]] = []
+        traversal_failures: List[PathFailure] = []
         unreadable_files: Dict[Path, str] = {}
         transient_files: Dict[Path, str] = {}
         all_imports, failed_files, lost_files, skipped_reason = self._collect_raw_imports(
@@ -501,7 +507,7 @@ class I002(BaseRule):
         return graph
 
     def _collect_raw_imports(self, directory: Path, *,
-                            traversal_failures: Optional[List[Tuple[Optional[str], str]]] = None,
+                            traversal_failures: Optional[List[PathFailure]] = None,
                             unreadable_files: Optional[Dict[Path, str]] = None,
                             transient_files: Optional[Dict[Path, str]] = None) -> tuple:
         """Phase 1: Walk directory and extract raw import statements from all files.
@@ -545,11 +551,10 @@ class I002(BaseRule):
 
         # Pass A: cheap count-only walk — abort before any parsing if over ceiling.
         source_files = []
-        source_failures: List[Tuple[Optional[str], str]] = []
+        source_failures: List[PathFailure] = []
 
         def on_error(error: OSError) -> None:
-            failure = (to_posix(error.filename) if error.filename else None,
-                       f'{type(error).__name__}: {error}')
+            failure = failure_of(error)
             source_failures.append(failure)
             if traversal_failures is not None:
                 traversal_failures.append(failure)
@@ -619,7 +624,7 @@ class I002(BaseRule):
             self._scan_budget_metadata['exact'] = False
 
     def _resolve_graph_dependencies(self, graph: ImportGraph, directory: Path, *,
-                                    traversal_failures: Optional[List[Tuple[Optional[str], str]]] = None) -> None:
+                                    traversal_failures: Optional[List[PathFailure]] = None) -> None:
         """Phase 2: resolve import statements to files through the shared
         import-analysis service, the same resolution imports:// uses (BACK-1723).
 
@@ -633,8 +638,7 @@ class I002(BaseRule):
         failures = list(graph.traversal_failures if traversal_failures is None else traversal_failures)
 
         def on_error(error: OSError) -> None:
-            failures.append((to_posix(error.filename) if error.filename else None,
-                             f'{type(error).__name__}: {error}'))
+            failures.append(failure_of(error))
 
         targets = basename_index([directory], on_error=on_error)
         import_analysis.resolve_graph(

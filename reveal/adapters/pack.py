@@ -20,8 +20,14 @@ from ..analyzers.imports import service as import_analysis
 from ..analyzers.imports.types import LAZY_INCLUDE
 from ..conventions import conventions_for_path
 from ..rendering.adapters.pack import PackRenderer
-from ..utils.path_utils import (DISPLAY, _walk_code_files, classify_path_provenance,
-                               to_posix, traversal_failed_warning)
+from ..utils.path_utils import (
+    DISPLAY,
+    _walk_code_files,
+    classify_path_provenance,
+    to_posix,
+    traversal_failed_warning,
+    failure_of,
+)
 from ..utils.query_binding import bind_declared_params
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema,
                                   split_exclude_param)
@@ -325,7 +331,7 @@ def _tiered_content(file_info: Dict[str, Any]) -> Tuple[str, str, Optional[str]]
         try:
             return 'full', _get_file_raw_content(path), None
         except OSError as e:
-            return 'full', '', f'unreadable: {e}'
+            return 'full', '', f'unreadable: {failure_of(e).cause}'
     if file_info.get('priority', _STRUCTURE_THRESHOLD) >= _STRUCTURE_THRESHOLD:
         try:
             return 'structure', _get_file_structure(path), None
@@ -375,7 +381,7 @@ def _record_candidate_discovery_warning(
 ) -> None:
     """Disclose actual candidate loss without changing Pack's legacy outcome policy."""
     warning = traversal_failed_warning([
-        (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
+        failure_of(error)
         for error in failures], path)
     if warning:
         warning['message'] = (
@@ -388,7 +394,7 @@ _FileMeasurementFailure = Tuple[str, str, str]
 
 
 def _file_measurement_failure(path: Path, operation: str, error: OSError) -> _FileMeasurementFailure:
-    return to_posix(path), operation, f'{type(error).__name__}: {error}'
+    return to_posix(path), operation, failure_of(error).cause
 
 
 def _candidate_measurements(files, on_file_error):

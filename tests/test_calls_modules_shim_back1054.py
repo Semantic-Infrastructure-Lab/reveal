@@ -171,8 +171,10 @@ def test_an_import_resolved_outside_the_path_is_counted_not_an_edge(tmp_path):
     assert _edges(result, root / 'src') == {('a.ts', 'b.ts')}
     assert result['outside_path_edges'] == 1
     assert 'package.json' not in json.dumps(result)  # no host path, no edge
-    # Positive control: imports itself has the edge to package.json under scope=path.
-    assert ('a.ts', 'package.json') in {(src, Path(f).name) for src, f in _import_edges(root / 'src')}
+    # BACK-2251: imports itself no longer counts the edge to package.json under scope=path and gives it
+    # no row; its rule states the number the shim reports. Control: the in-path edge is still counted.
+    assert _import_edges(root / 'src') == {('a.ts', 'b.ts')}
+    assert ImportsAdapter(str(root / 'src'), 'importers&scope=path').get_structure()['edge_rule']['outside_root_edges'] == 1
 
 
 def test_one_import_build_and_no_structure_walk(fx2, monkeypatch):

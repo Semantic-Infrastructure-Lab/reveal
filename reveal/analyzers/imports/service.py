@@ -15,7 +15,8 @@ from .base import LanguageExtractor, get_extractor
 from .file_index import discover_import_files
 from .types import LAZY_EXCLUDE, LAZY_INCLUDE, LAZY_MODES, LAZY_ONLY, ImportAnalysis, ImportGraph, ImportStatement
 from ...registry import language_for_extension
-from ...utils.path_utils import HiddenTally, to_posix
+from ...utils.path_utils import HiddenTally, failure_of
+from ...reveal_types import PathFailure
 
 
 @dataclass(frozen=True)
@@ -34,7 +35,7 @@ class ImportFileSet:
     candidates: Tuple[Path, ...]
     index: Dict[str, List[Path]]
     capped: bool = False
-    traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
+    traversal_failures: Tuple[PathFailure, ...] = ()
     # Entries the walk hid, by actionable cause (``HiddenTally``; BACK-2065).
     # With a focus, the causes at the focus once the walk kept files elsewhere.
     hidden: Dict[str, int] = field(default_factory=dict)
@@ -55,11 +56,10 @@ def discover(scope: ScanScope) -> ImportFileSet:
     if scope.root.is_file():
         kept = (scope.root,) if accepts(scope.root) else ()
         return ImportFileSet(kept, {}, analyzed=len(kept))
-    failures: List[Tuple[Optional[str], str]] = []
+    failures: List[PathFailure] = []
 
     def on_error(error: OSError) -> None:
-        failures.append((to_posix(error.filename) if error.filename else None,
-                         f'{type(error).__name__}: {error}'))
+        failures.append(failure_of(error))
 
     hidden = HiddenTally(scope.focus)
     candidates, index, capped = discover_import_files(scope.root, accepts, cap=scope.cap, on_error=on_error,

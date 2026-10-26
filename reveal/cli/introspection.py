@@ -20,6 +20,7 @@ from ..capabilities import (
     CONFORMANCE_SMOKE_TESTED, CONFORMANCE_STRUCTURE_ONLY, CONFORMANCE_TIER1_VERIFIED,
     CONFORMANCE_UNTESTED, get_capability,
 )
+from ..utils.path_utils import failure_of
 
 _CAPABILITY_METHODS = [
     ('get_functions', 'Functions'),
@@ -216,7 +217,7 @@ def show_ast(path: str, max_depth: Optional[int] = None) -> str:
         return "\n".join(lines)
 
     except (OSError, ValueError, TypeError) as e:
-        return f"❌ Error analyzing file: {e}"
+        return f"❌ Error analyzing file: {failure_of(e).cause}"
 
 
 def _format_ast_node(node, depth: int = 0, max_depth: Optional[int] = None, prefix: str = "", src_bytes: bytes = b"") -> str:

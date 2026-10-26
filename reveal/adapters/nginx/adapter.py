@@ -26,6 +26,7 @@ from ..ssl.probe import probe_http_redirect
 from ...utils.nginx_conf import find_blocks, strip_comments
 from ...utils.results import ResultBuilder
 from ...rendering.adapters.nginx import NginxRenderer
+from ...utils.path_utils import failure_of
 
 
 # Common nginx config directories, in search priority order
@@ -719,7 +720,7 @@ def _read_global_directives(
             for finding in analyzer.audit_global_directives():
                 global_checks[finding['id']] = finding['present']
         except OSError as e:  # nginx.conf found but unreadable (permissions, as non-root)
-            return nginx_conf_path, {}, f'{type(e).__name__}: {e}'
+            return nginx_conf_path, {}, failure_of(e).cause
     return nginx_conf_path, global_checks, None
 
 

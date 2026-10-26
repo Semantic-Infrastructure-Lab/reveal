@@ -152,7 +152,8 @@ def test_directory_count_exact_and_bounded_and_overlapping_roots(tree, monkeypat
     result = build_testability_report(str(root), [str(root), str(child), str(root)])
     warning, = traversal_warning(result)
     assert warning['count'] == 7 and warning['unit'] == 'directories'
-    assert len(warning['directories']) == len(warning['causes']) == 5
+    # BACK-2249: the cause no longer carries the path, so five directories lost to one error are one cause
+    assert len(warning['directories']) == 5 and warning['causes'] == ['PermissionError: controlled enumeration loss']
     assert 'unknown' in warning['message'] and 'files' not in warning
 
 

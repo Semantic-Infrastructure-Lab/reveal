@@ -66,8 +66,9 @@ from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, regis
 from .file_index import basename_index, load_path_manifests
 from .types import ImportStatement
 from ...utils.request_cache import register_request_cache
-from ...utils.path_utils import to_posix
+from ...utils.path_utils import to_posix, failure_of
 from reveal.utils.lines import split_lines
+from ...reveal_types import PathFailure
 
 # Cross-invocation disk cache (BACK-626, extending BACK-625): same
 # independent-reparse gap PythonExtractor had -- extract_imports() does not
@@ -2944,7 +2945,7 @@ class _RubyInventoryFacts:
     root: Path
     local_names: FrozenSet[str]
     external_names: FrozenSet[str]
-    traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
+    traversal_failures: Tuple[PathFailure, ...] = ()
 
 
 @lru_cache(maxsize=None)
@@ -2982,10 +2983,10 @@ def _ruby_inventory_facts(project_root: Path) -> _RubyInventoryFacts:
     hyphen/underscore RubyGems convention, not a guess -- anything that
     matches neither set stays honest ``None``.
     """
-    failures: List[Tuple[Optional[str], str]] = []
+    failures: List[PathFailure] = []
 
     def _record_manifest_error(error: OSError) -> None:
-        failures.append((to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
+        failures.append(failure_of(error))
 
     def _add_lib_entries(lib_dir: Path) -> None:
         if not lib_dir.is_dir():
@@ -2993,7 +2994,7 @@ def _ruby_inventory_facts(project_root: Path) -> _RubyInventoryFacts:
         try:
             entries = list(lib_dir.iterdir())
         except OSError as exc:
-            failures.append((to_posix(lib_dir), f'{type(exc).__name__}: {exc}'))
+            failures.append(PathFailure(to_posix(lib_dir), failure_of(exc).cause))
             return
         for entry in entries:
             if entry.is_file() and entry.suffix == '.rb':

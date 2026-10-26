@@ -11,6 +11,7 @@ from collections import defaultdict, deque
 
 from .unused import unused_entries
 from ...core.node_taxonomy import LOCAL_SCOPE
+from ...reveal_types import PathFailure
 
 # BACK-2077: which edges a graph view keeps, by the scope of the imports behind each edge.
 # 'include' keeps every edge, 'exclude' the load-time ones (an edge with at least one import
@@ -174,7 +175,7 @@ class ImportGraph:
     # Source-candidate accounting, distinct from graph membership and output paging.
     scan_budget: Dict[str, Any] = field(default_factory=dict)
     # Directory enumeration loss affects sources and extension-agnostic resolution targets.
-    traversal_failures: List[Tuple[Optional[str], str]] = field(default_factory=list)
+    traversal_failures: List[PathFailure] = field(default_factory=list)
     # BACK-2077: (from_file, to_file) -> the ImportStatement.scope of every import that
     # produced the edge ('module', 'local', or None where the extractor records no scope).
     # Every edge is stored; views (edge_view) filter at presentation.
@@ -308,6 +309,8 @@ class ImportGraph:
         views: Dict[str, 'ImportGraph'] = self.__dict__.setdefault('_edge_views', {})
         key = f'within_root:{root}'
         view = views.get(key)
+        if view is None and not self.outside_root_edges(root):
+            view = views[key] = self  # nothing to leave out: the answer is the graph itself, as lazy=include is
         if view is None:
             dependencies: Dict[Path, Set[Path]] = defaultdict(set)
             reverse_deps: Dict[Path, Set[Path]] = defaultdict(set)

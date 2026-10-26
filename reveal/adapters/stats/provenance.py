@@ -22,9 +22,15 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
-from ...utils.path_utils import classify_path_provenance, is_vendor_dir, looks_vendored_by_banner, to_posix
+from ...utils.path_utils import (
+    classify_path_provenance,
+    is_vendor_dir,
+    looks_vendored_by_banner,
+    failure_of,
+)
 from ...utils.results import ResultBuilder
 from .analysis import find_analyzable_files, get_file_display_path
+from ...reveal_types import PathFailure
 
 PROVENANCE_RESULT_TYPE = 'classify_report'
 
@@ -119,11 +125,10 @@ def provenance_report(path: Path, respect_gitignore: Optional[bool] = None) -> D
     from ..ast.analysis import traversal_failed_warning
 
     directory = path if path.is_dir() else path.parent
-    failures: List[Tuple[Optional[str], str]] = []
+    failures: List[PathFailure] = []
 
     def on_error(error: OSError) -> None:
-        failures.append((to_posix(error.filename) if error.filename else None,
-                         f'{type(error).__name__}: {error}'))
+        failures.append(failure_of(error))
 
     rows, excluded_by_extension = classify_directory(
         directory, respect_gitignore=respect_gitignore, on_error=on_error)

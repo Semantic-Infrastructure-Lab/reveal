@@ -117,6 +117,7 @@ from .cli import (
     reject_stdin_for_path_mode,
     handle_file,
 )
+from .utils.path_utils import failure_of
 
 
 def _warn_if_subcommand_shadows_path(name: str) -> None:
@@ -419,7 +420,7 @@ def _handle_at_file(file_path: str, args):
         with open(path, 'r', encoding='utf-8') as f:
             lines = [line.strip() for line in f if line.strip() and not line.startswith('#')]
     except (OSError, ValueError) as e:  # unreadable or not UTF-8
-        print(f"Error reading {file_path}: {e}", file=sys.stderr)
+        print(f"Error reading {file_path}: {failure_of(e).cause}", file=sys.stderr)
         sys.exit(1)
 
     if not lines:

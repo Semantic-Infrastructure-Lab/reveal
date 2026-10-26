@@ -36,7 +36,16 @@ from ..base_mixins import ASTParsingMixin
 from ...utils.pyparse import parse_python, statement_index
 from ...utils.gitignore import gitignore_enabled
 from ...utils.query_control import ScanBudget
-from ...utils.path_utils import EVIDENCE, _walk_code_files, cross_file_scan_root, scan_roots, to_posix, traversal_failed_warning
+from ...utils.path_utils import (
+    EVIDENCE,
+    _walk_code_files,
+    cross_file_scan_root,
+    scan_roots,
+    to_posix,
+    traversal_failed_warning,
+    failure_of,
+)
+from ...reveal_types import PathFailure
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +53,7 @@ class LiteralIndex(dict):
     """The existing literal mapping plus its picklable source-scan accounting."""
 
     def __init__(self, budget: ScanBudget, admitted: int, capped: bool = False, *,
-                 traversal_failures: Sequence[Tuple[Optional[str], str]] = ()):
+                 traversal_failures: Sequence[PathFailure] = ()):
         super().__init__()
         self.scan_budget = {**asdict(budget.accounting(admitted, capped)),
                             'limit': budget.limit, 'analyzed_files': 0,
@@ -384,9 +393,8 @@ def _build_index(
     return index
 
 
-def _normalize_traversal_failures(errors: Sequence[OSError]) -> Tuple[Tuple[Optional[str], str], ...]:
-    return tuple((to_posix(error.filename) if error.filename else None,
-                  f'{type(error).__name__}: {error}') for error in errors)
+def _normalize_traversal_failures(errors: Sequence[OSError]) -> Tuple[PathFailure, ...]:
+    return tuple(failure_of(error) for error in errors)
 
 
 def _evict_root(root: Path) -> None:

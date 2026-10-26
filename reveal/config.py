@@ -26,7 +26,7 @@ from dataclasses import dataclass
 import fnmatch
 import functools
 
-from .utils.path_utils import resolve_project_root, reveal_yaml_is_root
+from .utils.path_utils import resolve_project_root, reveal_yaml_is_root, failure_of
 
 try:
     import yaml
@@ -546,7 +546,7 @@ class RevealConfig:
         except (OSError, ValueError) as e:  # unreadable, or tomllib.TOMLDecodeError / UnicodeDecodeError
             logger.debug(f"Failed to load {pyproject}: {e}")
             if failures is not None:
-                failures.append((str(pyproject), f"{type(e).__name__}: {e}"))
+                failures.append((str(pyproject), failure_of(e).cause))
             return None
 
     @classmethod
@@ -1057,7 +1057,7 @@ def _write_user_config(config: Dict[str, Any], success_message: str) -> bool:
         print(f"{success_message} in {config_path}")
         return True
     except (OSError, yaml.YAMLError) as e:
-        print(f"Failed to update config: {e}", file=sys.stderr)
+        print(f"Failed to update config {config_path}: {failure_of(e).cause}", file=sys.stderr)
         return False
 
 

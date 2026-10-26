@@ -8,6 +8,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
 from ....utils.secrets import redact_secrets
+from ....utils.path_utils import failure_of
 
 try:
     import tomllib
@@ -26,7 +27,7 @@ def _path_info(p: Path) -> Dict[str, Any]:
             count = sum(1 for _ in p.iterdir())
         except OSError as exc:
             return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': None,
-                    'error': f'directory unreadable: {exc}'}
+                    'error': f'directory unreadable: {failure_of(exc).cause}'}
         return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': count}
     stat = p.stat()
     return {'path': str(p), 'exists': True, 'kind': 'file', 'size_bytes': stat.st_size}

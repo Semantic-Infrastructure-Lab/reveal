@@ -46,6 +46,7 @@ except ImportError:
 
 from .cli.defaults import _default_args
 from .cli.global_flags import apply_global_flags
+from .utils.path_utils import failure_of
 
 # All reveal-mcp tools are read-only (no writes, no side effects) and
 # idempotent (same args -> same result, modulo underlying files changing).
@@ -345,7 +346,7 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = 
                 try:
                     result = request(*args, **kwargs)
                 except OSError as exc:
-                    raise ToolError(f"reveal error: {exc}") from None
+                    raise ToolError(f"reveal error: {failure_of(exc).cause}") from None
                 except Exception:  # boundary-ok: broad-except -- SDK 2.0 exposes arbitrary exception details; mask at the registered tool boundary
                     logging.getLogger(__name__).exception("Unexpected failure in MCP tool %s", fn.__name__)
                     raise ToolError(f"Internal error executing tool {fn.__name__}") from None

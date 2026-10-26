@@ -7,7 +7,7 @@ prints the replaced-by note from the RETIREMENTS table until the cut (D5).
 """
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, cast
+from typing import Dict, Any, List, Optional, cast
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -24,7 +24,7 @@ from ...utils.query_parser import (
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.gitignore import respect_gitignore_param
-from ...utils.path_utils import to_posix, to_relative_display
+from ...utils.path_utils import to_relative_display, failure_of
 from ...utils.results import AnalysisCompleteness, ResultBuilder, note_truncation, note_warning, result_execution_facts
 from ...utils.validation import require_path_exists
 from ...utils.parallel import pool_worker_count, submit_each
@@ -37,6 +37,7 @@ from .metrics import calculate_file_stats
 from .queries import SORT_FIELDS, get_quality_config, field_value, compare, matches_filters
 from .aggregation import aggregate_stats, identify_hotspots
 from .provenance import PROVENANCE_RESULT_TYPE, provenance_report
+from ...reveal_types import PathFailure
 
 
 def _pool_results(executor, args: list) -> list:
@@ -351,7 +352,7 @@ class MetricsAdapter(ResourceAdapter):
         """
         self.path = require_path_exists(Path(resource)).resolve()  # the message names the path as spelled
         self._churn_disclosure: Optional[str] = None  # BACK-1166: set by _compute_churn_counts
-        self._traversal_failures: List[Tuple[Optional[str], str]] = []
+        self._traversal_failures: List[PathFailure] = []
 
         if params is not None:
             self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
@@ -544,8 +545,7 @@ class MetricsAdapter(ResourceAdapter):
 
     def _record_traversal_failure(self, error: OSError) -> None:
         """Directory loss has an unknown missing file population."""
-        self._traversal_failures.append((
-            to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
+        self._traversal_failures.append(failure_of(error))
 
     def _disclose_failures(self, result: dict) -> None:
         """Disclose directory and file analysis loss without treating totals as complete."""

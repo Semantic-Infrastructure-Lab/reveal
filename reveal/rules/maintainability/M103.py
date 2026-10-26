@@ -24,6 +24,7 @@ except ImportError:
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import toml_table
 from reveal.utils.lines import split_lines
+from ...utils.path_utils import failure_of
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,7 @@ class M103(BaseRule):
             logger.warning(f"M103: error reading {pyproject_path}: {e}")
             self.unavailable(
                 f"pyproject.toml could not be read, versions not compared: "
-                f"{type(e).__name__}: {e}", str(pyproject_path))
+                f"{failure_of(e).cause}", str(pyproject_path))
             return None
 
         # Check [project] section (PEP 621)

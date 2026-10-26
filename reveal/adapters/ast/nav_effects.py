@@ -13,6 +13,7 @@ from ...core.treesitter_compat import _zero_arg
 from .nav_calls import range_calls
 from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
 from reveal.utils.lines import split_lines
+from ...reveal_types import PathFailure
 
 # Each entry: (kind_label, list_of_patterns).
 #
@@ -1981,7 +1982,7 @@ class EffectList(List[Dict[str, Any]]):
     def __init__(self, *args: Any) -> None:
         super().__init__(*args)
         self.skipped: List[Tuple[str, str]] = []
-        self.traversal_failures: List[Tuple[Optional[str], str]] = []
+        self.traversal_failures: List[PathFailure] = []
 
 
 def skipped_files_note(skipped: Sequence[Tuple[str, str]]) -> Optional[str]:
@@ -1992,7 +1993,7 @@ def skipped_files_note(skipped: Sequence[Tuple[str, str]]) -> Optional[str]:
     return warning['message'] if warning else None
 
 
-def _traversal_note(failures: Sequence[Tuple[Optional[str], str]]) -> Optional[str]:
+def _traversal_note(failures: Sequence[PathFailure]) -> Optional[str]:
     """Share the existing directory-loss disclosure across transitive nav consumers."""
     from ...utils.path_utils import traversal_failed_warning  # noqa: I006
     warning = traversal_failed_warning(failures)

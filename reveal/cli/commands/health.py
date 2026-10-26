@@ -13,6 +13,7 @@ from ...utils.results import (AnalysisCompleteness, ExecutionFacts, execution_ex
 from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
+from ...utils.path_utils import failure_of
 
 logger = logging.getLogger(__name__)
 
@@ -469,7 +470,7 @@ def _check_nginx(path: Path, args: Namespace):
     try:
         content = path.read_text(errors='replace', encoding='utf-8')
     except OSError as exc:
-        return 1, f"nginx: cannot read {path}: {exc}"
+        return 1, f"nginx: cannot read {path}: {failure_of(exc).cause}"
 
     file_path = str(path)
     detections = RuleRegistry.check_file(file_path, None, content, select=['N'])

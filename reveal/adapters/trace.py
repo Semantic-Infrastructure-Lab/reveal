@@ -30,6 +30,7 @@ from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSp
                                   nonempty_scalar, param_schema, peek_query_items)
 from ..utils.path_utils import to_posix
 from ..utils.results import ResultBuilder
+from ..reveal_types import PathFailure
 
 
 
@@ -145,7 +146,7 @@ def _trace_skipped(values: Any, path: str, problems: List[Dict[str, str]]) -> Li
 
 
 def _trace_traversal(values: Any, path: str,
-                     problems: List[Dict[str, str]]) -> List[Tuple[Optional[str], str]]:
+                     problems: List[Dict[str, str]]) -> List[PathFailure]:
     """Validate directory loss separately: unlike file evidence, attribution may be unknown."""
     if not isinstance(values, list):
         _trace_problem(problems, path, 'Required trace traversal evidence is malformed')
@@ -155,7 +156,7 @@ def _trace_traversal(values: Any, path: str,
         if (isinstance(entry, (tuple, list)) and len(entry) == 2
                 and (entry[0] is None or isinstance(entry[0], str) and bool(entry[0]))
                 and isinstance(entry[1], str) and bool(entry[1])):
-            usable.append((entry[0], entry[1]))
+            usable.append(PathFailure(entry[0], entry[1]))
         else:
             _trace_problem(problems, path, 'Trace traversal entry is malformed')
     return usable

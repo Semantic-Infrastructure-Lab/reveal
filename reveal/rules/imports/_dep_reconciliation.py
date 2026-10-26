@@ -37,8 +37,9 @@ from typing import Callable, Dict, FrozenSet, Iterator, List, NamedTuple, Option
 
 from ...analyzers.imports.base import get_extractor
 from ...utils.gitignore import gitignore_enabled
-from ...utils.path_utils import EVIDENCE, _walk_code_files, to_posix, traversal_failed_warning
+from ...utils.path_utils import EVIDENCE, _walk_code_files, to_posix, traversal_failed_warning, failure_of
 from ...utils.request_cache import register_request_cache, register_validated_cache
+from ...reveal_types import PathFailure
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ def _fold_hyphen_underscore(name: str) -> str:
 # while its root's tree is unchanged (request_cache.register_validated_cache, BACK-1572):
 # a long-lived MCP host must not answer from the imports it saw on the first request.
 _ScanKey = Tuple[FrozenSet[str], Callable[[str], str], str]
-_TraversalFailure = Tuple[Optional[str], str]
+_TraversalFailure = PathFailure
 
 
 @dataclass(frozen=True)
@@ -141,7 +142,7 @@ def _scan_project_imports(
         imports = _scan_project_imports_uncached(root, extensions, normalize, sep,
                                                on_error=failures.append, on_transient=transient.append)
         scans[key] = _ProjectImportFacts(imports, tuple(
-            (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
+            failure_of(error)
             for error in failures), transient=bool(transient))
     facts = scans[key]
     if on_traversal_failure is not None:

@@ -5,6 +5,7 @@ import pytest
 
 from reveal.cli import file_checker as fc
 from reveal import mcp_server
+from reveal.reveal_types import PathFailure
 from test_check_collection_loss_back2040 import collection_fault, project, write
 
 pytestmark = pytest.mark.component
@@ -27,7 +28,7 @@ def test_collection_owns_full_immutable_event_sequence_and_formats_without_secon
     assert result.files == [visible] and len(walks) == 1
     assert len(collection_fault['events']) == 7 and collection_fault['checked'] == []
     assert type(result.traversal_failures) is tuple and len(result.traversal_failures) == 7
-    assert all(type(event) is tuple and len(event) == 2 for event in result.traversal_failures)
+    assert all(type(event) is PathFailure and len(event) == 2 for event in result.traversal_failures)
     assert all(cause.startswith('PermissionError:') for _, cause in result.traversal_failures)
     if unknown:
         assert all(path is None for path, _ in result.traversal_failures)

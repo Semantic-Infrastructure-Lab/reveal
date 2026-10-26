@@ -8,10 +8,13 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Sequence, Tuple, cast
 
 from ...complexity import fallback_complexity
-from ...reveal_types import StructureItem, WarningEntry
+from ...reveal_types import StructureItem, WarningEntry, PathFailure
 from ...utils.path_utils import (
-    _walk_code_files, to_posix, to_relative_display,
+    _walk_code_files,
+    to_posix,
+    to_relative_display,
     traversal_failed_warning as traversal_failed_warning,
+    failure_of,
 )
 from ...utils.results import outcome_of
 from .call_graph import build_symbol_map, resolve_callees
@@ -34,7 +37,7 @@ class StructureList(List[Dict[str, Any]]):
     def __init__(self, *args: Any) -> None:
         super().__init__(*args)
         self.skipped: List[Tuple[str, str]] = []
-        self.traversal_failures: List[Tuple[Optional[str], str]] = []
+        self.traversal_failures: List[PathFailure] = []
 
 
 def parse_recovered_warning(structures: Sequence[Dict[str, Any]]) -> Optional[WarningEntry]:
@@ -171,8 +174,7 @@ def collect_structures(path: str, outline: bool = False, needle: Optional[str] =
         # (BACK-1386; --no-gitignore turns that off), REVEAL_IGNORE and --exclude. Its own
         # os.walk also skipped *.egg-info, which holds packaging metadata, no code files.
         def on_error(error: OSError) -> None:
-            structures.traversal_failures.append((
-                to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
+            structures.traversal_failures.append(failure_of(error))
 
         for fp in _walk_code_files(path_obj, on_error=on_error):
             if is_code_file(fp):

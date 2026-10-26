@@ -27,7 +27,9 @@ from ..utils.path_utils import (
     _walk_code_files,
     tally_files_by_language,
     to_posix,
+    to_relative_display,
     traversal_failed_warning,
+    failure_of,
 )
 
 if TYPE_CHECKING:
@@ -56,6 +58,7 @@ from reveal.rules.scan_caches import (  # noqa: E402
 # Single source of truth for severity icons, shared with Detection.__str__ so
 # the single-file and directory renderers cannot drift apart (BACK-857).
 from reveal.rules.base import SEVERITY_MARKERS  # noqa: E402
+from ..reveal_types import PathFailure
 
 
 def _parallel_worker(packed_args: tuple) -> tuple:
@@ -255,7 +258,7 @@ class FileCollectionResult:
     # surface them the same way overview's census_for_path() already does,
     # instead of silently dropping the language from scope.languages.
     no_analyzer_by_language: Dict[str, Dict[str, object]] = field(default_factory=dict)
-    traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
+    traversal_failures: Tuple[PathFailure, ...] = ()
     # --changed RANGE (BACK-2068): the range and how many files git listed, stated in the report.
     changed: Optional[Dict[str, object]] = None
 
@@ -359,7 +362,7 @@ def collect_files_to_check(
         skipped_dirs=skipped[True],
         no_analyzer_by_language=no_analyzer_by_language,
         traversal_failures=tuple(
-            (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
+            failure_of(error)
             for error in traversal_errors),
     )
 
@@ -369,7 +372,7 @@ def _collection_disclosures(collection: FileCollectionResult, directory: Path) -
     warning = traversal_failed_warning(collection.traversal_failures, directory)
     if warning is None:
         return []
-    return [f"Check candidate discovery under {to_posix(directory)} is incomplete; "
+    return [f"Check candidate discovery under {to_relative_display(directory, Path.cwd())} is incomplete; "
             f"{warning['message']}; file and scope counts describe the discovered population only, "
             "and additional findings may be missing"]
 

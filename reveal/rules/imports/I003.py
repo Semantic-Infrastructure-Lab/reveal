@@ -26,6 +26,7 @@ from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...analyzers.imports.python import extract_python_imports
 from ...analyzers.imports.resolver import resolve_python_import
 from ...utils.request_cache import register_request_cache
+from ...utils.path_utils import failure_of
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ class I003(BaseRule):
             # PyYAML missing, or the directory walk hit an unreadable path
             logger.warning(f"I003: failed to load layer config for {file_path}: {e}")
             return self.unavailable(
-                f"layer config lookup failed: {type(e).__name__}: {e}", file_path)
+                f"layer config lookup failed: {failure_of(e).cause}", file_path)
 
         if load_error:
             return self.unavailable(load_error, file_path)

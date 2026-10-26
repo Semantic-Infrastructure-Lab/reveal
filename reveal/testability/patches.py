@@ -10,11 +10,12 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Callable, Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from ..utils.path_utils import _walk_code_files, is_test_basename_for_language, is_test_path, to_posix
+from ..utils.path_utils import _walk_code_files, is_test_basename_for_language, is_test_path, to_posix, failure_of
 from ..utils.pyparse import parse_python
 from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root
 from ..core.treesitter_parse import GrammarUnavailable, get_tree
 from ..registry import JS_TS_LANGUAGES, extensions_for_languages, js_ts_grammar
+from ..reveal_types import PathFailure
 
 suppress_treesitter_warnings()
 
@@ -57,15 +58,14 @@ class PatchUses(List[PatchUse]):
     def __init__(self) -> None:
         super().__init__()
         self.skipped: List[Tuple[str, str]] = []
-        self.traversal_failures: List[Tuple[Optional[str], str]] = []
+        self.traversal_failures: List[PathFailure] = []
         self.recovered_files: List[str] = []
         self.files_scanned = 0  # test files the scan opened: the denominator of 'no patches here'
 
     def record_traversal_failure(self, error: OSError) -> None:
         """Retain directory evidence separately from files that failed analysis."""
-        directory = to_posix(error.filename) if error.filename else None
-        failure = (directory, f'{type(error).__name__}: {error}')
-        if not error.filename or failure not in self.traversal_failures:
+        failure = failure_of(error)
+        if failure.path is None or failure not in self.traversal_failures:
             self.traversal_failures.append(failure)
 
     def merge(self, other: PatchUses) -> None:
@@ -313,7 +313,7 @@ def _scan_file_ts(file_path: Path) -> PatchUses:
     try:
         source = file_path.read_text(encoding='utf-8', errors='replace')
     except OSError as exc:
-        uses.skipped.append((to_posix(file_path), f'{type(exc).__name__}: {exc}'))
+        uses.skipped.append((to_posix(file_path), failure_of(exc).cause))
         return uses
 
     src_bytes = source.encode('utf-8', errors='replace')
@@ -475,7 +475,7 @@ def _scan_file(file_path: Path) -> PatchUses:
         source = file_path.read_text(encoding='utf-8', errors='replace')
         tree = parse_python(source, str(file_path))
     except (OSError, SyntaxError) as exc:
-        uses.skipped.append((to_posix(file_path), f'{type(exc).__name__}: {exc}'))
+        uses.skipped.append((to_posix(file_path), failure_of(exc).cause))
         return uses
 
     parents = _parent_map(tree)
