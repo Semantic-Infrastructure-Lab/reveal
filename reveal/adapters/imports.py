@@ -1521,8 +1521,10 @@ def _lost_extraction(error: BaseException) -> ImportExtraction:
 
 
 def _path_display(base_path: Path, scan_root: Optional[Path]) -> Callable[[Optional[str]], Optional[str]]:
-    """Paths relative to the requested path; under scope=root a file outside it (never outside the
-    scan root) is spelled from the requested directory (``../tests/test_x.py``), not absolute."""
+    """Paths relative to the requested directory, a file target's own directory (BACK-2183: a file was
+    its own base, so a sibling fell back to its host path); the requested file itself is named
+    (BACK-1488). Under scope=root a file outside the requested path (never outside the scan root) is
+    spelled from the requested directory (``../tests/test_x.py``), not absolute."""
     base_dir = base_path if base_path.is_dir() else base_path.parent
 
     def rel(value: Optional[str]) -> Optional[str]:
@@ -1531,28 +1533,20 @@ def _path_display(base_path: Path, scan_root: Optional[Path]) -> Callable[[Optio
         if scan_root is not None and os.path.isabs(value) and not resolution.path_is_under(Path(value), base_dir) \
                 and resolution.path_is_under(Path(value), scan_root):
             return to_posix(os.path.relpath(value, base_dir))
-        return to_relative_display(value, base_path)
+        return to_relative_display(value, base_dir)
     return rel
 
 
-def _relativize_importer_paths(result: Dict[str, Any], base_path: Path,
-                               rel: Callable[[Optional[str]], Optional[str]]) -> None:
+def _relativize_importer_paths(result: Dict[str, Any], rel: Callable[[Optional[str]], Optional[str]]) -> None:
     """The importer views (BACK-1054) name every file relative to the requested directory (a file
     target's own directory), as depends:// names them relative to its root."""
-    base_dir = base_path if base_path.is_dir() else base_path.parent
-
-    def rel_dir(value: str) -> str:
-        if base_path.is_dir() or value == str(base_path) or not resolution.path_is_under(Path(value), base_dir):
-            return rel(value) or value
-        return to_relative_display(value, base_dir)
-
     if result.get('target'):
-        result['target'] = rel_dir(result['target'])
+        result['target'] = rel(result['target'])
     for row in result.get('importers', []):
-        row['file'] = rel_dir(row['file'])
+        row['file'] = rel(row['file'])
     for entry in result.get('entries', []):
-        entry['file'] = rel_dir(entry['file'])
-        entry['importers'] = sorted(rel_dir(f) for f in entry['importers'])
+        entry['file'] = rel(entry['file'])
+        entry['importers'] = sorted(cast(str, rel(f)) for f in entry['importers'])
 
 
 def _relativize_imports_paths(result: Dict[str, Any], base_path: Path, scan_root: Optional[Path] = None) -> None:
@@ -1598,7 +1592,7 @@ def _relativize_imports_paths(result: Dict[str, Any], base_path: Path, scan_root
             component['component'] = rel(component['component'])
             component['top_bridge'] = rel(component['top_bridge'])
     elif result_type in ('module_importers', 'importer_summary'):
-        _relativize_importer_paths(result, base_path, rel)
+        _relativize_importer_paths(result, rel)
     elif result_type == 'circular_dependencies':
         for key in ('cycles', 'cycle_paths'):
             groups = result.get(key)
