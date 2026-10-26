@@ -92,6 +92,15 @@ def _leading_warnings(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return [w for w in warnings if w.get('type') in _ALWAYS_SHOWN]
 
 
+def _print_caveats(data: Dict[str, Any]) -> None:
+    """The warnings ``_leading_warnings`` did not print above the view: the dispatch caveats and, for a
+    scope with nothing to rank, the tree gitignore hid (BACK-2247). One rule for every view that prints
+    them, so a new view cannot pick its own."""
+    for w in data.get('meta', {}).get('warnings', []):
+        if w.get('type') not in _ALWAYS_SHOWN:
+            print(f"⚠ {w['message']}")
+
+
 def _render_text(data: Dict[str, Any]) -> None:
     if 'error' in data and 'target' not in data:  # the router reports the error (BACK-1059)
         if 'example' in data:
@@ -118,9 +127,7 @@ def _render_text(data: Dict[str, Any]) -> None:
             print(f"\n  Hint: {hint}")
         print()
         # BACK-1198: language-aware dispatch caveat, computed per-request.
-        for w in data.get('meta', {}).get('warnings', []):
-            if w.get('type') not in _ALWAYS_SHOWN:
-                print(f"⚠ {w['message']}")
+        _print_caveats(data)
         return
 
     for lvl in levels:
@@ -276,6 +283,8 @@ def _render_ranking_text(data: Dict[str, Any]) -> None:
 
     if not entries:
         print("  No call data found. Does the path contain Python files with function calls?")
+        print()
+        _print_caveats(data)  # why it is empty: a tree gitignore hid, no source counted (BACK-2247)
         return
 
     for entry in entries:
@@ -301,9 +310,6 @@ def _render_uncalled_text(data: Dict[str, Any]) -> None:
     total_uncalled = data.get('total_uncalled', 0)
     test_excluded = data.get('test_entrypoints_excluded', 0)
     entries = data.get('entries', [])
-    # BACK-1198: language-aware dispatch caveat + the "uncalled is a derived
-    # signal" warning, both computed per-request by the adapter.
-    warnings = data.get('meta', {}).get('warnings', [])
 
     print(f"Dead code candidates: {path}")
     print(f"Total defined:        {total_defined} functions/methods")
@@ -314,12 +320,11 @@ def _render_uncalled_text(data: Dict[str, Any]) -> None:
     if test_excluded:
         print(f"Note: excluded {test_excluded} test-runner entrypoint(s) "
               f"([Fact]/@Test/test_*, etc.) — add ?test-framework=true to include")
-    # BACK-1198: print the caveats near the number they qualify — previously
+    # BACK-1198: the language-aware dispatch caveat + the "uncalled is a derived signal" warning, both
+    # computed per-request by the adapter, print near the number they qualify — previously
     # this rendered ~2,235 lines below the count on a large uncalled list,
     # past where anyone reading the header would see it.
-    for w in warnings:
-        if w.get('type') not in _ALWAYS_SHOWN:
-            print(f"⚠ {w['message']}")
+    _print_caveats(data)
     print()
 
     if not entries:

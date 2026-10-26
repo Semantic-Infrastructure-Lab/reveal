@@ -108,6 +108,15 @@ _EMPTY_CENSUS_WARNING = {
 }
 
 
+def _census_unavailable_warning(cause: str) -> Dict[str, Any]:
+    """W-CALLS-12 for a census that could not be taken, which is not one that counted no file (BACK-2248):
+    the walk failed outside directory enumeration, so nothing is known about the scope's languages.
+    *cause* is ``failure_of``'s, the class and reason without the path."""
+    return {'code': 'W-CALLS-12', 'type': 'not_measured',
+            'message': (f'Confidence withheld: the language census could not be taken ({cause}), '
+                        'so no measured recall figure applies.')}
+
+
 # ?uncalled dead-code precision, measured by source review (BACK-1899, VALIDATION.md): 20 claims per
 # corpus, one to three corpora per language. The calls confidence is extraction recall and says nothing
 # about it. Each family contributes one sentence, shown only when a language of that family is in scope.
@@ -140,14 +149,16 @@ def _uncalled_measured_low_warning(per_language: Dict[str, int]) -> Optional[Dic
                         f'review per corpus, {figures} Treat this as a review list, not findings.')}
 
 
-def _declines(per_language: Dict[str, int], unmeasured_walk: bool, uncalled: bool = False) -> List[Dict[str, Any]]:
+def _declines(per_language: Dict[str, int], unmeasured_walk: bool, uncalled: bool = False,
+              census_unavailable: Optional[str] = None) -> List[Dict[str, Any]]:
     """W-CALLS-9 for an unmeasured walk, W-CALLS-10 for unmeasured languages, W-CALLS-11 for
     ?uncalled over a language whose dead-code claims were measured low, W-CALLS-12 for a census
-    that counted no file (rule 8)."""
+    that counted no file (rule 8) or, naming *census_unavailable*, one that could not be taken."""
     declines = [dict(_UNMEASURED_WALK_WARNING)] if unmeasured_walk else []
     unmeasured = _unmeasured_language_warning(per_language)
     measured_low = _uncalled_measured_low_warning(per_language) if uncalled else None
-    empty = None if sum(per_language.values()) else dict(_EMPTY_CENSUS_WARNING)
+    empty = None if sum(per_language.values()) else (
+        _census_unavailable_warning(census_unavailable) if census_unavailable else dict(_EMPTY_CENSUS_WARNING))
     return declines + [w for w in (unmeasured, measured_low, empty) if w]
 
 
@@ -167,18 +178,22 @@ def _reported_confidence(confidence: Optional[float], known_loss: bool, declines
 
 def language_census(path: str, *,
                     on_error: Optional[Callable[[OSError], None]] = None,
-                    on_hidden: Optional[OnHidden] = None) -> Dict[str, int]:
+                    on_hidden: Optional[OnHidden] = None,
+                    on_unavailable: Optional[Callable[[OSError], None]] = None) -> Dict[str, int]:
     """Per-language file counts under *path* (BACK-1198) — single walk,
     shared by the confidence and dynamic-dispatch-vocabulary computation.
     Empty dict (not an exception) on a missing/unreadable path — callers
     fall back to the language-agnostic defaults, same as the "unmeasured
     language" case. The optional callback retains actual directory enumeration
     errors; the broad fallback below also covers unqualified non-walk errors.
-    *on_hidden* sees what the walk hid (BACK-2065).
+    *on_hidden* sees what the walk hid (BACK-2065). *on_unavailable* sees the error behind that
+    fallback ``{}`` (BACK-2248): not a lost directory (BACK-2027), but not an empty scope either.
     """
     try:
         return dict(census_for_path(Path(path), on_error=on_error, on_hidden=on_hidden).per_language)
-    except OSError:
+    except OSError as error:
+        if on_unavailable is not None:
+            on_unavailable(error)
         return {}
 
 
@@ -199,20 +214,23 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
     makes the confidence null and is named (W-CALLS-10); *unmeasured_walk* adds the
     W-CALLS-9 decline for a callee walk beyond depth 1 or --detail; *uncalled* makes it null in every
     language (BACK-2195) and, over a family whose dead-code claims were measured low, names it (W-CALLS-11).
-    A census that counted no file has nothing to weight: no confidence, and W-CALLS-12 says so (BACK-2106).
+    A census that counted no file has nothing to weight: no confidence, and W-CALLS-12 says so (BACK-2106);
+    one that could not be taken says that instead, with its cause (BACK-2248).
 
     *census* is the per-language file count a caller already holds for this very *path* and scope
     (``CalleeSource.language_census``, BACK-2132); None walks the tree for it. A held census had
     no walk error and kept files, so there is neither a census failure nor a hidden tree to report.
     """
     census_failures: List[PathFailure] = []
+    census_unavailable: List[PathFailure] = []
 
     def _record_census_error(error: OSError) -> None:
         census_failures.append(failure_of(error))
 
     hidden = HiddenTally()
     per_language = census if census is not None else language_census(
-        path, on_error=_record_census_error, on_hidden=hidden)
+        path, on_error=_record_census_error, on_hidden=hidden,
+        on_unavailable=lambda error: census_unavailable.append(failure_of(error)))
     directory_failures = (*traversal_failures, *census_failures)
     total = sum(per_language.values())
     confidence: Optional[float] = None
@@ -230,7 +248,7 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
             dominant, CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB
         )
     else:
-        # Nothing counted, nothing to weight: _declines adds W-CALLS-12 and the number is withheld.
+        # Nothing counted (or no census to count by), nothing to weight: _declines adds W-CALLS-12 and the number is withheld.
         dominant = ''
         vocab = CALL_GRAPH_DEFAULT_DISPATCH_VOCAB
         implicit_vocab = CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB
@@ -248,7 +266,8 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
         warnings.append({'code': 'W-CALLS-8', 'message': (
             'JSX component uses are typed jsx_reference relationships; runtime render scheduling is unresolved. '
             'Class-field initializer navigation, string/HTML/Angular templates and Vue/Svelte component relationships are outside this scope.')})
-    declines = _declines(per_language, unmeasured_walk, uncalled)
+    declines = _declines(per_language, unmeasured_walk, uncalled,
+                         census_unavailable[0].cause if census_unavailable else None)
     warnings.extend(declines)
     known_loss = bool(skipped or directory_failures)
     if uncalled:
