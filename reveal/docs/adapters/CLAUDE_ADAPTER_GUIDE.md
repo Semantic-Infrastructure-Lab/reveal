@@ -357,7 +357,7 @@ Chronological sequence of tool operations:
   "collapsed_steps": 36,
   "displayed_steps": 36,
   "workflow": [
-    {"step": 1, "message_index": 7, "tool": "Bash", "detail": "Run TIA boot sequence",
+    {"step": 1, "message_index": 7, "tool": "Bash", "detail": "Run test suite",
      "timestamp": "2026-01-18T10:15:23", "outcome": "success"},
     {"step": 2, "message_index": 9, "tool": "Edit", "detail": "/path/to/file.py",
      "timestamp": "2026-01-18T10:16:45", "outcome": "success"}
@@ -1849,7 +1849,7 @@ reveal claude://session/my-session/tools --format json | jq '.tools | to_entries
 reveal claude://
 
 # Check the base path
-reveal 'claude://session/<name>' --base-path ~/src/tia/sessions
+reveal 'claude://session/<name>' --base-path ~/my-sessions
 ```
 
 A stock Claude Code install stores transcripts at `~/.claude/projects/<project-dir>/<uuid>.jsonl`.
