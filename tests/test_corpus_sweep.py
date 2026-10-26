@@ -74,3 +74,13 @@ def test_mypy_ratchet_parses_error_lines():
     m = mod._ERROR.match('reveal/x.py:12:5: error: Incompatible return value  [return-value]')
     assert (m["file"], m["code"]) == ("reveal/x.py", "return-value")
     assert mod._ERROR.match('reveal/x.py:12: note: see docs') is None
+
+
+def test_surface_rows_skip_the_recovered_marker():
+    """`_recovered` lists file paths (BACK-1480), not site dicts: it must not crash the surface sweep."""
+    found = {
+        "cli": [{"type": "argparse", "name": "main", "line": 3, "expr": "ArgumentParser()"}],
+        "env": [],
+        "_recovered": ["/corpus/cpp/core/config/engine.h"],
+    }
+    assert corpus_sweep.surface_rows(found) == [["cli", "argparse", "main", 3, "ArgumentParser()"]]

@@ -307,6 +307,13 @@ SURFACE_SCANNERS = {  # corpus language -> (module under reveal.adapters.ast, fu
 }
 
 
+def surface_rows(found: dict) -> list:
+    """Sorted [category, type, name, line, expr] rows; `_recovered` lists file paths, not sites (BACK-1480)."""
+    return sorted(
+        [cat, str(e.get("type")), str(e.get("name")), e.get("line", 0), str(e.get("expr", ""))]
+        for cat, entries in found.items() for e in entries if isinstance(e, dict))
+
+
 def worker_surface(langs: list[str], n: int) -> dict:
     """Every surface entry per file: {file: sorted [category, type, name, line, expr]} or {"error": ...}."""
     import importlib
@@ -320,9 +327,7 @@ def worker_surface(langs: list[str], n: int) -> dict:
         for p in sample_files(lang, n, AGREE_SEED):
             try:
                 found = scan(str(p))
-                out[rel_name(p, lang)] = sorted(
-                    [cat, str(e.get("type")), str(e.get("name")), e.get("line", 0), str(e.get("expr", ""))]
-                    for cat, entries in found.items() for e in entries)
+                out[rel_name(p, lang)] = surface_rows(found)
             except Exception as e:  # noqa: BLE001 - a sweep must survive one bad file
                 out[rel_name(p, lang)] = {"error": type(e).__name__}
     return out
