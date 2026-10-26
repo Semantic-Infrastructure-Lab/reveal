@@ -194,7 +194,7 @@ callee → [(file, caller_func, line), ...]
 | `callees` | string | — | Function name, or `FILE:NAME` for the definitions in one file, to find **callees of** (forward lookup). Depth 1 lists each definition's calls (`matches`); depth 2-5 walks level by level (see [`callees`](#callees)) |
 | `detail` | flag | — | `?callees` only: adds `params` and `effects` to every definition the walk reaches (`definitions[]`); with any other mode it exits 2. Not measured (W-CALLS-9) |
 | `rank` | string | — | Set to `callers` to rank all functions by in-degree |
-| `uncalled` | flag | — | List dead-code candidates — functions/methods with no static callers (see [Workflow 2](#workflow-2-find-unused-functions-dead-code)) |
+| `uncalled` | flag | — | Retired (D8): lists functions/methods with no static callers, with no confidence; use `?callers=NAME` for one function (see [Retired spellings](#retired-spellings)) |
 | `top` | integer | 10 for `?rank`, all for `?uncalled` | Max results for `?rank=callers` or `?uncalled`; `0` = all; a negative or non-whole value exits 2. `--limit N` becomes `top=N` |
 | `depth` | integer | 1 (the retired `?root`: 2) | Levels for `?callers` and `?callees` (and the retired `?root`): a signed whole integer clamped 1–5 (1 = direct only); `depth=abc` or `1.5` exits 2. A callee walk beyond depth 1 is not measured (W-CALLS-9) |
 | `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` at every depth, the retired `?root` and `?rank=callers`) |
@@ -420,7 +420,8 @@ Objective-C; the 19 measured pairs cover python, typescript/tsx, javascript, go,
 php, csharp, kotlin, swift, cpp, c, scala, zig, lua, gdscript and dart) withholds it: the envelope
 carries no `confidence`, and W-CALLS-10 names each such language with its file count, in text and
 JSON. Files that yield no call edge (shell, SQL, GraphQL, protobuf, YAML, ...) do not withhold it.
-`?uncalled` over a JavaScript, TypeScript, TSX, Java or PHP scan withholds it as well, and W-CALLS-11 names the
+`?uncalled` (retired) withholds it in every language, because the figure is call-extraction recall and
+says nothing about dead code; over a JavaScript, TypeScript, TSX, Java or PHP scan W-CALLS-11 also names the
 language and states the figures of the languages in scope: a source review of 20 claims per corpus found 0 of 20
 (three.js), 12 of 20 (VS Code), 1 of 20 (Excalidraw), 1 of 20 (Elasticsearch server, one directory scanned),
 0 of 20 (Guava) and 0 of 20 (WordPress) dead, so the list is a review list, not findings.
@@ -512,15 +513,14 @@ reveal 'calls://src/?callers=parse_config' --format=json | \
   jq -r '.levels[0].callers[].file' | sort -u
 ```
 
-### Workflow 2: Find Unused Functions (Dead Code)
+### Workflow 2: Is This Function Used?
 
 ```bash
-reveal 'calls://src/?uncalled'                # all functions/methods with no callers
-reveal 'calls://src/?uncalled&type=function'  # module-level only (skip methods)
-reveal 'calls://src/?uncalled&top=20'         # most-recently-modified uncalled first
+reveal 'calls://src/?callers=validate_item'      # every caller the index sees, with file and line
+reveal 'calls://src/?callers=validate_item&depth=2'  # and their callers
 ```
 
-Note: static analysis produces false positives for runtime-dispatched functions (framework entry points, console scripts, dispatch tables). Treat results as candidates to investigate, not definitive dead code.
+An empty answer means no static caller, not that the function is dead: runtime dispatch (framework entry points, console scripts, dispatch tables) leaves no call. For a whole-project dead-code list use the language's own tool (vulture, knip, staticcheck/deadcode, rustc `dead_code`, Roslyn IDE0051, Periphery, Psalm); `?uncalled` is retired because its bare-name matching measured too imprecise to list candidates (see [Retired spellings](#retired-spellings)).
 
 ### Workflow 3: Trace an Execution Path
 
@@ -681,9 +681,9 @@ trigger() {
 
 `reveal 'calls://.?callers=doResolve'` lists both `fn` and `trigger` as callers, since executing `trigger()` does transitively execute that call. This is intentional depth, not a bug — it doesn't cause false negatives — but it means callers counts for functions called from inline closures will be higher than a naive "innermost scope only" model expects. Plain anonymous/inline arrows (callback arguments, object-literal property values) don't get their own element at all and are attributed only to the nearest enclosing named scope, same as a Python `lambda`.
 
-### False Positives in `?uncalled`
+### False Positives in `?uncalled` (retired)
 
-`?uncalled` uses static name matching and cannot see runtime dispatch. Common sources of false positives: framework entry points (`@mcp.tool()`, `@app.route()`), console scripts wired in `pyproject.toml`, dispatch table functions (`_RENDERERS = {'key': fn}`), and unsupported top-level/class-body call shapes.
+`?uncalled` is retired (D8) and answers unchanged until the cut. It uses static name matching and cannot see runtime dispatch. Common sources of false positives: framework entry points (`@mcp.tool()`, `@app.route()`), console scripts wired in `pyproject.toml`, dispatch table functions (`_RENDERERS = {'key': fn}`), and unsupported top-level/class-body call shapes.
 
 A function used without being called is not listed, in any language: passed as a value, callback or function pointer (C `qsort(..., cmp)`, C++ `&Class::method` in Godot's `ClassDB::bind_method`, Go `wg.Go(l.run)`, Java `X::m`, a JS callback, object-literal value, `export` or JSX `<Button/>`), called outside a function body (module level, a Kotlin `init {}` block, a Scala class body), named in a PHP hook string or callable array (`add_action('init', 'fn')`, `[$this, 'm']`) or a Ruby symbol (`before_action :authenticate`). The rule is by name, like the rest of `calls://`: any other occurrence of the name counts, so an unrelated variable of the same name can hide a dead function (BACK-1391). A function referenced only from a non-code file (Redis's `commands.def` table) is still listed. Constructors are excluded in Java, C#, C++ and Dart (recognized by their declaration: no return type), as are overrides wherever the language marks them (`override` in C#/Kotlin/Swift/C++, including a C++ `override` on the in-class declaration of an out-of-line definition, and `@Override`/`@override` in Java/Dart), framework-registered methods (Spring/JAX-RS/Dagger annotations, ASP.NET `[HttpGet]`/`[Route]`, ASP.NET `Invoke`/`Configure` by name), Swift `init`/`deinit`/operators, C/C++ `main`, operators, destructors and GoogleTest/Catch2 `TEST(...)` bodies, and Godot's GDCLASS hooks (`_bind_methods`, `_notification`, ...) in classes that declare `GDCLASS` (BACK-1392). The exact list for the scanned language is printed with the result. Rust calls inside macro arguments (`format!("{}", h())`) are recovered best-effort from the macro's token tree (BACK-1393).
 
@@ -771,17 +771,9 @@ A: A few possibilities:
 - It's called via dynamic dispatch (not statically resolvable)
 - The caller is in a file type not indexed (e.g., `.yaml` or `.sh`)
 
-**Q: How do I find all functions that are never called (dead code)?**
+**Q: How do I find functions that are never called (dead code)?**
 
-A: Use `?uncalled`:
-
-```bash
-reveal 'calls://src/?uncalled'              # all uncalled functions + methods
-reveal 'calls://src/?uncalled&type=function' # skip methods
-reveal 'calls://src/?uncalled&top=20'       # most-recently-added uncalled first
-```
-
-See the Known False Positives section above for patterns that produce false positives, and `# noqa: uncalled` for suppression.
+A: For one function, ask who calls it: `reveal 'calls://src/?callers=NAME'`. For a whole-project list, use the language's own tool (vulture, knip, staticcheck/deadcode, rustc `dead_code`, Roslyn IDE0051, Periphery, Psalm). `?uncalled` is retired and measured low on precision; see [Retired spellings](#retired-spellings).
 
 **Q: How do I audit code for dangerous builtins like `eval` or `open`?**
 
@@ -817,6 +809,7 @@ result). At the cut the same text becomes an exit-2 error.
 | `ast://<path>?calls=NAME` | `calls://<path>?callers=NAME`; a pattern (`calls=*send*`) is a `reveal <path> --grep 'send'` text search |
 | `ast://<path>?callee_of=NAME` | `calls://<path>?callees=NAME` |
 | `ast://<path>?show=calls` | `calls://<path>?callers=NAME` or `?callees=NAME` |
+| `calls://<path>?uncalled`, `reveal calls --uncalled` | `?callers=NAME`, `--callers NAME` for one function, or the language's own dead-code tool (vulture, knip, staticcheck/deadcode, rustc `dead_code`, Roslyn IDE0051, Periphery, Psalm). It still answers, unchanged in shape and with no `meta.confidence` in any language, until the cut (D8): a 20-claim source review found 0 to 12 real dead functions per corpus (BACK-1899) |
 | `calls://<path>?modules`, `reveal calls --modules` | `imports://<path>?importers&scope=path`, `reveal imports <path> --importers --scope path` (BACK-1054). The old spelling already answers from it: one edge per import with both ends under the path, so an import used without a call is an edge too (on the celery corpus the call-resolved graph had 79 of its 1,453 import edges), and edges have no `call_count`. An import that resolves outside the path (an `import '../package.json'`) is counted in `outside_path_edges`, not listed. Its `calls_module_graph` shape is kept, with the imports `edge_rule`; a file parsed with errors is disclosed (`partial_parse`) and exits 0, an unreadable file or directory exits 3. `&format=dot` is `imports://<path>?importers&scope=path&format=dot` (BACK-2194) |
 | `calls://<path>?modules&external`, `--external` | `imports://<path>?importers` (`scope=root`, the default): importers from the whole project root, spelled from the path. The old flag named no external module: on the 24 measured corpora every edge it added was a file under the path that the default had dropped for being spelled as a host path |
 

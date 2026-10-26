@@ -141,7 +141,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
     'due-diligence': {
         'type': 'query_recipes',
         'task': 'due-diligence',
-        'description': 'Technical due-diligence workflow — orient, find risk, quantify coupling, blast-radius, dead code, test honesty (run in order)',
+        'description': 'Technical due-diligence workflow — orient, find risk, quantify coupling, blast-radius, duplication, test honesty (run in order)',
         'recipes': [
             {'goal': '0. What fraction of this is first-party', 'query': "reveal 'metrics://<repo>?view=provenance'", 'description': 'Provenance (first_party/test/vendor/minified) for every file, full population — not the ranked/capped subset overview:// and hotspots:// tag. Run this before ranking anything, so noise (vendored/generated/test code) doesn\'t dominate the rest of this workflow', 'output_type': 'classify_report'},
             {'goal': '1. Orient in 60 seconds', 'query': 'reveal overview <repo>', 'description': 'Counts, language mix, quality, top hotspots, architecture summary in one command. On multi-million-line repos this can take minutes — skip to the targeted steps below', 'output_type': 'overview'},
@@ -149,7 +149,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': '3. How coupled is it', 'query': "reveal 'imports://<repo>?circular=true'", 'description': 'Circular-dependency groups — a concrete, checkable architectural-debt number for a DD memo', 'output_type': 'circular_dependencies'},
             {'goal': '4. What is everything built on', 'query': 'reveal architecture <repo>', 'description': 'Entry points, core abstractions (by fan-in), risks, and suggested next commands in one brief — changing a core abstraction\'s contract is the highest-blast-radius work. For a token-budgeted LLM context snapshot boosted the same way, use reveal pack <repo> --architecture instead', 'output_type': 'architecture'},
             {'goal': '5. If I touch this, what breaks', 'query': "reveal 'imports://<repo>/<module>?importers'", 'description': 'Who imports this module (blast radius), each importer with its import line (depends://<repo>/<module> is the retired spelling). For a function: reveal <repo>/<file> <fn> --sideeffects (note: intra-procedural only — "none" means none in this body, not safe to change)', 'output_type': 'module_importers'},
-            {'goal': "6. What's dead or duplicated", 'query': "reveal 'calls://<repo>?uncalled=true&type=function'", 'description': 'Statically-uncalled functions (test-runner entry points excluded by default; add &test-framework=true to include). Also: reveal check <repo> --select B,C,D,I,U for duplicates (note: "uncalled" is a derived heuristic, not a separately measured signal — it inherits extraction confidence plus every convention-invoked call static analysis cannot see (runtime constructors, framework lifecycle hooks, dynamic dispatch); zero callers found is not proof of dead code)', 'output_type': 'calls_uncalled'},
+            {'goal': "6. What's duplicated or unused", 'query': "reveal check <repo> --select D,I", 'description': "Duplicate functions (D001) and import problems, unused imports among them (I rules). To ask whether one function is used, list its callers: reveal 'calls://<repo>?callers=NAME' (an empty answer is not proof of dead code: dynamic dispatch and framework hooks leave no static call)"},
             {'goal': '7. Is the test suite honest', 'query': "reveal 'patches://<repo>/tests?group=target&limit=15'", 'description': 'Mock/patch-pressure grouped by target (Python/TS-JS) — which boundaries are over-mocked, a test-trust smell', 'output_type': 'patches_scan'},
             {'goal': '8. Did recent changes hold up', 'query': 'reveal check --changed <old-tag>..<new-tag>', 'description': 'Quality rules over the files a git range changed (or main..feature for an open PR); structure of the same range: reveal diff://git://<old-tag>/.:git://<new-tag>/. — CLI flag, no URI adapter form'},
             {'goal': '9. Diff structure across two revisions', 'query': "reveal 'diff://git://<file>@<refA>:git://<file>@<refB>'", 'description': 'Structural diff between two revisions of a file. For a whole-repo architecture delta, use reveal architecture <repo> --against <ref> instead', 'output_type': 'diff_comparison'},
@@ -1513,8 +1513,6 @@ class HelpAdapter(ResourceAdapter):
          'use': 'hotspots://', 'example': "reveal 'hotspots://src/?functions_only=true&top=10'"},
         {'want': 'know who calls a function',
          'use': 'calls://', 'example': "reveal 'calls://src/?callers=my_fn'"},
-        {'want': 'find dead code (functions nothing calls)',
-         'use': 'calls://', 'example': "reveal 'calls://src/?uncalled'"},
         {'want': 'follow what a function calls, level by level',
          'use': 'calls://', 'example': "reveal 'calls://src/?callees=my_fn&depth=2'"},
         {'want': "see a function's inputs, side effects (db/http/file/env) and exits",

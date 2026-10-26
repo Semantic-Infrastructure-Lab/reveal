@@ -387,7 +387,6 @@ with a note naming `--callers` and `--callees NAME --depth N` ([retired spelling
 reveal calls [PATH] --callers NAME [--depth N]
 reveal calls [PATH] --callees NAME|FILE:NAME [--depth N] [--detail] [--builtins]
 reveal calls [PATH] --rank callers [--top N] [--builtins] [--test-framework]
-reveal calls [PATH] --uncalled [--type function|method] [--top N] [--test-framework]
 reveal calls [PATH] --modules [--external]
 ```
 
@@ -402,13 +401,13 @@ reveal calls [PATH] --modules [--external]
 | `--root NAME` | `root` | Retired: `--callees NAME --depth N` is the same walk (`--root` defaulted to depth 2); prints a note |
 | `--depth N` | `depth` | Signed whole integer, clamped 1–5: callers levels (default 1), callee walk levels for `--callees` (default 1) and the retired `--root` (default 2); other modes ignore it with a warning |
 | `--rank callers` | `rank=callers` | Rank every function by caller count |
-| `--top N` | `top` | Entries for `--rank` (default 10) or `--uncalled` (default all); 0 = all; negative values reject |
-| `--uncalled` | `uncalled` | Functions/methods with no callers (dead-code candidates) |
-| `--type KIND` | `type` | With `--uncalled`: `function` (module-level only) or `method` |
+| `--top N` | `top` | Entries for `--rank` (default 10) or the retired `--uncalled` (default all); 0 = all; negative values reject |
+| `--uncalled` | `uncalled` | Retired (D8): functions/methods with no callers; `--callers NAME` for one function, the language's own tool for a project-wide list; prints a note and no confidence |
+| `--type KIND` | `type` | With the retired `--uncalled`: `function` (module-level only) or `method` |
 | `--modules` | `modules` | Retired: module graph, one edge per import under PATH (`reveal imports PATH --importers --scope path`); prints a note |
 | `--external` | `external` | Retired, with `--modules`: importers from the whole project root (`reveal imports PATH --importers`) |
 | `--builtins` | `builtins` | Include language builtins in callees (every depth), the retired root and rank output |
-| `--test-framework` | `test-framework` | Count test-framework entrypoints (rank callers, uncalled candidates) |
+| `--test-framework` | `test-framework` | Count test-framework entrypoints (rank callers, and the retired `--uncalled`) |
 
 `?format=dot` (Graphviz) has no subcommand spelling; `--format` takes `text` or `json`.
 `--all`/`--limit` lift or set `top` on the URI only; the subcommand takes `--top N`.
@@ -427,7 +426,7 @@ A callee walk beyond depth 1 and `--detail` are not measured in any language: th
 W-CALLS-9 and its `walk_rule` (a `Rule:` line in text) says `beyond_depth_1: false, detail: false`.
 A language in PATH that yields call sources and has no recall snapshot (Elixir, Objective-C)
 withholds the confidence and is named (W-CALLS-10); shell, SQL and other files with no call edges do not.
-`?uncalled` over JavaScript, TypeScript, TSX, Java or PHP also withholds it (W-CALLS-11): its dead-code claims were measured low, so read the list as candidates to review.
+The retired `?uncalled` withholds it in every language (W-CALLS-11 also names the measured precision for JavaScript, TypeScript, TSX, Java and PHP).
 
 A directory named `calls` in the current directory is shadowed by the verb: `reveal calls`
 prints `note: ./calls/ exists — use ./calls or calls/ to target it`; `reveal calls/` is the path.
@@ -440,7 +439,6 @@ reveal calls src --callers process --depth 2       # callers of callers
 reveal calls src --callees validate_item           # what it calls
 reveal calls src --callees main --depth 3 --detail # what that calls, 3 levels, params/effects
 reveal calls src --rank callers --top 20           # most-called functions
-reveal calls src --uncalled --type function        # dead-code candidates
 reveal imports src --importers --scope path        # was: reveal calls src --modules (module graph)
 ```
 

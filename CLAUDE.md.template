@@ -37,9 +37,6 @@ No need to read each changed file separately.
 ## Common Queries
 
 ```bash
-# Find dead code
-reveal 'calls://src/?uncalled'
-
 # Impact radius before refactoring
 reveal 'calls://src/?callers=my_function&depth=3'
 

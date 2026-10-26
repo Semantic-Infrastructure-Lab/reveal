@@ -63,12 +63,11 @@ what Reveal does that normal code utilities do not.
 
 ```bash
 reveal 'calls://src/?rank=callers&top=20'
-reveal 'calls://src/?uncalled&type=function'
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
 ```
 
-**Why this matters:** `calls://` gives you coupling hotspots, dead-code
-candidates, and graph export from the CLI.
+**Why this matters:** `calls://` gives you coupling hotspots, impact radius,
+and graph export from the CLI.
 
 ### Agent-ready PR context
 
@@ -627,23 +626,9 @@ reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
 
 **Before refactoring a function:** run `?callers=fn` to see impact radius — everything that calls it.
 **Before splitting a function:** run `?callees=fn` to see its full dependency surface.
-**Dead code hunt:** if `?callers=fn` returns 0 callers, it's a candidate for removal.
+**Is it used?** If `?callers=fn` returns 0 callers, check for dynamic use (`getattr`, framework hooks, entry points) before removing it. For a project-wide dead-code list use the language's own tool (vulture, knip, staticcheck/deadcode, rustc `dead_code`, Roslyn IDE0051, Periphery, Psalm); `calls ?uncalled` is retired.
 
-```bash
-# Dead code: all functions defined but never called anywhere in the project
-reveal 'calls://src/?uncalled'
-
-# Functions only (skip methods and class-level definitions)
-reveal 'calls://src/?uncalled&type=function'
-
-# Top 20 most-recently-added uncalled functions
-reveal 'calls://src/?uncalled&top=20'
-
-# JSON output — pipe to jq, filter private vs public
-reveal 'calls://src/?uncalled' --format json | jq '.uncalled[] | select(.is_private == false)'
-```
-
-**What to expect:** `__dunder__` methods and functions decorated with `@property`, `@classmethod`, `@staticmethod` are excluded (they're called implicitly). Functions imported under aliases are correctly resolved — `from utils import helper as h` means `helper` is treated as called when `h` is called.
+Functions imported under aliases are resolved — `from utils import helper as h` means a call to `h` is a caller of `helper`.
 
 ```bash
 # What does process call, and what do those call? (forward walk)

@@ -109,7 +109,6 @@ Run any reveal URI query across all adapters. Same syntax as the CLI.
 ```
 reveal_query("ast://src/?complexity>10&sort=-complexity")
 reveal_query("calls://src/?callers=validate_token&depth=3")
-reveal_query("calls://src/?uncalled")
 reveal_query("ssl://api.example.com")
 reveal_query("domain://example.com")
 reveal_query("imports://src/?unused")
@@ -297,8 +296,8 @@ reveal_element("src/auth.py", "validate_token")  # ~100-600 tokens: one function
 # 4. PR review context in one call
 reveal_pack("src/", since="main", budget=8000, content=True)
 
-# 5. Find dead code before a refactor
-reveal_query("calls://src/?uncalled")
+# 5. Check whether a function is used before removing it
+reveal_query("calls://src/?callers=validate_item")
 
 # 6. Impact analysis before changing a function
 reveal_query("calls://src/?callers=validate_token&depth=3")
@@ -347,7 +346,7 @@ reveal_query("help://quick")   # compact intent router, ~1,600 tokens
 | `reveal_structure(file)` | 200–500 | 10–50× less than cat |
 | `reveal_element(file, fn)` | 100–300 | 20–50× less than cat |
 | `reveal_pack(dir, budget=8000)` | ~8,000 | One call instead of N calls |
-| `reveal_query("calls://...?uncalled")` | 200–500 | 33× less than manual cross-ref |
+| `reveal_query("calls://...?callers=NAME")` | ~100 | 6.7× less than grep (BENCHMARKS.md, scenario 4) |
 | `reveal_grep(dir, pattern)` | 100–500 | each hit's line, grouped by function, vs raw grep output |
 | `reveal_trace(dir, entry_point)` | 300–1000 | one call vs manual multi-file call chasing |
 

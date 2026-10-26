@@ -774,7 +774,8 @@ def test_named_fixture_inventory_runs_most_and_says_why_it_skips_the_rest():
     """The skips can't grow silently: most target commands run, and every skip names its need."""
     params = _named_fixture_commands()
     skipped = [p for p in params if any(m.name == 'skip' for m in p.marks)]
-    assert len(params) > 1100 and len(params) - len(skipped) > 900, (len(params), len(skipped))
+    # BACK-2195 stopped teaching ?uncalled: 6 fewer commands (1222 to 1216), 4 of them runnable (901 to 897 run).
+    assert len(params) > 1100 and len(params) - len(skipped) > 890, (len(params), len(skipped))
     assert all(m.kwargs['reason'].startswith('named fixture: ')
                for p in skipped for m in p.marks if m.name == 'skip')
 

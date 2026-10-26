@@ -40,19 +40,21 @@ _CALL_GRAPH_WARNINGS = [
 
 # BACK-1198: "derived signal" caveat, distinct from the extraction-confidence
 # warnings above — only attached to ?uncalled results. A zero-callers count
-# is not itself a measured signal; it's DERIVED from the (measured)
-# extraction confidence plus every convention-invoked call no static tool
-# sees (constructors invoked by the language runtime, e.g. Ruby's `.new` ->
-# `initialize`; framework lifecycle hooks; dynamic dispatch). Reporting one
-# confidence number for both extraction accuracy and "is this really dead
-# code" was the actual modelling error this ticket found.
+# is not itself a measured signal; it's DERIVED from call extraction plus
+# every convention-invoked call no static tool sees (constructors invoked by
+# the language runtime, e.g. Ruby's `.new` -> `initialize`; framework
+# lifecycle hooks; dynamic dispatch). Reporting one confidence number for
+# both extraction accuracy and "is this really dead code" was the actual
+# modelling error this ticket found; BACK-2195 (D8) withholds the number for
+# ?uncalled in every language.
 _UNCALLED_DERIVED_SIGNAL_WARNING = {
     'code': 'W-CALLS-5',
     'message': (
         "'Uncalled' is a derived heuristic, not a separately measured "
-        "signal -- it inherits the confidence above PLUS every "
-        "convention-invoked call static analysis cannot see (runtime "
-        "constructors, framework lifecycle hooks, dynamic dispatch). "
+        "signal, so it carries no confidence: call extraction is measured, "
+        "dead code is not, and every convention-invoked call static analysis "
+        "cannot see (runtime constructors, framework lifecycle hooks, "
+        "dynamic dispatch) is also missing. "
         "Zero callers found is not proof of dead code."
     ),
 }
@@ -137,9 +139,11 @@ def _declines(per_language: Dict[str, int], unmeasured_walk: bool, uncalled: boo
     return declines + [w for w in (unmeasured, measured_low) if w]
 
 
-def _reported_confidence(confidence: float, known_loss: bool, declines: List[Dict[str, Any]]) -> Optional[float]:
-    """No number while evidence was lost or a scanned call-source language has no recall snapshot."""
-    if known_loss or any(w['code'] in ('W-CALLS-10', 'W-CALLS-11') for w in declines):
+def _reported_confidence(confidence: float, known_loss: bool, declines: List[Dict[str, Any]],
+                         uncalled: bool = False) -> Optional[float]:
+    """No number while evidence was lost, a scanned call-source language has no recall snapshot, or the
+    request is ?uncalled (the figure is call-extraction recall, not a measure of dead code; D8)."""
+    if uncalled or known_loss or any(w['code'] in ('W-CALLS-10', 'W-CALLS-11') for w in declines):
         return None
     return confidence
 
@@ -175,8 +179,8 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
     vocabulary, printed unconditionally on every language) for the dominant
     language's own dispatch idioms. A scanned language in UNMEASURED_CALL_SOURCE_LANGUAGES
     makes the confidence null and is named (W-CALLS-10); *unmeasured_walk* adds the
-    W-CALLS-9 decline for a callee walk beyond depth 1 or --detail; *uncalled* over a JS/TS-family
-    language makes it null and names it (W-CALLS-11).
+    W-CALLS-9 decline for a callee walk beyond depth 1 or --detail; *uncalled* makes it null in every
+    language (BACK-2195) and, over a family whose dead-code claims were measured low, names it (W-CALLS-11).
 
     *census* is the per-language file count a caller already holds for this very *path* and scope
     (``CalleeSource.language_census``, BACK-2132); None walks the tree for it. A held census had
@@ -233,7 +237,7 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
         if known_loss:
             heuristic = {**heuristic, 'message': (
                 "'Uncalled' is a derived heuristic, not a separately measured "
-                "signal -- the extraction estimate is withheld for missing required inputs. "
+                "signal, and the evidence it needs is missing. "
                 "Convention-invoked calls (runtime constructors, framework lifecycle hooks, "
                 "dynamic dispatch) remain outside static analysis. "
                 "Zero callers found is not proof of dead code.")}
@@ -267,6 +271,6 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
 
     return {
         'parse_mode': 'tree_sitter_partial' if known_loss else 'tree_sitter_full',
-        'confidence': _reported_confidence(confidence, known_loss, declines),
+        'confidence': _reported_confidence(confidence, known_loss, declines, uncalled),
         'warnings': warnings,
     }

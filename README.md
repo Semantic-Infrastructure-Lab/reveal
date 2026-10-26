@@ -39,7 +39,6 @@ reveal src/auth.py validate_token    # exact code (~100-600 tokens)
 ```bash
 reveal 'calls://src/?callers=fn&depth=3'  # full impact radius before a refactor
 reveal 'calls://src/?rank=callers&top=20'  # most architecturally coupled functions
-reveal 'calls://src/?uncalled'             # functions with no callers — rough check, verify results
 ```
 
 **Deep-dive code navigation (works on Python, PHP, and the other tree-sitter languages; see `reveal --languages`):**

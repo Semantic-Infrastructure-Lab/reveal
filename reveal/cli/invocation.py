@@ -258,6 +258,12 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:calls.external': Retirement('calls ?external (--external)',
                                        'imports://<path>?importers (scope=root, the default), importers from the '
                                        'whole project root'),
+    # D8 (BACK-2195): ?uncalled is retired. It answers unchanged in shape until the cut (BACK-2200), with no
+    # confidence in any language; ?callers=NAME answers "is this used?" and the language's own tool answers the rest.
+    'param:calls.uncalled': Retirement('calls ?uncalled (--uncalled)',
+                                       '?callers=NAME (--callers NAME) for one function, or the language\'s own '
+                                       'dead-code tool (vulture, knip, staticcheck/deadcode, rustc dead_code, '
+                                       'Roslyn IDE0051, Periphery, Psalm)'),
     # Decision (e): ast's call filters are retired, not kept as element filters; calls= matched call
     # text in every scanned file instead of the callers index, so the two could disagree.
     'param:ast.calls': Retirement('ast://?calls=', "calls://<path>?callers=NAME, or --grep 'PATTERN' for a pattern"),

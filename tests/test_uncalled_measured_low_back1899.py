@@ -41,10 +41,10 @@ def test_uncalled_over_js_ts_withholds_confidence_and_names_the_measurement(tmp_
     assert '0 of 20' in warning['message'] and 'review list' in warning['message']
 
 
-def test_uncalled_over_python_keeps_its_confidence(tmp_path):
-    """Negative control: the other languages' answers do not change."""
+def test_uncalled_over_python_has_no_confidence_and_no_measured_low_warning(tmp_path):
+    """Python has no measured-low figure, so no W-CALLS-11; the confidence is withheld everywhere (BACK-2195)."""
     meta = meta_of(tmp_path, {'app.py': PY}, 'uncalled=true')
-    assert isinstance(meta['confidence'], float)
+    assert meta.get('confidence') is None
     assert 'W-CALLS-11' not in codes(meta)
 
 

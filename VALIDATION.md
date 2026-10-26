@@ -2031,6 +2031,8 @@ by scheduled execution.
 
 ## `calls ?uncalled` precision, JavaScript and TypeScript (2026-10-22)
 
+> **Retired (D8, BACK-2195).** `calls ?uncalled` is retired and prints no confidence in any language; this section is kept as the record of the measurement that retired it.
+
 `calls://<corpus>?uncalled=true` was run on the whole of each pinned corpus (reveal 0.131.0; three.js
 `4a1f515d`, VS Code `71a83f43`, Excalidraw `53973c3a`). Claims in JS/TS-family files were sampled
 deterministically (seed `BACK-1899/2026-10-22`, strata by top-level directory), 20 per corpus, and each
@@ -2083,6 +2085,8 @@ project builds callables through a project helper and registers them elsewhere; 
 is small and the labels are one reviewer's, so the rates are indicative only.
 
 ## `calls ?uncalled` precision, Java and PHP (2026-10-22)
+
+> **Retired (D8, BACK-2195).** `calls ?uncalled` is retired and prints no confidence in any language; this section is kept as the record of the measurement that retired it.
 
 Same method and criteria as the JavaScript and TypeScript section above: 20 claims per corpus, stratified by
 top-level directory (Elasticsearch by package), one reviewer reading each claim against the whole checkout,

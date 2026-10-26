@@ -21,7 +21,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
 | **metrics://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `exclude`, `sort`, `limit`, `offset` | `metrics://.?hotspots` |
 | **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `has_decorator`, `show`, `sort`, `limit`, `offset`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` (retired, with a note: `calls`, `callee_of`, `show=calls`) | `ast://src?complexity>10` |
-| **calls://** | `callers`, `callees`, `detail`, `uncalled`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `target`, `root`) | `calls://src?callers=fn` |
+| **calls://** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `uncalled`, `target`, `root`) | `calls://src?callers=fn` |
 | **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
 | **codex://** | `search`, `filter`, `since`, `until` | `codex://sessions/?search=auth-refactor` |
 | **depends://** | `top`, `format` | `depends://src?top=10` |
@@ -435,10 +435,10 @@ reveal 'metrics://.?hotspots&code_only'
   reveal 'imports://src?importers&scope=path'   # the same edges, as each module's importers
   ```
 
-One mode per request (`callers`, `callees`, `rank`, `uncalled`, `modules`, or the retired `target`
+One mode per request (`callers`, `callees`, `rank`, `modules`, or the retired `uncalled`, `target`
 and `root`); two exit 2.
 A name that names nothing exits 2 (`callees`: no definition; `callers`: no definition and no call
-site). A scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds `meta.confidence` and is named (W-CALLS-10). `?uncalled` over JavaScript, TypeScript, TSX, Java or PHP withholds it too (W-CALLS-11): dead-code precision was measured low there.
+site). A scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds `meta.confidence` and is named (W-CALLS-10). The retired `?uncalled` withholds it in every language (W-CALLS-11 also names the measured precision for JavaScript, TypeScript, TSX, Java and PHP); use `?callers=NAME`.
 
 - **`external=true`** - Retired with `modules`: importers from the whole project root (imports'
   default `scope=root`), not only those under the path. Import edges never reach stdlib or third-party

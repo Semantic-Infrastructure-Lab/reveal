@@ -557,8 +557,8 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
 def reveal_query(uri: str, provenance: bool = False) -> str:
     """Run a reveal URI query across any adapter (``scheme://resource?query`` syntax).
 
-    Use for anything outside the file/nav workflow: call graphs, dead-code
-    detection, import health, git history, SSL/domain checks, database/Excel
+    Use for anything outside the file/nav workflow: call graphs, import
+    health, git history, SSL/domain checks, database/Excel
     inspection, doc search, and more — one URI syntax for every adapter; the
     query keys each adapter accepts are its own (see below).
 

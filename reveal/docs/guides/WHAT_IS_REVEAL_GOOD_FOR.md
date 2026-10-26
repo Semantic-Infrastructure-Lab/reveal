@@ -129,7 +129,7 @@ Why it is good for this:
 
 - shows who calls a function across files
 - ranks architectural hotspots by caller count
-- finds dead-code candidates with `?uncalled`
+- answers "is this function used?" with `?callers=NAME`
 - shows which modules depend on a file before you change it
 - helps you estimate blast radius before renames, extractions, or deletions
 
@@ -191,7 +191,6 @@ It is also a strong fit for automation because the docs support:
 - changed-files quality gates
 - complexity gates
 - hotspot tracking
-- dead-code checks
 - SSL health checks in CI
 
 If the question is "can I turn this into a repeatable gate?" Reveal is often a good candidate.

@@ -173,36 +173,6 @@ jobs:
           path: metrics.json
 ```
 
-### Dead Code Check
-
-Flags uncalled functions introduced in a PR.
-
-```yaml
-# .github/workflows/dead-code.yml
-name: Dead Code Check
-
-on:
-  pull_request:
-
-jobs:
-  dead-code:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install reveal-cli
-
-      - name: Check for dead code
-        run: |
-          UNCALLED=$(reveal 'calls://src/?uncalled' --format json | \
-            jq '[.entries[]] | length')
-          echo "Uncalled functions: $UNCALLED"
-          if [ "$UNCALLED" -gt 0 ]; then
-            reveal 'calls://src/?uncalled'
-            # Advisory only — change exit 0 to exit 1 to enforce
-            exit 0
-          fi
-```
-
 ### SSL Certificate Health Check
 
 Checks that all SSL certs in your nginx config are valid and not expiring soon.

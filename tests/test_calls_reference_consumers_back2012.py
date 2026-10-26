@@ -250,7 +250,7 @@ def test_excluded_reference_is_policy_and_scope_change_rebuilds_cleanly(tmp_path
         result = CallsAdapter(str(root), 'uncalled').get_structure()
         assert names(result) == {'kept', 'genuinely_dead'}
         assert not [w for w in result['meta']['warnings'] if w.get('type') in ('analysis_failed', 'analysis_incomplete')]
-        assert 'confidence' in result['meta']
+        assert 'confidence' not in result['meta']  # ?uncalled carries none (BACK-2195)
         assert str(root) in index._REFERENCE_CACHE
     assert names(CallsAdapter(str(root), 'uncalled').get_structure()) == {'genuinely_dead'}
 

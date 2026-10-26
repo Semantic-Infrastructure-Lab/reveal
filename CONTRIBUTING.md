@@ -570,7 +570,6 @@ retain separate domains and are never silently discarded.
 
 **Active backlog**:
 - `reveal file.py :N` — extract the semantic unit at a given line number (BACK-099)
-- `calls://?uncalled` — dead code detection (BACK-071)
 - `imports://?violations` — architecture layer enforcement (BACK-100)
 - nginx N008–N012 security rules
 

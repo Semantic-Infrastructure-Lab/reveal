@@ -81,7 +81,8 @@ def observations(result):
 def test_actual_census_loss_all_modes_preserves_healthy_query_observations(tmp_path, monkeypatch, query, scope):
     root = tmp_path / 'affected'; child = project(root)
     baseline = CallsAdapter(str(root), query).get_structure()
-    assert baseline['meta']['confidence'] == calls_extraction_confidence('python')
+    # ?uncalled carries no confidence at all (BACK-2195); the other modes carry the extraction figure.
+    assert baseline['meta'].get('confidence') == (None if query.startswith('uncalled') else calls_extraction_confidence('python'))
     state = fault(monkeypatch, {root if scope == 'root' else child})
     result = CallsAdapter(str(root), query).get_structure()
     assert state['events'] and all(label == 'census' for label, _ in state['events'])

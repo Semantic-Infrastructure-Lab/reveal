@@ -188,6 +188,8 @@ PRODUCTION_CASES = {
     # row is its one note (with ?modules it is the second).
     'param:calls.modules': lambda f: [f'calls://{Path(f).parent}?modules'],
     'param:calls.external': lambda f: [f'calls://{Path(f).parent}?callers=auth_gate&external'],
+    # BACK-2195 (D8): ?uncalled is retired; every spelling is in tests/test_retired_call_spellings_back2066.py.
+    'param:calls.uncalled': lambda f: [f'calls://{Path(f).parent}?uncalled'],
     'param:ast.calls': lambda f: [f'ast://{f}?calls=auth_gate'],
     'param:ast.callee_of': lambda f: [f'ast://{f}?callee_of=auth_gate'],
     'value:ast.show=calls': lambda f: [f'ast://{f}?show=calls'],

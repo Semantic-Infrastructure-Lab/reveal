@@ -132,7 +132,7 @@ def test_required_file_loss_withholds_confidence_and_uncalled_wording(tmp_path, 
     assert result['meta']['parse_mode'] == 'tree_sitter_partial'
     warning = next(w for w in result['meta']['warnings'] if w.get('code') == 'W-CALLS-5')
     assert 'confidence above' not in warning['message']
-    assert 'withheld' in warning['message']
+    assert 'evidence it needs is missing' in warning['message']
     assert 'Zero callers found is not proof of dead code.' in warning['message']
 
 
@@ -153,8 +153,8 @@ def test_clean_empty_is_full_and_warning_only_controls_keep_score(tmp_path, quer
     assert result[count] == 0
     assert not required(result)
     assert result['meta']['parse_mode'] == 'tree_sitter_full'
-    # ?modules' edges are imports' (BACK-1054 slice S5): no calls extraction estimate.
-    assert result['meta'].get('confidence') == (None if query == 'modules' else 0.85)
+    # ?modules' edges are imports' (BACK-1054 slice S5): no calls extraction estimate; ?uncalled carries none (BACK-2195).
+    assert result['meta'].get('confidence') == (None if query == 'modules' or query.startswith('uncalled') else 0.85)
 
 
 @pytest.mark.parametrize('unknown', [False, True])

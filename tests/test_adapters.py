@@ -497,13 +497,14 @@ class TestHelpAdapter(unittest.TestCase):
 
     def test_due_diligence_step_6_has_derived_signal_caveat(self):
         """BACK-1197 item 3: step 5 ('sideeffects') already carries an
-        intra-procedural-only caveat; step 6 (calls://?uncalled) did not
-        carry the matching 'uncalled is derived, zero callers != dead code'
-        caveat despite being the same class of over-confident signal."""
+        intra-procedural-only caveat; step 6 carries the matching 'zero callers
+        != dead code' caveat. BACK-2195: step 6 no longer teaches ?uncalled (D8),
+        it points at ?callers=NAME and keeps the caveat."""
         adapter = HelpAdapter()
         result = adapter.get_element('examples/due-diligence')
         step6 = next(r for r in result['recipes'] if r['goal'].startswith('6.'))
-        self.assertIn('derived heuristic', step6['description'])
+        self.assertNotIn('uncalled', step6['query'])
+        self.assertIn('?callers=NAME', step6['description'])
         self.assertIn('not proof of dead code', step6['description'])
 
     def test_examples_rendered(self):

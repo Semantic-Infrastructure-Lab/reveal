@@ -87,8 +87,12 @@ def test_healthy_sibling_and_repaired_adapter_retain_clean_metadata(tmp_path, mo
     repaired = adapter.get_structure()
     assert not loss_warning(repaired)
     assert repaired['meta']['parse_mode'] == 'tree_sitter_full'
-    # ?modules' edges are imports' (BACK-1054 slice S5): its rule is edge_rule, not calls' extraction estimate.
-    assert isinstance(repaired['meta']['confidence'], float) if query != 'modules' else 'confidence' not in repaired['meta']
+    # ?modules' edges are imports' (BACK-1054 slice S5): its rule is edge_rule, not calls' extraction estimate;
+    # ?uncalled carries no confidence (BACK-2195).
+    if query == 'modules' or query.startswith('uncalled'):
+        assert 'confidence' not in repaired['meta']
+    else:
+        assert isinstance(repaired['meta']['confidence'], float)
 
 
 def test_unknown_directory_event_with_zero_identified_directories_is_still_loss(tmp_path, monkeypatch):

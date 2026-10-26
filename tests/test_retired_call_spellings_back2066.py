@@ -59,6 +59,9 @@ CASES = {
     # BACK-1054 slice S5: the module graph answers from imports ?importers&scope=path (Q4/Q8).
     'calls ?modules': ('param:calls.modules', lambda p: [f'calls://{p}?modules'], '?importers&scope=path'),
     'reveal calls --modules': ('param:calls.modules', lambda p: ['calls', p, '--modules'], '--importers'),
+    # BACK-2195 (D8): ?uncalled answers unchanged until the cut, with the note.
+    'calls ?uncalled': ('param:calls.uncalled', lambda p: [f'calls://{p}?uncalled'], '?callers=NAME'),
+    'reveal calls --uncalled': ('param:calls.uncalled', lambda p: ['calls', p, '--uncalled'], '?callers=NAME'),
     'ast ?calls=': ('param:ast.calls', lambda p: [f'ast://{p}?calls=helper'], '?callers='),
     'ast ?callee_of=': ('param:ast.callee_of', lambda p: [f'ast://{p}?callee_of=main'], '?callees='),
     'ast ?show=calls': ('value:ast.show=calls', lambda p: [f'ast://{p}?show=calls'], '?callers='),
@@ -174,6 +177,7 @@ MCP_CASES = {
     'calls ?root=': ('param:calls.root', lambda p: f'calls://{p}?root=main'),
     'calls ?target=': ('param:calls.target', lambda p: f'calls://{p}?target=helper'),
     'calls ?modules': ('param:calls.modules', lambda p: f'calls://{p}?modules'),
+    'calls ?uncalled': ('param:calls.uncalled', lambda p: f'calls://{p}?uncalled'),
     'ast ?calls=': ('param:ast.calls', lambda p: f'ast://{p}?calls=helper'),
 }
 

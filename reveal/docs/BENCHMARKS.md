@@ -103,7 +103,12 @@ Total:      4
 
 ---
 
-## Scenario 5: Rough Dead Code Scan
+## Scenario 5: Rough Dead Code Scan (retired)
+
+> **Retired measurement.** `calls ?uncalled` is retired (D8): its bare-name matching measured too imprecise
+> to list dead-code candidates (see [VALIDATION.md](../../VALIDATION.md)). Use `?callers=NAME` for one
+> function and the language's own dead-code tool for a project-wide list. The numbers below are kept as
+> the record of this measurement and are re-measured, or dropped, with the benchmark refresh (BACK-1618).
 
 **Goal**: Get a list of uncalled function candidates for post-refactor inspection.
 
@@ -134,7 +139,7 @@ The 33x reduction is real: Reveal eliminates the manual cross-reference work. Wh
 | Understand focused module | cat: 4,128 tokens | struct: 275 tokens | **15x** |
 | PR context (24 changed files) | git diff \| cat: 12,000+ | pack --content: ~4,000 | **3–4x** |
 | Find callers of a function | grep: 560 tokens | calls://?callers: 84 tokens | **6.7x** |
-| Uncalled function scan | ast:// all + manual: 7,196 tokens | calls://?uncalled: 220 tokens | **33x** *(candidates, not confirmed)* |
+| Uncalled function scan (retired) | ast:// all + manual: 7,196 tokens | calls://?uncalled: 220 tokens | **33x** *(candidates, not confirmed; `?uncalled` is retired)* |
 
 **The typical range is 3.9–15x** for file inspection and call graph queries. Scenario 5 reaches 33x but requires human verification of results. The gap widens when:
 - The file is large and only part of it matters (structure vs cat)

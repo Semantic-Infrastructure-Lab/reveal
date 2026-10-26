@@ -98,7 +98,8 @@ _RANK = ParamSpec('rank', 'string', 'Rank every function by in-degree, most-call
 _TOP = ParamSpec('top', 'integer', 'Max entries for rank (default 10) or uncalled (default all); 0 = all; '
                  'other modes ignore it with a warning', None, _calls_top, examples=('top=20',), minimum=0,
                  zero_policy='all', role='analysis', cli=CliBinding(('--top',), metavar='N'))
-_UNCALLED = _flag_spec('uncalled', 'List every function/method with no callers (dead-code candidates)',
+_UNCALLED = _flag_spec('uncalled', 'List every function/method with no callers (retired, D8: ?callers=NAME for one '
+                       'function, the language\'s own dead-code tool for the rest; prints no confidence)',
                        role='operation')
 _TYPE = ParamSpec('type', 'string', 'For uncalled: function (module-level functions only) or method', None,
                   nonempty_scalar, examples=('type=function',), choices=('function', 'method'), role='analysis',
@@ -177,12 +178,6 @@ _HELP: Dict[str, Any] = {
          'description': 'Top 10 most-called functions (coupling hotspot ranking)'},
         {'uri': 'calls://src/?rank=callers&top=20',
          'description': 'Top 20 most-called functions'},
-        {'uri': 'calls://src/?uncalled',
-         'description': 'Dead code candidates — all functions/methods with no callers'},
-        {'uri': 'calls://src/?uncalled&type=function',
-         'description': 'Dead code — module-level functions only (skip methods)'},
-        {'uri': 'calls://src/?uncalled&top=20',
-         'description': 'Top 20 most-recently-added uncalled functions'},
         {'uri': 'calls://src/?callers=main&format=dot',
          'description': 'Output callers graph as Graphviz dot (pipe to dot -Tsvg)'},
         {'uri': 'calls://src/?callers=main&format=json',
@@ -199,8 +194,8 @@ _HELP: Dict[str, Any] = {
         '(W-CALLS-9).',
         'A scanned language that yields call sources and has no recall snapshot (Elixir, Objective-C) withholds '
         'meta.confidence and is named (W-CALLS-10); shell, SQL and other files with no call edges do not. '
-        '?uncalled over JavaScript, TypeScript, TSX, Java or PHP withholds it too (W-CALLS-11): dead-code precision '
-        'was measured low there.',
+        '?uncalled is retired (D8) and answers unchanged until the cut, with a note and no meta.confidence in any '
+        'language; over JavaScript, TypeScript, TSX, Java or PHP W-CALLS-11 also names the measured precision.',
         '?uncalled: web/CLI framework routes (Flask, FastAPI, Click, …) are dispatched by the '
         'framework, not a static call, so they false-flag as dead code by default. Declare '
         'project-specific entry-point decorators in .reveal.yaml to exclude them: '
@@ -424,7 +419,7 @@ _SCHEMA: Dict[str, Any] = {
         '?callees depth=2-5 and detail: the callee walk under calls_callees, every call site of an expanded '
         'definition an edge; not measured in any language (W-CALLS-9 in meta.warnings, walk_rule.measured).',
         'A call-source language with no recall snapshot in scope: no meta.confidence, W-CALLS-10 names it (languages). '
-        '?uncalled over JS/TS/TSX, Java or PHP: no meta.confidence, W-CALLS-11 names the language and the measured precision.',
+        '?uncalled (retired, D8): no meta.confidence in any language; over JS/TS/TSX, Java or PHP W-CALLS-11 names the language and the measured precision.',
         '?modules is retired (BACK-1054): it answers from imports://<path>?importers&scope=path, one edge per '
         'import that resolves under the path (an import used without a call counts too; no call_count), and '
         '&external counts importers from the whole project root (scope=root). A file parsed with errors is '

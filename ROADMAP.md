@@ -81,11 +81,11 @@ Two problems shape the current work.
 1. **The first screen teaches only current names.** The README, `--agent-help` and
    `help://quick` teach only spellings that are not retiring, enforced by a test that reads
    the retired-names table (BACK-2196); `--adapters` marks retired schemes from the same table
-   (BACK-2197); `calls ?uncalled` prints its replacement and no confidence figure (BACK-2195).
+   (BACK-2197).
 2. **Call-graph recall back to its baseline for JavaScript and TypeScript.** Two precision
    fixes for function values moved what counts as a caller; recover the real functions they
-   drop and re-baseline what remains with each lost edge classified (BACK-2198, BACK-2178,
-   BACK-2199, BACK-2191).
+   drop and re-baseline what remains with each lost edge classified (BACK-2178, BACK-2199,
+   BACK-2191).
 3. **One import graph.** `depends`, `deps` and `calls ?modules` already answer through
    `imports`; finish per-language parity before the old names stop working (BACK-2063,
    BACK-2064, BACK-1054), measure through the public request path (BACK-2062), and keep the

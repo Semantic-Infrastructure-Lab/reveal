@@ -52,7 +52,6 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Query functions by complexity/size/type | `reveal 'ast://src/?type=function&complexity>10&sort=-complexity&limit=10'` |
 | Who calls a function | `reveal 'calls://src/?callers=my_fn'` |
 | What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
-| Dead code | `reveal 'calls://src/?uncalled'` |
 | A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--sideeffects`, `--exits`) |
 | Unused or circular imports | `reveal 'imports://src/?unused'` / `?circular` |
 | HTTP routes, env vars, network/db/fs access | `reveal 'surface://src/?type=http'` |
@@ -155,7 +154,7 @@ reveal help://examples/codebase --format=json        # Codebase exploration and 
 reveal help://examples/data --format=json            # Database and structured data inspection — SQLite, MySQL, Excel, JSON
 reveal help://examples/debugging --format=json       # Debugging and error investigation
 reveal help://examples/documentation --format=json   # Documentation search and analysis — markdown, front matter
-reveal help://examples/due-diligence --format=json   # Technical due-diligence workflow — orient, find risk, quantify coupling, blast-radius, dead code, test honesty (run in order)
+reveal help://examples/due-diligence --format=json   # Technical due-diligence workflow — orient, find risk, quantify coupling, blast-radius, duplication, test honesty (run in order)
 reveal help://examples/history --format=json         # Prompt history and session discovery across all projects
 reveal help://examples/infrastructure --format=json  # Server infrastructure inspection — nginx, SSL, domains, cPanel, AutoSSL, Let's Encrypt
 reveal help://examples/quality --format=json         # Code quality and hotspot analysis
@@ -248,7 +247,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
 | `reveal patches [path]` | Mock/patch pressure in tests, grouped by target; --view pressure joins it with production boundary fan-out *(Python and TS/JS test suites)* | `reveal patches --help` |
 | `reveal testability [path]` | Retired: use reveal patches <path> --view pressure (the same answer); test patch pressure joined with production boundary fan-out | `reveal testability --help` |
-| `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --rank callers, --uncalled, --modules | `reveal calls --help` |
+| `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --rank callers, --modules | `reveal calls --help` |
 | `reveal trace --from FUNC` | Retired: use reveal calls --callees FUNC --depth N --detail (the same walk); depth-indented narrative with side effects | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
 | `reveal review <path>` | Retired: use reveal check --changed RANGE and the diff:// adapter (structure: reveal 'diff://git://A/.:git://B/.'); still answers and prints a replaced-by note | `reveal review --help` |
@@ -1366,14 +1365,14 @@ reveal calls src/ --callers validate_item --depth 2
 reveal calls src/ --rank callers --top 20
 ```
 
-One mode per request (`callers`, `callees`, `rank`, `uncalled`, `modules`): two exit 2 and name
+One mode per request (`callers`, `callees`, `rank`, `modules`, or the retired `uncalled`): two exit 2 and name
 both, and a malformed value (`depth=abc`, `top=-1`, `callers=a.py:f`, `detail` without `callees`)
 exits 2 naming the parameter. The retired `?target=` and `?root=` still answer, with a note naming
 `?callers=` and `?callees=NAME&depth=N`. A name that names nothing (callees: no definition;
 callers: no definition and no call site) exits 2 with the empty answer. Exit 3 means a file or
 directory could not be read; the answer still prints with its warning. A callee walk beyond depth 1
 and `detail` are not measured in any language (W-CALLS-9; the `walk_rule` and its `Rule:` line say
-so), and a scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds the confidence (W-CALLS-10). `?uncalled` over JavaScript/TypeScript/TSX, Java or PHP withholds it too (W-CALLS-11): dead-code precision was measured low there, so treat the list as a review list.
+so), and a scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds the confidence (W-CALLS-10). The retired `?uncalled` still answers, with a note and no confidence in any language (W-CALLS-11 names the measured precision for JS/TS, Java and PHP); use `?callers=NAME`.
 
 **Two adapters — different scopes:**
 
@@ -1442,39 +1441,17 @@ On the next `reveal` run, `.myfmt` files are handled by `MyFormatAnalyzer` autom
 
 ---
 
-### Task: "Find dead code (uncalled functions)"
+### Task: "Is this function used? (dead code)"
 
 **Pattern:**
 ```bash
-reveal 'calls://src/?uncalled'                 # All functions with no callers
-reveal 'calls://src/?uncalled&type=function'   # Module-level functions only (skip methods)
-reveal 'calls://src/?uncalled&type=method'     # Methods only
-reveal 'calls://src/?uncalled&top=20'          # Top 20 most-recently-added uncalled
+reveal 'calls://src/?callers=validate_item'          # every caller the index sees, with file and line
+reveal 'calls://src/?callers=validate_item&depth=2'  # and their callers
 ```
 
-**Suppression:** Add `# noqa: uncalled` to a function's definition line (or up to 3 lines after) to exclude it from results — useful for runtime-dispatched functions, plugin entry points, or framework hooks that are called dynamically.
+For a whole-project dead-code list use the language's own tool: vulture (Python), knip (JS/TS), staticcheck or deadcode (Go), rustc `dead_code` (Rust), Roslyn IDE0051 (C#), Periphery (Swift), Psalm (PHP). `calls ?uncalled` is retired (D8): bare-name matching measured too imprecise to list candidates, so it still answers, with a note and no confidence, until the cut.
 
-**Limitations:** Static analysis only — functions called via `getattr`, `importlib`, reflection, or string dispatch are not tracked and appear as uncalled. Private (`_prefix`) functions are marked `(function, private)`. A function referenced without being called (a callback, `&Class::method`, `X::m`, `+= OnEvent`, a JSX component, a Ruby `before_action :x` symbol) counts as used.
-
-**Implicitly-invoked code is excluded per language.** The output footer (`⚠ Excludes …`) names the exact list for the scanned languages:
-
-| Language | Excluded automatically |
-|----------|------------------------|
-| Python | `__dunder__` methods, `@property`/`@classmethod`/`@staticmethod` |
-| JS/TS | constructors, `get`/`set` accessors; `describe`/`it`/`test` callbacks |
-| Go | `main`, `init`; `Test*`/`Benchmark*`/`Example*`/`Fuzz*` in `_test.go` |
-| Rust | `main`, `#[test]`/`#[bench]` functions, trait-impl methods |
-| Java | constructors, `@Override`, `main`, Spring/JAX-RS/Dagger methods (`@GetMapping`, `@Bean`, `@Provides`, …); JUnit3 `test*` in test files |
-| Kotlin | `override`, `main`, Spring/Dagger functions |
-| C# | constructors, `override`, `Main`, ASP.NET actions (`[HttpGet]`, `[Route]`, …), `Invoke`/`Configure`/… |
-| C/C++ | `main`, test-registration macros (`TEST`, `TEST_F`, `TEST_CASE`, …); C++ also constructors, destructors, operators, `override`/`final`, Godot `GDCLASS` hooks |
-| Swift | `init`/`deinit`, operator functions, `override` |
-| Ruby | `initialize`, `included`/`extended`/`inherited`/`method_missing`/`respond_to_missing?` |
-| PHP | magic methods (`__construct`, `__destruct`, `__get`/`__set`, `__call`/`__callStatic`, `__toString`, `__invoke`, `__clone`, `__sleep`/`__wakeup`, …); functions named in hook strings (`add_action('init', 'fn')`) count as referenced |
-
-Test entry points (Go `Test*`, Rust `#[test]`, JS/TS test callbacks, JUnit3 `test*`) are counted in `test_entrypoints_excluded` (JSON) instead of being listed. Add `&test-framework=true` to list them as candidates too. `.reveal.yaml` `adapters.calls.entry_points.decorators` adds project-specific entry-point decorators.
-
-**Interpreting absence of evidence:** "No callers found" means no *static* callers were detected in the scanned path. It does not mean the function is dead — runtime dispatch (callbacks, plugin loaders, framework hooks, `getattr`-based dispatch) may call it without leaving a static trace. Treat `?uncalled` output as *candidates for review*, not confirmed dead code. When `.gitignore` hid the whole scanned tree, the empty answer carries `⚠ No files left to analyze: N entries hidden by .gitignore (use --no-gitignore to show)` (a `scope_hidden` warning in JSON `meta.warnings`); imports://, depends:// and surface:// say the same.
+**Interpreting absence of evidence:** "No callers found" means no *static* callers were detected in the scanned path. It does not mean the function is dead: runtime dispatch (callbacks, plugin loaders, framework hooks, `getattr`-based dispatch) may call it without leaving a static trace. A function referenced without being called (a callback, `&Class::method`, `X::m`, `+= OnEvent`, a JSX component, a Ruby `before_action :x` symbol) counts as used. When `.gitignore` hid the whole scanned tree, the empty answer carries `⚠ No files left to analyze: N entries hidden by .gitignore (use --no-gitignore to show)` (a `scope_hidden` warning in JSON `meta.warnings`); imports://, depends:// and surface:// say the same.
 
 ---
 
@@ -2947,7 +2924,7 @@ reveal 'ast://./src?complexity>5' --max-items 20
 reveal 'calls://./src?rank=callers' --max-snippet-chars 80
 
 # Combine: first 50 items, strings max 80 chars
-reveal 'calls://./src?uncalled' --max-items 50 --max-snippet-chars 80
+reveal 'calls://./src?rank=callers' --max-items 50 --max-snippet-chars 80
 ```
 Any cut list is disclosed the same way, whatever cut it (`--max-items`, `--head`, `?limit=`, an adapter's default cap): text output ends with `⚠ Truncated <field>: showing N of M — <how to see more>`, and JSON carries it as a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "cause", "message"}`. When a URI result has one list, `--max-items` also adds `meta.budget` with a cursor for pagination. A result with several lists (`hotspots://`, `reveal://`) and a file's lists are each cut on their own, like `--head`, so they carry only the per-list entries. A truncated result exits 0.
 
