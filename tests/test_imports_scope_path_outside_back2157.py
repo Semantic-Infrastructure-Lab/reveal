@@ -37,17 +37,19 @@ def _json(tmp_path, uri):
 OUTSIDE = ['../build/vite/style.css', '../extensions/themes/dark.json']
 
 
-def test_scope_path_importers_name_targets_outside_the_path_relative(tmp_path):
+def test_scope_path_importers_list_no_target_outside_the_path(tmp_path):
+    """BACK-2251: the targets above the scan root are not rows (the spelling of those paths is the
+    statement view's, below); the host path still never appears."""
     _project(tmp_path)
     data = _json(tmp_path, 'imports://proj/src?importers&scope=path')
-    assert {e['file']: e['importers'] for e in data['entries']} == {
-        OUTSIDE[0]: ['test/fixtureUtils.ts'], OUTSIDE[1]: ['test/fixtureUtils.ts'], 'b.ts': ['test/fixtureUtils.ts']}
+    assert {e['file']: e['importers'] for e in data['entries']} == {'b.ts': ['test/fixtureUtils.ts']}
 
 
-def test_scope_path_fan_in_names_targets_outside_the_path_relative(tmp_path):
+def test_scope_path_fan_in_lists_no_target_outside_the_path(tmp_path):
     _project(tmp_path)
     data = _json(tmp_path, 'imports://proj/src?rank=fan-in&scope=path')
-    assert sorted(e['file'] for e in data['entries']) == sorted(OUTSIDE + ['b.ts', 'test/fixtureUtils.ts'])
+    assert sorted(e['file'] for e in data['entries']) == ['b.ts', 'test/fixtureUtils.ts']
+    assert data['edge_rule']['outside_root_edges'] == 2
 
 
 def test_scope_path_default_view_resolves_targets_outside_the_path_relative(tmp_path):

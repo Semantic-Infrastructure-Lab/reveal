@@ -134,6 +134,15 @@ def restamp_file_path(imports: List['ImportStatement'], file_path: Path) -> List
     return imports
 
 
+def _is_under(path: Path, directory: Path) -> bool:
+    """Lexical containment, the rule of ``resolution.path_is_under`` (which imports this module)."""
+    try:
+        path.relative_to(directory)
+        return True
+    except ValueError:
+        return False
+
+
 @dataclass
 class ImportGraph:
     """Complete import graph for a codebase.
@@ -290,6 +299,31 @@ class ImportGraph:
             view = replace(self, dependencies=dependencies, reverse_deps=reverse_deps)
             views['tests_excluded'] = view
         return view
+
+    def within_root(self, root: Path) -> 'ImportGraph':
+        """This graph without the edges whose target lies outside ``root``, the scan-root view
+        beside ``edge_view`` and ``without_test_importers`` (BACK-2251): an edge to a file the scan
+        never covered is a true fact the statement view keeps, but no count may include it. Computed
+        once per root."""
+        views: Dict[str, 'ImportGraph'] = self.__dict__.setdefault('_edge_views', {})
+        key = f'within_root:{root}'
+        view = views.get(key)
+        if view is None:
+            dependencies: Dict[Path, Set[Path]] = defaultdict(set)
+            reverse_deps: Dict[Path, Set[Path]] = defaultdict(set)
+            for from_file, to_files in self.dependencies.items():
+                for to_file in to_files:
+                    if _is_under(to_file, root):
+                        dependencies[from_file].add(to_file)
+                        reverse_deps[to_file].add(from_file)
+            view = replace(self, dependencies=dependencies, reverse_deps=reverse_deps)
+            views[key] = view
+        return view
+
+    def outside_root_edges(self, root: Path) -> int:
+        """How many edges ``within_root(root)`` leaves out."""
+        return sum(1 for to_files in self.dependencies.values() for to_file in to_files
+                   if not _is_under(to_file, root))
 
     def find_cycles(self) -> List[List[Path]]:
         """Find all circular dependencies using DFS.

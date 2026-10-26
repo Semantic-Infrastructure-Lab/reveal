@@ -577,6 +577,7 @@ _EDGE_RULE_SCHEMA = {
                 'additionalProperties': {'type': 'integer'}},
         'ungated_languages': {'type': 'array', 'items': {'type': 'string'}},
         'ungated_edges': {'type': 'integer'},
+        'outside_root_edges': {'type': 'integer', 'description': 'edges whose target lies outside the scan root, not counted'},
         'text': {'type': 'string'},
     },
 }
@@ -2385,8 +2386,11 @@ class ImportsAdapter(ResourceAdapter):
 
     def _edges(self, default: str) -> ImportGraph:
         """The graph view an edge-derived answer counts: &lazy, else the view's default, then
+        &scan-root containment (BACK-2251: an edge to a file outside the scan root is not counted), then
         &tests=exclude (importers under a test path dropped, ``path_utils.is_test_path``)."""
         view = self._graph().edge_view(self._lazy_mode(default)[0])
+        if self._scan is not None:
+            view = view.within_root(self._scan.root)
         return view.without_test_importers() if self._tests_excluded() else view
 
     def _tests_excluded(self) -> bool:
@@ -2400,11 +2404,13 @@ class ImportsAdapter(ResourceAdapter):
         return target if target.is_dir() else target.parent
 
     def _in_scope(self, path: Path) -> bool:
-        """Whether ``path`` is a row of this answer: everything the graph holds when the requested
+        """Whether ``path`` is a row of this answer: every file under the scan root when the requested
         path is the scan root, else the requested file or files under the requested directory."""
         target = self._target_path
-        if target is None or self._scan is None or self._scan.source == 'path' or self._scan.root == target:
+        if target is None or self._scan is None:
             return True
+        if self._scan.source == 'path' or self._scan.root == target:
+            return resolution.path_is_under(path, self._scan.root)
         return path == target or (target.is_dir() and resolution.path_is_under(path, target))
 
     def _resolved_at(self, cycles: bool = False) -> import_analysis.ResolvedAt:
@@ -2412,7 +2418,8 @@ class ImportsAdapter(ResourceAdapter):
         return import_analysis.ResolvedAt(
             root=to_posix(os.path.relpath(scan.root, self._base_dir())), root_source=scan.source,
             scope=_SCOPE.read(self._query_params), tests=_TESTS.read(self._query_params),
-            gated=resolution.IMPORT_RECALL_GATED, cycles=cycles)
+            gated=resolution.IMPORT_RECALL_GATED, cycles=cycles,
+            outside_root=self._graph().outside_root_edges(scan.root))
 
     def _edge_rule(self, default: str, subject: str, *, tests_counted: bool = True,
                    cycles: bool = False) -> Dict[str, Any]:

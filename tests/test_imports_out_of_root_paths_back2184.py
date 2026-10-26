@@ -31,16 +31,17 @@ def _json(tmp_path, uri):
     return json.loads(result.stdout)
 
 
-def test_importers_name_a_target_above_a_pinned_root_relative(tmp_path):
+def test_importers_list_no_target_above_a_pinned_root(tmp_path):
+    """BACK-2251: a target above the pinned root is not a row; the host path still never appears."""
     _project(tmp_path)
     data = _json(tmp_path, 'imports://proj/src?importers&root=proj/src')
-    assert {e['file']: e['importers'] for e in data['entries']} == {'../assets/x.css': ['a.ts'], 'b.ts': ['a.ts']}
+    assert {e['file']: e['importers'] for e in data['entries']} == {'b.ts': ['a.ts']}
 
 
-def test_the_fan_in_ranking_names_a_target_above_a_pinned_root_relative(tmp_path):
+def test_the_fan_in_ranking_lists_no_target_above_a_pinned_root(tmp_path):
     _project(tmp_path)
     data = _json(tmp_path, 'imports://proj/src?rank=fan-in&root=proj/src')
-    assert sorted(e['file'] for e in data['entries']) == ['../assets/x.css', 'a.ts', 'b.ts']
+    assert sorted(e['file'] for e in data['entries']) == ['a.ts', 'b.ts']
 
 
 def test_the_default_view_resolves_a_target_above_a_pinned_root_relative(tmp_path):

@@ -225,7 +225,8 @@ class ResolvedAt:
     the requested path, edges from anywhere under the root; ``path``: the requested path is the
     root), ``tests`` its ``&tests``. ``gated`` names the languages a recall oracle scores; edges
     from any other language are named as not gated. ``cycles`` marks a cycle view, which leaves
-    module and convention edges out.
+    module and convention edges out. ``outside_root`` counts the edges whose target lies outside
+    the scan root, which no count includes (BACK-2251).
     """
     root: str
     root_source: str
@@ -233,9 +234,15 @@ class ResolvedAt:
     tests: str
     gated: frozenset
     cycles: bool = False
+    outside_root: int = 0
 
 
 _VIA_ORDER = ('direct', 'constant', 'namespace', 'member', 'module', 'convention')
+
+
+def _outside_root_note(at: ResolvedAt) -> str:
+    """The sentence naming the edges no count includes because their target lies outside the scan root."""
+    return f' {at.outside_root} edge(s) resolve outside the scan root, not counted.' if at.outside_root else ''
 
 
 def _resolution_fields(graph: ImportGraph, at: ResolvedAt) -> Tuple[Dict[str, Any], str]:
@@ -253,14 +260,15 @@ def _resolution_fields(graph: ImportGraph, at: ResolvedAt) -> Tuple[Dict[str, An
                 ungated[language] = ungated.get(language, 0) + 1
     via = {tag: via[tag] for tag in _VIA_ORDER if tag in via}
     fields = {'root': at.root, 'root_source': at.root_source, 'scope_param': at.scope, 'tests_param': at.tests,
-              'via': via, 'ungated_languages': sorted(ungated), 'ungated_edges': sum(ungated.values())}
+              'via': via, 'ungated_languages': sorted(ungated), 'ungated_edges': sum(ungated.values()),
+              'outside_root_edges': at.outside_root}
     rows = 'rows are files under the requested path' if at.scope == 'root' else 'the requested path is the scan root'
     text = f' Resolved at the scan root {at.root} ({at.root_source.replace("_", " ")}); {rows}'
     if via:
         text += '; edges by stage: ' + ', '.join(f'{tag} {n}' for tag, n in via.items())
     if at.cycles:
         text += '; module and convention edges never close a cycle'
-    text += '.'
+    text += '.' + _outside_root_note(at)
     if ungated:
         text += (f' Not gated (no recall oracle measures them): {", ".join(sorted(ungated))}, '
                  f'{sum(ungated.values())} edge(s); treat those counts as unmeasured.')
