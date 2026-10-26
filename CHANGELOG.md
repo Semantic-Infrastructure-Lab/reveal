@@ -14,6 +14,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.132.0] - 2026-10-26
+
+### Behavior changes
+
+This release is larger than usual (1,198 commits since 0.131.0) and changes some answers that scripts may depend on. Nothing here is removed: retired spellings still run and print a replaced-by note until the cut release. The entries below repeat the detail in Added, Changed and Fixed, grouped so a script owner can check them in one place.
+
+**Exit codes** (one contract: 0 complete, 1 findings you gated on, 2 invalid invocation, 3 required analysis or output failed or incomplete)
+- Declared commands (`calls`, `pack`, `testability`, `trace`, `overview`, `hotspots`, `deps`, `contracts`, `architecture`, `surface`, `metrics`, `imports`) exit 2 for a rejected request and 3 when known analysis loss leaves the answer incomplete. `calls` used to exit 0 with a loss warning, and a bad `depth=`, `top=` or `type=` used to exit 1 with a Python error or be ignored. A request with two modes (`?target=X&callees=Y`) now exits 2 instead of answering one of them.
+- `reveal review` exits 1 for a high or critical finding (it was 2), and lost or capped analysis exits 3 even when a high or critical finding is present. A script that tests `$? -eq 2` should read `overall_status` or test for non-zero.
+- `reveal health` exits 2 for a missing target (it was 1) and 3 when a check failed, could not reach its target or was incomplete (these used to exit 1 or 2).
+- `reveal check` exits 3 when a requested `--also-json PATH` cannot be written, with the report still printed.
+- `imports://DIR?importers=NAME` and `calls://DIR?root=NAME` exit 2 when NAME matches nothing. They used to print an empty or summary answer with exit 0.
+- New: `--fail-on none|findings` on `check`, `review` and `health`; the declared commands take `--fail-on` where they have a findings gate.
+
+**Counts and rules** (each count now states its rule in text and JSON)
+- `imports` keeps function-level imports as edges, so importer counts and fan-in can rise; `?circular` and I002 still read load-time edges only. It resolves at the project root by default (`&scope=root`); `&scope=path` keeps the requested path as the scan root.
+- `depends://`, `deps` and `calls ?modules` now read the `imports` engine, so their numbers can differ from 0.131.0 (a Go file is no longer its own dependent; `calls ?modules` counts an import used without a call).
+- The issue count printed by `stats`, `overview` and `hotspots` counts file-local rules only; project-wide rules are left to `reveal check`.
+- `calls` confidence per language is derived from the committed recall snapshot and moved (for example ruby 1.00 to 0.9771). `calls ?uncalled` prints no confidence for JS, TS and TSX.
+- JS/TS/TSX: a callback-wrapped `const NAME = fn(...)` and `const NAME = xs.map(fn)` are no longer listed as functions named NAME, which changes outlines, callers and `?uncalled` for those files.
+- Complexity for a function without a tree-sitter complexity is one estimate everywhere (`ast://`, `stats://`, C901).
+- I002 no longer reports a Rust module tree as import cycles.
+- `architecture` and `overview` count active entry points separately from files with fan-in 0, and state the rule.
+
+**Retired spellings** (still answer, print a replaced-by note, carry a `retired_spelling` warning in JSON and MCP)
+- `reveal trace` and `trace://`, `calls ?root=`, `calls ?target=`, ast `?calls=`, `?callee_of=`, `?show=calls`, `reveal deps` and `deps://`, `stats://` and `classify://` (use `metrics://`), and `reveal health` on a code path (use `reveal check`).
+
+**Python internals** (only for code that imports reveal directly)
+- The nine `reveal.cli.commands.<noun>` modules are gone; import from `reveal.adapters.<noun>`. `is_test_path_any_sep` and the two `_is_test_file` aliases are gone; `is_test_path` reads backslashes as separators on every host.
+
 ### Added
 - `--head`, `--tail` and `--range` cut the module rows of `imports://DIR?importers` (and the other row views) and disclose the cut in `meta.warnings`; they answered "no list to slice" before. This is the bound for a corpus with hundreds of thousands of edges (swift: 660,716); `calls ?modules` gets no cap of its own, it is retired at the cut. `limit=` and `offset=` are still unknown parameters on `imports://` (BACK-2192).
 - `imports://DIR?importers&format=dot` draws the module graph as Graphviz, one `importer -> module` edge per importer `?importers` lists (`&scope=path` gives the edges `calls ?modules &format=dot` drew, same node names relative to DIR); like `calls://`, `dot` has no `--format` spelling, loss warnings go to stderr so stdout stays valid Graphviz, and on any other view the key is named a no-op (BACK-2194).
@@ -97,6 +127,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retired spellings now come from one table (`RETIREMENTS`, read at each parse site) instead of hand-written notes: the `--search` and file `--check`/`--lint` notes keep their wording on stderr, and JSON output (and MCP results) now carry the same fact as a `meta.warnings` entry with code `retired_spelling` (`old`, `replacement`, `stage`). The surface program adds its retired names to this table (BACK-2066).
 
 ### Fixed
+- `calls ?uncalled` claims fewer false dead-code entries: files that define nothing are read for references (`add_action('x','fn')`, `setInterval(fn)`), a Java `@Test` below another annotation is seen, a PHP handler reached through a computed callback name (`'wp_ajax_' . $action`) is seen (WordPress 2,571 to 2,473 claims, 0 added), and methods carrying a project-declared annotation that the scan reads reflectively count as entry points (Guava 715 to 562, 0 added). Those checks read the parse tree, so a prefix or string inside a comment or string literal no longer suppresses a claim (BACK-2170, BACK-2171, BACK-2175, BACK-2176, BACK-2177). `?uncalled` is retired and goes at the cut.
+- `calls` index, forward index and `?uncalled` records write `/` in every record's `file` on every OS (BACK-2189).
+- JS/TS: a method's own name binds nothing in its body, so a same-named module-level `const NAME = Fn(...)` is no longer dropped from the function list (three.js `Texture3DNode`) (BACK-2198).
 - Markdown heading anchors resolve the way GitHub renders them: punctuation is dropped and each space becomes its own hyphen, so `[x](#onboarding--exploration)` verifies for the heading `Onboarding & Exploration`, `foo_bar` keeps its underscore, and the collapsed `#onboarding-exploration` that GitHub does not resolve is now reported broken (`reveal file.md --links --broken`, `reveal check` L001). Doc links that used the collapsed spelling were silently dead on GitHub (BACK-2228).
 - A file reveal could not read (`chmod 000`) is no longer reported by `overview`, `architecture`, `pack` and the architecture diff as "parsed with errors"; it gets its own `analysis_failed` warning naming the error (`PermissionError`) and that its imports are missing from the import graph, as `calls` already worded it. A file tree-sitter recovered with ERROR nodes keeps the `partial_parse` wording. Exit codes are unchanged (BACK-2190).
 - The module graph's Graphviz view and every path `calls ?modules` writes use `/` on Windows too (BACK-2188).

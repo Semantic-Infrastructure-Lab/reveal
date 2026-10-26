@@ -6,7 +6,7 @@ help_description: Complete agent guide (task-based patterns, all adapters, troub
 help_category: ai_guides
 ---
 # Reveal - AI Agent Reference
-**Version:** 0.131.0
+**Version:** 0.132.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** estimated from rendered text by `help://` (characters / 4; not model tokenization)
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)

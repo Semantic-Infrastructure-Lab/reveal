@@ -156,6 +156,15 @@ The release process adds an entry here for each version; the three most recent a
 Everything is in [CHANGELOG.md](CHANGELOG.md), and unreleased work on master is under its
 `[Unreleased]` heading.
 
+### v0.132.0 — One exit contract, one imports engine, named command forms, retired names noted
+
+- ✅ One exit contract on the declared commands: 0 complete, 1 gated findings, 2 invalid invocation, 3 required analysis or output failed or incomplete; `--fail-on none|findings` on `check`, `review` and `health` (BACK-2051, 2052, 2066).
+- ✅ `imports` is the one import-graph engine: `depends://`, `deps` and `calls ?modules` read it, function-level imports are edges tagged with their scope, every count states its edge rule (BACK-1054, 2077, 2078).
+- ✅ `calls`, `imports`, `metrics`, `patches`, `pack`, `overview`, `hotspots`, `contracts`, `architecture`, `surface` and `testability` answer the same through `reveal NOUN` and `NOUN://` (equal JSON and exit code); `check --changed RANGE` checks a git range.
+- ✅ Measured: the pinned-corpus recall gate scores imports and Python callers through the public request path, and `scripts/graph_invariants.py` checks oracle-free graph invariants on all 24 pinned corpora.
+- ✅ Old spellings (`trace`, `deps`, `calls ?root=` and `?target=`, `stats://`, `classify://`, `health` on a code path) still run and print a replaced-by note from the one `RETIREMENTS` table; they error at the cut release.
+- ⚠️ Exit codes of `review`, `health`, `calls` and `check --also-json` changed, `imports` and `calls` count some edges differently, and the nine `reveal.cli.commands.<noun>` modules moved to `reveal.adapters.<noun>` — see the "Behavior changes" section of CHANGELOG.md.
+
 ### v0.131.0 — Silent answers refused or disclosed, special modes and `--stdin`, install hints, cross-platform self-checks
 
 - ✅ A command that cannot honor an argument says so: a mode that reads no path, a flag that reads no element, 23 per-file flags and `--stdin --section` refuse a second path or section and exit 2 instead of answering for the first (BACK-1751, 1728, 1687, 1715, 1735, 1773, 1764, 1765).
@@ -173,17 +182,6 @@ Everything is in [CHANGELOG.md](CHANGELOG.md), and unreleased work on master is 
 - ✅ Rust `mod`, PHP/C#/C++ namespaces and C/C++ enums and unions are listed and extract by name, `Parent.Child` resolves in every language, and `--outline` nests Go receiver and Rust impl methods under their type (BACK-1636, 1648, 1632, 1649); GraphQL operations and fragments are listed (BACK-1416).
 - ✅ Help says what ships: guides open on a runnable command, `--language-info` states each analyzer's conformance level, MCP tool descriptions match behaviour, and data-adapter help promises only what returns (BACK-1613, 1421, 1612, 1608).
 - ⚠️ JSON shape changes for scripts: an element diff's verdict moved from `type` to `change` (BACK-1637), `--fields` selects by one rule on every adapter (BACK-1607), and `--grep` groups carry `hits` (BACK-1602) — see CHANGELOG "Changed".
-
-### v0.129.0 — Result-control flags honored or rejected, .gitignore correctness, member/route resolution, cache keyed on code
-
-- ✅ `--limit`, `--head/--tail/--range`, `--format` and `--also-json` are applied or rejected with a note, never silently dropped: unsupported `sort=`/`limit=`/`offset=` warn and run (BACK-1385, 1425, 1496, 1497).
-- ✅ Every walker skips what git ignores and no longer drops tracked files; `--no-gitignore` works everywhere (BACK-1386, 1485). A package marker above the nearest `.git` belongs to another project (BACK-1434).
-- ✅ Element/member resolution: C++ out-of-line methods and operators, ambiguous names disclose every definition, and enums/traits/type aliases/`#private` JS methods/config elements are listed and extractable (BACK-1400, 1409–1412).
-- ✅ `surface://` reads Rails `routes.draw`, WordPress REST routes and Spring/C# controller prefixes, and discloses error-recovered regions (BACK-1417, 1418, 1480).
-- ✅ The disk cache is keyed on the code that built it, not just the version, so an edit cannot serve stale results (BACK-1294, BACK-1328); a huge file's outline is capped and says so (BACK-1424).
-- ⚠️ Changes a script may notice: an unsupported `--format` or `--also-json` exits 2 instead of printing text (BACK-1425); git-ignored files drop out of every walker, so counts fall (BACK-1386); the text outline stops at 500 items per category (`--format json` is uncapped, BACK-1424).
-
----
 
 ## Validation
 
