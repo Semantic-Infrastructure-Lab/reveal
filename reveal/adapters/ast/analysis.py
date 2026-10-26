@@ -381,6 +381,13 @@ def _owner_call_lines(file_struct: Dict[str, Any], elem: Dict[str, Any]) -> Dict
     return {callee: sorted(found) for callee, found in lines.items()}
 
 
+def _class_field_sources(file_struct: Dict[str, Any]):
+    """One caller per class field whose initializer calls something (BACK-2230)."""
+    for field in file_struct.get('class_field_call_sites', []):
+        yield {'category': 'class_fields', 'name': field['name'], 'line': field['line'], 'caller_kind': 'class_field',
+               'calls': list(dict.fromkeys(s['callee'] for s in field['sites'])), 'call_sites': field['sites']}
+
+
 def call_sources(file_struct: Dict[str, Any]):
     """Call/reference projection shared by callers, callees and trace."""
     refs = file_struct.get('jsx_references', [])
@@ -392,9 +399,7 @@ def call_sources(file_struct: Dict[str, Any]):
                    'call_lines': _owner_call_lines(file_struct, elem)}
         else:
             yield elem
-    for field in file_struct.get('class_field_call_sites', []):
-        yield {'category': 'class_fields', 'name': field['name'], 'line': field['line'], 'caller_kind': 'class_field',
-               'calls': list(dict.fromkeys(s['callee'] for s in field['sites'])), 'call_sites': field['sites']}
+    yield from _class_field_sources(file_struct)
     sites = [s for s in file_struct.get('module_call_sites', []) if s.get('relationship') != 'jsx_reference']
     references = [r for r in refs if r['owner'] == '<module>']
     if sites or references:

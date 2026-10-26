@@ -74,3 +74,10 @@ def test_a_stale_cached_layer_without_the_field_key_is_rebuilt():
     assert not _call_site_layer_complete(old, 'js')
     assert _call_site_layer_complete({**old, 'class_field_call_sites': []}, 'js')
     assert _call_site_layer_complete({'module_call_sites': []}, 'python')
+
+
+def test_a_field_record_names_its_own_line_and_the_call_lines_inside_it(project):
+    records = [c for level in query(project, 'callers=helper')['levels'] for c in level['callers']
+               if c['caller'] == 'handler']
+    (record,) = records
+    assert record['caller_kind'] == 'class_field' and record['line'] == 2 and record['call_lines'] == [2]

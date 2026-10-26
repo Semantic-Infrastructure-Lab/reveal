@@ -500,6 +500,21 @@ def _cached_callers_index(dir_str: str, cache_key: Any,
     return None
 
 
+def _scope_record_fields(elem: Dict[str, Any], callee: str) -> Dict[str, Any]:
+    """Extra record fields of a caller that is a scope rather than a listed function: ``<module>`` (BACK-2191) or a
+    class field (BACK-2230). Both carry the sites of their calls; JSX uses are ``reference_lines``, not ``call_lines``."""
+    kind = elem.get('caller_kind')
+    if kind not in ('module', 'class_field'):
+        return {}
+    sites = [site for site in elem['call_sites'] if site['callee'] == callee]
+    calls = sorted({site['line'] for site in sites if site.get('relationship') != 'jsx_reference'})
+    # A module's `line` is the first site of any kind; a field keeps its own line, like a function.
+    fields: Dict[str, Any] = {'caller_kind': kind, 'call_lines': calls}
+    if kind == 'module':
+        fields['line'] = min(site['line'] for site in sites)
+    return fields
+
+
 def build_callers_index(path: str, structures: Optional[StructureList] = None) -> CallersIndex:
     """Return project-level callers index for *path* (file or directory).
 
@@ -581,11 +596,7 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
                                   reference_lines=sorted({r['line'] for r in refs}))
                     if elem.get('call_lines', {}).get(callee):
                         record['call_lines'] = elem['call_lines'][callee]
-                if elem.get('caller_kind') == 'module':
-                    # `line` is the first site of any kind; `call_lines` only the calls (JSX uses are `reference_lines`).
-                    sites = [site for site in elem['call_sites'] if site['callee'] == callee]
-                    record.update(caller_kind='module', line=min(site['line'] for site in sites),
-                                  call_lines=sorted({site['line'] for site in sites if site.get('relationship') != 'jsx_reference'}))
+                record.update(_scope_record_fields(elem, callee))
                 _index_callee(index, callee, record, alias_map, class_aliases)
 
     _cache_callers_index(dir_str, cache_key, index, structures)

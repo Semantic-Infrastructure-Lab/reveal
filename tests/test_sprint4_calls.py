@@ -55,6 +55,7 @@ def test_mcp_navigation_uses_the_same_effect_policy(tmp_path):
 
 
 def test_methods_and_abstract_classes_do_not_create_module_helper_calls(tmp_path):
+    """A class-field initializer is the field's own caller, never `<module>` (BACK-1805, BACK-2230)."""
     path = tmp_path / 'a.ts'
     path.write_text('function helper() { return 1; }\n'
                     'abstract class A { x = helper(); abstract m(): void; }\n'
@@ -62,7 +63,7 @@ def test_methods_and_abstract_classes_do_not_create_module_helper_calls(tmp_path
                     'const api = { get() { return helper(); }, set: () => helper() };\n'
                     'export default { methods: { load() { helper(); } } };\n', encoding='utf-8')
     rows = find_callers(str(tmp_path), 'helper')['levels'][0]['callers']
-    assert {r['caller'] for r in rows} == {'g', 'get', 'set', 'load'}
+    assert {r['caller'] for r in rows} == {'x', 'y', 'g', 'get', 'set', 'load'}
     assert not any(s['callee'] == 'helper' for s in analyze_file(str(path))['module_call_sites'])
 
 

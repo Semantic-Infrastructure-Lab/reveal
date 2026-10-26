@@ -159,7 +159,7 @@ belongs to the smallest tracked element that contains it, as call sites do; a de
 body with no tracked element around it is marked
 `<anonymous>` and excluded from module callers. Only references outside deferred
 bodies belong to `<module>`. Class-field initializer references keep class
-source ownership but are outside caller navigation; render methods remain indexed. Imported aliases are resolved through the shared
+source ownership and are outside JSX reference navigation (calls in the initializer have the field as caller, BACK-2230); render methods remain indexed. Imported aliases are resolved through the shared
 name-resolution seam. Callees and trace use the same references; callees text labels a name that is only rendered
 `(JSX reference)` and a name that is both called and rendered `(includes JSX reference)`. Callers text
 names each kind of site: `[call line 3, JSX line 4]` (JSON: `call_lines` and `reference_lines`), `[JSX line 6]`,
@@ -241,7 +241,10 @@ reveal 'calls://src/?callers=process'
 In JS/TS a call inside an anonymous callback that no listed function, method or class contains
 (`app.get('/', (req) => helper(req))`, `setTimeout(() => helper())`) is reported under the caller `<module>`, as is
 a file that only holds such calls. The callback runs later, not at load: `<module>` here means "no named scope owns it".
-A callback inside a class (a field such as `x = throttle(async () => ...)`) is still not reported (BACK-2191 follow-up).
+In JS/TS the initializer of a class field (`x = helper()`, `_save = debounce(async () => helper())`) is a scope of its
+own: the field is the caller, named like a method (`x`, `_save`), never `<module>`. The record has `caller_kind: class_field`,
+the field's line as `line`, and the calls inside the initializer as `call_lines`. A field that holds a function
+(`f = () => helper()`) is a listed method as before, and a call inside a method stays that method's (BACK-2230).
 
 ### `callees`
 
@@ -678,8 +681,9 @@ reveal 'calls://.?callers=fn'       # use project root for full coverage
 and Ruby DSL blocks. Caller JSON carries `caller_kind: module`, `line` set to the first call line (the first JSX line when
 the name is only rendered; `callees=<module>` prints the module's first call line, not 1) and every matching call in `call_lines`. Counts are unique caller scopes;
 several sites in one module remain one caller. Deferred function bodies retain
-their own scope. Class-body initializers, extensionless Ruby DSL files and other
-languages' top-level code remain outside this relationship scope and are disclosed.
+their own scope. Extensionless Ruby DSL files and other
+languages' top-level code remain outside this relationship scope and are disclosed; JS/TS class-field initializers are not
+module code, the field is their caller.
 
 ```bash
 reveal 'calls://src?callees=<module>'
