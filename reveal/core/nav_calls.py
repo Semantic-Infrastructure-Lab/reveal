@@ -215,8 +215,12 @@ def range_calls(
     implicit_nodes: Sequence[Any] = (),
     skip_kinds: frozenset = frozenset(),
     include_jsx: bool = False,
+    owned_scope: Optional[Callable[[Any], bool]] = None,
 ) -> List[Dict[str, Any]]:
     """Return call sites within a line range.
+
+    `owned_scope` narrows `skip_kinds`: a deferred scope is skipped only when it returns True for the node
+    (a scope something else lists and reports its own calls for); the rest are walked (BACK-2191).
 
     JSX references are opt-in; effect consumers receive actual calls only.
     `implicit_nodes` are call sites that are not call-expression nodes (Ruby's
@@ -239,7 +243,7 @@ def range_calls(
         line = _zero_arg(node, 'start_position').row + 1
         if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
-        if is_deferred_scope(node, skip_kinds):
+        if is_deferred_scope(node, skip_kinds) and (owned_scope is None or owned_scope(node)):
             continue
         children = _children(node)
         results.extend(_generic_call_hits(node, call_node_types, get_text, from_line, to_line,
@@ -254,7 +258,7 @@ def range_calls(
         parent = _zero_arg(node, 'parent')
         skipped = False
         while parent is not None and skip_kinds:
-            if is_deferred_scope(parent, skip_kinds):
+            if is_deferred_scope(parent, skip_kinds) and (owned_scope is None or owned_scope(parent)):
                 skipped = True
                 break
             parent = _zero_arg(parent, 'parent')

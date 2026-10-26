@@ -296,8 +296,11 @@ def create_element_dict(
 _MODULE_CALL_FAMILIES = frozenset({'python', 'js', 'php', 'ruby'})
 
 
-def module_call_sites(file_path: str, analyzer) -> List[Dict[str, Any]]:
-    """Script/block calls through the shared call collector; definitions keep their scopes."""
+def module_call_sites(file_path: str, analyzer, elements: Sequence[Dict[str, Any]] = ()) -> List[Dict[str, Any]]:
+    """Script/block calls through the shared call collector; definitions keep their scopes.
+
+    JS/TS: an anonymous callback no listed function, method or class contains (``app.get('/', (req) => ...)``,
+    ``setTimeout(() => ...)``) is not a scope anyone reports, so its calls are the module's (BACK-2191)."""
     from ...conventions import family_for_path
     from ...registry import language_for_extension
     from ...core import get_tree, _zero_arg
@@ -314,8 +317,20 @@ def module_call_sites(file_path: str, analyzer) -> List[Dict[str, Any]]:
         return content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8', errors='replace')
     implicit = analyzer._implicit_call_nodes(root) if hasattr(analyzer, '_implicit_call_nodes') else ()
     # Python's root node is 'module'; only children are excluded by range_calls.
+    owned = _listed_scope_test(elements) if family_for_path(file_path) == 'js' else None
     return range_calls(root, 1, _zero_arg(root, 'end_position').row + 1, text,
-                       implicit_nodes=implicit, skip_kinds=DEFERRED_SCOPE_KINDS, include_jsx=True)
+                       implicit_nodes=implicit, skip_kinds=DEFERRED_SCOPE_KINDS, include_jsx=True, owned_scope=owned)
+
+
+def _listed_scope_test(elements: Sequence[Dict[str, Any]]):
+    """Whether a deferred scope starts inside a listed function, method or class (its calls are that element's)."""
+    from ...core import _zero_arg
+    spans = [(e['line'], e['line'] + max(e.get('line_count', 1), 1)) for e in elements
+             if e.get('category') in ('functions', 'methods', 'classes') and 'line' in e]
+    def owned(node) -> bool:
+        line = _zero_arg(node, 'start_position').row + 1
+        return any(start <= line < end for start, end in spans)
+    return owned
 
 
 def _owner_call_lines(file_struct: Dict[str, Any], elem: Dict[str, Any]) -> Dict[str, List[int]]:
@@ -429,7 +444,7 @@ def _add_call_sites(result: Dict[str, Any], file_path: str, analyzer) -> None:
                 result['jsx_references'] = layer['jsx_references']
                 result['jsx_call_sites'] = layer['jsx_call_sites']
             return
-    result['module_call_sites'] = module_call_sites(file_path, analyzer)
+    result['module_call_sites'] = module_call_sites(file_path, analyzer, result['elements'])
     if family == 'js':
         from ..calls.references import jsx_component_references, jsx_owner_call_sites
         result['jsx_references'] = jsx_component_references(analyzer, result['elements'])
@@ -511,6 +526,14 @@ def _complete_structure(result: Dict[str, Any], file_path: str, analyzer,
     return None
 
 
+def _script_only_structure(file_path: str, analyzer) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """A file that lists no element can still call: a script of ``app.get(...)`` / ``setTimeout(...)`` lines holds
+    module calls only (BACK-2191). Its structure is the module call sites, or nothing when it has none."""
+    result: Dict[str, Any] = {'file': file_path, 'elements': []}
+    failure = _complete_structure(result, file_path, analyzer, False, None)
+    return (result if result.get('module_call_sites') else None), failure
+
+
 def _analyzer_outcome(file_path: str, analyzer, outline: bool,
                       needle: Optional[str]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     structure = analyzer.get_outline() if outline else analyzer.get_structure()
@@ -524,7 +547,7 @@ def _analyzer_outcome(file_path: str, analyzer, outline: bool,
         if failures:
             return None, '; '.join(failures)
         # Empty outlines may omit imports that the existing full scan counts.
-        return analyze_file_outcome(file_path) if outline else (None, None)
+        return analyze_file_outcome(file_path) if outline else _script_only_structure(file_path, analyzer)
     result = _flatten_structure(file_path, structure, analyzer, outline)
     completion_failure = _complete_structure(result, file_path, analyzer, outline, needle)
     if completion_failure is not None:

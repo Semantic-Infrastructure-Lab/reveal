@@ -49,9 +49,9 @@ def spy(monkeypatch):
     calls = []
     real = analysis.module_call_sites
 
-    def counted(file_path, analyzer):
+    def counted(file_path, analyzer, *rest):
         calls.append(os.path.basename(file_path))
-        return real(file_path, analyzer)
+        return real(file_path, analyzer, *rest)
 
     monkeypatch.setattr(analysis, "module_call_sites", counted)
     return calls
