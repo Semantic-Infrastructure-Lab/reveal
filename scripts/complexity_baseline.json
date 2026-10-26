@@ -55,7 +55,7 @@
   "reveal/adapters/claude/adapter.py::ClaudeAdapter._route_by_resource": 21,
   "reveal/adapters/claude/analysis/messages.py::_search_block": 20,
   "reveal/adapters/claude/analysis/messages.py::get_exchanges": 18,
-  "reveal/adapters/claude/analysis/tools.py::get_session_agents": 18,
+  "reveal/adapters/claude/analysis/tools.py::get_session_agents": 16,
   "reveal/adapters/claude/handlers/post_process.py::_post_process_session_list": 22,
   "reveal/adapters/claude/handlers/sessions.py::_scan_jsonl_for_title": 19,
   "reveal/adapters/claude/handlers/sessions.py::track_file_sessions": 18,
