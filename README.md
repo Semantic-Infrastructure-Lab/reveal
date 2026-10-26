@@ -9,7 +9,7 @@ reveal src/auth.py validate_token           # What does this function do?
 reveal 'calls://src/?callers=validate_token' # Who calls it? (cross-file)
 reveal overview .                           # one-glance dashboard: quality, activity, deps
 reveal 'ast://src/?complexity>10'           # What's too complex?
-reveal health ssl://api.example.com domain://example.com ./src  # One-shot health check
+reveal check src/                           # What needs fixing? (rules, complexity, links)
 reveal pack src/ --since main --budget 8000 # PR context snapshot for AI agents
 ```
 
@@ -82,10 +82,10 @@ reveal-mcp  # starts the server
 # Agents get progressive disclosure, deep-dive nav, and call-graph analysis — no subprocess overhead
 ```
 
-**Unified health checks across categories:**
+**Hosting health checks across categories:**
 ```bash
-reveal health ./src ssl://api.example.com domain://example.com mysql://prod
-# → code quality + cert expiry + DNS health + DB replication, one exit code
+reveal health ssl://api.example.com domain://example.com mysql://prod
+# → cert expiry + DNS health + DB replication, one exit code
 ```
 
 **Documentation as a queryable graph:**
@@ -116,7 +116,7 @@ code, but for sessions, git history, documents, data stores, and runtime state.
 |------|---------|---------|
 | Code structure / functions | `ast://` | `reveal 'ast://src/?type=function'` |
 | Call relationships | `calls://` | `reveal 'calls://src/?callers=my_fn'` |
-| Imports / change impact | `imports://` `depends://` | `reveal imports://src/` |
+| Imports / change impact | `imports://` | `reveal imports://src/` |
 | Git history / diffs | `git://` `diff://` | `reveal 'git://.?message~=fix'` |
 | Claude sessions / prompts | `claude://` | `reveal 'claude://sessions/?search=auth-refactor'` |
 | Codex CLI sessions | `codex://` | `reveal 'codex://sessions/?search=auth-refactor'` |
@@ -152,17 +152,16 @@ reveal check --changed main..HEAD  # PR review: rules on the files the range cha
 reveal health ssl://site.com   # health check: exit 0 pass, 1 findings, 3 incomplete/failed
 reveal pack src/ --budget 8000 # token-budgeted snapshot for LLM context
 reveal pack src/ --architecture # pack + entry points + core abstractions brief
-reveal hotspots src/           # top complexity hotspots (✅/⚪ test-coverage per fn)
+reveal metrics src/ --hotspots # worst files by complexity and size
 reveal overview .              # one-glance dashboard: stats, quality, git activity
 reveal imports . --external    # third-party and stdlib packages (--circular, --unused)
-reveal architecture src/       # architectural brief: entry points, abstractions, risks
 reveal calls src/ --callees main --depth 2 --detail  # what main calls, level by level, with side effects
 reveal contracts src/          # ABC/Protocol/TypedDict/Pydantic inventory
 reveal surface src/            # external boundary map: CLI args, routes, env vars, I/O
 reveal dev new-adapter <name>  # scaffold new adapters/rules
 ```
 
-`architecture`, `overview` and `pack --architecture` rank by the import graph and print the counting rule they used (a `Rule:` line, `edge_rule` in JSON), as `imports://` does.
+`overview` and `pack --architecture` rank by the import graph and print the counting rule they used (a `Rule:` line, `edge_rule` in JSON), as `imports://` does.
 
 ## Adapters
 
@@ -171,11 +170,10 @@ The most-used adapters; `reveal --adapters` lists every one.
 | Adapter | What it queries |
 |---------|-----------------|
 | `ast://` | Functions, classes, complexity, decorators — every language `reveal --languages` lists |
-| `calls://` | Cross-file call graph: callers, callees, coupling metrics, dead code |
-| `depends://` | Inverse module dependency graph: who imports this module |
+| `calls://` | Cross-file call graph: callers, callees, coupling metrics |
 | `diff://` | Structural diff between branches or commits (with per-function complexity delta) |
-| `imports://` | Dependency graph, circular imports, unused imports |
-| `stats://` | Codebase quality scores, hotspots, duplication |
+| `imports://` | Dependency graph, importers (who imports this module), circular imports, unused imports |
+| `metrics://` | Per-file size, complexity, churn and provenance; file hotspots |
 | `git://` | Commits, blame, branches, tags, function-level history |
 | `ssl://` | Certificate expiry, chain validation, hostname match |
 | `autossl://` | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |

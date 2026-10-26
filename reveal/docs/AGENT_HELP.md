@@ -54,7 +54,8 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
 | A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--sideeffects`, `--exits`) |
 | Unused or circular imports | `reveal 'imports://src/?unused'` / `?circular` |
-| HTTP routes, env vars, network/db/fs access | `reveal 'surface://src/?type=http'` |
+| HTTP routes | `reveal 'surface://src/?type=http'` |
+| Env vars, network/db/fs access, the whole external boundary | `reveal 'surface://src/'` |
 | Text search, grouped by enclosing function | `reveal src/ --grep 'pattern'` (Python regex syntax) |
 | File history / commit search | `reveal 'git://src/app.py?type=history'`, `reveal 'git://.?type=history&message~=fix'` |
 | One section of a markdown doc | `reveal doc.md "Heading"` |
@@ -65,7 +66,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 - **Limit results:** `--limit N` becomes `?limit=N` on ast/markdown/json/git/stats and `?top=N` on hotspots/calls/depends/testability; elsewhere a note says it has no effect. `--head N` slices any list result.
 - **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
 - **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~12,500 tokens); rules are `reveal --rules`.
-- **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `review` 0 pass, 1 findings (warnings or a blocking issue; `overall_status` tells them apart), 2 bad target, 3 incomplete (beats findings); `--fail-on none` on `review` reports findings without exit 1; `deps` defaults to no findings gate, with `--fail-on findings` for exit 1, usage 2 and incomplete/output failure 3; `hotspots` defaults to no findings gate; `--fail-on findings` exits 1 for file quality below 70 or function complexity above 20, usage exits 2, and incomplete/output failure exits 3.
+- **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `check --changed RANGE` uses `check`'s codes, with 2 for an unusable range; `imports` defaults to no findings gate, with `--fail-on findings` for exit 1 on a `--circular`, `--unused` or `--violations` row, usage 2 and incomplete/output failure 3; `hotspots` (retiring into `metrics --hotspots`, which has no `--fail-on findings` gate yet) defaults to no findings gate; `--fail-on findings` exits 1 for file quality below 70 or function complexity above 20, usage exits 2, and incomplete/output failure exits 3.
 
 ---
 

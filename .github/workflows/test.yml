@@ -78,6 +78,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python scripts/check_complexity.py
 
+      - name: Retired-names ratchet (the first screen teaches no retired spelling)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: python scripts/check_retired_names.py
+
       - name: Doc hygiene ratchet (broken links, private-repo path refs)
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         env:

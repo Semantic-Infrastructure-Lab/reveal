@@ -281,6 +281,12 @@ if [[ $PRIMARY -eq 1 ]]; then
     "$PY" scripts/check_complexity.py 2>&1 | tee -a "$LOG" | tail -20
     [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "complexity ratchet (see scripts/check_complexity.py)"
 
+    # README, ROADMAP, the first section of AGENT_HELP, help://quick and help://examples name a retired
+    # spelling only in a "replaced by" sentence (BACK-2196).
+    step "Retired-names ratchet"
+    "$PY" scripts/check_retired_names.py 2>&1 | tee -a "$LOG" | tail -20
+    [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "retired-names ratchet (see scripts/check_retired_names.py)"
+
     # Five fresh serial runs of each pinned command, independent of RUN_TESTS.
     step "Cold serial parser-count ratchet"
     "$PY" scripts/check_parse_counts.py >>"$LOG" 2>&1 \
