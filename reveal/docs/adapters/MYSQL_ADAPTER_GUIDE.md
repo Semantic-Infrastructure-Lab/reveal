@@ -71,7 +71,7 @@ reveal mysql://localhost/indexes --format=json | jq '.unused[]'
 
 # 8. Monitor storage growth
 reveal mysql://localhost/storage --format=json | \
-  jq '{time: .snapshot_time, total_gb: .total_size_gb, largest: .largest_db}'
+  jq '{time: .snapshot_time, total_gb: ([.databases[].size_gb] | add)}'
 ```
 
 **Why use mysql://?**
@@ -282,7 +282,7 @@ Use `/element` to drill into specific areas:
 | `storage/<db>` | Specific database tables | Analyze individual database size breakdown |
 | `errors` | Error indicators | Check for connection errors, aborted clients |
 | `variables` | Server configuration variables | Review key settings (max_connections, buffer pool) |
-| `health` | Comprehensive health check | Full health overview (same as default view) |
+| `tables` | Table I/O statistics and hotspots | Find the busiest tables |
 | `databases` | Database list | Enumerate all databases |
 | `indexes` | Index usage statistics | Find unused indexes, optimize queries |
 | `slow-queries` | Slow query log analysis | Analyze slow query patterns (requires slow_log) |
@@ -715,7 +715,7 @@ checks:
 | Code | Status | Meaning |
 |------|--------|---------|
 | `0` | Pass | All checks passed |
-| `1` | Warning | One or more warnings |
+| `1` | Warning | One or more warnings (also: the check could not run, for example the connection failed; the JSON then has `error` and no `status`) |
 | `2` | Failure | One or more failures |
 
 **Use in CI/CD**:
@@ -723,13 +723,14 @@ checks:
 ```bash
 #!/bin/bash
 reveal mysql://prod.db.com --check --only-failures --format=json
+rc=$?
 
-if [ $? -eq 0 ]; then
+if [ $rc -eq 0 ]; then
   echo "✅ All health checks passed"
-elif [ $? -eq 1 ]; then
-  echo "⚠️ Health warnings detected"
+elif [ $rc -eq 1 ]; then
+  echo "⚠️ Health warnings detected (or the check could not connect: JSON has an error and no status)"
   exit 1
-elif [ $? -eq 2 ]; then
+elif [ $rc -eq 2 ]; then
   echo "❌ Health check failures"
   exit 2
 fi
@@ -929,12 +930,12 @@ All mysql:// endpoints include **snapshot timing context** to ensure accurate in
 ```bash
 # Snapshot 1 (Feb 1)
 reveal mysql://localhost/storage --format=json | \
-  jq '{time: .snapshot_time, total_gb: .total_size_gb}' > feb1.json
+  jq '{time: .snapshot_time, total_gb: ([.databases[].size_gb] | add)}' > feb1.json
 # {"time": "2025-02-01T08:00:00+00:00", "total_gb": 42.34}
 
 # Snapshot 2 (Feb 14)
 reveal mysql://localhost/storage --format=json | \
-  jq '{time: .snapshot_time, total_gb: .total_size_gb}' > feb14.json
+  jq '{time: .snapshot_time, total_gb: ([.databases[].size_gb] | add)}' > feb14.json
 # {"time": "2025-02-14T08:00:00+00:00", "total_gb": 45.67}
 
 # Calculate growth rate
@@ -1151,7 +1152,7 @@ reveal mysql://localhost/slow-queries
 reveal mysql://localhost/innodb --format=json | jq '.row_lock_waits'
 
 # 6. Review tuning ratios
-reveal mysql://localhost/performance --format=json | jq '.tuning_ratios'
+reveal mysql://localhost/performance --format=json | jq '.full_table_scans'
 ```
 
 **Common findings**:
@@ -1187,9 +1188,8 @@ reveal mysql:// --check --only-failures
 reveal mysql:///storage --format=json | \
   jq '{
     time: .snapshot_time,
-    total_gb: .total_size_gb,
-    databases: .database_count,
-    largest: .largest_db
+    total_gb: ([.databases[].size_gb] | add),
+    databases: .database_count
   }'
 
 # 5. Monitor replication lag (if slave)
@@ -1224,7 +1224,7 @@ reveal mysql://localhost/storage --format=json | \
   jq '{
     snapshot_time: .snapshot_time,
     server_start: .server_start_time,
-    total_gb: .total_size_gb,
+    total_gb: ([.databases[].size_gb] | add),
     databases: [.databases[] | {name: .db_name, size_gb: .size_gb}]
   }' >> storage_history.jsonl
 
@@ -1317,7 +1317,7 @@ reveal mysql://localhost/indexes --format=json | \
   jq '{
     reset_detected: .performance_schema_status.counters_reset_detected,
     server_uptime: .uptime_seconds,
-    oldest_event: .performance_schema_status.oldest_event_timestamp,
+    perf_schema: .performance_schema_status,
     interpretation: "Counters were reset - wait longer before removing unused indexes"
   }'
 ```
@@ -1346,7 +1346,7 @@ THRESHOLD="$2"  # pass, warning, failure
 echo "🔍 Running MySQL health checks on ${DB_HOST}..."
 
 # Run health checks (JSON output)
-RESULT=$(reveal mysql://${DB_HOST} --check --format=json)
+RESULT=$(reveal mysql://${DB_HOST} --check --format=json) || true   # exit 1/2 is data here, not a script error
 
 # Extract status and exit code
 STATUS=$(echo "$RESULT" | jq -r '.status')
@@ -1487,12 +1487,12 @@ THRESHOLD_GB_PER_DAY=1.0
 
 # Get current storage
 CURRENT=$(reveal mysql://localhost/storage --format=json)
-CURRENT_SIZE=$(echo "$CURRENT" | jq -r '.total_size_gb')
+CURRENT_SIZE=$(echo "$CURRENT" | jq -r '[.databases[].size_gb] | add')
 CURRENT_TIME=$(echo "$CURRENT" | jq -r '.snapshot_time')
 
 # Read previous snapshot
 if [ -f storage_previous.json ]; then
-  PREV_SIZE=$(jq -r '.total_size_gb' storage_previous.json)
+  PREV_SIZE=$(jq -r '[.databases[].size_gb] | add' storage_previous.json)
   PREV_TIME=$(jq -r '.snapshot_time' storage_previous.json)
 
   # Calculate growth rate (GB/day)
@@ -1661,7 +1661,7 @@ mysql:// is designed for AI agent consumption:
 4. **Progressive disclosure**
    - Start with overview: `mysql://localhost`
    - Drill into specific area: `mysql://localhost/innodb`
-   - Extract one metric: `mysql://localhost/innodb --format=json | jq '.buffer_hit_rate'`
+   - Extract one metric: `mysql://localhost/innodb --format=json | jq '.buffer_pool_hit_rate'`
 
 5. **Batch monitoring**
    - Use JSON output for parsing: `--format=json`
@@ -1786,7 +1786,7 @@ reveal mysql://localhost/indexes --format=json | \
 
 **Solution**:
 ```bash
-# Copy default config
+# The file REPLACES the built-in seven checks (no merge): copy all seven entries and edit thresholds
 mkdir -p ~/.config/reveal
 cat > ~/.config/reveal/mysql-health-checks.yaml <<EOF
 checks:
@@ -1891,7 +1891,7 @@ reveal mysql:///storage
 ```bash
 # Daily snapshot
 reveal mysql://localhost/storage --format=json | \
-  jq '{time: .snapshot_time, total_gb: .total_size_gb}' \
+  jq '{time: .snapshot_time, total_gb: ([.databases[].size_gb] | add)}' \
   >> storage_history.jsonl
 
 # Weekly report
@@ -1951,7 +1951,7 @@ reveal mysql://localhost --check
 # Minimize token usage
 reveal mysql://localhost               # ~100 tokens
 reveal mysql://localhost/innodb        # ~200 tokens
-reveal mysql://localhost/innodb --format=json | jq '.buffer_hit_rate'  # ~50 tokens
+reveal mysql://localhost/innodb --format=json | jq '.buffer_pool_hit_rate'  # ~50 tokens
 ```
 
 ---

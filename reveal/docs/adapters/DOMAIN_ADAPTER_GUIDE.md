@@ -116,13 +116,13 @@ reveal domain://example.com/registrar
 
 ### 6. Advanced Health Check
 
-Run deep health validation with advanced SSL checks:
+`--advanced` is accepted with `--check` but does not change `domain://` results today:
 
 ```bash
 reveal domain://example.com --check --advanced
 ```
 
-**Returns**: All basic checks + advanced SSL validation
+**Returns**: The same 9 checks and values as plain `--check`. For certificate chain and trust detail run `reveal ssl://example.com --check --advanced`.
 
 ### 7. Show Only Problems
 
@@ -185,7 +185,7 @@ Complete DNS record support:
 **Example**: Extract specific record types with jq:
 
 ```bash
-reveal domain://example.com/dns --format json | jq '.records.MX'
+reveal domain://example.com/dns --format json | jq '.records.mx'
 ```
 
 ### 3. DNS Propagation Validation
@@ -244,9 +244,10 @@ Comprehensive domain health validation:
     }
   ],
   "summary": {
-    "pass": 3,
-    "warning": 1,
-    "failure": 0
+    "total": 4,
+    "passed": 3,
+    "warnings": 1,
+    "failures": 0
   },
   "next_steps": [
     "Renew SSL certificate: reveal ssl://example.com --check --advanced",
@@ -301,7 +302,7 @@ Next steps:
 
 ## Elements Reference
 
-The domain:// adapter supports four elements for progressive disclosure:
+The domain:// adapter supports seven elements for progressive disclosure (`/dns`, `/whois`, `/ssl`, `/registrar`, `/mail`, `/http`, `/ns-audit`); the first four are documented below:
 
 ### 1. dns
 
@@ -344,7 +345,7 @@ reveal domain://google.com/dns
 
 ### 2. whois
 
-**Description**: WHOIS registration data (registrar, expiry, nameservers)
+**Description**: WHOIS registration data (registrar, expiry, nameservers). Requires `pip install "reveal-cli[whois]"`; without it `/whois` exits 1 with an install hint, and `/registrar` returns the nameservers plus a `note`.
 
 **Syntax**:
 ```bash
@@ -366,8 +367,9 @@ reveal domain://example.com/whois
   "registrar": "RESERVED-Internet Assigned Numbers Authority",
   "creation_date": "1995-08-14",
   "expiration_date": "2026-08-13",
-  "nameservers": ["elliott.ns.cloudflare.com", "hera.ns.cloudflare.com"],
-  "status": ["clientDeleteProhibited"]
+  "name_servers": ["elliott.ns.cloudflare.com", "hera.ns.cloudflare.com"],
+  "status": ["clientDeleteProhibited"],
+  "dnssec": "unsigned"
 }
 ```
 
@@ -488,10 +490,14 @@ reveal domain://example.com --check
 **Use in automation**:
 ```bash
 # CI/CD validation
-if reveal domain://staging.example.com --check --format json > /dev/null; then
+reveal domain://staging.example.com --check --format json > /dev/null
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 0 ]; then
   echo "Domain health: OK"
+elif [ $EXIT_CODE -eq 1 ]; then
+  echo "Domain health: WARNING (exit 1; test -eq 2 to fail only on failures)"
 else
-  echo "Domain health: FAILED (exit code: $?)"
+  echo "Domain health: FAILED (exit code: $EXIT_CODE)"
   exit 1
 fi
 ```
@@ -512,12 +518,7 @@ reveal 'domain://<domain>' --check --advanced
 reveal domain://example.com --check --advanced
 ```
 
-**Additional checks** (when combined with --check):
-- Advanced SSL validation (certificate chain, validity, trust)
-- Deep DNS diagnostics
-- Extended propagation validation
-
-**Performance note**: Advanced checks take 2-3x longer (requires more SSL validation)
+The same checks run with or without `--advanced`; for certificate chain and trust detail use `reveal ssl://HOST --check --advanced`.
 
 ---
 
@@ -547,7 +548,7 @@ reveal domain://example.com --check --only-failures
   "domain": "example.com",
   "status": "pass",
   "checks": [],
-  "summary": {"pass": 4, "warning": 0, "failure": 0},
+  "summary": {"total": 9, "passed": 9, "warnings": 0, "failures": 0},
   "next_steps": []
 }
 ```
@@ -567,7 +568,7 @@ reveal domain://example.com --check --only-failures
       "message": "SSL certificate expires in 15 days"
     }
   ],
-  "summary": {"pass": 3, "warning": 1, "failure": 0},
+  "summary": {"total": 9, "passed": 8, "warnings": 1, "failures": 0},
   "next_steps": ["Renew SSL certificate"]
 }
 ```
@@ -607,7 +608,7 @@ echo -e "domain://example.com\ndomain://google.com\ndomain://github.com" | \
 
 Each entry's `data` is the result `reveal <uri> --check --format json` gives for that URI,
 with the same flags applied. A query that fails there (exit 1) is `"status": "error"` here,
-with its message in `error`. The batch exits 2 when any entry failed, else 0.
+with its message in `error`. The batch exits 2 when any entry failed, 1 when any warned (and none failed), else 0.
 
 **Use cases**:
 - Monitor multiple domains in parallel
@@ -729,7 +730,7 @@ reveal domain://example.com --check
 
 ### Check Types
 
-**Note**: `--check` now runs 9 checks total, including the four documented below plus HTTP redirect (port 80 → HTTPS), mail deliverability (SPF/DMARC), and NS authority checks. See the `/mail`, `/http`, and `/ns-audit` elements listed in `reveal 'domain://<domain>'` output for details on those additional checks.
+**Note**: `--check` runs 9 checks: the four documented below plus `http_response` (HTTP/HTTPS reachable), `http_redirect` (port 80 → HTTPS), and `mx_records`, `spf_record`, `dmarc_record` (the `/mail` element). The NS authority cross-check is the separate `/ns-audit` element and is not part of `--check`. See the `/mail`, `/http` and `/ns-audit` elements listed in `reveal 'domain://<domain>'` output.
 
 #### 1. DNS Resolution Check
 
@@ -868,9 +869,10 @@ Health check results include summary metrics:
 ```json
 {
   "summary": {
-    "pass": 3,
-    "warning": 1,
-    "failure": 0
+    "total": 4,
+    "passed": 3,
+    "warnings": 1,
+    "failures": 0
   }
 }
 ```
@@ -1126,8 +1128,10 @@ reveal ssl://example.com --check
 **Automation example** (CI/CD):
 ```bash
 #!/bin/bash
-if ! reveal domain://staging.example.com --check --format json > /dev/null; then
-  echo "Domain health check failed (exit code: $?)"
+reveal domain://staging.example.com --check --format json > /dev/null
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 2 ]; then
+  echo "Domain health check failed (exit code: $EXIT_CODE)"
   reveal domain://staging.example.com --check --only-failures
   exit 1
 fi
@@ -1152,7 +1156,7 @@ reveal domain://example.com/dns
 # Returns: Current A, AAAA, MX, TXT, NS, CNAME, SOA records
 
 # Step 3: Extract specific record types
-reveal domain://example.com/dns --format json | jq '.records.A'
+reveal domain://example.com/dns --format json | jq '.records.a'
 # Output: ["93.184.216.34"]
 
 # Step 4: Check nameserver configuration
@@ -1283,8 +1287,9 @@ DOMAINS=(
 ALERT_EMAIL="ops@example.com"
 
 for domain in "${DOMAINS[@]}"; do
-  if ! reveal domain://$domain --check --only-failures --format json > /dev/null; then
-    EXIT_CODE=$?
+  reveal domain://$domain --check --only-failures --format json > /dev/null
+  EXIT_CODE=$?
+  if [ $EXIT_CODE -eq 2 ]; then
     MESSAGE=$(reveal domain://$domain --check --only-failures)
 
     echo "ALERT: Domain health check failed for $domain (exit code: $EXIT_CODE)"
@@ -1305,9 +1310,9 @@ done
 
 ```bash
 # Prometheus exporter
-reveal domain://example.com --check --format json | jq -r '
+reveal domain://example.com --check --format json | jq -r --arg d example.com '
   .checks[] |
-  "domain_health{domain=\"\(.domain)\",check=\"\(.name)\",status=\"\(.status)\"} \(if .status == "pass" then 1 elif .status == "warning" then 0.5 else 0 end)"
+  "domain_health{domain=\"\($d)\",check=\"\(.name)\",status=\"\(.status)\"} \(if .status == "pass" then 1 elif .status == "warning" then 0.5 else 0 end)"
 ' > /var/lib/prometheus/domain-health.prom
 ```
 
@@ -1578,9 +1583,9 @@ reveal ssl://example.com/dates
 
 ---
 
-#### Error: "ModuleNotFoundError: No module named 'dns'"
+#### Error: "dnspython is required for DNS operations"
 
-**Meaning**: dnspython package not installed
+**Meaning**: dnspython package not installed. `/dns` returns this as an `error`, and `--check` skips the nameserver and propagation checks with a warning (exit at least 1).
 
 **Solution**:
 ```bash
@@ -1669,14 +1674,13 @@ cat "$CACHE_FILE"
 ### 6. Monitor Exit Codes in Automation
 
 ```bash
-if ! reveal domain://example.com --check > /dev/null; then
-  EXIT_CODE=$?
-  if [ $EXIT_CODE -eq 1 ]; then
-    echo "Warning: Non-critical issues detected"
-  elif [ $EXIT_CODE -eq 2 ]; then
-    echo "Error: Critical issues detected"
-    exit 1
-  fi
+reveal domain://example.com --check > /dev/null
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 1 ]; then
+  echo "Warning: Non-critical issues detected"
+elif [ $EXIT_CODE -eq 2 ]; then
+  echo "Error: Critical issues detected"
+  exit 1
 fi
 ```
 
@@ -2054,7 +2058,7 @@ A: Propagation validation queries all authoritative nameservers (typically 2-4 s
 
 **Q: Do I need to install dnspython?**
 
-A: Yes. Run `pip install "reveal-cli[dns]"`. Without it, DNS operations will fail.
+A: Yes. Run `pip install "reveal-cli[dns]"`. Without it, `/dns` returns an `error` and the nameserver and propagation checks in `--check` are skipped with a warning.
 
 ---
 
@@ -2109,8 +2113,8 @@ reveal domain://example.com --check --only-failures
 
 A: Use jq:
 ```bash
-reveal domain://example.com/dns --format json | jq '.records.A'
-reveal domain://example.com/dns --format json | jq '.records.MX'
+reveal domain://example.com/dns --format json | jq '.records.a'
+reveal domain://example.com/dns --format json | jq '.records.mx'
 ```
 
 ---
@@ -2180,7 +2184,8 @@ domain_ssl_expiry_days{domain="example.com"} < 30
 
 A: Use exit codes for validation:
 ```bash
-if ! reveal domain://staging.example.com --check; then
+reveal domain://staging.example.com --check
+if [ $? -eq 2 ]; then   # exit 1 is a warning, 2 is a failure
   echo "Domain health check failed"
   exit 1
 fi

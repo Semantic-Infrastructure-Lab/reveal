@@ -116,7 +116,6 @@ Use `@<ref>` to specify Git references:
 | Tag | `@v1.0.0`, `@latest` | Tag name |
 | Commit hash | `@abc1234`, `@abc1234567890abcd` | Full or short hash |
 | Relative | `@HEAD~1`, `@HEAD~10` | Relative to HEAD |
-| Date | `@HEAD@{2.days.ago}` | Time-based reference |
 
 ### Query Syntax
 
@@ -169,11 +168,11 @@ reveal git://.@main
 
 # 3. Examine specific commit
 reveal git://.@abc1234
-# Shows: commit details, changed files, diff stats
+# Shows: that commit's header (author, committer, date, message, parents) followed by the history starting at it
 
 # 4. View file at that commit
 reveal git://src/app.py@abc1234
-# Shows: file contents at that point in time
+# Shows: the file's structure at that point in time (add ?raw=1 for its contents)
 
 # 5. Trace file history
 reveal 'git://src/app.py?type=history'
@@ -196,47 +195,28 @@ reveal git://path/to/repo
 **Returns** (under ~1,000 tokens; the overview lists branches, tags and recent commits):
 
 ```
-Repository: /home/user/projects/myproject
-Type: git_repository
-
-HEAD:
-  Branch: main
-  Commit: abc1234567890abcdef (Mon Feb 13 15:42:30 2025)
-  Author: John Doe <john@example.com>
-  Message: feat: Add new feature
-
-Branches (10 total, showing 10):
-  main - abc1234 (13 hours ago) - feat: Add new feature
-  develop - def5678 (2 days ago) - fix: Bug fix
-  feature/login - ghi9012 (1 week ago) - wip: Login implementation
-  hotfix/security - jkl3456 (2 weeks ago) - security: Patch vulnerability
-  (6 more branches...)
-
-Tags (5 total, showing 5):
-  v1.2.0 - mno7890 (1 month ago) - Release v1.2.0
-  v1.1.0 - pqr1234 (2 months ago) - Release v1.1.0
-  v1.0.0 - stu5678 (3 months ago) - Release v1.0.0
-
-Recent Commits (10):
-  abc1234 (13 hours ago) - John Doe - feat: Add new feature
-  def5678 (2 days ago) - Jane Smith - fix: Bug fix in auth
-  ghi9012 (1 week ago) - Bob Jones - docs: Update README
-  jkl3456 (2 weeks ago) - Alice Brown - refactor: Code cleanup
-  (6 more commits...)
-
-Next Steps:
-  reveal git://.@main              # Main branch history
-  reveal git://.@v1.2.0            # Tag history
-  reveal 'git://src/app.py?type=history'  # File history
-  reveal 'git://src/app.py?type=blame'    # File attribution
+Repository: /home/user/projects/myproject/
+HEAD: main @ abc1234
+Branches: 24
+  • main                 abc1234 2025-02-13 feat: Add new feature
+  • develop              def5678 2025-02-11 fix: Bug fix
+  • feature/login        ghi9012 2025-02-06 wip: Login implementation
+Tags: 5
+  • v1.2.0               mno7890 2025-01-13 Release v1.2.0
+Recent Commits:
+  abc1234 2025-02-13 15:42:30 John Doe
+    feat: Add new feature
+  def5678 2025-02-11 09:12:44 Jane Smith
+    fix: Bug fix in auth
+⚠ Truncated commits.recent: showing 10 of 11+ — raise ?limit=N or page with ?offset=N
+⚠ Truncated branches.recent: showing 10 of 24 — raise ?limit=N, or --all
 ```
 
 **What you get**:
-- **HEAD info**: Current branch, commit, author, message
+- **HEAD**: Current branch and short commit
 - **Branches**: 10 most recent (with commit, date, message)
 - **Tags**: 10 most recent (with commit, date, message)
-- **Recent commits**: 10 most recent across all branches
-- **Next steps**: Suggested follow-up commands
+- **Recent commits**: 10 most recent reachable from HEAD
 
 **Use cases**:
 - Quick repository orientation
@@ -258,34 +238,18 @@ reveal git://.@develop
 **Returns** (~300 tokens):
 
 ```
-Git Reference: main
-Type: git_ref
-
-Commit: abc1234567890abcdef
+Ref: main
+Commit: abc1234567890abcdef1234567890abcdef12345
 Author: John Doe <john@example.com>
-Date: Mon Feb 13 15:42:30 2025
-Message: feat: Add new feature
+Date: 2025-02-13 15:42:30
+feat: Add new feature
 
-History (20 commits, showing 20):
-
-  1. abc1234 (13 hours ago) - John Doe
-     feat: Add new feature
-     Files changed: 3 (+45, -12)
-
-  2. def5678 (2 days ago) - Jane Smith
-     fix: Bug fix in auth module
-     Files changed: 2 (+8, -3)
-
-  3. ghi9012 (1 week ago) - Bob Jones
-     docs: Update README with examples
-     Files changed: 1 (+23, -5)
-
-  (17 more commits...)
-
-Next Steps:
-  reveal git://.@abc1234            # Specific commit details
-  reveal 'git://.@main?limit=100'     # More commits
-  reveal 'git://.@main?author=John'   # Filter by author
+History:
+  abc1234 2025-02-13 15:42:30 John Doe
+    feat: Add new feature
+  def5678 2025-02-11 09:12:44 Jane Smith
+    fix: Bug fix in auth module
+⚠ Truncated history: showing 20 of 21+ — raise ?limit=N or page with ?offset=N
 ```
 
 **Query parameters**:
@@ -344,11 +308,9 @@ Next Steps:
 ```
 
 **What you get**:
-- Commit metadata (hash, author, date, message)
-- Parent commits (for merges)
-- Changed files with diff stats (+/-)
-- Total insertions/deletions
-- Suggestions for follow-up
+- Commit metadata (hash, author, committer, date, full message, parents)
+- The history starting at that commit (same layout as a branch ref)
+- No changed-files list or diff stats: use `git://<path>@<hash>?type=diff` for what a commit changed to a file or directory, or `git show --stat <hash>`
 
 ---
 
@@ -365,38 +327,14 @@ reveal git://config/settings.py@HEAD~5
 **Returns** (~500-2000 tokens depending on file size):
 
 ```
-File: src/app.py
-Ref: main
-Type: git_file
+File: src/app.py @ main
+Commit: abc1234  2025-02-13  John Doe — "feat: Add new feature"
+Size: 2,345 bytes, 89 lines
 
-Commit: abc1234567890abcdef
-Author: John Doe <john@example.com>
-Date: Mon Feb 13 15:42:30 2025
-
-Size: 2,345 bytes
-Lines: 89
-
-Content:
-────────────────────────────────────────
-  1  """Application entry point."""
-  2  import os
-  3  from flask import Flask
-  4
-  5  def create_app():
-  6      """Create Flask application."""
-  7      app = Flask(__name__)
-  8      app.config.from_object('config.Config')
-  9      return app
- 10
- 11  if __name__ == '__main__':
- 12      app = create_app()
- 13      app.run(debug=True)
-────────────────────────────────────────
-
-Next Steps:
-  reveal 'git://src/app.py?type=history'  # File history
-  reveal 'git://src/app.py?type=blame'    # Who wrote what
+Use: reveal 'git://src/app.py@main?raw=1' for full file contents
 ```
+
+With `?raw=1` the result is a `git_file` with the file's `content`; without it, a `git_file_structure` (functions, classes or headings).
 
 **Use cases**:
 - View file at specific tag (e.g., production version)
@@ -502,7 +440,7 @@ reveal 'git://.?type=history&bucket=month&author=Alice'  # scoped to one author'
 
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "git_timeline",
   "source_type": "file",
   "path": "src/app.py",
@@ -881,7 +819,7 @@ reveal 'git://src/app.py?type=history&bucket=month'
 
 ## Commit Filtering
 
-Filter commits by author, email, message, or hash. **All examples below need an explicit `@ref`** (`.@main`, `.@HEAD`, etc.) — a bare `git://.?...` ignores filter params and returns the repository overview instead.
+Filter commits by author, email, message, or hash. **All examples below need an explicit `@ref`** (`.@main`, `.@HEAD`, etc.) — on a bare `git://.?...` the filters apply only to the overview's Recent Commits block (branches and tags stay unfiltered). Add `?type=history` or an `@ref` for a plain filtered commit list.
 
 ### Author Filtering
 
@@ -915,8 +853,8 @@ reveal 'git://.?email~=@(example|test).com'
 ### Message Filtering
 
 ```bash
-# Exact match (case-sensitive)
-reveal 'git://.?message=Initial' commit
+# Exact match (case-insensitive)
+reveal 'git://.?type=history&message=Initial commit'
 
 # Contains (case-insensitive regex)
 reveal 'git://.?message~=bug'
@@ -931,11 +869,11 @@ reveal 'git://.?message~=feat.*auth'
 ### Hash Filtering
 
 ```bash
-# Prefix match
-reveal 'git://.?hash=abc123'
+# Exact match on the 7-character short hash
+reveal 'git://.?type=history&hash=abc1234'
 
-# Range match (Git's hash range operator)
-reveal 'git://.?hash=abc123..def456'
+# Prefix match: use a regex
+reveal 'git://.?type=history&hash~=^abc1'
 ```
 
 ### Combining Filters
@@ -961,7 +899,6 @@ reveal 'git://.@main?author=John&message~=fix.*auth'
 | `>` | Greater than (for dates) | `date>2025-01-01` |
 | `<` | Less than | `date<2025-02-01` |
 | `>=`, `<=` | Greater/less or equal | `date>=2025-01-01` |
-| `.=` | Starts with | `hash.=abc` |
 
 ---
 
@@ -1048,7 +985,7 @@ reveal 'git://.?message~=bug&limit=100'
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "git_repository",
   "source": "/home/user/projects/myproject",
   "source_type": "repository",
@@ -1089,7 +1026,7 @@ reveal 'git://.?message~=bug&limit=100'
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "git_ref",
   "source": "main",
   "source_type": "branch",
@@ -1114,7 +1051,7 @@ reveal 'git://.?message~=bug&limit=100'
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "git_file",
   "source": "src/app.py@main",
   "source_type": "file",
@@ -1134,7 +1071,7 @@ reveal 'git://.?message~=bug&limit=100'
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "git_file_history",
   "source": "src/app.py",
   "source_type": "file",
@@ -1154,7 +1091,7 @@ reveal 'git://.?message~=bug&limit=100'
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "git_file_blame",
   "source": "src/app.py",
   "source_type": "file",
@@ -1178,7 +1115,7 @@ reveal 'git://.?message~=bug&limit=100'
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "git_ownership",
   "source": "src/app.py@HEAD",
   "source_type": "file",
@@ -1216,7 +1153,7 @@ reveal 'git://.?message~=bug&limit=100'
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "git_timeline",
   "source": "src/app.py@HEAD",
   "source_type": "file",
@@ -1258,7 +1195,7 @@ reveal git://.@main
 reveal git://.@v1.0.0
 
 # 4. Find configuration files
-reveal git://config/ @main
+reveal 'git://config?type=history'
 
 # 5. Read main entry point
 reveal git://src/main.py@main
@@ -1339,7 +1276,7 @@ reveal 'git://src/payment.py?type=blame&element=process_payment'
 reveal git://.
 
 # 2. Find main contributors to core module
-reveal 'git://src/core/?type=blame'
+reveal 'git://src/core/?type=ownership'
 
 # 3. Identify API expert (most commits in api/)
 reveal 'git://.?author=*&message~=api&limit=100'
@@ -1368,14 +1305,14 @@ reveal 'git://.?message~=feat|fix|breaking&limit=200'
 # 2. Group by type (features, fixes, breaking)
 reveal 'git://.?message~=^feat&limit=100' > features.txt
 reveal 'git://.?message~=^fix&limit=100' > fixes.txt
-reveal 'git://.?message~=^breaking&limit=100' > breaking.txt
+reveal 'git://.?type=history&message~=^breaking&limit=100' > breaking.txt
 
 # 3. Get commit details
 reveal git://.@abc1234
 
-# 4. Extract files changed
+# 4. Extract the commit list
 reveal 'git://.@main?limit=100' --format=json | \
-  jq '.history[] | {hash, message, files: .stats.files}'
+  jq '.history[] | {hash, message}'
 ```
 
 **Output**: Structured data for release notes
@@ -1414,17 +1351,10 @@ reveal 'git://requirements.txt?type=blame&detail=full' | grep "flask=="
 reveal git://.@main --format=json | \
   jq -r '.history[].hash'
 
-# Find largest commits (by files changed)
-reveal git://.@main --format=json | \
-  jq '.history | sort_by(.stats.files) | reverse | .[0:10] | .[] | {hash, files: .stats.files, message}'
-
 # Get contributor statistics
 reveal 'git://.@main?limit=1000' --format=json | \
   jq '[.history[] | .author] | group_by(.) | map({author: .[0], commits: length}) | sort_by(.commits) | reverse'
 
-# Find commits with most changes
-reveal git://.@main --format=json | \
-  jq '.history | sort_by(.stats.insertions + .stats.deletions) | reverse | .[0:5]'
 ```
 
 ### Integration 2: Generate Contribution Report
@@ -1466,7 +1396,7 @@ echo "$DATA" | jq -r '
 # Activity timeline
 echo -e "\nActivity by Month:"
 echo "$DATA" | jq -r '
-  [.history[] | .date | split(" ")[1,2,4] | join(" ")] |
+  [.history[] | .date[0:7]] |
   group_by(.) |
   map({month: .[0], commits: length}) |
   sort_by(.month) |
@@ -1486,16 +1416,8 @@ LIMIT=${2:-500}
 
 echo "Finding code hotspots on $BRANCH..."
 
-# Get all commits with file changes
-reveal "git://.@$BRANCH?limit=$LIMIT" --format=json | \
-  jq -r '
-    [.history[] | .changed_files[]? | .path] |
-    group_by(.) |
-    map({file: .[0], changes: length}) |
-    sort_by(.changes) | reverse |
-    .[] |
-    "\(.changes) changes - \(.file)"
-  ' | head -20
+# History entries carry no per-file data, so count file touches with git itself
+git log "$BRANCH" -n "$LIMIT" --name-only --pretty=format: | sed '/^$/d' | sort | uniq -c | sort -rn | head -20
 
 echo -e "\nThese files change frequently - potential refactoring targets"
 ```
@@ -1511,22 +1433,22 @@ echo "Generating release notes since $LAST_TAG..."
 
 # Features
 echo "## Features"
-reveal 'git://.?message~=^feat:&limit=100' --format=json | \
+reveal 'git://.?type=history&message~=^feat:&limit=100' --format=json | \
   jq -r '.history[] | "- \(.message | split("\n")[0] | sub("^feat: "; ""))"'
 
 # Fixes
 echo -e "\n## Bug Fixes"
-reveal 'git://.?message~=^fix:&limit=100' --format=json | \
+reveal 'git://.?type=history&message~=^fix:&limit=100' --format=json | \
   jq -r '.history[] | "- \(.message | split("\n")[0] | sub("^fix: "; ""))"'
 
 # Breaking Changes
 echo -e "\n## Breaking Changes"
-reveal 'git://.?message~=BREAKING&limit=100' --format=json | \
+reveal 'git://.?type=history&message~=BREAKING&limit=100' --format=json | \
   jq -r '.history[] | "- \(.message | split("\n")[0])"'
 
 # Contributors
 echo -e "\n## Contributors"
-reveal 'git://.?limit=100' --format=json | \
+reveal 'git://.?type=history&limit=100' --format=json | \
   jq -r '[.history[] | .author] | unique | .[] | "- \(.)"'
 ```
 
@@ -1605,7 +1527,7 @@ set -e
 echo "Checking commits since main..."
 
 # Get commits in this PR/branch
-COMMITS=$(reveal 'git://.?limit=50' --format=json)
+COMMITS=$(reveal 'git://.?type=history&limit=50' --format=json)
 
 # Check for conventional commit format
 INVALID=$(echo "$COMMITS" | jq -r '
@@ -1757,7 +1679,7 @@ sudo apt-get install libgit2-dev
 brew install libgit2
 ```
 
-### Error: "Not a git repository"
+### "(git://) not applicable: Not a git repository" (exit 0)
 
 **Problem**: Path is not a Git repository
 
@@ -1799,7 +1721,7 @@ mv repo repo.bak
 git clone <url> repo
 ```
 
-### Error: "Reference not found: @branch"
+### Error: "Invalid ref: <name>"
 
 **Problem**: Branch/tag/commit doesn't exist
 
@@ -1866,7 +1788,6 @@ reveal 'git://src/models.py?type=blame&element=User.save'
 
 6. **Merge commits**
    - Merge commits show multiple parents
-   - Diff stats may not reflect actual changes
    - Use `git show <hash>` for merge details
 
 7. **Submodules**
@@ -1914,7 +1835,7 @@ reveal 'git://.?limit=10000' | grep john
 ```bash
 # Parse structured output
 reveal git://.@main --format=json | \
-  jq '.history[] | select(.stats.insertions > 100)'
+  jq '.history[] | select(.message | test("^feat"))'
 ```
 
 ### 5. Progressive Blame
@@ -1934,8 +1855,8 @@ reveal 'git://src/app.py?type=blame&detail=full'
 
 ```bash
 # Find complex functions, then blame them
-reveal 'ast://src/**/*.py?complexity>10' --format=json | \
-  jq -r '.matches[].path' | while read file; do
+reveal 'ast://src?complexity>10' --format=json | \
+  jq -r '.results[].file' | sort -u | while read file; do
     echo "=== $file ==="
     reveal "git://$file?type=blame"
   done
@@ -2013,7 +1934,7 @@ reveal git://.@suspicious_hash
 
 ```bash
 # Get branch list
-reveal git://. --format=json | jq -r '.branches.items[].name' | \
+reveal git://. --format=json | jq -r '.branches.recent[].name' | \
   while read branch; do
     echo "=== $branch ==="
     reveal "git://.@$branch?message~=search_term"
@@ -2087,12 +2008,12 @@ cat commits.json | jq '.history[] | {date, author, message}'
 
 ```bash
 # View file at two refs
-reveal git://config.yaml@main > main.txt
-reveal git://config.yaml@develop > develop.txt
+reveal 'git://config.yaml@main?raw=1' > main.txt
+reveal 'git://config.yaml@develop?raw=1' > develop.txt
 diff main.txt develop.txt
 
 # Or use diff:// adapter
-reveal diff://config.yaml@main..develop
+reveal diff://git://app.py@main:git://app.py@develop   # code files only (compares functions, classes, imports)
 ```
 
 ### Q: How accurate is the blame attribution?
@@ -2101,22 +2022,21 @@ reveal diff://config.yaml@main..develop
 
 ### Q: Can I get commit diffs?
 
-**A**: Commit metadata includes diff stats (files changed, +/-, lines). For full diffs:
+**A**: `git://.@<hash>` shows commit metadata but not changed files or diff stats. For what a commit changed in a file or directory:
 
 ```bash
-# Get diff stats
-reveal git://.@abc1234
+# Diff of one file or directory in that commit
+reveal 'git://src/app.py@abc1234?type=diff'
 
-# For full diff, use git:
-git show abc1234
+# Diff stats and the full patch: use git
+git show --stat abc1234
 ```
 
 ### Q: What about merge commits?
 
 **A**: Merge commits show:
-- Multiple parents
-- Combined diff stats
-- Merge message
+- Multiple parents (`commit.parents`)
+- The merge message
 
 For detailed merge analysis, use `git show <merge_commit>`.
 
@@ -2125,9 +2045,8 @@ For detailed merge analysis, use `git show <merge_commit>`.
 **A**:
 
 ```bash
-# Get commits with file changes
-reveal 'git://.@main?limit=1000' --format=json | \
-  jq -r '[.history[].changed_files[]?.path] | group_by(.) | map({file: .[0], changes: length}) | sort_by(.changes) | reverse | .[]'
+# History entries carry no per-file data; use git, or `reveal hotspots` for ranked files
+git log main -n 1000 --name-only --pretty=format: | sed '/^$/d' | sort | uniq -c | sort -rn | head -20
 ```
 
 ---
