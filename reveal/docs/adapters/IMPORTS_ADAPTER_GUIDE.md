@@ -499,7 +499,12 @@ not `src/models`; for `imports://.?violations` write `src/models`.
 
 ### Example Output
 
-Use `--format=json` to read the violations (rows carry no line number):
+```
+Layer Violations: 1
+  models/user.py -> db/session.py  [domain] domain layer cannot import from db
+```
+
+Rows carry no line number. In JSON:
 
 ```json
 {

@@ -658,9 +658,10 @@ _SCHEMA_OUTPUT_TYPES = [
                     'items': {
                         'type': 'object',
                         'properties': {
-                            'file': {'type': 'string'},
-                            'line': {'type': 'integer'},
-                            'message': {'type': 'string'}
+                            'from_file': {'type': 'string'},
+                            'to_file': {'type': 'string'},
+                            'layer': {'type': 'string'},
+                            'reason': {'type': 'string'}
                         }
                     }
                 }
@@ -1070,15 +1071,12 @@ class ImportsRenderer:
                 print(f"  ✅ {note or 'No violations found'}\n")
         else:
             violations = result.get('violations', [])
-            if verbose:
-                for v in violations:
-                    print(f"  {v['file']}:{v['line']} - {v['message']}")
-            else:
-                for v in violations[:10]:
-                    print(f"  {v['file']}:{v['line']} - {v['message']}")
-                if count > 10:
-                    print(f"\n  ... and {count - 10} more violations")
-                    print(f"  Run with --verbose to see all {count} violations\n")
+            shown = violations if verbose else violations[:10]
+            for v in shown:
+                print(f"  {v['from_file']} -> {v['to_file']}  [{v['layer']}] {v['reason']}")
+            if not verbose and count > 10:
+                print(f"\n  ... and {count - 10} more violations")
+                print(f"  Run with --verbose to see all {count} violations\n")
 
     @staticmethod
     def _render_cycle_summary(result: dict, display_path: str) -> None:
