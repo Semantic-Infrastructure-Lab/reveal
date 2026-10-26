@@ -621,8 +621,34 @@ def _derive_step_outcome(tool_name: str, tur: Optional[Dict], result_content: Op
     return outcome
 
 
-def _enrich_agent_step(step: Dict[str, Any], tur: Dict) -> None:
-    step['agent_type'] = tur.get('agentType') or 'unknown'
+def _agent_type(tur: Optional[Dict], call_input: Optional[Dict]) -> str:
+    """The agent's type: the result's ``agentType``, else the call's ``subagent_type``.
+
+    Claude Code writes ``agentType`` only on a finished foreground run; a background
+    launch (and some foreground ones) carry neither it nor any other type, so the type
+    the call asked for is the only record of it.
+    """
+    from_result = tur.get('agentType') if isinstance(tur, dict) else None
+    from_call = call_input.get('subagent_type') if isinstance(call_input, dict) else None
+    return from_result or from_call or 'unknown'
+
+
+# toolUseResult.usage is the API's usage block, snake_case, unlike the camelCase
+# totals (totalTokens, totalDurationMs) beside it.
+_AGENT_USAGE_FIELDS = (
+    ('input_tokens', 'input_tokens'),
+    ('output_tokens', 'output_tokens'),
+    ('cache_read_tokens', 'cache_read_input_tokens'),
+    ('cache_created_tokens', 'cache_creation_input_tokens'),
+)
+
+
+def _agent_usage(usage_raw: Dict) -> Dict[str, int]:
+    return {key: usage_raw.get(raw) or 0 for key, raw in _AGENT_USAGE_FIELDS}
+
+
+def _enrich_agent_step(step: Dict[str, Any], tur: Dict, call_input: Optional[Dict] = None) -> None:
+    step['agent_type'] = _agent_type(tur, call_input)
     if tur.get('totalDurationMs') is not None:
         step['duration_ms'] = tur['totalDurationMs']
     if tur.get('totalTokens') is not None:
@@ -672,7 +698,7 @@ def get_workflow(messages: List[Dict], session_name: str,
             step['outcome'] = outcome
 
         if tool_name == 'Agent' and tur and isinstance(tur, dict):
-            _enrich_agent_step(step, tur)
+            _enrich_agent_step(step, tur, content.get('input'))
 
         # backgroundTaskId marks a backgrounded Bash run; isAsync marks a
         # backgrounded Agent launch — same 'backgrounded' signal, different
@@ -731,7 +757,7 @@ def get_session_agents(messages: List[Dict], session_name: str,
             'step': len(agents) + 1,
             'message_index': i,
             'agent_id': agent_id,
-            'agent_type': (tur.get('agentType') if isinstance(tur, dict) else None) or 'unknown',
+            'agent_type': _agent_type(tur, inp),
             'status': (tur.get('status') if isinstance(tur, dict) else None) or 'unknown',
             'prompt': prompt[:200],
             'timestamp': msg.get('timestamp'),
@@ -751,14 +777,9 @@ def get_session_agents(messages: List[Dict], session_name: str,
                 total_tokens += tur['totalTokens']
             if tur.get('totalToolUseCount') is not None:
                 entry['tool_count'] = tur['totalToolUseCount']
-            usage_raw = tur.get('usage') or {}
-            if usage_raw:
-                entry['usage'] = {
-                    'input_tokens': usage_raw.get('inputTokens', 0),
-                    'output_tokens': usage_raw.get('outputTokens', 0),
-                    'cache_read_tokens': usage_raw.get('cacheReadInputTokens', 0),
-                    'cache_created_tokens': usage_raw.get('cacheCreationInputTokens', 0),
-                }
+            usage_raw = tur.get('usage')
+            if isinstance(usage_raw, dict) and usage_raw:
+                entry['usage'] = _agent_usage(usage_raw)
 
         agents.append(entry)
 

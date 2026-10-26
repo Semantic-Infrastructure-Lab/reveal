@@ -701,8 +701,8 @@ class TestGetSessionAgents:
     def test_agent_call_extracted(self):
         tur = {'agentId': 'ag-001', 'agentType': 'Explore', 'status': 'completed',
                'totalDurationMs': 10000, 'totalTokens': 500, 'totalToolUseCount': 5,
-               'usage': {'inputTokens': 400, 'outputTokens': 100,
-                         'cacheReadInputTokens': 0, 'cacheCreationInputTokens': 0}}
+               'usage': {'input_tokens': 400, 'output_tokens': 100,
+                         'cache_read_input_tokens': 0, 'cache_creation_input_tokens': 0}}
         msgs = [
             _assistant_tool_use('tu_001', 'Agent', prompt='Explore codebase for auth'),
             _tur_msg('tu_001', tur),
