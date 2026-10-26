@@ -394,7 +394,7 @@ def _generate_domain_next_steps(checks: List[Dict[str, Any]], domain: str) -> Li
 
     # SSL certificate issues
     if any(c['name'] == 'ssl_certificate' and c['status'] in ('failure', 'warning') for c in checks):
-        next_steps.append(f"Inspect SSL certificate: reveal ssl://{domain} --check-advanced")
+        next_steps.append(f"Inspect SSL certificate: reveal ssl://{domain} --check --advanced")
 
     # HTTP response failures
     if any(c['name'] == 'http_response' and c['status'] == 'failure' for c in checks):
@@ -856,7 +856,7 @@ class DomainAdapter(ResourceAdapter):
                 'ssl_check': ssl_check,
                 'next_steps': [
                     f"Full SSL details: reveal ssl://{self.domain}",
-                    f"Advanced SSL checks: reveal ssl://{self.domain} --check-advanced",
+                    f"Advanced SSL checks: reveal ssl://{self.domain} --check --advanced",
                 ],
             }
         except SSL_CHECK_ERRORS as e:

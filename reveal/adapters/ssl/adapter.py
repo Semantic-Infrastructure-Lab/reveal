@@ -953,7 +953,7 @@ class SSLAdapter(ResourceAdapter):
         if failures > 0 or warnings > 0:
             failed_domains = [r['host'] for r in all_results if r['status'] == 'failure']
             if failed_domains and not advanced:
-                next_steps.append(f"Inspect first failure: reveal ssl://{failed_domains[0]} --check-advanced")
+                next_steps.append(f"Inspect first failure: reveal ssl://{failed_domains[0]} --check --advanced")
             if not only_failures and (failures > 0 or warnings > 0):
                 next_steps.append("Show only problems: ... --only-failures")
             if source and 'nginx' in str(source).lower():
@@ -1087,7 +1087,7 @@ class SSLAdapter(ResourceAdapter):
         next_steps = []
         if failed > 0:
             failed_domains = [r['domain'] for r in validation_results if r['status'] == 'failure']
-            next_steps.append(f"Inspect failures: reveal ssl://{failed_domains[0]} --check-advanced")
+            next_steps.append(f"Inspect failures: reveal ssl://{failed_domains[0]} --check --advanced")
             next_steps.append("Check nginx config for certificate paths")
 
         return {
