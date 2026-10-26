@@ -58,14 +58,35 @@ def _check_orphaned_bytecode(pyc_file: Path) -> Dict[str, Any]:
     }
 
 
+def _pyc_header_is_stale(py_file: Path, pyc_file: Path) -> bool:
+    """True when a timestamp-based .pyc was compiled from a different source file.
+
+    This is importlib's own test: the .pyc header holds the source mtime and size (3.7+ layout:
+    magic, flags, mtime, size). A hash-based .pyc (flags bit 0) is validated by hash, not by
+    mtime, so it is never judged here. A .pyc that is merely newer than its source is the
+    normal state after an import.
+    """
+    try:
+        header = pyc_file.read_bytes()[:16]
+        source = py_file.stat()
+    except OSError:
+        return False
+    if len(header) < 16 or int.from_bytes(header[4:8], "little") & 1:
+        return False
+    recorded_mtime = int.from_bytes(header[8:12], "little")
+    recorded_size = int.from_bytes(header[12:16], "little")
+    return (recorded_mtime != (int(source.st_mtime) & 0xFFFFFFFF)
+            or recorded_size != (source.st_size & 0xFFFFFFFF))
+
+
 def _check_stale_bytecode(py_file: Path, pyc_file: Path) -> Dict[str, Any]:
-    """Check if pyc file is newer than source (stale bytecode)."""
+    """Report a .pyc compiled from an older (or otherwise different) version of its source."""
     return {
         "type": "stale_bytecode",
         "severity": "warning",
         "file": str(py_file),
         "pyc_file": str(pyc_file),
-        "problem": ".pyc file is NEWER than source (stale bytecode)",
+        "problem": ".pyc was compiled from an older version of the source (stale bytecode)",
         "source_mtime": py_file.stat().st_mtime,
         "pyc_mtime": pyc_file.stat().st_mtime,
         "fix": f"rm {pyc_file}",
@@ -85,7 +106,7 @@ def _check_pyc_file(pyc_file: Path) -> Dict[str, Any]:
     py_file = pyc_to_source(pyc_file)
     if not py_file.exists():
         return _check_orphaned_bytecode(pyc_file)
-    if pyc_file.stat().st_mtime > py_file.stat().st_mtime:
+    if _pyc_header_is_stale(py_file, pyc_file):
         return _check_stale_bytecode(py_file, pyc_file)
     return {}
 
