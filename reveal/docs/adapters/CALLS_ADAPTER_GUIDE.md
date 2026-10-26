@@ -238,6 +238,11 @@ reveal 'calls://src/?callers=validate_item'
 reveal 'calls://src/?callers=process'
 ```
 
+In JS/TS a call inside an anonymous callback that no listed function, method or class contains
+(`app.get('/', (req) => helper(req))`, `setTimeout(() => helper())`) is reported under the caller `<module>`, as is
+a file that only holds such calls. The callback runs later, not at load: `<module>` here means "no named scope owns it".
+A callback inside a class (a field such as `x = throttle(async () => ...)`) is still not reported (BACK-2191 follow-up).
+
 ### `callees`
 
 Forward lookup — what does this function call? Scans all definitions of the function name across the project:
