@@ -7,6 +7,7 @@ collector skipped every arrow and function as "its own scope", and nothing liste
 contains now contributes its calls to `<module>`; one inside a listed function stays that function's.
 """
 import json
+import os
 
 import pytest
 
@@ -44,7 +45,7 @@ def callers_by_file(root):
     found = {}
     for level in json.loads(out.stdout)['levels']:
         for c in level['callers']:
-            found.setdefault(c['file'].rsplit('/', 1)[-1], set()).add(c['caller'])
+            found.setdefault(os.path.basename(c['file']), set()).add(c['caller'])
     return found
 
 
