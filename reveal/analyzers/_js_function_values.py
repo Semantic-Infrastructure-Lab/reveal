@@ -17,6 +17,7 @@ in never pays for the scan. Same mixin pattern as `JSClassBasesMixin` and
 from typing import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
 
 from ..core import node_children as _children
+from ..conventions import JS_FUNCTION_FACTORIES
 from ..core.treesitter_compat import _zero_arg
 from ..reveal_types import StructureItem
 
@@ -139,11 +140,11 @@ class JSFunctionValueMixin(_Base):
     def _plain_call_is_function(self, call, name_node) -> bool:
         """Whether `const NAME = callee(fn)` binds a function.
 
-        BACK-2174: a declared wrapper (``memo``, ``useCallback``) returns its function. Any other plain call
+        BACK-2174: a declared wrapper (``memo``, ``useCallback``) or an imported factory (``Fn`` from TSLBase, BACK-2178) returns its function. Any other plain call
         (``setTimeout(fn)``, ``derived(fn)``, ``useMemo(fn)``) returns a value, and the file only shows it is a
         function when it calls or constructs the name this declaration binds.
         """
-        if self._is_wrapper_call(call):
+        if self._is_wrapper_call(call) or self._is_imported_factory_call(call):
             return True
         return name_node is not None and self._is_called_in_scope(
             _zero_arg(name_node, 'parent'), self._get_node_text(name_node))
@@ -167,6 +168,36 @@ class JSFunctionValueMixin(_Base):
                                 found.add(self._get_node_text(bound))
             names = self._imported_names_cache = frozenset(found)
         return names
+
+    def _named_import_sources(self) -> dict:
+        """local name -> (name it is exported under, module specifier) for this file's named ES imports."""
+        sources = getattr(self, '_named_import_sources_cache', None)
+        if sources is None:
+            sources = {}
+            for spec in self._find_nodes_by_type('import_specifier'):
+                statement = _zero_arg(spec, 'parent')
+                while statement is not None and _zero_arg(statement, 'kind') != 'import_statement':
+                    statement = _zero_arg(statement, 'parent')
+                module = statement.child_by_field_name('source') if statement is not None else None
+                exported = spec.child_by_field_name('name')
+                if module is None or exported is None:
+                    continue
+                bound = spec.child_by_field_name('alias') or exported
+                sources[self._get_node_text(bound)] = (self._get_node_text(exported),
+                                                       self._get_node_text(module).strip('\'"`'))
+            self._named_import_sources_cache = sources
+        return sources
+
+    def _is_imported_factory_call(self, call) -> bool:
+        """Whether a plain call's callee is an import listed in ``JS_FUNCTION_FACTORIES`` from one of its modules."""
+        obj, name = self._callee_parts(call)
+        source = self._named_import_sources().get(name) if not obj else None
+        if source is None:
+            return False
+        exported, specifier = source
+        modules = JS_FUNCTION_FACTORIES.get(exported, ())
+        stem = specifier.rsplit('/', 1)[-1].rsplit('.', 1)[0] if specifier.startswith('.') else specifier
+        return stem in modules
 
     def _dropped_function_values(self) -> List[dict]:
         """The `const NAME = callee(fn)` declarators the BACK-2174 rule leaves out of the functions (BACK-2229):

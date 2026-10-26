@@ -185,6 +185,15 @@ CSHARP_ENTRY_POINT_DECORATORS: FrozenSet[str] = frozenset({
     'Route', 'AcceptVerbs', 'FunctionName', 'Function',
 })
 
+# JS/TS callees that return a function, keyed by the module they are imported from (last path segment without
+# extension, or the whole package specifier): `const x = Fn(...)` then declares a function even when this file
+# never calls `x`. three.js shader nodes (`Fn`, from TSLBase/TSLCore or `three/tsl`) are used from other files.
+# Entries only ever add "this callee returns a function"; the same spelling from another module stays a value
+# (BACK-2178).
+JS_FUNCTION_FACTORIES: Dict[str, FrozenSet[str]] = {
+    'Fn': frozenset({'TSLBase', 'TSLCore', 'three/tsl'}),
+}
+
 # --- stdlib classification (BACK-1275) --------------------------------------
 
 # Python 3.10+ ships sys.stdlib_module_names; the fallback set covers older

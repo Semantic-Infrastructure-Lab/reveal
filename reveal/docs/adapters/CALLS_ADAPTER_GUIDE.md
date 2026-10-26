@@ -437,6 +437,11 @@ is declarations the rule did not list, not functions lost. A `?callers=NAME` or 
 of those declarations does not answer "not found" (exit 2): the name is declared, so the answer is empty and the
 warning stands beside it.
 
+One such callee is declared: `JS_FUNCTION_FACTORIES` in `reveal/conventions.py` names callees that return a function,
+keyed by the module they are imported from (today `Fn` from `TSLBase`, `TSLCore` or `three/tsl`). `const x = Fn(...)`
+with that import is a function whether or not the file calls `x`; the same spelling from another module, or declared
+in the file, stays a value. Adding a callee is a one-line change there, shown first to return its function.
+
 ### JSON
 
 Structured data for programmatic processing:
