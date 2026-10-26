@@ -92,8 +92,8 @@ _SCHEMA_OUTPUT_TYPES = [
         'checks': {'type': 'array'}, 'summary': {'type': 'object'}, 'certificate': {'type': 'object'},
         'exit_code': {'type': 'integer'},
     }),
-    _ssl_output_type('ssl_cert_file_validation', 'ssl://nginx://... --check --local-certs: '
-                     'the certificate files an nginx config names, validated on disk', {
+    _ssl_output_type('ssl_cert_file_validation', 'ssl://nginx://... --check --local-certs, or ssl://file://PEM --check: '
+                     'the certificate files an nginx config names (or one file), validated on disk', {
         'type': {'type': 'string', 'const': 'ssl_cert_file_validation'}, 'source': {'type': 'string'},
         'certs_checked': {'type': 'integer'}, 'status': {'type': 'string'},
         'summary': {'type': 'object'}, 'results': {'type': 'array'}, 'exit_code': {'type': 'integer'},
@@ -390,8 +390,7 @@ class SSLAdapter(ResourceAdapter):
         next_steps = []
         if is_file_mode:
             file_uri = f'ssl://file://{self._cert_file_path}'
-            next_steps.append(f"reveal {file_uri}/san  # View all SANs")
-            next_steps.append(f"reveal {file_uri}/chain  # View cert chain")
+            next_steps.append(f"reveal {file_uri} --check  # Validate expiry")
             if cert.san:
                 primary = cert.san[0].lstrip('*').lstrip('.')
                 next_steps.append(
@@ -517,6 +516,8 @@ class SSLAdapter(ResourceAdapter):
         Returns:
             List of available elements with descriptions
         """
+        if self._cert_file_path:
+            return []  # a file path plus /element is not a reachable URI
         self._fetch_certificate()
         cert = self._certificate
 
@@ -685,8 +686,11 @@ class SSLAdapter(ResourceAdapter):
                 warn_days, critical_days, advanced, only_failures, severity
             )
 
+        if self._cert_file_path:
+            return self._check_cert_file(warn_days, critical_days)
+
         if not self.host:
-            return {'type': 'ssl_check', 'error': 'No host specified'}
+            return {'type': 'ssl_check', 'error': 'No host specified', 'exit_code': 2}
 
         return check_ssl_health(
             self.host, self.port,
@@ -802,6 +806,20 @@ class SSLAdapter(ResourceAdapter):
             'results': results,
             'exit_code': 0 if summary['failures'] == 0 else 2,
             **({'files_skipped': skipped} if skipped else {}),
+        }
+
+    def _check_cert_file(self, warn_days: int, critical_days: int) -> Dict[str, Any]:
+        """ssl://file://PEM --check: validate the one certificate file on disk (no network)."""
+        results = [self._validate_cert_file(self._cert_file_path, [], warn_days, critical_days)]
+        summary = self._build_cert_validation_summary(results)
+        return {
+            'type': 'ssl_cert_file_validation',
+            'source': f'ssl://file://{self._cert_file_path}',
+            'certs_checked': summary['total'],
+            'status': summary['overall'],
+            'summary': {k: v for k, v in summary.items() if k != 'overall'},
+            'results': results,
+            'exit_code': 0 if summary['failures'] == 0 else 2,
         }
 
     def _validate_cert_file(

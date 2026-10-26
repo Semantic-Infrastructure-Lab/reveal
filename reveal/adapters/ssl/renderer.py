@@ -17,6 +17,9 @@ class SSLRenderer(TypeDispatchRenderer):
     @staticmethod
     def _render_ssl_certificate(result: dict) -> None:
         """Render main certificate overview."""
+        if result.get('source_type') == 'file':
+            SSLRenderer._render_ssl_certificate_file(result)
+            return
         host = result['host']
         port = result['port']
 
@@ -74,6 +77,28 @@ class SSLRenderer(TypeDispatchRenderer):
             print()
             from .probe import render_probe_text
             render_probe_text(result['http_probe'])
+
+    @staticmethod
+    def _render_ssl_certificate_file(result: dict) -> None:
+        """Render a certificate read from a file: no host, port or live verification."""
+        print(f"SSL Certificate: {result.get('file_path') or result.get('source')}")
+        print()
+        print(f"Status: {result['health_icon']} {result['health_status']} "
+              f"({result['days_until_expiry']} days until expiry)")
+        print()
+        print("Certificate:")
+        print(f"  Common Name: {result['common_name']}")
+        print(f"  Issuer: {result['issuer']}")
+        print(f"  Valid: {result['valid_from']} to {result['valid_until']}")
+        print(f"  SANs: {result['san_count']} domain(s)")
+        if result.get('chain_certs'):
+            print(f"  Chain certificates in file: {result['chain_certs']}")
+        print()
+        if result.get('next_steps'):
+            print("Next Steps:")
+            for step in result['next_steps']:
+                print(f"  {step}")
+            print()
 
     @staticmethod
     def _render_ssl_san(result: dict) -> None:
