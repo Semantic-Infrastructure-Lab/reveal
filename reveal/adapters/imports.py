@@ -1584,33 +1584,38 @@ def _relativize_importer_paths(result: Dict[str, Any], rel: Callable[[Optional[s
         entry['importers'] = sorted(cast(str, rel(f)) for f in entry['importers'])
 
 
+def _relativize_import_dicts(imports: List[Dict[str, Any]], rel: Callable[[Optional[str]], Optional[str]],
+                             roots: Tuple[Path, Optional[Path]]) -> None:
+    """``file`` and ``resolved`` of formatted import statements, and an absolute ``module`` in the
+    project (under the requested path's directory or the scan root, ``roots``): a folded PHP constant
+    include keeps its host path as the module, spelled as the ?importers=FILE row does. A module the
+    author wrote absolute outside the project is source text, not a host path of ours, and is
+    reported as written."""
+    base_path, scan_root = roots
+    project = (base_path if base_path.is_dir() else base_path.parent, scan_root)
+    for imp in imports:
+        if imp.get('file'):
+            imp['file'] = rel(imp['file'])
+        if imp.get('resolved'):
+            imp['resolved'] = rel(imp['resolved'])
+        module = imp.get('module')
+        if module and os.path.isabs(module) and any(
+                resolution.path_is_under(Path(module), where) for where in project if where):
+            imp['module'] = rel(module)
+
+
 def _relativize_imports_paths(result: Dict[str, Any], base_path: Path, scan_root: Optional[Path] = None) -> None:
-    """Relativize the file-path fields the text renderer already relativizes
-    (ImportsRenderer._render_components's local `rel()`, etc.), but in the
-    raw structures get_structure() serializes directly to JSON -- those never
-    routed through the text renderer, so `--format json` leaked absolute host
-    paths (analyst's filesystem layout/username), same gap as overview.py's
-    `_relativize_paths` / deps.py's `_relativize_deps_paths` (BACK-1194
-    follow-up). BACK-1212. Mutates in place; dispatches on result['type']
-    since get_structure() returns a different shape per query param.
+    """Spell the file-path fields of a view's data with ``_path_display`` (the envelope's metadata
+    and warnings are spelled in ``_build_response``). The raw structures get_structure() serializes
+    to JSON leaked absolute host paths (analyst's filesystem layout/username), same gap as
+    overview.py's `_relativize_paths` / deps.py's `_relativize_deps_paths` (BACK-1194 follow-up).
+    BACK-1212. Mutates in place; dispatches on result['type'] since get_structure() returns a
+    different shape per query param; the text renderers print what this leaves.
     """
     rel = _path_display(base_path)
-    base_dir = base_path if base_path.is_dir() else base_path.parent
-
-    def in_project(module: str) -> bool:
-        return any(resolution.path_is_under(Path(module), where) for where in (base_dir, scan_root) if where)
 
     def relativize_import_dicts(imports: List[Dict[str, Any]]) -> None:
-        for imp in imports:
-            if imp.get('file'):
-                imp['file'] = rel(imp['file'])
-            if imp.get('resolved'):
-                imp['resolved'] = rel(imp['resolved'])
-            # A folded PHP constant include keeps its host path as the module; spell it as the
-            # ?importers=FILE row does. A module the author wrote absolute outside the project is
-            # source text, not a host path of ours, and is reported as written.
-            if imp.get('module') and os.path.isabs(imp['module']) and in_project(imp['module']):
-                imp['module'] = rel(imp['module'])
+        _relativize_import_dicts(imports, rel, (base_path, scan_root))
 
     result_type = result.get('type')
     if result_type == 'imports':
