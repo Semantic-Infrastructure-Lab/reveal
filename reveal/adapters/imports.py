@@ -250,14 +250,19 @@ def parse_failure_warning(failed_files: List[str], base: Optional[Path] = None) 
     }
 
 
-def file_loss_warnings(analysis: ImportAnalysis, base: Optional[Path] = None) -> List[WarningEntry]:
+def file_loss_warnings(analysis: ImportAnalysis, base: Optional[Path] = None, *,
+                       spell: Optional[Callable[[Optional[str]], Optional[str]]] = None) -> List[WarningEntry]:
     """The per-file facts of one import build, each under its own cause (BACK-2190).
 
     ``files_failed`` holds three different things, and the user's next step differs: a file
     tree-sitter recovered with ERROR nodes (``partial_parse``: its recovered imports are edges), a
     file never parsed because it could not be read (``analysis_failed``, named by the OSError type:
-    no tree, its imports are missing) and a file a dead pool worker took (``worker_lost``)."""
+    no tree, its imports are missing) and a file a dead pool worker took (``worker_lost``).
+    ``spell`` names each file as the answer does (imports' ``_path_display``) instead of ``base``."""
     from .ast.analysis import analysis_skipped_warning
+    name = _spelled(spell)
+    if spell is not None:
+        base = None
     lost = set(analysis.files_lost)
     partial: List[str] = []
     unread: List[Tuple[str, str]] = []
@@ -270,14 +275,21 @@ def file_loss_warnings(analysis: ImportAnalysis, base: Optional[Path] = None) ->
         # Only a file whose tree was never built is unreadable (status 'unavailable', or an OSError);
         # a failed file with no such record is a parse failure, as it was before BACK-2190.
         if read_error or parse.get('status') == 'unavailable':
-            unread.append((str(path), f'{read_error}: {parse.get("reason", "")}' if read_error
+            unread.append((name(path), f'{read_error}: {parse.get("reason", "")}' if read_error
                            else str(parse.get('reason') or 'not parsed')))
         else:
-            partial.append(str(path))
-    warnings = [parse_failure_warning(partial, base), worker_lost_warning([str(p) for p in lost], base),
+            partial.append(name(path))
+    warnings = [parse_failure_warning(partial, base), worker_lost_warning([name(p) for p in lost], base),
                 analysis_skipped_warning(unread, base, 'analysis is incomplete; its imports are missing from the '
                                                        'import graph')]
     return [w for w in warnings if w]
+
+
+def _spelled(spell: Optional[Callable[[Optional[str]], Optional[str]]]) -> Callable[[Any], str]:
+    """``str`` of a path, or the answer's spelling of it when the caller passes one."""
+    if spell is None:
+        return str
+    return lambda path: spell(str(path)) or str(path)
 
 
 def detect_autoload_regime(path: Path) -> Optional[Dict[str, str]]:
@@ -1534,12 +1546,29 @@ def _path_display(base_path: Path) -> Callable[[Optional[str]], Optional[str]]:
             return value
         shown = to_relative_display(value, base_dir)
         if not os.path.isabs(shown):
-            return shown
+            return to_posix(shown)  # the string: a PurePath's as_posix() keeps a backslash on POSIX
         try:
             return to_posix(os.path.relpath(value, base_dir))
         except ValueError:  # another drive on Windows
             return shown
     return rel
+
+
+def _spell_metadata_paths(metadata: Dict[str, Any],
+                          rel: Callable[[Optional[str]], Optional[str]]) -> Dict[str, Any]:
+    """The answer's copy of ``get_metadata()`` with its file lists spelled as the rows are (BACK-2185).
+
+    ``get_metadata()`` keeps absolute ``files_failed``/``files_lost`` for its library readers
+    (overview://, the architecture diff), which spell them against their own base; the answer printed
+    them as host paths. ``extraction_diagnostics`` keys arrive relative to the target where they can
+    be (``rel`` reads such a key from the same directory) and absolute otherwise."""
+    for key in ('files_failed', 'files_lost'):
+        if isinstance(metadata.get(key), list):
+            metadata[key] = [rel(path) or path for path in metadata[key]]
+    if isinstance(metadata.get('extraction_diagnostics'), dict):
+        metadata['extraction_diagnostics'] = {
+            rel(path) or path: causes for path, causes in metadata['extraction_diagnostics'].items()}
+    return metadata
 
 
 def _relativize_importer_paths(result: Dict[str, Any], rel: Callable[[Optional[str]], Optional[str]]) -> None:
@@ -1922,17 +1951,24 @@ class ImportsAdapter(ResourceAdapter):
 
         return None
 
-    def integrity_warnings(self, base: Optional[Path] = None) -> List[WarningEntry]:
+    def integrity_warnings(self, base: Optional[Path] = None, *,
+                           spell: Optional[Callable[[Optional[str]], Optional[str]]] = None) -> List[WarningEntry]:
         """The graph's disclosures, for the commands that build it through _build_graph
         rather than get_structure (overview, architecture): files parsed with errors
         (parse_failure_warning) and files a dead pool worker took down
-        (worker_lost_warning), each under its own cause."""
+        (worker_lost_warning), each under its own cause. Paths are relative to ``base``, or
+        spelled by ``spell`` (imports' own answers, BACK-2185) when one is given."""
         from .ast.analysis import analysis_skipped_warning, traversal_failed_warning
-        traversal = getattr(self.analysis.graph, 'traversal_failures', ())
+        name = _spelled(spell)
+        if spell is not None:
+            base = None
+        traversal = [(name(path) if path else path, cause)
+                     for path, cause in getattr(self.analysis.graph, 'traversal_failures', ())]
+        structure_failures = [(name(path), cause) for path, cause in self.analysis.structure_failures]
         warnings = [traversal_failed_warning(traversal, base),
-                    *file_loss_warnings(self.analysis, base),
+                    *file_loss_warnings(self.analysis, base, spell=spell),
                     analysis_skipped_warning(
-                        self.analysis.structure_failures, base,
+                        structure_failures, base,
                         "analysis is incomplete; some functions and classes may be missing from the complexity and structure results")]
         return [w for w in warnings if w]
 
@@ -2303,11 +2339,9 @@ class ImportsAdapter(ResourceAdapter):
         Returns:
             Standardized response dict with contract_version, type, source, etc.
         """
-        base = self._target_path
-        if base is not None and not base.is_dir():
-            base = base.parent
+        display = self._display()
         # Keep legacy file/worker diagnostics in their existing metadata and text paths.
-        warnings = [warning for warning in self.integrity_warnings(base)
+        warnings = [warning for warning in self.integrity_warnings(spell=display)
                     if warning.get('type') == 'analysis_incomplete']
         if self._scope_hidden:
             warnings.append(self._scope_hidden)
@@ -2320,7 +2354,7 @@ class ImportsAdapter(ResourceAdapter):
             data=data_fields,
             warnings=warnings,
         )
-        response['metadata'] = metadata = self.get_metadata()
+        response['metadata'] = metadata = _spell_metadata_paths(self.get_metadata(), display)
         failed = metadata.get('files_failed')
         if isinstance(failed, list):
             # get_metadata keeps the first 50 paths; the count is exact (BACK-1551).
@@ -2328,6 +2362,10 @@ class ImportsAdapter(ResourceAdapter):
                             metadata['files_failed_count'], 'auto_cap',
                             hint='the first 50 by path; files_failed_count is exact')
         return response
+
+    def _display(self) -> Callable[[Optional[str]], Optional[str]]:
+        """How this answer spells a path (``_path_display``): every view's rows and its envelope."""
+        return _path_display(self._target_path or Path('.').resolve())
 
     def _lazy_mode(self, default: str) -> Tuple[str, bool]:
         """The &lazy value this view applies, and whether it is the view's ``default``."""
