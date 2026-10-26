@@ -82,7 +82,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Architectural brief: entry points, core abstractions, risks'),
     'calls':        _declared('calls',
                      'reveal calls --callers FUNC',
-                     'Call graph: callers, callees (--depth N, --detail), --rank callers, --uncalled, --modules'),
+                     'Call graph: callers, callees (--depth N, --detail), --rank callers, --modules'),
     'check':        _spec('check',
                      'reveal check <path>',
                      'Run quality rules on a file or directory',
