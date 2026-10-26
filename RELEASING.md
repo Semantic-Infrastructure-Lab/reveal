@@ -104,7 +104,7 @@ Before running the release script, **4 files must be updated** — CI checks val
 
 | File | What to update |
 |------|---------------|
-| `CHANGELOG.md` | Add `[X.Y.Z] - YYYY-MM-DD` section with session list |
+| `CHANGELOG.md` | Add `[X.Y.Z] - YYYY-MM-DD` section, written for users (see "Writing CHANGELOG entries") |
 | `reveal/docs/AGENT_HELP.md` | Version line near the top → new version |
 | `ROADMAP.md` | Add entry to "What We've Shipped" |
 | `pyproject.toml` | **Pre-bump to new version** (same as AGENT_HELP) |
@@ -121,26 +121,54 @@ Before running the release script, **4 files must be updated** — CI checks val
 
 #### Update CHANGELOG.md
 
-Add a new version section:
+Add a new version section directly under `## [Unreleased]`, moving the unreleased entries
+beneath it:
 
 ```markdown
-## [X.Y.Z] - YYYY-MM-DD (sessions session-name-MMDD, ...)
+## [X.Y.Z] - YYYY-MM-DD
 
+One short paragraph: how big the release is and what to read first.
+
+### Behavior changes      <- only when a script could break; see below
 ### Added
-- New feature description
-
+### Changed
 ### Fixed
-- Bug fix description
 ```
 
-Add it directly under `## [Unreleased]`, moving the unreleased entries beneath it. **Never
-rename the previous release's heading.** Three preps did that (0.94.0, 0.103.0, 0.124.0),
-and each time that release's entries silently became part of the next one.
-`tests/test_changelog_release_headings.py` fails if a release tag has no heading.
+**Never rename the previous release's heading.** Three preps did that (0.94.0, 0.103.0,
+0.124.0), and each time that release's entries silently became part of the next one.
+`tests/test_changelog_release_headings.py` fails if a release tag has no heading. A session
+list after the date is optional; `git log` has it.
 
-`scripts/check_changelog_coverage.py` (run by `pre-release-check.sh`) fails if a `feat`/`fix`/`perf` commit since the last tag
-names a BACK id that `[Unreleased]` does not mention. Internal work (CI, ratchets, harnesses) goes in
-`scripts/changelog_coverage_skip.txt` with a reason; empty that file when you cut the release.
+#### Writing CHANGELOG entries
+
+The version's section is the GitHub release notes and the first thing an upgrader reads. It
+is for people who run reveal, not for the people who built it. The 0.132.0 draft had 201
+entries and 76 KB, 42 of 107 fixes in internal vocabulary; it was rewritten to 19 KB before release.
+
+- **Say what changed for the user, in command terms:** the command, flag or URI, what it did
+  before, what it does now. "Pack retains candidate stat failures before the carrier cut" says
+  nothing a user can act on; "`pack` reports files it could not stat" does.
+- **One or two sentences per entry**, at most 700 characters. A figure belongs only when it
+  changes a decision (`registry.py` 69 to 86 importers; a warm query 7.5 s to 2.1 s).
+- **Group a series into one entry.** Forty commits that each made one command disclose lost
+  directories are one bullet: "Commands that scan a directory now report one they could not
+  read." Cite two or three task ids there.
+- **List every id the check wants, without an entry each.** Task ids covered by a grouped entry,
+  and internal work (CI, ratchets, test harnesses, maintainer scripts), go in
+  `scripts/changelog_coverage_skip.txt` with a one-line reason.
+- **Put anything that can break a script under `### Behavior changes`, at the top:** exit
+  codes, counting rules, retired spellings, Python import paths. Give the old value and the
+  migration ("`reveal review RANGE` becomes `reveal check --changed RANGE`").
+- **Leave out** module and function names (unless the Python API changed), cache and seam
+  vocabulary, and how the work was split into tasks or sessions.
+
+`scripts/check_changelog_coverage.py` (run by `pre-release-check.sh`, and as a warning by
+`ci-local.sh`) checks both halves. It fails if a `feat`/`fix`/`perf` commit since the last tag
+names a BACK id that the section and the skip file do not mention. It also fails on an entry
+over 700 characters or a section over 40 KB, and warns on internal vocabulary. Clear the skip
+file in the first commit after the release: it names work since the last tag, and the check
+still needs it until the new tag exists.
 
 ### Step 2: Run Release Script
 
@@ -336,7 +364,7 @@ Bumping mid-session causes the doc validation test (`test_agent_help_is_current_
 ## Release Checklist
 
 **Before release — 4-file prep commit:**
-- [ ] `CHANGELOG.md` — `[X.Y.Z] - YYYY-MM-DD` section with session list
+- [ ] `CHANGELOG.md` — `[X.Y.Z] - YYYY-MM-DD` section, user-facing, `check_changelog_coverage.py` clean
 - [ ] `reveal/docs/AGENT_HELP.md` — version line bumped to new version
 - [ ] `ROADMAP.md` — new version added to "What We've Shipped" section
 - [ ] `pyproject.toml` — **pre-bumped to new version** (all 4 committed together)

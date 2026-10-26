@@ -1,6 +1,7 @@
-# Task ids whose feat/fix/perf commits are internal work a user never sees, so CHANGELOG
-# has no entry for them (scripts/check_changelog_coverage.py). One per line: id, then why.
-# Clear this list at each release: it only names work since the last tag.
+# Task ids that need no CHANGELOG entry of their own (scripts/check_changelog_coverage.py):
+# internal work a user never sees (CI, ratchets, test harnesses, maintainer scripts), or ids
+# covered by a grouped entry. One per line: id, then why (name the grouped entry).
+# Clear this list in the first commit after each release: it only names work since the last tag.
 BACK-1872 perf: parse reuse and the D005 literal disk cache; output unchanged, only faster
 BACK-1873 perf: I002 cycle search once per graph; output unchanged
 BACK-1874 perf: shared statement-level index for B005/B006/B007/D005; output unchanged
@@ -18,3 +19,53 @@ BACK-2133 internal: test fixture hardening against a transient git error; no pro
 BACK-2142 internal: test isolation for a module-level toggle; no product behavior
 BACK-2143 internal: follow-up to the unreleased BACK-2117 stamp; covered by its changelog entry
 BACK-1895 internal: the packaging test builds from a committed copy instead of rewriting the checkout's PKG-INFO; no product behavior
+BACK-1966 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-1967 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-1969 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-1972 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-1974 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-1977 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-1986 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-1987 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-1988 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2002 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2009 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2010 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2012 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2013 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2016 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2017 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2018 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2020 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2023 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2024 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2025 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2027 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2028 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2029 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2031 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2032 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2033 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2034 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2035 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2037 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2038 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2039 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2041 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2042 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2043 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2046 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2047 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-2048 grouped under the Fixed entry 'Commands that scan a directory now report a directory they could not read'
+BACK-1052 internal: I002 shared scan policy; thresholds and output unchanged
+BACK-1461 maintainer: recall oracle corpus pins
+BACK-1518 maintainer: scheduled recall gate
+BACK-1783 maintainer: JS/TS/TSX import recall oracle
+BACK-1785 maintainer: JSX framework matrix check
+BACK-1796 maintainer: scheduled Python callers baseline
+BACK-1797 maintainer: rule precision pilot
+BACK-1807 maintainer: JSX owner check in the framework matrix
+BACK-1840 maintainer: recall gate partial_files check
+BACK-1912 maintainer: parser attribution counters
+BACK-1914 maintainer: parser-count gate
+BACK-2062 maintainer: recall gate scores through the public request path

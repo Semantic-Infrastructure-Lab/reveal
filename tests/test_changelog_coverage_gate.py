@@ -25,3 +25,33 @@ def test_missing_ids_are_reported_and_covered_ones_are_not(monkeypatch):
     assert list(missing) == ['BACK-2']
     assert idless == ['ddd fix: no id here']
 
+
+
+def _bullets(count, text='A short user-facing entry (BACK-1).'):
+    return ''.join(f'- {text}\n' for _ in range(count))
+
+
+def test_an_overlong_entry_is_an_error():
+    errors, _ = gate.style_problems('### Fixed\n- ' + 'x' * (gate.MAX_ENTRY_CHARS + 1) + '\n')
+    assert len(errors) == 1 and 'too long' in errors[0]
+
+
+def test_an_entry_at_the_limit_and_a_clean_section_pass():
+    errors, warnings = gate.style_problems('### Fixed\n- ' + 'x' * (gate.MAX_ENTRY_CHARS - 2) + '\n' + _bullets(3))
+    assert errors == [] and warnings == []
+
+
+def test_an_oversized_section_is_an_error():
+    one = len(_bullets(1).encode())
+    errors, _ = gate.style_problems(_bullets(gate.MAX_SECTION_KB * 1024 // one + 1))
+    assert any('section is' in e for e in errors)
+
+
+def test_internal_vocabulary_is_a_warning_not_an_error():
+    errors, warnings = gate.style_problems('- Pack retains candidate failures before the carrier cut (BACK-2).\n')
+    assert errors == [] and len(warnings) == 1 and 'retains' in warnings[0]
+
+
+def test_wrapped_continuation_lines_do_not_count_as_new_entries():
+    errors, _ = gate.style_problems('- short entry\n  continuation of the same entry\n')
+    assert errors == []

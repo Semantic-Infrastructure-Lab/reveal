@@ -329,9 +329,9 @@ if [[ $PRIMARY -eq 1 ]]; then
 
     # A warning, not a gate: a push should not wait on prose. pre-release-check.sh fails
     # on the same script, so the list only grows if it is ignored until release day.
-    step "CHANGELOG coverage (warning only)"
+    step "CHANGELOG coverage and style (warning only)"
     "$PY" scripts/check_changelog_coverage.py >>"$LOG" 2>&1 \
-        || { tail -8 "$LOG"; echo "WARNING: CHANGELOG [Unreleased] lacks the tasks above; fix before the next release" | tee -a "$LOG"; }
+        || { tail -8 "$LOG"; echo "WARNING: CHANGELOG [Unreleased] lacks the tasks above or breaks its style rules (RELEASING.md, Writing CHANGELOG entries); fix before the next release" | tee -a "$LOG"; }
 
     # recall.yml sat invalid for 7 pushes (runner.temp in job env); GitHub only shows a
     # 0s "workflow file issue" run nobody reads (BACK-1675). Required, not skipped: a

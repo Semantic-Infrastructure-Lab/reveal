@@ -523,6 +523,12 @@ retain separate domains and are never silently discarded.
 
 **Commit style:** Conventional commits (`feat:`, `fix:`, `docs:`, `test:`)
 
+**CHANGELOG:** a `feat`, `fix` or `perf` commit that a user can see adds one or two sentences
+under `## [Unreleased]` saying what the command, flag or URI did before and does now, and
+names its `BACK-N`. Internal work (CI, test harnesses, ratchets) goes in
+`scripts/changelog_coverage_skip.txt` instead. Rules, limits and the check that enforces them:
+[RELEASING.md](RELEASING.md), "Writing CHANGELOG entries".
+
 **PR checklist:**
 - [ ] Analyzer registered in `__init__.py`
 - [ ] Uses 1-indexed line numbers
