@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from itertools import islice
 from pathlib import Path, PurePath
 from typing import (
-    Any, Callable, Dict, FrozenSet, Iterable, Iterator, Mapping, Optional, List, Sequence, Set, Tuple, Union,
+    Any, Callable, Dict, FrozenSet, Iterable, Iterator, Mapping, NamedTuple, Optional, List, Sequence, Set, Tuple,
+    Union,
 )
 
 from ..defaults import (
@@ -757,7 +758,32 @@ def hidden_entries_warning(hidden: Mapping[str, int], analyzed: int) -> Optional
     return warning
 
 
-def traversal_failed_warning(failures: Sequence[Tuple[Optional[str], str]],
+class PathFailure(NamedTuple):
+    """One filesystem failure as ``(path, cause)``: the shape every traversal and read loss is recorded in
+    and ``traversal_failed_warning`` consumes (BACK-2249). ``path`` is the failing path as a ``/`` string
+    (``None`` when the error names none); ``cause`` never contains it, so the consumer's relative spelling
+    of ``path`` is the only spelling of it in the output."""
+    path: Optional[str]
+    cause: str
+
+
+def failure_of(error: BaseException) -> PathFailure:
+    """The ``PathFailure`` of ``error``, the one place an exception becomes a failure record.
+
+    ``str(OSError)`` embeds the absolute filename (``[Errno 13] Permission denied: '/abs/dir'``), which
+    leaked the host path through the cause text beside a path field that was spelled correctly. An
+    ``OSError`` is therefore described by its class and ``strerror`` alone, with ``filename`` (and
+    ``filename2``, which the same text carries) held only in ``path``. An OSError without ``strerror``
+    keeps its message and any other exception ``Type: message``; neither names a path of its own.
+    """
+    if not isinstance(error, OSError):
+        return PathFailure(None, f'{type(error).__name__}: {error}')
+    filename = error.filename
+    path = to_posix(os.fsdecode(filename)) if isinstance(filename, (str, bytes, os.PathLike)) else None
+    return PathFailure(path, f'{type(error).__name__}: {error.strerror if error.strerror else error}')
+
+
+def traversal_failed_warning(failures: Sequence[PathFailure],
                              base: Optional[Path] = None) -> Optional[WarningEntry]:
     """Unique identified directories, plus unlocated enumeration error events."""
     if not failures:
