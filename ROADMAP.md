@@ -84,8 +84,8 @@ Two problems shape the current work.
    same table.
 2. **Call-graph recall back to its baseline for JavaScript and TypeScript.** Two precision
    fixes for function values moved what counts as a caller; the real functions they dropped
-   are recovered. Remaining: callbacks inside class fields (BACK-2230), then re-baseline what
-   is left with each lost edge classified (BACK-2191, BACK-2231).
+   are recovered, and the baseline is rebuilt with each lost edge classified. Remaining:
+   callbacks inside class fields (BACK-2230) and the found-side scoring of `<module>` edges (BACK-2231).
 3. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
    through `imports`; finish per-language parity before the old names stop working (BACK-2063,
    BACK-2064, BACK-1054), measure through the public request path (BACK-2062), and keep the
