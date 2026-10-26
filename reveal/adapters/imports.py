@@ -1520,20 +1520,25 @@ def _lost_extraction(error: BaseException) -> ImportExtraction:
         'parse': {'status': 'unavailable', 'reason': f"{type(error).__name__}: {error}"}})
 
 
-def _path_display(base_path: Path, scan_root: Optional[Path]) -> Callable[[Optional[str]], Optional[str]]:
-    """Paths relative to the requested directory, a file target's own directory (BACK-2183: a file was
-    its own base, so a sibling fell back to its host path); the requested file itself is named
-    (BACK-1488). Under scope=root a file outside the requested path (never outside the scan root) is
-    spelled from the requested directory (``../tests/test_x.py``), not absolute."""
+def _path_display(base_path: Path) -> Callable[[Optional[str]], Optional[str]]:
+    """Every path an imports answer prints, spelled from the requested directory (a file target's own
+    directory): the requested file is named (BACK-1488), a file under the directory is relative to it,
+    and any other file is spelled ``../`` from it. That covers a sibling of a file target (BACK-2183), a
+    file outside the requested path under scope=root (``../tests/test_x.py``) and a target outside a
+    pinned ``&root=`` or a ``&scope=path`` scan root (BACK-2184, BACK-2157), which fell back to the host
+    path. Only a path on another Windows drive, which has no relative spelling, is printed as given."""
     base_dir = base_path if base_path.is_dir() else base_path.parent
 
     def rel(value: Optional[str]) -> Optional[str]:
         if not value:
             return value
-        if scan_root is not None and os.path.isabs(value) and not resolution.path_is_under(Path(value), base_dir) \
-                and resolution.path_is_under(Path(value), scan_root):
+        shown = to_relative_display(value, base_dir)
+        if not os.path.isabs(shown):
+            return shown
+        try:
             return to_posix(os.path.relpath(value, base_dir))
-        return to_relative_display(value, base_dir)
+        except ValueError:  # another drive on Windows
+            return shown
     return rel
 
 
@@ -1559,7 +1564,11 @@ def _relativize_imports_paths(result: Dict[str, Any], base_path: Path, scan_root
     follow-up). BACK-1212. Mutates in place; dispatches on result['type']
     since get_structure() returns a different shape per query param.
     """
-    rel = _path_display(base_path, scan_root)
+    rel = _path_display(base_path)
+    base_dir = base_path if base_path.is_dir() else base_path.parent
+
+    def in_project(module: str) -> bool:
+        return any(resolution.path_is_under(Path(module), where) for where in (base_dir, scan_root) if where)
 
     def relativize_import_dicts(imports: List[Dict[str, Any]]) -> None:
         for imp in imports:
@@ -1568,8 +1577,9 @@ def _relativize_imports_paths(result: Dict[str, Any], base_path: Path, scan_root
             if imp.get('resolved'):
                 imp['resolved'] = rel(imp['resolved'])
             # A folded PHP constant include keeps its host path as the module; spell it as the
-            # ?importers=FILE row does. rel() leaves a path outside the scan as written.
-            if imp.get('module') and os.path.isabs(imp['module']):
+            # ?importers=FILE row does. A module the author wrote absolute outside the project is
+            # source text, not a host path of ours, and is reported as written.
+            if imp.get('module') and os.path.isabs(imp['module']) and in_project(imp['module']):
                 imp['module'] = rel(imp['module'])
 
     result_type = result.get('type')
