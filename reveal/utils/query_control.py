@@ -178,6 +178,20 @@ def unknown_sort_field_warning(field: Optional[str], items: List[Any],
     }
 
 
+def sort_nulls_last(items: List[Any], value: Callable[[Any], Any], descending: bool = False) -> List[Any]:
+    """``items`` ordered by ``value(item)``; an item whose value is None (null or missing) goes
+    last in either direction, and such items keep their source order.
+
+    The one ``?sort=`` null rule (json:// and ast:// BACK-2276, markdown:// and metrics://
+    BACK-2298). Values that do not compare with each other raise TypeError: the caller decides
+    whether that is a ``sort_failed`` warning or an ordering as text.
+    """
+    keyed = [(value(item), item) for item in items]
+    valued = [pair for pair in keyed if pair[0] is not None]
+    valued.sort(key=lambda pair: pair[0], reverse=descending)
+    return [item for _, item in valued] + [item for key, item in keyed if key is None]
+
+
 def _safe_numeric(v):
     """Convert value to numeric, returning None for non-numeric values."""
     if v is None:
