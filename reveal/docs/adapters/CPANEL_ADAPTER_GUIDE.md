@@ -29,6 +29,8 @@ cpanel://USERNAME[/element]
 | `acl-check` | `nobody` ACL status on every domain docroot |
 | `full-audit` | Composite: `ssl` + `acl-check` + nginx ACME check in one pass; exits 2 on any failure — the preferred single command for agents |
 
+`reveal cpanel://help/api` (no username) prints a WHM & cPanel API quick reference: common commands, filesystem paths and domain types.
+
 ---
 
 ## Quick Start
@@ -62,18 +64,22 @@ Shows at a glance: domain count, SSL status summary (count by ok/expiring/critic
 cPanel user: myuser
   userdata dir: /var/cpanel/userdata/myuser ✅
   nginx config: /etc/nginx/conf.d/users/myuser.conf
-  domains: 12
+  domains: 9
 
   SSL status:
-    ✅ ok: 9
-    ⚠️  expiring: 2
-    ❌ critical: 1
+    ✅ ok: 2
+    ⚠️  expiring: 1
+    ❌ critical: 3
+    ❌ expired: 1
+    ⚫ missing: 1
+    ❌ error: 1
 
   Next steps:
-    reveal cpanel://myuser/domains    # All domains + docroots
-    reveal cpanel://myuser/ssl        # Cert health per domain
-    reveal cpanel://myuser/acl-check  # nobody ACL on docroots
-    reveal /etc/nginx/conf.d/users/myuser.conf --validate-nginx-acme  # Full ACME audit
+    reveal cpanel://myuser/full-audit  # SSL + ACL + nginx in one pass
+    reveal cpanel://myuser/domains     # All domains + docroots
+    reveal cpanel://myuser/ssl         # Cert health per domain
+    reveal cpanel://myuser/acl-check   # nobody ACL on docroots
+    reveal /etc/nginx/conf.d/users/myuser.conf --validate-nginx-acme  # nginx ACME audit only
 ```
 
 ---
@@ -113,30 +119,34 @@ reveal cpanel://myuser/ssl
 ```
 SSL disk certs for cPanel user: myuser
   source: /var/cpanel/ssl/apache_tls/DOMAIN/combined
-  summary: 9 ok, 2 expiring, 1 critical
+  summary: 1 expired (1 subdomain/parked), 3 critical, 1 error, 1 expiring, 1 missing, 2 ok
 
-  domain                       status
-  ─────────────────────────────────────────────────────────
-  critical.example.com         ❌ 3d  (2026-03-02)
-  expiring1.example.com        ⚠️  18d  (2026-03-17)
-  expiring2.example.com        ⚠️  22d  (2026-03-21)
-  myuser.example.com           ✅ 87d  (2026-05-25)
-  shop.example.com             ✅ 87d  (2026-05-25)
-  ...
+  domain                status
+  ────────────────────────────────────────────────────────────
+  expired.example.com   ❌ EXPIRED 5d ago  (2026-10-23)
+  critical.example.com  ⚠️  3d  (2026-10-31)
+  gone1.invalid         ⚠️  3d  (2026-10-31)
+  gone2.invalid         ⚠️  5d  (2026-11-02)
+  broken.example.com    ❌ Failed to parse certificate file …
+  expiring.example.com  ⚠️  18d  (2026-11-15)
+  nocert.example.com    ⚫ no cert at /var/cpanel/ssl/apache_tls/nocert.example.com/combined
+  example.com           ✅ 87d  (2027-01-23)
+  shop.example.com      ✅ 87d  (2027-01-23)
+
   → reveal cpanel://myuser/acl-check  # Check docroot ACL
-  → reveal /etc/nginx/conf.d/users/myuser.conf --cpanel-certs  # Compare disk vs live
+  → reveal cpanel://myuser/ssl --check-live  # Cross-reference disk vs live cert
 ```
 
-Results are sorted: critical → expired → error → expiring → missing → ok.
+Results are sorted: expired → critical → error → expiring → missing → ok. The summary notes how many expired or critical certs belong to subdomains or parked domains.
 
 **Status values:**
 
 | Icon | Status | Meaning |
 |------|--------|---------|
-| ✅ | ok | Healthy, expires in > 30 days |
-| ⚠️ | expiring | Expires in 8–30 days |
-| ❌ | critical | Expires in ≤ 7 days |
-| ❌ | expired | Already expired |
+| ✅ | ok | Healthy, expires in 30 days or more |
+| ⚠️ | expiring | Expires in 7–29 days |
+| ⚠️ | critical | Expires in under 7 days (`❌` in the overview's SSL status block) |
+| ❌ | expired | Already expired: `❌ EXPIRED Nd ago` |
 | ⚫ | missing | No cert file at expected path |
 | ❌ | error | File exists but unreadable |
 
@@ -148,24 +158,22 @@ On large multi-domain accounts, some "critical" or "expiring" domains may belong
 reveal cpanel://myuser/ssl --dns-verified
 ```
 
-With `--dns-verified`:
-- Each domain gets a DNS lookup (`socket.getaddrinfo`)
-- Domains that return NXDOMAIN are displayed with a `[nxdomain]` tag
-- NXDOMAIN domains are **excluded from summary counts**
-- The summary shows both the active count and the excluded count:
+With `--dns-verified`, each domain is resolved (`socket.getaddrinfo`): NXDOMAIN domains are tagged `[nxdomain]` and domains that resolve to an IP not on this server are tagged `[→ elsewhere]`. Both are shown but **excluded from the summary counts**, which list each excluded group separately:
 
 ```
-  summary: 1 critical  (2 nxdomain-excluded: 2 critical)
-  dns-verified: NXDOMAIN domains shown but excluded from summary counts
+  summary: none  (8 nxdomain-excluded: 1 expired, 3 critical, 1 error, 1 expiring, 1 missing, 1 ok)  (1 elsewhere-excluded: 1 ok)
+  dns-verified: NXDOMAIN and elsewhere-resolving domains excluded from summary counts
 
-  domain                       status
-  ─────────────────────────────────────────────────────────────
-  real-critical.example.com    ❌ 3d  (2026-03-02)
-  gone1.example.com            ❌ 3d  (2026-03-02)  [nxdomain]
-  gone2.example.com            ❌ 5d  (2026-03-04)  [nxdomain]
+  domain                status
+  ────────────────────────────────────────────────────────────
+  expired.example.com   ❌ EXPIRED 5d ago  (2026-10-23)  [nxdomain]
+  critical.example.com  ⚠️  3d  (2026-10-31)  [nxdomain]
+  ...
+  example.com           ✅ 87d  (2027-01-23)  [→ elsewhere]
+  shop.example.com      ✅ 87d  (2027-01-23)  [nxdomain]
 ```
 
-**Scope**: NXDOMAIN only. Domains that resolve but point to a different server are not excluded (that's a separate investigation — see `--cpanel-certs` for disk-vs-live comparison).
+In JSON, `dns_resolves: false` marks NXDOMAIN and `dns_points_here: false` marks a domain served elsewhere.
 
 ---
 
@@ -190,7 +198,12 @@ Docroot ACL check for cPanel user: myuser
 
 ❌ ACL failures detected — 'nobody' cannot read docroot(s).
    Fix: chmod o+x on each path component of the docroot.
+
+  → reveal cpanel://myuser/ssl  # Check cert status
+  → reveal /etc/nginx/conf.d/users/myuser.conf --check-acl  # Full nginx ACL check
 ```
+
+`acl-check` exits 0 even when a docroot is denied; use `full-audit` (exit 2) or `jq '.has_failures'` to gate.
 
 The check tests each path component of the docroot using standard Unix `other` permission bits (falling back to `getfacl` when ACLs are in use).
 
@@ -216,12 +229,19 @@ reveal cpanel://myuser/full-audit
 Full audit: myuser
 ===================
 
-✅ SSL (9 domains): 9 ok
-✅ ACL (12 domains): 12 ok
-✅ nginx: ACME path OK
+❌ SSL (9 domains): 1 expired, 3 critical, 1 error, 1 expiring, 1 missing, 2 ok
+     expired.example.com: ❌ EXPIRED 5d ago  (2026-10-23)
+     critical.example.com: ⚠️  3d  (2026-10-31)
+     ...
+     nocert.example.com: ⚫ no cert at /var/cpanel/ssl/apache_tls/nocert.example.com/combined
+❌ ACL (9 domains): 8 ok, 1 denied
+     shop.example.com: ❌ denied  (/home/myuser/public_html)
+✅ nginx ACME (1 domains): 1 ok
 
-✅ Audit complete — all checks passed
+❌ Audit complete — failures detected (exit 2)
 ```
+
+Any SSL status other than `ok` fails the audit, including `expiring` and `missing`. The nginx section fails on an ACL denial or a failing live certificate. When everything passes the last line reads `✅ Audit complete — all checks passed` and the exit code is 0.
 
 ---
 
@@ -339,9 +359,9 @@ See [NGINX_GUIDE.md](NGINX_GUIDE.md) for all nginx operator commands.
 
 | Flag | Element | Description |
 |------|---------|-------------|
-| `--dns-verified` | `ssl` | Exclude NXDOMAIN domains from summary counts |
-| `--only-failures` | `ssl`, `acl-check` | Show only non-ok/denied entries |
-| `--check-live` | `ssl` | Cross-reference disk cert against the live server cert |
+| `--dns-verified` | `ssl`, `full-audit` | Exclude NXDOMAIN and elsewhere-resolving domains from summary counts |
+| `--only-failures` | `ssl`, `acl-check`, `full-audit` | Show only non-ok/denied entries |
+| `--check-live` | `ssl` | For each non-ok disk cert, fetch the live cert and show its expiry (catches CDN/edge renewals where the disk cert is stale) |
 | `?domain_type=<type>` | `ssl` | Filter to one domain type, e.g. `?domain_type=subdomain` |
 | `--format=json` | all | JSON output for scripting |
 

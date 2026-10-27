@@ -934,7 +934,7 @@ class CpanelAdapter(ResourceAdapter):
             'uri_syntax': 'cpanel://USERNAME[/element[?param=value]]',
             'query_params': {
                 'domain_type': 'Filter ssl certs by type: main_domain, addon, subdomain, parked',
-                'dns-verified': 'Exclude domains with no DNS record (NXDOMAIN) from SSL counts (also: --dns-verified)',
+                'dns-verified': 'Exclude NXDOMAIN domains and domains resolving to another server from SSL counts (also: --dns-verified)',
                 'check-live': 'Cross-check disk certs against live TLS (also: --check-live)',
             },
             'elements': _SCHEMA_ELEMENTS,
