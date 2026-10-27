@@ -39,6 +39,13 @@ from .adapter_utils import get_adapter_class
 logger = logging.getLogger(__name__)
 
 
+# Builtins that build a payload in place; `return dict(...)` is not delegation to a
+# builder that owns the contract envelope.
+_PAYLOAD_CONSTRUCTORS = frozenset({
+    'dict', 'list', 'tuple', 'set', 'frozenset', 'sorted', 'str', 'int', 'float', 'bool',
+})
+
+
 class V023(BaseRule):
     """Verify adapter outputs conform to Output Contract v1.0.
 
@@ -231,8 +238,15 @@ class V023(BaseRule):
             return []
         # Module-level delegation: all paths return via an imported helper (e.g. return files.get_X(...))
         import re as _re
-        delegated_returns = _re.findall(r'\breturn \w+\.\w+\(', method_body)
-        direct_dict_returns = _re.findall(r'\breturn \{', method_body)
+        # A bare imported builder (`return provenance_report(...)`) delegates like a
+        # dotted one; a builtin constructor (`return dict(...)`) builds the payload
+        # right here, so it does not. An `{'error': ...}` early return is not the
+        # envelope, so it does not count as a direct dict return either.
+        delegated_returns = [
+            m for m in _re.findall(r'\breturn ((?:\w+\.)*\w+)\(', method_body)
+            if '.' in m or m not in _PAYLOAD_CONSTRUCTORS
+        ]
+        direct_dict_returns = _re.findall(r'\breturn \{(?!\s*[\'"]error[\'"])', method_body)
         if delegated_returns and not direct_dict_returns:
             return []
 
