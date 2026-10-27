@@ -366,6 +366,12 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             'http.get', 'http.post', 'http.head', 'http.postform',
             'http.newrequest', 'http.newrequestwithcontext',
             'roundtrip',
+            # BACK-2269: net/http's `req.Header.Get(...)` family. BACK-1406 removed the bare
+            # `header` pattern (it matched `header.lower()` in every language); Go's field
+            # receiver `Header` followed by its method is unambiguous, and Go-only. Restores
+            # the client-go http recall of 15/18 (BACK-2261). `w.Header().Set` (a call
+            # receiver, tokenized `header()`) was never matched and still is not.
+            'header.get', 'header.set', 'header.add', 'header.values', 'header.del',
         ]),
         # BACK-629: klog (k8s.io/klog, the dominant structured logger across
         # the entire Kubernetes ecosystem) and glog/logrus were silently

@@ -785,6 +785,23 @@ class TestClassifyCallLanguageScoping(unittest.TestCase):
         self.assertEqual(classify_call('transport.RoundTrip', language='go'), 'http')
         self.assertIsNone(classify_call('http.Get', language='python'))
 
+    def test_go_header_field_methods_classified_as_http(self):
+        # BACK-2269: BACK-1406 scoped the bare `header` pattern to PHP, which dropped Go's
+        # `req.Header.Get(...)` (client-go http recall 15/18 -> 13/18). Go-only, dotted.
+        from reveal.adapters.ast.nav_effects import classify_call
+        for callee in ('req.Header.Get', 'resp.Request.Header.Get', 'r.Header.Set',
+                       'req.Header.Add', 'req.Header.Values', 'r.Header.Del'):
+            self.assertEqual(classify_call(callee, language='go'), 'http', callee)
+
+    def test_go_header_pattern_stays_out_of_other_languages_and_other_receivers(self):
+        # The BACK-1406 collisions stay fixed: `header.lower()`-style calls are not http.
+        from reveal.adapters.ast.nav_effects import classify_call
+        for callee, language in [('req.Header.Get', 'python'), ('req.Header.Get', 'javascript'),
+                                 ('req.Header.Get', 'cpp'),
+                                 ('header.lower', 'go'), ('headers.Get', 'go'),
+                                 ('printHeader', 'go'), ('w.Header', 'go')]:
+            self.assertIsNone(classify_call(callee, language=language), (callee, language))
+
     def test_go_do_call_stays_unclassified_ambiguous_verb(self):
         # `client.Do(req)` (net/http's dominant call-site idiom, e.g.
         # rest/request.go:Watch and rest/fake/fake.go:do in client-go) is
