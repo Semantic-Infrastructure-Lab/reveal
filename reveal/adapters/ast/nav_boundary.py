@@ -204,11 +204,12 @@ def render_boundary_transitive(
 
     effects = result['effects']
     directory_note = _traversal_note(result.get('traversal_failures') or [])
+    ambiguous = ambiguous_hops_note(result.get('ambiguous') or [])
     header = f'EFFECTS (--transitive, depth={depth}):'
     if effects:
         body = render_effects_transitive(effects, root_name, depth)
         sections.append(f'{header}\n' + '\n'.join(f'  {line}' for line in body.split('\n')))
-    elif directory_note:
+    elif directory_note or ambiguous:
         sections.append(f'{header}\n  none observed in the analyzed portion of {root_name} '
                         'or its callees; analysis is incomplete')
     else:
@@ -219,7 +220,6 @@ def render_boundary_transitive(
         sections.append(f'Warning: {note}')
     if directory_note:
         sections.append(f'Warning: {directory_note}')
-    ambiguous = ambiguous_hops_note(result.get('ambiguous') or [])
     if ambiguous:
         sections.append(f'Warning: {ambiguous}')
     if result.get('assignment_coverage_note'):

@@ -58,6 +58,7 @@ def test_an_ambiguous_hop_is_declined_with_a_note_not_guessed(twins, flag):
     assert kinds == []
     text = _run_reveal_direct(str(twins / 'root_amb.py'), 'run_amb', flag, '--transitive').stdout
     assert 'ambiguous' in text and 'helper' in text
+    assert 'analysis is incomplete' in text and 'none in' not in text and 'No classified side effects found' not in text
     assert 'wa.py' in text and 'wb.py' in text
     data = json.loads(_run_reveal_direct(str(twins / 'root_amb.py'), 'run_amb', flag, '--transitive',
                                          '--format', 'json').stdout)

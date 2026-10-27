@@ -2128,7 +2128,7 @@ def render_effects_transitive(
     visible = [e for e in effects if e['kind'] is not None or include_unclassified]
     if visible:
         body = _render_transitive_groups(visible, root_name)
-    elif note:
+    elif note or ambiguous:
         body = (f'No classified side effects observed in the analyzed portion of {root_name} '
                 f'or its callees (--transitive, depth={depth}); analysis is incomplete')
     else:
