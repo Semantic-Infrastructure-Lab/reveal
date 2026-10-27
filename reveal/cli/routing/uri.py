@@ -1051,10 +1051,11 @@ def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None,
     from reveal.utils.query import apply_budget_limits
 
     mark(args, 'max_items', 'max_snippet_chars')
+    offset = _page_start(adapter) if len(fields) == 1 else 0
     for field in fields:
         budget_result = apply_budget_limits(
             result[field], max_items=max_items,
-            truncate_strings=peek(args, 'max_snippet_chars'))
+            truncate_strings=peek(args, 'max_snippet_chars'), offset=offset)
         total = len(result[field])
         result[field] = budget_result['items']
         if budget_result['meta']['truncated']:
@@ -1066,6 +1067,20 @@ def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None,
         print(f"Note: --max-items applied to each of {', '.join(fields)} -- "
               f"{scheme or 'this'}:// returns several lists.", file=sys.stderr)
     return result
+
+
+def _page_start(adapter) -> int:
+    """Where the adapter's page starts in its whole answer: its ``?offset=`` (BACK-2276).
+
+    The adapters that apply ``?offset=`` (ast, markdown, json, git, stats/metrics) keep the
+    parsed ``ResultControl`` as ``result_control``. The list ``--max-items`` cuts already
+    starts at that offset, so the next page is ``offset + returned``; the cursor said
+    ``returned`` and a loop that followed it re-read the same page. An adapter with no
+    ``result_control`` does not shift its list, and its cursor stays ``returned``.
+    """
+    from reveal.utils.query import ResultControl
+    control = getattr(adapter, 'result_control', None)
+    return control.page_start() if isinstance(control, ResultControl) else 0
 
 
 def _budget_meta_of_cut(budget: dict, result: dict, field: str) -> dict:
