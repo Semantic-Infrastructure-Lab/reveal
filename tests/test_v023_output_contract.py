@@ -383,6 +383,80 @@ class TestAdapter(ResourceAdapter):
         self.assertEqual(len(detections), 0)
 
 
+class TestV023BareCallDelegation(unittest.TestCase):
+    """BACK-2221: the builder's call spelling (bare function, error early-return)
+    must not decide whether the contract fields "live in the callee"."""
+
+    def setUp(self):
+        self.rule = V023()
+
+    def _run(self, content):
+        return self.rule._check_output_code_patterns(
+            file_path="/adapters/test.py", content=content, method_name="get_structure")
+
+    def test_return_of_bare_imported_builder_not_flagged(self):
+        """classify.py's shape: `return provenance_report(...)`, a plain imported
+        function (no dotted receiver), builds the whole envelope."""
+        content = """
+class TestAdapter(ResourceAdapter):
+    def get_structure(self, **kwargs):
+        path = Path(self.path)
+        require_path_exists(path)
+        return provenance_report(path, respect_gitignore=respect_gitignore_param(self.query_params))
+"""
+        self.assertEqual(self._run(content), [])
+
+    def test_error_early_return_plus_delegated_result_not_flagged(self):
+        """depends.py's shape: an `{'error': ...}` early return is not the
+        envelope; the success path binds a builder's result and returns it."""
+        content = """
+class TestAdapter(ResourceAdapter):
+    def get_structure(self, **kwargs):
+        if not self.target.exists():
+            return {'error': 'Path not found'}
+        result = self._format_dependents(self.target)
+        result['verbose'] = True
+        return result
+"""
+        self.assertEqual(self._run(content), [])
+
+    def test_bare_builtin_constructor_is_not_delegation(self):
+        """Negative control: `return dict(...)`/`list(...)` builds the payload
+        right there, so an envelope-less one is still flagged."""
+        content = """
+class TestAdapter(ResourceAdapter):
+    def get_structure(self, **kwargs):
+        return dict(files=[], count=0)
+"""
+        self.assertEqual(len(self._run(content)), 1)
+
+    def test_error_dict_only_still_flagged(self):
+        """Negative control: a method whose only returns are error dicts and a
+        literal payload without the fields is still a violation."""
+        content = """
+class TestAdapter(ResourceAdapter):
+    def get_structure(self, **kwargs):
+        if not self.target.exists():
+            return {'error': 'Path not found'}
+        return {'files': []}
+"""
+        detections = self._run(content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('contract_version', detections[0].message)
+
+    def test_assigned_literal_dict_still_flagged(self):
+        """Negative control: `result = {...}` then `return result` is not a call."""
+        content = """
+class TestAdapter(ResourceAdapter):
+    def get_structure(self, **kwargs):
+        if not self.target.exists():
+            return {'error': 'Path not found'}
+        result = {'files': []}
+        return result
+"""
+        self.assertEqual(len(self._run(content)), 1)
+
+
 class TestV023TypeNaming(unittest.TestCase):
     """Test type field snake_case validation."""
 
