@@ -96,3 +96,20 @@ def test_a_checkout_under_a_tests_directory_is_not_all_tests(tmp_path):
     root = tmp_path / 'tests' / 'checkout'
     _w(root / 'pkg' / 'big.py', LONG_PY)
     assert _hotspot_files(root) == ['pkg/big.py']
+
+
+def test_metrics_tests_exclude_narrows_only_the_ranking(mixed):
+    data = _json(f'metrics://{mixed}?hotspots=true&top=20&tests=exclude', '--format', 'json')
+    assert sorted(h['file'] for h in data['hotspots']) == ['jv/Big.java', 'pkg/big.py', 'srv/big.go']
+    assert data['test_scope'] == {'rule': 'is_test_path', 'tests': 'exclude', 'files_excluded': 4}
+    assert data['summary']['total_files'] == 7  # totals and the files list still count the tests
+    assert 'pkg/big_test.py' in [f['file'] for f in data['files']]
+
+
+def test_metrics_without_tests_param_adds_no_key(mixed):
+    data = _json(f'metrics://{mixed}?hotspots=true&top=20', '--format', 'json')
+    assert 'test_scope' not in data
+
+
+def test_metrics_rejects_a_bad_tests_value(mixed):
+    assert run(f'metrics://{mixed}?hotspots=true&tests=maybe').returncode == 2
