@@ -469,7 +469,8 @@ def _single_line_ref(element: str, flag: str) -> int:
             file=sys.stderr,
         )
         sys.exit(1)
-    start, end = syntax['start_line'], syntax['end_line']
+    start: int = syntax['start_line']
+    end = syntax['end_line']
     if end is not None and end != start:
         hint = f'drop {flag} to print lines {element[1:]}' if flag == '--around' else 'run it once per line'
         print(
