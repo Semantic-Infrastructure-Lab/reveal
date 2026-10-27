@@ -35,8 +35,11 @@ reveal reveal://config              # Show active config with sources
 reveal reveal://config --format json # JSON output for scripting
 
 # See all validation rules
-reveal --rules | grep V0
+reveal --rules --all | grep V0
 ```
+
+`reveal://` and the V-series rules are internal self-inspection, hidden from
+`reveal --adapters` / `reveal --rules` unless you pass `--all`.
 
 ---
 
@@ -48,7 +51,7 @@ Adapters aren't limited to file types. They can inspect ANY resource:
 
 | Adapter | Inspects | Example |
 |---------|----------|---------|
-| `python://` | Python runtime | `reveal python://venv` |
+| `git://` | Git repository | `reveal git://.` |
 | `env://` | Environment vars | `reveal env://PATH` |
 | `json://` | JSON data | `reveal json://file.json/path` |
 | `reveal://` | **Reveal itself** | `reveal reveal://` |
@@ -58,16 +61,16 @@ Adapters aren't limited to file types. They can inspect ANY resource:
 
 ### 2. **Validation Rules**
 
-The V-series rules (V001–V023+) check reveal's internal state:
+The V-series rules (V001–V042, 41 rules; there is no V010; `reveal --rules --all` lists them) check reveal's internal state:
 
 ```python
 # reveal/rules/validation/V001.py
 class V001(BaseRule):
-    """Help documentation completeness."""
+    """Validate that all supported file types have help documentation."""
 
     code = "V001"
     message = "File type analyzer missing help documentation"
-    category = RulePrefix.M
+    category = RulePrefix.V
     severity = Severity.MEDIUM
 
     def check(self, file_path, structure, content):
@@ -99,7 +102,9 @@ Then look at `reveal/rules/validation/V*.py` for:
 ```
 reveal/
 ├── adapters/
-│   └── reveal.py          # Meta-adapter (inspects reveal)
+│   └── reveal/            # Meta-adapter package (inspects reveal)
+│       ├── adapter.py     #   RevealAdapter: get_structure(), check()
+│       ├── structure.py, operations.py, renderer.py, ...
 ├── rules/
 │   └── validation/        # V-series rules (validate reveal)
 │       ├── V001.py        # Help completeness
@@ -107,8 +112,10 @@ reveal/
 │       ├── V003.py        # Feature matrix
 │       ├── V004.py        # Test coverage
 │       ├── V005.py        # Help file sync
-│       └── V006.py        # Output format support
-└── REVEAL_ADAPTER_GUIDE.md  # This file
+│       ├── V006.py        # Output format support
+│       └── ...            # 35 more, up to V042
+└── docs/adapters/
+    └── REVEAL_ADAPTER_GUIDE.md  # This file
 ```
 
 ### How It Works
@@ -127,7 +134,7 @@ User runs: reveal reveal:// --check
            ↓
 4. --check flag triggers validation rules
            ↓
-5. V001-V023+ run checks, return Detection objects
+5. V-series rules run checks, return Detection objects
            ↓
 6. Output formatted and displayed
 ```
@@ -220,13 +227,44 @@ class DockerAdapter(ResourceAdapter):
 
 ### Step 1: Create the Adapter
 
+An adapter needs a renderer: `@register_renderer` stacked under `@register_adapter`.
+Without it `reveal mything://` exits 1 with `No renderer registered for scheme 'mything'`.
+Text and JSON output both go through the renderer's `render_structure`.
+
 ```python
-# my_adapter.py
-from reveal.adapters.base import ResourceAdapter, register_adapter
+# .reveal/adapters/mything/my_adapter.py
+from typing import Optional
+
+from reveal.adapters.base import ResourceAdapter, register_adapter, register_renderer
+from reveal.utils import print_json_result
+
+
+class MyThingRenderer:
+    @staticmethod
+    def render_structure(result, format='text'):
+        if format == 'json':
+            print_json_result(result)
+            return
+        print(f"My Thing: {result['metadata']['count']} item(s)")
+        for item in result['items']:
+            print(f"  {item}")
+
+    @staticmethod
+    def render_check(result, format='text', **kwargs):
+        """Only needed if the adapter implements check() (Step 3)."""
+        if format == 'json':
+            print_json_result({**result, 'detections': [d.to_dict() for d in result['detections']]})
+            return
+        for d in result['detections']:
+            print(f"{d.file_path}:{d.line} {d.rule_code} {d.message}")
+
 
 @register_adapter('mything')
+@register_renderer(MyThingRenderer)
 class MyThingAdapter(ResourceAdapter):
     """Inspect my thing."""
+
+    LEGACY_INIT = False  # construct with the canonical signature below
 
     @staticmethod
     def get_help():
@@ -236,49 +274,52 @@ class MyThingAdapter(ResourceAdapter):
             'description': 'Inspect my thing',
             'syntax': 'mything://[resource]',
             'examples': [
-                {
-                    'uri': 'mything://',
-                    'description': 'List all things'
-                }
+                {'uri': 'mything://', 'description': 'List all things'}
             ]
         }
 
-    def __init__(self, resource=None):
-        self.resource = resource
+    def __init__(self, resource: str = '', query: Optional[str] = None):
+        super().__init__(resource, query)
 
-    def get_structure(self):
+    def get_structure(self, **kwargs):
         """Core method - return Dict describing structure."""
+        items = self._get_items()
         return {
-            'items': self._get_items(),
-            'metadata': {'count': ...}
+            'type': 'mything',
+            'items': items,
+            'metadata': {'count': len(items)},
         }
 
-    def format_output(self, structure, format_type='text'):
-        """Optional - custom formatting."""
-        if format_type == 'json':
-            import json
-            return json.dumps(structure, indent=2)
-
-        # Text format
-        lines = []
-        lines.append(f"# My Thing Structure\n")
-        # ... format nicely
-        return '\n'.join(lines)
+    def _get_items(self):
+        return ['alpha', 'beta']
 ```
 
 ### Step 2: Register the Adapter
 
+reveal discovers plugin adapters in `<cwd>/.reveal/adapters/<name>/` (project-local) and
+`~/.reveal/adapters/<name>/` (user-global) and imports each package; the decorators register
+the scheme as a side effect. Plugins must import `reveal.adapters.base` absolutely, since they
+live outside the reveal package.
+
 ```python
-# __init__.py
+# .reveal/adapters/mything/__init__.py
 from .my_adapter import MyThingAdapter
 
 __all__ = ['MyThingAdapter']
 ```
 
+`examples/plugin-adapters/tasks-adapter/` in the reveal repository is a complete working
+plugin with this layout.
+
 ### Step 3: Create Validation Rules (Optional)
 
+Rules are discovered from a category directory under `<project>/.reveal/rules/` (project-local)
+or `~/.local/share/reveal/rules/` (user-global). `--check` runs them against a custom URI only
+when the adapter implements `check()`; otherwise reveal prints
+`Note: --check has no effect on mything:// queries -- not supported by this adapter.`
+
 ```python
-# rules/custom/C001.py
+# .reveal/rules/custom/C001.py
 from reveal.rules.base import BaseRule, Detection, RulePrefix, Severity
 
 class C001(BaseRule):
@@ -310,13 +351,25 @@ class C001(BaseRule):
         return detections
 ```
 
+And on the adapter, a `check()` that hands the URI and its structure to the rule registry:
+
+```python
+    def check(self, select=None, ignore=None):
+        """Makes `reveal mything:// --check` run rules against this URI."""
+        from reveal.rules import RuleRegistry
+        detections = RuleRegistry.check_file('mything://', self.get_structure(), '',
+                                             select=select, ignore=ignore)
+        return {'type': 'mything_check', 'detections': detections, 'total': len(detections),
+                'exit_code': 1 if detections else 0}
+```
+
 ### Step 4: Test It
 
 ```bash
-# Basic usage
+# Basic usage (from the directory that holds .reveal/)
 reveal mything://
 
-# With validation
+# With validation (exits 1 when a rule reports a detection)
 reveal mything:// --check
 
 # Get help
@@ -358,16 +411,17 @@ detections.append(self.create_detection(
 
 ### 3. **Support Multiple Formats**
 
-Always implement JSON output for scripting:
+Always support JSON output for scripting, in the renderer's `render_structure`:
 
 ```python
-def format_output(self, structure, format_type='text'):
-    if format_type == 'json':
-        import json
-        return json.dumps(structure, indent=2)
+@staticmethod
+def render_structure(result, format='text'):
+    if format == 'json':
+        print_json_result(result)  # from reveal.utils
+        return
 
     # Text format for humans
-    return self._format_text(structure)
+    print(format_text(result))
 ```
 
 ### 4. **Good Help Documentation**
@@ -464,7 +518,7 @@ Running `reveal reveal:// --check` in CI ensures reveal stays well-maintained.
 | **Scope** | Unit/integration | Cross-cutting concerns |
 | **When Run** | CI, local testing | Anytime via CLI |
 | **Output** | Pass/fail | Detections with suggestions |
-| **Discoverability** | Need to know filename | `reveal --rules`, `reveal help://` |
+| **Discoverability** | Need to know filename | `reveal --rules --all`, `reveal help://` |
 | **Example** | `test_markdown_works()` | V001: Every analyzer has help |
 
 **Both are valuable** - tests verify correctness, validation rules verify structure.
@@ -474,7 +528,7 @@ Running `reveal reveal:// --check` in CI ensures reveal stays well-maintained.
 ## Learning Path
 
 1. **Study reveal://** - Read the `reveal/adapters/reveal/` package (adapter.py, renderer.py, operations.py, etc.)
-2. **Study V-series rules** - Read `reveal/rules/validation/V001.py` through `V023.py` (and beyond)
+2. **Study V-series rules** - Read `reveal/rules/validation/V*.py` (V001-V042)
 3. **Run it yourself** - `reveal reveal:// --check`
 4. **Adapt the pattern** - Create your own `project://` or `api://` adapter
 5. **Share it** - Contribute back if useful to others!
@@ -495,7 +549,7 @@ Running `reveal reveal:// --check` in CI ensures reveal stays well-maintained.
 ```bash
 reveal help://reveal        # This adapter's help
 reveal help://adapters      # All adapters
-reveal --rules              # All validation rules
+reveal --rules --all        # All rules, including the V-series self-checks
 reveal help://adapter-authoring  # How to create adapters
 ```
 
@@ -519,8 +573,12 @@ reveal help://adapter-authoring  # How to create adapters
    - Start simple (just the adapter), add rules if needed
 
 4. **Where do custom adapters go?**
-   - In your project: `my_project/adapters/`
-   - Make them importable and they'll auto-register
+   - Project-local: `<project>/.reveal/adapters/<name>/`; user-global: `~/.reveal/adapters/<name>/`
+   - Each needs an `__init__.py` that imports the adapter module, and absolute imports
+     from `reveal.adapters.base`; reveal imports these packages itself, so nothing else
+     needs to import them
+   - Custom rules go in a category directory under `<project>/.reveal/rules/` or
+     `~/.local/share/reveal/rules/` (for example `.reveal/rules/custom/C001.py`)
    - Or contribute to reveal if generally useful!
 
 ---
