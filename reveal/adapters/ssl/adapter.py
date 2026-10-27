@@ -7,7 +7,7 @@ from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_rend
 from ..help_data import load_help_data
 from .certificate import (
     SSL_CHECK_ERRORS, SSLFetcher, CertificateInfo, check_ssl_health,
-    load_certificate_from_file,
+    load_certificate_from_file, status_exit_code,
 )
 from .probe import probe_http_redirect
 from .renderer import SSLRenderer
@@ -804,7 +804,7 @@ class SSLAdapter(ResourceAdapter):
             'status': summary['overall'],
             'summary': {k: v for k, v in summary.items() if k != 'overall'},
             'results': results,
-            'exit_code': 0 if summary['failures'] == 0 else 2,
+            'exit_code': status_exit_code(summary['overall']),
             **({'files_skipped': skipped} if skipped else {}),
         }
 
@@ -819,7 +819,7 @@ class SSLAdapter(ResourceAdapter):
             'status': summary['overall'],
             'summary': {k: v for k, v in summary.items() if k != 'overall'},
             'results': results,
-            'exit_code': 0 if summary['failures'] == 0 else 2,
+            'exit_code': status_exit_code(summary['overall']),
         }
 
     def _validate_cert_file(
@@ -956,8 +956,8 @@ class SSLAdapter(ResourceAdapter):
                 next_steps.append(f"Inspect first failure: reveal ssl://{failed_domains[0]} --check --advanced")
             if not only_failures and (failures > 0 or warnings > 0):
                 next_steps.append("Show only problems: ... --only-failures")
-            if source and 'nginx' in str(source).lower():
-                next_steps.append("Validate nginx config: reveal ssl:// --from-nginx <path> --validate")
+            if source:
+                next_steps.append(f"Validate nginx config: reveal 'ssl://nginx://{source}' --check --validate-nginx")
         return next_steps
 
     def _determine_overall_status(self, failures: int, warnings: int) -> str:
@@ -1021,7 +1021,7 @@ class SSLAdapter(ResourceAdapter):
             'summary': summary,
             'results': results,  # May be filtered
             'next_steps': next_steps,
-            'exit_code': 0 if summary['failures'] == 0 else 2,
+            'exit_code': status_exit_code(status),
         }
 
     def _validate_single_domain(self, domain: str, severity: Optional[str] = None) -> Dict[str, Any]:
@@ -1196,7 +1196,7 @@ def _build_batch_summary(results: list, nginx_path: str) -> Dict[str, Any]:
             'failures': failures,
         },
         'results': results,
-        'exit_code': 0 if failures == 0 else 2,
+        'exit_code': status_exit_code(status),
     }
 
 

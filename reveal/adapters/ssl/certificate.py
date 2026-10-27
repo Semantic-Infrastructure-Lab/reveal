@@ -174,13 +174,11 @@ class SSLFetcher:
             context = ssl.create_default_context()
             with socket.create_connection((host, port), timeout=self.timeout) as sock:
                 with context.wrap_socket(sock, server_hostname=host) as ssock:
-                    cert = ssock.getpeercert()
-                    binary_cert = ssock.getpeercert(binary_form=True)
+                    # _get_peer_cert adds signatureAlgorithm and ocspUrl, which the
+                    # getpeercert() dict lacks even on a verified connection.
+                    leaf = self._parse_certificate(self._get_peer_cert(ssock))
                     verification['verified'] = True
                     verification['hostname_match'] = True
-                    leaf = self._parse_certificate(cert)  # type: ignore[arg-type]
-                    if binary_cert:
-                        leaf.ocsp_url = self._extract_ocsp_url(binary_cert)
                     return leaf, [], verification
         except ssl.CertificateError as e:
             verification['error'] = str(e)
@@ -580,8 +578,20 @@ def _build_ssl_health_success_result(
         'certificate': leaf.to_dict(),
         'checks': checks,
         'summary': summary,
-        'exit_code': 0 if overall_status == 'pass' else (1 if overall_status == 'warning' else 2),
+        'exit_code': status_exit_code(overall_status),
     }
+
+
+_STATUS_EXIT_CODES = {'pass': 0, 'warning': 1, 'failure': 2}
+
+
+def status_exit_code(status: str) -> int:
+    """Exit code for an ssl:// check status: 0 pass, 1 warning, 2 failure (or anything else).
+
+    Every ``--check`` mode (one host, nginx batch, cert file, ``--local-certs``) uses this so the
+    0/1/2 contract holds the same way in each.
+    """
+    return _STATUS_EXIT_CODES.get(status, 2)
 
 
 def _build_ssl_health_error_result(
@@ -998,7 +1008,8 @@ def live_cert_state(ssl_result: dict) -> tuple:
         return 'healthy', ''
     if status == 'warning':
         return 'warning', ''
-    failing = next((c for c in ssl_result.get('checks', []) if c.get('status') == 'failure'), {})
+    failing: Dict[str, Any] = next(
+        (c for c in ssl_result.get('checks', []) if c.get('status') == 'failure'), {})
     message = (failing.get('message') or ssl_result.get('error') or 'ssl check failed')
     if days is not None and failing.get('name') == 'certificate_expiry':
         return 'critical', message
