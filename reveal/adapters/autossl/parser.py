@@ -98,7 +98,7 @@ def get_run_metadata(timestamp: str, log_dir: str = AUTOSSL_LOG_DIR) -> Dict[str
 def _new_domain_entry(domain: str) -> Dict[str, Any]:
     return {
         'domain': domain,
-        'tls_status': None,       # 'ok' | 'incomplete' | 'defective'
+        'tls_status': None,       # 'ok' | 'incomplete' | 'defective' | 'ready_for_renewal' | None (unrecognised)
         'cert_expiry_raw': None,  # raw string from log
         'cert_expiry_days': None, # float, negative = already expired
         'defects': [],            # list of full defect strings
@@ -117,7 +117,16 @@ def _extract_defect_code(defect_str: str) -> str:
     return m.group(1) if m else defect_str[:60]
 
 
-_STATUS_ORDER: Dict[str, int] = {'defective': 0, 'incomplete': 1, 'ok': 2}
+# The status is the log's own words (a TLS Status line), not the record's colour: cPanel logs
+# 'Incomplete' and 'Ready for Renewal' with the same record type (BACK-2296). Text this table does
+# not know stays None and is counted as unknown rather than being filed under a known status.
+_TLS_STATUS_BY_TEXT: Dict[str, str] = {
+    'ok': 'ok',
+    'defective': 'defective',
+    'incomplete': 'incomplete',
+    'ready for renewal': 'ready_for_renewal',
+}
+_STATUS_ORDER: Dict[str, int] = {'defective': 0, 'ready_for_renewal': 1, 'incomplete': 2, 'ok': 3}
 
 
 def _process_indent0(contents: str, state: Dict[str, Any], users: Dict[str, Any]) -> None:
@@ -177,7 +186,7 @@ def _process_indent3(contents: str, rtype: str, state: Dict[str, Any], users: Di
         return
 
     if 'TLS Status:' in contents:
-        entry['tls_status'] = 'ok' if rtype == 'success' else ('defective' if rtype == 'error' else 'incomplete')
+        entry['tls_status'] = _TLS_STATUS_BY_TEXT.get(contents.split('TLS Status:', 1)[1].strip().lower())
     elif 'Certificate expiry:' in contents:
         entry['cert_expiry_raw'] = contents
         m = _RE_EXPIRY_DAYS.search(contents)
@@ -243,7 +252,7 @@ def _build_user_list(users: Dict[str, Any]) -> tuple:
     for uname, udata in users.items():
         domains_list = sorted(
             udata['domains'].values(),
-            key=lambda d: (_STATUS_ORDER.get(d.get('tls_status') or 'unknown', 3), d['domain']),
+            key=lambda d: (_STATUS_ORDER.get(d.get('tls_status') or 'unknown', len(_STATUS_ORDER)), d['domain']),
         )
         for d in domains_list:
             d['defect_codes'] = [_extract_defect_code(x) for x in d['defects']]
@@ -269,6 +278,20 @@ def _build_user_list(users: Dict[str, Any]) -> tuple:
     return user_list, overall
 
 
+def _run_error(timestamp: str, run_dir: str, message: str) -> Dict[str, Any]:
+    """The error answer for a run whose log cannot be read or holds nothing."""
+    result: Dict[str, Any] = dict(ResultBuilder.create_error(
+        result_type='autossl_run',
+        source=run_dir,
+        error=message,
+        contract_version=CONTRACT_VERSION,
+        run_timestamp=timestamp,
+        log_dir=run_dir,
+    ))
+    result['source_type'] = 'autossl_run_directory'
+    return result
+
+
 def parse_run(timestamp: str, log_dir: str = AUTOSSL_LOG_DIR) -> Dict[str, Any]:
     """Parse the NDJSON log for an autossl run.
 
@@ -277,7 +300,7 @@ def parse_run(timestamp: str, log_dir: str = AUTOSSL_LOG_DIR) -> Dict[str, Any]:
         'type': 'autossl_run',
         'run_timestamp': str,
         'provider': str,
-        'summary': {'ok': N, 'incomplete': N, 'defective': N, ...},
+        'summary': {'ok': N, 'incomplete': N, 'ready_for_renewal': N, 'defective': N, ...},
         'users': [
             {
                 'username': str,
@@ -286,7 +309,7 @@ def parse_run(timestamp: str, log_dir: str = AUTOSSL_LOG_DIR) -> Dict[str, Any]:
                 'domains': [
                     {
                         'domain': str,
-                        'tls_status': str,       # ok / incomplete / defective
+                        'tls_status': str,       # ok / incomplete / ready_for_renewal / defective
                         'cert_expiry_days': float,  # negative = expired
                         'defects': [str, ...],
                         'defect_codes': [str, ...], # compact codes
@@ -304,16 +327,13 @@ def parse_run(timestamp: str, log_dir: str = AUTOSSL_LOG_DIR) -> Dict[str, Any]:
     try:
         users, run_start, run_end = _parse_log_lines(json_path)
     except OSError as exc:
-        error_result = ResultBuilder.create_error(
-            result_type='autossl_run',
-            source=run_dir,
-            error=str(exc),
-            contract_version=CONTRACT_VERSION,
-            run_timestamp=timestamp,
-            log_dir=run_dir,
-        )
-        error_result['source_type'] = 'autossl_run_directory'
-        return error_result
+        return _run_error(timestamp, run_dir, str(exc))
+
+    if run_start is None:
+        # No record at all: an aborted or still-running run leaves a 0-byte log. That is no
+        # answer about the domains, and 0 domains / empty summary would read as one (BACK-2296).
+        return _run_error(timestamp, run_dir,
+                          f"AutoSSL run log is empty (an aborted or still-running run): {json_path}")
 
     user_list, overall = _build_user_list(users)
 

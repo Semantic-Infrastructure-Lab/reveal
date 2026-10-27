@@ -86,6 +86,11 @@ def _tls_incomplete():
     return _make_record('TLS Status: Incomplete', indent=3, rtype='out')
 
 
+def _tls_ready_for_renewal():
+    # Verbatim from a real cPanel run (type 'out', like Incomplete): BACK-2296.
+    return _make_record('TLS Status: Ready for Renewal', indent=3, rtype='out')
+
+
 def _tls_defective():
     return _make_record('TLS Status: Defective', indent=3, rtype='error')
 
@@ -227,6 +232,38 @@ class TestParseRunBasic:
         result = parse_run(ts, log_dir)
         domain = result['users'][0]['domains'][0]
         assert domain['tls_status'] == 'incomplete'
+
+    def test_ready_for_renewal_is_its_own_status_not_incomplete(self, tmp_path):
+        """BACK-2296: cPanel logs 'Ready for Renewal' with the same record type as 'Incomplete'."""
+        ts = '2026-01-01T00:00:00Z'
+        records = [
+            _user_analyzing('alice'),
+            _domain_analyzing('soon.example.com'), _tls_ready_for_renewal(),
+            _domain_analyzing('partial.example.com'), _tls_incomplete(),
+        ]
+        result = parse_run(ts, _write_run(tmp_path, ts, records))
+        by = {d['domain']: d['tls_status'] for d in result['users'][0]['domains']}
+        assert by == {'soon.example.com': 'ready_for_renewal', 'partial.example.com': 'incomplete'}
+        assert result['summary']['incomplete'] == 1
+        assert result['summary']['ready_for_renewal'] == 1
+
+    def test_status_comes_from_the_log_text_not_the_record_colour(self, tmp_path):
+        """A TLS Status the parser does not know is unknown, never silently incomplete."""
+        ts = '2026-01-01T00:00:00Z'
+        records = [_user_analyzing('alice'), _domain_analyzing('odd.example.com'),
+                   _make_record('TLS Status: Something New', indent=3, rtype='out')]
+        result = parse_run(ts, _write_run(tmp_path, ts, records))
+        assert result['users'][0]['domains'][0]['tls_status'] is None
+        assert result['summary'].get('incomplete', 0) == 0
+        assert result['summary']['unknown'] == 1
+
+    def test_empty_run_log_is_an_error_not_a_zero_domain_result(self, tmp_path):
+        """BACK-2296: an aborted run leaves a 0-byte json; reporting it as 0 domains is a false zero."""
+        ts = '2026-01-02T00:00:00Z'
+        (tmp_path / ts).mkdir()
+        (tmp_path / ts / 'json').write_text('', encoding='utf-8')
+        result = parse_run(ts, str(tmp_path))
+        assert 'error' in result and 'empty' in result['error']
 
     def test_parses_multiple_users(self, tmp_path):
         ts = '2026-01-01T00:00:00Z'
@@ -500,6 +537,30 @@ class TestAutosslAdapter:
             result = a.get_structure()
         assert result['type'] == 'autossl_run'
         assert result['run_timestamp'] == ts
+
+    def test_latest_skips_an_empty_newest_run_and_says_so(self, tmp_path):
+        """BACK-2296: on cPanel the newest run directory can be an aborted, 0-byte one."""
+        good = '2026-01-01T00:00:00Z'
+        bad = '2026-01-02T00:00:00Z'
+        log_dir = _write_run(tmp_path, good, [_user_analyzing('alice'), _domain_analyzing('a.com'), _tls_ok()])
+        (tmp_path / bad).mkdir()
+        (tmp_path / bad / 'json').write_text('', encoding='utf-8')
+        a = AutosslAdapter('autossl://latest')
+        with patch('reveal.adapters.autossl.adapter.AUTOSSL_LOG_DIR', log_dir):
+            result = a.get_structure()
+        assert result['run_timestamp'] == good
+        assert result['summary'] == {'ok': 1}
+        warning = result['meta']['warnings'][0]
+        assert warning['type'] == 'empty_runs_skipped' and bad in warning['message']
+
+    def test_latest_with_only_empty_runs_is_an_error(self, tmp_path):
+        bad = '2026-01-02T00:00:00Z'
+        (tmp_path / bad).mkdir()
+        (tmp_path / bad / 'json').write_text('', encoding='utf-8')
+        a = AutosslAdapter('autossl://latest')
+        with patch('reveal.adapters.autossl.adapter.AUTOSSL_LOG_DIR', str(tmp_path)):
+            result = a.get_structure()
+        assert 'error' in result and 'empty' in result['error']
 
     def test_latest_raises_when_no_runs(self):
         a = AutosslAdapter('autossl://latest')
@@ -1122,7 +1183,7 @@ class TestAutosslQueryParams:
         a = AutosslAdapter('autossl://latest?only-failures')
         with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts]), \
              patch('reveal.adapters.autossl.adapter.parse_run',
-                   side_effect=lambda t: parse_run(t, log_dir=log_dir)):
+                   side_effect=lambda t, _dir=None: parse_run(t, log_dir=log_dir)):
             result = a.get_structure()
         # With only-failures, ok.example.com should be gone
         alice = result['users'][0]
@@ -1137,7 +1198,7 @@ class TestAutosslQueryParams:
         a = AutosslAdapter('autossl://latest?summary')
         with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts]), \
              patch('reveal.adapters.autossl.adapter.parse_run',
-                   side_effect=lambda t: parse_run(t, log_dir=log_dir)):
+                   side_effect=lambda t, _dir=None: parse_run(t, log_dir=log_dir)):
             result = a.get_structure()
         assert 'users' not in result
 
@@ -1157,7 +1218,7 @@ class TestAutosslQueryParams:
         a = AutosslAdapter('autossl://latest?user=alice')
         with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts]), \
              patch('reveal.adapters.autossl.adapter.parse_run',
-                   side_effect=lambda t: parse_run(t, log_dir=log_dir)):
+                   side_effect=lambda t, _dir=None: parse_run(t, log_dir=log_dir)):
             result = a.get_structure()
         usernames = [u['username'] for u in result['users']]
         assert usernames == ['alice']
@@ -1169,7 +1230,7 @@ class TestAutosslQueryParams:
         a = AutosslAdapter('autossl://latest?only-failures&summary')
         with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts]), \
              patch('reveal.adapters.autossl.adapter.parse_run',
-                   side_effect=lambda t: parse_run(t, log_dir=log_dir)):
+                   side_effect=lambda t, _dir=None: parse_run(t, log_dir=log_dir)):
             result = a.get_structure()
         assert 'users' not in result
         assert result['summary']['defective'] >= 1

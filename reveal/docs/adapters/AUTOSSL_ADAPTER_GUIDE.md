@@ -23,7 +23,7 @@ The `autossl://` adapter parses the NDJSON logs written by cPanel AutoSSL at
 `/var/cpanel/logs/autossl/`. It surfaces:
 
 - **Run inventory**: all available run timestamps (newest first)
-- **Per-domain TLS status**: `ok`, `incomplete`, or `defective`
+- **Per-domain TLS status**: `ok`, `incomplete`, `ready_for_renewal`, or `defective`
 - **Defect codes**: `SELF_SIGNED_CERT`, `CERT_HAS_EXPIRED`, etc.
 - **DCV impediment codes**: `TOTAL_DCV_FAILURE`, `DNS_RESOLVES_TO_ANOTHER_SERVER`, etc.
 - **User-scoped output**: filter to one cPanel user — essential on shared hosts
@@ -63,13 +63,15 @@ reveal autossl://2026-03-03T23:26:01Z
 reveal autossl://latest --format=json
 ```
 
+`latest` is the newest run that has a readable log. cPanel leaves 0-byte run directories behind (aborted or manual runs); those are skipped and named in a `meta.warnings` entry of type `empty_runs_skipped`. Asking for an empty run by timestamp is an error, not a run with 0 domains.
+
 ---
 
 ## Flags Reference
 
 | Flag | URI query param | Description |
 |------|----------------|-------------|
-| `--only-failures` | `?only-failures` | Show only domains with `defective` or `incomplete` status |
+| `--only-failures` | `?only-failures` | Show only domains that are not `ok` (`defective`, `ready_for_renewal`, `incomplete`, `dcv_failed`, `unknown`) |
 | `--summary` | `?summary` | Aggregated counts only — no per-domain rows |
 | `--user=NAME` | `?user=NAME` | Filter to a single cPanel username; the `Summary:` counts are then that user's. An unknown name is an error (exit 1) that lists the users in the run |
 | `--all` | — | Domain history: show all runs (bypasses default 20-run cap) |
@@ -89,7 +91,8 @@ reveal 'autossl://latest?user=acme&only-failures'
 | Status | Meaning |
 |--------|---------|
 | `ok` | Certificate valid; AutoSSL satisfied — no renewal needed |
-| `incomplete` | AutoSSL logged the domain's TLS status as neither success nor error. The reason is in the run's own messages (`reveal autossl://DOMAIN`); reveal does not interpret it |
+| `incomplete` | A valid certificate is in place but AutoSSL could not secure every domain: the run's DCV section lists an impediment, usually NO_UNSECURED_DOMAIN_PASSED_DCV (every unsecured domain failed DCV). Often benign (a mail. name with no DNS), not always. The impediments are in `impediments[]` and `reveal autossl://DOMAIN` |
+| `ready_for_renewal` | The certificate is inside AutoSSL's renewal window; it renews on the next run unless the DCV section lists an impediment |
 | `defective` | Certificate has a problem: expired, self-signed, or chain error |
 
 ---
@@ -220,12 +223,13 @@ Key fields:
   "summary": {
     "ok": 820,
     "incomplete": 24,
+    "ready_for_renewal": 2,
     "defective": 3
   }
 }
 ```
 
-The run object also carries `run_start`, `run_end`, `provider`, `upid`, `global_run` and `log_dir`. `summary` can also count `dcv_failed` and `unknown` (a domain with no `TLS Status` line).
+The run object also carries `run_start`, `run_end`, `provider`, `upid`, `global_run` and `log_dir`. `summary` can also count `dcv_failed` and `unknown` (a domain with no `TLS Status` line, or one whose status text reveal does not recognise).
 
 ---
 
@@ -246,7 +250,7 @@ Not a cPanel server, or running without root access. This adapter is cPanel-spec
 
 **All domains show `incomplete`**
 
-Do not assume this is benign. `incomplete` only means AutoSSL logged neither success nor error for the domain. Read the run's messages with `reveal autossl://DOMAIN`, and check the certificate itself with `reveal ssl://DOMAIN` (`days_until_expiry`). `reveal autossl://error-codes` explains the defect and impediment codes.
+Do not assume this is benign. `incomplete` means a valid certificate is in place but AutoSSL could not secure every domain: each one carries a DCV impediment (read it with `reveal autossl://DOMAIN`). Many are harmless (a `mail.` name that never had DNS), some are live domains serving the wrong certificate. Check the certificate itself with `reveal ssl://DOMAIN` (`days_until_expiry`). `reveal autossl://error-codes` explains the defect and impediment codes.
 
 **`defective` domains persist after fixing DNS**
 

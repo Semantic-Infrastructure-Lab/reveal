@@ -16,6 +16,7 @@ Examples:
 """
 
 import re
+from collections import Counter
 from typing import Any, Dict, List, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -24,9 +25,9 @@ from ..help_data import load_help_data
 from ...utils.query import parse_query_params
 from .parser import AUTOSSL_LOG_DIR, list_runs, parse_run
 from .renderer import AutosslRenderer
-from ...utils.results import ResultBuilder
+from ...utils.results import ResultBuilder, note_warning
 
-_FAILURE_STATUSES = {'incomplete', 'defective', 'dcv_failed', 'unknown'}
+_FAILURE_STATUSES = {'incomplete', 'ready_for_renewal', 'defective', 'dcv_failed', 'unknown'}
 
 
 def _get_error_code_taxonomy() -> dict:
@@ -103,7 +104,8 @@ def _get_error_code_taxonomy() -> dict:
         ],
         'tls_status_values': {
             'ok': 'Certificate valid; AutoSSL satisfied (no renewal needed)',
-            'incomplete': "AutoSSL logged the domain's TLS status as neither success nor error; the reason is in the run's own messages",
+            'incomplete': "A valid certificate is in place but AutoSSL could not secure every domain: the run's DCV section lists an impediment, usually NO_UNSECURED_DOMAIN_PASSED_DCV (every unsecured domain failed DCV). Often benign (a mail. name with no DNS), not always",
+            'ready_for_renewal': "The certificate is inside AutoSSL's renewal window; it renews on the next run unless the DCV section lists an impediment",
             'defective': 'Certificate has a problem (expired, self-signed, chain error)',
         },
         'next_steps': [
@@ -217,7 +219,7 @@ _SCHEMA: Dict[str, Any] = {
                     'domain_count': {'type': 'integer'},
                     'summary': {
                         'type': 'object',
-                        'description': 'Counts keyed by tls_status: ok/incomplete/defective',
+                        'description': 'Counts keyed by tls_status: ok/incomplete/ready_for_renewal/defective',
                     },
                     'users': {
                         'type': 'array',
@@ -234,7 +236,7 @@ _SCHEMA: Dict[str, Any] = {
                                             'domain': {'type': 'string'},
                                             'tls_status': {
                                                 'type': 'string',
-                                                'enum': ['ok', 'incomplete', 'defective'],
+                                                'enum': ['ok', 'incomplete', 'ready_for_renewal', 'defective'],
                                             },
                                             'cert_expiry_days': {'type': ['number', 'null']},
                                             'detail': {
@@ -263,7 +265,7 @@ _SCHEMA: Dict[str, Any] = {
                     'run_count': {'type': 'integer'},
                     'summary': {
                         'type': 'object',
-                        'description': 'Counts by tls_status across all runs: ok/defective/incomplete',
+                        'description': 'Counts by tls_status across all runs: ok/defective/incomplete/ready_for_renewal',
                     },
                     'history': {
                         'type': 'array',
@@ -321,7 +323,7 @@ _SCHEMA: Dict[str, Any] = {
     'notes': [
         'Reads /var/cpanel/logs/autossl/ directly — no WHM API or credentials required',
         'Run timestamps are ISO 8601 UTC (2026-03-03T23:26:01Z), the log directory names; autossl:// lists them newest first',
-        'tls_status values: ok (cert valid), incomplete (AutoSSL logged neither success nor error; read the run messages for why), defective (failed)',
+        'tls_status values: ok (cert valid), incomplete (valid cert, but AutoSSL could not secure every domain: see impediments), ready_for_renewal (inside the renewal window), defective (failed)',
         'defect_codes are the OpenSSL verification codes (CERT_HAS_EXPIRED, DEPTH_ZERO_SELF_SIGNED_CERT, ...); DCV failures are in impediments[{code, detail}]',
         'Only available on cPanel servers — adapter errors cleanly on non-cPanel systems',
         'jq: get timestamp of most recent run — reveal autossl:// --format=json | jq \'.runs[0]\'',
@@ -477,14 +479,35 @@ class AutosslAdapter(ResourceAdapter):
 
     def _parse_run_structure(self, timestamp: str) -> Dict[str, Any]:
         if timestamp == 'latest':
-            runs = list_runs()
+            runs = list_runs(AUTOSSL_LOG_DIR)
             if not runs:
                 raise ValueError(
                     f"No AutoSSL runs found in {AUTOSSL_LOG_DIR}. "
                     "Is this a cPanel server?"
                 )
-            timestamp = runs[0]
-        return parse_run(timestamp)
+            return self._newest_readable_run(runs)
+        return parse_run(timestamp, AUTOSSL_LOG_DIR)
+
+    @staticmethod
+    def _newest_readable_run(runs: List[str]) -> Dict[str, Any]:
+        """The newest run that has a log. cPanel leaves 0-byte run directories behind (aborted
+        or manual runs), so the newest directory is not always the latest result; the ones
+        skipped are named in a warning rather than silently passed over (BACK-2296)."""
+        skipped: List[str] = []
+        for ts in runs:
+            result = parse_run(ts, AUTOSSL_LOG_DIR)
+            if not result.get('error'):
+                if skipped:
+                    note_warning(result, {
+                        'type': 'empty_runs_skipped',
+                        'message': f"{len(skipped)} newer run(s) have no readable log and were skipped: "
+                                   + ', '.join(skipped),
+                    })
+                return result
+            skipped.append(ts)
+        first = parse_run(runs[0], AUTOSSL_LOG_DIR)
+        first['error'] = f"No AutoSSL run has a readable log ({len(runs)} checked, newest {runs[0]}): " + str(first.get('error'))
+        return first
 
     def _domain_history_structure(self, domain: str, show_all: bool = False) -> Dict[str, Any]:
         """Search all runs for a specific domain and return its full history."""
@@ -508,9 +531,7 @@ class AutosslAdapter(ResourceAdapter):
                             'impediments': d.get('impediments', []),
                             'detail': d.get('detail', ''),
                         })
-        ok_count = sum(1 for h in history if h['tls_status'] == 'ok')
-        defective_count = sum(1 for h in history if h['tls_status'] == 'defective')
-        incomplete_count = sum(1 for h in history if h['tls_status'] == 'incomplete')
+        by_status = Counter(h['tls_status'] for h in history)
         dcv_failed_count = sum(
             1 for h in history if not h['tls_status'] and h.get('impediments')
         )
@@ -530,9 +551,10 @@ class AutosslAdapter(ResourceAdapter):
                 'truncated': truncated,
                 'oldest_run_timestamp': oldest_run_timestamp,
                 'summary': {
-                    'ok': ok_count,
-                    'defective': defective_count,
-                    'incomplete': incomplete_count,
+                    'ok': by_status['ok'],
+                    'defective': by_status['defective'],
+                    'incomplete': by_status['incomplete'],
+                    'ready_for_renewal': by_status['ready_for_renewal'],
                     'dcv_failed': dcv_failed_count,
                 },
                 'history': history,

@@ -58,7 +58,7 @@ features:
   - 'Filesystem-based — no WHM API or credentials required'
   - 'Lists all available run timestamps'
   - 'Parses NDJSON log: per-user, per-domain TLS status'
-  - 'TLS outcomes: ok / incomplete / defective'
+  - 'TLS outcomes: ok / incomplete / ready_for_renewal / defective'
   - 'Defect codes extracted (e.g. SELF_SIGNED_CERT, CERT_HAS_EXPIRED)'
   - 'DCV impediment codes (TOTAL_DCV_FAILURE, NO_UNSECURED_DOMAIN_PASSED_DCV)'
   - 'Summary by user + overall counts'
@@ -71,7 +71,8 @@ features:
 
 tls_status_values:
   ok: 'Certificate valid and AutoSSL satisfied'
-  incomplete: "AutoSSL logged the domain's TLS status as neither success nor error; read the run's messages for why"
+  incomplete: "A valid certificate is in place but AutoSSL could not secure every domain: the run's DCV section lists an impediment, usually NO_UNSECURED_DOMAIN_PASSED_DCV (every unsecured domain failed DCV). Often benign (a mail. name with no DNS), not always"
+  ready_for_renewal: "The certificate is inside AutoSSL's renewal window; it renews on the next run unless the DCV section lists an impediment"
   defective: 'Certificate has a problem (expired, self-signed, chain error)'
 
 impediment_codes:

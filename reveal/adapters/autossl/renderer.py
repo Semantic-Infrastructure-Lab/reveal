@@ -9,6 +9,7 @@ from .parser import IMPEDIMENT_SHORT
 _STATUS_ICON = {
     'ok': '✅',
     'incomplete': '⚠️ ',
+    'ready_for_renewal': '🔄',
     'defective': '❌',
     'dcv_failed': '🔴',
     'unknown': '⚫',
@@ -45,7 +46,7 @@ def _icon(status: str) -> str:
 
 def _summary_line(summary: Dict[str, int]) -> str:
     parts = []
-    for status in ('ok', 'incomplete', 'defective', 'dcv_failed', 'unknown'):
+    for status in ('ok', 'incomplete', 'ready_for_renewal', 'defective', 'dcv_failed', 'unknown'):
         n = summary.get(status, 0)
         if n:
             parts.append(f"{_icon(status)} {n} {status}")
@@ -219,7 +220,7 @@ class AutosslRenderer:
         # Always show ok bucket even when zero — it's the key signal
         ok = summary.get('ok', 0)
         parts = [f"{_icon('ok')} {ok} ok"]
-        for key in ('incomplete', 'defective', 'dcv_failed'):
+        for key in ('incomplete', 'ready_for_renewal', 'defective', 'dcv_failed'):
             n = summary.get(key, 0)
             if n:
                 parts.append(f"{_icon(key)} {n} {key}")
