@@ -113,7 +113,7 @@ def get_quality_config(path: Path) -> Dict[str, Any]:
     """
     config = copy.deepcopy(QUALITY_DEFAULTS)
 
-    scanned = path if path.is_dir() else path.parent
+    scanned = (path if path.is_dir() else path.parent).resolve()  # one spelling, so the walk meets the root
     project_root = resolve_project_root(scanned)
     config_paths = []
     for directory in (scanned, *scanned.parents):

@@ -115,3 +115,16 @@ def test_the_schema_note_defines_complexity_as_cyclomatic():
     notes = ' '.join(StatsAdapter.get_schema()['notes'])
     assert 'per 100 lines' not in notes
     assert 'Complexity is cyclomatic' in notes
+
+
+def test_the_walk_stops_at_the_project_root_through_a_symlinked_path(project, tmp_path, monkeypatch):
+    """macOS spells /var as /private/var, so the root comes back resolved while the scanned path is not.
+    A config ABOVE the project root must not be picked up: the walk has to meet the root, not run on to '/'."""
+    _config(tmp_path, _TIGHT)   # above the project root, outside it
+    link = tmp_path / 'link'
+    try:
+        link.symlink_to(project, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip('symlinks unavailable')
+    monkeypatch.setattr('reveal.adapters.stats.queries.resolve_project_root', lambda _start: project.resolve())
+    assert get_quality_config(link / 'src') == QUALITY_DEFAULTS
