@@ -44,10 +44,11 @@ def _local_time(zoned: 're.Match[str]') -> str:
     zone = '+00:00' if zone.upper() == 'Z' else f'{zone[:3]}:{zone[-2:]}'
     try:
         moment = datetime.fromisoformat(f'{day}T{clock}{zone}').astimezone()
-    # Not a calendar time (month 13), or outside what the platform's localtime converts.
-    except (ValueError, OverflowError, OSError) as error:
-        raise ValueError(f"date bound {zoned.group(0)!r} is not a time reveal can convert to "
-                         f"local time: {error}") from error
+    except ValueError as error:  # not a calendar time: month 13, hour 25
+        raise ValueError(f"date bound {zoned.group(0)!r} is not a time: {error}") from error
+    except (OverflowError, OSError) as error:  # before 1970 on Windows, past year 9999
+        raise ValueError(f"date bound {zoned.group(0)!r} is outside the times this platform "
+                         f"converts to local time") from error
     fraction = f'.{moment.microsecond:06d}' if moment.microsecond else ''
     return moment.strftime('%Y-%m-%d %H:%M:%S') + fraction
 
