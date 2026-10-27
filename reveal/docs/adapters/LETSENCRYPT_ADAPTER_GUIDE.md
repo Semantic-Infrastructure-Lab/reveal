@@ -63,15 +63,23 @@ reveal letsencrypt:// --format json
 Certs are sorted by `days_until_expiry` ascending — imminent expirations and expired certs appear first.
 
 ```
-  name                  common name            expiry     SANs
-  ──────────────────────────────────────────────────────────────
-  old-app.example.com   old-app.example.com    EXPIRED    1 name(s)
-  example.com             example.com              87d        3 name(s)
-  api.example.com         api.example.com          87d        1 name(s)
+  name                 common name          expiry   SANs
+  ───────────────────────────────────────────────────────
+  old-app.example.com  old-app.example.com  EXPIRED (12d ago)  1 name(s)
+  soon.example.com     soon.example.com     ⚠️  5d    1 name(s)
+  seven.example.com    seven.example.com    ⚠️  7d    1 name(s)
+  api.example.com      api.example.com      ~14d      1 name(s)
+  example.com          example.com          87d       3 name(s)
+  example.com-old      example.com          87d       3 name(s)
+
+  ⚠️  No certbot renewal timer or cron file found — certs may expire without automatic renewal (checked systemd unit and cron dirs; run `systemctl list-timers` to confirm)
 
   reveal letsencrypt:// --check-orphans    # find unreferenced certs
+  reveal letsencrypt:// --check-duplicates # find duplicate-SAN certs
   # 1 cert(s) are EXPIRED — renew with: certbot renew
 ```
+
+A renewal-timer line follows the table: `✅` with the unit or cron path when a `*certbot*` systemd timer, snap timer or cron file exists, otherwise the warning shown. A `cert.pem` that cannot be parsed is listed last, with its error in place of the common name.
 
 ### Orphan check
 
@@ -164,7 +172,7 @@ Key fields in the JSON response:
       "common_name": "example.com",
       "san": ["example.com", "www.example.com", "api.example.com"],
       "days_until_expiry": 87,
-      "not_after": "2026-06-14T12:00:00",
+      "not_after": "2026-06-14T12:00:00+00:00",
       "is_expired": false,
       "issuer": "Let's Encrypt"
     }
@@ -181,12 +189,16 @@ Key fields in the JSON response:
   },
   "renewal_timer": {
     "configured": true,
-    "mechanisms": ["systemd"],
+    "mechanisms": [{"path": "/etc/systemd/system/certbot.timer", "kind": "systemd"}],
     "warning": null
   },
   "next_steps": []
 }
 ```
+
+`renewal_timer.mechanisms` lists each timer or cron file found, with `kind` one of `systemd`, `snap` or `cron`. `duplicate_check.groups` is a list of groups, each a list of cert objects. A cert that cannot be parsed appears in `certs` as `{name, cert_path, error}`.
+
+Both checks exit 0 even when they find orphans or duplicates; gate on `jq '.orphan_check.orphan_count'` or `jq '.duplicate_check.duplicate_group_count'`. The orphan scan reads only the top level of each nginx directory (it does not descend into `conf.d/users/`).
 
 ---
 

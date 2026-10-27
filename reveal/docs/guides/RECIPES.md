@@ -1037,7 +1037,8 @@ reveal ssl://file:///etc/letsencrypt/live/example.com/fullchain.pem
 ```bash
 # Check if certificate expires within 30 days
 reveal ssl://example.com --check
-# Exit code 0 = healthy, 1 = warning (<30 days), 2 = critical (<7 days)
+# Exit code 0 = pass, 1 = warning (<30 days or unverified chain), 2 = failure (<7 days, expired,
+# hostname mismatch, unreachable); the same codes for --stdin, nginx batch, --local-certs and file://
 
 # Combine with nginx config analysis
 reveal check /etc/nginx/nginx.conf  # N004 detects ACME path issues, N006 detects timeout mismatches

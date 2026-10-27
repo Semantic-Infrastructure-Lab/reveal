@@ -69,7 +69,8 @@ def _expiry_label(days: int, is_expired: bool) -> str:
 
 def _render_cert_table(certs: list) -> None:
     col_name = max(len(c.get('name', '')) for c in certs)
-    col_cn = max(len(c.get('common_name', c.get('error', ''))) for c in certs)
+    # An unparseable cert prints its error on its own row, so it does not size this column.
+    col_cn = max((len(c.get('common_name', '')) for c in certs if 'error' not in c), default=0)
 
     header = f"  {'name':<{col_name}}  {'common name':<{col_cn}}  expiry   SANs"
     print(header)

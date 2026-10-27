@@ -88,7 +88,6 @@
   "reveal/adapters/imports.py::ImportsRenderer._render_circular_dependencies": 17,
   "reveal/adapters/markdown/adapter.py::MarkdownQueryAdapter.__init__": 20,
   "reveal/adapters/markdown/operations.py::build_link_graph": 18,
-  "reveal/adapters/nginx/adapter.py::_build_fleet_matrix": 16,
   "reveal/adapters/pack.py::PackAdapter.get_structure": 17,
   "reveal/adapters/pack.py::_compute_graph_relevance": 18,
   "reveal/adapters/pack.py::_compute_priority": 27,

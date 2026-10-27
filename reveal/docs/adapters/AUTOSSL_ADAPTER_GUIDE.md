@@ -71,7 +71,7 @@ reveal autossl://latest --format=json
 |------|----------------|-------------|
 | `--only-failures` | `?only-failures` | Show only domains with `defective` or `incomplete` status |
 | `--summary` | `?summary` | Aggregated counts only — no per-domain rows |
-| `--user=NAME` | `?user=NAME` | Filter to a single cPanel username |
+| `--user=NAME` | `?user=NAME` | Filter to a single cPanel username; the `Summary:` counts are then that user's. An unknown name is an error (exit 1) that lists the users in the run |
 | `--all` | — | Domain history: show all runs (bypasses default 20-run cap) |
 | `--format=json` | — | Full structured JSON output |
 
@@ -96,15 +96,17 @@ reveal 'autossl://latest?user=acme&only-failures'
 
 ## Defect Codes
 
-These appear in the `defect_code` field when `tls_status == "defective"`.
+These appear in the `defect_codes` list (and the `detail` string) when `tls_status == "defective"`.
 
 | Code | Meaning | Fix |
 |------|---------|-----|
 | `DEPTH_ZERO_SELF_SIGNED_CERT` | Leaf cert is self-signed (cPanel fallback) | AutoSSL should replace automatically; check DCV if stuck |
-| `SELF_SIGNED_CERT_IN_CHAIN` | Chain includes a self-signed intermediate | Re-run AutoSSL; inspect chain with `reveal ssl://DOMAIN --advanced` |
+| `SELF_SIGNED_CERT_IN_CHAIN` | Chain includes a self-signed intermediate | Re-run AutoSSL; inspect chain with `reveal ssl://DOMAIN --check --advanced` |
 | `CERT_HAS_EXPIRED` | Certificate has passed its `notAfter` date | Fix DCV impediments — see table below |
-| `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` | Issuer cert missing from local trust store | Usually resolves next cycle; check with `reveal ssl://DOMAIN --advanced` |
-| `CERTIFICATE_VERIFY_FAILED` | General chain validation error | Inspect live cert: `reveal ssl://DOMAIN --advanced` |
+| `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` | Issuer cert missing from local trust store | Usually resolves next cycle; check with `reveal ssl://DOMAIN --check --advanced` |
+| `CERTIFICATE_VERIFY_FAILED` | General chain validation error | Inspect live cert: `reveal ssl://DOMAIN --check --advanced` |
+
+Code reference: `reveal autossl://error-codes` prints every defect and DCV impediment code with its meaning.
 
 ---
 
@@ -115,7 +117,7 @@ must pass DCV for AutoSSL to issue or renew its certificate.
 
 | Code | Meaning | Fix |
 |------|---------|-----|
-| `TOTAL_DCV_FAILURE` | Every domain in the cert failed DCV | Verify DNS A record points to this server; check ACME path: `reveal nginx://DOMAIN --validate-nginx-acme` |
+| `TOTAL_DCV_FAILURE` | Every domain in the cert failed DCV | Verify DNS A record points to this server; check ACME path: `reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme` |
 | `NO_UNSECURED_DOMAIN_PASSED_DCV` | All domains failed DCV — at least one must pass | Fix the primary domain DCV first; subdomains inherit |
 | `DNS_RESOLVES_TO_ANOTHER_SERVER` | Domain's DNS points elsewhere — AutoSSL skips it | Update DNS to point here, or remove the domain from cPanel; check with `reveal domain://DOMAIN` |
 | `DOMAIN_NOT_IN_CPANEL` | Domain not found in the cPanel account | Re-add the domain to cPanel or remove it from the cert |
@@ -150,13 +152,13 @@ reveal autossl://app.example.com
 reveal autossl://app.example.com --all
 
 # Inspect the live cert
-reveal ssl://app.example.com --advanced
+reveal ssl://app.example.com --check --advanced
 
 # Check DNS
 reveal domain://app.example.com
 
 # Verify ACME challenge path is accessible
-reveal nginx://app.example.com --validate-nginx-acme
+reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
 ```
 
 ### Post-migration validation
@@ -192,18 +194,25 @@ Key fields:
 ```json
 {
   "type": "autossl_run",
-  "timestamp": "2026-03-03T23:26:01Z",
+  "run_timestamp": "2026-03-03T23:26:01Z",
   "user_count": 3,
   "domain_count": 847,
   "users": [
     {
       "username": "acme",
+      "domain_count": 12,
+      "summary": {"ok": 11, "defective": 1},
       "domains": [
         {
           "domain": "app.example.com",
           "tls_status": "defective",
-          "defect_code": "CERT_HAS_EXPIRED",
-          "dcv_impediment": "TOTAL_DCV_FAILURE"
+          "cert_expiry_raw": "Certificate expiry: 3/1/26, 12:00 AM UTC (3 days ago)",
+          "cert_expiry_days": -3,
+          "defects": ["OpenSSL verification failed (0:10:CERT_HAS_EXPIRED)."],
+          "defect_codes": ["CERT_HAS_EXPIRED"],
+          "impediments": [{"code": "TOTAL_DCV_FAILURE", "detail": "Every domain failed DCV"}],
+          "user_excluded": false,
+          "detail": "CERT_HAS_EXPIRED, DCV:TOTAL"
         }
       ]
     }
@@ -215,6 +224,8 @@ Key fields:
   }
 }
 ```
+
+The run object also carries `run_start`, `run_end`, `provider`, `upid`, `global_run` and `log_dir`. `summary` can also count `dcv_failed` and `unknown` (a domain with no `TLS Status` line).
 
 ---
 

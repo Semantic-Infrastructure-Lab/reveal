@@ -16,7 +16,7 @@ Examples:
 """
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
@@ -116,6 +116,15 @@ def _get_error_code_taxonomy() -> dict:
     }
 
 
+def _sum_user_summaries(users: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Add up the per-status counts of the given users."""
+    total: Dict[str, int] = {}
+    for u in users:
+        for status, count in u.get('summary', {}).items():
+            total[status] = total.get(status, 0) + count
+    return total
+
+
 def _apply_autossl_filters(result: Dict[str, Any], only_failures: bool = False,
                             summary: bool = False,
                             user: Optional[str] = None) -> Dict[str, Any]:
@@ -141,6 +150,8 @@ def _apply_autossl_filters(result: Dict[str, Any], only_failures: bool = False,
                 f"User '{user}' not found in this AutoSSL run. "
                 f"Available users: {', '.join(available) if available else '(none)'}"
             )
+        # The run-wide summary would sit next to one user's counts; count this user only.
+        result = {**result, 'summary': _sum_user_summaries(users)}
 
     # Filter to failures only
     if only_failures:
@@ -309,12 +320,13 @@ _SCHEMA: Dict[str, Any] = {
     ],
     'notes': [
         'Reads /var/cpanel/logs/autossl/ directly — no WHM API or credentials required',
-        'Timestamps are in YYYY-MM-DD_HH-MM-SS format matching log filenames',
+        'Run timestamps are ISO 8601 UTC (2026-03-03T23:26:01Z), the log directory names; autossl:// lists them newest first',
         'tls_status values: ok (cert valid), incomplete (pending), defective (failed)',
-        'defect_codes explain why AutoSSL failed: DCV_ERROR, RATE_LIMIT, etc.',
+        'defect_codes are the OpenSSL verification codes (CERT_HAS_EXPIRED, DEPTH_ZERO_SELF_SIGNED_CERT, ...); DCV failures are in impediments[{code, detail}]',
         'Only available on cPanel servers — adapter errors cleanly on non-cPanel systems',
-        'jq: get timestamp of most recent run — reveal autossl:// --format=json | jq \'.runs[-1]\'',
-        'jq: chain into the most recent run directly — reveal autossl://$(reveal autossl:// --format=json | jq -r \'.runs[-1]\')',
+        'jq: get timestamp of most recent run — reveal autossl:// --format=json | jq \'.runs[0]\'',
+        'jq: chain into the most recent run directly — reveal autossl://$(reveal autossl:// --format=json | jq -r \'.runs[0]\')',
+        'Code reference: reveal autossl://error-codes',
     ],
 }
 

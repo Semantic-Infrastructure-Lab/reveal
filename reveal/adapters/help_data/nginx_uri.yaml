@@ -47,7 +47,7 @@ workflows:
       - "reveal nginx://app.example.com          # verify config was applied"
       - "reveal nginx://app.example.com/ports    # check SSL block is present"
       - "reveal nginx://app.example.com/upstream # verify upstream still reachable"
-      - "reveal check ssl://app.example.com       # verify SSL cert intact"
+      - "reveal ssl://app.example.com --check     # verify SSL cert intact"
 
   - name: "Diagnose unexpected redirect"
     steps:
@@ -77,7 +77,7 @@ notes:
   - 'Searches /etc/nginx/sites-enabled/ and /etc/nginx/conf.d/ by default'
   - 'For SSH-accessed nginx (remote servers), use file-path form: reveal check /etc/nginx/...'
   - 'Upstream reachability checks TCP only (3s timeout) — not HTTP response'
-  - 'For SSL cert status: reveal check ssl://domain'
+  - 'For SSL cert status: reveal ssl://domain --check'
   - 'For running N001-N007 rules: reveal check /path/to/nginx.conf'
 
 output_formats:
