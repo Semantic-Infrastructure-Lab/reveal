@@ -8,7 +8,7 @@ category: guide
 `overview://` is a one-glance codebase dashboard: language breakdown,
 quality pulse, hotspots, complex functions, an architecture summary (entry
 points/core abstractions/components), and recent git activity. It is
-composed from `stats://`, `ast://`, `imports://`, and `git://` — not an
+composed from `metrics://`, `ast://`, `imports://`, and `git://` — not an
 independent scan.
 
 ## Quick Start
@@ -64,7 +64,7 @@ retain their separate policy and reject `--fail-on`.
 
 The Architecture section's Components rows are ranked by import cohesion. For a directory with more than half its files in Go, Java, Kotlin, C#, Scala or Swift the number is `n/a` (JSON `cohesion: null` with `cohesion_reason`, plus one `architecture.cohesion_rule`): files of one package or module use each other without an import, so the ratio would read ~0 whatever the structure. Such rows follow every measured one, by file count.
 
-`stats` carries the summary/hotspots/files data from `stats://`.
+`stats` carries the summary/hotspots/files data from `metrics://`.
 `complex_functions` is the `ast://` complexity ranking. `architecture` has
 `fan_in`/`entrypoints`/`components`/`circular_count` from `imports://`.
 `architecture.entrypoints` lists every fan-in-0 file; the text view shows only
@@ -91,7 +91,7 @@ skips that optional section; operational dependency, I/O and repository-open
 failures remain attributed diagnostics. `no_git=true` skips discovery and history.
 Optional Stats churn warnings reach the overview Caveats section once.
 
-Quality counts file-local check rules only, the same count `stats://` and `hotspots` print
+Quality counts file-local check rules only, the same count `metrics://` and `hotspots` print
 (`stats.files[].quality.local_check_issues`); `meta.issue_count` and the text footer name the
 rule set, and cross-file rules run under `reveal check`. A cross-file scan cap therefore
 neither changes a score nor fails the overview
@@ -154,6 +154,6 @@ their own failure outcome.
 ## See Also
 
 - `reveal help://schemas/overview` - JSON schema
-- `reveal 'stats://<dir>?hotspots=true'` - the quality/hotspot data behind this dashboard
+- `reveal 'metrics://<dir>?hotspots=true'` - the quality/hotspot data behind this dashboard
 - `reveal 'imports://<dir>'` - the fan-in/fan-out/component data behind `architecture`
 - `reveal architecture <dir>` - a deeper, standalone architectural brief
