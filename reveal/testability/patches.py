@@ -10,7 +10,8 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Callable, Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from ..utils.path_utils import _walk_code_files, in_test_scope, is_test_basename_for_language, to_posix, failure_of
+from ..utils.path_utils import (_display_name_for_language, _walk_code_files, failure_of, in_test_scope,
+                                is_test_basename_for_language, tally_files_by_language, to_posix)
 from ..utils.pyparse import parse_python
 from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root
 from ..core.treesitter_parse import GrammarUnavailable, get_tree
@@ -61,6 +62,25 @@ class PatchUses(List[PatchUse]):
         self.traversal_failures: List[PathFailure] = []
         self.recovered_files: List[str] = []
         self.files_scanned = 0  # test files the scan opened: the denominator of 'no patches here'
+        self.unscanned_languages: Dict[str, int] = {}  # test files in a language the scan does not read, by language (BACK-2224)
+
+    def unscanned_to_report(self) -> Dict[str, int]:
+        """The unread test files a result with scanned files must disclose: those of languages the scan does not
+        read, once they outnumber the files it did read (the census rule of ``LanguageCoverage.should_warn``: warn
+        when the result no longer represents the suite). A lone shell script beside 184 Python tests is not.
+        Threshold-free on purpose; ``unscanned_languages`` keeps the full tally for a decline."""
+        if sum(self.unscanned_languages.values()) > self.files_scanned:
+            return dict(sorted(self.unscanned_languages.items()))
+        return {}
+
+    def test_scope(self, rule: str) -> Dict[str, Any]:
+        """The ``test_scope`` block both answers carry: the rule, the files read, and (only when disclosed) the
+        test files left unread for want of a scanner, by language."""
+        scope: Dict[str, Any] = {'rule': rule, 'files_scanned': self.files_scanned}
+        unscanned = self.unscanned_to_report()
+        if unscanned:
+            scope['unscanned'] = unscanned
+        return scope
 
     def record_traversal_failure(self, error: OSError) -> None:
         """Retain directory evidence separately from files that failed analysis."""
@@ -119,6 +139,7 @@ def iter_test_files(
     *,
     on_error: Optional[Callable[[OSError], None]] = None,
     by_test_path: bool = False,
+    unscanned: Optional[Dict[str, int]] = None,
 ) -> List[Path]:
     """Return test files under the given paths, dispatching by extension.
 
@@ -127,20 +148,62 @@ def iter_test_files(
     *by_test_path* is the discovered scope: a directory is walked and a file kept only when
     :func:`in_test_scope` calls it a test. Without it the paths are trusted as the test suite
     (an explicit ``tests=``), and every Python file under them is scanned.
+
+    *unscanned*, filled only in the discovered scope, is the other half of the question: the test files in a
+    code language the scan does not read (Go, Java, Rust, ...), counted by display name. A zero from the scan
+    means 'none' only when this is empty too (BACK-2224).
     """
     files: List[Path] = []
+    skipped: List[Path] = []
     for raw in paths:
         path = Path(raw).expanduser()
         if path.is_file():
             if _file_matches(path, extensions):
                 files.append(path)
+            elif by_test_path:
+                skipped.append(path)
         elif path.is_dir():
             walked = _walk_code_files(path, on_error=on_error)  # the shared walker (BACK-1577)
             if by_test_path:
-                files.extend(fp for fp in walked if _file_scannable(fp, extensions) and in_test_scope(fp, path))
+                for fp in walked:
+                    if not in_test_scope(fp, path):
+                        continue
+                    (files if _file_scannable(fp, extensions) else skipped).append(fp)
             else:
                 files.extend(fp for fp in walked if _file_matches(fp, extensions))
+    if unscanned is not None:
+        for lang, entry in tally_files_by_language(skipped).items():
+            name = _display_name_for_language(lang)
+            unscanned[name] = unscanned.get(name, 0) + entry['count']
     return sorted(set(files))
+
+
+def _languages_phrase(unscanned: Dict[str, int]) -> str:
+    """'2 Go' or '14 Java, 3 Kotlin' (most files first)."""
+    return ', '.join(f'{n:,} {lang}' for lang, n in sorted(unscanned.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def no_scannable_tests_reason(subject: str, unscanned: Dict[str, int]) -> str:
+    """Why a tree with no Python or JavaScript/TypeScript test file is declined, for ``patches://`` and
+    ``testability://`` alike (BACK-2224). With *unscanned* it says the tests exist but are not read: a 0 from
+    a language the scan never opens is 'not scanned', not 'none'."""
+    if unscanned:
+        return (f"patch pressure is not scanned for {subject}: its test files are {_languages_phrase(unscanned)}, and the "
+                'patch scan reads Python and JavaScript/TypeScript tests only, so no count would mean nothing')
+    return (f"no test files found under {subject} (the shared is_test_path rule: test directories such as tests/, test/, "
+            "spec/, t/, and test_*, *_test, *.spec.* names) — pass --tests <path> (URI: tests=<path>)")
+
+
+def language_not_scanned_warning(unscanned: Dict[str, int]) -> Optional[Dict[str, Any]]:
+    """The disclosure for a scan that read some tests and skipped others by language, or None."""
+    if not unscanned:
+        return None
+    return {
+        'code': 'language_not_scanned',
+        'message': (f'{_languages_phrase(unscanned)} test file(s) not scanned: the patch scan reads Python and '
+                    'JavaScript/TypeScript tests only, so the totals cover the scanned languages and say nothing about these.'),
+        'languages': dict(sorted(unscanned.items())),
+    }
 
 
 def _file_scannable(path: Path, extensions: Optional[Sequence[str]]) -> bool:
@@ -168,7 +231,8 @@ def _file_matches(path: Path, extensions: Optional[Sequence[str]]) -> bool:
 def scan_patches(paths: Sequence[str | Path], *, by_test_path: bool = False) -> PatchUses:
     """Scan Python and TypeScript test files for patch-like calls (*by_test_path*: see ``iter_test_files``)."""
     uses = PatchUses()
-    for file_path in iter_test_files(paths, on_error=uses.record_traversal_failure, by_test_path=by_test_path):
+    for file_path in iter_test_files(paths, on_error=uses.record_traversal_failure, by_test_path=by_test_path,
+                                     unscanned=uses.unscanned_languages if by_test_path else None):
         uses.files_scanned += 1
         if file_path.suffix == '.py':
             uses.merge(_scan_file(file_path))

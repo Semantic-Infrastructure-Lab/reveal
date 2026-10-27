@@ -79,6 +79,19 @@ def test_a_mixed_tree_scans_the_python_and_discloses_the_go(tmp_path):
     assert 'not scanned' in text.stdout + text.stderr
 
 
+def test_a_stray_script_beside_a_scanned_suite_is_not_disclosed(tmp_path):
+    """The census rule (LanguageCoverage.should_warn): disclose once unread test files outnumber the read ones.
+    python-celery's one test_cluster.sh among 184 Python tests keeps its answer byte-identical."""
+    root = tmp_path / 'pyproj'
+    for name in ('test_a.py', 'test_b.py', 'test_c.py'):
+        _w(root / 'tests' / name, PATCH)
+    _w(root / 'tests' / 'test_cluster.sh', 'echo ok\n')
+    proc, doc = _json(f'patches://{root}')
+    assert proc.returncode == 0 and doc['total_uses'] == 3
+    assert doc['test_scope'] == {'rule': 'is_test_path', 'files_scanned': 3}
+    assert not [w for w in doc['meta']['warnings'] if w.get('code') == 'language_not_scanned']
+
+
 def test_a_scanned_js_suite_with_no_mocks_is_a_real_zero(tmp_path):
     root = tmp_path / 'jsproj'
     _w(root / 'tests' / 'a.test.js', "test('x', () => { expect(1).toBe(1); });\n")

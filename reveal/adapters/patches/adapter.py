@@ -7,7 +7,8 @@ from typing import Any, Dict, List, Optional
 
 from reveal.adapters.base import ResourceAdapter, register_adapter, register_renderer
 from reveal.reveal_types import CONTRACT_VERSION
-from reveal.testability.patches import group_patches, scan_patches
+from reveal.testability.patches import (group_patches, language_not_scanned_warning, no_scannable_tests_reason,
+                                        scan_patches)
 from reveal.utils.path_utils import to_posix
 from reveal.utils.query_binding import bind_declared_params, boolean_value
 from reveal.utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema,
@@ -16,6 +17,7 @@ from reveal.utils.results import AnalysisCompleteness, ResultBuilder, note_trunc
 from reveal.utils.validation import require_path_exists
 
 from ...rendering.adapters.patches import PatchesRenderer
+from ...errors import NotApplicableError
 from ..testability import TestabilityAdapter, _report_error, testability_report
 
 
@@ -141,6 +143,7 @@ class PatchesAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Supports Python (unittest.mock/pytest) and TypeScript/JavaScript (Jest/Vitest).',
+                'A tree whose test files are all in another language (Go, Java, Rust, ...) is declined as not applicable (exit 0), naming the language: 0 uses there would mean not scanned, not none. A scanned JS/TS suite with no mock calls is a real 0.',
                 'Patch pressure is advisory. Mocking external boundaries can be normal and correct.',
                 'Use reveal testability <src> --tests <tests> to join patch pressure with production boundary fan-out.',
             ],
@@ -195,6 +198,7 @@ class PatchesAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Scans the test files under <path> by the shared is_test_path rule, judged from the path\'s own name down (patches://tests scans all of tests/); `test_scope` names the rule and the file count.',
+                'Mixed trees: the Python and JS/TS tests are scanned; when the test files in other languages outnumber them, `test_scope.unscanned` (language -> files) and a `language_not_scanned` warning say so.',
                 'Uses Python AST parsing for .py files, tree-sitter for .ts/.tsx/.js/.jsx files.',
                 'TypeScript: recognises jest.mock, vi.mock, jest.spyOn, vi.spyOn, jest.fn, vi.fn, jest.replaceProperty.',
                 'Dynamic patch targets are retained with lower confidence.',
@@ -213,6 +217,10 @@ class PatchesAdapter(ResourceAdapter):
         # The path is the root; the test files under it are chosen by the shared is_test_path rule, judged from
         # the root's own name down, so patches://tests scans all of tests/ and a repository root only its tests (BACK-1888).
         patches = scan_patches([self.path], by_test_path=True)
+        # A tree with no test file the scan reads has no answer: 0 uses would mean 'not scanned', not 'none'
+        # (BACK-2224). The same decision testability makes. A walk that lost directories is reported below instead.
+        if not patches.files_scanned and not patches.traversal_failures:
+            raise NotApplicableError(no_scannable_tests_reason(self.path, patches.unscanned_languages))
         # BACK-1211: query_parser.coerce_value() turns a literal '0'/'1'
         # value into bool regardless of field type -- str(True/False) would
         # silently corrupt group_by/target_filter if either were ever
@@ -244,6 +252,9 @@ class PatchesAdapter(ResourceAdapter):
         }]
         from ..ast.analysis import analysis_skipped_warning, parse_recovered_warning, traversal_failed_warning
 
+        unscanned = language_not_scanned_warning(patches.unscanned_to_report())
+        if unscanned:
+            warnings.append(unscanned)
         traversal = traversal_failed_warning(patches.traversal_failures)
         if traversal:
             warnings.append(traversal)
@@ -274,7 +285,7 @@ class PatchesAdapter(ResourceAdapter):
                     'private': private_only,
                     'suppress': suppress,
                 },
-                'test_scope': {'rule': 'is_test_path', 'files_scanned': patches.files_scanned},
+                'test_scope': patches.test_scope('is_test_path'),
                 'total_uses': len(patches),
                 'total_targets': len(targets),
                 'displayed_groups': len(groups),

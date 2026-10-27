@@ -255,6 +255,7 @@ class TestabilityAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Patch-pressure detection supports Python and recognized JavaScript/TypeScript test files.',
+                'A tree whose discovered test files are all in another language is declined as not applicable (the decision patches:// shares), naming the language.',
             ],
         }
 
@@ -265,7 +266,7 @@ class TestabilityAdapter(ResourceAdapter):
 def testability_report(resource: str, query_params: Any, verbose: bool = False) -> Dict[str, Any]:
     """The report both ``testability://`` and ``patches://?view=pressure`` answer (BACK-2160): one owner, read from
     the declared parameters of whichever adapter was asked."""
-    from reveal.testability.patches import iter_test_files
+    from reveal.testability.patches import iter_test_files, no_scannable_tests_reason
     from reveal.testability.report import build_testability_report
     from reveal.utils.path_utils import as_spelled, detect_non_python_language
 
@@ -281,11 +282,10 @@ def testability_report(resource: str, query_params: Any, verbose: bool = False) 
     test_paths = _resolve_test_paths(path, tests)
     if tests and not test_paths:
         raise NotApplicableError(f"none of the tests= paths exist for {path}: {', '.join(tests)}")
-    if by_test_path and not iter_test_files(test_paths, by_test_path=True):
-        raise NotApplicableError(
-            f"no test files found under {path} (the shared is_test_path rule: test directories such as tests/, test/, "
-            "spec/, t/, and test_*, *_test, *.spec.* names) — pass --tests <path> (URI: tests=<path>)"
-        )
+    if by_test_path:
+        unscanned: Dict[str, int] = {}
+        if not iter_test_files(test_paths, by_test_path=True, unscanned=unscanned):
+            raise NotApplicableError(no_scannable_tests_reason(str(path), unscanned))  # one decision with patches:// (BACK-2224)
 
     report = build_testability_report(
         str(path),

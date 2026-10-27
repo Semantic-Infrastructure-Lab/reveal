@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Sequence
 from .boundaries import BoundaryProfile, collect_boundary_profiles, module_name_from_file, profile_score
 from ..reveal_types import CONTRACT_VERSION
 from ..utils.results import note_truncation
-from .patches import PatchGroup, PatchUse, group_patches, scan_patches
+from .patches import PatchGroup, PatchUse, group_patches, language_not_scanned_warning, scan_patches
 
 
 def _count(value: Any) -> bool:
@@ -118,6 +118,9 @@ def build_testability_report(
         patches.skipped, None, 'their patch uses are missing from the report')
     if failed_patches:
         warnings.append(failed_patches)
+    unscanned = language_not_scanned_warning(patches.unscanned_to_report())
+    if unscanned:
+        warnings.append(unscanned)
     for files, consequence in (
         (patches.recovered_files, 'Patch uses may be incomplete.'),
         (profiles.recovered_files, 'Boundary profiles may be incomplete.'),
@@ -142,7 +145,7 @@ def build_testability_report(
         'tests': [str(Path(p)) for p in test_paths],
         # The rule that chose the test files, and how many it found: two answers about one suite
         # 1000x apart were once indistinguishable (BACK-1888).
-        'test_scope': {'rule': 'is_test_path' if by_test_path else 'tests=', 'files_scanned': patches.files_scanned},
+        'test_scope': patches.test_scope('is_test_path' if by_test_path else 'tests='),
         'summary': {
             'total_patch_uses': len(patches),
             'total_boundary_profiles': len(profiles),
