@@ -264,7 +264,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
 
 _SCHEMA_NOTES = [
     'quality_score is 0-100: 100 = no issues; weighted by severity (error/warning/info)',
-    'Complexity is heuristic-based (average functions per 100 lines) — not cyclomatic complexity',
+    'Complexity is cyclomatic, from the tree-sitter AST: 1 plus one per decision node (if/elif, loops, except/catch arms, case arms, and/or, ternaries); languages without a tree-sitter complexity fall back to a text heuristic',
     'hotspots=true adds a ranked list of files most in need of refactoring',
     'tests=exclude leaves test files (is_test_path) out of the hotspots=true ranking only and reports test_scope.files_excluded; the default (include) ranks them, as overview://\'s own default (exclude) does not',
     'quality.local_check_issues counts the findings of file-local check rules only, so a file has one count whatever else is in the tree; meta.issue_count names the rule and the rule set. Cross-file rules (import cycles, duplicate literals, ...) run under reveal check.',

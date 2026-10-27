@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, cast
 
+from ...utils.path_utils import resolve_project_root
 from ...utils.query import compare_values
 from .issue_count import DEPRECATED_FIELDS
 
@@ -97,10 +98,12 @@ def _apply_yaml_config_file(config_path: Path, config: Dict[str, Any]) -> bool:
 def get_quality_config(path: Path) -> Dict[str, Any]:
     """Load quality scoring configuration.
 
-    Config search order:
-    1. ./.reveal/stats-quality.yaml (project)
-    2. ~/.config/reveal/stats-quality.yaml (user)
-    3. Hardcoded QUALITY_DEFAULTS (fallback)
+    Config search order, the first file found wins and files are not merged:
+    1. .reveal/stats-quality.yaml in the scanned directory (a file's own directory for a file),
+       then in each parent up to the project root, so ``metrics://src`` scores like
+       ``metrics://.`` (BACK-2238); the nearest file wins
+    3. ~/.config/reveal/stats-quality.yaml (user)
+    4. Hardcoded QUALITY_DEFAULTS (fallback)
 
     Args:
         path: Base path for config search
@@ -110,10 +113,14 @@ def get_quality_config(path: Path) -> Dict[str, Any]:
     """
     config = copy.deepcopy(QUALITY_DEFAULTS)
 
-    config_paths = [
-        path / '.reveal' / 'stats-quality.yaml' if path.is_dir() else path.parent / '.reveal' / 'stats-quality.yaml',
-        Path.home() / '.config' / 'reveal' / 'stats-quality.yaml',
-    ]
+    scanned = path if path.is_dir() else path.parent
+    project_root = resolve_project_root(scanned)
+    config_paths = []
+    for directory in (scanned, *scanned.parents):
+        config_paths.append(directory / '.reveal' / 'stats-quality.yaml')
+        if project_root is None or directory == project_root:
+            break
+    config_paths.append(Path.home() / '.config' / 'reveal' / 'stats-quality.yaml')
 
     import yaml
     for config_path in config_paths:

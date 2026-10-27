@@ -1334,7 +1334,7 @@ reveal metrics://./src/core
 
 The metrics adapter supports **custom quality thresholds** via `.reveal/stats-quality.yaml`:
 
-**Location**: `<scanned directory>/.reveal/stats-quality.yaml` (for a file, its directory), else `~/.config/reveal/stats-quality.yaml`. It is not searched upward: `reveal metrics://./src` reads `./src/.reveal/stats-quality.yaml`, not `./.reveal/stats-quality.yaml`.
+**Location**: `.reveal/stats-quality.yaml` in the scanned directory (for a file, its directory), else in each parent up to the project root, else `~/.config/reveal/stats-quality.yaml`. The nearest file wins and files are not merged, so `reveal metrics://./src` and `reveal metrics://.` read the same project-root config unless `./src/.reveal/` has its own.
 
 **Default config** (if file doesn't exist):
 ```yaml
@@ -1409,7 +1409,7 @@ penalties:
 
 ### Using Config
 
-Config is **automatically loaded** from the scanned directory's `.reveal/stats-quality.yaml` if present:
+Config is **automatically loaded** from the nearest `.reveal/stats-quality.yaml` (scanned directory, then up to the project root) if present:
 
 ```bash
 # Uses custom config if exists, otherwise defaults
@@ -1826,7 +1826,7 @@ Both retired spellings still answer exactly as before, with one
 
 ### Q1: How accurate is the complexity calculation?
 
-**A**: Cyclomatic complexity is **estimated** using decision point counting (if/for/while/and/or/try/except). It's heuristic-based and may differ slightly from tools like `mccabe` or `radon` that do full AST traversal. However, it's accurate enough for **comparative analysis** (finding highest complexity, tracking trends).
+**A**: It is cyclomatic complexity, computed from the tree-sitter AST like `mccabe` or `radon` do for Python: 1 plus one per decision node (`if`/`elif`, loops, `except`/`catch` arms, `case`/match arms, `and`/`or`, ternaries); `else` and `try` add nothing. Languages without a tree-sitter complexity fall back to a text heuristic, which may differ slightly. Use it for **comparative analysis** (finding the highest complexity, tracking trends).
 
 ### Q2: What quality score should I target?
 
@@ -1914,7 +1914,7 @@ See [Workflow 2: CI/CD Quality Gate](#workflow-2-cicd-quality-gate) for examples
 
 ### Q9: How do I customize quality thresholds?
 
-**A**: Create `.reveal/stats-quality.yaml` in the directory you scan (`./src/.reveal/` for `metrics://./src`):
+**A**: Create `.reveal/stats-quality.yaml` at the project root (a nearer `./src/.reveal/` overrides it for scans of `./src`):
 ```yaml
 thresholds:
   complexity_target: 15    # Custom target
