@@ -16,6 +16,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
+### Behavior changes
+
+- `.reveal.yaml` `overrides.files`: `*`, `?` and `[...]` no longer match `/`, as the guide always said. `src/*.py` covers `src/b.py` but not `src/a/b.py`, `*.py` covers the project root only, and `**/test_*.py` no longer reaches files inside a `test_x/` directory; before, they matched at any depth. Write `**/*.py` or `src/**/*.py` to keep the old reach. `ignore:` (`.gitignore` rules) is unchanged (BACK-2274).
+
 ## [0.132.0] - 2026-10-26
 
 This release is larger than usual: 1,198 commits since 0.131.0. Every old spelling still works. It prints a "replaced by" note and carries a `retired_spelling` warning in JSON and MCP output, and becomes an error at a later release. Read **Behavior changes** first: it lists what can break a script.

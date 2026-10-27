@@ -516,11 +516,16 @@ overrides:
 
 ```yaml
 overrides:
-  - files: "*.py"          # All Python files
-  - files: "src/**/*.py"   # Python files in src/
+  - files: "*.py"          # Python files at the project root only
+  - files: "**/*.py"       # All Python files
+  - files: "src/*.py"      # Python files directly in src/ (not src/a/b.py)
+  - files: "src/**/*.py"   # Python files anywhere under src/
   - files: "**/test_*.py"  # Test files by naming convention, at any depth
   - files: "**/__init__.py" # All __init__.py files
 ```
+
+A pattern is matched against the whole path relative to the project root. `*`, `?` and `[...]`
+never match `/`; only a whole `**` segment spans directories (`a/**/b`, `**/b`, `a/**`).
 
 ---
 
@@ -766,10 +771,9 @@ in the active config) but is not listed as a source.
 **Problem:** `ignore` or `overrides` pattern not matching files
 
 **Common issues:**
-- Overrides anchor at the project root: write `**/name.py` to match at any depth. In
-  `overrides.files` a pattern without `**` is matched with `fnmatch`, where `*` also crosses
-  `/` (`src/*.py` matches `src/a/b.py`). (`ignore:` uses `.gitignore` rules instead, where a bare
-  name matches at any depth and `*` does not cross `/`.)
+- Overrides anchor at the project root: write `**/name.py` to match at any depth. `*` does
+  not cross `/` (`src/*.py` matches `src/b.py`, not `src/a/b.py`; use `src/**/*.py` for both).
+  (`ignore:` uses `.gitignore` rules instead, where a bare name matches at any depth.)
 - Absolute vs relative paths: Patterns match relative to project root
 - Case sensitivity: Patterns are case-sensitive on Linux/macOS
 
