@@ -627,6 +627,11 @@
               "total_functions": 3,
               "total_lines": 13
             },
+            "test_scope": {
+              "files_excluded": 0,
+              "rule": "is_test_path",
+              "tests": "exclude"
+            },
             "type": "stats_summary"
           },
           "type": "overview"
