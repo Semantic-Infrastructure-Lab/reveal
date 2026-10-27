@@ -20,7 +20,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **json://** | `schema`, `flatten`, `gron`, `type`, `keys`, `length`, field filters, `sort`, `limit`, `offset` | `json://data.json?type=object` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
 | **metrics://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `exclude`, `sort`, `limit`, `offset` | `metrics://.?hotspots` |
-| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `has_decorator`, `show`, `sort`, `limit`, `offset`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` (retired, with a note: `calls`, `callee_of`, `show=calls`) | `ast://src?complexity>10` |
+| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `show`, `sort`, `limit`, `offset`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` (retired, with a note: `calls`, `callee_of`, `show=calls`) | `ast://src?complexity>10` |
 | **calls://** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `uncalled`, `target`, `root`) | `calls://src?callers=fn` |
 | **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
 | **codex://** | `search`, `filter`, `since`, `until` | `codex://sessions/?search=auth-refactor` |
