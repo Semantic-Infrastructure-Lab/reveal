@@ -107,7 +107,7 @@ reveal 'ast://./src'
 ```
 
 **Output includes:**
-- Function/class/method names
+- Function/class/method names, plus import rows (and structs, interfaces and the like where the language has them)
 - Line numbers
 - Line counts
 - Complexity metrics
@@ -173,8 +173,11 @@ reveal 'ast://./src?name~=.*Manager$'      # Regex: ends with Manager
 Filter by code element type:
 
 ```bash
-# Only functions (not classes or methods)
+# Functions, methods included (not classes)
 reveal 'ast://./src?type=function'
+
+# Only methods (functions that belong to a class, struct or impl)
+reveal 'ast://./src?type=method'
 
 # Only classes
 reveal 'ast://./src?type=class'
@@ -188,9 +191,12 @@ reveal 'ast://./src?type!=function'
 ```
 
 **Valid types:**
-- `function` - Top-level functions
+- `function` - Every function, methods included (a method is reported with `category: "functions"`)
+- `method` - Only functions with an owner (the `owner` field names their class, struct or impl)
 - `class` - Class definitions
-- `method` - Class methods
+- `struct`, `interface` (`trait` is an alias), `module`, `namespace` - Where the language has them
+- `import` - Import statements
+- `test` - Test blocks (languages whose analyzer reports them)
 
 ### 6. **Decorator Filtering**
 
@@ -254,12 +260,12 @@ Complete reference of all supported query parameters:
 |-----------|------|-------------|----------|
 | `lines` | integer | Number of lines in function/class | `lines>50`, `lines=10..100` |
 | `complexity` | integer | McCabe cyclomatic complexity (>10 needs refactoring, >20 high risk) | `complexity>10`, `complexity<5` |
-| `type` | string | Element type: `function`, `class`, `method`. Supports OR with `\|` or `,` | `type=function`, `type=class\|function` |
+| `type` | string | Element type: `function` (methods included), `method` (only functions with an owner), `class`, `struct`, `import`, `interface`, `module`, `namespace`, `test`. Supports OR with `\|` or `,` | `type=function`, `type=method`, `type=class\|function` |
 | `name` | string | Element name with wildcards (`*` = any chars, `?` = one char) or regex | `name=test_*`, `name~=^test_` |
 | `decorator` | string | Decorator, annotation or attribute name (bracket attributes match by name, qualified names by trailing segments), with wildcards or regex | `decorator=property`, `decorator=HttpGet`, `decorator=*cache*` |
 | `calls` | string | Retired (prints a replaced-by note): use `calls://<path>?callers=NAME`, or `--grep 'PATTERN'` for a pattern | `calls=validate_item` |
 | `callee_of` | string | Retired (prints a replaced-by note): use `calls://<path>?callees=NAME` | `callee_of=main` |
-| `callers` | integer | Number of inbound callers within the scanned files (length of `called_by`). High values find high-coupling functions | `callers>5`, `callers>3&complexity>10`, `callers==0` |
+| `callers` | integer | Number of inbound callers in the same file (length of `called_by`). For project-wide counts use `calls://<path>?callers=NAME`. High values find high-coupling functions | `callers>5`, `callers>3&complexity>10`, `callers==0` |
 | `param_type` | string | Find functions where any parameter has a given type annotation (parses the signature string; glob supported; bare type name matches generics too) | `param_type=dict`, `param_type=Dict*`, `param_type=Optional*` |
 | `return_type` | string | Find functions with a given return type annotation (parses the `-> TYPE` suffix; glob supported) | `return_type=bool`, `return_type=List*` |
 | `has_annotations` | boolean | Filter by presence of type annotations — `has_annotations=false` finds fully unannotated functions | `has_annotations=false`, `has_annotations=true` |
@@ -333,15 +339,27 @@ Human-readable output with color coding:
 reveal 'ast://./src?complexity>10'
 ```
 
-**Output:**
+**Output** (run against reveal's own `adapters/ast`):
 ```
-src/auth.py:
-  authenticate (line 45, 67 lines, complexity 15)
-  validate_token (line 120, 89 lines, complexity 12)
+AST Query: ./adapters/ast
+Filter: complexity>10
+Files scanned: 51
+Results: 104
 
-src/api.py:
-  process_request (line 78, 134 lines, complexity 18)
+File: adapters/ast/analysis.py
+  : 234  create_element_dict [65 lines, complexity: 14]
+           calls:     item.get, cast, _add_function_metrics
+           called by: _flatten_structure
+  : 400  call_sources [20 lines, complexity: 20]
+           calls:     file_struct.get, elem.get, dict.fromkeys, _owner_call_lines, _class_field_sources, s.get
+...
+
+  ⚠ complexity is McCabe cyclomatic complexity (a count of decision points), not weighted by nesting depth -- ...
 ```
+
+Results are grouped under a `File:` line; each row is `:LINE  name [N lines, complexity: C]`,
+followed by `calls:` and `called by:` lines when the function has them (a call resolved to
+another file shows as `name (→ file.py::name)`).
 
 ### 2. JSON Format
 
@@ -360,6 +378,7 @@ reveal 'ast://./src?complexity>10' --format=json
   "source_type": "directory",
   "path": "./src",
   "query": "complexity>10",
+  "show_mode": null,
   "total_files": 15,
   "total_results": 8,
   "displayed_results": 8,
@@ -370,13 +389,24 @@ reveal 'ast://./src?complexity>10' --format=json
       "name": "authenticate",
       "line": 45,
       "line_count": 67,
+      "signature": "(self, token: str) -> bool",
+      "decorators": [],
+      "bases": [],
+      "owner": "AuthService",
       "complexity": 15,
-      "decorators": []
+      "depth": 3,
+      "calls": ["decode", "self.lookup"],
+      "called_by": ["login"],
+      "provenance": null
     }
   ],
   "meta": {
     "parse_mode": "tree_sitter_full",
-    "confidence": 1.0
+    "confidence": 1.0,
+    "warnings": [
+      {"type": "complexity_is_unweighted", "message": "complexity is McCabe cyclomatic complexity ..."}
+    ],
+    "errors": []
   }
 }
 ```
@@ -388,11 +418,12 @@ reveal 'ast://./src?complexity>10' --format=json
 - `total_files`: Number of files scanned
 - `total_results`: Number of matches before limit/offset
 - `displayed_results`: Number of results in output
-- `results`: Array of matched code elements — each has `name` (not `symbol`), `category` (not `type`; values `functions`/`classes`/`methods`), and `line_count` (not `lines`)
+- `results`: Array of matched code elements — each has `name` (not `symbol`), `category` (not `type`; the plural of the element kind: `functions`, `classes`, `imports`, `structs`, `interfaces`, `modules`, `namespaces`, `tests`; methods are `functions` with an `owner`), and `line_count` (not `lines`). Functions also carry `signature`, `depth`, `calls`, `called_by` and, when a call resolves to another file, `resolved_calls`; classes carry `bases`. Import rows have no `complexity`.
 - `meta`: Trust metadata (parse mode, confidence) and `warnings`. When `results` holds fewer
   than `total_results` (`?limit=`, `?offset=`, the 200-result cap on an unfiltered query,
   `--max-items`, `--head`), one warning says so: `{"type": "truncated", "field": "results",
-  "shown", "total", "cause", "message"}`. Text output prints the same message last.
+  "shown", "total", "exact", "cause", "message"}`. Text output prints the same message last.
+  Whenever complexity is shown, a `complexity_is_unweighted` warning is there too.
 
 ### 3. Grep Format
 
@@ -816,9 +847,12 @@ AST queries require parsing source code, so they're slower than text search but 
 
 3. **Cache results**: For repeated queries, save JSON output
    ```bash
-   reveal 'ast://./src' --format=json > structure_cache.json
+   reveal 'ast://./src?type=function&limit=100000' --format=json > structure_cache.json
    jq '.results[] | select(.complexity > 10)' structure_cache.json
    ```
+
+An unfiltered `ast://` query is capped at 200 results (`meta.warnings` entry with
+`cause: auto_cap`); pass `limit=` (or a filter) whenever the output feeds a script or export.
 
 ### Large Codebase Strategies
 
@@ -854,8 +888,8 @@ git diff --name-only origin/main | grep '\.py$' | \
 For very large codebases, consider pre-computing structure:
 
 ```bash
-# Generate structure cache (run nightly)
-reveal 'ast://./src' --format=json > structure_cache.json
+# Generate structure cache (run nightly); limit= lifts the 200-result cap
+reveal 'ast://./src?type=function&limit=100000' --format=json > structure_cache.json
 
 # Query cache with jq (instant)
 jq '.results[] | select(.complexity > 10)' structure_cache.json
@@ -874,8 +908,9 @@ jq '.results[] | select(.line_count > 100)' structure_cache.json
 
 AST queries operate on individual code elements, not relationships between files:
 
-❌ "Find all callers of function X"
-❌ "Find all classes that inherit from Y"
+❌ Find all callers of X with an `ast://` filter — ✅ use `calls://<path>?callers=X`
+✅ Find all classes that inherit from Y: filter `bases` in JSON,
+`jq '.results[] | select(.bases | index("Y"))'`
 ✅ Use `imports://` adapter for dependency analysis
 
 **2. Runtime behavior**
@@ -883,8 +918,7 @@ AST queries operate on individual code elements, not relationships between files
 AST is static analysis only:
 
 ❌ "Find functions that throw exceptions"
-❌ "Find functions that call external APIs"
-✅ Use dynamic analysis or runtime inspection
+✅ `reveal file.py fn --sideeffects` lists a function's db/http/cache/log/file calls
 
 **3. Comment/docstring content**
 
@@ -921,7 +955,7 @@ AST can't understand code meaning:
 reveal --languages
 ```
 
-**Decorator matching**: Python-specific. Other languages may not support decorator filtering.
+**Decorator matching**: Python decorators, Java/Kotlin annotations, C# attributes, PHP `#[...]` and Rust `#[...]` attributes all match by bare name (see Decorator Filtering above).
 
 ---
 
@@ -929,19 +963,21 @@ reveal --languages
 
 ### Common errors and solutions:
 
-**Note**: The current adapter fails soft rather than raising hard errors — an unsupported operator, a nonexistent path, or a malformed query (e.g. `lines>>50`) all just produce a `Files scanned: 0` / `No matches found` result instead of an error message. If a query returns nothing, double-check the path and operator syntax below rather than expecting an exception.
+**Note**: A nonexistent path is an error (`Error (ast://): Path not found: <path>`, exit 1; in JSON an `error` field and no `results`). An unsupported operator or malformed filter (`lines>>50`, `name>5`) fails soft: the files are scanned and the result is `Results: 0` / `No matches found.`, exit 0. If a query returns nothing, double-check the operator syntax below rather than expecting an error.
 
-**1. No matches (bad operator, bad path, or malformed query)**
+**1. No matches (bad operator or malformed query)**
 
 ```
-Files scanned: 0
+AST Query: ./src
+Filter: lines>>50
+Files scanned: 51
 Results: 0
 
 No matches found.
 ```
 
-**Cause**: Any of: unsupported operator for the parameter type, a path that doesn't exist, or a malformed query string (e.g. `lines>>50`).
-**Solution**: Check the [Operators](#operators) table for valid operators per parameter type, verify the path with `ls`, and use single operators (`lines>50`, not `lines>>50`).
+**Cause**: An unsupported operator for the parameter type, or a malformed query string (e.g. `lines>>50`).
+**Solution**: Check the [Operators](#operators) table for valid operators per parameter type, and use single operators (`lines>50`, not `lines>>50`).
 
 **2. No results (query is valid, nothing matches)**
 
@@ -955,10 +991,12 @@ No matches found.
 **3. Tree-sitter parsing error**
 
 ```
-Warning: Failed to parse file.py (tree-sitter error)
+  ⚠ 1 file(s) contain syntax tree-sitter could not read; their elements may be incomplete or wrong: src/broken.py
 ```
 
-**Cause**: File contains syntax errors or unsupported language features.
+**Cause**: File contains syntax errors or unsupported language features. The file's elements
+are still listed but may be incomplete; JSON carries the same as a `meta.warnings` entry
+`{"type": "parse_recovered", "count", "files", "message"}`.
 **Solution**: Fix syntax errors or exclude file from query.
 
 ---
@@ -1026,7 +1064,7 @@ reveal 'ast://.?decorator=property&lines>10'
 **OR logic** (only for type parameter):
 
 ```bash
-# Classes OR functions (not methods)
+# Classes OR functions (methods are functions, so they are included)
 reveal 'ast://./src?type=class|function'
 ```
 
@@ -1036,7 +1074,7 @@ reveal 'ast://./src?type=class|function'
 # Everything except functions
 reveal 'ast://./src?type!=function'
 
-# All non-property decorators
+# Everything not decorated with @property (undecorated elements included)
 reveal 'ast://.?decorator!=property'
 ```
 
@@ -1068,12 +1106,11 @@ reveal 'ast://./src?type=function' --format=json | \
   jq -r '.results[].file' | sort | uniq -c | sort -rn
 
 # Find top 10 most complex functions
-reveal 'ast://./src' --format=json | \
-  jq -r '[.results[] | {name, file, complexity, line_count}] |
-         sort_by(.complexity) | reverse | .[0:10][]'
+reveal 'ast://./src?type=function&sort=-complexity&limit=10' --format=json | \
+  jq -r '.results[] | {name, file, complexity, line_count}'
 
-# Generate CSV report
-reveal 'ast://./src' --format=json | \
+# Generate CSV report (limit= lifts the 200-result cap)
+reveal 'ast://./src?type=function&limit=100000' --format=json | \
   jq -r '.results[] | [.file, .name, .complexity, .line_count] | @csv' \
   > code_metrics.csv
 ```
@@ -1100,7 +1137,7 @@ reveal 'ast://./src?complexity>20'
 
 **Bad: Query everything, filter later**
 ```bash
-# ❌ Slow: scans all files, returns everything
+# ❌ Slow: scans all files, returns everything (and only the first 200 rows)
 reveal 'ast://.' --format=json | jq '.results[] | select(.complexity > 10)'
 ```
 
@@ -1118,17 +1155,16 @@ reveal 'ast://.?complexity>10' --format=json
 
 ```bash
 # Top 10 most complex functions
-reveal 'ast://./src' --format=json | \
-  jq '[.results[] | {name, complexity}] |
-      sort_by(.complexity) | reverse | .[0:10]'
+reveal 'ast://./src?type=function&sort=-complexity&limit=10' --format=json | \
+  jq '[.results[] | {name, complexity}]'
 
 # Functions by file with complexity
 reveal 'ast://./src?complexity>10' --format=json | \
-  jq -r 'group_by(.file) |
+  jq -r '.results | group_by(.file) |
          .[] | "\(.[0].file): \(length) complex functions"'
 
-# Generate HTML report
-reveal 'ast://./src' --format=json | \
+# Generate HTML report (limit= lifts the 200-result cap)
+reveal 'ast://./src?type=function&limit=100000' --format=json | \
   jq -r '.results[] |
          "<tr><td>\(.name)</td><td>\(.complexity)</td></tr>"' \
   > report.html
@@ -1171,9 +1207,8 @@ code_quality:
   hooks:
     - id: complexity-check
       name: Check code complexity
-      entry: bash -c 'reveal "ast://." --format=json |
-                      jq -e ".total_results == 0 or
-                             all(.results[]; .complexity <= 15)"'
+      entry: bash -c 'reveal "ast://.?complexity>15" --format=json |
+                      jq -e ".total_results == 0"'
       language: system
       types: [python]
 ```
@@ -1207,9 +1242,9 @@ import subprocess
 import json
 import pandas as pd
 
-# Get all code structure
+# Get every function (limit= lifts the 200-result cap)
 result = subprocess.run(
-    ["reveal", "ast://./src", "--format=json"],
+    ["reveal", "ast://./src?type=function&limit=100000", "--format=json"],
     capture_output=True,
     text=True
 )
@@ -1219,15 +1254,15 @@ df = pd.DataFrame(data["results"])
 
 # Analyze
 print(df.describe())
-print(df.groupby("type")["complexity"].mean())
+print(df.groupby("category")["complexity"].mean())
 print(df.nlargest(10, "complexity"))
 ```
 
 ### With SQLite (code database)
 
 ```bash
-# Export to CSV
-reveal 'ast://./src' --format=json | \
+# Export to CSV (limit= lifts the 200-result cap)
+reveal 'ast://./src?limit=100000' --format=json | \
   jq -r '.results[] | [.file, .name, .category, .line, .line_count, .complexity] | @csv' \
   > code_structure.csv
 
@@ -1296,8 +1331,7 @@ sqlite3 code.db "SELECT file, symbol, complexity
 - `..` - Range operator
 
 **Known limitations:**
-- Decorator filtering is Python-specific
-- No cross-file analysis (use imports:// adapter)
+- Cross-file callers live in `calls://`; `ast://` call fields are per-file plus `resolved_calls`
 
 ---
 
@@ -1313,7 +1347,7 @@ A: AST queries parse all source files. Narrow your path (`ast://./src` instead o
 
 **Q: Can I query across multiple languages?**
 
-A: Yes! reveal supports every language `reveal --languages` lists. However, some features (decorator filtering) may be language-specific.
+A: Yes! reveal supports every language `reveal --languages` lists. However, some features may be language-specific.
 
 **Q: How accurate is complexity measurement?**
 
