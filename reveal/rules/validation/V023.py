@@ -217,13 +217,13 @@ class V023(BaseRule):
         detections.extend(self._check_hyphenated_type_values(method_body, file_path, line_num))
         return detections
 
-    def _check_required_contract_fields(self, method_body, method_name, file_path, line_num):
-        """Check that required contract fields appear in the method body."""
+    def _delegates_contract(self, method_body: str) -> bool:
+        """True when the method hands the envelope to a callee or builder that owns it."""
         # Dispatcher pattern: method delegates to sub-methods/functions that own the contract.
         # e.g. get_structure() returns self._get_ssl_structure() or files.get_file_history()
         # The fields live in those callees; checking the dispatcher is a false positive.
         if 'return self._get_' in method_body or 'return self._' in method_body:
-            return []
+            return True
 
         # Analyzer-subclass delegation: `structure = super().get_structure(...)` then
         # mutated/returned. Language analyzers (analyzers/*.py) that override get_structure()
@@ -235,35 +235,40 @@ class V023(BaseRule):
         # an inconsistency, not a real gap -- same "fields live in the callee" reasoning as
         # the dispatcher carve-out above.
         if 'super().get_structure(' in method_body:
-            return []
+            return True
         # Module-level delegation: all paths return via an imported helper (e.g. return files.get_X(...))
-        import re as _re
         # A bare imported builder (`return provenance_report(...)`) delegates like a
         # dotted one; a builtin constructor (`return dict(...)`) builds the payload
         # right here, so it does not. An `{'error': ...}` early return is not the
         # envelope, so it does not count as a direct dict return either.
         delegated_returns = [
-            m for m in _re.findall(r'\breturn ((?:\w+\.)*\w+)\(', method_body)
+            m for m in re.findall(r'\breturn ((?:\w+\.)*\w+)\(', method_body)
             if '.' in m or m not in _PAYLOAD_CONSTRUCTORS
         ]
-        direct_dict_returns = _re.findall(r'\breturn \{(?!\s*[\'"]error[\'"])', method_body)
+        direct_dict_returns = re.findall(r'\breturn \{(?!\s*[\'"]error[\'"])', method_body)
         if delegated_returns and not direct_dict_returns:
-            return []
+            return True
 
         # Assign-then-return delegation: result = helper.build_x(...); ...;
         # return result -- same "fields live in the callee" shape as the
         # direct `return helper.build_x(...)` case above, just with the
         # helper's dict bound to a local name first (optionally mutated with
         # an extra key, e.g. an informational note) before being returned.
-        assigned_from_call_names = _re.findall(r'\b(\w+)\s*=\s*\w+(?:\.\w+)?\(', method_body)
+        assigned_from_call_names = re.findall(r'\b(\w+)\s*=\s*\w+(?:\.\w+)?\(', method_body)
         if not direct_dict_returns and any(
-            _re.search(rf'\breturn {name}\b', method_body) for name in assigned_from_call_names
+            re.search(rf'\breturn {name}\b', method_body) for name in assigned_from_call_names
         ):
-            return []
+            return True
 
         # ResultBuilder pattern: fields are passed as kwargs, not dict literals.
         # ResultBuilder.create(contract_version=..., source=..., ...) satisfies the contract.
         if 'ResultBuilder.create(' in method_body:
+            return True
+        return False
+
+    def _check_required_contract_fields(self, method_body, method_name, file_path, line_num):
+        """Check that required contract fields appear in the method body."""
+        if self._delegates_contract(method_body):
             return []
 
         required_fields = ['contract_version', 'type', 'source', 'source_type']
@@ -273,7 +278,7 @@ class V023(BaseRule):
             # kwarg-style assignment: dict(...)/.update(field=value, ...) -- same
             # contract satisfaction as a 'field': value dict-literal key, just
             # passed positionally-as-keyword instead of quoted.
-            and not _re.search(rf'\b{f}\s*=(?!=)', method_body)
+            and not re.search(rf'\b{f}\s*=(?!=)', method_body)
         ]
         if not missing_fields:
             return []
