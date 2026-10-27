@@ -101,3 +101,12 @@ def test_unique_names_keep_the_sideeffects_text_byte_for_byte(unique):
 def test_unique_names_keep_the_boundary_effects_section(unique):
     out = _normalised(_run_reveal_direct(str(unique / 'top.py'), 'entry', '--boundary', '--transitive').stdout)
     assert UNIQUE_SIDEEFFECTS.replace('\n', '\n  ').join(['EFFECTS (--transitive, depth=2):\n  ', '']) in out
+
+
+def test_the_ambiguity_note_lists_three_candidates_and_counts_the_rest():
+    from reveal.adapters.ast.nav_effects import AmbiguousHop, ambiguous_hops_note
+
+    note = ambiguous_hops_note([AmbiguousHop('f', 'get', [(f'm{i}.py', i) for i in range(1, 8)])])
+    assert '7 candidates: m1.py:1, m2.py:2, m3.py:3 +4 more' in note
+    assert 'm4.py' not in note
+    assert ambiguous_hops_note([]) is None

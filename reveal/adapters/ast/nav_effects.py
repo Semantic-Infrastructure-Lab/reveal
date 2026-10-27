@@ -1999,10 +1999,15 @@ def ambiguous_hops_note(hops: Sequence[AmbiguousHop]) -> Optional[str]:
     stays ambiguous (the same decline calls:// makes); None if there are none."""
     if not hops:
         return None
-    shown = '; '.join(
-        f"{h.call} in {h.caller} -> {', '.join(f'{f}:{n}' for f, n in h.candidates)}" for h in hops)
+    shown = '; '.join(f'{h.call} in {h.caller} ({_candidates_phrase(h.candidates)})' for h in hops)
     return (f'{len(hops)} call(s) not followed, the name is ambiguous (several project definitions, '
             f'none named by this file or its imports): {shown}; effects behind them are not listed')
+
+
+def _candidates_phrase(candidates: Sequence[Tuple[str, int]], shown: int = 3) -> str:
+    listed = ', '.join(f'{file}:{line}' for file, line in candidates[:shown])
+    more = len(candidates) - shown
+    return f'{len(candidates)} candidates: {listed}' + (f' +{more} more' if more > 0 else '')
 
 
 def skipped_files_note(skipped: Sequence[Tuple[str, str]]) -> Optional[str]:
