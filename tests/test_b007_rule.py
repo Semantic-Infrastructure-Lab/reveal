@@ -120,6 +120,74 @@ class ClaudeAdapter(ResourceAdapter):
         detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 0)
 
+    # ==================== BACK-2254: meta.warnings and returned failures ====================
+
+    def test_note_warning_counts_as_envelope_call(self):
+        """A failure that leaves the rest of the answer standing goes to meta.warnings."""
+        content = '''
+class HelpAdapter(ResourceAdapter):
+    def add_see_also(self, data):
+        try:
+            extra = load()
+        except Exception as exc:
+            logger.warning("see_also not shown: %s", exc)
+            note_warning(data, {'type': 'x', 'message': str(exc)})
+            return
+'''
+        path = self.create_temp_file(content)
+        self.assertEqual(len(self.rule.check(path, None, content)), 0)
+
+    def test_failure_returned_to_caller_not_flagged(self):
+        """The handler adds its exception to a list the function returns; the caller records it."""
+        content = '''
+class HelpAdapter(ResourceAdapter):
+    def schemes(self):
+        found, failures = [], []
+        for s in names():
+            try:
+                found.append(check(s))
+            except Exception as exc:
+                logger.warning("%s left out: %s", s, exc)
+                failures.append((s, exc))
+        return sorted(found), warning_for(failures)
+'''
+        path = self.create_temp_file(content)
+        self.assertEqual(len(self.rule.check(path, None, content)), 0)
+
+    def test_failure_collected_but_not_returned_flagged(self):
+        """Negative control: a list that never leaves the function discloses nothing."""
+        content = '''
+class HelpAdapter(ResourceAdapter):
+    def schemes(self):
+        found, failures = [], []
+        for s in names():
+            try:
+                found.append(check(s))
+            except Exception as exc:
+                logger.warning("%s left out: %s", s, exc)
+                failures.append((s, exc))
+        return sorted(found)
+'''
+        path = self.create_temp_file(content)
+        self.assertEqual(len(self.rule.check(path, None, content)), 1)
+
+    def test_returned_list_without_the_exception_flagged(self):
+        """Appending something other than the exception to a returned list is not disclosure."""
+        content = '''
+class HelpAdapter(ResourceAdapter):
+    def schemes(self):
+        found = []
+        for s in names():
+            try:
+                check(s)
+            except Exception as exc:
+                logger.warning("%s left out: %s", s, exc)
+                found.append(s)
+        return found
+'''
+        path = self.create_temp_file(content)
+        self.assertEqual(len(self.rule.check(path, None, content)), 1)
+
     # ==================== Scope: not adapter-context code ====================
 
     def test_non_adapter_function_not_flagged(self):

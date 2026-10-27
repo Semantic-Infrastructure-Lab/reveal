@@ -190,7 +190,7 @@ def _legacy_b007(rule, path, content):
         for sub in ast.walk(node):
             if isinstance(sub, ast.ExceptHandler) and rule._nearest_enclosing_function(
                     sub, parent_map) is node:
-                detection = rule._check_handler(sub, path, content)
+                detection = rule._check_handler(sub, path, content, node)
                 if detection:
                     found.append(detection)
     return found

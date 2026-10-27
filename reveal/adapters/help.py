@@ -10,11 +10,30 @@ from .base import ResourceAdapter, Stability, register_adapter, register_rendere
 from .registry import _SCAFFOLD_SCHEMES, is_internal_scheme
 from ..utils.formatting import shell_command
 from ..utils.query_parser import ParamSpec, param_schema, whole_number
-from ..utils.results import ResultBuilder, note_truncation
+from ..utils.results import ResultBuilder, note_truncation, note_warning
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
+
+
+def _adapter_help_failed(field: str, method: str,
+                         failures: List[Tuple[str, Exception]]) -> Optional[Dict[str, Any]]:
+    """The ``meta.warnings`` entry for adapters whose ``get_help()``/``get_schema()`` raised.
+
+    ``field`` is the part of the help result they are missing from; None when nothing failed
+    (BACK-2254: the log line alone reached stderr, never a ``--format json`` reader).
+    """
+    if not failures:
+        return None
+    named = ', '.join(f'{scheme}:// ({type(e).__name__}: {e})' for scheme, e in failures)
+    return {
+        'type': 'adapter_help_failed',
+        'field': field,
+        'count': len(failures),
+        'adapters': [scheme for scheme, _e in failures],
+        'message': f'{field}: {len(failures)} adapter(s) left out because {method} failed: {named}',
+    }
 
 # Valid help_category values for the help:// index listing.
 # Guides without help_category (or with an unknown value) are accessible by
@@ -560,6 +579,12 @@ class HelpAdapter(ResourceAdapter):
                     'when they implement get_help()'
                 ),
                 (
+                    "An adapter whose get_help() or get_schema() raises (e.g. a broken plugin) "
+                    "is left out of the part of the page that needed it, and meta.warnings "
+                    "names it and the error (type adapter_help_failed; field is the part: "
+                    "see_also, available_adapters)"
+                ),
+                (
                     'For agents: --agent-help is the orientation (first sections); '
                     'help://agent/full is the whole reference (~50K tokens, task-pattern recipes)'
                 )
@@ -885,9 +910,10 @@ class HelpAdapter(ResourceAdapter):
         # straight into a "no schema available" error from its own menu (N1).
         # A navigational index, not a failure: its own success type with no
         # 'error' key, as BACK-998 did for help://examples (BACK-1059).
-        return {
+        available, omitted = self._adapters_with_schema()
+        result: Dict[str, Any] = {
             'type': 'adapter_schema_index',
-            'available_adapters': self._adapters_with_schema(),
+            'available_adapters': available,
             'usage': 'reveal help://schemas/<adapter>',
             'examples': [
                 'reveal help://schemas/ast',
@@ -908,6 +934,8 @@ class HelpAdapter(ResourceAdapter):
                 'reveal help://schemas/all',
             ],
         }
+        note_warning(result, omitted)
+        return result
 
     def _search_from_query(self, query_string: str) -> Dict[str, Any]:
         """help://search?search=<term>."""
@@ -1414,9 +1442,10 @@ class HelpAdapter(ResourceAdapter):
             return
         try:
             adapter_help = adapter_class.get_help()
-        except Exception as e:  # boundary-ok: broad-except -- get_help() is adapter code of unknown shape, including user plugins; the guide still renders and the warning names what is missing from it
+        except Exception as e:  # boundary-ok: broad-except -- get_help() is adapter code of unknown shape, including user plugins; the guide still renders and its meta.warnings names what is missing from it
             logger.warning("help://%s: see_also not shown, %s.get_help() failed: %s",
                            topic, adapter_class.__name__, e)
+            note_warning(data, _adapter_help_failed('see_also', 'get_help()', [(topic, e)]))
             return
         see_also = adapter_help.get('see_also') if adapter_help else None
         if see_also:
@@ -2023,23 +2052,29 @@ class HelpAdapter(ResourceAdapter):
         )
         return preview + footer
 
-    def _adapters_with_schema(self) -> List[str]:
+    def _adapters_with_schema(self) -> Tuple[List[str], Optional[Dict[str, Any]]]:
         """Public adapter schemes that actually return a machine-readable schema.
 
         The bare `help://schemas` menu and the "did you mean" list are built from
         this rather than the raw registry, so an agent following the menu can
         never land on an adapter that has no schema (N1).
+
+        Returns the schemes and the ``meta.warnings`` entry naming any adapter left
+        out because its get_schema() raised (None if none did), for the caller to
+        record on the result that shows the list (BACK-2254).
         """
         schemes: List[str] = []
+        failures: List[Tuple[str, Exception]] = []
         for scheme in list_public_schemes():
             cls = _ADAPTER_REGISTRY[scheme]
             try:
                 if cls.get_schema():
                     schemes.append(scheme)
-            except Exception as e:  # boundary-ok: broad-except -- get_schema() is adapter code of unknown shape, including user plugins; one broken adapter must not empty the menu, and the omission is logged as a warning naming it
+            except Exception as e:  # boundary-ok: broad-except -- get_schema() is adapter code of unknown shape, including user plugins; one broken adapter must not empty the menu, and the returned warning names it for the result's meta.warnings
                 logger.warning("%s:// left out of the schema menu: get_schema() failed: %s",
                                scheme, e)
-        return sorted(schemes)
+                failures.append((scheme, e))
+        return sorted(schemes), _adapter_help_failed('available_adapters', 'get_schema()', failures)
 
     def _get_rules_catalog(self) -> Dict[str, Any]:
         """help://rules — the pattern-detection rule catalog (BACK-846).
@@ -2265,8 +2300,8 @@ class HelpAdapter(ResourceAdapter):
                 }
             # Only advertise adapters that actually have a schema, so the
             # "did you mean" list can't point at another dead end (N1).
-            available = self._adapters_with_schema()
-            return {
+            available, omitted = self._adapters_with_schema()
+            unknown: Dict[str, Any] = {
                 'type': 'adapter_schema',
                 'adapter': adapter_name,
                 'error': 'Unknown adapter',
@@ -2274,6 +2309,8 @@ class HelpAdapter(ResourceAdapter):
                 'available_adapters': available,
                 'next': ['reveal help://schemas'],
             }
+            note_warning(unknown, omitted)
+            return unknown
 
         if not hasattr(adapter_class, 'get_schema'):
             return {

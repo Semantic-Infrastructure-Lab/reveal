@@ -36,9 +36,10 @@ def test_listing_names_the_failure(broken_registered):
 
 def test_schema_menu_omission_is_logged(broken_registered, caplog):
     with caplog.at_level(logging.WARNING, logger='reveal.adapters.help'):
-        schemes = HelpAdapter()._adapters_with_schema()
+        schemes, omitted = HelpAdapter()._adapters_with_schema()
     assert 'brokenx' not in schemes
     assert 'brokenx:// left out of the schema menu' in caplog.text
+    assert omitted is not None and omitted['adapters'] == ['brokenx']  # BACK-2254
 
 
 def test_see_also_failure_is_logged(broken_registered, caplog):

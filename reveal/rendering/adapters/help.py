@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 from reveal.registry import FALLBACK_SUPPORT_NOTE
 from reveal.utils import print_json_result
 from reveal.utils.formatting import shell_command
+from reveal.utils.warning_render import render_meta_warnings
 from reveal.adapters.base import Stability, _ADAPTER_REGISTRY
 
 
@@ -1061,9 +1062,15 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
 
     if list_mode:
         _render_help_list_mode(data)
-        return
+    else:
+        _render_help_element(data)
+    # A print renderer, so the shared seam can't add these after it (emit_body): the text page
+    # says what it left out as the JSON does, e.g. an adapter whose get_schema() raised (BACK-2254).
+    render_meta_warnings(data)
 
-    # Dispatch to specific renderers based on help type
+
+def _render_help_element(data: Dict[str, Any]) -> None:
+    """Dispatch one help topic to its renderer by result type."""
     help_type = data.get('type', 'unknown')
 
     renderers = {
