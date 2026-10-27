@@ -19,6 +19,7 @@ from ...utils.query import (
     unknown_sort_field_warning,
 )
 from ...utils.query_control import sort_nulls_last
+from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_parser import (
     CliBinding, ParamSpec, QueryParams, ResourceSpec, filter_expression, nonnegative_display_limit,
     param_schema, peek_query_items, split_exclude_param, whole_number,
@@ -410,6 +411,7 @@ class MetricsAdapter(ResourceAdapter):
                              f"{', '.join(VIEWS)} (omit view for per-file metrics)")
         self._analysis_failures: list = []
         self._excluded_by_extension: Dict[str, int] = {}
+        self._unknown_filter_fields: List[str] = []
 
     def _control_query(self) -> str:
         """The bound sort/limit/offset as the query text ``parse_result_control`` reads, so a bound
@@ -458,6 +460,7 @@ class MetricsAdapter(ResourceAdapter):
 
         self._analysis_failures = []
         self._excluded_by_extension = {}
+        self._unknown_filter_fields = []
         files = list(find_analyzable_files(
             self.path, code_only=code_only,
             respect_gitignore=respect_gitignore, exclude_patterns=exclude_patterns,
@@ -491,13 +494,19 @@ class MetricsAdapter(ResourceAdapter):
             all_stats = [_analyze_file_worker(a) for a in args]
 
         self._record_analysis_results(all_stats)
-        return [
-            s for s in all_stats
-            if s and not is_failure(s) and matches_filters(
+        analyzed = [s for s in all_stats if s and not is_failure(s)]
+        matched = [
+            s for s in analyzed
+            if matches_filters(
                 s, min_lines, max_lines, min_complexity, max_complexity, min_functions,
                 self.query_filters, field_value, compare
             )
         ]
+        if analyzed and not matched:
+            # A filter field no analyzed file has is why nothing matched: a typo, not a
+            # genuine zero (BACK-2299, json:// BACK-1165).
+            self._unknown_filter_fields = find_unknown_filter_fields(analyzed, self.query_filters, field_value)
+        return matched
 
     def _record_analysis_results(self, all_stats: list) -> None:
         """Capture raw rule facts before filters, paging, and presentation cuts."""
@@ -521,6 +530,18 @@ class MetricsAdapter(ResourceAdapter):
                 'type': 'deprecated_field',
                 'message': f"{name} was renamed {renamed_field(name)}; the old name still answers",
             })
+
+    def _unknown_filter_field_warning(self) -> Optional[Dict[str, Any]]:
+        """The ``unknown_filter_field`` warning for filter fields no analyzed file has, or None."""
+        if not self._unknown_filter_fields:
+            return None
+        fields = ', '.join(f"'{f}'" for f in self._unknown_filter_fields)
+        return {
+            'type': 'unknown_filter_field',
+            'message': (f"Filter field(s) {fields} never appear on any scanned file — this may be a "
+                        f"typo rather than a genuine zero-match. Fields: {', '.join(SORT_FIELDS)}, "
+                        f"or a dotted path such as lines.total"),
+        }
 
     def _apply_sorting(self, file_stats: list) -> list:
         """Apply sorting to file stats if sort field is specified."""
@@ -805,6 +826,7 @@ class MetricsAdapter(ResourceAdapter):
         self._add_truncation_metadata(result, len(controlled_stats), total_filtered)
         note_warning(result, unknown_sort_field_warning(
             self.result_control.sort_field, dir_file_stats, field_value, SORT_FIELDS))
+        note_warning(result, self._unknown_filter_field_warning())
         self._disclose_failures(result)
         self._disclose_exclusions(result)
 
