@@ -30,6 +30,7 @@ from ..utils.path_utils import (
     to_relative_display,
     traversal_failed_warning,
     failure_of,
+    should_skip_file,
 )
 
 if TYPE_CHECKING:
@@ -225,18 +226,6 @@ def _cwd_relative(file_path: Path, directory: Path, cwd: Optional[Path] = None) 
         return to_posix(file_path.relative_to(cwd or Path.cwd()))
     except ValueError:
         return to_posix(file_path.relative_to(directory))
-
-
-def should_skip_file(relative_path: Path, gitignore_patterns: List[str]) -> bool:
-    """True if *relative_path* matches an ``--exclude`` / REVEAL_IGNORE pattern.
-
-    Patterns are gitignore syntax (BACK-1576, ``utils.gitignore.PatternSet``): a bare name
-    matches at any depth, a pattern with a slash is anchored at the root *relative_path*
-    is relative to, and a file under a matched directory is matched. Callers asking about a
-    directory pass a synthetic child (``rel / '_'``).
-    """
-    from ..utils.gitignore import pattern_set
-    return pattern_set(tuple(gitignore_patterns)).matches(to_posix(relative_path))
 
 
 @dataclass

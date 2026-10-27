@@ -192,7 +192,7 @@ def path_is_excluded(path: Path) -> bool:
     if not _ACTIVE_PATTERNS or _ACTIVE_ROOT is None:
         return False
     _CONSULTED = True
-    from ..cli.file_checker import should_skip_file  # deferred: cli imports utils
+    from .path_utils import should_skip_file  # deferred: path_utils imports this module
     rel = _relative_to_scope(path)
     if rel is None:
         return False

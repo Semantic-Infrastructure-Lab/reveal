@@ -466,6 +466,19 @@ def as_spelled(path: Union[str, PurePath], spelling: Union[str, PurePath]) -> st
     return to_posix(path)
 
 
+def should_skip_file(relative_path: Union[str, PurePath], gitignore_patterns: List[str]) -> bool:
+    """True if *relative_path* matches an ``--exclude`` / REVEAL_IGNORE pattern.
+
+    Patterns are gitignore syntax (BACK-1576, ``utils.gitignore.PatternSet``): a bare name
+    matches at any depth, a pattern with a slash is anchored at the root *relative_path*
+    is relative to, and a file under a matched directory is matched. Callers asking about a
+    directory pass a synthetic child (``rel / '_'``). Lives here, beside the walker that is its
+    main caller: in cli/file_checker it closed a utils -> cli import cycle (BACK-2215).
+    """
+    from .gitignore import pattern_set
+    return pattern_set(tuple(gitignore_patterns)).matches(to_posix(relative_path))
+
+
 def to_posix(path: Union[str, PurePath]) -> str:
     """Serialize a path with forward slashes on every OS.
 
@@ -1005,8 +1018,6 @@ def walk_filter(
     from .gitignore import gitignore_filter
     gi = gitignore_filter(path, respect_gitignore)
     skip_patterns = list(exclude_patterns or []) if purpose.honor_exclude else []
-    if skip_patterns:
-        from ..cli.file_checker import should_skip_file  # deferred: cli cycle
     from .exclusions import dir_is_excluded, path_is_excluded, scope_matcher
     all_noise = purpose.noise == 'all'
     # Matchers on the path relative to *path*: the root is resolved once, not every path.
