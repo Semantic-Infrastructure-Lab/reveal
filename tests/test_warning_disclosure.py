@@ -119,14 +119,14 @@ def test_patches_says_not_measured_rather_than_clean(tmp_path):
     it used to print 'No patch pressure groups found.' alone, a clean result for a question never asked), and an
     empty scanned suite keeps the not-measured caveat for the languages it does not cover."""
     (tmp_path / 'tests').mkdir()
-    (tmp_path / 'tests' / 'app_test.rb').write_text("class FooTest\n  def test_bar\n    1\n  end\nend\n")
+    (tmp_path / 'tests' / 'app_test.rb').write_text("class FooTest\n  def test_bar\n    1\n  end\nend\n", encoding='utf-8')
     declined = _run(tmp_path, 'patches://.')
     assert 'No patch pressure groups found' not in declined.stdout
     assert 'not scanned' in declined.stdout + declined.stderr and 'Ruby' in declined.stdout + declined.stderr
 
     scanned = tmp_path / 'py'
     (scanned / 'tests').mkdir(parents=True)
-    (scanned / 'tests' / 'test_a.py').write_text("def test_a():\n    assert 1\n")
+    (scanned / 'tests' / 'test_a.py').write_text("def test_a():\n    assert 1\n", encoding='utf-8')
     text = _run(scanned, 'patches://.').stdout
     assert 'No patch pressure groups found' in text
     assert 'not measured' in text
@@ -135,7 +135,7 @@ def test_patches_says_not_measured_rather_than_clean(tmp_path):
 def test_patches_prints_its_own_advisory_warning(tmp_path):
     """W-PATCHES-1 was in the JSON from the start and never rendered."""
     (tmp_path / 'tests').mkdir()
-    (tmp_path / 'tests' / 'test_a.py').write_text("def test_a():\n    assert 1\n")
+    (tmp_path / 'tests' / 'test_a.py').write_text("def test_a():\n    assert 1\n", encoding='utf-8')
     as_json = json.loads(_run(tmp_path, 'patches://.', '--format', 'json').stdout)
     codes = [w.get('code') for w in as_json.get('meta', {}).get('warnings', [])]
     assert 'W-PATCHES-1' in codes, as_json.get('meta')
