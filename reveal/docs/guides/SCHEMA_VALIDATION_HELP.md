@@ -8,7 +8,6 @@ help_category: feature_guides
 # Schema Validation for Markdown Front Matter
 
 **Purpose:** Validate markdown front matter against built-in or custom schemas
-**Version:** v0.29.0+
 **Audience:** Documentation maintainers, content creators, CI/CD pipelines
 
 ---
@@ -55,7 +54,7 @@ reveal README.md --validate-schema session --select F003,F004
 
 | Schema | Purpose | Required Fields | Community Reach |
 |--------|---------|----------------|----------------|
-| **session** | Session/workflow READMEs | `session_id` | Workflow sessions |
+| **session** | Session/workflow READMEs | `session_id`, `topics` | Workflow sessions |
 | **hugo** | Hugo static sites | `title` | 500K+ users |
 | **jekyll** | Jekyll (GitHub Pages) | `layout` | **1M+ users** |
 | **mkdocs** | MkDocs documentation | _(none)_ | Large Python ecosystem |
@@ -64,10 +63,10 @@ reveal README.md --validate-schema session --select F003,F004
 ### Session Schema
 **Target:** Session README files
 **Required:**
-- `session_id` - Pattern: `word-word-MMDD` (e.g., `cloudy-steam-0103`)
+- `session_id` - lowercase letters, digits and hyphens (`^[a-z0-9-]+$`, e.g. `cloudy-steam-0103`)
 - `topics` - List of topics (minimum 1)
 
-**Optional:** date, badge, type, project, files_modified, files_created, commits
+**Optional:** related_docs, tags, status, date, type, project, files_modified, files_created, commits
 
 **Custom Validation:**
 - Session ID format checking
@@ -276,9 +275,9 @@ tags: [single-tag, another-tag]
 
 **Example:**
 ```
-/path/to/file.md:1:1 ⚠️  F005 Custom validation failed: Session ID format invalid
-  💡 Session ID must match pattern: word-word-MMDD
-  📝 Schema: Session/Workflow Schema
+bad.md:1:1 ⚠️  F005 session_id should be a valid identifier (lowercase letters, numbers, hyphens)
+  💡 Fix value of 'session_id' field
+  📝 Schema: Session/Workflow Schema | Check: re.match(r'^[a-z0-9-]+$', value)
 ```
 
 **How to fix:**
@@ -303,12 +302,14 @@ reveal README.md --validate-schema session
 
 **Output:**
 ```
-/path/to/README.md:1:1 ⚠️  F003 Required field 'session_id' missing from front matter
+README.md: Found 1 issue
+
+README.md:1:1 ⚠️  F003 Required field 'session_id' missing from front matter
   💡 Add 'session_id' to front matter
   📝 Schema: Session/Workflow Schema
-
-1 issue found
 ```
+
+The path is printed as given on the command line.
 
 ### Validating paths from stdin
 
@@ -339,10 +340,14 @@ reveal README.md --validate-schema session --format json
 **Output:**
 ```json
 {
-  "file": "/path/to/README.md",
+  "contract_version": "1.0",
+  "type": "check",
+  "source": "README.md",
+  "source_type": "file",
+  "file": "README.md",
   "detections": [
     {
-      "file_path": "/path/to/README.md",
+      "file_path": "README.md",
       "line": 1,
       "rule_code": "F003",
       "message": "Required field 'session_id' missing from front matter",
@@ -353,9 +358,13 @@ reveal README.md --validate-schema session --format json
       "category": "F"
     }
   ],
-  "total": 1
+  "total": 1,
+  "scan_disclosures": []
 }
 ```
+
+A single-file result has no `summary`; detections name their rule in `rule_code` (not `code`).
+The stdin batch form below carries a `summary`.
 
 ### Grep Format (Pipeable)
 Minimal output for scripting:
@@ -366,7 +375,7 @@ reveal README.md --validate-schema session --format grep
 
 **Output:**
 ```
-/path/to/README.md:1:1:F003:Required field 'session_id' missing
+README.md:1:1:F003:Required field 'session_id' missing from front matter
 ```
 
 ---
@@ -375,7 +384,8 @@ reveal README.md --validate-schema session --format grep
 
 ### Exit Codes
 - **0** - All validation passed
-- **1** - Validation failures detected
+- **1** - Validation failures detected (or, for a single file, an unknown schema)
+- **2** - An unknown schema with `--stdin`
 
 ### GitHub Actions Example
 
@@ -425,7 +435,7 @@ validate-docs:
   stage: test
   script:
     - pip install reveal-cli
-    - find docs -name "*.md" -exec reveal {} --validate-schema mkdocs \; || exit 1
+    - find docs -name "*.md" | reveal --stdin --validate-schema mkdocs
 ```
 
 ---
@@ -458,13 +468,21 @@ field_types:
   tags: list
 
 validation_rules:
-  - name: "Title length check"
-    expression: "len(title) >= 10"
+  - code: F005
+    field: title
+    check: "len(value) >= 10"
     message: "Title must be at least 10 characters"
-  - name: "Author not empty"
-    expression: "len(author) > 0"
+  - code: F005
+    field: author
+    check: "len(value) > 0"
     message: "Author cannot be empty"
 ```
+
+Each rule names one `field`; its `check` expression sees that field's value as `value`.
+A rule for a field the document does not have is skipped. A rule without `field` and `check`
+is skipped without a warning, so a rule written in another shape (for example
+`expression: "len(title) >= 10"`) silently checks nothing: run the schema once against a
+document that should fail.
 
 ### Using Custom Schema
 
@@ -485,19 +503,27 @@ reveal document.md --validate-schema /path/to/my-schema.yaml
 ```yaml
 validation_rules:
   # Check minimum length
-  - expression: "len(title) >= 10"
+  - code: F005
+    field: title
+    check: "len(value) >= 10"
     message: "Title too short"
 
   # Regex pattern matching
-  - expression: "re.match(r'^[A-Z]', title)"
+  - code: F005
+    field: title
+    check: "re.match(r'^[A-Z]', value)"
     message: "Title must start with capital letter"
 
   # List validation
-  - expression: "len(tags) >= 1"
+  - code: F005
+    field: tags
+    check: "len(value) >= 1"
     message: "At least one tag required"
 
   # Range checking
-  - expression: "priority >= 1 and priority <= 5"
+  - code: F005
+    field: priority
+    check: "1 <= value <= 5"
     message: "Priority must be 1-5"
 ```
 
@@ -510,16 +536,19 @@ validation_rules:
 ### Batch Validation
 
 ```bash
-# Validate all session READMEs
-find sessions -name "README.md" -exec reveal {} --validate-schema session \;
+# Validate all session READMEs (exits 1 if any file is invalid)
+find sessions -name "README.md" | reveal --stdin --validate-schema session
 
 # Validate all blog posts
-find content/posts -name "*.md" -exec reveal {} --validate-schema hugo \;
+find content/posts -name "*.md" | reveal --stdin --validate-schema hugo
 
-# Validate with error counting
-find docs -name "*.md" -exec reveal {} --validate-schema mkdocs --format json \; | \
-  jq -s 'map(.summary.total) | add'
+# Count invalid files
+find docs -name "*.md" | reveal --stdin --validate-schema mkdocs --format json | \
+  jq '.summary.invalid'
 ```
+
+`find ... -exec reveal {} ... \;` ignores each call's exit status (find exits 0), so it
+cannot fail a CI job; pipe the paths into `reveal --stdin` instead.
 
 ### Selective Rule Checking
 
@@ -539,11 +568,11 @@ reveal note.md --validate-schema obsidian --ignore F002
 ```bash
 # Find all issues, output as JSON, filter with jq
 reveal README.md --validate-schema session --format json | \
-  jq '.detections[] | select(.severity == "high")'
+  jq '.detections[] | select(.severity == "medium")'
 
 # Count issues by rule code
 reveal README.md --validate-schema session --format json | \
-  jq '.detections | group_by(.code) | map({code: .[0].code, count: length})'
+  jq '.detections | group_by(.rule_code) | map({code: .[0].rule_code, count: length})'
 ```
 
 ---
@@ -580,12 +609,14 @@ Error: Failed to parse front matter YAML
 
 **Error:**
 ```
-F005 Custom validation failed: <expression>
+F005 <the rule's message>
+  💡 Fix value of '<field>' field
+  📝 Schema: <schema name> | Check: <check expression>
 ```
 
 **Solutions:**
-1. Check expression syntax in schema YAML
-2. Verify field names match front matter exactly (case-sensitive)
+1. Check expression syntax in schema YAML (`check:`, reading the field as `value`)
+2. Verify the rule's `field` matches the front matter key exactly (case-sensitive)
 3. Ensure expression returns boolean (true/false)
 4. Test expression with simple values first
 
@@ -596,13 +627,11 @@ F005 Custom validation failed: <expression>
 2. Front matter missing entirely (F001 should catch this)
 3. Schema has no required fields (mkdocs, obsidian)
 4. Rule ignored with `--ignore F003`
+5. A custom rule without `field`/`check` keys (e.g. `expression:`) is skipped silently
 
 **Debug:**
 ```bash
-# Show all rules being run
-reveal README.md --validate-schema session --verbose
-
-# Check which rules are selected
+# Check which F-rules exist
 reveal --rules | grep F00
 ```
 
@@ -632,7 +661,6 @@ reveal --rules | grep F00
   - F001-F005 validation rules
   - Custom schema support
   - CI/CD integration (exit codes, JSON output)
-  - 103 comprehensive tests
 
 ## CLI Flags
 
@@ -644,7 +672,7 @@ reveal --rules | grep F00
 ```bash
 reveal README.md --validate-schema session         # Validate against session schema
 reveal README.md --validate-schema hugo         # Validate against hugo schema
-find . -name README.md -exec reveal {} --validate-schema session --format json \;  # Batch: one file per call (or: find . -name README.md | reveal --stdin --validate-schema session)
+find . -name README.md | reveal --stdin --validate-schema session   # Batch: one call, exits 1 if any file is invalid
 reveal --list-schemas                           # Show available built-in schemas (no path)
 ```
 
