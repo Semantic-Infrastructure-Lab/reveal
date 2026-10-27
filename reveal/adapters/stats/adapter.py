@@ -393,11 +393,15 @@ class MetricsAdapter(ResourceAdapter):
         # BACK-507: warn on unrecognized params (e.g. ?complexity=true, which
         # isn't a stats param — the real ones are min_complexity/max_complexity).
         # Mixed adapter: skip filter expressions (complexity>10) and the
-        # cross-cutting result-control params this adapter honors.
+        # cross-cutting result-control params this adapter honors. A key the
+        # filter parser consumed is applied even when its operator is in the
+        # value (`complexity=5..15`, or `lines=1` beside another filter), so it
+        # is not "ignored" (BACK-2278).
         self._warn_unknown_query_params(
             self.query_params,
             skip_filter_keys=True,
-            extra_known_keys={'sort', 'limit', 'offset', 'exclude', 'respect_gitignore'},
+            extra_known_keys={'sort', 'limit', 'offset', 'exclude', 'respect_gitignore',
+                              *(qf.field for qf in self.query_filters)},
         )
         self.view = self.query_params.get('view')
         if self.view is not None and self.view not in VIEWS:

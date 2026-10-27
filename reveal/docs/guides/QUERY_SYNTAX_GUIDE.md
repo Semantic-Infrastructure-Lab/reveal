@@ -278,9 +278,8 @@ reveal 'metrics://src/?complexity>10'                 # Complex files
 reveal 'metrics://src/?complexity=5..15'              # Medium complexity
 ```
 
-A metrics:// range (`field=a..b`) currently prints `⚠ Unknown query param '<field>' for
-metrics:// — ignored` on stderr. Ignore that warning: the range is applied (same files as
-`field>=a&field<=b`).
+A metrics:// range (`field=a..b`) is inclusive and returns the same files as
+`field>=a&field<=b`.
 
 **Size filtering**:
 ```bash
