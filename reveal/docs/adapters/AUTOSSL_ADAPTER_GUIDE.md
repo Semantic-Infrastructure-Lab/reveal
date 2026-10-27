@@ -89,7 +89,7 @@ reveal 'autossl://latest?user=acme&only-failures'
 | Status | Meaning |
 |--------|---------|
 | `ok` | Certificate valid; AutoSSL satisfied — no renewal needed |
-| `incomplete` | No renewal triggered — existing cert still valid, not near expiry |
+| `incomplete` | AutoSSL logged the domain's TLS status as neither success nor error. The reason is in the run's own messages (`reveal autossl://DOMAIN`); reveal does not interpret it |
 | `defective` | Certificate has a problem: expired, self-signed, or chain error |
 
 ---
@@ -246,7 +246,7 @@ Not a cPanel server, or running without root access. This adapter is cPanel-spec
 
 **All domains show `incomplete`**
 
-AutoSSL ran but found all certs healthy and not near expiry — this is normal. No renewal was needed. Check `days_until_expiry` with `reveal ssl://DOMAIN`.
+Do not assume this is benign. `incomplete` only means AutoSSL logged neither success nor error for the domain. Read the run's messages with `reveal autossl://DOMAIN`, and check the certificate itself with `reveal ssl://DOMAIN` (`days_until_expiry`). `reveal autossl://error-codes` explains the defect and impediment codes.
 
 **`defective` domains persist after fixing DNS**
 

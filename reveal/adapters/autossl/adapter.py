@@ -103,7 +103,7 @@ def _get_error_code_taxonomy() -> dict:
         ],
         'tls_status_values': {
             'ok': 'Certificate valid; AutoSSL satisfied (no renewal needed)',
-            'incomplete': 'No renewal triggered — existing cert is still valid and not near expiry',
+            'incomplete': "AutoSSL logged the domain's TLS status as neither success nor error; the reason is in the run's own messages",
             'defective': 'Certificate has a problem (expired, self-signed, chain error)',
         },
         'next_steps': [
@@ -321,7 +321,7 @@ _SCHEMA: Dict[str, Any] = {
     'notes': [
         'Reads /var/cpanel/logs/autossl/ directly — no WHM API or credentials required',
         'Run timestamps are ISO 8601 UTC (2026-03-03T23:26:01Z), the log directory names; autossl:// lists them newest first',
-        'tls_status values: ok (cert valid), incomplete (pending), defective (failed)',
+        'tls_status values: ok (cert valid), incomplete (AutoSSL logged neither success nor error; read the run messages for why), defective (failed)',
         'defect_codes are the OpenSSL verification codes (CERT_HAS_EXPIRED, DEPTH_ZERO_SELF_SIGNED_CERT, ...); DCV failures are in impediments[{code, detail}]',
         'Only available on cPanel servers — adapter errors cleanly on non-cPanel systems',
         'jq: get timestamp of most recent run — reveal autossl:// --format=json | jq \'.runs[0]\'',

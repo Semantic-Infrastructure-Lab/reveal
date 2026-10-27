@@ -71,7 +71,7 @@ features:
 
 tls_status_values:
   ok: 'Certificate valid and AutoSSL satisfied'
-  incomplete: 'No cert renewal triggered (existing cert still valid)'
+  incomplete: "AutoSSL logged the domain's TLS status as neither success nor error; read the run's messages for why"
   defective: 'Certificate has a problem (expired, self-signed, chain error)'
 
 impediment_codes:

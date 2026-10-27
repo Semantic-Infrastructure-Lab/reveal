@@ -291,13 +291,16 @@ Codex runs a background memory consolidation process. Stage 1 extracts memory-re
 reveal 'codex://memories/pipeline'
 # Codex Memory Pipeline
 #
-#   Stage 1 outputs:      47
-#   Selected for Stage 2:  8
+#   Stage 1 outputs:     3
+#   Selected for Stage 2: 1
 #
 #   Recent Stage 1 outputs (up to 20):
-#     [✓] 019d9da3  my-session-slug       uses=3
-#     [ ] 019d9dd4  other-session-slug    uses=0
+#     [✓] 019d9da3  my-session-slug  uses=3
+#     [ ] 019d9dd4  other-session-slug  uses=0
+#     [ ] 019d9e10  third-session-slug  uses=1
 ```
+
+The sample is rendered by the real adapter from a hand-built `memories_1.sqlite` holding the columns the adapter reads (`thread_id`, `rollout_slug`, `generated_at`, `selected_for_phase2`, `usage_count`, `last_usage`, `source_updated_at`); the ids and slugs are invented.
 
 `[✓]` marks entries selected for Stage 2 consolidation. `uses` counts how many times the memory was cited in a session. `memories/pipeline` reads the `stage1_outputs` table from `memories_1.sqlite`, where current Codex keeps it, or from `state_5.sqlite` (the session index) on installs that predate that file.
 

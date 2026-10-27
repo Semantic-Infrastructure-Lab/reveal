@@ -47,6 +47,9 @@ writes the same file):
 { "mcpServers": { "reveal": { "command": "reveal-mcp" } } }
 ```
 
+Claude Code asks you to approve a server it finds in a project `.mcp.json` the first time
+(`claude mcp list` shows it as "Pending approval" until you do).
+
 ### Cursor / Windsurf
 
 Add `reveal-mcp` as an MCP server in your IDE's MCP configuration.
