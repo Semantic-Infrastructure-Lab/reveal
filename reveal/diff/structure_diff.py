@@ -7,6 +7,29 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 _POSITION_FIELDS = frozenset({'line', 'line_end', 'line_start', 'file'})
 
 
+def element_label(element: Dict[str, Any]) -> str:
+    """An element's name qualified by its owning class: ``K.m`` for a method, ``f`` otherwise.
+
+    Two classes in one file may each have a method ``m``; keyed by bare name the second
+    silently replaced the first, and ``diff://a.py:b.py/K.m`` found nothing (BACK-2213).
+    """
+    name = str(element['name'])
+    owner = element.get('owner')
+    return f'{owner}.{name}' if owner else name
+
+
+def _keyed(items: List[Dict]) -> Dict[Tuple[Any, str], Dict]:
+    """Elements keyed by (file, label): file is None for a single-file diff."""
+    return {(item.get('file'), element_label(item)): item for item in items}
+
+
+def _located(entry: Dict[str, Any], key: Tuple[Any, ...]) -> Dict[str, Any]:
+    """A diff entry with the file its element came from, when a directory diff knows it."""
+    if key[0] is not None:
+        entry['file'] = key[0]
+    return entry
+
+
 def element_categories(struct: Dict[str, Any]) -> List[str]:
     """The element categories of an analyzer's structure, in the order it emits them.
 
@@ -124,7 +147,7 @@ def diff_named_elements(left_items: List[Dict],
     for change, keys, side in (('added', right_keyed.keys() - left_keyed.keys(), right_keyed),
                                ('removed', left_keyed.keys() - right_keyed.keys(), left_keyed)):
         for key in sorted(keys, key=order):
-            details.append({'type': change, 'name': key[1], 'line': side[key].get('line')})
+            details.append(_located({'type': change, 'name': key[1], 'line': side[key].get('line')}, key))
 
     modified = 0
     for key in sorted(left_keyed.keys() & right_keyed.keys(), key=order):
@@ -134,8 +157,8 @@ def diff_named_elements(left_items: List[Dict],
                    if old.get(field) != new.get(field)}
         if changes:
             modified += 1
-            details.append({'type': 'modified', 'name': key[1],
-                            'line': right_keyed[key].get('line'), 'changes': changes})
+            details.append(_located({'type': 'modified', 'name': key[1],
+                                     'line': right_keyed[key].get('line'), 'changes': changes}, key))
 
     summary = {'added': len(right_keyed.keys() - left_keyed.keys()),
                'removed': len(left_keyed.keys() - right_keyed.keys()),
@@ -215,8 +238,7 @@ def diff_functions(left_funcs: List[Dict],
     # Key by (file, name), not name alone — otherwise unrelated functions that
     # happen to share a name in different files (common across a directory
     # diff) get matched as "modified" instead of removed+added.
-    left_names = {(f.get('file'), f['name']): f for f in left_funcs}
-    right_names = {(f.get('file'), f['name']): f for f in right_funcs}
+    left_names, right_names = _keyed(left_funcs), _keyed(right_funcs)
 
     added_names = right_names.keys() - left_names.keys()
     removed_names = left_names.keys() - right_names.keys()
@@ -230,7 +252,7 @@ def diff_functions(left_funcs: List[Dict],
         name = key[1]
         func = right_names[key]
         cx_after = func.get('complexity')
-        details.append({
+        details.append(_located({
             'type': 'added',
             'name': name,
             'line': func.get('line'),
@@ -240,14 +262,14 @@ def diff_functions(left_funcs: List[Dict],
             'complexity_before': None,
             'complexity_after': cx_after,
             'complexity_delta': cx_after,
-        })
+        }, key))
 
     # Removed functions
     for key in sorted(removed_names, key=lambda k: (k[1], k[0] or '')):
         name = key[1]
         func = left_names[key]
         cx_before = func.get('complexity')
-        details.append({
+        details.append(_located({
             'type': 'removed',
             'name': name,
             'line': func.get('line'),
@@ -257,7 +279,7 @@ def diff_functions(left_funcs: List[Dict],
             'complexity_before': cx_before,
             'complexity_after': None,
             'complexity_delta': -cx_before if cx_before is not None else None,
-        })
+        }, key))
 
     # Modified functions
     modified_count = 0
@@ -271,7 +293,7 @@ def diff_functions(left_funcs: List[Dict],
             changes = _compute_function_changes(left_func, right_func)
             cx_before = left_func.get('complexity', 0)
             cx_after = right_func.get('complexity', 0)
-            details.append({
+            details.append(_located({
                 'type': 'modified',
                 'name': name,
                 'changes': changes,
@@ -280,7 +302,7 @@ def diff_functions(left_funcs: List[Dict],
                 'complexity_before': cx_before,
                 'complexity_after': cx_after,
                 'complexity_delta': cx_after - cx_before,
-            })
+            }, key))
 
     summary = {
         'added': len(added_names),
@@ -383,8 +405,7 @@ def diff_classes(left_classes: List[Dict],
         Tuple of (summary_dict, details_list)
     """
     # Key by (file, name), not name alone — see diff_functions for why.
-    left_names = {(c.get('file'), c['name']): c for c in left_classes}
-    right_names = {(c.get('file'), c['name']): c for c in right_classes}
+    left_names, right_names = _keyed(left_classes), _keyed(right_classes)
 
     added_names = right_names.keys() - left_names.keys()
     removed_names = left_names.keys() - right_names.keys()
@@ -396,25 +417,25 @@ def diff_classes(left_classes: List[Dict],
     for key in sorted(added_names, key=lambda k: (k[1], k[0] or '')):
         name = key[1]
         cls = right_names[key]
-        details.append({
+        details.append(_located({
             'type': 'added',
             'name': name,
             'line': cls.get('line'),
             'bases': cls.get('bases', []),
             'method_count': len(cls.get('methods', []))
-        })
+        }, key))
 
     # Removed classes
     for key in sorted(removed_names, key=lambda k: (k[1], k[0] or '')):
         name = key[1]
         cls = left_names[key]
-        details.append({
+        details.append(_located({
             'type': 'removed',
             'name': name,
             'line': cls.get('line'),
             'bases': cls.get('bases', []),
             'method_count': len(cls.get('methods', []))
-        })
+        }, key))
 
     # Modified classes
     modified_count = 0
@@ -426,13 +447,13 @@ def diff_classes(left_classes: List[Dict],
         if class_changed(left_cls, right_cls):
             modified_count += 1
             changes = _compute_class_changes(left_cls, right_cls)
-            details.append({
+            details.append(_located({
                 'type': 'modified',
                 'name': name,
                 'changes': changes,
                 'left': left_cls,
                 'right': right_cls
-            })
+            }, key))
 
     summary = {
         'added': len(added_names),

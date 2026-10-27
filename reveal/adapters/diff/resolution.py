@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional, Iterator, cast
 
 from .git import resolve_git_ref, resolve_git_adapter, read_git_text
 from ..base import get_adapter_class
-from ...diff.structure_diff import element_categories
+from ...diff.structure_diff import element_categories, element_label
 from ...errors import NotApplicableError
 from ...registry import get_analyzer
 from ...utils.path_utils import _walk_code_files
@@ -266,20 +266,25 @@ def find_element(structure: Dict[str, Any], element_name: str) -> Optional[Dict[
 
     Args:
         structure: Structure dict from adapter
-        element_name: Name of element to find
+        element_name: Name of element to find: ``f``, or ``Class.method`` for a method
 
     Returns:
-        Element dict or None if not found
+        Element dict or None if not found. An owner-qualified match wins; a bare method
+        name matches the first method of that name.
     """
-    for element in _iter_elements(structure):
-        if element.get('name') == element_name:
+    elements = [e for e in _iter_elements(structure) if e.get('name')]
+    for element in elements:
+        if element_label(element) == element_name:
+            return element
+    for element in elements:
+        if element['name'] == element_name:
             return element
     return None
 
 
 def element_names(structure: Dict[str, Any]) -> list:
     """Names of the elements ``find_element`` can find in a structure, in order, once each."""
-    return list(dict.fromkeys(e['name'] for e in _iter_elements(structure) if e.get('name')))
+    return list(dict.fromkeys(element_label(e) for e in _iter_elements(structure) if e.get('name')))
 
 
 def read_source_text(uri: str) -> Optional[str]:
