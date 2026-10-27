@@ -96,6 +96,16 @@ Rules (home = where the concern is allowed to live):
     file content (subprocess output, a rendered or help string) is marked
     ``# boundary-ok: splitlines -- <why>``.
 
+``lazy-cycle`` (BACK-2215)
+    A function-level import that closes an import cycle among reveal's own files. The load-time
+    graph has no cycles; every cycle closes through a deferred ``from ..cli.x import y`` inside a
+    function, the habit of hiding an upward import instead of moving the function down a layer
+    (one such import grew the largest group from 99 to 155 files in a day). Unlike the other rules
+    it is read from reveal's own import graph (``ImportsAdapter``, lazy edges included), not one
+    file at a time: a site is the import line of each lazy edge inside a cycle group, counted per
+    importing file. Fix it by importing the other way round or moving the function down a layer;
+    a deliberate one takes ``# boundary-ok: lazy-cycle -- <why>`` on the import line.
+
 Code under ``if __name__ == '__main__':`` is exempt from ``exit`` and ``print``.
 Suppress one deliberate site with ``# boundary-ok: <rule> -- <why>`` on any line of the
 call, or on a comment line directly above it.
@@ -186,6 +196,13 @@ RULES: Dict[str, Dict[str, Any]] = {
         'fix': 'split file content with reveal.utils.lines.split_lines (a line ends at \\n only); '
                'mark non-file text # boundary-ok: splitlines -- <why>',
         'home': (),
+    },
+    'lazy-cycle': {
+        'task': 'BACK-2215',
+        'fix': 'a function-level import closes an import cycle: import the other way round, or move the '
+               'function down a layer (utils < core < analyzers < rules < rendering < adapters < cli)',
+        'home': (),
+        'graph': True,  # read from the import graph in scan(), not by the per-file AST scanner
     },
     'print': {
         'task': 'BACK-1368 (removal: BACK-916)',
@@ -524,7 +541,35 @@ def scan() -> Dict[str, Dict[str, List[int]]]:
         for rule, lines in sites.items():
             if lines:
                 found[rule][rel] = lines
+    found['lazy-cycle'] = lazy_cycle_sites(ROOT / TREE, ROOT)
     return found
+
+
+def lazy_cycle_sites(package: Path, base: Path) -> Dict[str, List[int]]:
+    """{importing file: import lines} for every function-level import that closes a cycle among
+    *package*'s files, paths relative to *base* (BACK-2215).
+
+    One site per lazy edge inside a cycle group, at the line of the statement that resolved to it.
+    The graph is reveal's own (lazy edges included); a statement marked
+    ``# boundary-ok: lazy-cycle -- <why>`` is skipped."""
+    from reveal.adapters.imports import ImportsAdapter
+
+    base = base.resolve()
+    graph = ImportsAdapter(str(package), 'circular&lazy=include').analyze().graph
+    sites: Dict[str, List[int]] = {}
+    for group in graph.find_cycle_groups():
+        members = set(group)
+        for importer in group:
+            for imported in graph._cycle_successors(importer):
+                if imported not in members or not graph.is_lazy_edge(importer, imported):
+                    continue
+                stmts = [st for st in graph.files.get(importer, []) if st.scope == 'local'
+                         and st.resolved_path and Path(st.resolved_path).resolve() == Path(imported).resolve()]
+                if any('boundary-ok: lazy-cycle' in st.source_line for st in stmts):
+                    continue
+                rel = Path(importer).resolve().relative_to(base).as_posix()
+                sites.setdefault(rel, []).append(min((st.line_number for st in stmts), default=0))
+    return {rel: sorted(lines) for rel, lines in sorted(sites.items())}
 
 
 def compare(baseline: Dict[str, Dict[str, int]], counts: Dict[str, Dict[str, int]]

@@ -338,3 +338,45 @@ def test_broad_except_flagged_even_when_the_failure_is_surfaced(handler):
 ])
 def test_broad_except_not_flagged(src):
     assert 'broad-except' not in _hits(src)
+
+
+# lazy-cycle (BACK-2215): read from the import graph, not the per-file scanner.
+
+def _package(root, files):
+    pkg = root / 'pkg'
+    pkg.mkdir()
+    (pkg / '__init__.py').write_text('', encoding='utf-8')
+    for name, body in files.items():
+        (pkg / name).write_text(body, encoding='utf-8')
+    return pkg
+
+
+def test_lazy_cycle_site_is_the_deferred_back_import(tmp_path):
+    pkg = _package(tmp_path, {
+        'low.py': 'def helper():\n    from .high import top  # deferred upward import\n    return top()\n',
+        'high.py': 'from .low import helper\n\n\ndef top():\n    return helper\n',
+    })
+    # the load-time edge high -> low closes the cycle too, but it is not a lazy site
+    assert cb.lazy_cycle_sites(pkg, tmp_path) == {'pkg/low.py': [2]}
+
+
+def test_lazy_cycle_ignores_a_downward_lazy_import(tmp_path):
+    pkg = _package(tmp_path, {
+        'low.py': 'def helper():\n    return 1\n',
+        'high.py': 'from .low import helper\n\n\ndef top():\n    from .low import helper as h  # lazy, no cycle\n    return h()\n',
+    })
+    assert cb.lazy_cycle_sites(pkg, tmp_path) == {}
+
+
+def test_lazy_cycle_boundary_ok_is_skipped(tmp_path):
+    pkg = _package(tmp_path, {
+        'low.py': 'def helper():\n    from .high import top  # boundary-ok: lazy-cycle -- test\n    return top()\n',
+        'high.py': 'from .low import helper\n\n\ndef top():\n    return helper\n',
+    })
+    assert cb.lazy_cycle_sites(pkg, tmp_path) == {}
+
+
+def test_main_names_the_lazy_cycle_fix(ratchet, capsys):
+    assert ratchet({'lazy-cycle': {'reveal/x.py': [7]}}, {'lazy-cycle': {}}) == 1
+    out = capsys.readouterr().out
+    assert '[lazy-cycle] reveal/x.py: 0 -> 1  lines [7]' in out and 'move the function down a layer' in out
