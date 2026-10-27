@@ -3,7 +3,7 @@
 from typing import Any, Callable, Dict, List
 
 from .messages import cumulative_total_tokens
-from .normalize import text_of
+from .normalize import one_line, text_of
 
 
 def _cmd(payload: Dict[str, Any]) -> str:
@@ -45,7 +45,7 @@ _EVENT_MSG_HANDLERS: Dict[str, Callable[[Dict[str, Any]], str]] = {
 
 _RESPONSE_ITEM_HANDLERS: Dict[str, Callable[[Dict[str, Any]], str]] = {
     'function_call': lambda p: f"{p.get('name', '?')}({(p.get('arguments') or '')[:40]})",
-    'function_call_output': lambda p: f"→ {str(p.get('output', ''))[:60]}",
+    'function_call_output': lambda p: f"→ {one_line(p.get('output'))[:60]}",
     'reasoning': lambda _: 'reasoning (encrypted)',
     'message': _response_msg,
 }

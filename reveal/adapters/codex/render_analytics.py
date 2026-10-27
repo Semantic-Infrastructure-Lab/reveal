@@ -1,6 +1,6 @@
 """Analytics renderers for the Codex adapter — tools, errors, shell, tokens."""
 
-from .analysis.normalize import text_of
+from .analysis.normalize import one_line, text_of
 
 
 def _render_codex_tools(result: dict) -> None:
@@ -93,7 +93,7 @@ def _render_codex_workflow(result: dict) -> None:
             args = str(ev.get('arguments', ''))[:60]
             status = '✓' if ev.get('success') else '✗'
             print(f"  [{status}] tool  {name}({args})  [{ts}]")
-            out = str(ev.get('output') or '')
+            out = one_line(ev.get('output'))
             if out:
                 print(f"      → {out[:100]}")
         elif kind == 'shell':

@@ -32,6 +32,12 @@ def text_of(content: Any) -> str:
     return '\n'.join(parts)
 
 
+def one_line(content: Any) -> str:
+    """A tool output (text or content blocks) collapsed to one line for a preview row."""
+    text = text_of(content) or (str(content) if content else '')
+    return ' '.join(text.split())
+
+
 def _from_item(item: Dict[str, Any]) -> Dict[str, Any]:
     """The legacy event_msg payload for one item_completed item, or {} for none."""
     kind = item.get('type')
