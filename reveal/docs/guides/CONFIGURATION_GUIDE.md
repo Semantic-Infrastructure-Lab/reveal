@@ -7,8 +7,6 @@ help_category: feature_guides
 ---
 # Reveal Configuration Guide
 
-**Version:** v0.29.0+
-
 Reveal's configuration system provides flexible, hierarchical control over rule checking behavior through `.reveal.yaml` files and environment variables.
 
 ## Table of Contents
@@ -58,7 +56,7 @@ ignore:
 ### Verify Configuration
 
 ```bash
-# Check what config is loaded
+# See the merged active config for this directory
 reveal reveal://config
 
 # Test with environment variable
@@ -74,7 +72,7 @@ Reveal merges configurations from multiple sources with the following precedence
 
 1. **CLI flags** (`--select`, `--ignore`) - Highest priority
 2. **Environment variables** (`REVEAL_RULES_DISABLE`, etc.)
-3. **REVEAL_CONFIG file** (if `REVEAL_CONFIG` env var is set)
+3. **REVEAL_CONFIG file** — when set, it *replaces* levels 4-6 (no project, user or system config is read)
 4. **Project configs** (walk up from the checked file's directory, so `reveal check /other/proj/f.py` uses `/other/proj`'s `.reveal.yaml` wherever you run it)
 5. **User config** (`~/.config/reveal/config.yaml`)
 6. **System config** (`/etc/reveal/config.yaml`)
@@ -102,7 +100,9 @@ $ reveal check file.py --select=E501
 
 ## File Formats
 
-Reveal supports YAML, TOML, and JSON configuration files:
+Reveal reads `.reveal.yaml`, and a `[tool.reveal]` table in `pyproject.toml` (same keys, TOML
+syntax). `REVEAL_CONFIG` may point at a YAML or JSON file (JSON is valid YAML).
+`.reveal.toml` and `.reveal.json` are not discovered: they are ignored without a warning.
 
 ### YAML (Recommended)
 ```yaml
@@ -111,14 +111,14 @@ rules:
   disable: [C901, E501]
 ```
 
-### TOML
+### pyproject.toml
 ```toml
-# .reveal.toml
-[rules]
+# pyproject.toml
+[tool.reveal.rules]
 disable = ["C901", "E501"]
 ```
 
-### JSON
+### JSON (only through `REVEAL_CONFIG`)
 ```json
 {
   "rules": {
@@ -189,7 +189,7 @@ ignore:
 Patterns support:
 - Wildcards: `*.js`, `*.min.*`
 - Globstar: `vendor/**/*.py`
-- Negation: `!important.js` (not yet implemented)
+- Negation: `!important.js` re-includes a file an earlier pattern ignored (`.gitignore` semantics; see `REVEAL_IGNORE` below)
 
 ### Display Options
 
@@ -198,7 +198,8 @@ display:
   breadcrumbs: false  # Disable navigation hints (default: true for TTY)
 ```
 
-**Note:** Breadcrumbs are automatically hidden when output is piped.
+**Note:** Breadcrumbs are hidden when output is piped, unless a config sets `display.breadcrumbs`
+explicitly (an explicit `true` keeps them on in pipes).
 
 ### Layer Violations (I003)
 
@@ -218,8 +219,10 @@ architecture:
       deny_imports: [src/ui, src/domain]       # targets this layer must not reach
 ```
 
-A layer has `name`, `paths`, `allow_imports` and `deny_imports`, all prefixes; a config in any other
-shape exits 3 naming the bad key. Full reference: the imports guide, "Configuration (.reveal.yaml)".
+A layer has `name`, `paths`, `allow_imports` and `deny_imports`, all prefixes. In any other shape
+`imports://?violations` exits 3 naming the bad key; `reveal check` reports I003 as unavailable with
+the same reason and still exits 0 (watch the `Checks: ... unavailable` line). Full reference: the
+imports guide, "Configuration (.reveal.yaml)".
 
 ---
 
@@ -230,7 +233,8 @@ Reveal supports configuration via environment variables with higher precedence t
 ### Core Environment Variables
 
 #### `REVEAL_NO_CONFIG`
-Skip all config files (use only defaults and env vars):
+Skip all config files (use only defaults and env vars). The value must be exactly `1`;
+`true`/`yes` are not recognised:
 
 ```bash
 export REVEAL_NO_CONFIG=1
@@ -238,7 +242,8 @@ reveal check file.py
 ```
 
 #### `REVEAL_CONFIG`
-Load a specific config file instead of discovery:
+Load a specific config file instead of discovery (no project, user or system config is read
+while it is set):
 
 ```bash
 export REVEAL_CONFIG=/path/to/custom-config.yaml
@@ -324,8 +329,15 @@ monorepos:
 
 ```bash
 export REVEAL_I002_MAX_FILES=50000
+export REVEAL_I002_CYCLE_LIMIT=0   # see below: otherwise cycles are still skipped past 2,000 files
 reveal check very-large-monorepo/
 ```
+
+#### `REVEAL_I002_CYCLE_LIMIT`
+I002 skips whole-project cycle detection by default past 2,000 source files (and says so),
+because it can take minutes on a correct but large root. Set a higher number, or `0`, to always
+run it. This is separate from `REVEAL_I002_MAX_FILES`, which aborts on a root that is probably
+mis-detected.
 
 #### `REVEAL_D005_MAX_FILES` / `REVEAL_T006_MAX_FILES`
 Same kind of ceiling for the two other rules that index the whole project once per run.
@@ -502,7 +514,7 @@ overrides:
 overrides:
   - files: "*.py"          # All Python files
   - files: "src/**/*.py"   # Python files in src/
-  - files: "test_*.py"     # Test files by naming convention
+  - files: "**/test_*.py"  # Test files by naming convention, at any depth
   - files: "**/__init__.py" # All __init__.py files
 ```
 
@@ -640,7 +652,7 @@ reveal check src/
 1. Check file is in project root or parent directory
 2. Verify YAML syntax: `python -c "import yaml; yaml.safe_load(open('.reveal.yaml'))"`
 3. Check for `root: true` in parent directory stopping discovery
-4. Use `reveal reveal://config` to see loaded config
+4. Use `reveal reveal://config` to see the merged active config, and `reveal dev inspect-config` for the nearest `.reveal.yaml` path
 
 ### Rule Still Running After Disable
 
@@ -648,7 +660,9 @@ reveal check src/
 
 **Possible causes:**
 1. CLI flag overriding: `--select` ignores config
-2. Environment variable precedence: `REVEAL_RULES_SELECT` overrides file config
+2. A `disable` in any layer (system, user, project, env) cannot be undone by a nearer layer: lists
+   are concatenated, not replaced, and `disable` is checked before `select`. Only CLI `--select`
+   overrides it.
 3. Typo in rule code: `C901` not `C9O1` (zero vs letter O)
 
 **Debug:**
@@ -666,31 +680,36 @@ print(cfg.dump())
 
 **Problem:** Unsure which config is being used
 
-**Solution:** Use `reveal://config` to see exactly what's loaded:
+**Solution:** Use `reveal://config` to see the merged active config:
 
 ```bash
-# See full configuration transparency
 reveal reveal://config
 
 # Shows:
-# - All environment variables set
-# - All config files discovered (project, user, system)
-# - Active merged configuration
+# - The merged active config for the current directory (rules, ignore, overrides, root)
+# - The REVEAL_* threshold variables that are set
 # - Precedence order explanation
 ```
+
+It does not yet list which project config files were loaded (`Config Files Found` reads 0 even
+when a `.reveal.yaml` applies), and its environment list leaves out `REVEAL_RULES_SELECT`,
+`REVEAL_IGNORE`, `REVEAL_FORMAT` and `REVEAL_BREADCRUMBS`. It discovers from the current
+directory, not from a file you name. Use `reveal dev inspect-config` for the nearest
+`.reveal.yaml` path (read only its `Config file:` line: it always ends with "Using all default
+settings.", even when the file sets rules).
 
 **Manual precedence check:**
 1. Check for CLI flags first
 2. Check environment variables: `env | grep REVEAL_`
 3. Check for `REVEAL_CONFIG` env var
-4. Check `.reveal.yaml` in current and parent directories
+4. Check `.reveal.yaml` (and `pyproject.toml` `[tool.reveal]`) in current and parent directories
 5. Check user config: `~/.config/reveal/config.yaml`
 
 ### Debugging with reveal://config
 
 **Problem:** Need to understand current configuration state
 
-**Solution:** Use `reveal://config` for complete transparency:
+**Solution:** Use `reveal://config` for the merged state:
 
 ```bash
 # Human-readable output
@@ -704,32 +723,49 @@ REVEAL_C901_THRESHOLD=20 reveal reveal://config
 ```
 
 **What it shows:**
-- **Overview**: Project root, working directory, config file counts
-- **Sources**: Environment variables, custom config, discovered config files
-- **Active Config**: Merged rules, ignore patterns, root flag, overrides
+- **Overview**: Project root, working directory, no-config mode, counts
+- **Sources**: the `REVEAL_*` threshold variables that are set, and a `REVEAL_CONFIG` file
+- **Active Config**: Merged rules (disabled rules and per-rule settings; the text view omits
+  `select`, the JSON `active_config.rules` has it), ignore patterns, root flag, overrides
 - **Precedence**: 7-level hierarchy explanation
 
-**Example output:**
+**Example output** (a project with `.reveal.yaml` = `root: true` and `rules: {disable: [E501]}`):
 ```
-Configuration Sources:
-  Environment Variables:
-    REVEAL_C901_THRESHOLD: 20
+Overview:
+  Project Root: /home/user/project
+  Working Directory: /home/user/project
+  No-Config Mode: False
+  Config Files Found: 0
+  Environment Variables Set: 1
 
-  Project Configs:
-    /home/user/project/.reveal.yaml
+Configuration Sources:
+
+  Environment Variables:
+    * REVEAL_C901_THRESHOLD = 20
 
 Active Configuration:
+
   Rules:
+    Disabled: E501
     C901:
-      threshold: 20  # From REVEAL_C901_THRESHOLD
+      threshold: 20
+
+  Root:
+    * root: true (stops config search)
 ```
+
+`Config Files Found: 0` is a known gap: the project file was read (its `disable` and `root` are
+in the active config) but is not listed as a source.
 
 ### Pattern Matching Not Working
 
 **Problem:** `ignore` or `overrides` pattern not matching files
 
 **Common issues:**
-- Missing `**` for subdirectories: Use `src/**/*.py` not `src/*.py`
+- Overrides anchor at the project root: write `**/name.py` to match at any depth. In
+  `overrides.files` a pattern without `**` is matched with `fnmatch`, where `*` also crosses
+  `/` (`src/*.py` matches `src/a/b.py`). (`ignore:` uses `.gitignore` rules instead, where a bare
+  name matches at any depth and `*` does not cross `/`.)
 - Absolute vs relative paths: Patterns match relative to project root
 - Case sensitivity: Patterns are case-sensitive on Linux/macOS
 
@@ -751,7 +787,7 @@ Reveal can load custom file analyzers at startup without any registration boiler
 
 | Location | Scope |
 |----------|-------|
-| `.reveal/analyzers/` in your project root | Project-local plugins |
+| `.reveal/analyzers/` under the current working directory | Project-local plugins |
 | `~/.reveal/plugins/` | User-global plugins (all projects) |
 
 ### Writing a Plugin
@@ -759,26 +795,26 @@ Reveal can load custom file analyzers at startup without any registration boiler
 A plugin file must define a `FileAnalyzer` subclass decorated with `@register`:
 
 ```python
-# .reveal/analyzers/myformat_analyzer.py
+# .reveal/analyzers/myformat_analyzer.py   (relative to the directory you run reveal from)
 from reveal.base import FileAnalyzer
 from reveal.registry import register
 
-@register
+@register('.myext', name='MyFormat')
 class MyFormatAnalyzer(FileAnalyzer):
-    extensions = ['.myext']
-
-    def get_structure(self):
+    def get_structure(self, **kwargs):
         # ... your analysis logic
-        return self.result_builder.create(entries=[...])
+        return {'sections': [{'name': 'hello', 'line': 1}]}
 ```
 
-The `@register` decorator fires on import — no manual registry entry needed.
+`register(*extensions, name=...)` is a decorator factory: pass the extensions it handles. It fires
+on import — no manual registry entry needed. `reveal a.myext` then prints `Sections (1): :1 hello`.
 
 ### Discovery Behavior
 
 - Discovery runs once per process (lazy, on first `get_analyzer()` call)
 - Bad plugin files emit a warning and are skipped without crashing reveal
-- `reveal dev inspect-config` shows which plugins were loaded
+- No command lists the loaded plugins; a successful load is logged only at debug level
+  (`Loaded plugin: <path>`)
 
 ### Testing Plugins
 
@@ -798,12 +834,12 @@ def test_my_plugin():
 ### Config Discovery Algorithm
 
 1. Start at current file's directory
-2. Check for `.reveal.{yaml,toml,json}`
+2. Check for `.reveal.yaml`, then a `pyproject.toml` `[tool.reveal]` table
 3. If found and `root: true`, stop
 4. If found, add to config stack
 5. Move to parent directory
 6. Repeat until reaching filesystem root or finding `root: true`
-7. Merge all configs (nearest has highest precedence)
+7. Merge all configs: scalars from the nearest win; lists (such as `disable`) are concatenated
 
 ### Config Caching
 
@@ -826,11 +862,10 @@ Reveal follows XDG Base Directory specification:
 
 - Config: `$XDG_CONFIG_HOME/reveal/config.yaml` (default: `~/.config/reveal/config.yaml`)
 - Data: `$XDG_DATA_HOME/reveal/` (default: `~/.local/share/reveal/`)
-- Cache: `$XDG_CACHE_HOME/reveal/` (default: `~/.cache/reveal/`)
+- Cache: `~/.reveal/cache/` (override with `REVEAL_CACHE_DIR`; not XDG)
 
-Legacy paths still supported with deprecation warning:
-- `~/.reveal/config.yaml` → `~/.config/reveal/config.yaml`
-- `~/.reveal/rules/` → `~/.local/share/reveal/rules/`
+Legacy path still read, with a migration warning:
+- `~/.reveal/rules/` → `$XDG_DATA_HOME/reveal/rules/` (default `~/.local/share/reveal/rules/`)
 
 ---
 
@@ -843,6 +878,3 @@ Legacy paths still supported with deprecation warning:
 - `reveal help://` - List all help topics
 - `reveal check --help` - CLI usage
 
----
-
-**Last Updated:** 2026-01-03 (v0.29.0)
