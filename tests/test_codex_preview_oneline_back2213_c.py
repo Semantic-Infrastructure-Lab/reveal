@@ -14,8 +14,8 @@ from reveal.adapters.codex.render_analytics import _render_codex_workflow
 MULTI = 'Script completed\nWall time 10.2 seconds\nOutput:\n\n{"ok": true}'
 
 
-def _workflow_text(output):
-    ev = {'kind': 'tool_call', 'name': 'exec', 'arguments': '{}', 'success': True,
+def _workflow_text(output, arguments='{}'):
+    ev = {'kind': 'tool_call', 'name': 'exec', 'arguments': arguments, 'success': True,
           'timestamp': '2026-10-22T10:00:00Z', 'output': output}
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
@@ -37,3 +37,8 @@ def test_timeline_output_summary_is_one_line():
     summary = _summarize('response_item', {'type': 'function_call_output', 'output': MULTI})
     assert '\n' not in summary
     assert summary.startswith('→ Script completed Wall time')
+
+
+def test_workflow_arguments_are_one_line():
+    text = _workflow_text('ok', arguments='const r = await f([\n  1,\n  2])')
+    assert '  [✓] tool  exec(const r = await f([ 1, 2]))  [2026-10-22T10:00:00]' in text.splitlines()

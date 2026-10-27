@@ -90,7 +90,7 @@ def _render_codex_workflow(result: dict) -> None:
         ts = (ev.get('timestamp') or '')[:19]
         if kind == 'tool_call':
             name = ev.get('name', '?')
-            args = str(ev.get('arguments', ''))[:60]
+            args = one_line(ev.get('arguments'))[:60]
             status = '✓' if ev.get('success') else '✗'
             print(f"  [{status}] tool  {name}({args})  [{ts}]")
             out = one_line(ev.get('output'))
