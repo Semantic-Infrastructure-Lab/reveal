@@ -149,7 +149,8 @@ def test_depends_directory_json_exits_0_with_its_shape(partial):
     assert result.returncode == 0, result.stderr
     doc = json.loads(result.stdout)
     assert doc['type'] == 'dependency_summary'
-    assert {'modules', 'total_modules', '_format', 'edge_rule', 'metadata', '_meta'} <= set(doc)
+    assert {'modules', 'total_modules', 'edge_rule', 'metadata', '_meta'} <= set(doc)
+    assert '_format' not in doc  # renderer routing, not part of the shape (BACK-2282)
     assert all(set(m) == {'module', 'dependent_count', 'dependents'} for m in doc['modules'])
     assert 'partial_parse' in _warning_types(doc)
 

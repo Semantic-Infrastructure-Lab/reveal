@@ -243,6 +243,11 @@ class DependsRenderer:
 
     @staticmethod
     def render_structure(result: dict, format: str = 'text', verbose: bool = False, resource: str = '.') -> None:
+        # ?format=dot is a URI output override (as on imports:// and calls://): it wins over
+        # --format, so the private routing field never reaches JSON (BACK-2282).
+        if result.get('_format') == 'dot':
+            DependsRenderer._render_dot(result)
+            return
         if format == 'json':
             print_json_result(result)
             return
@@ -254,11 +259,7 @@ class DependsRenderer:
         if result_type == 'module_dependents':
             DependsRenderer._render_dependents(result, verbose)
         elif result_type == 'dependency_summary':
-            fmt = result.get('_format', 'text')
-            if fmt == 'dot':
-                DependsRenderer._render_dot(result)
-            else:
-                DependsRenderer._render_summary(result, verbose, resource)
+            DependsRenderer._render_summary(result, verbose, resource)
         else:
             print_json_result(result)
 
@@ -952,7 +953,6 @@ class DependsAdapter(ResourceAdapter):
             contract_version=CONTRACT_VERSION,
             source_type='directory',
             data={
-                '_format': fmt,
                 'modules': modules,
                 'total_modules': total_modules,
                 'edge_rule': self._edge_rule(),
@@ -960,6 +960,10 @@ class DependsAdapter(ResourceAdapter):
                 '_meta': self._build_meta(),
             },
         )
+        if fmt == 'dot':
+            # Renderer routing only, set for the one value it acts on; text and JSON never
+            # carry it (BACK-2282).
+            result['_format'] = 'dot'
         # total_modules stays for JSON readers; the marker is what every renderer and the
         # router read as a cut (BACK-1543).
         note_truncation(result, 'modules', len(modules), total_modules, 'limit', hint='raise ?top=N')

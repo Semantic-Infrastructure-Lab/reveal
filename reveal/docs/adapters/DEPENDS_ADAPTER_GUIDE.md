@@ -30,7 +30,8 @@ for a file target, its own extension family.
 - **Parameters:** `top` (caps the module or dependent list), `root` (override the scan root),
   `verbose` (directory targets: list each module's importers under its row; a file target
   already lists each importing file) and `format`. Only `?format=dot` changes the
-  output, and only for a directory target; for JSON use the CLI `--format json`. Any other
+  output, and only for a directory target, where it wins over `--format json` as on
+  `imports://` and `calls://`; for JSON use the CLI `--format json`. Any other
   `format` value, and `dot` on a file target, falls back to text without a warning.
 - **File target (`module_dependents`):** text prints a `Rule:` line, then
   `N file(s) import this module:` (`N file(s) import this module (showing K):` under `?top=`,
@@ -44,7 +45,7 @@ for a file target, its own extension family.
   `Top N of M module(s) imported internally (K import edges shown)`), one bar row per module,
   a `Tip:` line, the `ℹ` line and, when capped, `⚠ Truncated modules: showing N of M`. JSON
   carries `modules` (each `module`, `dependent_count`, `dependents`), `total_modules`,
-  `edge_rule`, `metadata`, `_meta` and `undercount_possible`, plus an internal `_format` field.
+  `edge_rule`, `metadata`, `_meta` and `undercount_possible`.
 - **Disclosure:** `metadata.scan_capped` means the scan hit the 5,000-file cap;
   `metadata.root_inferred` means no project marker was found, so only the target's own
   directory was scanned. Directory loss during the scan is reported in `meta.warnings`, with
