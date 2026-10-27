@@ -104,9 +104,9 @@ class TestPackagingManifest(unittest.TestCase):
 
     def test_every_tracked_package_file_ships(self):
         """The sdist built from the staged copy holds every tracked file under
-        reveal/, data files included (help_data/*.yaml, schemas/frontmatter):
-        they ship through setuptools_scm's git file finder, so this fails if
-        _stage_sources stops committing its copy."""
+        reveal/, data files included (help_data/*.yaml, schemas/frontmatter).
+        TestBuildWithoutGit checks the same without setuptools_scm's git file
+        finder."""
         tracked = subprocess.run(
             ['git', 'ls-files', '-z', 'reveal'], cwd=self.project_root,
             capture_output=True, check=True,

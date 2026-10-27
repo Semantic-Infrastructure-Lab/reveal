@@ -121,7 +121,7 @@ exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 plugins = ["*.yaml", "*.yml"]
-reveal = ["../plugins/*.yaml", "docs/*.md"]
+reveal = ["../plugins/*.yaml", "docs/*.md", "adapters/help_data/*.yaml", "schemas/frontmatter/*.yaml"]
 
 [tool.setuptools]
 include-package-data = true

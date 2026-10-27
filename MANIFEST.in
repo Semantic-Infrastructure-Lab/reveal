@@ -20,3 +20,8 @@ recursive-exclude * *.py[co]
 
 # Include agent help documentation (in reveal/docs/ subdirectory)
 recursive-include reveal/docs *.md
+
+# Package data read at runtime (help:// topics, frontmatter schemas); declared so a
+# build without git history ships them too (BACK-2154)
+recursive-include reveal/adapters/help_data *.yaml
+recursive-include reveal/schemas/frontmatter *.yaml
