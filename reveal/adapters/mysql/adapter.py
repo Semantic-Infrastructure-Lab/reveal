@@ -928,8 +928,7 @@ class MySQLAdapter(ResourceAdapter):
     def _load_health_check_config(self) -> Dict[str, Any]:
         """Load health check configuration from file or use defaults.
 
-        Uses unified reveal config system with XDG-compliant paths.
-        Config file locations (in order of precedence):
+        Config file locations (the first that loads wins; ``RevealConfig.load_standalone_file``):
         1. ./.reveal/mysql-health-checks.yaml (project)
         2. ~/.config/reveal/mysql-health-checks.yaml (user)
         3. /etc/reveal/mysql-health-checks.yaml (system)
@@ -938,7 +937,7 @@ class MySQLAdapter(ResourceAdapter):
         Returns:
             Dict with 'checks' key containing list of check definitions
         """
-        from reveal.config import load_config
+        from reveal.config import RevealConfig
 
         # Default configuration (fallback)
         defaults = {
@@ -953,8 +952,8 @@ class MySQLAdapter(ResourceAdapter):
             ]
         }
 
-        # Load from unified config system
-        return load_config('mysql-health-checks.yaml', defaults)
+        loaded = RevealConfig.load_standalone_file('mysql-health-checks.yaml')
+        return loaded if loaded is not None else defaults
 
     def _parse_percentage(self, value_str) -> float:
         """Parse percentage string like '12.5%' to float.

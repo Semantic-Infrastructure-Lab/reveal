@@ -710,6 +710,26 @@ class RevealConfig:
         return None, why
 
     @classmethod
+    def load_standalone_file(cls, name: str) -> Optional[Dict[str, Any]]:
+        """An adapter's own YAML file *name*, outside the merged config (BACK-2270).
+
+        The first of ``./.reveal/<name>``, ``~/.config/reveal/<name>`` and
+        ``/etc/reveal/<name>`` that loads wins whole; files are not merged, because a merge
+        would concatenate lists such as mysql's ``checks``. None when no file loads (a
+        malformed one is logged at WARNING and skipped).
+        """
+        if not yaml:
+            return None
+        for path in (Path.cwd() / '.reveal' / name,
+                     Path.home() / '.config' / 'reveal' / name,
+                     Path('/etc/reveal') / name):
+            if path.exists():
+                result = _try_load_yaml_file(path)
+                if result is not None:
+                    return result
+        return None
+
+    @classmethod
     def _get_user_config_path(cls) -> Path:
         """Get user config path following XDG spec."""
         xdg_config = os.getenv('XDG_CONFIG_HOME')
@@ -1049,20 +1069,8 @@ def load_config(name: str, default: Optional[Dict[str, Any]] = None) -> Dict[str
         Config dict
     """
     logger.warning(f"load_config('{name}') is deprecated. Use RevealConfig.get() instead.")
-
-    config_paths = [
-        Path.cwd() / '.reveal' / name,
-        Path.home() / '.config' / 'reveal' / name,
-        Path('/etc/reveal') / name,
-    ]
-
-    for path in config_paths:
-        if path.exists() and yaml:
-            result = _try_load_yaml_file(path)
-            if result is not None:
-                return result
-
-    return default or {}
+    result = RevealConfig.load_standalone_file(name)
+    return result if result is not None else (default or {})
 
 
 def get_cache_path(name: str) -> Path:
