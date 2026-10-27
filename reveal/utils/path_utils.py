@@ -155,6 +155,20 @@ def is_test_path(path: Union[str, PurePath]) -> bool:
     return any(is_test_dir(part) for part in p.parts[:-1]) or is_test_file_name(p)
 
 
+def in_test_scope(path: Path, root: Path) -> bool:
+    """Whether *path*, found by walking *root*, is a test by the one shared rule (``is_test_path``).
+
+    The path is judged from the root's own name down, so ``patches://tests`` (the root IS a test
+    directory) scans everything under it while a repository root scans only its test-named
+    directories and files, and the directories above the root never decide (a checkout that lives
+    under a ``tests/`` directory is not all tests). BACK-1888, Phase 4 Q-P4-1.
+    """
+    try:
+        return is_test_path(Path(root.name) / path.relative_to(root))
+    except ValueError:
+        return is_test_path(path)
+
+
 def is_test_file_name(path: Union[str, PurePath]) -> bool:
     """The file-name half of :func:`is_test_path` (no directory check): generic
     ``test_``/``_test``/``Test`` naming plus the file's own language convention.

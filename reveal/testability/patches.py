@@ -10,7 +10,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Callable, Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from ..utils.path_utils import _walk_code_files, is_test_basename_for_language, is_test_path, to_posix, failure_of
+from ..utils.path_utils import _walk_code_files, in_test_scope, is_test_basename_for_language, to_posix, failure_of
 from ..utils.pyparse import parse_python
 from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root
 from ..core.treesitter_parse import GrammarUnavailable, get_tree
@@ -111,20 +111,6 @@ def _is_ts_test_file(p: Path) -> bool:
         is_test_basename_for_language(p.name)  # *.spec.* / *.test.* from the conventions profile
         or ('__tests__' in p.parts and p.suffix in _TS_TEST_EXTENSIONS)
     )
-
-
-def in_test_scope(path: Path, root: Path) -> bool:
-    """Whether *path*, found by walking *root*, is a test by the one shared rule (``is_test_path``).
-
-    The path is judged from the root's own name down, so ``patches://tests`` (the root IS a test
-    directory) scans everything under it while a repository root scans only its test-named
-    directories and files, and the directories above the root never decide (a checkout that lives
-    under a ``tests/`` directory is not all tests). BACK-1888, Phase 4 Q-P4-1.
-    """
-    try:
-        return is_test_path(Path(root.name) / path.relative_to(root))
-    except ValueError:
-        return is_test_path(path)
 
 
 def iter_test_files(
