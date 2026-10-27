@@ -203,7 +203,7 @@ calls when you know which sections you want, reducing round-trips by N−1.
 ```bash
 $ reveal docs/README.md --links
 
-File: README.md
+File: README.md (651B, 52 lines)
 
 Links (5):
 
@@ -279,7 +279,7 @@ Reveal automatically validates internal links:
 ```bash
 $ reveal README.md --links --link-type internal
 
-File: README.md
+File: README.md (651B, 52 lines)
 
 Links (3):
 
@@ -735,7 +735,7 @@ Contact us at [support@example.com](mailto:support@example.com).
 
 **Output**:
 ```
-File: example.md
+File: example.md (127B, 11 lines)
 
 Links (3):
 
@@ -878,7 +878,7 @@ Human-readable output with grouping and formatting:
 ```bash
 $ reveal README.md --links
 
-File: README.md
+File: README.md (651B, 52 lines)
 
 Links (3):
   External (2):

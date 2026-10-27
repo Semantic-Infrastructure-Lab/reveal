@@ -391,6 +391,8 @@ Rule: callers whose body calls orphan_fn by bare name or import alias; ...; dept
 
   No callers found for 'orphan_fn'.
 
+⚠ Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.
+...
 ⚠ Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; ...
 ```
 
