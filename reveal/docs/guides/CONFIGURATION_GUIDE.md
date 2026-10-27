@@ -208,7 +208,7 @@ architecture:
   layers:
     - name: presentation
       paths: [src/ui]
-      allow_imports: [src/domain, src/utils]   # every import target must match one of these
+      allow_imports: [src/domain, src/utils]   # may import only itself and these
 
     - name: domain
       paths: [src/domain]
@@ -219,7 +219,11 @@ architecture:
       deny_imports: [src/ui, src/domain]       # targets this layer must not reach
 ```
 
-A layer has `name`, `paths`, `allow_imports` and `deny_imports`, all prefixes. In any other shape
+A layer has `name`, `paths`, `allow_imports` and `deny_imports`, all prefixes. `allow_imports` is an
+allow list: when the key is present a layer may import only its own files and the listed prefixes, and
+`allow_imports: []` means "nothing outside this layer"; leave the key out for no allow list.
+`deny_imports` always wins. Only imports of other files in the project are judged: standard-library
+and third-party imports are never checked. In any other shape
 `imports://?violations` exits 3 naming the bad key; `reveal check` reports I003 as unavailable with
 the same reason and still exits 0 (watch the `Checks: ... unavailable` line). Full reference: the
 imports guide, "Configuration (.reveal.yaml)".

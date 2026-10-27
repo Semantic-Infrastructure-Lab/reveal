@@ -176,8 +176,8 @@ CONFIG_SCHEMA = {
                         "properties": {
                             "name": {"type": "string"},
                             "paths": {"type": "array"},
-                            "allow_imports": {"type": "array"},
-                            "deny_imports": {"type": "array"}
+                            "allow_imports": {"type": "array", "items": {"type": "string"}},
+                            "deny_imports": {"type": "array", "items": {"type": "string"}}
                         }
                     }
                 }

@@ -16,6 +16,13 @@ Example .reveal.yaml configuration:
           paths: ["src/services/**"]
           allow_imports: ["src/repositories", "src/models"]
           deny_imports: ["src/routes", "src/api"]
+
+        - name: "domain"
+          paths: ["src/domain/**"]
+          allow_imports: []        # nothing outside the layer itself
+
+A layer may always import its own files. `allow_imports`, when present (even empty), limits the
+layer to those files plus the listed prefixes; omit it for no allow list. `deny_imports` wins.
 """
 
 import logging
@@ -217,9 +224,12 @@ class I003(BaseRule):
 
         suggestions = []
 
-        if layer.allow_imports:
-            allowed = ", ".join(layer.allow_imports)
-            suggestions.append(f"The {layer_name} layer can only import from: {allowed}")
+        if layer.allow_imports is not None:
+            if layer.allow_imports:
+                allowed = ", ".join(layer.allow_imports)
+                suggestions.append(f"The {layer_name} layer can only import from itself and: {allowed}")
+            else:
+                suggestions.append(f"The {layer_name} layer cannot import from outside itself")
 
         if layer.deny_imports:
             denied = ", ".join(layer.deny_imports)

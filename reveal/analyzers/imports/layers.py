@@ -22,7 +22,7 @@ Example .reveal.yaml:
 
 import difflib
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 
@@ -37,6 +37,21 @@ class LayerConfigError(ValueError):
 
 _ARCHITECTURE_KEYS = ("layers",)
 _LAYER_KEYS = ("name", "paths", "allow_imports", "deny_imports")
+
+
+def _check_prefix_list(value: Any, where: str, allow_empty_hint: bool) -> None:
+    """A layer's allow_imports/deny_imports must be a list of strings.
+
+    A key written with no value (YAML null) is refused rather than read as absent or empty: for
+    allow_imports those two mean opposite things.
+    """
+    if value is None:
+        hint = " (write [] to forbid every import outside the layer, or remove the key)" if allow_empty_hint else ""
+        raise LayerConfigError(f"{where} is empty{hint}")
+    if not isinstance(value, list):
+        raise LayerConfigError(f"{where} must be a list, got {type(value).__name__}")
+    if not all(isinstance(item, str) for item in value):
+        raise LayerConfigError(f"{where} must be a list of strings")
 
 
 def _reject_unknown_keys(mapping: Dict[str, Any], known: Tuple[str, ...], where: str) -> None:
@@ -57,8 +72,10 @@ class LayerRule:
 
     name: str
     paths: List[str]  # Glob patterns
-    allow_imports: List[str]  # Module prefixes allowed
-    deny_imports: List[str]  # Module prefixes denied
+    # Module prefixes allowed. None = no allow list; [] = an allow list that is empty, so the
+    # layer may import nothing outside its own files. A layer's own files are always allowed.
+    allow_imports: Optional[List[str]] = None
+    deny_imports: List[str] = field(default_factory=list)  # Module prefixes denied
 
     def matches_file(self, file_path: Path, project_root: Optional[Path] = None) -> bool:
         """Check if a file belongs to this layer.
@@ -119,10 +136,14 @@ class LayerRule:
             if to_module.startswith(pattern):
                 return True, f"{self.name} layer cannot import from {deny_pattern}"
 
-        # If allow_imports is specified, target must match one of them
-        if self.allow_imports and not self._is_target_allowed(to_module):
+        # An allow list (even an empty one) restricts imports to the layer's own files plus
+        # the listed prefixes
+        if (self.allow_imports is not None and not self.matches_file(to_file, project_root)
+                and not self._is_target_allowed(to_module)):
+            if not self.allow_imports:
+                return True, f"{self.name} layer cannot import from outside itself"
             allowed_str = ", ".join(self.allow_imports)
-            return True, f"{self.name} layer can only import from: {allowed_str}"
+            return True, f"{self.name} layer can only import from itself and: {allowed_str}"
 
         return False, None
 
@@ -137,7 +158,7 @@ class LayerRule:
 
     def _is_target_allowed(self, to_module: str) -> bool:
         """Return True if *to_module* matches at least one pattern in allow_imports."""
-        for allow_pattern in self.allow_imports:
+        for allow_pattern in self.allow_imports or []:
             pattern = allow_pattern if allow_pattern.endswith("/") else allow_pattern + "/"
             if to_module.startswith(pattern):
                 return True
@@ -201,16 +222,19 @@ class LayerConfig:
                 )
             where = f"{source}: architecture.layers[{index}]"
             _reject_unknown_keys(layer_def, _LAYER_KEYS, where)
-            if not layer_def.get("allow_imports") and not layer_def.get("deny_imports"):
+            for key in ("allow_imports", "deny_imports"):
+                if key in layer_def:
+                    _check_prefix_list(layer_def[key], f"{where}.{key}", allow_empty_hint=key == "allow_imports")
+            if "allow_imports" not in layer_def and not layer_def.get("deny_imports"):
                 raise LayerConfigError(
-                    f"{where} sets neither a non-empty allow_imports nor deny_imports, so it enforces "
-                    "nothing (an empty allow_imports list does not forbid every import)"
+                    f"{where} sets neither allow_imports nor a non-empty deny_imports, so it enforces "
+                    "nothing (allow_imports: [] forbids every import outside the layer)"
                 )
             layers.append(LayerRule(
                 name=layer_def.get("name", "unnamed"),
                 paths=layer_def.get("paths", []),
-                allow_imports=layer_def.get("allow_imports", []),
-                deny_imports=layer_def.get("deny_imports", []),
+                allow_imports=layer_def.get("allow_imports"),
+                deny_imports=layer_def.get("deny_imports") or [],
             ))
 
         return cls(layers=layers)
