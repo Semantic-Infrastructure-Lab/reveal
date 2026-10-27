@@ -220,9 +220,9 @@ def _architecture_components(components: List[Dict[str, Any]], top: int,
                              base_path: Optional[Path], cohesion_rule: Optional[str] = None) -> List[str]:
     if not components:
         return []
-    declined = any(c['cohesion'] is None for c in components)
+    declined = sum(1 for c in components if c['cohesion'] is None)
     lines = [f"  Components  ({len(components)} directories, by cohesion"
-             + ("; n/a ones last, by file count)" if declined else ")")]
+             + (f"; {declined} n/a, last, by file count)" if declined else ")")]
     for c in components[:top]:
         rel = _relpath(c['component'], base_path)
         cohesion = c['cohesion']
