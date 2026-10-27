@@ -598,12 +598,15 @@ class TestGlobFilePatternFixAlsoRestoresV009(unittest.TestCase):
     same bug: '*.md' matched neither the bare-suffix branch ('.md' != '*.md')
     nor the exact-name branch, so V009 was equally 100% dead in any real
     `reveal check` run before this fix. No V009-specific logic changed —
-    this only confirms the generic base.py fix also covers it."""
+    this only confirms the generic base.py fix also covers it. V009 is reveal-only
+    (BACK-2253): the glob selects the reveal:// element, never a real document."""
 
     def test_matches_target_glob_pattern(self):
-        self.assertTrue(V009.matches_target('doc.md'))
-        self.assertTrue(V009.matches_target('docs/readme.md'))
-        self.assertFalse(V009.matches_target('doc.py'))
+        self.assertTrue(V009.matches_target('reveal://doc.md'))
+        self.assertTrue(V009.matches_target('reveal://docs/readme.md'))
+        self.assertFalse(V009.matches_target('reveal://doc.py'))
+        self.assertFalse(V009.matches_target('doc.md'))
+        self.assertFalse(V009.matches_target('docs/readme.md'))
 
 
 class TestM103ExactNameFilePatternNonPython(_TempDirMixin, unittest.TestCase):

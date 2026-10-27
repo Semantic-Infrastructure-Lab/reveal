@@ -16,7 +16,6 @@ Examples:
 """
 
 import re
-from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
@@ -43,11 +42,11 @@ class V017(BaseRule):
     """
 
     code = "V017"
-    scope = RuleScope.FILE
+    scope = RuleScope.CROSS_FILE
     message = "Tree-sitter node types missing for supported language"
     category = RulePrefix.V
     severity = Severity.HIGH
-    file_patterns = ['.py']
+    file_patterns = []  # No file-extension form; reveal:// self-check only
     uri_patterns = ['^reveal://.*']
     version = "1.0.0"
     internal = True  # only ever validates reveal's own treesitter.py
@@ -56,73 +55,55 @@ class V017(BaseRule):
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
-        """Check tree-sitter node type coverage.
+        """Check tree-sitter node type coverage of reveal's own source.
+
+        The evidence is two files read together: core/node_taxonomy.py holds the function and
+        class node types (BACK-814, BACK-911), treesitter.py the identifier kinds. Either alone
+        answers wrongly, so the registry matches this rule to a ``reveal://`` target only
+        (BACK-2253) and ``reveal://`` carries no content of its own: both files are read here.
 
         Args:
-            file_path: Path to file being checked
-            structure: Parsed structure
-            content: Raw file content
+            file_path: ``reveal://...`` for a self-check; anything else is not applicable
+            structure: Unused
+            content: Unused
 
         Returns:
             List of detections for missing node type coverage
         """
-        # `reveal reveal:// --check` invokes every internal rule's check() with
-        # file_path="reveal://" and content="" (see
-        # reveal/adapters/reveal/operations.py::check()) — there is no per-file
-        # scan for internal rules to hook into. Without uri_patterns above, this
-        # rule never matched that literal string (BaseRule.matches_target()
-        # requires a '.py' suffix or an explicit URI pattern) and was 100% dead
-        # in every real reveal:// self-check, identical in shape to the M105
-        # bug from BACK-432 tranche 5. Load node_taxonomy.py directly in that
-        # case — BACK-814 moved FUNCTION_NODE_TYPES/CLASS_NODE_TYPES from
-        # literal tuples in treesitter.py to `tuple(_DEF_NODES - {...})` /
-        # `tuple(_CLASS_NODES)` derived expressions sourced from that module's
-        # DEF_NODES/CLASS_NODES frozensets; treesitter.py itself no longer
-        # contains any quoted node-type strings for this rule's regexes to
-        # find, so scanning it always returned near-empty coverage after that
-        # refactor (caught only once this rule's own test suite actually ran
-        # against a real push, since the BACK-814 commit had been local-only).
-        # Identifier-kind coverage (_NAME_KINDS, incl. 'simple_identifier' for
-        # Kotlin/Swift) still lives in treesitter.py — only the function/class
-        # node-type *counts* moved to node_taxonomy.py by BACK-814 — so this
-        # rule needs both files' content, not just one.
-        identifier_content = content
-        if file_path.startswith('reveal://'):
-            reveal_root = find_reveal_root()
-            if not reveal_root:
-                return self.unavailable("reveal source root unavailable")
-            # BACK-911 moved DEF_NODES/CLASS_NODES to core/node_taxonomy.py,
-            # leaving a back-compat shim (no frozenset literals) at the old
-            # adapters/ast/ path — read from the new location first, same
-            # shape of break as the BACK-814 comment above describes.
-            taxonomy_path = reveal_root / 'core' / 'node_taxonomy.py'
-            if not taxonomy_path.exists():
-                taxonomy_path = reveal_root / 'adapters' / 'ast' / 'node_taxonomy.py'
-            treesitter_path = reveal_root / 'treesitter.py'
-            if not taxonomy_path.exists():
-                return self.unavailable("required source or documentation missing", taxonomy_path.as_posix())
-            try:
-                content = taxonomy_path.read_text(encoding='utf-8')
-                identifier_content = (
-                    treesitter_path.read_text(encoding='utf-8')
-                    if treesitter_path.exists() else content
-                )
-            except OSError:
-                return self.unavailable("required input could not be inspected")
-            file_path = str(taxonomy_path)
-        elif Path(file_path).name not in ('node_taxonomy.py', 'treesitter.py'):
-            # BACK-852 (dogfooding find, same class as V016/V023): the old
-            # substring check ('node_taxonomy.py' not in file_path) matched
-            # tests/adapters/test_node_taxonomy.py too — 'test_node_taxonomy.py'
-            # contains 'node_taxonomy.py' as a literal substring of its own
-            # filename — wrongly scanning the test file's content as if it
-            # were the real taxonomy module and reporting bogus "insufficient
-            # node type coverage". Compare the exact basename instead.
-            # Direct per-file invocation (e.g. `reveal reveal/adapters/ast/node_taxonomy.py
-            # --check` or the pre-BACK-814 `reveal reveal/treesitter.py --check`) applies
-            # only to those two files; the extraction methods' fallback regexes still
-            # handle a treesitter.py-shaped `content` for this second case.
+        if not file_path.startswith('reveal://'):
             return []
+        reveal_root = find_reveal_root()
+        if not reveal_root:
+            return self.unavailable("reveal source root unavailable")
+        # BACK-911 left a back-compat shim (no frozenset literals) at the old adapters/ast/
+        # path: read core/ first.
+        taxonomy_path = reveal_root / 'core' / 'node_taxonomy.py'
+        if not taxonomy_path.exists():
+            taxonomy_path = reveal_root / 'adapters' / 'ast' / 'node_taxonomy.py'
+        treesitter_path = reveal_root / 'treesitter.py'
+        if not taxonomy_path.exists():
+            return self.unavailable("required source or documentation missing", taxonomy_path.as_posix())
+        try:
+            taxonomy = taxonomy_path.read_text(encoding='utf-8')
+            identifiers = (
+                treesitter_path.read_text(encoding='utf-8')
+                if treesitter_path.exists() else taxonomy
+            )
+        except OSError:
+            return self.unavailable("required input could not be inspected")
+        return self.check_sources(str(taxonomy_path), taxonomy, identifiers)
+
+    def check_sources(self,
+                      file_path: str,
+                      content: str,
+                      identifier_content: Optional[str] = None) -> List[Detection]:
+        """Judge node type coverage in *content* (the taxonomy) and *identifier_content*.
+
+        *identifier_content* is the source of the name-extraction kinds (treesitter.py);
+        it defaults to *content*.
+        """
+        if identifier_content is None:
+            identifier_content = content
 
         # Check coverage for critical node categories
         detections: List[Detection] = []

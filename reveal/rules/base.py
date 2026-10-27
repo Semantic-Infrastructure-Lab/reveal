@@ -303,6 +303,8 @@ class BaseRule(ABC):
     enabled: bool = True
     # True for rules that only ever apply to reveal's own source (reveal:// self-check),
     # never to an external user's codebase. Excluded from default --rules listings/counts.
+    # With a scope other than FILE the registry also matches the rule to a reveal:// target only
+    # (reveal_only(), BACK-2253); a guard inside check() is then only for a direct call.
     internal: bool = False
     # Optional: languages/formats this rule is *correctness*-verified against
     # (BACK-466 part 1). Leave None to derive it from file_patterns + the tier-1
@@ -473,6 +475,17 @@ class BaseRule(ABC):
         )
 
     @classmethod
+    def reveal_only(cls) -> bool:
+        """True for a rule that judges reveal's own source as a whole (BACK-2253).
+
+        Such a rule reads files other than the one it is handed, so a per-file run answers for
+        the wrong input (V017 compares two files and reported "0 node types" on either alone).
+        It matches a ``reveal://`` target and never a filesystem path. An internal rule that reads
+        only its own file (``RuleScope.FILE``, e.g. B007) is not affected.
+        """
+        return bool(cls.internal) and cls.scope is not None and cls.scope != RuleScope.FILE
+
+    @classmethod
     def matches_target(cls, target: str) -> bool:
         """
         Check if this rule applies to target (file or URI).
@@ -483,6 +496,9 @@ class BaseRule(ABC):
         Returns:
             True if rule should check this target
         """
+        if cls.reveal_only() and not str(target).startswith('reveal://'):
+            return False
+
         # Check URI patterns first
         if cls.uri_patterns:
             for pattern in cls.uri_patterns:
