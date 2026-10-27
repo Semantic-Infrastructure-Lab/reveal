@@ -782,8 +782,7 @@ Shows WAL mode, but not WAL file details:
 
 ### Common errors and solutions:
 
-Each error prints `Error (sqlite://): ...` and exits 1. (The locked and permission-denied
-wordings below are SQLite's own and were not reproduced.)
+Each error prints `Error (sqlite://): ...` and exits 1.
 
 **1. Database file not found**
 
@@ -812,7 +811,7 @@ Error (sqlite://): Database error during query: file is not a database
 **3. Database is locked**
 
 ```
-Error (sqlite://): ... database is locked
+Error (sqlite://): Database error during query: database is locked
 ```
 
 **Cause**: Another process has write lock on database.
@@ -836,7 +835,7 @@ Error (sqlite://): Table not found: nonexistent
 **5. Permission denied**
 
 ```
-Error (sqlite://): ... unable to open database file
+Error (sqlite://): Database file is not readable: ./app.db
 ```
 
 **Cause**: Insufficient file permissions.
