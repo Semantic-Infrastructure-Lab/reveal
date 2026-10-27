@@ -701,7 +701,7 @@ class OverviewAdapter(ResourceAdapter):
                 'so a reader can discount vendored/generated/test noise in the ranking in place.',
             ],
             'notes': [
-                'Hotspots leave out test files (path_utils.is_test_path, judged from the scanned path\'s own name down) and print a Rule: line with the count; '
+                'Hotspots leave out test files (path_utils.is_test_path, judged from the scanned path\'s own name down) and say so in one line with the count; '
                 '?tests=include (--tests include) ranks them. Only the ranking is narrowed: Complex functions, totals and Languages still count test files.',
                 'Component cohesion is n/a (null in JSON, with one cohesion_rule) for directories mostly in Go, Java, Kotlin, C#, Scala or Swift, where files share a package without importing.',
                 'Static imports only for the architecture section — dynamically loaded files may appear as entry points.',
