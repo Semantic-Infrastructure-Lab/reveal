@@ -41,13 +41,13 @@ def _handle_wildcard_operator(field_value: Any, target_value: Any, opts: dict) -
         return False
 
 
-def _handle_regex_operator(field_value: Any, operator: str, target_value: Any) -> bool:
+def _handle_regex_operator(field_value: Any, operator: str, target_value: Any, opts: dict) -> bool:
     """Handle regex operators (~=, !~)."""
     pattern_str = str(target_value)
     if len(pattern_str) > _REGEX_MAX_LEN:
         return False if operator == '~=' else True
     try:
-        pattern = re.compile(pattern_str)
+        pattern = re.compile(pattern_str, 0 if opts['case_sensitive'] else re.IGNORECASE)
         matches = bool(pattern.search(str(field_value)))
         return matches if operator == '~=' else not matches
     except re.error:
@@ -118,7 +118,7 @@ def _dispatch_comparison(field_value: Any, operator: str, target_value: Any,
     elif operator == '*':
         return _handle_wildcard_operator(field_value, target_value, opts)
     elif operator in ('~=', '!~'):
-        return _handle_regex_operator(field_value, operator, target_value)
+        return _handle_regex_operator(field_value, operator, target_value, opts)
     elif operator in ('=', '!='):
         return _handle_equality_operator(field_value, operator, target_value, opts)
     elif operator in ('>', '<', '>=', '<='):

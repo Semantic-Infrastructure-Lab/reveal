@@ -183,14 +183,14 @@ reveal 'git://.?type=history&author~=john&message~=fix'
   - **Examples**:
     ```bash
     reveal 'json://data.json?type=user'           # Exact match
-    reveal 'json://data.json?name~=john'          # Regex search (case-sensitive)
+    reveal 'json://data.json?name~=john'          # Regex search (any case)
     reveal 'json://data.json?age>25'              # Numeric comparison
     reveal 'json://data.json?status=active&role=admin'  # Multiple filters
     ```
 
 **Supported Operators**:
 - `=` - Exact match (case-insensitive on json://)
-- `~=` - Regex search (case-sensitive; prefix `(?i)` to ignore case)
+- `~=` - Regex search (ignores case)
 - `!~` - Regex does not match
 - `>`, `<`, `>=`, `<=` - Numeric comparison (a non-numeric value matches nothing)
 - `..` - Range (e.g., `age=25..35`; string bounds compare as strings)
@@ -669,7 +669,7 @@ The following operators work across adapters that support field filtering (json:
 | Operator | Description | Example |
 |----------|-------------|---------|
 | `=` | Exact match (case-insensitive on json://, case-sensitive on markdown://) | `status=published` |
-| `~=` | Regex search (case-sensitive) | `title~=(?i)python` |
+| `~=` | Regex search (ignores case; case-sensitive on ast://) | `title~=python` |
 | `!~` | Regex does not match (json:// and git://; on markdown:// it matches nothing today) | `role!~admin` |
 | `>`, `<` | Comparison | `count>100` |
 | `>=`, `<=` | Comparison (inclusive) | `age>=18` |

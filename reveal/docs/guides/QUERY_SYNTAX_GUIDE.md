@@ -136,12 +136,12 @@ All 5 adapters support these operators through the unified `compare_values()` fu
 | `<` | Less than | `complexity<10` | 1, 5, 9... |
 | `>=` | Greater or equal | `priority>=5` | 5, 6, 10... |
 | `<=` | Less or equal | `functions<=20` | 1, 10, 20 |
-| `~=` | Regex match (case-sensitive; prefix `(?i)` to ignore case) | `message~=(?i)bug.*fix` | "Bug fix", "fixed bug fix" |
+| `~=` | Regex match (ignores case; case-sensitive on ast://) | `message~=bug.*fix` | "Bug fix", "fixed bug fix" |
 | `!~` | Regex does not match (json://, git://; matches nothing on markdown:// today) | `email!~@company.com` | any email not at company.com |
 | `..` | Range (inclusive) | `lines=50..200` | 50, 100, 200 |
 
-`~=` is case-sensitive on every adapter; git's `author` and `email` filters are the exception
-and match case-insensitively. The negated regex is `!~` (not `!~=`, which is mis-parsed and
+`~=` and `!~` ignore case on json://, markdown://, git:// and metrics://, and are case-sensitive on
+ast:// (code is case-sensitive; start the pattern with `(?i)` there to ignore case). The negated regex is `!~` (not `!~=`, which is mis-parsed and
 filters everything out).
 
 ### Type Coercion
@@ -204,7 +204,7 @@ reveal 'json://data.json?score=80..95'              # Score range
 ```bash
 reveal 'json://data.json?status=active'             # Exact match
 reveal 'json://data.json?status!=draft'             # Not draft
-reveal 'json://data.json?name~=john'                # Name contains "john" (case-sensitive; (?i)john to ignore case)
+reveal 'json://data.json?name~=john'                # Name contains "john" (any case)
 ```
 
 **Combined filters**:
@@ -230,7 +230,7 @@ reveal 'markdown://docs/?status!=archived'          # Not archived
 
 **Tag filtering**:
 ```bash
-reveal 'markdown://docs/?tags~=python'              # Tagged "python" (case-sensitive)
+reveal 'markdown://docs/?tags~=python'              # Tagged "python" (any case)
 reveal 'markdown://docs/?tags~=api&status=complete' # Python APIs, complete
 ```
 
@@ -438,8 +438,8 @@ matches nothing (no lexicographic fallback): `name>m` returns no rows. Use a ran
 
 **Pattern matching**:
 - Uses Python `re` module (a search, not a full match)
-- Case-sensitive; prefix `(?i)` to ignore case (git `author`/`email` are matched case-insensitively)
-- `message~=(?i)bug.*fix` matches "Bug fix for login"
+- Ignores case except on ast:// (prefix `(?i)` there to ignore case)
+- `message~=bug.*fix` matches "Bug fix for login"
 
 **Common patterns**:
 ```bash
@@ -609,8 +609,8 @@ The `compare_values()` function accepts options to configure behavior per adapte
 | **ast://** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **git://** | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
 
-The column is about `=` and wildcards. `~=` ignores it: a regex is case-sensitive on every
-adapter (add `(?i)`), except git's `author`/`email` filters, which ignore case.
+The column covers `=`, wildcards and `~=`/`!~`, except that `=` is also case-sensitive on markdown://
+(the unified-query path ignores case; a plain `field=value` filter does not).
 
 **Rationale**:
 - **JSON/Markdown**: Have list fields (tags, topics)
