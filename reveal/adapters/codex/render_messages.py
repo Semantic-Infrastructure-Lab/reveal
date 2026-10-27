@@ -2,6 +2,8 @@
 
 import json
 
+from .analysis.normalize import one_line
+
 
 def _render_codex_messages(result: dict) -> None:
     messages = result.get('messages', [])
@@ -25,7 +27,7 @@ def _render_codex_messages(result: dict) -> None:
 def _render_codex_digest(result: dict) -> None:
     """Render the composed overview + prompts + agent-narrative digest (BACK-943)."""
     session_id = result.get('session_id', 'unknown')
-    title = result.get('title')
+    title = one_line(result.get('title'))
 
     if 'error' in result:
         return
