@@ -1036,7 +1036,7 @@ reveal legacy_controller.php :477-531 --sideeffects
 reveal legacy_controller.php :120-340 --returns
 reveal legacy_controller.php :477-531 --boundary
 ```
-All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE`. All variable-tracking flags (`--varflow`, `--deps`, `--mutations`) now work on PHP as well as Python.
+All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE` (a range exits 2). All variable-tracking flags (`--varflow`, `--deps`, `--mutations`) now work on PHP as well as Python.
 
 **Combining with `--range` to narrow scope:**
 ```bash
