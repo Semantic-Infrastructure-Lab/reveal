@@ -680,9 +680,9 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 | `email` | string | `=`, `~=` | Filter by author email |
 | `message` | string | `=`, `~=` | Filter by commit message |
 | `hash` | string | `=`, `.=` | Filter by commit hash prefix |
-| `date` | ISO date | `>`, `<`, `>=`, `<=`, `=a..b` | Filter by commit date, e.g. `date>=2026-01-01`. A date-only bound is the whole day: `date>D` excludes day D, `date>=D`/`date<=D` include it |
-| `since` | ISO date | `=` only | Ergonomic alias for `date>=YYYY-MM-DD` |
-| `until` | ISO date | `=` only | Ergonomic alias for `date<=YYYY-MM-DD` |
+| `date` | ISO date | `>`, `<`, `>=`, `<=`, `=a..b` | Filter by commit date, e.g. `date>=2026-01-01`. A month or day bound is the whole period: `date>2026-01` excludes January, `date>=P`/`date<=P` include it. A timestamp may use a space or `T` (`2026-01-31T12:00:00`) |
+| `since` | ISO date | `=` only | Ergonomic alias for `date>=` (`since=2026-01` includes January) |
+| `until` | ISO date | `=` only | Ergonomic alias for `date<=` (`until=2026-01` includes January) |
 
 ### Result Control Parameters
 
@@ -807,9 +807,10 @@ reveal 'git://.@main?author=John&message~=fix.*auth'
 | `=` | Exact match (case-insensitive for author/email) | `author=John` |
 | `~=` | Regex match (case-insensitive) | `message~=bug` |
 | `!=` | Not equal | `author!=bot` |
-| `>` | Greater than; a date-only bound means after the end of that day | `date>2025-01-01` |
-| `<` | Less than; a date-only bound means before the start of that day | `date<2025-02-01` |
-| `>=`, `<=` | Greater/less or equal; a date-only bound includes the whole day | `date>=2025-01-01` |
+| `>` | Greater than; a month or day bound means after the end of that month or day | `date>2025-01-01` |
+| `<` | Less than; a month or day bound means before its start | `date<2025-02` |
+| `>=`, `<=` | Greater/less or equal; a month or day bound includes all of it | `date>=2025-01-01` |
+| (key alone) | The field is present, as on `json://` and `ast://`; `!key` is absent | `author` |
 
 ---
 

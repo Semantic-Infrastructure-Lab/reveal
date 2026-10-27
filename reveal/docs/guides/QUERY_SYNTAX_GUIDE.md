@@ -389,9 +389,10 @@ reveal 'git://.?date>=2026-02-01'                   # From 1 Feb on (1 Feb inclu
 reveal 'git://.?since=2026-01-01&until=2026-01-31'  # All of January
 ```
 
-A date-only bound names the whole day: `date>D` is after the end of day D, `date<D` before its
-start, and `date>=D`, `date<=D` and a range `date=D1..D2` include all of day D. A full timestamp
-bound (`date>2026-02-01 12:00:00`) compares the timestamp.
+A month or day bound names the whole period: `date>P` is after the end of P, `date<P` before its
+start, and `date>=P`, `date<=P` and a range `date=P1..P2` include all of P, so `date>2026-01` starts
+in February and `until=2026-01` includes January. A full timestamp bound
+(`date>2026-02-01 12:00:00`, or `2026-02-01T12:00:00`) compares the timestamp.
 
 **File history**:
 ```bash

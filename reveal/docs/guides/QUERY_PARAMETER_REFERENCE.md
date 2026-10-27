@@ -154,9 +154,10 @@ reveal 'imports://src?circular&verbose'   # Cycle paths
     ```
 
 - **`date`** - Filter commits by commit date: `>`, `<`, `>=`, `<=` or a range `=a..b`
-  - A date-only bound names the whole day: `date>2026-02-01` is after the end of that day,
-    `date<2026-02-01` before its start, and `date>=`/`date<=` (and a range) include all of it.
-    A full timestamp bound (`date>2026-02-01 12:00:00`) compares the timestamp.
+  - A month or day bound names the whole period: `date>2026-02-01` is after the end of that day,
+    `date>2026-02` after the end of February, `date<P` before the start of P, and
+    `date>=`/`date<=` (and a range) include all of it. A full timestamp bound
+    (`date>2026-02-01 12:00:00`, or with a `T`: `2026-02-01T12:00:00`) compares the timestamp.
   - `since=D` is `date>=D` and `until=D` is `date<=D`
   - **Examples**:
     ```bash
