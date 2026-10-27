@@ -1025,7 +1025,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if self._outline_only:  # BACK-1560: get_outline() locates, it doesn't measure
             located: StructureItem = {'line': line_start, 'line_end': line_end, 'name': name,
                                       'decorators': decorators}
-            return self._with_owner(located, node)
+            return self._with_owner(located, node, function=True)
         # For Dart, end_node is the sibling function_body — walk that for
         # complexity/calls too, or both metrics silently see an empty body
         # (same blindness _function_end_node's docstring describes).
@@ -1073,17 +1073,21 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # never by its own name.
         if self._is_trait_impl_method(node):
             result['trait_impl'] = True
-        return self._with_owner(result, node)
+        return self._with_owner(result, node, function=True)
 
-    def _with_owner(self, item: StructureItem, node) -> StructureItem:
+    def _with_owner(self, item: StructureItem, node, function: bool = False) -> StructureItem:
         """Record the definition `node` is a member of as `owner` (`Outer.Inner`),
         so --outline nests by the tree, not by line ranges: a Go receiver method or
         a Rust impl method sits outside its type's lines (BACK-1632), and a class on
-        its namespace's line can't be told inside it by line (BACK-1649)."""
-        from .element_resolve import owner_path  # element_resolve imports this module
+        its namespace's line can't be told inside it by line (BACK-1649).
+        An owned `function` that is not a method (in a namespace or a function body)
+        says so with `method: False`, which ast://?type=method reads (BACK-2283)."""
+        from .element_resolve import is_method, owner_path  # element_resolve imports this module
         owner = owner_path(self, node)
         if owner:
             item['owner'] = owner
+            if function and not is_method(self, node):
+                item['method'] = False
         return item
 
     def _is_trait_impl_method(self, node) -> bool:

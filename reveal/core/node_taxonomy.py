@@ -408,6 +408,16 @@ TYPE_DECL_NODES: frozenset = frozenset({
 MEMBER_CONTAINER_NODES: frozenset = (
     CLASS_NODES | STRUCT_NODES | IMPL_NODES | TYPE_DECL_NODES | frozenset({'module'})
 )
+# Member containers that group free functions instead of defining a type: a function
+# declared in one has an owner (--outline nests it, labels read `ns.f`) but is not a
+# method (BACK-2283). Ruby's 'module' is a mixin of methods, so it is not here.
+NAMESPACE_NODES: frozenset = frozenset({
+    'mod_item', 'namespace_definition', 'namespace_declaration',
+    'file_scoped_namespace_declaration', 'internal_module',
+})
+# The member list of a class-like body, named or not: Java/Kotlin anonymous classes
+# (`new Runnable() { ... }`, `object : T { ... }`) have no class node around it.
+CLASS_BODY_NODES: frozenset = frozenset({'class_body'})
 
 # BACK-1527: expression-oriented grammars wrap each exit in an *_expression
 # (Rust return/break/continue/yield, Scala return; JS/TS/PHP yield), C++20

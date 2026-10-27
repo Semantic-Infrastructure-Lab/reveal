@@ -28,7 +28,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from .core import node_children as _children
 from .core.definition_names import name_matches
 from .core.node_taxonomy import (
-    CLASS_NODES, MEMBER_CONTAINER_NODES, TYPE_DECL_NODES,
+    CLASS_BODY_NODES, CLASS_NODES, MEMBER_CONTAINER_NODES, NAMESPACE_NODES, TYPE_DECL_NODES,
+    is_local_scope,
 )
 from .core.treesitter_compat import _zero_arg
 from .treesitter import CHILD_NODE_TYPES, FUNCTION_NODE_TYPES, is_definition
@@ -384,6 +385,32 @@ def owner_path(analyzer, node) -> Optional[str]:
         if owner:
             parts.append(owner)
     return '.'.join(parts) or None
+
+
+def is_method(analyzer, node) -> bool:
+    """Whether the definition `node` is a method of a type, for one that has an owner.
+
+    `owner_path` names every container around a definition, so a function in a Rust
+    `mod` or a namespace and a function nested in a method's body have an owner too.
+    The nearest enclosing definition decides (BACK-2283): a class, struct, impl, trait,
+    interface or class body makes a method; a function body before it, or a namespace,
+    does not. A Dart method's body is a sibling of its signature, so the `function_body`
+    is what encloses a local function there. An owner from a function value's binding
+    (`Foo.prototype.bar = function () {}`) has no container and is a method.
+    """
+    if _zero_arg(node, 'kind') == 'method_declaration' and getattr(analyzer, 'language', None) == 'go':
+        return True
+    nested = False
+    parent = _zero_arg(node, 'parent')
+    while parent is not None:
+        kind = _zero_arg(parent, 'kind')
+        if is_local_scope(parent, kind) or kind == 'function_body':
+            nested = True
+        elif kind in CLASS_BODY_NODES or kind in CLASS_NODES or (
+                kind in MEMBER_CONTAINER_NODES and container_names(analyzer, parent)):
+            return not nested and kind not in NAMESPACE_NODES
+        parent = _zero_arg(parent, 'parent')
+    return True
 
 
 def qualified_name(analyzer, node, fallback: str = '?') -> str:

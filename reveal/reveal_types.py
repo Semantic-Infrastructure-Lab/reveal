@@ -149,6 +149,7 @@ class StructureItem(TypedDict, total=False):
     members: List[str]  # Zig struct/enum/union member names
     type: str  # PowerShell class entries
     owner: str  # dotted name of the enclosing definition, from the tree (BACK-1632)
+    method: bool  # False on an owned function that is not a method: namespace member, nested function (BACK-2283)
 
 
 class VarFlowEvent(TypedDict, total=False):

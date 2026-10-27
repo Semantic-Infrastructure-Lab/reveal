@@ -279,17 +279,19 @@ def _decorator_glob_matches(dec: str, attributes: List[str], pattern: str, raw: 
 
 
 def _type_value(element: ASTElement, condition: Dict[str, Any]) -> str:
-    """The kind ``type=`` compares: the element's category, except that a function with an
-    owner reads as ``methods`` when the condition names methods.
+    """The kind ``type=`` compares: the element's category, except that a method reads as
+    ``methods`` when the condition names methods.
 
     No analyzer emits a ``methods`` category (a method is a ``functions`` element whose
     ``owner`` is its class), so ``type=method`` matched nothing; ``type=function`` still
-    matches methods (BACK-2213).
+    matches methods (BACK-2213). An owned function marked ``method: False`` (a Rust ``mod``
+    or namespace member, a function nested in a method) is not a method (BACK-2283).
     """
     category = str(element.get('category', ''))
     wanted = condition.get('value')
     names_methods = wanted == 'methods' or (isinstance(wanted, list) and 'methods' in wanted)
-    if category == 'functions' and names_methods and cast(Dict[str, Any], element).get('owner'):
+    fields = cast(Dict[str, Any], element)
+    if category == 'functions' and names_methods and fields.get('owner') and fields.get('method') is not False:
         return 'methods'
     return category
 

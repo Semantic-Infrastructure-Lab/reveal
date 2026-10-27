@@ -192,7 +192,7 @@ reveal 'ast://./src?type!=function'
 
 **Valid types:**
 - `function` - Every function, methods included (a method is reported with `category: "functions"`)
-- `method` - Functions with an `owner` (their class, struct, impl, or enclosing Rust `mod`; a function nested in a method inherits the method's class)
+- `method` - Functions whose nearest enclosing definition is a type: a class, struct, impl, trait, interface or object, and a Go receiver method. A function in a Rust `mod` or a namespace, and a function nested in a method's body, still carry an `owner` (the container `--outline` nests them under) but are marked `method: false` and are not methods
 - `class` - Class definitions
 - `struct`, `interface` (`trait` is an alias), `module`, `namespace` - Where the language has them
 - `import` - Import statements
@@ -260,7 +260,7 @@ Complete reference of all supported query parameters:
 |-----------|------|-------------|----------|
 | `lines` | integer | Number of lines in function/class | `lines>50`, `lines=10..100` |
 | `complexity` | integer | McCabe cyclomatic complexity (>10 needs refactoring, >20 high risk) | `complexity>10`, `complexity<5` |
-| `type` | string | Element type: `function` (methods included), `method` (only functions with an owner), `class`, `struct`, `import`, `interface`, `module`, `namespace`, `test`. Supports OR with `\|` or `,` | `type=function`, `type=method`, `type=class\|function` |
+| `type` | string | Element type: `function` (methods included), `method` (functions that are members of a type), `class`, `struct`, `import`, `interface`, `module`, `namespace`, `test`. Supports OR with `\|` or `,` | `type=function`, `type=method`, `type=class\|function` |
 | `name` | string | Element name with wildcards (`*` = any chars, `?` = one char) or regex | `name=test_*`, `name~=^test_` |
 | `decorator` | string | Decorator, annotation or attribute name (bracket attributes match by name, qualified names by trailing segments), with wildcards or regex | `decorator=property`, `decorator=HttpGet`, `decorator=*cache*` |
 | `calls` | string | Retired (prints a replaced-by note): use `calls://<path>?callers=NAME`, or `--grep 'PATTERN'` for a pattern | `calls=validate_item` |
@@ -419,7 +419,7 @@ reveal 'ast://./src?complexity>10' --format=json
 - `total_files`: Number of files scanned
 - `total_results`: Number of matches before limit/offset
 - `displayed_results`: Number of results in output
-- `results`: Array of matched code elements — each has `name` (not `symbol`), `category` (not `type`; the plural of the element kind: `functions`, `classes`, `imports`, `structs`, `interfaces`, `modules`, `namespaces`, `tests`; methods are `functions` with an `owner`), and `line_count` (not `lines`). Functions also carry `signature`, `depth`, `calls`, `called_by` and, when a call resolves to another file, `resolved_calls`; classes carry `bases`. Import rows have no `complexity`.
+- `results`: Array of matched code elements — each has `name` (not `symbol`), `category` (not `type`; the plural of the element kind: `functions`, `classes`, `imports`, `structs`, `interfaces`, `modules`, `namespaces`, `tests`; methods are `functions` with an `owner`; an owned function that is not a method, such as a Rust `mod` member or a function nested in a method, also has `method: false`), and `line_count` (not `lines`). Functions also carry `signature`, `depth`, `calls`, `called_by` and, when a call resolves to another file, `resolved_calls`; classes carry `bases`. Import rows have no `complexity`.
 - `meta`: Trust metadata (parse mode, confidence) and `warnings`. When `results` holds fewer
   than `total_results` (`?limit=`, `?offset=`, the 200-result cap on any query without `limit=`,
   `--max-items`, `--head`), one warning says so: `{"type": "truncated", "field": "results",

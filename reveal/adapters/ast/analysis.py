@@ -281,9 +281,12 @@ def create_element_dict(
         'bases': item.get('bases', []),
     }
     # A method is a function element with an owner (its class/struct/impl): what
-    # ?type=method selects (BACK-2213).
+    # ?type=method selects (BACK-2213). An owned function in a namespace or a function
+    # body carries method: False and is not one (BACK-2283).
     if item.get('owner'):
         element['owner'] = cast(Dict[str, Any], item)['owner']
+        if item.get('method') is False:
+            element['method'] = False
     # Propagate optional flags from the analyzer (e.g. TypeScript abstract classes).
     if item.get('is_abstract'):
         element['is_abstract'] = True

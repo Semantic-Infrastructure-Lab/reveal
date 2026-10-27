@@ -193,7 +193,7 @@ _SCHEMA_QUERY_PARAMS = {
     'type': {
         'type': 'string',
         'description': ('Element type. function matches every function, methods included; '
-                        'method only functions with an owning class/struct (their owner field); '
+                        'method only members of a class, struct, impl, trait or interface (not a mod/namespace or nested function); '
                         'also struct, import, interface (trait), module, namespace, test'),
         'operators': ['==', '!=', '|'],
         'examples': ['type=function', 'type=method', 'type=class|function'],
@@ -527,7 +527,7 @@ def get_help() -> Dict[str, Any]:
         'filters': {
             'lines': 'Number of lines in function/class (e.g., lines>50, lines=10..100)',
             'complexity': 'McCabe cyclomatic complexity (industry threshold: >10 needs refactoring, >20 is high risk)',
-            'type': 'Element type: function (methods included), method (functions with an owner), class, struct, import, interface, module, namespace, test. Supports OR with | or , (e.g., type=function, type=class|function)',
+            'type': 'Element type: function (methods included), method (members of a type), class, struct, import, interface, module, namespace, test. Supports OR with | or , (e.g., type=function, type=class|function)',
             'name': 'Element name pattern with wildcards or regex (e.g., name=test_*, name~=^test_)',
             'decorator': ('Decorator, annotation or attribute name - find decorated functions/classes '
                           '(e.g., decorator=property, decorator=HttpGet for C# [HttpGet], decorator=derive '
