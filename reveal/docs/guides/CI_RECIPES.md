@@ -79,7 +79,8 @@ jobs:
 
 ### Complexity Gate
 
-Fails the build if any function in the PR got more than 5 complexity points harder.
+Fails the build if any function in the PR got more than 5 complexity points harder, or a new
+function arrives with complexity above 5 (an added function's delta is its whole complexity).
 
 ```yaml
 # .github/workflows/complexity-gate.yml
@@ -96,7 +97,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - run: pip install reveal-cli jq
+      - run: pip install reveal-cli   # jq is preinstalled on ubuntu-latest; otherwise: sudo apt-get install -y jq
 
       - name: Check complexity delta
         run: |
@@ -110,10 +111,14 @@ jobs:
             echo "Failing: complexity increased in $REGRESSIONS function(s)"
             reveal diff://git://origin/${{ github.base_ref }}/.:git://HEAD/. \
               --format json | \
-              jq '.diff.functions[] | select(.complexity_delta > 5) | {function: .name, file: .file, delta: .complexity_delta}'
+              jq '.diff.functions[] | select(.complexity_delta > 5) | {function: .name, type: .type, file: (.right.file // .left.file), delta: .complexity_delta}'
             exit 1
           fi
 ```
+
+`file` is null for added and removed functions: the diff JSON records a path only on `modified`
+entries (`.left.file` / `.right.file`). To gate only on regressions of existing code, select
+`.type == "modified" and .complexity_delta > 5`.
 
 ### Hotspot Tracking
 
@@ -160,7 +165,7 @@ jobs:
 
       - name: Collect quality metrics
         run: |
-          reveal stats://src/ --format json > metrics.json
+          reveal metrics://src/ --format json > metrics.json
           cat metrics.json | jq '{
             quality_score: .summary.avg_quality_score,
             total_functions: .summary.total_functions,
@@ -267,9 +272,10 @@ health:
 	reveal check ./src
 	reveal health ssl://api.yoursite.com domain://yoursite.com
 
-# Pack PR context for AI review
+# Pack PR context for AI review (raise --budget until every changed file is listed;
+# a changed file larger than the remaining budget is dropped)
 pack:
-	reveal pack src/ --since main --budget 8000 --content
+	reveal pack src/ --since main --budget 30000 --content
 ```
 
 ---
@@ -278,12 +284,16 @@ pack:
 
 | Code | Meaning |
 |------|---------|
-| 0 | Clean — no issues found |
-| 1 | Violations found (quality issues, complexity regressions, certs expiring soon) |
-| 2 | Critical violations (expired certs, critical-severity rule failures) |
+| 0 | Completed, nothing matched the findings gate |
+| 1 | Findings (rule violations, health warnings/failures, an expiring or expired cert) |
+| 2 | Request rejected before analysis (usage error, missing path) |
+| 3 | Incomplete: a file could not be parsed/checked, a health target could not be reached, or a requested `--output json=PATH` could not be written (beats 1) |
 
-All reveal subcommands (`review`, `check`, `health`, `pack`) use these exit codes,
-making them directly usable as CI gates with `|| exit 1`.
+No command exits 2 for a severe finding: a critical rule violation or an expired cert is still 1.
+`check` and `health` fail on findings by default. `hotspots` and `pack` are informational:
+they exit 0 unless the request is rejected (2) or the run is incomplete (3), and `hotspots`
+exits 1 only with `--fail-on findings`. Treat 3 as a failure too: it means the finding count
+may be wrong. Each command's `--help` ends with its own exit-code block.
 
 ---
 
@@ -293,7 +303,7 @@ making them directly usable as CI gates with `|| exit 1`.
 
 **Baseline first**: Run `reveal hotspots src/` on your main branch before adding the complexity gate — this lets you set a realistic threshold rather than failing immediately.
 
-**Advisory vs blocking**: Use exit 0 for first-time adoption (shows issues without blocking), then move to exit 1 once the team is used to the output.
+**Advisory vs blocking**: add `--fail-on none` for first-time adoption (findings are reported but the run exits 0; an incomplete scan still exits 3), then drop it once the team is used to the output.
 
 **Caching**: reveal has no index to cache — each run is fresh. This is intentional (no stale data) and keeps setup simple.
 
@@ -302,5 +312,5 @@ making them directly usable as CI gates with `|| exit 1`.
 ## See Also
 
 - [RECIPES.md](RECIPES.md) — General task recipes (CI is one application of these).
-- [SUBCOMMANDS_GUIDE.md](SUBCOMMANDS_GUIDE.md) — Reference for `review`, `check`, `health`, `pack`, `hotspots`.
+- [SUBCOMMANDS_GUIDE.md](SUBCOMMANDS_GUIDE.md) — Reference for `check`, `health`, `pack`, `hotspots`.
 - [../QUICK_START.md](../QUICK_START.md) — First-run orientation before wiring into CI.
