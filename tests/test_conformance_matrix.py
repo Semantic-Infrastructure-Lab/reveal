@@ -16,6 +16,7 @@ import inspect
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -712,35 +713,36 @@ def test_rust_varflow_classifies_expression_loop_conditions_as_cond():
 
 # ───────────────────────── check/hotspots bounded-scan guard ──────────────────
 
-def test_check_and_hotspots_complete_quickly(lang):
-    """`check`/`hotspots` must never hang regardless of language (BACK-418/424
+def test_check_and_hotspots_complete_quickly(lang, tmp_path):
+    """`check`/`hotspots` must never hang or crash regardless of language (BACK-418/424
     class: an unbounded scan that only shows up on a real-sized tree). Fixture
-    directories are tiny, so this is a smoke bound, not a scale repro — the
+    directories are tiny, so this is a smoke bound, not a scale repro -- the
     scale repro itself lives in test_rules.py's I002 ceiling tests.
 
-    timeout=30, not a tight bound: under `-n auto` parallel test execution
-    this subprocess competes with every other worker for CPU, so a real
-    (sub-second) run can occasionally exceed a tight timeout under load —
-    observed flaking at timeout=10 with no code change involved. 30s still
-    catches a genuine infinite-loop regression; it would not finish in that
-    window either."""
+    The fixture runs from a copy pinned as its own project (`.reveal.yaml`
+    `root: true`). In place, the cross-file rules (D005, T006, I002) resolved the
+    reveal checkout as the project root and indexed all of it: ~1,550 Python
+    files, 4-8 s alone for `python`, and 31.7 s with 24 runs at once on 12 cores,
+    past the timeout (BACK-2306; isolated: 0.3 s alone, 2.6 s under the same
+    load). The time grew with the repo, not with anything this test is about.
+
+    timeout=30 stays a hang guard, not a tight bound: under `-n auto` this
+    subprocess competes with every other worker for CPU."""
+    target = tmp_path / lang
+    shutil.copytree(_lang_dir(lang), target)
+    (target / ".reveal.yaml").write_text("root: true\n", encoding="utf-8")
     env = os.environ.copy()
     env["PYTHONPATH"] = str(Path(__file__).parents[1])
-    env["REVEAL_I002_MAX_FILES"] = "3"
     for flag in ("--check", "--hotspots"):
         result = subprocess.run(
-            [sys.executable, "-m", "reveal.main", str(_lang_dir(lang)), flag],
+            [sys.executable, "-m", "reveal.main", str(target), flag],
             capture_output=True, text=True, encoding='utf-8', timeout=30, env=env,
         )
-        # rc 3 is the disclosed "scan incomplete" outcome (BACK-1824): the cap of 3
-        # files is deliberately exceeded, so I002 must say so rather than hang or crash.
-        assert result.returncode in (0, 1, 3), (
-            f"{lang} {flag}: unexpected crash (rc={result.returncode}): {result.stderr}"
+        # rc 3 (scan incomplete, BACK-1824) would mean a cross-file scan escaped the
+        # one-file project or was cut: neither may happen here.
+        assert result.returncode in (0, 1), (
+            f"{lang} {flag}: unexpected exit (rc={result.returncode}): {result.stderr}"
         )
-        if result.returncode == 3:
-            assert 'exceeded 3 source files' in result.stderr, (
-                f"{lang} {flag}: exit 3 without a scan-cap disclosure: {result.stderr}"
-            )
 
 
 def test_lua_table_method_is_addressable():
