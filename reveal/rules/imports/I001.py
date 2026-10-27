@@ -37,12 +37,18 @@ class I001(BaseRule):
         detections: List[Detection] = []
         # Non-Python imports are quoted from source, not re-rendered in Python
         # syntax (`from k8s.io/api/core/v1 import core`, BACK-1397).
-        source_context = stmt.source_line.strip() if not file_path.endswith(('.py', '.pyi')) else ''
+        is_python = file_path.endswith(('.py', '.pyi'))
+        source_context = '' if is_python else stmt.source_line.strip()
         for entry in unused_entries(stmt, symbols_used, frozenset(exports)):
+            # The message names the binding (ruff F401 style: `typing.List`), so two
+            # unused names on one line are two distinguishable findings (BACK-2221).
             if is_named_import(stmt):
+                dotted = stmt.module_name if stmt.module_name.endswith('.') else f"{stmt.module_name}."
+                subject = f"{dotted}{entry}" if is_python else entry
                 context = source_context or f"from {stmt.module_name} import {entry}"
                 suggestion = f"Remove unused import: `{bound_name(entry)}`"
             else:
+                subject = f"{stmt.module_name} as {stmt.alias}" if stmt.alias else stmt.module_name
                 context = f"import {stmt.module_name}"
                 if stmt.alias:
                     context += f" as {stmt.alias}"
@@ -51,6 +57,7 @@ class I001(BaseRule):
             detections.append(self.create_detection(
                 file_path=file_path,
                 line=stmt.line_number,
+                message=f"{self.message}: {subject}",
                 column=1,
                 suggestion=suggestion,
                 context=context,
