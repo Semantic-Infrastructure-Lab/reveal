@@ -33,7 +33,7 @@ from ..ast.call_graph import (
     ClassAliasSpan, build_alias_map, build_class_attribute_aliases, class_attribute_alias,
 )
 from .confidence import language_census
-from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
+from ...conventions import conventions_for, decorator_names, family_for_path, is_builtin_anywhere
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
 from ...utils.gitignore import gitignore_enabled
 from ...utils.path_utils import _walk_code_files, is_unsafe_scan_root, to_posix, failure_of
@@ -68,14 +68,10 @@ _lang_family = family_for_path
 def _get_decorator_names(elem: Dict[str, Any]) -> Set[str]:
     """Return the bare decorator names for *elem* (strips leading '@', module prefix, and
     any call parens — a decorator *factory* like ``@app.route('/x')`` or ``@pytest.fixture()``
-    must still bare-name-match as 'route'/'fixture', the same as its bare form).
+    must still bare-name-match as 'route'/'fixture', the same as its bare form). A bracket
+    group holds several: C# ``[HttpPost, Authorize]`` names both (``conventions.decorator_names``).
     """
-    names = set()
-    for d in elem.get('decorators', []):
-        # Rust attributes arrive as raw `#[tokio::test(flavor = "x")]` text.
-        bare = d.lstrip('@#!').lstrip('[').split('(', 1)[0].rstrip(']')
-        names.add(bare.replace('::', '.').split('.')[-1])
-    return names
+    return {name for d in elem.get('decorators', []) for name in decorator_names(d)}
 
 
 def _is_method_elem(elem: Dict[str, Any], decorator_names: Set[str]) -> bool:
