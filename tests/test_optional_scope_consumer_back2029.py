@@ -9,6 +9,7 @@ from conftest import _run_reveal_direct as run
 from reveal.adapters import architecture, overview
 from reveal.capabilities import scope_dict_for_path
 from reveal.utils.exclusions import exclusion_scope
+from reveal.utils.path_utils import to_posix
 from reveal.utils.results import AnalysisCompleteness
 
 pytestmark = pytest.mark.component
@@ -120,7 +121,8 @@ def test_multiple_actual_scope_events_match_existing_optional_exception_and_surv
     projected = run(uri, '--format', 'json', '--fields', 'path', '--provenance')
     assert projected.returncode == 3
     data = json.loads(projected.stdout)
-    assert data['path'] == str(root) and len(_compose(data)) == 1
+    # architecture writes its path with '/' on every OS (BACK-2302); overview still echoes the spelling given.
+    assert to_posix(data['path']) == to_posix(root) and len(_compose(data)) == 1
     assert len(_directories(data)) == 1
     assert data['execution']['command'].startswith(f'reveal {name}://')
     artifact = tmp_path / 'answer.json'
