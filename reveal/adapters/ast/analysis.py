@@ -296,13 +296,16 @@ def create_element_dict(
 
 
 _MODULE_CALL_FAMILIES = frozenset({'python', 'js', 'php', 'ruby'})
+# Families whose anonymous functions no listed scope owns count as the module's (Ruby blocks never were skipped).
+_ANONYMOUS_SCOPE_FAMILIES = frozenset({'js', 'python', 'php'})
 
 
 def module_call_sites(file_path: str, analyzer, elements: Sequence[Dict[str, Any]] = ()) -> List[Dict[str, Any]]:
     """Script/block calls through the shared call collector; definitions keep their scopes.
 
-    JS/TS: an anonymous callback no listed function, method or class contains (``app.get('/', (req) => ...)``,
-    ``setTimeout(() => ...)``) is not a scope anyone reports, so its calls are the module's (BACK-2191)."""
+    JS/TS, Python, PHP: an anonymous callback no listed function, method or class contains
+    (``app.get('/', (req) => ...)``, ``setTimeout(() => ...)``, ``register(lambda: ...)``) is not a scope anyone
+    reports, so its calls are the module's (BACK-2191, BACK-2232)."""
     from ...conventions import family_for_path
     from ...registry import language_for_extension
     from ...core import get_tree, _zero_arg
@@ -319,7 +322,7 @@ def module_call_sites(file_path: str, analyzer, elements: Sequence[Dict[str, Any
         return content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8', errors='replace')
     implicit = analyzer._implicit_call_nodes(root) if hasattr(analyzer, '_implicit_call_nodes') else ()
     # Python's root node is 'module'; only children are excluded by range_calls.
-    owned = _listed_scope_test(elements) if family_for_path(file_path) == 'js' else None
+    owned = _listed_scope_test(elements) if family_for_path(file_path) in _ANONYMOUS_SCOPE_FAMILIES else None
     return range_calls(root, 1, _zero_arg(root, 'end_position').row + 1, text,
                        implicit_nodes=implicit, skip_kinds=DEFERRED_SCOPE_KINDS, include_jsx=True, owned_scope=owned)
 
