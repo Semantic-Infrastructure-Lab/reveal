@@ -8,7 +8,7 @@ help_category: feature_guides
 
 # Query Syntax Guide
 
-Complete reference for the unified query syntax that works consistently across all of Reveal's query-capable adapters. All operators use the same underlying comparison logic (`compare_values()` in `reveal/utils/query.py`), ensuring consistent behavior across adapters.
+Complete reference for the unified query syntax that works consistently across all of Reveal's query-capable adapters. All operators use the same underlying comparison logic (`compare_values()` in `reveal/utils/query_eval.py`), ensuring consistent behavior across adapters.
 
 ---
 
@@ -130,14 +130,19 @@ All 5 adapters support these operators through the unified `compare_values()` fu
 
 | Operator | Description | Example | Matches |
 |----------|-------------|---------|---------|
-| `=` or `==` | Exact match (case-insensitive) | `status=active` | "active", "Active", "ACTIVE" |
+| `=` or `==` | Exact match (case-insensitive on json:// and git://; case-sensitive on markdown:// and ast://) | `status=active` | "active", "Active", "ACTIVE" (json://) |
 | `!=` | Not equal | `status!=draft` | Anything except "draft" |
 | `>` | Greater than | `lines>50` | 51, 100, 200... |
 | `<` | Less than | `complexity<10` | 1, 5, 9... |
 | `>=` | Greater or equal | `priority>=5` | 5, 6, 10... |
 | `<=` | Less or equal | `functions<=20` | 1, 10, 20 |
-| `~=` | Regex match (case-insensitive) | `message~=bug.*fix` | "Bug fix", "Fixed bug" |
+| `~=` | Regex match (case-sensitive; prefix `(?i)` to ignore case) | `message~=(?i)bug.*fix` | "Bug fix", "fixed bug fix" |
+| `!~` | Regex does not match | `email!~@company.com` | any email not at company.com |
 | `..` | Range (inclusive) | `lines=50..200` | 50, 100, 200 |
+
+`~=` is case-sensitive on every adapter; git's `author` and `email` filters are the exception
+and match case-insensitively. The negated regex is `!~` (not `!~=`, which is mis-parsed and
+filters everything out).
 
 ### Type Coercion
 
@@ -146,8 +151,8 @@ All 5 adapters support these operators through the unified `compare_values()` fu
 - Non-numeric strings fail gracefully (no match)
 
 **String comparison**:
-- Case-insensitive by default (configurable per adapter)
-- `author=John` matches "john", "John", "JOHN"
+- `=` is case-insensitive on json:// and git://, case-sensitive on markdown:// and ast://
+- git: `author=John` matches "john", "John", "JOHN" (the whole author name)
 
 **Boolean coercion**:
 - `"true"`, `"yes"`, `"1"` → true
@@ -199,7 +204,7 @@ reveal 'json://data.json?score=80..95'              # Score range
 ```bash
 reveal 'json://data.json?status=active'             # Exact match
 reveal 'json://data.json?status!=draft'             # Not draft
-reveal 'json://data.json?name~=john'                # Name contains "john"
+reveal 'json://data.json?name~=john'                # Name contains "john" (case-sensitive; (?i)john to ignore case)
 ```
 
 **Combined filters**:
@@ -225,20 +230,28 @@ reveal 'markdown://docs/?status!=archived'          # Not archived
 
 **Tag filtering**:
 ```bash
-reveal 'markdown://docs/?tags~=python'              # Tagged with Python
+reveal 'markdown://docs/?tags~=python'              # Tagged "python" (case-sensitive)
 reveal 'markdown://docs/?tags~=api&status=complete' # Python APIs, complete
 ```
 
 **Date filtering**:
 ```bash
-reveal 'markdown://docs/?created>2026-01-01'        # Created this year
-reveal 'markdown://docs/?updated=2026-01..2026-02'  # Range query
+reveal 'markdown://docs/?created=2026-01-01..2026-12-31'   # Created in 2026
+reveal 'markdown://docs/?updated=2026-01-01..2026-02-28'   # January-February 2026
 ```
+
+Frontmatter dates: use a range with full `YYYY-MM-DD` bounds. `>`/`<` on a frontmatter date
+match nothing (no error), and a short bound such as `2026-02` excludes every February date
+(`"2026-02-01" > "2026-02"`).
 
 **Priority and sorting**:
 ```bash
-reveal 'markdown://docs/?priority>=5&sort=-priority&limit=10'
+reveal 'markdown://docs/?priority>=5&limit=10'
 ```
+
+markdown:// filters on any frontmatter key but sorts only on the fields it puts in each result
+(`path`, `relative_path`, `modified`, `mtime`, `status`, `has_frontmatter`); `sort=-priority`
+leaves the results unsorted with a warning.
 
 **Body text search** (markdown-specific):
 ```bash
@@ -262,6 +275,10 @@ reveal 'metrics://src/?complexity>10'                 # Complex files
 reveal 'metrics://src/?complexity=5..15'              # Medium complexity
 ```
 
+A metrics:// range (`field=a..b`) currently prints `⚠ Unknown query param '<field>' for
+metrics:// — ignored` on stderr. Ignore that warning: the range is applied (same files as
+`field>=a&field<=b`).
+
 **Size filtering**:
 ```bash
 reveal 'metrics://src/?lines>500'                     # Large files
@@ -271,7 +288,7 @@ reveal 'metrics://src/?lines=100..500'                # Medium files
 
 **Quality filtering**:
 ```bash
-reveal 'metrics://src/?quality_score<50'              # Low quality
+reveal 'metrics://src/?quality<50'                    # Low quality
 reveal 'metrics://src/?functions>20'                  # Many functions
 ```
 
@@ -333,8 +350,8 @@ reveal 'ast://src/?lines<30&complexity>10'
 
 **Author filtering**:
 ```bash
-reveal 'git://.?author=John'                        # Exact name match
-reveal 'git://.?author~=john'                       # Contains "john"
+reveal 'git://.?author=John'                        # Exact full-name match (use author~= for part of a name)
+reveal 'git://.?author~=john'                       # Contains "john" (any case)
 reveal 'git://.?email~=@example.com'                # Company emails
 ```
 
@@ -411,18 +428,18 @@ reveal 'git://app.py?type=history&author=John&sort=-date&limit=10'
 - `lines>50` matches 51, 100, 200
 - Fails gracefully if not numeric (no match)
 
-**String comparison** (fallback):
-- Lexicographic comparison
-- `name>"m"` matches "python", "ruby", "zebra"
+**No string fallback**: `>`, `<`, `>=`, `<=` compare numbers. A value that is not a number
+matches nothing (no lexicographic fallback): `name>m` returns no rows. Use a range
+(`name=a..n`) for string ordering; ranges compare strings when the bounds are not numbers.
 
 ---
 
 ### Regex Match (`~=`)
 
 **Pattern matching**:
-- Uses Python `re` module
-- Case-insensitive by default
-- `message~=bug.*fix` matches "Bug fix for login"
+- Uses Python `re` module (a search, not a full match)
+- Case-sensitive; prefix `(?i)` to ignore case (git `author`/`email` are matched case-insensitively)
+- `message~=(?i)bug.*fix` matches "Bug fix for login"
 
 **Common patterns**:
 ```bash
@@ -448,7 +465,7 @@ reveal 'git://app.py?type=history&author=John&sort=-date&limit=10'
 
 **String ranges**:
 - Lexicographic comparison
-- `name=a..m` matches "alice", "bob", "mike"
+- `name=a..n` matches "alice", "bob", "mike" (`a..m` would drop "mike", since "mike" > "m")
 
 **Syntax**:
 - Use with `=` operator: `field=min..max`
@@ -480,7 +497,7 @@ reveal 'ast://src/?type=function&lines>100&complexity>15'
 **Behavior**:
 - Filters are ANDed together
 - Each filter narrows results
-- No OR operator (use regex for OR: `~=(foo|bar)`)
+- No general OR operator: ast:// accepts `type=a|b`; elsewhere use a regex `~=(foo|bar)`
 
 ---
 
@@ -518,10 +535,10 @@ reveal 'ast://src/?type=function&sort=-complexity&limit=10'
 reveal 'metrics://src/?sort=-lines&limit=20'
 
 # Most active committers (recent)
-reveal 'git://.?sort=-date&limit=50' | jq '.items | group_by(.author) | map({author: .[0].author, count: length}) | sort_by(-.count)'
+reveal 'git://.?type=log&limit=50' --format json | jq '.history | group_by(.author) | map({author: .[0].author, count: length}) | sort_by(-.count)'
 
 # Worst quality files
-reveal 'metrics://src/?sort=quality_score&limit=10'
+reveal 'metrics://src/?sort=quality&limit=10'
 ```
 
 ---
@@ -569,7 +586,7 @@ Use regex for OR logic:
 reveal 'git://.?message~=(bug|feat)'
 
 # Python or JavaScript files
-reveal 'metrics://src/?path~=\.(py|js)$'
+reveal 'metrics://src/?file~=\.(py|js)$'
 
 # Test or spec files
 reveal 'ast://src/?name~=(test_|spec_)'
@@ -584,19 +601,22 @@ reveal 'json://users.json?role~=(admin|moderator)'
 
 The `compare_values()` function accepts options to configure behavior per adapter:
 
-| Adapter | List Matching | Case Sensitive | Numeric Coercion | Null != |
+| Adapter | List Matching | Case Sensitive (`=`) | Numeric Coercion | Null != |
 |---------|---------------|----------------|------------------|---------|
 | **json://** | ✅ Any | ❌ No | ✅ Yes | ✅ Yes |
-| **markdown://** | ✅ Any | ❌ No | ✅ Yes | ✅ Yes |
+| **markdown://** | ✅ Any | ✅ Yes | ✅ Yes | ✅ Yes |
 | **metrics://** | ❌ No | ❌ No | ✅ Yes | ❌ No |
 | **ast://** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **git://** | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
 
+The column is about `=` and wildcards. `~=` ignores it: a regex is case-sensitive on every
+adapter (add `(?i)`), except git's `author`/`email` filters, which ignore case.
+
 **Rationale**:
-- **JSON/Markdown**: Have list fields (tags, topics), need case-insensitive search
-- **Stats**: Numeric-focused, no lists
+- **JSON/Markdown**: Have list fields (tags, topics)
+- **Metrics**: Numeric-focused, no lists
 - **AST**: Code is case-sensitive
-- **Git**: Commit metadata, case-insensitive search
+- **Git**: Commit metadata, case-insensitive author/email search
 
 ---
 
@@ -609,7 +629,7 @@ The `compare_values()` function accepts options to configure behavior per adapte
 reveal 'metrics://src/?lines>200&complexity>10&sort=-complexity'
 
 # Technical debt hotspots
-reveal 'metrics://src/?quality_score<50&sort=quality_score&limit=20'
+reveal 'metrics://src/?quality<50&sort=quality&limit=20'
 
 # Overly complex small functions
 reveal 'ast://src/?type=function&lines<50&complexity>10'
@@ -624,10 +644,10 @@ reveal 'ast://src/?type=function&lines>100&sort=-lines'
 
 ```bash
 # Unfinished high-priority docs
-reveal 'markdown://docs/?status=draft&priority>=5&sort=-priority'
+reveal 'markdown://docs/?status=draft&priority>=5'
 
-# Stale documentation
-reveal 'markdown://docs/?updated<2025-01-01&sort=updated'
+# Stale documentation (dates: use a range; > and < on dates match nothing)
+reveal 'markdown://docs/?updated=0000-01-01..2024-12-31'
 
 # Python API documentation
 reveal 'markdown://docs/?tags~=python&tags~=api&status=complete'
@@ -648,7 +668,7 @@ reveal 'git://.?message~=bug&date>2026-02-01&sort=-date'
 reveal 'git://.?message~=^feat:&author=John&sort=-date'
 
 # Commits from external contributors
-reveal 'git://.?email!~=@company.com&sort=-date'
+reveal 'git://.?type=log&email!~@company.com&sort=-date'
 
 # Recent work by file
 reveal 'git://app.py?type=history&limit=10&sort=-date'
@@ -757,7 +777,7 @@ reveal 'git://.?author=John&message~=bug&sort=-date&limit=10'
 ## Implementation Details
 
 **Phase 3 Completion** (2026-02-08):
-- Unified query parser in `reveal/utils/query.py`
+- Unified query parser in `reveal/utils/query_parser.py`, operators in `reveal/utils/query_eval.py` (`reveal/utils/query.py` re-exports both)
 - Single `compare_values()` function powers all operators
 - 299 lines of duplicate code eliminated
 - All 5 adapters migrated: json, markdown, stats, ast, git
