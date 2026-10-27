@@ -18,6 +18,7 @@ from ...utils.query import (
     parse_result_control,
     unknown_sort_field_warning,
 )
+from ...utils.query_control import sort_nulls_last
 from ...utils.query_parser import (
     CliBinding, ParamSpec, QueryParams, ResourceSpec, filter_expression, nonnegative_display_limit,
     param_schema, peek_query_items, split_exclude_param, whole_number,
@@ -531,12 +532,10 @@ class MetricsAdapter(ResourceAdapter):
         assert sort_field is not None
 
         try:
-            sorted_stats = list(file_stats)
-            sorted_stats.sort(
-                key=lambda x: field_value(x, sort_field) or 0,
-                reverse=self.result_control.sort_descending
-            )
-            return sorted_stats
+            # A missing value goes last in either direction, as on json:// (BACK-2298); it
+            # sorted as 0.
+            return sort_nulls_last(file_stats, lambda x: field_value(x, sort_field),
+                                   self.result_control.sort_descending)
         except (TypeError, KeyError):
             return list(file_stats)  # Skip sorting if field doesn't exist
 

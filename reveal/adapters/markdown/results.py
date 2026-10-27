@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from reveal.reveal_types import CONTRACT_VERSION
 
+from ...utils.query_control import sort_nulls_last
 from ...utils.results import ResultBuilder, note_truncation
 from ...utils.path_utils import to_posix
 
@@ -51,32 +52,25 @@ def build_result_item(
     return result
 
 
-def create_sort_key(item: Dict[str, Any], sort_field: str, sort_descending: bool) -> tuple:
-    """Create sort key for an item based on sort_field.
+def sort_value(item: Dict[str, Any], sort_field: str) -> Any:
+    """The value an item sorts by: the field, a list by its first element, None when null or missing.
 
     Args:
         item: Result item dict
         sort_field: Field name to sort by
-        sort_descending: Whether to sort descending
 
     Returns:
-        Sort key tuple
+        The sort value, or None (sorts last)
     """
-    # Check if field exists in the result dict (including frontmatter fields)
-    if sort_field in item:
-        value = item[sort_field]
-        # Handle None values (sort to end)
-        if value is None:
-            return (1, 0) if sort_descending else (0, 0)
-        # Handle list values (use first element)
-        if isinstance(value, list):
-            return (0, str(value[0]) if value else '')
-        return (0, value)
-    return (1, 0) if sort_descending else (0, 0)
+    value = item.get(sort_field)
+    if isinstance(value, list):
+        return str(value[0]) if value else ''
+    return value
 
 
 def apply_sorting(results: List[Dict[str, Any]], sort_field: str, sort_descending: bool) -> List[Dict[str, Any]]:
-    """Apply sorting to results.
+    """Apply sorting to results. Null and missing values go last in either direction, in
+    their source order, as on json:// and ast:// (BACK-2298).
 
     Args:
         results: List of result items
@@ -89,21 +83,20 @@ def apply_sorting(results: List[Dict[str, Any]], sort_field: str, sort_descendin
     if not sort_field:
         return results
 
+    def value(item: Dict[str, Any]) -> Any:
+        return sort_value(item, sort_field)
+
     try:
-        return sorted(
-            results,
-            key=lambda item: create_sort_key(item, sort_field, sort_descending),
-            reverse=sort_descending
-        )
+        return sort_nulls_last(results, value, sort_descending)
     except TypeError:
         # Values of different types (a YAML number next to a string, a date next to text)
         # cannot be compared. Order them as text, as utils/query_control._apply_sorting does;
         # returning the input order would read as sorted (BACK-1059).
-        def text_key(item: Dict[str, Any]) -> tuple:
-            rank, value = create_sort_key(item, sort_field, sort_descending)
-            return rank, str(value)
+        def text(item: Dict[str, Any]) -> Optional[str]:
+            found = value(item)
+            return None if found is None else str(found)
 
-        return sorted(results, key=text_key, reverse=sort_descending)
+        return sort_nulls_last(results, text, sort_descending)
 
 
 def apply_pagination(results: List[Dict[str, Any]], offset: int, limit: Optional[int]) -> List[Dict[str, Any]]:

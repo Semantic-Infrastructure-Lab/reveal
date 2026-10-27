@@ -375,7 +375,7 @@ def test_markdown_sort_over_one_value_type_is_unchanged(tmp_path):
 
 def test_markdown_sort_does_not_swallow_a_bug(monkeypatch):
     from reveal.adapters.markdown import results
-    monkeypatch.setattr(results, 'create_sort_key', _raise_bug)
+    monkeypatch.setattr(results, 'sort_value', _raise_bug)
     with pytest.raises(_InjectedBug):
         results.apply_sorting([{'title': 'a'}, {'title': 'b'}], 'title', False)
 
