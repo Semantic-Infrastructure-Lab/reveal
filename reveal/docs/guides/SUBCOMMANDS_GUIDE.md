@@ -265,7 +265,7 @@ measurement loss does not imply that a separate requested content read failed.
 
 Files are scored and selected in this order:
 
-1. **Changed files** (when `--since` is used) — files in `git diff --name-only <ref>...HEAD`, boosted above all else, but a changed file larger than the remaining budget is still skipped (without a warning); raise `--budget` until every changed file is listed
+1. **Changed files** (when `--since` is used) — files under PATH in `git diff --name-only <ref>...HEAD` (the `Changed files: N` line, JSON `meta.changed_files_count`), boosted above all else. A changed file larger than the remaining budget is still skipped, and a warning names it (JSON: a `meta.warnings` entry of type `changed_files_over_budget` with its `files`); the exit code stays 0. Raise `--budget` until no changed file is named
 2. **Entry points** — `main.py`, `app.py`, `index.js`, the root config file (`package.json`, `pyproject.toml`, ...)
 3. **`--focus` matches** — files whose path contains the topic, then files tied to them by imports
 4. **Key directories** — `api/`, `core/`, `models/`, `auth/`, `routes/`, ... and, with `--architecture`, widely imported files

@@ -451,6 +451,34 @@ def _record_file_measurement_warning(failures: Sequence[_FileMeasurementFailure]
     })
 
 
+def _changed_in_scope(path: Path, changed_files: Set[str]) -> Set[str]:
+    """The changed files at or under *path*: git reports the whole repository's changes."""
+    root = path.resolve()
+    return {changed for changed in changed_files
+            if Path(changed) == root or root in Path(changed).parents}
+
+
+_OVER_BUDGET_SHOWN = 10
+
+
+def _record_changed_over_budget_warning(
+    candidates: Sequence[Dict[str, Any]], selected: Sequence[Dict[str, Any]], meta: Dict[str, Any],
+) -> None:
+    """Name the changed candidates the budget dropped: they rank first, so a drop is a surprise."""
+    kept = {id(c) for c in selected}
+    dropped = [c for c in candidates if c['changed'] and id(c) not in kept]
+    if not dropped:
+        return
+    shown = ', '.join(f"{c['relative']} (~{c['tokens_approx']} tokens)" for c in dropped[:_OVER_BUDGET_SHOWN])
+    more = f' and {len(dropped) - _OVER_BUDGET_SHOWN} more' if len(dropped) > _OVER_BUDGET_SHOWN else ''
+    meta.setdefault('warnings', []).append({
+        'type': 'changed_files_over_budget',
+        'files': [c['relative'] for c in dropped],
+        'message': (f'{len(dropped)} changed file(s) did not fit the budget and are not in the pack: '
+                    f'{shown}{more}; raise --budget (budget=) to include them'),
+    })
+
+
 def _collect_candidates(
     path: Path,
     focus: Optional[str],
@@ -778,7 +806,7 @@ _BUDGET = ParamSpec('budget', 'string', 'Token or line budget (e.g. 2000, 500-li
 _FOCUS = ParamSpec('focus', 'string', 'Emphasize files matching this name pattern', None,
                    _optional_text, ('focus=auth',), role='analysis', uri_codec='percent',
                    cli=CliBinding(('--focus',), metavar='TOPIC'))
-_SINCE = ParamSpec('since', 'string', 'Git ref to diff against; changed files boosted to top priority',
+_SINCE = ParamSpec('since', 'string', 'Git ref to diff against; changed files rank first, one the budget drops is named in a warning',
                    None, _optional_text, ('since=main',), role='analysis', uri_codec='percent',
                    cli=CliBinding(('--since',), metavar='REF'))
 _CONTENT = ParamSpec('content', 'boolean', 'Include tiered file content (full/structure/name_only)',
@@ -1026,7 +1054,8 @@ class PackAdapter(ResourceAdapter):
         _record_file_measurement_warning(tuple(file_failures), meta)
         if since:
             meta['since'] = since
-            meta['changed_files_count'] = len(changed_files)
+            meta['changed_files_count'] = len(_changed_in_scope(path, changed_files))
+            _record_changed_over_budget_warning(candidates, selected, meta)
         if self.since_error:
             # Optional signal: candidates stay ranked without it, the cause stays visible.
             meta['since_error'] = self.since_error

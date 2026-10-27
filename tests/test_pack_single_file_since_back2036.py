@@ -47,7 +47,8 @@ def test_adapter_keeps_exact_one_file_candidate_population_and_existing_content_
     result = owner.get_structure()
     assert owner.since_error is None and result['source_type'] == 'file'
     assert result['path'] == baseline['path'] and result['meta']['total_candidates'] == result['meta']['selected'] == 1
-    assert result['meta']['changed_files_count'] == 2 and result['meta']['since'] == 'HEAD~1'
+    # The count is the PATH's own changes (BACK-2271); the helper keeps the repository set.
+    assert result['meta']['changed_files_count'] == (filename == 'module.py') and result['meta']['since'] == 'HEAD~1'
     assert result['meta']['used_tokens_approx'] == baseline['meta']['used_tokens_approx']
     selected, = result['files']
     assert selected['path'] == source.as_posix() and selected['relative'] == '.'
@@ -74,7 +75,7 @@ def test_public_file_since_uses_shared_helper_and_returns_legacy_success(repo, s
     if fmt == 'json':
         data = json.loads(result.stdout)
         assert data['files'][0]['relative'] == '.' and data['files'][0]['changed'] is True
-        assert data['meta']['total_candidates'] == 1 and data['meta']['changed_files_count'] == 2
+        assert data['meta']['total_candidates'] == 1 and data['meta']['changed_files_count'] == 1
         assert data['content'][0]['content_type'] == 'full'
     else:
         assert 'selected_file_marker' in result.stdout
@@ -97,7 +98,7 @@ def test_decorated_tools_accept_existing_file_since_and_keep_other_changed_file_
         data = json.loads(result)
         assert data['meta']['total_candidates'] == 1 and data['files'][0]['changed'] is True
     else:
-        assert 'Changed files:  2' in result
+        assert 'Changed files:  1' in result
 
 
 @pytest.mark.parametrize('consumer', ['helper', 'adapter', 'native-json', 'specialized', 'generic-json'])
