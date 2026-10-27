@@ -31,7 +31,7 @@ from ..analyzers.imports.types import (
     LAZY_EXCLUDE, LAZY_INCLUDE, LAZY_MODES, ImportAnalysis, ImportExtraction,
 )
 from ..analyzers.imports.classify import classify_import, local_package_names, package_table
-from ..conventions import family_for_path
+from ..conventions import conventions_for_path, family_for_path, same_package_families
 from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
@@ -441,6 +441,21 @@ _IMPORTERS = ParamSpec(
     examples=('imports://src?importers', 'imports://src?importers=utils.py', 'imports://src/utils.py?importers'),
 )
 _REQUEST_SPECS = (_LAZY, _SCOPE, _TESTS, _ROOT, _MAX_FILES, _IMPORTERS)
+
+# Component cohesion (internal / (internal + outgoing) imports) is declined, not computed, for a component whose
+# files are mostly in a language where one package/module sees its own files with no import (BACK-1428).
+COHESION_DECLINED_REASON = 'same-package visibility'
+COHESION_DECLINED_RULE = (
+    'cohesion n/a (' + COHESION_DECLINED_REASON + '): a component with more than half its files in ' + ', '.join(same_package_families())
+    + ' is not scored, because files of one package or module use each other without an import, so internal imports '
+    'would read ~0 whatever the structure; other languages keep their number')
+
+
+def _cohesion_declined(files) -> bool:
+    """Whether a component's files are mostly (strictly more than half) in a same-package-visibility language."""
+    same = sum(1 for f in files if conventions_for_path(str(f)).same_package_visibility)
+    return 2 * same > len(files)
+
 # BACK-2194: the Graphviz module view, the replacement for calls ?modules &format=dot. URI-only, as
 # on calls:// (dot has no --format spelling); it draws the edges ?importers lists for a directory.
 _FORMAT = ParamSpec(
@@ -531,7 +546,7 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'components': {
         'type': 'flag',
-        'description': 'Score each directory as a component: cohesion (internal/outgoing imports), coupling (incoming), top bridge file',
+        'description': 'Score each directory as a component: cohesion (internal/outgoing imports; null/n/a for a component mostly in Go, Java, Kotlin, C#, Scala or Swift, with cohesion_rule saying why), coupling (incoming), top bridge file',
         'examples': ['imports://src?components']
     },
     'external': {
@@ -719,6 +734,7 @@ _SCHEMA_OUTPUT_TYPES = [
                 'source_type': {'type': 'string'},
                 'total': {'type': 'integer'},
                 'edge_rule': _EDGE_RULE_SCHEMA,
+                'cohesion_rule': {'type': 'string', 'description': 'Present when any component declined its cohesion: why (BACK-1428)'},
                 'components': {
                     'type': 'array',
                     'items': {
@@ -729,7 +745,8 @@ _SCHEMA_OUTPUT_TYPES = [
                             'internal': {'type': 'integer'},
                             'outgoing': {'type': 'integer'},
                             'incoming': {'type': 'integer'},
-                            'cohesion': {'type': 'number'},
+                            'cohesion': {'type': ['number', 'null'], 'description': 'null = declined, see cohesion_reason (more than half the files are in a same-package-visibility language); declined components sort after measured ones'},
+                            'cohesion_reason': {'type': 'string', 'description': 'Only on a declined component'},
                             'top_bridge': {'type': ['string', 'null']},
                         }
                     }
@@ -1358,11 +1375,13 @@ class ImportsRenderer:
             name = _shown_path(c['component'], source)
             bridge = c.get('top_bridge')
             bridge_note = f"  ← {Path(bridge).name}" if bridge else ''
-            cohesion_pct = f"{c['cohesion'] * 100:.0f}%"
+            cohesion_pct = 'n/a' if c['cohesion'] is None else f"{c['cohesion'] * 100:.0f}%"
             print(f"  {name:<{col_w}}  {c['files']:>5}  {c['internal']:>8}  {c['outgoing']:>5}  {c['incoming']:>5}  {cohesion_pct:>9}{bridge_note}")
 
         print()
         print("  Note: low cohesion = files import heavily outside this directory (may not be a real component)")
+        if result.get('cohesion_rule'):
+            print(f"  Note: {result['cohesion_rule']}")
         print("  Note: static imports only — dynamic dispatch not captured")
         print()
 
@@ -2614,7 +2633,10 @@ class ImportsAdapter(ResourceAdapter):
                         incoming += 1
 
             total_out = internal + outgoing
-            cohesion = internal / total_out if total_out > 0 else 0.0
+            cohesion: Optional[float] = internal / total_out if total_out > 0 else 0.0
+            declined = _cohesion_declined(file_set)
+            if declined:
+                cohesion = None
             # BACK-1243: break ties deterministically -- max() over a dict
             # with equal-count keys otherwise depends on hash-seed-salted
             # dict iteration order (PYTHONHASHSEED), varying top_bridge
@@ -2626,21 +2648,26 @@ class ImportsAdapter(ResourceAdapter):
                 if bridge_counts else None
             )
 
-            components.append({
+            component = {
                 'component': str(directory),
                 'files': len(file_set),
                 'internal': internal,
                 'outgoing': outgoing,
                 'incoming': incoming,
-                'cohesion': round(cohesion, 3),
+                'cohesion': None if cohesion is None else round(cohesion, 3),
                 'top_bridge': top_bridge,
-            })
+            }
+            if declined:
+                component['cohesion_reason'] = COHESION_DECLINED_REASON
+            components.append(component)
 
-        # Sort: cohesion descending (best-structured first), files descending as tiebreak
-        components.sort(key=lambda c: (-c['cohesion'], -c['files'], c['component']))
+        # Sort: measured cohesion descending (best-structured first), files descending as tiebreak.
+        # A declined component has no number to rank by: it follows every measured one (never sorted as 0.00).
+        components.sort(key=lambda c: (c['cohesion'] is None, -(c['cohesion'] or 0.0), -c['files'], c['component']))
 
+        extra = {'cohesion_rule': COHESION_DECLINED_RULE} if any(c['cohesion'] is None for c in components) else {}
         return self._build_response(
-            'components', components=components, total=len(components),
+            'components', components=components, total=len(components), **extra,
             edge_rule=self._edge_rule(LAZY_INCLUDE, 'internal, outgoing and incoming count static imports between'))
 
     def _format_external(self) -> Dict[str, Any]:

@@ -936,7 +936,7 @@ last node. `count` = number of distinct groups, not simple paths.
 - `components[].internal` — import edges where both source and target are in this directory
 - `components[].outgoing` — import edges leaving this directory
 - `components[].incoming` — import edges arriving from outside this directory
-- `components[].cohesion` — `internal / (internal + outgoing)`; 1.0 = fully self-contained; 0.0 = all imports cross boundaries
+- `components[].cohesion` — `internal / (internal + outgoing)`; 1.0 = fully self-contained; 0.0 = all imports cross boundaries. `null` (text: `n/a`) when more than half the directory's files are in Go, Java, Kotlin, C#, Scala or Swift: files of one package or module use each other without an import, so `internal` would read ~0 whatever the structure. The row then carries `cohesion_reason`, the response carries one `cohesion_rule` sentence, and declined components sort after every measured one (never as 0.00). Other languages keep their number
 - `components[].top_bridge` — file in this directory with the most outgoing cross-boundary edges (null if none)
 
 **Scan root**: rows are the directories under the requested path (nested directories at any depth). Edges resolve at the project root (the default `&scope=root`), so scanning a subdirectory still sees absolute-package imports and importers from outside it. With `&scope=path` the subdirectory is the scan root and those edges are missed.

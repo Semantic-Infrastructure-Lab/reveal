@@ -45,16 +45,20 @@ def _render_core_abstractions(core: List[Dict], top: int, base_path: Path) -> Li
         indent='  ', suffix=' (--format json lists all)'), '']
 
 
-def _render_components(components: List[Dict], top: int, base_path: Path) -> List[str]:
+def _render_components(components: List[Dict], top: int, base_path: Path,
+                       cohesion_rule: Optional[str] = None) -> List[str]:
     from ...adapters.architecture import _relpath
     if not components:
         return []
     def component_line(c):
         cohesion = c['cohesion']
+        if cohesion is None:  # declined, see cohesion_rule (BACK-1428)
+            return f"  {_relpath(c['component'], base_path):<44}  {'n/a':>4}  {' ' * 10}  {c['files']} files"
         bar = '█' * int(cohesion * 10) + '░' * (10 - int(cohesion * 10))
         return f"  {_relpath(c['component'], base_path):<44}  {cohesion:.2f}  {bar}  {c['files']} files"
     return [f"Components  ({len(components)} directories)", *capped_section(
-        components, top, component_line, indent='  ', suffix=' (--format json lists all)'), '']
+        components, top, component_line, indent='  ', suffix=' (--format json lists all)'),
+        *([f"  {cohesion_rule}"] if cohesion_rule else []), '']
 
 
 def _render_risks(risks: List[Dict]) -> List[str]:
@@ -84,7 +88,7 @@ def _render_brief(report: Dict[str, Any], top: int, base_path: Path,
     lines += _render_entry_points(facts.get('entry_points', []), top, base_path,
                                    report.get('entry_point_filter'))
     lines += _render_core_abstractions(facts.get('core_abstractions', []), top, base_path)
-    lines += _render_components(facts.get('components', []), top, base_path)
+    lines += _render_components(facts.get('components', []), top, base_path, report.get('cohesion_rule'))
     lines += _render_risks(report.get('risks', []))
     lines += _render_next_commands(report.get('next_commands', []))
     if not no_imports:
@@ -165,7 +169,9 @@ def architecture_diff_text(report: Dict[str, Any]) -> str:
     if coupling:
         lines.append(f"Component coupling changes ({len(coupling)})")
         for c in coupling:
-            lines.append(f"  {c['component']:<44}  {c['base_cohesion']} -> {c['head_cohesion']}  ({_signed(c['change'])})")
+            base = 'n/a' if c.get('declined_on') == 'base' else c['base_cohesion']
+            head = 'n/a' if c.get('declined_on') == 'head' else c['head_cohesion']
+            lines.append(f"  {c['component']:<44}  {base} -> {head}  ({_signed(c['change'])})")
         lines.append('')
 
     centroid = deltas['complexity_centroid']

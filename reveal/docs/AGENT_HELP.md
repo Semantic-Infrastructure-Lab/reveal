@@ -1478,7 +1478,7 @@ reveal 'imports://src?importers&format=dot' | dot -Tsvg > deps.svg
 - **Architectural orientation** — three complementary views from the import graph:
   - `imports://src?rank=fan-in` — ranks every file by importer count. High fan-in = core abstractions (change carefully); zero = entry points or dead code.
   - `imports://src?entrypoints` — lists only the fan-in=0 files, sorted by fan-out. High fan-out = real CLI/runner; zero = likely dead code.
-  - `imports://src?components` — scores each directory as a component: cohesion (how self-contained), coupling (incoming/outgoing), top bridge file. Low cohesion = not a real component.
+  - `imports://src?components` — scores each directory as a component: cohesion (how self-contained), coupling (incoming/outgoing), top bridge file. Low cohesion = not a real component. Cohesion is `null`/`n/a` (with `cohesion_reason` and one `cohesion_rule`) for a directory mostly in Go, Java, Kotlin, C#, Scala or Swift: same-package files need no import, so the number would be a structural 0.
 - **Impact analysis before refactoring** — before changing `utils.py`, run `imports://src/utils.py?importers` to see every direct importer
 - **Safe deletion** — verify `count: 0` (via `?importers`) before removing a module
 

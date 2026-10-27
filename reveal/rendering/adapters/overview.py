@@ -217,15 +217,22 @@ def _architecture_rule(arch: Dict[str, Any]) -> List[str]:
 
 
 def _architecture_components(components: List[Dict[str, Any]], top: int,
-                             base_path: Optional[Path]) -> List[str]:
+                             base_path: Optional[Path], cohesion_rule: Optional[str] = None) -> List[str]:
     if not components:
         return []
-    lines = [f"  Components  ({len(components)} directories, by cohesion)"]
+    declined = any(c['cohesion'] is None for c in components)
+    lines = [f"  Components  ({len(components)} directories, by cohesion"
+             + ("; n/a ones last, by file count)" if declined else ")")]
     for c in components[:top]:
         rel = _relpath(c['component'], base_path)
         cohesion = c['cohesion']
+        if cohesion is None:  # declined, see cohesion_rule (BACK-1428)
+            lines.append(f"    {rel:<42}  {'n/a':>4}  {' ' * 10}  {c['files']} files")
+            continue
         bar = '█' * int(cohesion * 10) + '░' * (10 - int(cohesion * 10))
         lines.append(f"    {rel:<42}  {cohesion:.2f}  {bar}  {c['files']} files")
+    if cohesion_rule:
+        lines.append(f"    {cohesion_rule}")
     remaining = len(components) - min(len(components), top)
     if remaining > 0:
         lines.append(f"    ... and {remaining} more (use --all)")
@@ -286,7 +293,7 @@ def _render_architecture(
         if footer:
             lines.append(footer)
 
-    lines.extend(_architecture_components(components, top, base_path))
+    lines.extend(_architecture_components(components, top, base_path, arch.get('cohesion_rule')))
     return lines
 
 

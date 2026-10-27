@@ -199,6 +199,7 @@ def _format_imports_data(adapter, path: Path, *,
         'entry_point_filter': entry_point_filter(raw_eps),
         'core_abstractions': core_abstractions,
         'components': components,
+        **({'cohesion_rule': components_data['cohesion_rule']} if components_data.get('cohesion_rule') else {}),
         'circular_groups': cycle_groups,
         # BACK-518 part 2: same coverage disclosure imports:// itself already
         # gives — without it, an unsupported-language repo (e.g. all-Lua) with
@@ -714,6 +715,7 @@ class ArchitectureAdapter(ResourceAdapter):
             **imports_data.get('edge_rules', {}),
             **({'entry_point_filter': imports_data['entry_point_filter']}
                if 'entry_point_filter' in imports_data else {}),
+            **({'cohesion_rule': imports_data['cohesion_rule']} if 'cohesion_rule' in imports_data else {}),
             'unsupported_extensions': imports_data.get('unsupported_extensions', {}),
             'scope': _run_scope(self, path, failures=scope_failures),
         }

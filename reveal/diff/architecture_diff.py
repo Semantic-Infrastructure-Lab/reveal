@@ -409,9 +409,13 @@ def _normalize_snapshot(raw: Dict[str, Any], top_n: int) -> Dict[str, Any]:
             circular_groups.append(frozenset(rels))
 
     component_cohesion: Dict[str, float] = {}
+    component_declined: Set[str] = set()  # BACK-1428: declined cohesion is not a number, never 0.0
     for c in raw['components']:
         rel = _dir_relpath_or_none(c['component'], root)
         if rel is None:
+            continue
+        if c.get('cohesion') is None and c.get('cohesion_reason'):
+            component_declined.add(rel)
             continue
         component_cohesion[rel] = c.get('cohesion', 0.0)
 
@@ -428,6 +432,7 @@ def _normalize_snapshot(raw: Dict[str, Any], top_n: int) -> Dict[str, Any]:
         'fan_out': fan_out,
         'circular_groups': circular_groups,
         'component_cohesion': component_cohesion,
+        'component_declined': component_declined,
         'entry_points': entry_points,
         'complexity_centroid': centroid,
         'unsupported_extensions': raw['unsupported_extensions'],
@@ -469,21 +474,32 @@ def _diff_circular_groups(base_groups: List[frozenset], head_groups: List[frozen
 
 
 def _diff_components(
-    base_cohesion: Dict[str, float], head_cohesion: Dict[str, float]
+    base_cohesion: Dict[str, float], head_cohesion: Dict[str, float],
+    base_declined: Optional[Set[str]] = None, head_declined: Optional[Set[str]] = None,
 ) -> List[Dict[str, Any]]:
+    """Cohesion deltas per component. A component whose cohesion is declined (same-package-visibility
+    language, BACK-1428) has no number: declined on both sides is no delta, declined on one side is
+    reported as such (``declined_on``), never as a move to or from 0.0 or as an added/removed component."""
+    base_declined = base_declined or set()
+    head_declined = head_declined or set()
     out: List[Dict[str, Any]] = []
-    for component in sorted(set(base_cohesion) | set(head_cohesion)):
+    for component in sorted(set(base_cohesion) | set(head_cohesion) | base_declined | head_declined):
         base_val = base_cohesion.get(component)
         head_val = head_cohesion.get(component)
-        if base_val == head_val:
+        if base_val == head_val:  # includes declined on both sides, or declined against absent
             continue
         change = None if base_val is None or head_val is None else round(head_val - base_val, 3)
-        out.append({
+        entry = {
             'component': component,
             'base_cohesion': base_val,
             'head_cohesion': head_val,
             'change': change,
-        })
+        }
+        if component in base_declined:
+            entry['declined_on'] = 'base'
+        elif component in head_declined:
+            entry['declined_on'] = 'head'
+        out.append(entry)
     return out
 
 
@@ -506,7 +522,9 @@ def diff_snapshots(base: Dict[str, Any], head: Dict[str, Any], top_n: int) -> Di
         'fan_in': _diff_counts(base['fan_in'], head['fan_in'], 'fan_in'),
         'fan_out': _diff_counts(base['fan_out'], head['fan_out'], 'fan_out'),
         'circular_groups': _diff_circular_groups(base['circular_groups'], head['circular_groups']),
-        'component_coupling': _diff_components(base['component_cohesion'], head['component_cohesion']),
+        'component_coupling': _diff_components(
+            base['component_cohesion'], head['component_cohesion'],
+            base.get('component_declined'), head.get('component_declined')),
         'complexity_centroid': {
             'base': base_centroid,
             'head': head_centroid,

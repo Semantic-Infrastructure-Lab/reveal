@@ -34,7 +34,7 @@ examples:
     description: 'List files nothing imports (fan-in=0) — entry points, CLIs, scripts, or dead code; sorted by fan-out'
 
   - uri: "imports://src?components"
-    description: 'Score each directory as a component — cohesion (how self-contained), coupling (incoming/outgoing), top bridge file'
+    description: 'Score each directory as a component — cohesion (how self-contained; n/a for Go, Java, Kotlin, C#, Scala and Swift directories, where files share a package without importing), coupling (incoming/outgoing), top bridge file'
 
   # Which edges count (function-level imports)
   - uri: "imports://src?rank=fan-in&lazy=exclude"
@@ -155,6 +155,7 @@ notes:
   - "Function-level (lazy) imports are edges: ?circular and has_cycles leave them out (a lazy back-edge is no import-time cycle), every other view counts them; &lazy=include|exclude|only overrides. Every answer prints its rule (Rule: line, edge_rule in JSON). Python, JavaScript, TypeScript and TSX record import scope; the rule names other languages' unclassified edges"
   - "Every answer resolves at the project root (&root=, .reveal.yaml root: true, package marker, VCS root, else the requested directory) through depends://'s cascade (direct, PHP constants, namespaces, members, Swift modules, Zeitwerk naming) and shows rows under the requested path; &scope=path makes the path itself the scan root. The rule names the root and its source, &scope, &tests, the edges each stage found (via) and the languages no recall oracle gates. Swift module and Zeitwerk convention edges never close a cycle"
   - "Paths are relative to the requested directory (a file target's own directory); a file outside it, a target outside a pinned &root= or a &scope=path root included, is spelled ../ (metadata.files_failed too), never as a host path"
+  - "?components cohesion is declined (null in JSON, n/a in text, a cohesion_reason on the row and one cohesion_rule line) for a component with more than half its files in Go, Java, Kotlin, C#, Scala or Swift: files of one package or module use each other without an import, so internal imports would read ~0. Declined components sort after measured ones; other languages keep their number"
   - 'Static imports only — dynamic dispatch (importlib.import_module, JS require(), Java Class.forName, Ruby autoload, plugin registries, etc.) is not captured by any query mode; affected files show lower fan-in than actual and may appear as false-positive entrypoints'
   - 'Supported languages: Python, JavaScript, TypeScript, Go, Rust, Java, C++, and more'
   - 'Use --verbose for detailed import chains and file paths'

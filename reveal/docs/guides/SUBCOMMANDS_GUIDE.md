@@ -730,7 +730,7 @@ reveal architecture [PATH] [--top N] [--no-imports | --against REF] [--format js
 
 - **Entry Points** — files with fan-in=0, sorted by fan-out (active callers of other code)
 - **Core Abstractions** — files most imported by others (high fan-in)
-- **Components** — directory cohesion bars
+- **Components** — directory cohesion bars (`n/a`, with one rule line, for directories mostly in Go, Java, Kotlin, C#, Scala or Swift, where files share a package without importing)
 - **Risks** — derived from findings: circular groups, high-complexity entry points, load-bearing files
 - **Next Commands** — specific `reveal` follow-up commands generated from what was found
 

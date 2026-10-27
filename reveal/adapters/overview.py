@@ -148,7 +148,8 @@ def _validate_import_rows(data: Any, field: str, kind: str) -> None:
         _text(entry.get('component' if kind == 'components' else 'file'), f'{kind}.path')
         if kind == 'components':
             _count(entry, 'files')
-            _number(entry.get('cohesion'), 'components.cohesion')
+            if entry.get('cohesion') is not None or 'cohesion_reason' not in entry:  # null is a declined value (BACK-1428)
+                _number(entry.get('cohesion'), 'components.cohesion')
         else:
             _count(entry, 'fan_out')
             if kind == 'fan_in':
@@ -494,6 +495,7 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, *,
             # BACK-1891: the fan-in-0 count, the active count and the rule between them.
             'entry_point_filter': entry_point_filter(entrypoints.get('entries', [])),
             'components': components.get('components', []),
+            **({'cohesion_rule': components['cohesion_rule']} if components.get('cohesion_rule') else {}),
             'circular_count': circular.get('count', 0),
             # BACK-518 part 2: disclose files the import graph couldn't cover,
             # same signal imports:// itself already gives — otherwise an

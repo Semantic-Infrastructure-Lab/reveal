@@ -109,6 +109,11 @@ class LanguageConventions:
     # abstractions" rankings in architecture://.
     entry_point_files: FrozenSet[str] = frozenset()
     reexport_files: FrozenSet[str] = frozenset()
+    # The files of one package/module (Go, Java, Kotlin, C#, Scala; Swift per module) name each
+    # other's declarations with no import statement, so an import-edge measure of "how much of this
+    # directory talks to itself" is structurally ~0 there. Component cohesion is declined for the
+    # family instead of printing that 0 (BACK-1428).
+    same_package_visibility: bool = False
 
     def is_test_basename(self, name: str) -> bool:
         """True if file *name* is a test file by this family's own naming convention."""
@@ -384,7 +389,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         # Test/Benchmark/Example/Fuzz functions in _test.go files; the name after
         # the prefix must not start with a lowercase letter (`Testable` is not a test).
         LanguageConventions(
-            family='go',
+            family='go', same_package_visibility=True,
             entry_point_files=frozenset({'main.go'}),
             reexport_files=frozenset({'doc.go'}),
             stdlib_key=_go_stdlib_key,
@@ -450,13 +455,13 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             }),
         ),
         LanguageConventions(
-            family='swift', entry_point_files=frozenset({'main.swift'}),
+            family='swift', same_package_visibility=True, entry_point_files=frozenset({'main.swift'}),
             # `P(x:)` indexes under the type name, never `init`; operators run on `a == b`.
             implicit_names=frozenset({'init', 'deinit'}),
             implicit_name_pattern=re.compile(r'^[^\w`]'),
         ),
         LanguageConventions(
-            family='csharp', test_annotation_markers=_CSHARP_TEST_MARKERS,
+            family='csharp', same_package_visibility=True, test_annotation_markers=_CSHARP_TEST_MARKERS,
             entry_point_files=frozenset({'program.cs', 'startup.cs'}),
             # ASP.NET Core resolves middleware Invoke/InvokeAsync and Startup's
             # Configure/ConfigureServices by name, through reflection.
@@ -465,7 +470,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             stdlib_key=_prefix_stdlib_key('System'),
         ),
         LanguageConventions(
-            family='java', test_annotation_markers=_JVM_TEST_MARKERS,
+            family='java', same_package_visibility=True, test_annotation_markers=_JVM_TEST_MARKERS,
             entry_point_files=frozenset({'main.java', 'app.java', 'application.java'}),
             # Java serialization calls these by name through reflection (BACK-2171); the
             # exact list, like PHP's magic methods, so `readConfig` stays checkable.
@@ -487,7 +492,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             test_symbol_patterns=(re.compile(r'(?:void|fun)\s+`?test(\w+)', re.MULTILINE),),
         ),
         LanguageConventions(
-            family='kotlin', test_annotation_markers=_JVM_TEST_MARKERS,
+            family='kotlin', same_package_visibility=True, test_annotation_markers=_JVM_TEST_MARKERS,
             entry_point_files=frozenset({'main.kt', 'application.kt'}),
             implicit_names=frozenset({'main'}),
             entry_point_decorators=JVM_ENTRY_POINT_DECORATORS,
@@ -497,7 +502,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             test_symbol_patterns=(re.compile(r'(?:void|fun)\s+`?test(\w+)', re.MULTILINE),),
         ),
         LanguageConventions(
-            family='scala', test_annotation_markers=_JVM_TEST_MARKERS,
+            family='scala', same_package_visibility=True, test_annotation_markers=_JVM_TEST_MARKERS,
             stdlib_key=_prefix_stdlib_key('scala', 'java', 'javax'),
         ),
     )
@@ -520,6 +525,11 @@ def family_for_path(file_path: str) -> str:
 def conventions_for_path(file_path: str) -> LanguageConventions:
     """Conventions for the language of *file_path*."""
     return conventions_for(family_for_path(file_path))
+
+
+def same_package_families() -> Tuple[str, ...]:
+    """The family slugs whose files share declarations without importing them (``same_package_visibility``)."""
+    return tuple(sorted(f for f, c in _CONVENTIONS.items() if c.same_package_visibility))
 
 
 def is_builtin_anywhere(name: str) -> bool:
