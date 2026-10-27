@@ -124,7 +124,7 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'verbose': {
         'type': 'flag',
-        'description': 'Show full import detail per dependent instead of a summary. Same as the CLI --verbose',
+        'description': "Directory targets: list each module's importers under its row (a file target already shows one row per import). Same as the CLI --verbose",
         'examples': ['depends://src?verbose'],
     },
 }
@@ -331,12 +331,9 @@ class DependsRenderer:
             alias_str = f' as {alias}' if alias else ''
             print(f"  {file_path}:{line}  ← {what}{alias_str}")
 
+        # Each importing statement is already its own row, so --verbose adds nothing
+        # here; no Tip recommends it (BACK-2213 lane C B2).
         print()
-        if not verbose:
-            # BACK-1462: 'target' is scan-root-relative now, so it is not a
-            # runnable path from an arbitrary cwd -- point at the flag instead.
-            print("  Tip: re-run with --verbose  for full import detail")
-            print()
         print("ℹ Import-graph analysis — dynamic imports not followed.")
         print()
 
