@@ -90,6 +90,15 @@ _RE_FROM_PAREN = re.compile(r'^\s*from\s+([\w.]+)\s+import\s*\(([^)]+)\)', re.MU
 # importlib.import_module('pkg.sub.mod'), dispatch tables ('pkg.sub': ...), etc.
 # Requires at least two dots (three parts) to avoid false positives on short strings.
 _RE_MODULE_STRING = re.compile(r'''['"]([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*){2,})['"]''')
+# A loader that imports by name: import_module(f'pkg.sub.{name}') (BACK-2221). The names
+# it can be handed are the module-level tables of bare string names declared beside it
+# (`SCHEMES = ('a', 'b')`, also list/set/frozenset), e.g. registry.BUILTIN_SCHEMES.
+_RE_NAME_LOADER = re.compile(r'''import_module\(\s*f['"]([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*)\.\{\w+\}['"]''')
+_RE_NAME_TABLE = re.compile(
+    r'^[A-Za-z_]\w*\s*(?::[^=\n]+)?=\s*(?:\w+\()?[(\[{]([^()\[\]{}]*)[)\]}]', re.MULTILINE)
+_RE_NAME_TABLE_BODY = re.compile(r'''(?:\s*['"]([a-zA-Z_]\w*)['"]\s*,?)+\s*''')
+_RE_COMMENT = re.compile(r'#[^\n]*')
+_RE_QUOTED_NAME = re.compile(r'''['"]([a-zA-Z_]\w*)['"]''')
 
 
 def _resolve_relative_import(
@@ -242,6 +251,24 @@ def _extract_imports_regex(
     # importlib.import_module('pkg.sub.mod'), tuple tables ('pkg.sub.cmd', ...), etc.
     for m in _RE_MODULE_STRING.finditer(content):
         _add_module_and_parents(imports, m.group(1))
+
+    _add_name_loaded_modules(content, imports)
+
+
+def _add_name_loaded_modules(content: str, imports: Set[str]) -> None:
+    """Record `<prefix>.<name>` for every name table beside a by-name loader (BACK-2221)."""
+    if 'import_module(' not in content:
+        return
+    prefixes = [m.group(1) for m in _RE_NAME_LOADER.finditer(content)]
+    if not prefixes:
+        return
+    for table in _RE_NAME_TABLE.finditer(content):
+        body = _RE_COMMENT.sub('', table.group(1))
+        if not _RE_NAME_TABLE_BODY.fullmatch(body):
+            continue
+        for name in _RE_QUOTED_NAME.findall(body):
+            for prefix in prefixes:
+                _add_module_and_parents(imports, f'{prefix}.{name}')
 
 
 class M102(BaseRule):
