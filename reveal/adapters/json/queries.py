@@ -167,17 +167,13 @@ def apply_result_control(
     elif result_control.sort_field:
         try:
             field = result_control.sort_field
-            reverse = result_control.sort_descending
-
-            def sort_key(item):
-                """Extract sort key from item."""
-                value = get_field_value_func(item, field)
-                # Handle None values (sort to end)
-                if value is None:
-                    return (1, '') if not reverse else (0, '')
-                return (0, value)
-
-            controlled = sorted(controlled, key=sort_key, reverse=reverse)
+            # Null and missing values go last in either direction, in source order. They
+            # were keyed (0, '') when descending and compared with (0, 30) (BACK-2276).
+            valued, nulls = [], []
+            for item in controlled:
+                (nulls if get_field_value_func(item, field) is None else valued).append(item)
+            controlled = sorted(valued, key=lambda item: get_field_value_func(item, field),
+                                reverse=result_control.sort_descending) + nulls
         except TypeError as e:
             # Values of types that don't compare (a number and a string): the array
             # stays in source order, and the result says it is not sorted (BACK-1614).
