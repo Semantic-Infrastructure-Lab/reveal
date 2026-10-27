@@ -18,6 +18,7 @@ from ..core.treesitter_parse import GrammarUnavailable
 from ..core.treesitter_compat import _zero_arg
 from ..utils.github_anchors import heading_anchors, html_anchor_ids
 from ..utils.results import ResultBuilder
+from ..utils.lines import split_lines
 from reveal.reveal_types import CONTRACT_VERSION
 
 # BACK-1562: _heading_index()'s tree-derived result, per file, in the disk cache.
@@ -646,6 +647,33 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 return cast(str, self._get_node_text(child))
         return ''
 
+    @staticmethod
+    def _node_line_span(node) -> Tuple[int, int]:
+        """1-indexed first and last line of a block node.
+
+        A block node's end position sits at column 0 of the line after it (it owns its
+        trailing newline), so that row is not part of the block.
+        """
+        start = _zero_arg(node, 'start_position').row + 1
+        end_pos = _zero_arg(node, 'end_position')
+        end = end_pos.row + 1 if end_pos.column else end_pos.row
+        return start, max(start, end)
+
+    def _code_block_lines(self) -> Set[int]:
+        """Lines inside fenced or indented code blocks, fence markers included.
+
+        The markdown_inline parse covers the whole file, so a fence reads to it as a code
+        span; inline-code extraction skips spans that start on these lines.
+        """
+        if not self.tree:
+            return self._fenced_code_line_numbers()
+        lines: Set[int] = set()
+        for kind in ('fenced_code_block', 'indented_code_block'):
+            for node in self._find_nodes_by_type(kind):
+                start, end = self._node_line_span(node)
+                lines.update(range(start, end + 1))
+        return lines
+
     def _build_fenced_block_info(self, node, block_lang: str, source: str) -> Dict[str, Any]:
         """Build code block info dict from node and extracted data.
 
@@ -657,10 +685,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Returns:
             Dict with line_start, line_end, language, source, etc.
         """
-        # Get position (tree-sitter is 0-indexed)
-        line_start = _zero_arg(node, 'start_position').row + 1
-        line_end = _zero_arg(node, 'end_position').row + 1
-        line_count = source.count('\n') + 1 if source else 0
+        line_start, line_end = self._node_line_span(node)
+        line_count = len(split_lines(source))
 
         return {
             'line_start': line_start,
@@ -770,8 +796,11 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         # Find all code_span nodes from inline parser
         code_span_nodes = self._find_nodes_in_tree(self.inline_tree, 'code_span')
+        in_code_block = self._code_block_lines()
 
         for node in code_span_nodes:
+            if _zero_arg(node, 'start_position').row + 1 in in_code_block:
+                continue
             # Extract the code text - in new grammar, code_span text includes backticks
             # So we need to strip them
             full_text = self._get_node_text(node)
@@ -807,7 +836,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         # Match `code` pattern (single backticks)
         inline_pattern = r'`([^`]+)`'
 
+        in_code_block = self._fenced_code_line_numbers()
         for i, line in enumerate(self.lines, 1):
+            if i in in_code_block:
+                continue
             for match in re.finditer(inline_pattern, line):
                 code_text = match.group(1)
 
