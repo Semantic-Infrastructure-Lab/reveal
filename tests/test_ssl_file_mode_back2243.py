@@ -59,7 +59,12 @@ def test_file_overview_suggests_nothing_that_cannot_run(good_pem):
     out = json.loads(_reveal(f'ssl://file://{good_pem}', '--format=json').stdout)
     blob = json.dumps(out)
     assert 'None' not in blob, 'host-based element examples leaked into file mode'
-    assert f'{good_pem}/san' not in blob, 'a file path plus /element is not a reachable URI'
+    # BACK-2286: a file path plus /element is reachable now, so every suggested element must run.
+    examples = [e['example'] for e in out.get('available_elements', [])]
+    assert f'reveal ssl://file://{good_pem}/san' in examples
+    for example in examples:
+        r = _reveal(example.split(' ', 1)[1])
+        assert r.returncode == 0, (example, r.stderr)
 
 
 def test_check_of_a_good_file_passes_in_text_and_json(good_pem):

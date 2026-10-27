@@ -6,6 +6,11 @@ from typing import Optional
 from reveal.rendering import TypeDispatchRenderer
 
 
+def _origin(result: dict) -> str:
+    """The host an element was read from, or the file for ssl://file:// (BACK-2286)."""
+    return result.get('host') or result.get('file_path') or '?'
+
+
 class SSLRenderer(TypeDispatchRenderer):
     """Renderer for SSL adapter results.
 
@@ -103,7 +108,7 @@ class SSLRenderer(TypeDispatchRenderer):
     @staticmethod
     def _render_ssl_san(result: dict) -> None:
         """Render Subject Alternative Names."""
-        print(f"SSL SANs for {result['host']}")
+        print(f"SSL SANs for {_origin(result)}")
         print(f"Common Name: {result['common_name']}")
         print(f"Total SANs: {result['san_count']}")
         print()
@@ -126,7 +131,7 @@ class SSLRenderer(TypeDispatchRenderer):
     @staticmethod
     def _render_ssl_chain(result: dict) -> None:
         """Render certificate chain."""
-        print(f"SSL Chain for {result['host']}")
+        print(f"SSL Chain for {_origin(result)}")
         print(f"Chain Length: {result['chain_length']}")
         print()
 
@@ -144,6 +149,9 @@ class SSLRenderer(TypeDispatchRenderer):
 
         v = result['verification']
         print()
+        if v is None:  # ssl://file:// has no live connection to verify (BACK-2286)
+            print("Verified: not checked (certificates read from a file)")
+            return
         print(f"Verified: {'Yes' if v.get('verified') else 'No'}")
         if v.get('error'):
             print(f"Error: {v['error']}")
@@ -151,7 +159,7 @@ class SSLRenderer(TypeDispatchRenderer):
     @staticmethod
     def _render_ssl_issuer(result: dict) -> None:
         """Render issuer details."""
-        print(f"SSL Issuer for {result['host']}")
+        print(f"SSL Issuer for {_origin(result)}")
         print()
 
         issuer = result['issuer']
@@ -166,7 +174,7 @@ class SSLRenderer(TypeDispatchRenderer):
     @staticmethod
     def _render_ssl_subject(result: dict) -> None:
         """Render subject details."""
-        print(f"SSL Subject for {result['host']}")
+        print(f"SSL Subject for {_origin(result)}")
         print()
 
         subject = result['subject']
@@ -180,7 +188,7 @@ class SSLRenderer(TypeDispatchRenderer):
     @staticmethod
     def _render_ssl_dates(result: dict) -> None:
         """Render validity dates."""
-        print(f"SSL Validity for {result['host']}")
+        print(f"SSL Validity for {_origin(result)}")
         print()
         print(f"Not Before: {result['not_before']}")
         print(f"Not After: {result['not_after']}")

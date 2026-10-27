@@ -490,7 +490,7 @@ reveal ssl://example.com/san
 
 ### chain - Certificate Chain
 
-**Description**: The leaf certificate's CN and issuer plus the verification result. For network hosts the intermediate/root chain is not retrieved (`chain` is empty, `chain_length` is 1). `ssl://file://` takes no elements: its overview reports only how many extra certificates the file holds (`Chain certificates in file: N`, JSON `chain_certs`).
+**Description**: The leaf certificate's CN and issuer plus the verification result. For network hosts the intermediate/root chain is not retrieved (`chain` is empty, `chain_length` is 1). On a PEM bundle, `ssl://file:///path/bundle.pem/chain` lists the file's other certificates in `chain` (`chain_length` counts the leaf too); its result names `file_path` instead of `host`, and `verification` is `null` (text: `Verified: not checked`) because nothing was connected to. Every element on this page works on `ssl://file://` the same way; the file overview counts the extra certificates (`Chain certificates in file: N`, JSON `chain_certs`) and suggests `/chain`.
 
 **Command**:
 ```bash

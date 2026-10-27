@@ -1,6 +1,7 @@
 """SSL certificate adapter (ssl://)."""
 
 import glob
+import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
@@ -19,7 +20,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 _SCHEMA_ELEMENTS = {
     'san': 'Subject Alternative Names (all domain names)',
-    'chain': 'Leaf certificate + verification result (no chain array)',
+    'chain': "Leaf certificate + verification result; chain lists a file:// bundle's other certificates",
     'issuer': 'Certificate issuer details',
     'subject': 'Certificate subject details',
     'dates': 'Validity dates (not_before, not_after)',
@@ -33,6 +34,19 @@ _SCHEMA_CLI_FLAGS = [
     '--expiring-within=<days>',
     '--summary',
 ]
+
+
+def _split_file_element(path: str) -> Tuple[str, Optional[str]]:
+    """``/x/bundle.pem/chain`` -> ``('/x/bundle.pem', 'chain')`` for ssl://file:// (BACK-2286).
+
+    The last segment is an element only when the whole path is not a file and the path before
+    it is one, so a missing file keeps its own path and its error names it.
+    """
+    parent, sep, last = path.rpartition('/')
+    if sep and parent and last and not os.path.isfile(path) and os.path.isfile(parent):
+        return parent, last
+    return path, None
+
 
 def _ssl_output_type(type_name: str, description: str, props: dict) -> dict:
     return {'type': type_name, 'description': description, 'schema': {'type': 'object', 'properties': props}}
@@ -67,10 +81,11 @@ _SCHEMA_OUTPUT_TYPES = [
         'common_name': {'type': 'string'}, 'san': {'type': 'array', 'items': {'type': 'string'}},
         'san_count': {'type': 'integer'}
     }),
-    _ssl_output_type('ssl_chain', 'Leaf certificate + verification result (no chain array)', {
+    _ssl_output_type('ssl_chain', _SCHEMA_ELEMENTS['chain'], {
         'type': {'type': 'string', 'const': 'ssl_chain'}, 'host': {'type': 'string'},
+        'file_path': {'type': 'string'},
         'leaf': {'type': 'object'}, 'chain': {'type': 'array'},
-        'chain_length': {'type': 'integer'}, 'verification': {'type': 'object'}
+        'chain_length': {'type': 'integer'}, 'verification': {'type': ['object', 'null']}
     }),
     _ssl_output_type('ssl_subject', 'Certificate subject details (CN, org, country)', {
         'type': {'type': 'string', 'const': 'ssl_subject'}, 'host': {'type': 'string'}, 'subject': {'type': 'object'}
@@ -322,9 +337,9 @@ class SSLAdapter(ResourceAdapter):
             self.host = None  # Indicates batch mode
             return
 
-        # Check for file:// syntax (ssl://file:///path/to/cert) — S2
+        # Check for file:// syntax (ssl://file:///path/to/cert[/element]) — S2
         if uri.startswith("file://"):
-            self._cert_file_path = uri[7:]  # Remove file:// → /path/to/cert
+            self._cert_file_path, self.element = _split_file_element(uri[7:])
             self.host = None
             return
 
@@ -418,6 +433,8 @@ class SSLAdapter(ResourceAdapter):
         if is_file_mode:
             file_uri = f'ssl://file://{self._cert_file_path}'
             next_steps.append(f"reveal {file_uri} --check  # Validate expiry")
+            if self._chain:
+                next_steps.append(f"reveal {file_uri}/chain  # The {len(self._chain)} other certificate(s) in the file")
             if cert.san:
                 primary = cert.san[0].lstrip('*').lstrip('.')
                 next_steps.append(
@@ -543,46 +560,51 @@ class SSLAdapter(ResourceAdapter):
         Returns:
             List of available elements with descriptions
         """
-        if self._cert_file_path:
-            return []  # a file path plus /element is not a reachable URI
         self._fetch_certificate()
         cert = self._certificate
 
         if not cert:
             return []
+        base = f'ssl://file://{self._cert_file_path}' if self._cert_file_path else f'ssl://{self.host}'
 
         return [
             {
                 'name': 'san',
                 'description': f'Subject Alternative Names ({len(cert.san)} domains)',
-                'example': f'reveal ssl://{self.host}/san'
+                'example': f'reveal {base}/san'
             },
             {
                 'name': 'chain',
                 'description': f'Certificate chain ({len(self._chain) + 1} certificates)',
-                'example': f'reveal ssl://{self.host}/chain'
+                'example': f'reveal {base}/chain'
             },
             {
                 'name': 'issuer',
                 'description': 'Certificate issuer details',
-                'example': f'reveal ssl://{self.host}/issuer'
+                'example': f'reveal {base}/issuer'
             },
             {
                 'name': 'subject',
                 'description': 'Certificate subject details',
-                'example': f'reveal ssl://{self.host}/subject'
+                'example': f'reveal {base}/subject'
             },
             {
                 'name': 'dates',
                 'description': f'Validity dates (expires in {cert.days_until_expiry} days)',
-                'example': f'reveal ssl://{self.host}/dates'
+                'example': f'reveal {base}/dates'
             },
             {
                 'name': 'full',
                 'description': 'Full certificate details',
-                'example': f'reveal ssl://{self.host}/full'
+                'example': f'reveal {base}/full'
             },
         ]
+
+    def _element_origin(self) -> Dict[str, Any]:
+        """Where an element's certificate came from: the host, or the file for ssl://file:// (BACK-2286)."""
+        if self._cert_file_path:
+            return {'file_path': self._cert_file_path}
+        return {'host': self.host}
 
     def _get_san(self) -> Dict[str, Any]:
         """Get Subject Alternative Names."""
@@ -591,7 +613,7 @@ class SSLAdapter(ResourceAdapter):
             return {'type': 'ssl_san', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_san',
-            'host': self.host,
+            **self._element_origin(),
             'common_name': cert.common_name,
             'san': cert.san,
             'san_count': len(cert.san),
@@ -605,7 +627,7 @@ class SSLAdapter(ResourceAdapter):
             return {'type': 'ssl_chain', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_chain',
-            'host': self.host,
+            **self._element_origin(),
             'leaf': {
                 'common_name': cert.common_name,
                 'issuer': cert.issuer_name,
@@ -622,7 +644,7 @@ class SSLAdapter(ResourceAdapter):
             return {'type': 'ssl_issuer', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_issuer',
-            'host': self.host,
+            **self._element_origin(),
             'issuer': cert.issuer,
             'issuer_name': cert.issuer_name,
         }
@@ -634,7 +656,7 @@ class SSLAdapter(ResourceAdapter):
             return {'type': 'ssl_subject', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_subject',
-            'host': self.host,
+            **self._element_origin(),
             'subject': cert.subject,
             'common_name': cert.common_name,
         }
@@ -646,7 +668,7 @@ class SSLAdapter(ResourceAdapter):
             return {'type': 'ssl_dates', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_dates',
-            'host': self.host,
+            **self._element_origin(),
             'not_before': cert.not_before.isoformat(),
             'not_after': cert.not_after.isoformat(),
             'days_until_expiry': cert.days_until_expiry,
@@ -660,8 +682,8 @@ class SSLAdapter(ResourceAdapter):
             return {'type': 'ssl_full', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_full',
-            'host': self.host,
-            'port': self.port,
+            **self._element_origin(),
+            **({} if self._cert_file_path else {'port': self.port}),
             'certificate': cert.to_dict(),
             'verification': self._verification,
         }

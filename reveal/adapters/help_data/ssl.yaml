@@ -42,6 +42,8 @@ examples:
     description: 'Inspect on-disk PEM cert (issuer, expiry, SANs)'
   - uri: 'ssl://file:///var/cpanel/ssl/apache_tls/example.com/combined'
     description: 'Inspect cPanel on-disk cert'
+  - uri: 'ssl://file:///etc/letsencrypt/live/example.com/fullchain.pem/chain'
+    description: 'The other certificates in a PEM bundle (every host element works on a file too)'
 
   # Nginx SSL audit - two approaches (both fully supported)
   # Approach 1: Direct nginx syntax (best for simple audits)
