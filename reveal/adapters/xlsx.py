@@ -905,7 +905,9 @@ class XlsxAdapter(ResourceAdapter):
             'rows': rows_data,
             'first_row': first_row,
             'dimension': sheet.get('dimension', ''),
-            'rows_count': sheet.get('rows', len(all_rows)),
+            # The rows the view covers before ?limit=, blank ones included: the truncation
+            # note's total. The analyzer's 'rows' counts stored rows only (BACK-2284).
+            'rows_count': len(all_rows),
             'cols_count': sheet.get('cols', len(rows_data[0]) if rows_data else 0)
         }
 

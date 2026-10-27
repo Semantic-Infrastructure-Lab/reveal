@@ -232,6 +232,12 @@ reveal 'xlsx://file.xlsx?sheet=Sales' --format json
 Cell values are strings as stored in the workbook (numbers unformatted, dates as
 Excel serial numbers); no column types are inferred.
 
+`rows_count` is the number of rows the view covers before `?limit=`: every row from 1 to the
+sheet's last row (or every row of a `?range=`), blank rows included, so it is the total the
+`truncated` warning states and the `Rows:` line of the text view. A blank row is listed as an
+empty row so row numbers line up with Excel's. The workbook overview's per-sheet `rows` counts
+the rows Excel stores, which leaves blank rows out.
+
 ### CSV Format
 
 **Excel-compatible CSV:**
