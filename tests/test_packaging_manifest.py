@@ -9,6 +9,7 @@ import subprocess
 import tarfile
 import tempfile
 import shutil
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -17,13 +18,13 @@ import pytest
 pytestmark = pytest.mark.contract
 
 
-def _stage_sources(project_root: Path, dest: Path) -> None:
+def _stage_sources(project_root: Path, dest: Path, commit: bool = True) -> None:
     """Copy the working tree (tracked files plus untracked, non-ignored ones)
-    into *dest* and commit it with git, so the sdist built there holds what a
-    build in the checkout holds. setuptools_scm's file finder adds every file
-    committed in HEAD to the sdist (reveal/adapters/help_data/*.yaml and the
-    frontmatter schemas ship only that way), so an uncommitted copy would
-    build a different sdist.
+    into *dest* and, unless *commit* is false, commit it with git, so the sdist
+    built there holds what a build in the checkout holds. setuptools_scm's file
+    finder adds every file committed in HEAD to the sdist; with commit=False the
+    copy builds like a GitHub zip or source tarball, from the declared
+    package-data and MANIFEST.in alone (BACK-2154).
 
     Building here and not in the checkout keeps the build's writes
     (reveal_cli.egg-info/PKG-INFO, the reveal_cli-X.Y.Z/ staging dir) away
@@ -37,6 +38,8 @@ def _stage_sources(project_root: Path, dest: Path) -> None:
         if src.is_file():  # a tracked file deleted from the tree is not staged
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest / rel)
+    if not commit:
+        return
     git = ['git', '-c', 'user.name=stage', '-c', 'user.email=stage@localhost',
            '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=']
     for args in (['init', '-q'], ['add', '-A'], ['commit', '-q', '--no-verify', '-m', 'stage']):
@@ -206,6 +209,50 @@ class TestPackagingManifest(unittest.TestCase):
             issues,
             f"MANIFEST.in references non-existent paths:\n" + "\n".join(issues)
         )
+
+
+class TestBuildWithoutGit(unittest.TestCase):
+    """A build from a tree with no git history (GitHub zip, a source tarball
+    rebuilt by a distro) gets no help from setuptools_scm's file finder: every
+    data file must be declared in package-data or MANIFEST.in (BACK-2154)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.project_root = Path(__file__).parent.parent
+        cls.temp_dir = Path(tempfile.mkdtemp())
+        stage = cls.temp_dir / 'src'
+        out = cls.temp_dir / 'out'
+        _stage_sources(cls.project_root, stage, commit=False)
+        result = subprocess.run(
+            ['python', '-m', 'build', '--outdir', str(out)],
+            cwd=stage, capture_output=True,
+            text=True, encoding='utf-8', errors='replace', timeout=600,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Package build failed: {result.stderr}")
+        cls.tarball = next(out.glob('*.tar.gz'))
+        cls.wheel = next(out.glob('*.whl'))
+        cls.tracked = [f for f in subprocess.run(
+            ['git', 'ls-files', '-z', 'reveal'], cwd=cls.project_root,
+            capture_output=True, check=True,
+        ).stdout.decode('utf-8').split('\0') if f and (cls.project_root / f).is_file()]
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, 'temp_dir') and cls.temp_dir.exists():
+            shutil.rmtree(cls.temp_dir)
+
+    def test_sdist_holds_every_tracked_package_file(self):
+        with tarfile.open(self.tarball, 'r:gz') as tar:
+            shipped = {n.split('/', 1)[1] for n in tar.getnames() if '/' in n}
+        missing = sorted(f for f in self.tracked if f not in shipped)
+        self.assertEqual([], missing, f"tracked files missing from a no-git sdist: {missing}")
+
+    def test_wheel_holds_every_tracked_package_file(self):
+        with zipfile.ZipFile(self.wheel) as whl:
+            shipped = set(whl.namelist())
+        missing = sorted(f for f in self.tracked if f not in shipped)
+        self.assertEqual([], missing, f"tracked files missing from a no-git wheel: {missing}")
 
 
 if __name__ == '__main__':
