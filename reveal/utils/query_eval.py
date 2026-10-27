@@ -3,7 +3,7 @@
 import re
 from typing import Any, Dict, List, Optional
 
-from .query_parser import QueryFilter
+from .query_parser import REGEX_MAX_LEN as _REGEX_MAX_LEN, QueryFilter
 
 
 def _handle_range_operator(field_value: Any, target_value: Any, opts: dict) -> bool:
@@ -38,9 +38,6 @@ def _handle_wildcard_operator(field_value: Any, target_value: Any, opts: dict) -
         return bool(pattern.search(str(field_value)))
     except re.error:
         return False
-
-
-_REGEX_MAX_LEN = 200
 
 
 def _handle_regex_operator(field_value: Any, operator: str, target_value: Any) -> bool:

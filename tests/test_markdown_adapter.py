@@ -353,11 +353,9 @@ class TestEdgeCases:
         assert result['matched_files'] == 0
 
     def test_invalid_regex(self, sample_docs):
-        """Test with invalid regex pattern."""
-        adapter = MarkdownQueryAdapter(str(sample_docs), query='title~=[invalid')
-        result = adapter.get_structure()
-        # Should not crash, regex errors are handled
-        assert 'results' in result
+        """An invalid regex is rejected, not answered as an empty result (BACK-2264)."""
+        with pytest.raises(ValueError, match='Invalid regular expression'):
+            MarkdownQueryAdapter(str(sample_docs), query='title~=[invalid')
 
     def test_list_field_comparison(self, sample_docs):
         """Test numeric comparison on list fields."""

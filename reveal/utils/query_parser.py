@@ -503,6 +503,21 @@ def warn_unknown_query_params(
     return unknown
 
 
+REGEX_MAX_LEN = 200
+
+
+def check_regex_pattern(field: str, op: str, pattern: str) -> None:
+    """Reject a ``~=``/``!~`` pattern that can never match, so it fails instead of reading as an empty answer."""
+    if len(pattern) > REGEX_MAX_LEN:
+        raise ValueError(
+            f"Regex for {field}{op} is too long ({len(pattern)} characters, limit {REGEX_MAX_LEN}): {pattern[:40]!r}..."
+        )
+    try:
+        _re.compile(pattern)
+    except _re.error as exc:
+        raise ValueError(f"Invalid regular expression for {field}{op}{pattern}: {exc}") from exc
+
+
 @dataclass
 class QueryFilter:
     """Represents a single filter condition.
@@ -524,6 +539,8 @@ class QueryFilter:
 
         if self.op not in self.VALID_OPERATORS:
             raise ValueError(f"Invalid operator: {self.op}. Must be one of {sorted(self.VALID_OPERATORS)}")
+        if self.op in ('~=', '!~'):
+            check_regex_pattern(self.field, self.op, str(self.value))
 
 
 def _try_parse_negation_filter(part: str) -> Optional[QueryFilter]:
