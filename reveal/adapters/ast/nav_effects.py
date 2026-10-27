@@ -1999,9 +1999,23 @@ def ambiguous_hops_note(hops: Sequence[AmbiguousHop]) -> Optional[str]:
     stays ambiguous (the same decline calls:// makes); None if there are none."""
     if not hops:
         return None
-    shown = '; '.join(f'{h.call} in {h.caller} ({_candidates_phrase(h.candidates)})' for h in hops)
+    # Group by the called name: on a real tree most hops are `.get`/`.update` on local dicts,
+    # and one entry per receiver repeats the same candidate list (17 entries, 2.7 KB on
+    # reveal's own _nav_boundary).
+    groups: 'OrderedDict[str, List[AmbiguousHop]]' = OrderedDict()
+    for hop in hops:
+        groups.setdefault(hop.call.rsplit('.', 1)[-1], []).append(hop)
+    shown = '; '.join(_ambiguous_group_phrase(name, members) for name, members in groups.items())
     return (f'{len(hops)} call(s) not followed, the name is ambiguous (several project definitions, '
             f'none named by this file or its imports): {shown}; effects behind them are not listed')
+
+
+def _ambiguous_group_phrase(name: str, members: Sequence[AmbiguousHop]) -> str:
+    first = members[0]
+    if len(members) == 1:
+        return f'{first.call} in {first.caller} ({_candidates_phrase(first.candidates)})'
+    return (f'{name} x{len(members)} ({_candidates_phrase(first.candidates)}; '
+            f'e.g. {first.call} in {first.caller})')
 
 
 def _candidates_phrase(candidates: Sequence[Tuple[str, int]], shown: int = 3) -> str:

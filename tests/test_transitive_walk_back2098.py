@@ -111,3 +111,16 @@ def test_the_ambiguity_note_lists_three_candidates_and_counts_the_rest():
     assert '7 candidates: m1.py:1, m2.py:2, m3.py:3 +4 more' in note
     assert 'm4.py' not in note
     assert ambiguous_hops_note([]) is None
+
+
+def test_the_ambiguity_note_groups_hops_by_called_name():
+    from reveal.adapters.ast.nav_effects import AmbiguousHop, ambiguous_hops_note
+
+    gets = [(f'g{i}.py', i) for i in range(1, 8)]
+    hops = [AmbiguousHop('f', 'd.get', gets), AmbiguousHop('g', 'e.get', gets),
+            AmbiguousHop('h', 'r.get', gets), AmbiguousHop('h', 'meta.update', [('u1.py', 1), ('u2.py', 2)])]
+    note = ambiguous_hops_note(hops)
+    assert note.startswith('4 call(s) not followed')
+    assert 'get x3 (7 candidates: g1.py:1, g2.py:2, g3.py:3 +4 more; e.g. d.get in f)' in note
+    assert 'meta.update in h (2 candidates: u1.py:1, u2.py:2)' in note
+    assert note.count('g1.py') == 1
