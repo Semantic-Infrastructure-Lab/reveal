@@ -77,10 +77,12 @@ def get_parser(language: str, *, announce_fetch: bool = True) -> Any:
 
     ``tree_sitter_language_pack.get_parser`` downloads a grammar on its first use.
     With *announce_fetch*, say so once per language before that fetch, so an offline
-    host learns why the parse is slow or fails (BACK-979)."""
+    host learns why the parse is slow or fails (BACK-979). An empty *language* (a file
+    reveal has no grammar for, such as a batch file in calls' reference scan) fetches
+    nothing, so it is not announced; the pack refuses it as before (BACK-1887)."""
     pack = _pack(language)
     alias = _PACK_ALIASES.get(language)
-    if announce_fetch and language not in _ready and language not in _warned_uncached:
+    if announce_fetch and language and language not in _ready and language not in _warned_uncached:
         if not is_downloaded(language):
             _warned_uncached.add(language)
             logger.warning(
