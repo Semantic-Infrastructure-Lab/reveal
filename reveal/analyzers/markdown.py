@@ -62,6 +62,18 @@ class RelatedTracker:
         return False
 
 
+def _without_closing_fence(content: str, opener: str) -> str:
+    """``content`` minus its last line when that line is a CommonMark closing fence for
+    ``opener``: up to three spaces, the opener's character at least as many times, then only
+    spaces or tabs."""
+    head, newline, last = content.rpartition('\n')
+    indent = len(last) - len(last.lstrip(' '))
+    fence = last.strip(' \t')
+    if indent <= 3 and fence and set(fence) == {opener[0]} and len(fence) >= len(opener):
+        return head + newline
+    return content
+
+
 @register('.md', '.markdown', name='Markdown', icon='', category='doc')
 class MarkdownAnalyzer(TreeSitterAnalyzer):
     """Markdown file analyzer using tree-sitter.
@@ -641,11 +653,24 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         Returns:
             Source code string
+
+        A closing fence on the file's last line with no newline after it gets no closing
+        delimiter node from the grammar; it ends the content instead and is cut off here
+        (BACK-2281).
         """
+        delimiters = []
+        content = None
         for child in _children(node):
-            if _zero_arg(child, 'kind') == 'code_fence_content':
-                return cast(str, self._get_node_text(child))
-        return ''
+            kind = _zero_arg(child, 'kind')
+            if kind == 'fenced_code_block_delimiter':
+                delimiters.append(cast(str, self._get_node_text(child)))
+            elif kind == 'code_fence_content':
+                content = cast(str, self._get_node_text(child))
+        if content is None:
+            return ''
+        if len(delimiters) == 1:
+            return _without_closing_fence(content, delimiters[0])
+        return content
 
     @staticmethod
     def _node_line_span(node) -> Tuple[int, int]:
