@@ -947,23 +947,24 @@ class DependsAdapter(ResourceAdapter):
         if top_n:
             modules = modules[:top_n]
 
+        data: Dict[str, Any] = {
+            'modules': modules,
+            'total_modules': total_modules,
+            'edge_rule': self._edge_rule(),
+            'metadata': self.get_metadata(),
+            '_meta': self._build_meta(),
+        }
+        if fmt == 'dot':
+            # Renderer routing only, set for the one value it acts on; text and JSON never
+            # carry it (BACK-2282).
+            data['_format'] = 'dot'
         result = ResultBuilder.create(
             result_type='dependency_summary',
             source=to_relative_display(str(self._target_path), self._scan_root),
             contract_version=CONTRACT_VERSION,
             source_type='directory',
-            data={
-                'modules': modules,
-                'total_modules': total_modules,
-                'edge_rule': self._edge_rule(),
-                'metadata': self.get_metadata(),
-                '_meta': self._build_meta(),
-            },
+            data=data,
         )
-        if fmt == 'dot':
-            # Renderer routing only, set for the one value it acts on; text and JSON never
-            # carry it (BACK-2282).
-            result['_format'] = 'dot'
         # total_modules stays for JSON readers; the marker is what every renderer and the
         # router read as a cut (BACK-1543).
         note_truncation(result, 'modules', len(modules), total_modules, 'limit', hint='raise ?top=N')
