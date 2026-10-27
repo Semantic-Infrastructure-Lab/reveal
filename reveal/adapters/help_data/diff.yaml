@@ -24,11 +24,11 @@ features:
   - 'Works with file paths, directories and git refs; compares functions, classes, imports and every other element category the analyzer emits (interfaces, structs, enums, types, ...)'
   - 'Never a silent clean: files that differ in nothing it compares (e.g. a Python module-level constant) get a not_compared warning'
   - 'Directory comparison - aggregates changes from all files'
-  - 'Git integration - compare commits, branches, working tree (uses git CLI)'
+  - 'Git integration - compare commits, branches, working tree (reads git objects via pygit2; nothing is checked out)'
   - 'Two-level output: summary (counts) + details (changes)'
   - 'Element-specific diff support'
   - 'Shows complexity and line count changes'
-  - 'Language-agnostic (works with Python, JS, etc.)'
+  - 'Language-agnostic (every language reveal --languages lists)'
 
 workflows:
   - name: 'Pre-Commit Validation'
@@ -45,7 +45,7 @@ workflows:
     scenario: 'Verify refactoring improved complexity'
     steps:
       - "reveal diff://old.py:new.py              # Check complexity delta"
-      - "# Look for 'complexity: 8 → 4' in output"
+      - "# Look for 'Complexity: 8 → 4 (-4)' in output"
   - name: 'Migration Validation'
     scenario: 'Ensure no functionality lost during migration'
     steps:
@@ -64,14 +64,14 @@ notes:
   - 'Complements git diff (semantic vs line-level)'
   - 'Resources whose structure has no functions, classes or imports (env://, sqlite://, mysql://, JSON/YAML files) are declined as not applicable (exit 0, applicable=false) -- diff their own output with the shell diff instead'
   - 'Git URI format: git://REF/path (e.g., git://HEAD~1/file.py, git://main/src/)'
-  - 'Note: diff git:// format differs from git:// adapter (uses git CLI directly)'
+  - 'Note: diff git:// format differs from git:// adapter'
   - 'Directory diffs aggregate all analyzable files (skips .git, node_modules, etc.)'
   - 'For complex URIs with colons, use explicit scheme://'
 
 try_now:
   - "# Create test files"
   - "echo 'def foo(): return 42' > v1.py"
-  - "echo 'def foo(): return 42\\ndef bar(): return 99' > v2.py"
+  - "printf 'def foo(): return 42\\ndef bar(): return 99\\n' > v2.py"
   - "reveal diff://v1.py:v2.py"
 
 see_also:
