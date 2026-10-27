@@ -6,8 +6,19 @@ normal state after any import (3,598 false hits on reveal's own tree). Python's 
 """
 import os
 import py_compile
+import sys
+
+import pytest
 
 from reveal.adapters.python.bytecode import check_bytecode
+
+
+@pytest.fixture(autouse=True)
+def _pyc_next_to_the_source(monkeypatch):
+    # BACK-2292: PYTHONPYCACHEPREFIX (read once at startup into sys.pycache_prefix) makes py_compile
+    # write the .pyc into a mirror tree outside tmp_path, so there was no __pycache__ to judge.
+    monkeypatch.setattr(sys, 'pycache_prefix', None)
+    monkeypatch.delenv('PYTHONPYCACHEPREFIX', raising=False)
 
 
 def _compile(src, mode=py_compile.PycInvalidationMode.TIMESTAMP):
