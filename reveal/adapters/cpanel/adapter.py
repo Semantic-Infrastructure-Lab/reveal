@@ -888,7 +888,7 @@ class CpanelAdapter(ResourceAdapter):
                             enriched = {**row, 'ssl_status': 'error', 'ssl_days': None,
                                         'ssl_not_after': str(exc)[:60]}
                         acl_fail = enriched['acl_status'] == 'denied'
-                        ssl_fail = enriched['ssl_status'] in ('expired', 'error')
+                        ssl_fail = enriched['ssl_status'] in ('expired', 'critical', 'error')
                         enriched['has_failure'] = acl_fail or ssl_fail
                         results.append(enriched)
                     nginx_audit = {

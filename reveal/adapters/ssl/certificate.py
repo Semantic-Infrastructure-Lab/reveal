@@ -995,9 +995,13 @@ def _generate_remediation_steps(checks: List[Dict[str, Any]], host: str) -> List
 def live_cert_state(ssl_result: dict) -> tuple:
     """Map a check_ssl_health() result to (state, message) for audit tables.
 
-    state is one of 'healthy', 'warning', 'critical', 'expired', 'error'.
-    check_ssl_health reports pass/warning/failure; audits need to tell an
-    expired or expiring certificate from an unreachable host.
+    state is one of 'healthy', 'warning', 'critical', 'expired', 'error'; 'critical',
+    'expired' and 'error' are failures, as they are for `reveal ssl://HOST --check` (exit 2).
+    check_ssl_health reports pass/warning/failure, so audits need this to tell an expired or
+    expiring certificate from an unreachable host. A failure other than expiry (hostname,
+    connection) wins over an expiry failure on the same certificate, so it is not hidden.
+    message is empty for healthy and for an expiry warning (the days say it); otherwise it
+    names the check that caused the state.
     """
     cert = ssl_result.get('certificate') or {}
     days = cert.get('days_until_expiry')
@@ -1006,11 +1010,16 @@ def live_cert_state(ssl_result: dict) -> tuple:
         return 'expired', 'expired'
     if status == 'pass':
         return 'healthy', ''
+    checks = ssl_result.get('checks', [])
     if status == 'warning':
-        return 'warning', ''
-    failing: Dict[str, Any] = next(
-        (c for c in ssl_result.get('checks', []) if c.get('status') == 'failure'), {})
-    message = (failing.get('message') or ssl_result.get('error') or 'ssl check failed')
-    if days is not None and failing.get('name') == 'certificate_expiry':
+        warned: Dict[str, Any] = next((c for c in checks if c.get('status') == 'warning'), {})
+        if warned.get('name') in (None, 'certificate_expiry'):
+            return 'warning', ''
+        return 'warning', warned.get('message') or warned.get('name') or 'ssl check warning'
+    failures = [c for c in checks if c.get('status') == 'failure']
+    other = next((c for c in failures if c.get('name') != 'certificate_expiry'), None)
+    failing: Dict[str, Any] = other or (failures[0] if failures else {})
+    message = failing.get('message') or ssl_result.get('error') or 'ssl check failed'
+    if other is None and days is not None and failing.get('name') == 'certificate_expiry':
         return 'critical', message
     return 'error', message

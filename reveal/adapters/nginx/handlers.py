@@ -165,7 +165,7 @@ def _format_acl_col(acl_status: str) -> tuple:
     return f"⚠️  ACL {acl_status}", False
 
 
-def _format_acme_ssl_col(ssl_status: str, ssl_days, ssl_not_after: str) -> tuple:
+def _format_acme_ssl_col(ssl_status: str, ssl_days, ssl_not_after: str, ssl_message: str = '') -> tuple:
     """Return (column_str, is_failure)."""
     if ssl_status == 'healthy':
         col = f"✅ {ssl_days}d"
@@ -176,8 +176,10 @@ def _format_acme_ssl_col(ssl_status: str, ssl_days, ssl_not_after: str) -> tuple
             except (ValueError, TypeError):
                 pass
         return col, False
-    if ssl_status in ('warning', 'critical'):
-        return f"⚠️  expires in {ssl_days}d", False
+    if ssl_status == 'critical':
+        return f"❌ expires in {ssl_days}d", True
+    if ssl_status == 'warning':
+        return (f"⚠️  {ssl_message}" if ssl_message else f"⚠️  expires in {ssl_days}d"), False
     if ssl_status == 'expired':
         return f"❌ EXPIRED {abs(ssl_days or 0)} days ago", True
     if ssl_status == 'error':
@@ -201,7 +203,8 @@ def _fetch_acme_ssl_data(rows: list, check_ssl_health) -> list:
             state, message = _cert_state(ssl_result)
             results.append({**r, 'ssl_status': state,
                             'ssl_days': leaf.get('days_until_expiry'),
-                            'ssl_not_after': message[:60] if state == 'error' else leaf.get('not_after', '')})
+                            'ssl_not_after': message[:60] if state == 'error' else leaf.get('not_after', ''),
+                            'ssl_message': message[:60] if state == 'warning' else ''})
         except _CERT_CHECK_ERRORS as exc:
             results.append({**r, 'ssl_status': 'error', 'ssl_days': None,
                             'ssl_not_after': str(exc)[:60], 'error': str(exc)})
@@ -247,7 +250,7 @@ def _render_acme_text(results: list, analyzer, only_failures: bool, verbose: boo
     analyzer_lines = getattr(analyzer, 'lines', [])
     for r in results:
         acl_col, _ = _format_acl_col(r['acl_status'])
-        ssl_col, _ = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'])
+        ssl_col, _ = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'], r.get('ssl_message', ''))
         if only_failures and not r['has_failure']:
             continue
         result.line(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}"
@@ -286,7 +289,7 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> FlagOutput:
 
     for r in results:
         _, acl_fail = _format_acl_col(r['acl_status'])
-        _, ssl_fail = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'])
+        _, ssl_fail = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'], r.get('ssl_message', ''))
         r['has_failure'] = acl_fail or ssl_fail
 
     has_failures = any(r['has_failure'] for r in results)
@@ -480,6 +483,7 @@ def _load_live_cert(domain: str, check_ssl_health) -> dict:
             state = f"error: {message[:40]}"
         return {
             'status': state,
+            'message': message,
             'expiry': leaf_data.get('days_until_expiry'),
             'serial': leaf_data.get('serial_number'),
             'not_after': not_after,
@@ -520,8 +524,10 @@ def _format_live_col(live: dict) -> tuple:
     if status == 'healthy':
         date_str = not_after.strftime('%b %d, %Y') if not_after else ''
         return (f"✅ {days}d  ({date_str})" if days is not None else "✅ ok"), False
-    if status in ('warning', 'critical'):
-        return f"⚠️  {days}d", False
+    if status == 'critical':
+        return f"❌ {days}d", True
+    if status == 'warning':
+        return (f"⚠️  {live['message']}" if live.get('message') else f"⚠️  {days}d"), False
     if status == 'expired':
         return f"❌ EXPIRED {abs(days or 0)}d ago", True
     if status and status.startswith('error'):
