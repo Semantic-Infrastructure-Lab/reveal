@@ -24,7 +24,7 @@ from ...utils.query_parser import (
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.gitignore import respect_gitignore_param
-from ...utils.path_utils import to_relative_display, failure_of
+from ...utils.path_utils import failure_of, in_test_scope, to_relative_display
 from ...utils.results import AnalysisCompleteness, ResultBuilder, note_truncation, note_warning, result_execution_facts
 from ...utils.validation import require_path_exists
 from ...utils.parallel import pool_worker_count, submit_each
@@ -115,6 +115,8 @@ def _display_count(name: str):
     return convert
 
 
+TEST_CHOICES = ('include', 'exclude')
+
 # The declaration `reveal metrics` and metrics:// are both generated from (BACK-2146). Operator filters
 # (`lines>50`, `complexity=5..15`) are not parameters: they stay a URI-only expression language and
 # are read from the query keys no parameter claims (MetricsAdapter._expression_filters).
@@ -154,6 +156,12 @@ _SINCE = ParamSpec('since', 'string', 'Bound the churn walk to commits on/after 
 _NO_MERGES = ParamSpec('no_merges', 'boolean', 'Exclude merge commits from the churn tally', False,
                        boolean_value, ('no_merges=1',), role='analysis',
                        cli=CliBinding(('--no-merges',), action='store_true'))
+_TESTS = ParamSpec('tests', 'string',
+                   'Test files in the hotspot ranking (path_utils.is_test_path: a tests/ or test/ directory, test_*.py, *_test.go, *Tests.java, '
+                   '*.spec.ts, ..., judged from the scanned path\'s own name down): include them (default here) or exclude them from '
+                   'hotspots=true. Totals, the files list and every other view still count them; overview passes exclude unless asked',
+                   'include', _text('tests'), ('tests=exclude',), choices=TEST_CHOICES, role='analysis',
+                   cli=CliBinding(('--tests',), metavar='{include,exclude}'))
 _SUMMARY_ONLY = ParamSpec('summary_only', 'boolean', 'Omit the per-file "files" array from the result — just the aggregate summary (+ hotspots, if also requested). Use on unscoped whole-repo calls, where the per-file array can reach tens of MB and dwarfs the summary block that is usually the actual signal wanted.',
                           False, boolean_value, ('summary_only=true',), role='analysis',
                           cli=CliBinding(('--summary-only',), action='store_true'))
@@ -167,7 +175,7 @@ _OFFSET = ParamSpec('offset', 'integer', 'Skip this many files before the first 
                     cli=CliBinding(('--offset',), metavar='N'))
 
 PARAM_SPECS = (_VIEW, _HOTSPOTS, _TOP, _CODE_ONLY, _MIN_LINES, _MAX_LINES, _MIN_COMPLEXITY, _MAX_COMPLEXITY,
-               _MIN_FUNCTIONS, _CHURN, _SINCE, _NO_MERGES, _SUMMARY_ONLY, _SORT, _LIMIT, _OFFSET)
+               _MIN_FUNCTIONS, _CHURN, _SINCE, _NO_MERGES, _TESTS, _SUMMARY_ONLY, _SORT, _LIMIT, _OFFSET)
 
 # Query keys a parameter does not claim but the adapter reads: the walk's scope (overview composes them).
 _SCOPE_KEYS = frozenset({'exclude', 'respect_gitignore'})
@@ -192,6 +200,10 @@ _SCHEMA_OUTPUT_TYPES = [
                 'file': {'type': 'string'}, 'quality_score': {'type': 'number'},
                 'hotspot_score': {'type': 'number'}, 'issues': {'type': 'array', 'items': {'type': 'string'}},
             }}},
+            'test_scope': {'type': 'object', 'description': 'Present when ?tests= was given with hotspots=true: the rule, the mode and how many files the ranking left out',
+                           'properties': {'rule': {'type': 'string', 'const': 'is_test_path'},
+                                          'tests': {'type': 'string', 'enum': list(TEST_CHOICES)},
+                                          'files_excluded': {'type': 'integer'}}},
         }},
         'example': {
             'type': 'stats_summary', 'path': './src',
@@ -254,6 +266,7 @@ _SCHEMA_NOTES = [
     'quality_score is 0-100: 100 = no issues; weighted by severity (error/warning/info)',
     'Complexity is heuristic-based (average functions per 100 lines) — not cyclomatic complexity',
     'hotspots=true adds a ranked list of files most in need of refactoring',
+    'tests=exclude leaves test files (is_test_path) out of the hotspots=true ranking only and reports test_scope.files_excluded; the default (include) ranks them, as overview://\'s own default (exclude) does not',
     'quality.local_check_issues counts the findings of file-local check rules only, so a file has one count whatever else is in the tree; meta.issue_count names the rule and the rule set. Cross-file rules (import cycles, duplicate literals, ...) run under reveal check.',
     'Both files and directories are supported; directories show aggregate + per-file breakdown',
     'view=provenance answers what classify:// did: every analyzable file tagged first_party/test/vendor/minified, without analysis or rules; stats:// and classify:// are retired spellings that answer the same',
@@ -676,6 +689,7 @@ class MetricsAdapter(ResourceAdapter):
 
     def _add_hotspots(self, result: dict, file_stats: list) -> None:
         """Rank the same analyzed population for file and directory requests."""
+        file_stats = self._rank_population(result, file_stats)
         churn_counts = None
         if self.query_params.get('churn', True) is not False:
             churn_counts = self._compute_churn_counts(file_stats)
@@ -686,6 +700,21 @@ class MetricsAdapter(ResourceAdapter):
                 })
         result['hotspots'] = self._top_hotspots(
             result, identify_hotspots(file_stats, churn_counts=churn_counts))
+
+    def _rank_population(self, result: dict, file_stats: list) -> list:
+        """The files the hotspot ranking sees: all of them, or without the test files (``?tests=exclude``).
+
+        The rule is ``is_test_path`` judged from the scanned path's own name down (``in_test_scope``, the one
+        patches:// and testability:// use). Only the ranking is narrowed: the totals and the files list keep
+        counting tests. A request that names ``tests`` records what it did as ``test_scope``.
+        """
+        if self.query_params.get('tests') is None:
+            return file_stats
+        mode = _TESTS.read(self.query_params)
+        kept = file_stats if mode == 'include' else [
+            f for f in file_stats if not in_test_scope(self.path / f['file'], self.path)]
+        result['test_scope'] = {'rule': 'is_test_path', 'tests': mode, 'files_excluded': len(file_stats) - len(kept)}
+        return kept
 
     def get_structure(self,
                      hotspots: bool = False,

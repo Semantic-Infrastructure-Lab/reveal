@@ -136,7 +136,8 @@ class TestCreateOverviewParser(unittest.TestCase):
         self.assertEqual(args.path, '.')
         self.assertNotIn('top', vars(args))
         self.assertNotIn('no_git', vars(args))
-        self.assertEqual([spec.default for spec in OverviewAdapter.PARAM_SPECS], [5, False, False])
+        self.assertEqual([spec.default for spec in OverviewAdapter.PARAM_SPECS], [5, False, False, 'exclude'])
+        self.assertNotIn('tests', vars(args))
 
     def test_path_positional(self):
         parser = create_overview_parser()
@@ -281,7 +282,7 @@ class TestRunStats(unittest.TestCase):
         # BACK-1042: query is now built explicitly (not compose()'s
         # urlencode path) so --exclude/--respect-gitignore reach
         # find_analyzable_files undecoded/unmangled.
-        MockAdapter.assert_called_once_with(str(Path('/project')), 'hotspots=true&top=5&respect_gitignore=true')
+        MockAdapter.assert_called_once_with(str(Path('/project')), 'hotspots=true&top=5&tests=exclude&respect_gitignore=true')
 
     @patch('reveal.adapters.overview.MetricsAdapter')
     def test_exclude_and_respect_gitignore_forwarded(self, MockAdapter):
@@ -291,7 +292,7 @@ class TestRunStats(unittest.TestCase):
         adapter = OverviewAdapter('/project', 'exclude=dist/*,*.min.js&respect_gitignore=false')
         _run_stats(adapter, Path('/project'), 5)
         MockAdapter.assert_called_once_with(
-            str(Path('/project')), 'hotspots=true&top=5&exclude=dist/*,*.min.js&respect_gitignore=false'
+            str(Path('/project')), 'hotspots=true&top=5&tests=exclude&exclude=dist/*,*.min.js&respect_gitignore=false'
         )
 
     @patch('reveal.adapters.overview.MetricsAdapter')

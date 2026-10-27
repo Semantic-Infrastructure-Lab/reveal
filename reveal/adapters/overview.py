@@ -21,6 +21,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .git import GitAdapter
 from .imports import ImportsAdapter
 from .stats import MetricsAdapter
+from .stats.adapter import TEST_CHOICES
 from .stats.issue_count import note_issue_count_basis
 from ..analyzers.imports import service as import_analysis
 from ..utils.entry_points import entry_point_filter
@@ -219,6 +220,12 @@ def _required_child(adapter: 'OverviewAdapter', owner: type, path: Path,
     return cast(Dict[str, Any], data)
 
 
+def _tests_value(value: Any) -> str:
+    if not isinstance(value, str):  # a bare `&tests` parses as True
+        raise TypeError(value)
+    return value
+
+
 def _overview_top(value: Any) -> int:
     if isinstance(value, bool):
         raise ValueError('top requires a non-negative whole number')
@@ -280,7 +287,7 @@ def _directory_loss_error(meta, observations) -> Optional[WarningEntry]:
     return None
 
 
-def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int, *,
+def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int, *, tests: str = 'exclude',
                observations: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
     """Fetch stats and the top ``top`` hotspots via MetricsAdapter.
 
@@ -293,8 +300,11 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int, *,
     BACK-1543: ``?top=N`` is forwarded, and stats' cut is restated as this report's
     ``hotspots``. Before, stats kept its own top 10 and dropped the total, so
     ``?top=2`` still listed 5 and "... and 5 more" counted against that hidden 10.
+
+    BACK-1428: ``tests`` is forwarded to the stats ranking (the owner of it): overview ranks without
+    test files unless ``?tests=include``; stats' own default still includes them.
     """
-    query = f'hotspots=true&top={top}'
+    query = f'hotspots=true&top={top}&tests={tests}'
     exclude_patterns = adapter.exclude_patterns
     if exclude_patterns:
         query += f'&exclude={join_exclude_patterns(exclude_patterns)}'
@@ -608,6 +618,12 @@ class OverviewAdapter(ResourceAdapter):
         ParamSpec('no_imports', 'boolean', 'Skip import graph analysis (architecture section)',
                   False, boolean_value, role='analysis', examples=('no_imports=true',),
                   cli=CliBinding(('--no-imports',), action='store_true')),
+        ParamSpec('tests', 'string',
+                  'Test files in the Hotspots ranking (path_utils.is_test_path: a tests/ or test/ directory, test_*.py, '
+                  '*_test.go, *Tests.java, *.spec.ts, ...): exclude them (default) or include them. Complex functions '
+                  'and the other sections are not filtered by it',
+                  'exclude', _tests_value, role='analysis', examples=('tests=include',), choices=TEST_CHOICES,
+                  cli=CliBinding(('--tests',), metavar='{include,exclude}')),
     )
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
@@ -668,11 +684,12 @@ class OverviewAdapter(ResourceAdapter):
         return {
             'name': 'overview',
             'description': 'One-glance codebase dashboard: languages, quality, hotspots, recent activity.',
-            'syntax': 'overview://<path>[?top=5&no_git=true&no_imports=true]',
+            'syntax': 'overview://<path>[?top=5&no_git=true&no_imports=true&tests=include]',
             'examples': [
                 {'uri': 'overview://src', 'description': 'Dashboard for src/'},
                 {'uri': 'overview://.?no_git=true', 'description': 'Skip the recent-activity section'},
                 {'uri': 'overview://.?top=10', 'description': 'Top 10 items per section'},
+                {'uri': 'overview://.?tests=include', 'description': 'Rank test files in Hotspots too (default: left out)'},
             ],
             'features': [
                 'Language breakdown, codebase size, quality pulse',
@@ -684,6 +701,9 @@ class OverviewAdapter(ResourceAdapter):
                 'so a reader can discount vendored/generated/test noise in the ranking in place.',
             ],
             'notes': [
+                'Hotspots leave out test files (path_utils.is_test_path, judged from the scanned path\'s own name down) and print a Rule: line with the count; '
+                '?tests=include (--tests include) ranks them. Only the ranking is narrowed: Complex functions, totals and Languages still count test files.',
+                'Component cohesion is n/a (null in JSON, with one cohesion_rule) for directories mostly in Go, Java, Kotlin, C#, Scala or Swift, where files share a package without importing.',
                 'Static imports only for the architecture section — dynamically loaded files may appear as entry points.',
                 'The architecture section states the rule it counted by (Rule: lines in text, edge_rule and '
                 'edge_rule_sections in JSON under architecture): function-level imports count, circulars use the load-time view.',
@@ -705,7 +725,7 @@ class OverviewAdapter(ResourceAdapter):
         return {
             'adapter': 'overview',
             'description': 'One-glance codebase dashboard (languages, quality, hotspots, architecture, recent activity)',
-            'uri_syntax': 'overview://<path>?top=5&no_git=true&no_imports=true&exclude=pat&respect_gitignore=true',
+            'uri_syntax': 'overview://<path>?top=5&no_git=true&no_imports=true&tests=exclude&exclude=pat&respect_gitignore=true',
             'resource': OverviewAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': OverviewAdapter.DEFAULT_FAIL_ON,
                                  'fail_on': list(OverviewAdapter.FINDINGS_POLICIES)},
@@ -742,14 +762,14 @@ class OverviewAdapter(ResourceAdapter):
 
     def get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
         path = Path(self.path)
-        top_spec, no_git_spec, no_imports_spec = self.PARAM_SPECS
+        top_spec, no_git_spec, no_imports_spec, tests_spec = self.PARAM_SPECS
         requested_top = top_spec.read(self.query_params)
         top = UNLIMITED_TOP if all or verbose else requested_top
         no_git = no_git_spec.read(self.query_params)
         no_imports = no_imports_spec.read(self.query_params)
 
         observations: Dict[str, bool] = {}
-        stats = _run_stats(self, path, top, observations=observations)
+        stats = _run_stats(self, path, top, tests=tests_spec.read(self.query_params), observations=observations)
         git_root = None if no_git else _git_root_or_disclose(self, path)
         git_log = [] if git_root is None else _run_git_log(self, path, top)
         git_foreign_root: Optional[Path] = None

@@ -329,6 +329,22 @@ def _render_next_steps(path: str) -> List[str]:
             ""]
 
 
+def _hotspot_scope_lines(scope: Optional[Dict[str, Any]], listed: bool) -> List[str]:
+    """The rule the Hotspots ranking was made by: test files left out (default) or ranked (``tests=include``)."""
+    if not isinstance(scope, dict):
+        return []
+    if scope.get('tests') == 'include':
+        line = '  Rule: test files (path_utils.is_test_path) are ranked with the rest (tests=include)'
+    else:
+        n = scope.get('files_excluded', 0)
+        line = (f"  Rule: test files (path_utils.is_test_path) are not ranked: {n} excluded; "
+                f"tests=include ranks them")
+    if listed:
+        return [line]
+    # No section to hang the rule on: say so only when excluding test files is why it is empty-handed.
+    return ['\nHotspots  (none outside test files)', line] if scope.get('files_excluded') else []
+
+
 def _render_overview(report: Dict[str, Any], top: int) -> List[str]:
     path_str = report['path']
     path = Path(path_str)
@@ -344,6 +360,7 @@ def _render_overview(report: Dict[str, Any], top: int) -> List[str]:
     lines += _render_language_breakdown(files_list, top)
     lines += _render_quality_pulse(summary, hotspots)
     lines += _render_hotspots(hotspots, top, root=path_str)
+    lines += _hotspot_scope_lines(stats.get('test_scope'), bool(hotspots))
     lines += _render_complex_functions(complex_fns, base_path=path)
     lines += _render_architecture(report.get('architecture', {}), complex_fns, top, base_path=path)
     lines += _render_git_log(report['git_log'], report.get('git_foreign_root'))
