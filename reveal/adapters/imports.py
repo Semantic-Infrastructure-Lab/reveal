@@ -31,6 +31,7 @@ from ..analyzers.imports.types import (
     LAZY_EXCLUDE, LAZY_INCLUDE, LAZY_MODES, ImportAnalysis, ImportExtraction,
 )
 from ..analyzers.imports.classify import classify_import, local_package_names, package_table
+from ..analyzers.imports.unused import describe_unused
 from ..conventions import conventions_for_path, family_for_path, same_package_families
 from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
@@ -1022,18 +1023,12 @@ class ImportsRenderer:
         elif count == 0:
             pass
         else:
-            def describe(imp: dict) -> str:
-                names = imp.get('unused_names') or []
-                # only a partly-used named import needs the names spelled out
-                partial = names and imp.get('names') and len(names) < len(imp['names'])
-                return f"{imp['module']} (unused: {', '.join(names)})" if partial else str(imp['module'])
-
             if verbose:
                 for imp in result['unused']:
-                    print(f"  {imp['file']}:{imp['line']} - {describe(imp)}")
+                    print(f"  {imp['file']}:{imp['line']} - {describe_unused(imp)}")
             else:
                 for imp in result['unused'][:10]:
-                    print(f"  {imp['file']}:{imp['line']} - {describe(imp)}")
+                    print(f"  {imp['file']}:{imp['line']} - {describe_unused(imp)}")
                 if count > 10:
                     print(f"\n  ... and {count - 10} more unused imports")
                     print(f"  Run with --verbose to see all {count} unused imports\n")

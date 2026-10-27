@@ -523,7 +523,8 @@ class TestRenderUnused(unittest.TestCase):
         self.assertIn('12', out)
 
     def test_shows_names_when_present(self):
-        out = _capture(_render_unused, [self._unused('typing', names=['Optional'])], Path('/project'), 10)
+        imp = dict(self._unused('typing', names=['Optional', 'List']), unused_names=['Optional'])
+        out = _capture(_render_unused, [imp], Path('/project'), 10)
         self.assertIn('Optional', out)
 
     def test_shows_only_the_unused_names(self):
@@ -532,7 +533,7 @@ class TestRenderUnused(unittest.TestCase):
         imp = dict(self._unused('typing', names=['Dict', 'List', 'Any', 'Optional']),
                    unused_names=['Dict', 'Any'])
         out = _capture(_render_unused, [imp], Path('/project'), 10)
-        self.assertIn('typing.Dict, Any', out)
+        self.assertIn('typing (unused: Dict, Any)', out)
         self.assertNotIn('Optional', out)
 
     def test_shows_warning_icon(self):

@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from ..base import BaseRenderer, capped_section
 from ...analyzers.imports.classify import package_table
 from ...analyzers.imports.service import edge_rule_lines
+from ...analyzers.imports.unused import describe_unused
 from ...utils.path_utils import to_relative_display
 from ...utils.results import outcome_of
 
@@ -132,11 +133,8 @@ def _render_unused(unused: List[Dict[str, Any]], base_path: Path, top: int) -> L
     lines.append(f"\nUnused imports  ({len(unused)} found)")
 
     def unused_line(imp: Dict[str, Any]) -> str:
-        # Only names the unused analysis selected, not every name in the statement.
-        names = imp.get('unused_names') or imp.get('names', [])
-        name_str = f".{', '.join(names)}" if names else ''
         rel = to_relative_display(imp.get('file', '?'), base_path)
-        return f"  ⚠️  {rel}:{imp.get('line', '?')}  {imp.get('module', '?')}{name_str}"
+        return f"  ⚠️  {rel}:{imp.get('line', '?')}  {describe_unused({'module': '?', **imp})}"
 
     lines += capped_section(
         unused, top, unused_line, indent='  ',
