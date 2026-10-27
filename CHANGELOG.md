@@ -63,6 +63,15 @@ This release is larger than usual: 1,198 commits since 0.131.0. Every old spelli
 - `reveal.utils.path_utils.failure_of(error)` records an exception as a `PathFailure(path, cause)` (`reveal.reveal_types`), the one shape `traversal_failed_warning` takes; a plain `(path, cause)` tuple of `str(OSError)` no longer type-checks (BACK-2249).
 - The nine `reveal.cli.commands.<noun>` modules are gone; import from `reveal.adapters.<noun>`. `is_test_path_any_sep` and the two `_is_test_file` aliases are gone, and `is_test_path` reads backslashes as separators on every host (BACK-2060, BACK-2103).
 
+**Output a script may parse** (found by the public docs review, BACK-2213)
+- `ssl://HOST --check` exits 1 on a warning in every mode: the nginx batch, `ssl://file://` and `--local-certs` checks exited 0. An expired or failing live certificate now exits 2 in `--validate-nginx-acme`, `--cpanel-certs` and `cpanel://USER/full-audit` (they passed); their `ssl_status` words are `healthy`, `warning`, `critical`, `expired` or `error`, not `pass`, `warning` or `failure`.
+- `diff://` names a method `Class.method` (it was `method`) and every directory-diff entry carries `file`, so `select(.name=="save")` stops matching methods. sqlite JSON drops `configuration.foreign_keys_enabled` (it read Disabled for every database) and a view entry carries `kind`.
+- `~=` and `!~` now ignore case on json, markdown, git and metrics (they were case-sensitive there); ast stays case-sensitive, so a pattern such as `name~=^[A-Z]` changes meaning.
+- `--validate-schema NAME` exits 2, not 1, for an unknown schema on a single file. A custom schema rule without `field` and `check` is reported as F005 instead of being skipped.
+- `.reveal.yaml` layers: `allow_imports: []` forbids every import outside the layer (it enforced nothing) and a layer's own files are always allowed. A key written with no value is an error.
+- `surface` reports the path a handle's `.write(...)` writes to (the `open()` or temp file that made it) as the `target`; it reported the data written.
+- `env://` also redacts by value (a URL with `user:pass@`, or a `password=` parameter), so `sensitive` and `sensitive_variables` can rise. Markdown code-block `line_end` is the closing fence, and xlsx `?range=` numbers rows by Excel row.
+
 ### Added
 - `reveal NOUN PATH` answers exactly what `NOUN://PATH` answers (equal JSON and exit code) for `calls`, `imports`, `metrics`, `patches`, `pack`, `overview`, `hotspots`, `contracts`, `architecture`, `surface`, `deps` and `trace`. Every parameter is a typed flag, so a bad value exits 2 naming the parameter (BACK-2146, BACK-2160, BACK-2045).
 - `imports --importers [FILE]` answers the module and directory forms `depends://` answered, with line, module and cascade stage. `--external` gives the package table `deps` printed in text only, as JSON (`external_packages`). `--fail-on findings` exits 1 when `--circular`, `--unused` or `--violations` has a row (BACK-1054).
