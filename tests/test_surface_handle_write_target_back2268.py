@@ -3,7 +3,8 @@
 Before this fix `f.write(data)` reported its first argument, the payload, as `target`
 ('content', "json.dumps(record) + '\\n'"), so the row named the data and never the file. Now:
 
-- a handle bound in the same function by `with open(PATH...) as f`, `f = open(PATH...)` or
+- a handle bound in the same function by `with open(PATH...) as f`, `f = open(PATH...)`,
+  `with p.open('w') as f` (reported as `p`, like `p.write_text`) or
   `with tempfile.NamedTemporaryFile(...) as f` reports that path, printed as the `open()` row
   for the handle prints it (a temporary file, which has no path argument, reports the call that
   made it);
@@ -74,6 +75,30 @@ def test_named_temporary_file_reports_the_call_that_made_it(tmp_path):
     ]
 
 
+def test_pathlib_open_reports_its_receiver_like_write_text(tmp_path):
+    # Only a literal writing mode marks a pathlib open: sftp/zip/project `.open(path, mode)`
+    # methods take the path first, and a bare `.open()` reads.
+    rows = _fs(tmp_path, '''\
+        from pathlib import Path
+
+        def f(path, data, conftest):
+            with path.open('w', encoding='utf-8') as a:
+                a.write(data)
+            with Path("p.txt").open(mode="ab") as b:
+                b.write(data)
+            with self.sftp.open(path, "wb") as c:
+                c.write(data)
+            with conftest.open() as d:
+                d.write(data)
+    ''')
+    assert rows == [
+        (5, 'a.write', 'path'),
+        (7, 'b.write', 'p.txt'),
+        (9, 'c.write', 'c'),
+        (11, 'd.write', 'd'),
+    ]
+
+
 def test_module_level_and_async_with(tmp_path):
     rows = _fs(tmp_path, '''\
         with open("module.log", "a") as log:
@@ -102,13 +127,16 @@ def test_several_handles_and_nested_with_items(tmp_path):
                 with open("d.txt", "w") as f:
                     f.write(rows[3])
     ''')
+    # Two with-blocks binding `f` one after the other each trace to their own path. Line 6 sits
+    # in a body that binds `f` again (line 7): the trace is not flow-sensitive (a loop could run
+    # the rebinding first), so it reports the name rather than risk the wrong path.
     assert rows == [
         (2, 'open', 'a.txt'),
         (2, 'open', 'b.txt'),
         (3, 'f.write', 'a.txt'),
         (4, 'g.write', 'b.txt'),
         (5, 'open', 'c.txt'),
-        (6, 'f.write', 'c.txt'),
+        (6, 'f.write', 'f'),
         (7, 'open', 'd.txt'),
         (8, 'f.write', 'd.txt'),
     ]

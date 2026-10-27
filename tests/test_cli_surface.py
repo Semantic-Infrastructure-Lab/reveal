@@ -2384,13 +2384,17 @@ class TestPythonSurfacePrecision(unittest.TestCase):
         self.assertEqual({e['name'] for e in s['fs']}, {'open', 'f.write'})
 
     def test_long_write_target_truncated(self):
+        # BACK-2268: a handle's write reports the path it was opened on, so the long expression
+        # is that path; the open() row and the write row are cut the same way.
         s = self._surfaces('''\
-            def save(f):
-                f.write(build_something_very_long(alpha_argument, beta_argument, gamma_argument, delta_argument))
+            def save(data):
+                with open(build_something_very_long(alpha_argument, beta_argument, gamma_argument), 'w') as f:
+                    f.write(data)
         ''')
-        target = s['fs'][0]['target']
-        self.assertLessEqual(len(target), 60)
-        self.assertTrue(target.endswith('…'))
+        for row in s['fs']:
+            self.assertLessEqual(len(row['target']), 60)
+            self.assertTrue(row['target'].endswith('…'))
+        self.assertEqual(len({row['target'] for row in s['fs']}), 1)
 
     def test_mcpserver_constructor_detected(self):
         s = self._surfaces('''\
