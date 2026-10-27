@@ -7,6 +7,7 @@ warnings passed a dead database.
 """
 import json
 import os
+import site
 import subprocess
 import sys
 
@@ -38,7 +39,12 @@ def test_unrecognised_element_still_falls_through_to_the_overview(monkeypatch):
 
 def _reveal(tmp_path, *args):
     # An empty HOME keeps a real ~/.my.cnf out of the picture; .invalid never resolves (RFC 2606).
-    env = dict(os.environ, HOME=str(tmp_path), USERPROFILE=str(tmp_path), PYTHONIOENCODING='utf-8')
+    # The user site is derived from HOME, so pin it (BACK-2292): an interpreter whose pymysql lives
+    # in ~/.local passed the importorskip above and then lost pymysql in the child. The empty HOME
+    # also empties the update-check cache, so without the opt-out every run asked PyPI and a
+    # version notice could land on stdout ahead of the JSON.
+    env = dict(os.environ, HOME=str(tmp_path), USERPROFILE=str(tmp_path), PYTHONIOENCODING='utf-8',
+               PYTHONUSERBASE=site.getuserbase(), REVEAL_NO_UPDATE_CHECK='1')
     for key in [k for k in env if k.startswith('MYSQL_')]:
         del env[key]
     return subprocess.run([sys.executable, '-m', 'reveal', *args], capture_output=True,
