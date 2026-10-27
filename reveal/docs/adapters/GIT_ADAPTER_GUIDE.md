@@ -22,18 +22,19 @@ category: guide
 9. [Blame Analysis](#blame-analysis)
 10. [Semantic Blame](#semantic-blame)
 11. [File Diff](#file-diff)
-12. [Query Parameters](#query-parameters)
-13. [Commit Filtering](#commit-filtering)
-14. [Result Control](#result-control)
-15. [Output Types](#output-types)
-16. [Workflows](#workflows)
-17. [Integration Examples](#integration-examples)
-18. [Performance & Best Practices](#performance--best-practices)
-19. [Troubleshooting](#troubleshooting)
-20. [Limitations](#limitations)
-21. [Tips & Best Practices](#tips--best-practices)
-22. [Related Documentation](#related-documentation)
-23. [FAQ](#faq)
+12. [Ownership (Commit-Share)](#ownership-commit-share)
+13. [Query Parameters](#query-parameters)
+14. [Commit Filtering](#commit-filtering)
+15. [Result Control](#result-control)
+16. [Output Types](#output-types)
+17. [Workflows](#workflows)
+18. [Integration Examples](#integration-examples)
+19. [Performance & Best Practices](#performance--best-practices)
+20. [Troubleshooting](#troubleshooting)
+21. [Limitations](#limitations)
+22. [Tips & Best Practices](#tips--best-practices)
+23. [Related Documentation](#related-documentation)
+24. [FAQ](#faq)
 
 ---
 
@@ -235,7 +236,7 @@ reveal git://.@main
 reveal git://.@develop
 ```
 
-**Returns** (~300 tokens):
+**Returns**:
 
 ```
 Ref: main
@@ -358,43 +359,21 @@ reveal 'git://src/auth?type=history'              # a directory — every commit
 **Returns** (~800 tokens for 50 commits):
 
 ```
-File History: src/app.py
-Ref: HEAD
-Type: git_file_history
+File History: src/app.py @ HEAD
+Commits: 50
 
-Commits (50 total, showing 50):
+  abc1234 2026-10-26 12:54:13 John Doe
+    feat: Add authentication
+  def5678 2026-10-24 09:10:02 Jane Smith
+    refactor: Extract config loading
+  ...
 
-  1. abc1234 (13 hours ago) - John Doe
-     feat: Add authentication
-     +45, -12 lines
-
-  2. def5678 (2 days ago) - Jane Smith
-     refactor: Extract config loading
-     +23, -8 lines
-
-  3. ghi9012 (1 week ago) - Bob Jones
-     fix: Handle edge case in startup
-     +5, -2 lines
-
-  4. jkl3456 (2 weeks ago) - Alice Brown
-     docs: Add docstrings
-     +12, -0 lines
-
-  (46 more commits...)
-
-Summary:
-  Total commits: 50
-  Contributors: 8
-  Lines added: +342
-  Lines deleted: -156
-  First commit: 6 months ago
-  Last commit: 13 hours ago
-
-Next Steps:
-  reveal 'git://src/app.py?type=blame'    # Who wrote what
-  reveal git://src/app.py@abc1234       # View at specific commit
-  reveal git://.@abc1234                # Full commit details
+⚠ Truncated commits: showing 50 of 51+ — raise ?limit=N or page with ?offset=N
 ```
+
+A directory target prints `Directory History: <dir> @ HEAD`. Each commit carries hash,
+author, email, date and message; there are no per-commit line counts or contributor
+summary (the JSON has none either).
 
 **Query parameters**:
 - `?limit=N` - Show N commits (default: 50)
@@ -490,49 +469,23 @@ reveal 'git://src/app.py?type=blame'
 **Returns** (~500 tokens):
 
 ```
-File Blame: src/app.py
-Ref: HEAD
-Type: git_file_blame
+File Blame Summary: src/app.py (89 lines, 12 hunks)
 
-Lines: 89
-Contributors: 4
+Contributors (by lines owned):
+  John Doe                         45 lines (50.6%)  Last: 2026-10-26 12:54:13
+  Jane Smith                       28 lines (31.5%)  Last: 2026-10-24 09:10:02
 
-Top Contributors:
-  1. John Doe (45 lines, 50.6%) - Last: 13 hours ago
-     john@example.com
-     Commits: 8
+Key hunks (largest continuous blocks):
+  Lines 18- 42 ( 25 lines)  def5678 2026-10-24 09:10:02 Jane Smith
+    feat: Add authentication
+  Lines  1- 15 ( 15 lines)  abc1234 2026-04-02 10:00:00 John Doe
+    feat: Initial implementation
+  ... and 10 more (--format json lists all)
 
-  2. Jane Smith (28 lines, 31.5%) - Last: 2 days ago
-     jane@example.com
-     Commits: 5
-
-  3. Bob Jones (12 lines, 13.5%) - Last: 1 week ago
-     bob@example.com
-     Commits: 3
-
-  4. Alice Brown (4 lines, 4.5%) - Last: 2 weeks ago
-     alice@example.com
-     Commits: 1
-
-Key Hunks (significant changes):
-
-  Lines 1-15 (15 lines) - John Doe - 6 months ago
-    abc1234 - Initial implementation
-    "Application entry point with basic Flask setup"
-
-  Lines 18-42 (25 lines) - Jane Smith - 2 days ago
-    def5678 - Add authentication
-    "Implemented JWT token auth with refresh logic"
-
-  Lines 45-68 (24 lines) - John Doe - 13 hours ago
-    ghi9012 - Add error handling
-    "Comprehensive error handling for all endpoints"
-
-Next Steps:
-  reveal 'git://src/app.py?type=blame&detail=full'     # Line-by-line
-  reveal 'git://src/app.py?type=blame&element=create_app'  # Semantic blame
-  reveal 'git://src/app.py?type=history'                # File history
+Use: reveal 'git://src/app.py?type=blame&detail=full' for line-by-line view
 ```
+
+Contributors are ranked by surviving lines. The summary lists the five largest hunks.
 
 ### Detailed Blame (Line-by-Line)
 
@@ -543,40 +496,21 @@ reveal 'git://src/app.py?type=blame&detail=full'
 **Returns** (~1500 tokens for 89-line file):
 
 ```
-File Blame (Detailed): src/app.py
-Type: git_file_blame
-
+File Blame (Detailed): src/app.py @ HEAD
 Lines: 89
-Contributors: 4
 
-Line-by-Line Attribution:
-────────────────────────────────────────
-abc1234 | John Doe | 6 months ago
-  1  """Application entry point."""
-  2  import os
-  3  from flask import Flask
-  4
+Lines 1-4:
+  abc1234 2026-04-02 10:00:00 John Doe
+  feat: Initial implementation
 
-def5678 | Jane Smith | 2 days ago
-  5  def create_app():
-  6      """Create Flask application."""
-  7      app = Flask(__name__)
-
-abc1234 | John Doe | 6 months ago
-  8      app.config.from_object('config.Config')
-  9      return app
- 10
-
-ghi9012 | John Doe | 13 hours ago
- 11  if __name__ == '__main__':
- 12      app = create_app()
- 13      app.run(debug=True)
-────────────────────────────────────────
-
-Next Steps:
-  reveal 'git://src/app.py?type=history'  # File history
-  reveal git://.@abc1234                # Commit details
+Lines 5-5:
+  def5678 2026-10-24 09:10:02 Jane Smith
+  feat: Add authentication
+...
 ```
+
+`detail=full` lists every hunk with its commit, author, date and message. It does not
+print the source lines; read the file for those.
 
 **Use cases**:
 - Find who wrote specific lines
@@ -593,60 +527,37 @@ Next Steps:
 ```bash
 reveal 'git://src/app.py?type=blame&element=create_app'
 reveal 'git://src/auth.py?type=blame&element=AuthHandler'
-reveal 'git://models.py?type=blame&element=User.save'
+reveal 'git://models.py?type=blame&element=save'
 ```
 
 **Returns** (~300 tokens):
 
 ```
-Semantic Blame: create_app function
-File: src/app.py
-Type: git_file_blame
+Element Blame: src/app.py → create_app
+Lines 5-9 (3 hunks)
 
-Element: create_app (function)
-Lines: 5-9 (5 lines)
+Contributors (by lines owned):
+  Jane Smith                        3 lines (60.0%)  Last: 2026-10-24 09:10:02
+  John Doe                          2 lines (40.0%)  Last: 2026-04-02 10:00:00
 
-Attribution:
-  Primary Author: Jane Smith (3 lines, 60%)
-    jane@example.com
-    Last modified: 2 days ago
-    Commit: def5678 - Add authentication
+Key hunks (largest continuous blocks):
+  Lines 5-7 (3 lines)  def5678 2026-10-24 09:10:02 Jane Smith
+    feat: Add authentication
+  Lines 8-9 (2 lines)  abc1234 2026-04-02 10:00:00 John Doe
+    feat: Initial implementation
 
-  Contributing Authors:
-    John Doe (2 lines, 40%)
-      john@example.com
-      Last modified: 6 months ago
-      Commit: abc1234 - Initial implementation
-
-Code:
-────────────────────────────────────────
-def5678 | Jane Smith | 2 days ago
-  5  def create_app():
-  6      """Create Flask application."""
-  7      app = Flask(__name__)
-
-abc1234 | John Doe | 6 months ago
-  8      app.config.from_object('config.Config')
-  9      return app
-────────────────────────────────────────
-
-Next Steps:
-  reveal 'git://src/app.py?type=blame&detail=full'  # Full file blame
-  reveal git://.@def5678                          # Jane's commit
-  reveal git://.@abc1234                          # John's commit
+Use: reveal 'git://src/app.py?type=blame&detail=full' for line-by-line view
 ```
 
 **How it works**:
-- Uses AST analysis to find function/class boundaries
-- Attributes lines within that semantic element
-- Shows primary author (most lines) + contributors
-- Works with Python functions, classes, methods
+- Finds the element's line range with reveal's outline for the file's language
+- Attributes only the lines inside that range
+- Prints the contributor totals and key hunks for that range
 
 **Supported elements**:
-- ✅ Python functions: `element=function_name`
-- ✅ Python classes: `element=ClassName`
-- ✅ Python methods: `element=ClassName.method_name`
-- ❌ Other languages: Falls back to full file blame
+- ✅ Any language reveal can outline (Python, JavaScript, ...): a function, class or method by its bare name, `element=get_structure`
+- ❌ The dotted `Class.method` form is not resolved
+- An element that is not found falls back to the full-file blame, with `Note: Element '<name>' not found in <path>, showing full file blame` on stderr (exit 0)
 
 **Use cases**:
 - Code review: "Who owns this function?"
@@ -667,7 +578,7 @@ reveal 'git://src/app.py@abc1234?type=diff&context=10'              # more conte
 reveal 'git://src/auth@abc1234?type=diff'                          # a directory — what the commit changed beneath src/auth/
 ```
 
-**Modifiers**: `element=<name>` scopes to hunks touching that function/class; `context=N` sets context lines around each hunk (default varies).
+**Modifiers**: `element=<name>` scopes to hunks touching that function/class; `context=N` sets context lines around each hunk (default 3).
 
 **Note**: `?type=history&element=<name>` similarly scopes file history to commits that touched a specific element.
 
@@ -987,64 +898,88 @@ reveal 'git://.?message~=bug&limit=100'
 {
   "contract_version": "1.1",
   "type": "git_repository",
-  "source": "/home/user/projects/myproject",
-  "source_type": "repository",
-  "path": "/home/user/projects/myproject",
-  "head": {
-    "branch": "main",
-    "commit": "abc1234567890abcdef",
-    "author": "John Doe <john@example.com>",
-    "date": "Mon Feb 13 15:42:30 2025",
-    "message": "feat: Add new feature"
-  },
+  "source": ".",
+  "source_type": "directory",
+  "path": "/home/user/projects/myproject/",
+  "head": {"branch": "main", "commit": "abc1234", "detached": false},
   "branches": {
-    "count": 10,
-    "items": [
-      {"name": "main", "commit": "abc1234", "date": "13 hours ago", "message": "feat: Add new feature"},
-      {"name": "develop", "commit": "def5678", "date": "2 days ago", "message": "fix: Bug fix"}
+    "count": 189,
+    "recent": [
+      {"name": "main", "commit": "abc1234", "message": "feat: Add new feature", "author": "John Doe", "date": "2026-10-26", "timestamp": 1793084153}
     ]
   },
   "tags": {
-    "count": 5,
-    "items": [
-      {"name": "v1.2.0", "commit": "mno7890", "date": "1 month ago", "message": "Release v1.2.0"}
+    "count": 172,
+    "recent": [
+      {"name": "v1.2.0", "commit": "mno7890", "message": "Release v1.2.0", "date": "2026-10-07", "timestamp": 1791428397}
     ]
   },
   "commits": {
-    "count": 10,
-    "items": [
-      {"hash": "abc1234", "author": "John Doe", "date": "13 hours ago", "message": "feat: Add new feature"}
+    "recent": [
+      {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53", "timestamp": 1793084153, "message": "feat: Add new feature"}
     ]
-  }
+  },
+  "stats": {"is_bare": false, "is_empty": false, "head_detached": false},
+  "meta": {"warnings": [{"type": "truncated", "field": "branches.recent", "shown": 10, "total": 189, "exact": true, "cause": "limit", "message": "..."}]}
 }
 ```
 
+Only the newest 10 branches, tags and commits are listed (`?limit=N` or `--all` for more); `count` is the full number of branches and tags.
+
 ### 2. git_ref
 
-**Use case**: Branch/tag/commit history
+**Use case**: Branch/tag/commit header plus the history that starts at it
 
 **Schema**:
 ```json
 {
   "contract_version": "1.1",
   "type": "git_ref",
-  "source": "main",
-  "source_type": "branch",
+  "source": "/home/user/projects/myproject/@main",
+  "source_type": "directory",
   "ref": "main",
   "commit": {
-    "hash": "abc1234567890abcdef",
-    "author": "John Doe <john@example.com>",
-    "date": "Mon Feb 13 15:42:30 2025",
-    "message": "feat: Add new feature",
-    "parents": ["def5678901234abcdef"]
+    "hash": "abc1234", "author": "John Doe", "email": "john@example.com",
+    "date": "2026-10-26 23:55:53", "timestamp": 1793084153,
+    "message": "feat: Add new feature", "full_hash": "abc1234567890abcdef...",
+    "full_message": "feat: Add new feature\n\nBody...", "parents": ["def5678"],
+    "committer": "John Doe", "committer_email": "john@example.com"
   },
   "history": [
-    {"hash": "abc1234", "author": "John Doe", "date": "13 hours ago", "message": "feat: Add new feature", "stats": {"files": 3, "insertions": 45, "deletions": 12}}
-  ]
+    {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53", "timestamp": 1793084153, "message": "feat: Add new feature"}
+  ],
+  "filter_applied": false,
+  "meta": {"warnings": []}
 }
 ```
 
-### 3. git_file
+History items carry no per-commit file or line statistics.
+
+### 3. git_file_structure
+
+**Use case**: A file's structure at a ref (`git://src/app.py@v1.0`; no `?raw=1`)
+
+**Schema**:
+```json
+{
+  "contract_version": "1.1",
+  "type": "git_file_structure",
+  "source": "src/app.py@v1.0",
+  "source_type": "file",
+  "path": "src/app.py",
+  "ref": "v1.0",
+  "commit": "abc1234",
+  "commit_info": {"hash": "abc1234", "author": "John Doe", "date": "2026-10-26", "message": "feat: Add new feature"},
+  "size": 11315,
+  "lines": 216,
+  "structure": {"type": "markdown_structure", "headings": [{"line": 1, "level": 1, "name": "Reveal", "size": 216}]}
+}
+```
+
+`structure` is the file's own analyzer output (functions and classes for code, headings for Markdown).
+
+### 3b. git_file
+
 
 **Use case**: File contents at ref
 
@@ -1066,21 +1001,23 @@ reveal 'git://.?message~=bug&limit=100'
 
 ### 4. git_file_history
 
-**Use case**: File commit history
+**Use case**: File, directory or repository commit history
 
 **Schema**:
 ```json
 {
   "contract_version": "1.1",
   "type": "git_file_history",
-  "source": "src/app.py",
+  "source": "src/app.py@HEAD",
   "source_type": "file",
   "path": "src/app.py",
   "ref": "HEAD",
-  "count": 50,
   "commits": [
-    {"hash": "abc1234", "author": "John Doe", "date": "13 hours ago", "message": "feat: Add authentication", "stats": {"insertions": 45, "deletions": 12}}
-  ]
+    {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53", "timestamp": 1793084153, "message": "feat: Add authentication"}
+  ],
+  "count": 50,
+  "total_matches": null,
+  "meta": {"warnings": []}
 }
 ```
 
@@ -1093,20 +1030,24 @@ reveal 'git://.?message~=bug&limit=100'
 {
   "contract_version": "1.1",
   "type": "git_file_blame",
-  "source": "src/app.py",
+  "source": "src/app.py@HEAD",
   "source_type": "file",
   "path": "src/app.py",
   "ref": "HEAD",
+  "commit": "abc1234",
   "lines": 89,
-  "element": null,
-  "contributors": [
-    {"name": "John Doe", "email": "john@example.com", "lines": 45, "percentage": 50.6, "commits": 8, "last_commit": "13 hours ago"}
-  ],
   "hunks": [
-    {"lines": "1-15", "author": "John Doe", "date": "6 months ago", "commit": "abc1234", "message": "Initial implementation"}
-  ]
+    {
+      "lines": {"start": 1, "count": 4},
+      "commit": {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53", "message": "feat: Initial implementation"}
+    }
+  ],
+  "file_content": ["\"\"\"Application entry point.\"\"\"", "import os"],
+  "detail": false
 }
 ```
+
+With `element=NAME` the JSON also carries an `element` key. The JSON carries the hunks and the file's lines; per-author totals (the text view's "Contributors") are computed by the text renderer and are not in the JSON. `detail` is `true` for `detail=full`.
 
 ### 6. git_ownership
 
@@ -1279,7 +1220,7 @@ reveal git://.
 reveal 'git://src/core/?type=ownership'
 
 # 3. Identify API expert (most commits in api/)
-reveal 'git://.?author=*&message~=api&limit=100'
+reveal 'git://.?type=history&message~=api&limit=100'
 
 # 4. Check database expert
 reveal 'git://db/migrations/?type=history'
@@ -1558,12 +1499,15 @@ echo "✅ All commit messages valid"
 
 git:// is optimized for AI agent consumption:
 
-| Operation | git log Output | reveal Output | Savings |
-|-----------|---------------|---------------|---------|
-| Repository overview | ~10000 tokens | ~900 tokens | **91%** |
-| Branch history (20) | ~5000 tokens | ~300 tokens | **94%** |
-| File history (50) | ~8000 tokens | ~800 tokens | **90%** |
-| Blame summary | ~3000 tokens | ~500 tokens | **83%** |
+Default output sizes, measured on a repository with 4,000+ commits (about 4 bytes per token):
+
+| Operation | Default cut | Output size |
+|-----------|-------------|-------------|
+| Repository overview | 10 branches, tags, commits | ~1,100 tokens |
+| Branch history (`@ref`) | 20 commits | ~950 tokens |
+| File history (`?type=history`) | 50 commits (16 in the sample) | ~500 tokens |
+| Blame summary | 5 key hunks | ~300 tokens |
+| Blame, `detail=full` (201-line file) | every hunk | ~2,400 tokens |
 
 **Why?**
 - ✅ Structured JSON (not unstructured text)
@@ -1752,8 +1696,8 @@ reveal 'git://src/app.py?type=blame&element=function_name'
 # For classes, use ClassName not classname
 reveal 'git://src/models.py?type=blame&element=User'
 
-# For methods, use ClassName.method_name
-reveal 'git://src/models.py?type=blame&element=User.save'
+# For methods, use the bare method name (the dotted Class.method form is not resolved)
+reveal 'git://src/models.py?type=blame&element=save'
 ```
 
 ---
@@ -1770,11 +1714,10 @@ reveal 'git://src/models.py?type=blame&element=User.save'
    - Cannot commit, push, merge, etc.
    - Use git CLI for modifications
 
-3. **Semantic blame: Python only**
-   - Semantic blame (`element=`) works with Python files
-   - Uses AST to find function/class boundaries
-   - Other languages: Falls back to full file blame
-   - Future: May support more languages
+3. **Semantic blame takes a bare element name**
+   - `element=` works for any language reveal can outline (Python, JavaScript, ...)
+   - Use the function, class or method name alone; `Class.method` is not resolved
+   - An unknown element falls back to the full-file blame, with a `Note:` on stderr
 
 4. **Performance with large repositories**
    - Very large repos (100k+ commits) can be slow
@@ -2055,9 +1998,9 @@ git log main -n 1000 --name-only --pretty=format: | sed '/^$/d' | sort | uniq -c
 
 - **v0.101.0**: `git://?type=ownership` — commit-share ownership for file / directory / whole repo (`git_ownership` output type). `?merges=1` to include merge commits; `?limit=N` caps the history walk. Shallow-clone warning carried from blame.
 - **v1.0** (2025-02-14): Initial comprehensive guide
-  - 5 output types documented (git_repository, git_ref, git_file, git_file_history, git_file_blame)
+  - 5 output types documented (git_repository, git_ref, git_file, git_file_history, git_file_blame); the guide now covers all 8 (adds git_file_structure, git_ownership, git_timeline)
   - Progressive disclosure pattern
-  - Semantic blame for Python
+  - Semantic blame for Python (any outlinable language since)
   - Commit filtering with operators
   - 6 complete workflows
   - Integration examples (jq, Python, CI/CD)
