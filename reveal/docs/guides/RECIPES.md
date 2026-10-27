@@ -1421,7 +1421,7 @@ reveal 'ast://./src?complexity>10'  # Just complex ones (~100 tokens)
 # First 5 elements of each section (imports, functions, classes)
 reveal large_module.py --head 5
 
-# Last 3 functions (bugs cluster at the bottom!)
+# Last 3 elements of each section (bugs cluster at the bottom!)
 reveal large_module.py --tail 3
 
 # Specific range

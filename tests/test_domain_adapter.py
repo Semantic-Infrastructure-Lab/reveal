@@ -428,10 +428,12 @@ class TestDomainAdapterSchema(unittest.TestCase):
 
         self.assertIn('output_types', schema)
         self.assertIsInstance(schema['output_types'], list)
-        # Should have domain_overview and domain_dns types
+        # The declared names are the `type` values the adapter returns
         output_type_names = [ot['type'] for ot in schema['output_types']]
         self.assertIn('domain_overview', output_type_names)
-        self.assertIn('domain_dns', output_type_names)
+        self.assertIn('domain_dns_records', output_type_names)
+        self.assertIn('domain_ssl_status', output_type_names)
+        self.assertNotIn('domain_dns', output_type_names)
 
     def test_schema_query_params(self):
         """Schema should document query parameters."""

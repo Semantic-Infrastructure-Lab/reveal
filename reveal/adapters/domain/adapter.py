@@ -418,6 +418,9 @@ _SCHEMA_ELEMENTS = {
     'whois': 'WHOIS registration data (requires python-whois)',
     'ssl': 'SSL certificate status (delegates to ssl:// adapter)',
     'registrar': 'Registrar and nameserver information',
+    'mail': 'Email DNS deliverability (MX, SPF, DMARC)',
+    'http': 'HTTP redirect chain inspection (port 80 to HTTPS)',
+    'ns-audit': 'NS authority cross-check (orphaned or stale nameserver entries)',
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -439,18 +442,17 @@ _SCHEMA_OUTPUT_TYPES = [
         }},
     },
     {
-        'type': 'domain_dns',
-        'description': 'All DNS records for domain',
+        'type': 'domain_dns_records',
+        'description': 'All DNS records for domain (record-type keys are lower-case)',
         'schema': {'type': 'object', 'properties': {
-            'contract_version': {'type': 'string'},
-            'type': {'type': 'string', 'const': 'domain_dns'},
-            'source': {'type': 'string'}, 'source_type': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'domain_dns_records'},
             'domain': {'type': 'string'},
             'records': {'type': 'object', 'properties': {
-                'A': {'type': 'array'}, 'AAAA': {'type': 'array'}, 'MX': {'type': 'array'},
-                'TXT': {'type': 'array'}, 'NS': {'type': 'array'}, 'CNAME': {'type': 'array'},
-                'SOA': {'type': 'array'},
+                'a': {'type': 'array'}, 'aaaa': {'type': 'array'}, 'mx': {'type': 'array'},
+                'txt': {'type': 'array'}, 'ns': {'type': 'array'}, 'cname': {'type': 'array'},
+                'soa': {'type': 'array'},
             }},
+            'lookup_failed': {'type': 'object'},
         }},
     },
     {
@@ -461,8 +463,8 @@ _SCHEMA_OUTPUT_TYPES = [
             'type': {'type': 'string', 'const': 'domain_whois'},
             'source': {'type': 'string'}, 'domain': {'type': 'string'},
             'registrar': {'type': 'string'}, 'creation_date': {'type': 'string'},
-            'expiration_date': {'type': 'string'}, 'nameservers': {'type': 'array'},
-            'status': {'type': 'array'},
+            'expiration_date': {'type': 'string'}, 'name_servers': {'type': 'array'},
+            'status': {'type': 'array'}, 'dnssec': {'type': 'string'},
         }},
     },
     {
@@ -477,21 +479,18 @@ _SCHEMA_OUTPUT_TYPES = [
         }},
     },
     {
-        'type': 'domain_health',
-        'description': 'Domain health check results (HTTP status, redirect chain)',
+        'type': 'domain_ssl_status',
+        'description': 'SSL status of one domain: the whole ssl:// check result under ssl_check',
         'schema': {'type': 'object', 'properties': {
-            'contract_version': {'type': 'string'},
-            'type': {'type': 'string', 'const': 'domain_health'},
-            'source': {'type': 'string'}, 'domain': {'type': 'string'},
-            'http_status': {'type': 'integer'}, 'https_status': {'type': 'integer'},
-            'redirect_chain': {'type': 'array'},
-            'checks_passed': {'type': 'integer'}, 'checks_failed': {'type': 'integer'},
+            'type': {'type': 'string', 'const': 'domain_ssl_status'},
+            'domain': {'type': 'string'}, 'ssl_check': {'type': 'object'},
+            'next_steps': {'type': 'array'},
         }},
     },
     {
         # What --check answers; undeclared until BACK-1595.
         'type': 'domain_health_check',
-        'description': 'Health check of one domain: DNS, SSL and HTTP checks, status and exit code',
+        'description': 'Health check of one domain: nine DNS, SSL, HTTP and email checks, status and exit code',
         'schema': {'type': 'object', 'properties': {
             'type': {'type': 'string', 'const': 'domain_health_check'},
             'domain': {'type': 'string'}, 'status': {'type': 'string'},
@@ -503,11 +502,11 @@ _SCHEMA_OUTPUT_TYPES = [
 
 _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'domain://example.com', 'description': 'Domain overview — registrar, DNS summary, SSL status', 'output_type': 'domain_overview'},
-    {'uri': 'domain://example.com/dns', 'description': 'All DNS records (A, MX, NS, TXT, CNAME, etc.)', 'element': 'dns', 'output_type': 'domain_dns'},
-    {'uri': 'domain://example.com/ssl', 'description': 'SSL certificate details (delegates to ssl:// adapter)', 'element': 'ssl', 'output_type': 'ssl_certificate'},
+    {'uri': 'domain://example.com/dns', 'description': 'All DNS records (A, MX, NS, TXT, CNAME, etc.)', 'element': 'dns', 'output_type': 'domain_dns_records'},
+    {'uri': 'domain://example.com/ssl', 'description': 'SSL certificate details (delegates to ssl:// adapter)', 'element': 'ssl', 'output_type': 'domain_ssl_status'},
     {'uri': 'domain://example.com/whois', 'description': 'WHOIS registration data — registrar, dates, nameservers (requires python-whois)', 'element': 'whois', 'output_type': 'domain_whois'},
     {'uri': 'domain://example.com/registrar', 'description': 'Registrar name, creation/expiry dates from WHOIS', 'element': 'registrar', 'output_type': 'domain_registrar'},
-    {'uri': 'domain://example.com --check', 'description': 'Full health check: DNS propagation + HTTP response + SSL expiry', 'cli_flag': '--check', 'output_type': 'domain_health'},
+    {'uri': 'domain://example.com --check', 'description': 'Full health check: DNS, SSL expiry, HTTP and email records', 'cli_flag': '--check', 'output_type': 'domain_health_check'},
 ]
 
 _SCHEMA_NOTES = [
@@ -537,6 +536,9 @@ class DomainAdapter(ResourceAdapter):
         whois: WHOIS registration data (optional: pip install "reveal-cli[whois]")
         ssl: SSL certificate status (delegates to ssl:// adapter)
         registrar: Registrar and nameserver information
+        mail: Email DNS deliverability (MX, SPF, DMARC)
+        http: HTTP redirect chain inspection (port 80 to HTTPS)
+        ns-audit: NS authority cross-check
     """
     HELP_CLUSTER = 'Infrastructure'
     QUICK_RANK = 6
@@ -559,7 +561,7 @@ class DomainAdapter(ResourceAdapter):
             'cli_flags': ['--check', '--advanced', '--only-failures'],
             'cli_only_flags': {
                 '--check': 'Run domain health checks (DNS, SSL expiry, registrar status)',
-                '--advanced': 'Include extended check metrics',
+                '--advanced': 'Accepted but changes no domain:// result today (use ssl://HOST --check --advanced for certificate chain and trust detail)',
                 '--only-failures': 'Show only warnings/failures in check output (use with --check)',
             },
             'supports_batch': False,
