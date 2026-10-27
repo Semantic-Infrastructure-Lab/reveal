@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct
-from reveal.adapters.ast import analysis, nav_effects
+from reveal.adapters.ast import nav_effects
+from reveal.adapters.calls import index as calls_index
 from reveal.utils.path_utils import to_posix
 
 pytestmark = pytest.mark.component
@@ -15,7 +16,7 @@ pytestmark = pytest.mark.component
 @pytest.fixture
 def discovery_fault(monkeypatch):
     state = {'active': False, 'denied': {}, 'events': [], 'attempts': []}
-    real_collect, real_scandir = analysis.collect_structures, os.scandir
+    real_collect, real_scandir = calls_index.collect_structures, os.scandir
 
     def collect(*args, **kwargs):
         state['active'] = True
@@ -36,7 +37,7 @@ def discovery_fault(monkeypatch):
             raise PermissionError(13, 'consumer identified denial', str(identified))
         return real_scandir(path)
 
-    monkeypatch.setattr(analysis, 'collect_structures', collect)
+    monkeypatch.setattr(calls_index, 'collect_structures', collect)
     monkeypatch.setattr(os, 'scandir', scandir)
     return state
 

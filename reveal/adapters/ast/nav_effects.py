@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import OrderedDict
-from pathlib import Path
-from typing import AbstractSet, Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import AbstractSet, Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from ...core import node_children as _children
 from ...core.callees.swift import is_subscript as _is_swift_subscript
@@ -1973,6 +1972,15 @@ def _resolve_definition_node(file_path: str, name: str, analyzer_cache: Dict[str
     return end_node, start, end, analyzer._get_node_text, getattr(analyzer, 'language', None)
 
 
+class AmbiguousHop(NamedTuple):
+    """A call site in a walked definition that stays ambiguous after the resolver's
+    same-file and import rules: the caller's chain label, the call text, and the
+    ``(file, line)`` of every candidate definition."""
+    caller: str
+    call: str
+    candidates: List[Tuple[str, int]]
+
+
 class EffectList(List[Dict[str, Any]]):
     """The effects ``collect_effects_transitive`` found, plus ``skipped``: ``(file, cause)``
     for every file whose structure analysis raised. Directory enumeration failures
@@ -1983,6 +1991,18 @@ class EffectList(List[Dict[str, Any]]):
         super().__init__(*args)
         self.skipped: List[Tuple[str, str]] = []
         self.traversal_failures: List[PathFailure] = []
+        self.ambiguous: List[AmbiguousHop] = []
+
+
+def ambiguous_hops_note(hops: Sequence[AmbiguousHop]) -> Optional[str]:
+    """The disclosure line for calls a --transitive walk did not follow because the name
+    stays ambiguous (the same decline calls:// makes); None if there are none."""
+    if not hops:
+        return None
+    shown = '; '.join(
+        f"{h.call} in {h.caller} -> {', '.join(f'{f}:{n}' for f, n in h.candidates)}" for h in hops)
+    return (f'{len(hops)} call(s) not followed, the name is ambiguous (several project definitions, '
+            f'none named by this file or its imports): {shown}; effects behind them are not listed')
 
 
 def skipped_files_note(skipped: Sequence[Tuple[str, str]]) -> Optional[str]:
@@ -2013,19 +2033,20 @@ def collect_effects_transitive(
     """Follow calls into project-local helpers, classifying effects across hops.
 
     Hop 0 is the entry function's own body (identical to collect_effects). Each
-    subsequent hop resolves calls that land on a project-local definition —
-    reusing the same bare-name + language-family scoping the calls:// recursive
-    walk (find_callees_recursive) already relies on — and classifies that
-    definition's own body too. An unresolved or cross-language call terminates
-    that branch: it's already covered by collect_effects's direct name-pattern
-    match at the hop that made it (BACK-545 design doc), so nothing is lost by
-    not chasing it further.
+    subsequent hop is a definition the shared callee walk (``calls.index.walk_callees``,
+    rooted at ``FILE:NAME``) reached at that level: call sites resolve through
+    ``CallResolver`` (same file, imports, language family), definitions are placed by
+    (file, line, name) and expanded once at their shallowest level, and that
+    definition's own body is classified too. An external or cross-language call ends
+    that branch: it is already covered by collect_effects's direct name-pattern match at
+    the hop that made it (BACK-545 design doc). A call the resolver cannot pin to one
+    definition is not followed, as in calls://; it is listed in ``EffectList.ambiguous``
+    and disclosed, never guessed (BACK-2098).
 
     Each returned effect carries 'hop' (0-indexed) and 'chain' (the call path
     that reached it, e.g. ['handle_request', '_save', 'db_execute']).
     """
-    from .analysis import collect_structures  # noqa: I006
-    from ..calls.index import _build_forward_index, _bare_callee_name, _lang_family  # noqa: I006
+    from ..calls.index import walk_callees  # noqa: I006
 
     depth = max(1, min(depth, 5))
 
@@ -2035,53 +2056,37 @@ def collect_effects_transitive(
         e['chain'] = [root_name]
     results = EffectList(hop0)
 
-    path_obj = Path(path)
-    directory = path_obj if path_obj.is_dir() else path_obj.parent
-    structures = collect_structures(str(directory))
-    results.skipped = list(structures.skipped)
-    results.traversal_failures = list(structures.traversal_failures)
-    forward = _build_forward_index(structures, include_builtins=False)
+    walk = walk_callees(path, f'{path}:{root_name}', depth=depth)
+    results.skipped = list(walk.skipped)
+    results.traversal_failures = list(walk.traversal_failures)
 
-    root_family = _lang_family(path) if path else ''
-    visited = {root_name}
-    frontier = [(root_name, root_family, [root_name])]
     analyzer_cache: Dict[str, Any] = {}
-
-    for hop in range(1, depth + 1):
-        next_frontier: List[Tuple[str, str, List[str]]] = []
-        for name, family, chain in frontier:
-            defs = forward.get(name, [])
-            if family:
-                defs = [d for d in defs if _lang_family(d['file']) == family]
-            for defn in defs:
-                for callee in defn['calls']:
-                    tail = _bare_callee_name(callee)
-                    if tail in visited:
-                        continue
-                    candidates = forward.get(tail, [])
-                    if family:
-                        candidates = [c for c in candidates if _lang_family(c['file']) == family]
-                    if not candidates:
-                        continue
-                    visited.add(tail)
-                    callee_file = candidates[0]['file']
-                    resolved = _resolve_definition_node(callee_file, tail, analyzer_cache)
-                    if resolved is None:
-                        continue
-                    node, start, end, callee_get_text, callee_language = resolved
-                    # A scope that only renders the component runs it without calling it
-                    # (BACK-1834): the hop stays, labelled `<Name/>` in the chain.
-                    renders = callee in defn.get('reference_only_calls', ())
-                    new_chain = chain + [f'<{callee}/>' if renders else tail]
-                    hop_effects = collect_effects(node, start, end, callee_get_text, callee_language)
-                    for e in hop_effects:
-                        e['hop'] = hop
-                        e['chain'] = new_chain
-                        e['file'] = callee_file
-                    results.extend(hop_effects)
-                    next_frontier.append((tail, family or _lang_family(callee_file), new_chain))
-        if not next_frontier:
-            break
+    seen_ambiguous: Set[Tuple[str, str]] = set()
+    frontier = [(node, [root_name]) for node in walk.roots]
+    while frontier:
+        next_frontier: List[Tuple[Any, List[str]]] = []
+        for node, chain in frontier:
+            for edge, child in node.edges:
+                if edge.get('ambiguous') and (node.name, edge['call_expr']) not in seen_ambiguous:
+                    seen_ambiguous.add((node.name, edge['call_expr']))
+                    results.ambiguous.append(AmbiguousHop(
+                        chain[-1], edge['call_expr'], [(c['file'], c['line']) for c in edge['candidates']]))
+                if child is None:
+                    continue
+                resolved = _resolve_definition_node(child.file, child.record['name'], analyzer_cache)
+                if resolved is None:
+                    continue
+                def_node, start, end, callee_get_text, callee_language = resolved
+                # A scope that only renders the component runs it without calling it
+                # (BACK-1834): the hop stays, labelled `<Name/>` in the chain.
+                renders = edge['call_expr'] in node.record['reference_only_calls']
+                new_chain = chain + [f"<{edge['call_expr']}/>" if renders else edge['callee']]
+                for e in collect_effects(def_node, start, end, callee_get_text, callee_language):
+                    e['hop'] = child.level
+                    e['chain'] = new_chain
+                    e['file'] = child.file
+                    results.append(e)
+                next_frontier.append((child, new_chain))
         frontier = next_frontier
 
     return results
@@ -2114,6 +2119,7 @@ def render_effects_transitive(
 ) -> str:
     """Render collect_effects_transitive output, grouped by hop/call chain."""
     note = _traversal_note(getattr(effects, 'traversal_failures', ()))
+    ambiguous = ambiguous_hops_note(getattr(effects, 'ambiguous', ()))
     visible = [e for e in effects if e['kind'] is not None or include_unclassified]
     if visible:
         body = _render_transitive_groups(visible, root_name)
@@ -2123,7 +2129,8 @@ def render_effects_transitive(
     else:
         body = (f'No classified side effects found in {root_name} '
                 f'or its callees (--transitive, depth={depth})')
-    return body + (f'\n\nWarning: {note}' if note else '')
+    return (body + (f'\n\nWarning: {note}' if note else '')
+            + (f'\n\nWarning: {ambiguous}' if ambiguous else ''))
 
 
 def _render_transitive_groups(visible: List[Dict[str, Any]], root_name: str) -> str:

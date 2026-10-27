@@ -8,6 +8,7 @@ from .nav_effects import (
     collect_effects_transitive,
     format_effect_target,
     render_effects_transitive,
+    ambiguous_hops_note,
     skipped_files_note,
     _traversal_note,
 )
@@ -186,6 +187,8 @@ def collect_boundary_transitive(
         result['skipped'] = [list(item) for item in effects.skipped]
     if effects.traversal_failures:
         result['traversal_failures'] = list(effects.traversal_failures)
+    if effects.ambiguous:
+        result['ambiguous'] = list(effects.ambiguous)
     return result
 
 
@@ -216,6 +219,9 @@ def render_boundary_transitive(
         sections.append(f'Warning: {note}')
     if directory_note:
         sections.append(f'Warning: {directory_note}')
+    ambiguous = ambiguous_hops_note(result.get('ambiguous') or [])
+    if ambiguous:
+        sections.append(f'Warning: {ambiguous}')
     if result.get('assignment_coverage_note'):
         sections.append(result['assignment_coverage_note'])
 

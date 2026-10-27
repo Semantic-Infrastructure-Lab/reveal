@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct
-from reveal.adapters.ast import analysis, nav_boundary, nav_effects
+from reveal.adapters.ast import nav_boundary, nav_effects
+from reveal.adapters.calls import index as calls_index
 from reveal.core.treesitter_compat import _zero_arg
 from reveal.file_handler import _find_element_node
 from reveal.registry import get_analyzer
@@ -32,7 +33,7 @@ def _tree(root, surviving=False, pure=False):
 def fault(monkeypatch):
     state = {'active': False, 'deny': None, 'unknown': False, 'unreadable': None,
              'attempts': 0, 'records': []}
-    real_collect, real_scandir, real_open = analysis.collect_structures, os.scandir, builtins.open
+    real_collect, real_scandir, real_open = calls_index.collect_structures, os.scandir, builtins.open
 
     def collect(*args, **kwargs):
         state['active'] = True
@@ -56,7 +57,7 @@ def fault(monkeypatch):
             raise PermissionError(13, 'controlled file read loss', str(file))
         return real_open(file, *args, **kwargs)
 
-    monkeypatch.setattr(analysis, 'collect_structures', collect)
+    monkeypatch.setattr(calls_index, 'collect_structures', collect)
     monkeypatch.setattr(os, 'scandir', scandir)
     monkeypatch.setattr(builtins, 'open', read)
     return state
