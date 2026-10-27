@@ -289,6 +289,11 @@ def disclose_timeline_cut(result: Any, walk: HistoryWalk) -> None:
                   hint='raise ?limit=N; the timeline counts only the newest N commits')
 
 
+# The fields of the record format_commit builds, in its order: what every git:// commit filter
+# reads, so a filter on any other field is a typo (BACK-2309). A test pins the two together.
+COMMIT_FIELDS = ('hash', 'author', 'email', 'date', 'timestamp', 'message')
+
+
 def format_commit(commit: 'pygit2.Commit', detailed: bool = False) -> Dict[str, Any]:
     """Format commit information."""
     basic_info = {

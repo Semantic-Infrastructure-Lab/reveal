@@ -3,6 +3,7 @@
 from ...utils import print_json_result
 from ...utils.formatting import lines_label
 from ...rendering.base import print_omitted
+from ...utils.warning_render import render_meta_warnings
 
 
 class GitRenderer:
@@ -43,6 +44,10 @@ class GitRenderer:
             GitRenderer._render_ownership(result)
         else:
             print_json_result(result)
+            return
+        # A filter field no commit has (BACK-2309); the ?sort=/?limit= notes are the output
+        # seam's, which warning_render leaves to it.
+        render_meta_warnings(result)
 
     @staticmethod
     def _render_repository_overview(result: dict) -> None:

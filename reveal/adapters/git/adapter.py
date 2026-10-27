@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from typing import Dict, Any, Optional, Tuple, Union
+from typing import Dict, Any, List, Optional, Set, Tuple, Union
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...errors import NotApplicableError
@@ -17,7 +17,9 @@ from ...utils.query import (
     parse_result_control,
     ResultControl
 )
+from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_parser import QueryParams, filter_expression, mark_query_keys, peek_query_items, query_key
+from ...utils.results import note_warning
 
 # Import modular components
 from ...utils.path_utils import to_posix
@@ -276,6 +278,7 @@ class GitAdapter(ResourceAdapter):
         result_control_parts = []
         filter_parts = []
         self._filter_keys = []  # the user's keys behind filter_parts, for warnings
+        self._operator_keys: Set[str] = set()  # those written with their operator (`authr~`, `!email`)
 
         # Routing a key is not reading it (BACK-1537): each key counts as used where it is
         # applied -- result control when a view reads the ResultControl, operational keys
@@ -306,6 +309,8 @@ class GitAdapter(ResourceAdapter):
             else:
                 filter_parts.append(filter_expression(k, v))
                 self._filter_keys.append(query_key(k))
+                if query_key(k) != k:
+                    self._operator_keys.add(query_key(k))
 
         return result_control_parts, filter_parts
 
@@ -383,6 +388,32 @@ class GitAdapter(ResourceAdapter):
             extra_known_keys={'sort', 'limit', 'offset'},
         )
         self._warn_view_scoped_query_params()
+        self._unknown_filter_fields = self._find_unknown_filter_fields()
+
+    def _find_unknown_filter_fields(self) -> List[str]:
+        """Filter fields written with an operator that no commit record has (BACK-2309).
+
+        BACK-909 warns about a bare key (`?authr`, `?authr=x`) and skips a key that carries its
+        operator (`authr~=x`), which compared None on every commit and answered 0 silently.
+        Every record has every field of ``commits.COMMIT_FIELDS``, so one template record
+        answers ``find_unknown_filter_fields`` for the whole history (and keeps its rule that
+        an absence filter, `!authr`, is not a typo).
+        """
+        filters = [qf for qf in self.query_filters if qf.field in self._operator_keys]
+        return find_unknown_filter_fields([dict.fromkeys(commits.COMMIT_FIELDS, True)], filters,
+                                          lambda record, field: record.get(field))
+
+    def _unknown_filter_field_warning(self) -> Optional[Dict[str, Any]]:
+        """The ``unknown_filter_field`` warning, shaped as metrics:// and json:// shape it, or None."""
+        if not self._unknown_filter_fields:
+            return None
+        fields = ', '.join(f"'{field}'" for field in self._unknown_filter_fields)
+        return {
+            'type': 'unknown_filter_field',
+            'message': (f"Filter field(s) {fields} are not fields of a commit, so every commit "
+                        f"compares a missing value -- this may be a typo. Fields: "
+                        f"{', '.join(commits.COMMIT_FIELDS)}"),
+        }
 
     # Params only meaningful when `type=` resolves to this exact value —
     # accepted (they're in the schema) but silently inert on any other view.
@@ -602,6 +633,12 @@ class GitAdapter(ResourceAdapter):
         return git_subpath
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
+        """The view of :meth:`_view_structure`, with the filter fields no commit has."""
+        result = self._view_structure(**kwargs)
+        note_warning(result, self._unknown_filter_field_warning())
+        return result
+
+    def _view_structure(self, **kwargs) -> Dict[str, Any]:
         """
         Get repository structure using progressive disclosure.
 

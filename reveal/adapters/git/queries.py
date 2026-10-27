@@ -1,45 +1,83 @@
 """Git query filtering and comparison logic."""
 
 import re
+from datetime import datetime
+from functools import lru_cache
 from typing import Any, Optional, Union, Dict
 
 from ...utils.query import compare_values
 from ...utils.query_eval import presence_matches
 
-# A bound written as a month or a day, no time: `date>2026-02`, `date>2026-02-01`.
-_DATE_ONLY = re.compile(r'\d{4}-\d{2}(-\d{2})?')
+# A bound written as a year, a month or a day, no time: `date>2026`, `date>2026-02`,
+# `date>2026-02-01`.
+_PERIOD = re.compile(r'\d{4}(-\d{2}(-\d{2})?)?')
 # A timestamp written with 'T' between the day and the time: `2026-02-01T12:00:00`.
 _T_SEPARATED = re.compile(r'(\d{4}-\d{2}-\d{2})T(\d)')
+# A timestamp with a zone: `2026-02-01T12:00:00Z`, `2026-02-01 12:00+02:00`, `...12:00:00-1200`.
+_ZONED = re.compile(r'(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?) ?(Z|[+-]\d{2}:?\d{2})',
+                    re.IGNORECASE)
 
 
 def _at_bound_precision(commit_date: str, bound: str) -> str:
-    """The commit date at the bound's precision: its month or day when the bound is one
-    (BACK-2277, months BACK-2300).
+    """The commit date at the bound's precision: its year, month or day when the bound is one
+    (BACK-2277, months BACK-2300, years BACK-2309).
 
-    A month or day bound names the whole period, so `date>P` is after the end of P, `date<P`
-    before its start, and `date>=P`/`date<=P` include all of it. Compared as the full
-    'YYYY-MM-DD HH:MM:SS' string, a commit in P sorts after 'P', so `date<=P` lost P and
-    `date>P` kept it. A timestamp bound compares the timestamp.
+    A period bound names the whole period, so `date>P` is after the end of P, `date<P` before
+    its start, `date>=P`/`date<=P` include all of it, and `date=P` is any time in it.
+    Compared as the full 'YYYY-MM-DD HH:MM:SS' string, a commit in P sorts after 'P', so
+    `date<=P` lost P, `date>P` kept it and `date=P` matched nothing. A timestamp bound
+    compares the timestamp.
     """
-    return commit_date[:len(bound)] if _DATE_ONLY.fullmatch(bound) else commit_date
+    return commit_date[:len(bound)] if _PERIOD.fullmatch(bound) else commit_date
 
 
+def _local_time(zoned: 're.Match[str]') -> str:
+    """A zoned timestamp as the local wall-clock time the commit dates are written in.
+
+    ``format_commit`` writes ``date`` with ``datetime.fromtimestamp``: the local time of the
+    machine running reveal, with no zone. So `date>2026-02-01T12:00:00Z` compared the digits
+    '12:00:00' with local times (BACK-2309); converted, it names the same instant. One hour a
+    year is ambiguous: in the hour a DST change repeats, two instants print the same local
+    time, in the commit dates and in the converted bound alike.
+    """
+    day, clock, zone = zoned.groups()
+    zone = '+00:00' if zone.upper() == 'Z' else f'{zone[:3]}:{zone[-2:]}'
+    try:
+        moment = datetime.fromisoformat(f'{day}T{clock}{zone}').astimezone()
+    # Not a calendar time (month 13), or outside what the platform's localtime converts.
+    except (ValueError, OverflowError, OSError) as error:
+        raise ValueError(f"date bound {zoned.group(0)!r} is not a time reveal can convert to "
+                         f"local time: {error}") from error
+    fraction = f'.{moment.microsecond:06d}' if moment.microsecond else ''
+    return moment.strftime('%Y-%m-%d %H:%M:%S') + fraction
+
+
+@lru_cache(maxsize=256)
 def _date_bound(text: str) -> str:
-    """A bound as the commit dates are written: a 'T' between day and time becomes the space
-    (BACK-2300), since ' ' sorts before 'T' and `date>DTHH:MM:SS` lost the commits of day D."""
-    return _T_SEPARATED.sub(r'\1 \2', text.strip(), count=1)
+    """A bound as the commit dates are written: a zoned timestamp in local time (BACK-2309), and
+    a 'T' between day and time as the space (BACK-2300), since ' ' sorts before 'T' and
+    `date>DTHH:MM:SS` lost the commits of day D. Cached: every commit compares the same bound."""
+    text = text.strip()
+    zoned = _ZONED.fullmatch(text)
+    if zoned:
+        return _local_time(zoned)
+    return _T_SEPARATED.sub(r'\1 \2', text, count=1)
 
 
 def _compare_date(commit_date: str, operator: str, target: str) -> Optional[bool]:
-    """A date bound or range compared at the bound's precision; None for any other operator."""
-    target = _date_bound(target)
-    if operator in ('>', '<', '>=', '<='):
-        return compare_values(_at_bound_precision(commit_date, target), operator, target,
-                              options={'coerce_numeric': False})
+    """A date bound, equality or range compared at the bound's precision; None for any other
+    operator (`~=`, `!~`)."""
     if operator == '..' and '..' in target:
         low, high = (_date_bound(part) for part in target.split('..', 1))
         return ((not low or _at_bound_precision(commit_date, low) >= low)
                 and (not high or _at_bound_precision(commit_date, high) <= high))
+    target = _date_bound(target)
+    if operator in ('>', '<', '>=', '<='):
+        return compare_values(_at_bound_precision(commit_date, target), operator, target,
+                              options={'coerce_numeric': False})
+    if operator in ('=', '!='):
+        same = _at_bound_precision(commit_date, target) == target
+        return same if operator == '=' else not same
     return None
 
 
@@ -75,8 +113,9 @@ def compare(
     # restores correct behavior without touching the shared compare_values()
     # utility other adapters rely on for genuinely numeric fields.
     coerce_numeric = field_name != 'date'
-    if field_name == 'date' and isinstance(field_value, str) and isinstance(target_value, str):
-        day_aware = _compare_date(field_value, operator, target_value)
+    # A year bound parses as a number (`date>2026` is 2026): it is a period all the same.
+    if field_name == 'date' and isinstance(field_value, str) and isinstance(target_value, (str, int)):
+        day_aware = _compare_date(field_value, operator, str(target_value))
         if day_aware is not None:
             return day_aware
     return compare_values(
