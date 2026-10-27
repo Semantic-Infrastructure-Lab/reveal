@@ -247,7 +247,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'recipes': [
             {'goal': 'List database tables', 'query': 'reveal sqlite:///path/to/app.db', 'description': 'Schema overview with row counts', 'output_type': 'sqlite_database'},
             {'goal': 'Inspect a table', 'query': 'reveal sqlite:///path/to/app.db/users', 'description': 'Columns and types, indexes, foreign keys, row count, CREATE statement (schema only: sqlite:// returns no row data)', 'output_type': 'sqlite_table'},
-            {'goal': 'MySQL server overview', 'query': 'reveal mysql://user:pass@host', 'description': 'Server health: connections, InnoDB, replication, storage (the path names a section, e.g. mysql://host/databases, not a database)', 'output_type': 'mysql_health'},
+            {'goal': 'MySQL server overview', 'query': 'reveal mysql://user:pass@host', 'description': 'Server health: connections, InnoDB, replication, storage (the path names a section, e.g. mysql://host/databases, not a database)', 'output_type': 'mysql_server'},
             {'goal': 'Inspect an Excel workbook', 'query': 'reveal xlsx:///path/to/data.xlsx', 'description': 'Sheet names numbered for ?sheet=N, dimensions, row and column counts (reveal data.xlsx is the file view of the same sheets)', 'output_type': 'xlsx_workbook'},
             {'goal': 'Query a JSON file by path', 'query': 'json://config.json?flatten', 'description': 'Flatten to grep-able dotted-path format (also: ?schema for type structure, ?gron as an alias for ?flatten)', 'output_type': 'json_flatten'},
         ]
