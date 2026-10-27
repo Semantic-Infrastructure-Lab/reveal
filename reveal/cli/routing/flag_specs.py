@@ -102,6 +102,11 @@ def _has_key(resource: str, key: str) -> bool:
     return any(pair.partition('=')[0] == key for pair in resource.partition('?')[2].split('&'))
 
 
+def _query_value(resource: str, key: str) -> str:
+    return next((pair.partition('=')[2] for pair in resource.partition('?')[2].split('&')
+                 if pair.partition('=')[0] == key), '')
+
+
 def _declared(adapter_class: Any) -> Mapping:
     declared = getattr(adapter_class, 'CLI_QUERY_FLAGS', None)
     return declared if isinstance(declared, Mapping) else {}
@@ -170,7 +175,12 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
                 injected[key] = spec.option
                 delegate(args, spec.dest, key)
             # A key already in the URI wins; the ledger counts the flag as carried only
-            # when the URI value is the flag's own.
+            # when the URI value is the flag's own. Otherwise say whose value won, not that
+            # the adapter lacks the flag (BACK-1685).
+            elif _query_value(resource, key) != fragment.partition('=')[2]:
+                mark(args, spec.dest)
+                print(f"Note: {spec.option} ignored on {scheme}:// -- the URI already sets "
+                      f"{key}={_query_value(resource, key)}.", file=sys.stderr)
         elif spec.warn_unsupported:
             mark(args, spec.dest)
             aware = ', '.join(f'{s}://' for s in _supporting_schemes(spec.dest))
