@@ -344,7 +344,9 @@ class SQLiteAdapter(ResourceAdapter):
         """Get SQLite PRAGMA information.
 
         Returns:
-            Dict with page_size, page_count, journal_mode, encoding, foreign_keys
+            Dict with page_size, page_count, journal_mode, encoding. Not ``PRAGMA
+            foreign_keys``: that is a per-connection setting, never stored in the file, so on
+            reveal's own connection it was always off (BACK-2213).
 
         Raises:
             IOError: When PRAGMA queries fail (database may be corrupt)
@@ -354,7 +356,6 @@ class SQLiteAdapter(ResourceAdapter):
             'page_count': self._execute_single("PRAGMA page_count"),
             'journal_mode': self._execute_single("PRAGMA journal_mode"),
             'encoding': self._execute_single("PRAGMA encoding"),
-            'foreign_keys': self._execute_single("PRAGMA foreign_keys"),
         }
         for name, result in pragmas.items():
             if result is None:
@@ -367,7 +368,6 @@ class SQLiteAdapter(ResourceAdapter):
             'page_count': pragmas['page_count']['page_count'],
             'journal_mode': pragmas['journal_mode']['journal_mode'],
             'encoding': pragmas['encoding']['encoding'],
-            'foreign_keys': pragmas['foreign_keys']['foreign_keys'],
         }
 
     def _get_table_stats(self, tables: list) -> list:
@@ -498,7 +498,6 @@ class SQLiteAdapter(ResourceAdapter):
                     'total_pages': f"{pragma_info['page_count']} pages × {pragma_info['page_size']} bytes = {pragma_info['page_count'] * pragma_info['page_size'] / 1024 / 1024:.2f} MB",
                     'journal_mode': pragma_info['journal_mode'],
                     'encoding': pragma_info['encoding'],
-                    'foreign_keys_enabled': bool(pragma_info['foreign_keys'])
                 },
                 'statistics': {
                     'tables': sum(1 for t in table_stats if t['type'] == 'table'),
@@ -556,20 +555,20 @@ class SQLiteAdapter(ResourceAdapter):
         )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
-        """Get details about a specific table.
+        """Get details about a specific table or view.
 
         Args:
-            element_name: Table name to inspect
+            element_name: Table or view name to inspect (the overview lists both)
 
         Returns:
-            Dict containing table structure details
+            Dict containing table structure details; ``kind`` is ``table`` or ``view``
         """
-        # Verify table exists (bound parameter — BACK-897, see _quote_identifier)
-        table_check = self._execute_query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        # Verify it exists (bound parameter — BACK-897, see _quote_identifier)
+        master = self._execute_single(
+            "SELECT type, sql FROM sqlite_master WHERE type IN ('table', 'view') AND name=?",
             (element_name,)
         )
-        if not table_check:
+        if not master:
             return None
 
         quoted_name = self._quote_identifier(element_name)
@@ -629,12 +628,6 @@ class SQLiteAdapter(ResourceAdapter):
         count_result = self._execute_single(f'SELECT COUNT(*) as count FROM "{quoted_name}"')
         row_count = count_result['count'] if count_result else 0
 
-        # Get CREATE TABLE statement
-        create_sql = self._execute_single(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
-            (element_name,)
-        )
-
         return ResultBuilder.create(
             result_type='sqlite_table',
             source=self.db_path,
@@ -643,11 +636,12 @@ class SQLiteAdapter(ResourceAdapter):
             data={
                 'database': self.db_path,
                 'table': element_name,
+                'kind': master['type'],
                 'row_count': row_count,
                 'columns': columns,
                 'indexes': indexes,
                 'foreign_keys': foreign_keys,
-                'create_statement': create_sql['sql'] if create_sql else None,
+                'create_statement': master['sql'],
                 'next_steps': [
                     f"reveal sqlite://{self.db_path}              # Back to database overview",
                 ]
