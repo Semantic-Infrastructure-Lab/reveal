@@ -111,14 +111,13 @@ jobs:
             echo "Failing: complexity increased in $REGRESSIONS function(s)"
             reveal diff://git://origin/${{ github.base_ref }}/.:git://HEAD/. \
               --format json | \
-              jq '.diff.functions[] | select(.complexity_delta > 5) | {function: .name, type: .type, file: (.right.file // .left.file), delta: .complexity_delta}'
+              jq '.diff.functions[] | select(.complexity_delta > 5) | {function: .name, type: .type, file: .file, delta: .complexity_delta}'
             exit 1
           fi
 ```
 
-`file` is null for added and removed functions: the diff JSON records a path only on `modified`
-entries (`.left.file` / `.right.file`). To gate only on regressions of existing code, select
-`.type == "modified" and .complexity_delta > 5`.
+Every entry carries the `file` it came from (added and removed entries too). To gate only on
+regressions of existing code, select `.type == "modified" and .complexity_delta > 5`.
 
 ### Hotspot Tracking
 
