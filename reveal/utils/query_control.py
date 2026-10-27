@@ -73,6 +73,15 @@ class ResultControl:
                 or fields.get('limit', type(self).limit) is not None
                 or (fields.get('offset', type(self).offset) or 0) > 0)
 
+    def page_start(self) -> int:
+        """The ``?offset=`` the adapter's page starts at, without counting it as read.
+
+        The router asks it to continue a page it cut further (``meta.budget.next_cursor``,
+        BACK-2276); asking is not applying, as with ``any_set``.
+        """
+        fields = object.__getattribute__(self, '__dict__')
+        return fields.get('offset', type(self).offset) or 0
+
     def __getattribute__(self, name: str) -> Any:
         key = _FIELD_KEYS.get(name)
         if key is not None:
@@ -244,9 +253,13 @@ def apply_result_control(items: List[Dict[str, Any]], control: ResultControl) ->
 def apply_budget_limits(
     items: List[Dict[str, Any]],
     max_items: Optional[int] = None,
-    truncate_strings: Optional[int] = None
+    truncate_strings: Optional[int] = None,
+    offset: int = 0
 ) -> Dict[str, Any]:
     """Apply budget constraints to results and track truncation.
+
+    ``offset`` is where ``items`` starts in the whole answer (the request's ``?offset=``):
+    the cut's ``next_cursor`` continues from there, not from 0 (BACK-2276).
 
     Returns:
         Dictionary with 'items' and 'meta' keys containing truncation metadata
@@ -273,7 +286,7 @@ def apply_budget_limits(
     }
 
     if truncated:
-        meta['next_cursor'] = f'offset={len(result_items)}'
+        meta['next_cursor'] = f'offset={offset + len(result_items)}'
 
     return {
         'items': result_items,

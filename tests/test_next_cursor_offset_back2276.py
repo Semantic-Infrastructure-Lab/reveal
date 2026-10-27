@@ -108,3 +108,15 @@ def test_budget_limits_offset_unit():
     assert apply_budget_limits(items, max_items=3)['meta']['next_cursor'] == 'offset=3'
     assert apply_budget_limits(items, max_items=3, offset=7)['meta']['next_cursor'] == 'offset=10'
     assert 'next_cursor' not in apply_budget_limits(items, max_items=20, offset=7)['meta']
+
+
+def test_page_start_is_not_a_read():
+    """The router asking where the page starts must not tell the flag ledger the adapter
+    used ``?offset=``: a view that ignores it still gets its "no effect" note."""
+    from reveal.utils.query_control import parse_result_control
+    _, control = parse_result_control('offset=4&limit=2')
+    vars(control)['_reads'] = reads = set()
+    assert control.page_start() == 4
+    assert reads == set()
+    assert control.offset == 4 and reads == {'offset'}  # a real read still counts
+    assert parse_result_control('')[1].page_start() == 0
