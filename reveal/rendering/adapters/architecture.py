@@ -140,6 +140,11 @@ def architecture_diff_text(report: Dict[str, Any]) -> str:
     deltas = report['deltas']
     lines.append(f"Architecture Diff: {report['path']}")
     lines.append(f"  {report['base_ref']} -> {report['head_ref']}\n")
+    if report['analysis'].get('basis') == 'identical_tree':
+        # Proved equal by tree id, so neither side was analyzed: no measured-looking zeros (BACK-2282).
+        lines.append(f"No architectural change: the working tree under {report['path']} "
+                     f"is identical to {report['base_ref']}, so neither snapshot was analyzed.")
+        return '\n'.join(lines) + '\n'
     lines += _render_edge_rule(report)
 
     fan_in = deltas['fan_in']

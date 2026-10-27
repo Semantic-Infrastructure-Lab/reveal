@@ -566,8 +566,10 @@ def run_architecture_diff(
 
     `head_ref` is a display label only (the live working tree is always the
     head snapshot per BACK-441's chosen flag shape — see module docstring);
-    it defaults to 'HEAD' and is not itself resolved/materialized.
+    it defaults to 'HEAD' and is not itself resolved/materialized. The report names
+    ``path`` as the caller spelled it (BACK-2282).
     """
+    spelling = path
     path = path.resolve()
     repo = _open_repo(path)
     subpath = _repo_relpath(repo, path)
@@ -576,7 +578,8 @@ def run_architecture_diff(
 
     if _fast_exit_possible(repo, base_commit, subpath):
         return _comparison_report(path, base_ref, head_ref, _empty_deltas(top_n),
-                                  {'complete': True, 'basis': 'identical_tree', 'snapshots': {}}, [])
+                                  {'complete': True, 'basis': 'identical_tree', 'snapshots': {}}, [],
+                                  spelling=spelling)
 
     from ..utils.exclusions import remapped_exclusion_scope
     from ..utils.gitignore import gitignore_scope
@@ -603,7 +606,8 @@ def run_architecture_diff(
     # Both sides are counted by one rule (the same formatters and defaults), so the answer states it once.
     return _comparison_report(path, base_ref, head_ref, deltas, analysis,
                               [*base_meta, *_snapshot_meta(head_raw, 'head')], confidence=confidence,
-                              edge_rules=head_raw['edge_rules'] if deltas is not None else None)
+                              edge_rules=head_raw['edge_rules'] if deltas is not None else None,
+                              spelling=spelling)
 
 
 def _diagnostic_path(value: str, root: Path) -> str:
@@ -644,16 +648,18 @@ def _snapshot_meta(raw: Dict[str, Any], side: str) -> List[Tuple[str, Dict[str, 
 def _comparison_report(path: Path, base_ref: str, head_ref: str, deltas: Optional[Dict[str, Any]],
                        analysis: Dict[str, Any], diagnostics: List[Tuple[str, Dict[str, Any]]],
                        *, confidence: Optional[float] = None,
-                       edge_rules: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                       edge_rules: Optional[Dict[str, Any]] = None,
+                       spelling: Optional[Path] = None) -> Dict[str, Any]:
     from ..utils.results import ResultBuilder
-    from ..utils.path_utils import to_posix
+    from ..utils.path_utils import as_spelled
     from ..reveal_types import CONTRACT_VERSION
-    data = {'base_ref': base_ref, 'head_ref': head_ref, 'path': to_posix(path),
+    shown = as_spelled(path, spelling if spelling is not None else path)
+    data = {'base_ref': base_ref, 'head_ref': head_ref, 'path': shown,
             'deltas': deltas, 'analysis': analysis, **(edge_rules or {})}
     if not analysis['complete']:
         data['error'] = 'Architecture comparison unavailable: required snapshot evidence is incomplete'
     return cast(Dict[str, Any], ResultBuilder.create(
-        result_type='architecture_diff', source=to_posix(path), data=data, contract_version=CONTRACT_VERSION,
+        result_type='architecture_diff', source=shown, data=data, contract_version=CONTRACT_VERSION,
         warnings=cast(List[WarningEntry], [entry for kind, entry in diagnostics if kind == 'warnings']) or None,
         errors=cast(List[WarningEntry], [entry for kind, entry in diagnostics if kind == 'errors']) or None,
         confidence=confidence,
