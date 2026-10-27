@@ -6,7 +6,7 @@ category: guide
 # hotspots:// Adapter Guide
 
 `hotspots://` identifies the files and functions most likely to need
-attention: low-quality/high-complexity files (via `stats://`) and
+attention: low-quality/high-complexity files (via `metrics://`) and
 high-cyclomatic-complexity functions (via `ast://`). It composes those two
 existing adapters rather than running an independent scan.
 
@@ -51,8 +51,9 @@ when no explicit `top` is present; explicit `top` wins. The subcommand rejects
 
 ## Reading The Output
 
-`file_hotspots` is a ranked list from `stats://` (quality score, hotspot
-score, issues, line count). `function_hotspots` is a ranked list from
+`file_hotspots` is a ranked list from `metrics://` (`quality_score`,
+`hotspot_score`, `issues`, and `details` with `lines`, `functions`, `complexity`,
+`commit_count`). `function_hotspots` is a ranked list from
 `ast://`'s complexity filter, each annotated with a heuristic
 `has_test_hint` — a name-matching guess (does a test for this name exist,
 by the language's own convention: Python `test_<name>`, Go `TestName` in
@@ -75,7 +76,7 @@ predicate even when `top` cuts the list. `min_complexity` and the two only-flags
 still define the requested population. Both only-flags may coexist, leaving both
 rankings empty while retaining the statistics coverage scan.
 
-File quality counts file-local check rules only, the same count `stats://` and `overview`
+File quality counts file-local check rules only, the same count `metrics://` and `overview`
 print; `meta.issue_count` and the text footer name the rule set, and cross-file rules run under
 `reveal check`. A scan cap on a cross-file rule neither changes a score nor fails the scan
 ([what the issue count counts](METRICS_ADAPTER_GUIDE.md#what-the-issue-count-counts)).
@@ -116,7 +117,7 @@ Mixed URI batches retain their legacy execution policy and reject `--fail-on`.
 
 ## Limits
 
-- Composed, not independent: results are exactly as good as `stats://`'s
+- Composed, not independent: results are exactly as good as `metrics://`'s
   quality scoring and `ast://`'s complexity metric for each language.
 - `has_test_hint` is a naming heuristic (does a plausibly-named test exist?)
   — it does not run coverage tooling and can both over- and under-count.
@@ -127,5 +128,5 @@ Mixed URI batches retain their legacy execution policy and reject `--fail-on`.
 ## See Also
 
 - `reveal help://schemas/hotspots` - JSON schema
-- `reveal 'stats://<dir>?hotspots=true'` - the file-quality data behind `file_hotspots`
+- `reveal 'metrics://<dir>?hotspots=true'` - the file-quality data behind `file_hotspots`
 - `reveal 'ast://<dir>?complexity>N'` - the function-complexity data behind `function_hotspots`

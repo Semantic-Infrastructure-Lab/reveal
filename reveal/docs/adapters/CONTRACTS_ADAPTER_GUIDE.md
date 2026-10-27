@@ -19,7 +19,7 @@ reveal contracts . --format json
 reveal contracts . --abstract-only
 reveal contracts . --no-implementations
 reveal contracts . --impls 0
-reveal contracts . --output json=PATH contracts.json
+reveal contracts . --output json=contracts.json
 
 reveal 'contracts://src'
 reveal 'contracts://.?abstract_only=true'
@@ -54,7 +54,7 @@ the filename as an argument.
 | Python | `ABC`/`ABCMeta`, `Protocol`, `TypedDict`, `@dataclass`, Pydantic `BaseModel` | Declared via inheritance |
 | TypeScript/JS, Java, C#, PHP, Swift, Kotlin | `interface`, abstract classes, type aliases | Declared via `extends`/`implements` |
 | Ruby | `module` (mixin) | Classes that `include`/`extend`/subclass it |
-| Go | `interface` | *Computed structurally* — a struct implements an interface when its method set is a superset (embedded interfaces resolved transitively); marker/empty interfaces are excluded from matching since everything trivially satisfies them |
+| Go | `interface` | *Computed structurally* — a struct implements an interface when it has a method of every name and signature the interface declares (embedded interfaces resolved transitively); marker/empty interfaces are excluded from matching since everything trivially satisfies them |
 | Rust | `trait` | Declared via `impl Trait for Type` |
 | C++ | Abstract class (≥1 pure virtual method) | Declared via inheritance |
 
@@ -138,10 +138,12 @@ exit policy and reject `--fail-on` until separately qualified.
 
 - Static analysis only — dynamically registered contracts (e.g. duck-typed
   protocols enforced only at runtime) are not detected.
-- Go's structural matching is best-effort: it compares method-name sets, not
-  full signatures.
-- Confidence is `medium` — treat results as an inventory to review, not a
-  compliance-grade contract registry.
+- Go's structural matching is best-effort: it compares method names and the
+  syntactic text of parameter and return types, so type aliases, generics and
+  cross-package promoted methods can be missed (see `nav_contracts_go.py`).
+- `meta.confidence` is a fixed `0.7` (`null` when discovery or coverage
+  failed, with an `E_CONTRACTS_DISCOVERY`/`E_CONTRACTS_COVERAGE` error): treat results as an inventory to review, not a compliance-grade
+  contract registry.
 
 ## See Also
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
+from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -414,6 +415,24 @@ def _relpath(file_str: str, base_path: Optional[Path]) -> str:
     return to_relative_display(file_str, base_path)
 
 
+def _target_relative(value: Optional[str], base_path: Path) -> Optional[str]:
+    """One engine path, spelled relative to the target.
+
+    For a relative target the engine's relative paths are walk paths, relative to
+    the cwd (``sub/pkg/core.py`` for target ``sub``); for an absolute target they
+    are already target-relative. Read as target-relative, the former stayed
+    ``sub/pkg/core.py`` and next_commands spelled it under the target again
+    (``reveal sub/sub/pkg/core.py``; BACK-2213 lane C B5).
+    """
+    from ..utils.path_utils import to_relative_display
+    if not value:
+        return value
+    path = Path(value)
+    if not path.is_absolute() and not base_path.is_absolute():
+        path = path.resolve()
+    return to_relative_display(path, base_path)
+
+
 def _relativize_architecture_paths(report: Dict[str, Any], base_path: Path) -> None:
     """Relativize the file-path fields the text renderer already relativizes
     via `_relpath` (_render_entry_points/_render_core_abstractions/etc), but
@@ -430,11 +449,7 @@ def _relativize_architecture_paths(report: Dict[str, Any], base_path: Path) -> N
     for the separate `risks[]` fix (must run earlier, before
     `_build_next_commands()`). Mutates in place.
     """
-    from ..utils.path_utils import to_relative_display
-
-    def rel(value: Optional[str]) -> Optional[str]:
-        return to_relative_display(value, base_path) if value else value
-
+    rel = partial(_target_relative, base_path=base_path)
     facts = report.get('facts', {})
     for key in ('entry_points', 'core_abstractions'):
         for entry in facts.get(key, []):
@@ -458,11 +473,7 @@ def _relativize_risks(risks: List[Dict[str, Any]], base_path: Path) -> None:
     these target-relative files under the target as the user named it
     (BACK-1366). Mutates in place.
     """
-    from ..utils.path_utils import to_relative_display
-
-    def rel(value: Optional[str]) -> Optional[str]:
-        return to_relative_display(value, base_path) if value else value
-
+    rel = partial(_target_relative, base_path=base_path)
     for risk in risks:
         if risk.get('file'):
             risk['file'] = rel(risk['file'])

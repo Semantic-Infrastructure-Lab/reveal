@@ -6,7 +6,7 @@ import os
 import re
 import sqlite3
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -65,6 +65,15 @@ def _disclose_unrecorded_exec_scripts(result: Dict[str, Any], records: List[Dict
                         f"record one by one; the shell count omits them (scripts and their output "
                         f"are in /tools)."),
         })
+
+
+def _session_lookup_error(session_id: str, candidates: List[str]) -> str:
+    """The error for a session id that matched no session, or several (a shared prefix)."""
+    if not candidates:
+        return f'Session not found: {session_id}'
+    more = ', ...' if len(candidates) > 5 else ''
+    return (f'Ambiguous session prefix {session_id}: matches '
+            f'{", ".join(candidates[:5])}{more}; use more characters')
 
 
 def _resolve_codex_home() -> Path:
@@ -146,10 +155,15 @@ class CodexAdapter(ResourceAdapter):
     # SQLite helpers
     # ------------------------------------------------------------------
 
-    def _find_session_row(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Look up a session row by full or prefix UUID."""
+    def _find_session_row(self, session_id: str) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+        """Look up a session row by full or prefix UUID.
+
+        Returns ``(row, [])`` for a unique match, ``(None, [])`` for none, and
+        ``(None, candidate_ids)`` when a prefix matches several sessions: picking
+        one of them silently opened an arbitrary session (BACK-2213 lane C B3).
+        """
         if not self.CODEX_DB.exists():
-            return None
+            return None, []
         try:
             conn = sqlite3.connect(str(self.CODEX_DB))
             conn.row_factory = sqlite3.Row
@@ -160,16 +174,18 @@ class CodexAdapter(ResourceAdapter):
                     (session_id,)
                 ).fetchone()
                 if row is None and len(session_id) < 36:
-                    # Prefix match
-                    row = conn.execute(
-                        f'SELECT * FROM threads WHERE id LIKE ? AND {_USER_FILTER} LIMIT 1',
+                    rows = conn.execute(
+                        f'SELECT * FROM threads WHERE id LIKE ? AND {_USER_FILTER} ORDER BY id LIMIT 6',
                         (session_id + '%',)
-                    ).fetchone()
-                return dict(row) if row else None
+                    ).fetchall()
+                    if len(rows) > 1:
+                        return None, [r['id'] for r in rows]
+                    row = rows[0] if rows else None
+                return (dict(row) if row else None), []
             finally:
                 conn.close()
         except sqlite3.Error:
-            return None
+            return None, []
 
     # ------------------------------------------------------------------
     # JSONL loading
@@ -288,11 +304,11 @@ class CodexAdapter(ResourceAdapter):
             base['error'] = f'Codex DB not found: {self.CODEX_DB}'
             return base
 
-        session_row = self._find_session_row(session_id)
+        session_row, candidates = self._find_session_row(session_id)
         if session_row is None:
             base = self._get_contract_base()
             base['type'] = 'codex_error'
-            base['error'] = f'Session not found: {session_id}'
+            base['error'] = _session_lookup_error(session_id, candidates)
             return base
 
         jsonl_path = self._find_jsonl_for_session(session_row)
@@ -517,7 +533,7 @@ class CodexAdapter(ResourceAdapter):
                 {'type': 'codex_tools', 'description': 'Each tool call paired with its output'},
                 {'type': 'codex_errors', 'description': 'Error/warning events'},
                 {'type': 'codex_shell', 'description': 'Shell commands with exit codes and output'},
-                {'type': 'codex_tokens', 'description': 'Per-turn token breakdown'},
+                {'type': 'codex_tokens', 'description': 'Per-request token breakdown (one row per token_count event)'},
                 {'type': 'codex_workflow', 'description': 'Tools + shell interleaved chronologically'},
                 {'type': 'codex_timeline', 'description': 'Full chronological event stream'},
                 {'type': 'codex_goal', 'description': 'Thread goal objective + token budget'},
@@ -536,7 +552,7 @@ class CodexAdapter(ResourceAdapter):
                 'since': 'Lower-bound date filter (ISO 8601 or "today") on session updated_at — codex://sessions/?filter=<term>&since=<date> or ?search=<term>&since=<date>',
                 'until': 'Upper-bound date filter (ISO 8601) on session updated_at, pairs with ?since= — codex://sessions/?filter=<term>&since=<date>&until=<date>',
                 'last': 'Last agent message only, for fast session recovery — codex://<UUID>?last',
-                'tokens': 'Per-turn token breakdown (input/output/cached/reasoning) — codex://<UUID>?tokens',
+                'tokens': 'Per-request token breakdown (input/output/cached/reasoning), one row per API call — codex://<UUID>?tokens',
                 'goal': 'Thread goal objective + token budget from goals_1.sqlite — codex://<UUID>?goal',
                 'key': 'Dot-path key lookup for codex://config — applied after secret masking — codex://config?key=<dotpath>',
             },
@@ -578,7 +594,7 @@ class CodexAdapter(ResourceAdapter):
                 'codex://sessions/?search=<term>&since=<date>      # content search scoped by date\n'
                 'codex://<UUID>                                     # session overview\n'
                 'codex://<UUID>?last                                # last agent message\n'
-                'codex://<UUID>?tokens                              # per-turn token breakdown\n'
+                'codex://<UUID>?tokens                              # per-request token breakdown\n'
                 'codex://<UUID>?goal                                # thread goal (goals_1.sqlite)\n'
                 'codex://<UUID>/messages                            # user + agent turns\n'
                 'codex://<UUID>/tools                               # tool calls paired with their outputs\n'
@@ -608,7 +624,7 @@ class CodexAdapter(ResourceAdapter):
                 {'uri': 'codex://sessions/?search=authentication&since=2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date'},
                 {'uri': 'codex://019e5cc5', 'description': 'Session overview: turns, tool calls, tokens, duration'},
                 {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern'},
-                {'uri': 'codex://019e5cc5?tokens', 'description': 'Per-turn token breakdown (input/output/cached/reasoning)'},
+                {'uri': 'codex://019e5cc5?tokens', 'description': 'Per-request token breakdown (input/output/cached/reasoning)'},
                 {'uri': 'codex://019e5cc5?goal', 'description': 'Thread goal objective + token budget (goals_1.sqlite)'},
                 {'uri': 'codex://019e5cc5/messages', 'description': 'All user and agent turns in order'},
                 {'uri': 'codex://019e5cc5/tools', 'description': 'Paired function_call + output events'},
@@ -635,8 +651,8 @@ class CodexAdapter(ResourceAdapter):
                 'Exchanges view — each user prompt paired with the agent\'s next reply (BACK-943)',
                 'Single-record access by raw JSONL index, negative indexing supported (BACK-943)',
                 'SQLite-backed session listing (fast, no JSONL scan needed for list/search)',
-                'UUID prefix lookup — type first 7+ hex chars instead of full UUID',
-                'Per-turn token breakdown with input/output/reasoning/cached split',
+                'UUID prefix lookup — a unique prefix of 7+ hex chars instead of the full UUID',
+                'Per-request token breakdown with input/output/reasoning/cached split',
                 'Full-text JSONL content search across all sessions',
                 'Shell command tracking with exit codes, output, and duration',
                 'Tool call pairing (function_call + function_call_output)',
@@ -651,7 +667,7 @@ class CodexAdapter(ResourceAdapter):
             'notes': [
                 'Sessions stored in ~/.codex/sessions/ as per-session JSONL files',
                 'SQLite index at ~/.codex/state_5.sqlite — most queries start here',
-                'UUID prefix: 7+ hex chars uniquely identify a session',
+                'UUID prefix: a unique 7+ hex-char prefix identifies a session; an ambiguous one is an error listing the matches',
                 'Subagent sessions filtered out — only user-visible threads shown',
                 'Override paths: REVEAL_CODEX_HOME, REVEAL_CODEX_DB env vars',
                 'token_count events give per-request token deltas from the API',

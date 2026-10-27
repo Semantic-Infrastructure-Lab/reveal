@@ -8,7 +8,7 @@ Ruff F401) and understood Python/JS/Go/Rust suppression comments, but flagged a
 used `import * as fs from 'fs'` as an unused `*`. Both now call this module.
 """
 
-from typing import TYPE_CHECKING, FrozenSet, List, Set
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Set
 
 if TYPE_CHECKING:  # types.py imports this module for ImportGraph.find_unused_imports
     from .types import ImportStatement
@@ -110,3 +110,15 @@ def unused_entries(stmt: 'ImportStatement', symbols_used: Set[str],
     if name in symbols_used or name in exports:
         return []
     return [name or '*']
+
+
+def describe_unused(record: Dict[str, Any]) -> str:
+    """One unused-import row's label: the module, plus the unused names of a partly-used import.
+
+    Shared by `imports://?unused` and the `deps` dashboard. Whole-module imports
+    (`import os`, Go `"net/http"`, a JS default import) report their bound name in
+    `unused_names`; appending it printed `os.os` in the dashboard (BACK-2213 B1).
+    """
+    names = record.get('unused_names') or []
+    partial = names and record.get('names') and len(names) < len(record['names'])
+    return f"{record['module']} (unused: {', '.join(names)})" if partial else str(record['module'])
