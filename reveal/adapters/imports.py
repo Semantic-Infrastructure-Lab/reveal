@@ -451,6 +451,20 @@ COHESION_DECLINED_RULE = (
     'would read ~0 whatever the structure; other languages keep their number')
 
 
+def _component_cohesion(internal: int, total: int, files) -> Optional[float]:
+    """internal / (internal + outgoing), or None where the component's language makes it meaningless."""
+    if _cohesion_declined(files):
+        return None
+    return internal / total if total > 0 else 0.0
+
+
+def _cohesion_fields(cohesion: Optional[float]) -> Dict[str, Any]:
+    """The row's cohesion, rounded, or its decline: ``cohesion: None`` and ``cohesion_reason``."""
+    if cohesion is None:
+        return {'cohesion': None, 'cohesion_reason': COHESION_DECLINED_REASON}
+    return {'cohesion': round(cohesion, 3)}
+
+
 def _cohesion_declined(files) -> bool:
     """Whether a component's files are mostly (strictly more than half) in a same-package-visibility language."""
     same = sum(1 for f in files if conventions_for_path(str(f)).same_package_visibility)
@@ -2633,10 +2647,7 @@ class ImportsAdapter(ResourceAdapter):
                         incoming += 1
 
             total_out = internal + outgoing
-            cohesion: Optional[float] = internal / total_out if total_out > 0 else 0.0
-            declined = _cohesion_declined(file_set)
-            if declined:
-                cohesion = None
+            cohesion = _component_cohesion(internal, total_out, file_set)
             # BACK-1243: break ties deterministically -- max() over a dict
             # with equal-count keys otherwise depends on hash-seed-salted
             # dict iteration order (PYTHONHASHSEED), varying top_bridge
@@ -2654,11 +2665,9 @@ class ImportsAdapter(ResourceAdapter):
                 'internal': internal,
                 'outgoing': outgoing,
                 'incoming': incoming,
-                'cohesion': None if cohesion is None else round(cohesion, 3),
+                **_cohesion_fields(cohesion),
                 'top_bridge': top_bridge,
             }
-            if declined:
-                component['cohesion_reason'] = COHESION_DECLINED_REASON
             components.append(component)
 
         # Sort: measured cohesion descending (best-structured first), files descending as tiebreak.

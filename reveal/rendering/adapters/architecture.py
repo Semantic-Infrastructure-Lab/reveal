@@ -165,20 +165,25 @@ def architecture_diff_text(report: Dict[str, Any]) -> str:
             lines.append(f"  - resolved:   {', '.join(group)}")
         lines.append('')
 
-    coupling = deltas['component_coupling']
-    if coupling:
-        lines.append(f"Component coupling changes ({len(coupling)})")
-        for c in coupling:
-            base = 'n/a' if c.get('declined_on') == 'base' else c['base_cohesion']
-            head = 'n/a' if c.get('declined_on') == 'head' else c['head_cohesion']
-            lines.append(f"  {c['component']:<44}  {base} -> {head}  ({_signed(c['change'])})")
-        lines.append('')
+    lines += _coupling_lines(deltas['component_coupling'])
 
     centroid = deltas['complexity_centroid']
     lines.append(f"Complexity centroid (top {centroid['top_n']}): {centroid['base']} -> {centroid['head']}  ({_signed(centroid['change'])})")
 
     lines.extend(_diff_entry_point_lines(deltas['entry_points']))
     return '\n'.join(lines) + '\n'
+
+
+def _coupling_lines(coupling: List[Dict[str, Any]]) -> List[str]:
+    """Component cohesion changes; a side whose cohesion is declined reads n/a (BACK-1428)."""
+    if not coupling:
+        return []
+    lines = [f"Component coupling changes ({len(coupling)})"]
+    for c in coupling:
+        base = 'n/a' if c.get('declined_on') == 'base' else c['base_cohesion']
+        head = 'n/a' if c.get('declined_on') == 'head' else c['head_cohesion']
+        lines.append(f"  {c['component']:<44}  {base} -> {head}  ({_signed(c['change'])})")
+    return [*lines, '']
 
 
 def _diff_entry_point_lines(eps: Dict[str, List[str]]) -> List[str]:

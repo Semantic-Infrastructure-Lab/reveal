@@ -390,6 +390,22 @@ def _dir_relpath_or_none(dir_str: str, root: Path) -> Optional[str]:
     return rel.as_posix() if str(rel) != '.' else '.'  # noqa: V026 -- compares against '.', never rendered
 
 
+def _component_cohesion(components: List[Dict[str, Any]], root: Path) -> Tuple[Dict[str, float], Set[str]]:
+    """Cohesion per component directory, and the directories whose cohesion is declined (same-package-visibility
+    language, BACK-1428): a declined value is not a number and never 0.0."""
+    cohesion: Dict[str, float] = {}
+    declined: Set[str] = set()
+    for c in components:
+        rel = _dir_relpath_or_none(c['component'], root)
+        if rel is None:
+            continue
+        if c.get('cohesion') is None and c.get('cohesion_reason'):
+            declined.add(rel)
+            continue
+        cohesion[rel] = c.get('cohesion', 0.0)
+    return cohesion, declined
+
+
 def _normalize_snapshot(raw: Dict[str, Any], top_n: int) -> Dict[str, Any]:
     root: Path = raw['root']
 
@@ -408,16 +424,7 @@ def _normalize_snapshot(raw: Dict[str, Any], top_n: int) -> Dict[str, Any]:
         if rels:
             circular_groups.append(frozenset(rels))
 
-    component_cohesion: Dict[str, float] = {}
-    component_declined: Set[str] = set()  # BACK-1428: declined cohesion is not a number, never 0.0
-    for c in raw['components']:
-        rel = _dir_relpath_or_none(c['component'], root)
-        if rel is None:
-            continue
-        if c.get('cohesion') is None and c.get('cohesion_reason'):
-            component_declined.add(rel)
-            continue
-        component_cohesion[rel] = c.get('cohesion', 0.0)
+    component_cohesion, component_declined = _component_cohesion(raw['components'], root)
 
     entry_points: Set[str] = {
         rel for rel in (_relpath_or_none(f, root) for f in raw['entry_points']) if rel is not None
