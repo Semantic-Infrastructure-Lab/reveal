@@ -107,6 +107,17 @@ def _query_value(resource: str, key: str) -> str:
                  if pair.partition('=')[0] == key), '')
 
 
+def _note_uri_wins(args: Any, spec: Any, scheme: str, resource: str, key: str, fragment: str) -> None:
+    """The URI already sets *key*: when its value differs from the flag's, say whose value won,
+    not that the adapter lacks the flag (BACK-1685). Equal values need no note."""
+    uri_value = _query_value(resource, key)
+    if uri_value == fragment.partition('=')[2]:
+        return
+    mark(args, spec.dest)
+    print(f"Note: {spec.option} ignored on {scheme}:// -- the URI already sets {key}={uri_value}.",
+          file=sys.stderr)
+
+
 def _declared(adapter_class: Any) -> Mapping:
     declared = getattr(adapter_class, 'CLI_QUERY_FLAGS', None)
     return declared if isinstance(declared, Mapping) else {}
@@ -174,13 +185,10 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
                 resource = f"{resource}{'&' if '?' in resource else '?'}{fragment}"
                 injected[key] = spec.option
                 delegate(args, spec.dest, key)
-            # A key already in the URI wins; the ledger counts the flag as carried only
-            # when the URI value is the flag's own. Otherwise say whose value won, not that
-            # the adapter lacks the flag (BACK-1685).
-            elif _query_value(resource, key) != fragment.partition('=')[2]:
-                mark(args, spec.dest)
-                print(f"Note: {spec.option} ignored on {scheme}:// -- the URI already sets "
-                      f"{key}={_query_value(resource, key)}.", file=sys.stderr)
+            else:
+                # A key already in the URI wins; the ledger counts the flag as carried only
+                # when the URI value is the flag's own.
+                _note_uri_wins(args, spec, scheme, resource, key, fragment)
         elif spec.warn_unsupported:
             mark(args, spec.dest)
             aware = ', '.join(f'{s}://' for s in _supporting_schemes(spec.dest))
