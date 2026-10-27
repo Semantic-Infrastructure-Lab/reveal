@@ -41,7 +41,7 @@ _SCHEMA_OUTPUT_TYPES = [
     },
     {
         'type': 'sqlite_table',
-        'description': 'Table schema with columns, types, and indices',
+        'description': 'Table or view schema with columns, types, indexes and foreign keys',
         'schema': {
             'type': 'object',
             'properties': {
@@ -49,10 +49,15 @@ _SCHEMA_OUTPUT_TYPES = [
                 'type': {'type': 'string', 'const': 'sqlite_table'},
                 'source': {'type': 'string'},
                 'source_type': {'type': 'string', 'const': 'table'},
-                'table_name': {'type': 'string'},
+                'database': {'type': 'string'},
+                'table': {'type': 'string'},
+                'kind': {'type': 'string', 'enum': ['table', 'view']},
                 'columns': {'type': 'array'},
-                'indices': {'type': 'array'},
-                'row_count': {'type': 'integer'}
+                'indexes': {'type': 'array'},
+                'foreign_keys': {'type': 'array'},
+                'create_statement': {'type': 'string'},
+                'row_count': {'type': 'integer'},
+                'next_steps': {'type': 'array'}
             }
         }
     },
