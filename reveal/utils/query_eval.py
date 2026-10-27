@@ -167,15 +167,26 @@ def compare_values(
     return _dispatch_comparison(field_value, operator, target_value, opts)
 
 
+def presence_matches(op: str, field_value: Any) -> Optional[bool]:
+    """The answer for a presence filter: ``!field`` (absent or empty) or ``?field`` (present).
+
+    None when ``op`` is not a presence operator, so the caller compares values instead. One
+    definition for every adapter that resolves field values its own way (json dotted paths).
+    """
+    if op == '!':
+        return field_value is None or field_value == ''
+    if op == '?':
+        return field_value is not None and field_value != ''
+    return None
+
+
 def apply_filter(item: Dict[str, Any], filter: QueryFilter) -> bool:
     """Apply a single filter to an item."""
     field_value = item.get(filter.field)
 
-    if filter.op == '!':
-        return field_value is None or field_value == ''
-
-    if filter.op == '?':
-        return field_value is not None and field_value != ''
+    presence = presence_matches(filter.op, field_value)
+    if presence is not None:
+        return presence
 
     return compare_values(field_value, filter.op, filter.value)
 

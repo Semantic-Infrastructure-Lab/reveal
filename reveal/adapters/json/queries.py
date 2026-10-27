@@ -3,6 +3,7 @@
 from typing import Any, List, Dict, Set
 
 from ...utils.query import compare_values, ResultControl, unknown_sort_field_warning
+from ...utils.query_eval import presence_matches
 
 
 def get_field_value(obj: Any, field: str) -> Any:
@@ -74,13 +75,10 @@ def matches_all_filters(obj: Any, query_filters: list, get_field_value_func, com
 
     for qf in query_filters:
         field_value = get_field_value_func(obj, qf.field)
-        if qf.op == '!':
-            if field_value is not None and field_value != '':
-                return False
-        elif qf.op == '?':
-            if field_value is None or field_value == '':
-                return False
-        elif not compare_func(field_value, qf.op, qf.value):
+        matched = presence_matches(qf.op, field_value)
+        if matched is None:
+            matched = compare_func(field_value, qf.op, qf.value)
+        if not matched:
             return False
 
     return True
