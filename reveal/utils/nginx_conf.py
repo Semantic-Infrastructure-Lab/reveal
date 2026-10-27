@@ -4,7 +4,8 @@
 it with regexes over the whole text. Each had its own idea of what a comment, a quoted
 string and a block are, so a commented-out ``# server {`` became a server in one, a
 ``"}"`` inside a quoted value closed a block early in the other, and the two disagreed on
-which locations exist (BACK-1725). They now route through the functions here.
+which locations exist (BACK-1725). They now route through the functions here, as does the
+http{}-level lookup the N002/N008/N009 rules share (``top_level_statements``, BACK-2280).
 
 The grammar: ``#`` starts a comment unless inside a quoted string; a string is quoted with
 ``'`` or ``"`` and ``\\`` escapes the next character; a directive ends at ``;`` and a block
@@ -139,3 +140,20 @@ def block_statements(lines: List[str], start: int) -> Iterator[Tuple[int, int, s
                     return
             elif opened and text:
                 yield index, depth, text
+
+
+def top_level_statements(text: str) -> List[str]:
+    """The directives of *text* outside every block, without their ``;``. For the body of an
+    ``http`` block (``find_blocks(text, 'http')``) these are the http-level directives every
+    server inherits; those of its ``server``, ``location`` and ``map`` blocks are not
+    (BACK-2280). Comments are ignored and braces inside quoted strings are text."""
+    found: List[str] = []
+    depth = 0
+    for kind, statement in _statement_events(strip_comments(text)):
+        if kind == '{':
+            depth += 1
+        elif kind == '}':
+            depth -= 1
+        elif depth == 0 and statement:
+            found.append(statement)
+    return found
