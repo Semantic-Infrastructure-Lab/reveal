@@ -1,6 +1,6 @@
 """Query parsing and formatting for AST adapter."""
 
-from typing import Dict, Any
+from typing import Any, Dict, List
 from ...utils.query import parse_query_filters
 from ...utils.query_parser import note_query_parsed
 
@@ -32,11 +32,34 @@ def parse_equality_value(key: str, value: str) -> Dict[str, Any]:
         return {'op': '==', 'value': value}
 
 
+def _split_alternatives(value: Any) -> List[str]:
+    separator = '|' if '|' in str(value) else ','
+    return [t.strip() for t in str(value).split(separator)]
+
+
+def _condition(op: str, value: Any) -> Dict[str, Any]:
+    """The filter condition of one parsed ``key op value``."""
+    has_alternatives = '|' in str(value) or ',' in str(value)
+    if op == '=' and has_alternatives:
+        # OR logic for any field: type=class|function, name=main|init
+        return {'op': 'in', 'value': _split_alternatives(value)}
+    if op == '*':
+        # Wildcard becomes glob; name=*run*|*process* matches any pattern
+        return {'op': 'glob', 'value': _split_alternatives(value) if has_alternatives else value}
+    if op == '=':
+        # The unified parser leaves "lines=10..100" as op '=' with value '10..100'
+        if isinstance(value, str) and '..' in value:
+            return {'op': '..', 'value': value}
+        # AST adapter historically used '==' for all equality checks
+        return {'op': '==', 'value': value}
+    # Standard operators (>, <, >=, <=, !=, ~=, ..)
+    return {'op': op, 'value': value}
+
+
 def parse_query(query_string: str) -> Dict[str, Any]:
     """Parse query string into filter conditions.
 
-    Now uses unified query parser from utils.query while maintaining
-    backward compatibility with existing filter format.
+    Uses the unified query parser from utils.query and keys its conditions by field.
 
     Args:
         query_string: URL query string (e.g., "lines>50&type=function")
@@ -47,46 +70,7 @@ def parse_query(query_string: str) -> Dict[str, Any]:
     if not query_string:
         return {}
 
-    # Use unified query parser to get list of QueryFilter objects
-    query_filters = parse_query_filters(query_string)
-
-    # Convert to existing dict format for backward compatibility
-    filters: Dict[str, Dict[str, Any]] = {}
-    for qf in query_filters:
-        key = qf.field
-        value = qf.value
-        op = qf.op
-
-        # Handle special cases from old _parse_equality_value logic
-        if qf.op == '=' and ('|' in str(value) or ',' in str(value)):
-            # OR logic for any field: type=class|function, name=main|init
-            separator = '|' if '|' in str(value) else ','
-            items = [t.strip() for t in str(value).split(separator)]
-            filters[key] = {'op': 'in', 'value': items}
-        elif qf.op == '*':
-            # Wildcard becomes glob operator
-            # Support OR logic: name=*run*|*process* → match any pattern
-            if '|' in str(value) or ',' in str(value):
-                separator = '|' if '|' in str(value) else ','
-                patterns = [p.strip() for p in str(value).split(separator)]
-                filters[key] = {'op': 'glob', 'value': patterns}
-            else:
-                filters[key] = {'op': 'glob', 'value': value}
-        elif qf.op == '=':
-            # Check if value contains range operator (..)
-            # Unified parser may have parsed "lines=10..100" as op='=' with value='10..100'
-            if isinstance(value, str) and '..' in value:
-                # Convert to range operator
-                filters[key] = {'op': '..', 'value': value}
-            else:
-                # AST adapter historically used '==' for all equality checks
-                # This maintains backward compatibility with existing behavior
-                filters[key] = {'op': '==', 'value': value}
-        else:
-            # Standard operators (>, <, >=, <=, !=, ~=, ..)
-            filters[key] = {'op': op, 'value': value}
-
-    return filters
+    return {qf.field: _condition(qf.op, qf.value) for qf in parse_query_filters(query_string)}
 
 
 def extract_builtins_param(query_string: str):
