@@ -83,7 +83,7 @@ $ reveal check adapters/ast/filtering.py --select D002
 
 adapters/ast/filtering.py: Found 3 issues
 
-adapters/ast/filtering.py:389:1 ℹ️  D002 Potential duplicate candidate: '_matches_return_type' ~99% similar to '_matches_param_type' (line 361)
+adapters/ast/filtering.py:404:1 ℹ️  D002 Potential duplicate candidate: '_matches_return_type' ~99% similar to '_matches_param_type' (line 376)
   💡 Combined 50 lines. Worth investigating if logic can be shared.
   📝 Interestingness: 7.0 (similarity 99% × size 50)
 ```

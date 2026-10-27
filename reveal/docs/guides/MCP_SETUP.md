@@ -121,8 +121,8 @@ reveal_query("ast://src/?name=validate_token", provenance=True)
 CLI-only global flags (`--severity`, `--select`, `--format`) don't pass
 through here — write `?limit=N`, `?sort=field`/`?sort=-field`, and
 `?offset=M` directly in the URI instead. Only `ast://`, `markdown://`,
-`json://`, `git://` and `metrics://` (`stats://` is its retired alias) apply these;
-`hotspots://`, `calls://`, `imports://?rank=` (which replaces the retired `depends://`) and
+`json://`, `git://` and `metrics://` (`stats://` is a deprecated alias) apply these;
+`hotspots://`, `calls://`, `imports://?rank=fan-in` (which replaces the deprecated `depends://`) and
 `patches://?view=pressure` cap with `?top=N`, and other adapters
 answer `Unknown query param ... ignored`. Everything else is each
 adapter's own `?key=value` vocabulary — check `reveal_query('help://schemas/

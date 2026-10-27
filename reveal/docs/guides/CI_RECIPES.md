@@ -203,7 +203,7 @@ jobs:
           # Extract domains from nginx config and batch check them
           reveal nginx.conf --extract domains --canonical-only | \
             reveal --stdin --batch --check --expiring-within 30
-        # Exits 1 if any cert is expired or expiring within 30 days
+        # Exits 1 if a cert expires within 30 days, 2 if one is expired or invalid
 ```
 
 ---
@@ -284,11 +284,12 @@ pack:
 | Code | Meaning |
 |------|---------|
 | 0 | Completed, nothing matched the findings gate |
-| 1 | Findings (rule violations, health warnings/failures, an expiring or expired cert) |
-| 2 | Request rejected before analysis (usage error, missing path) |
+| 1 | Findings (rule violations, health warnings/failures, an expiring cert) |
+| 2 | Request rejected before analysis (usage error, missing path); also an `ssl:// --check` failure (an expired or invalid cert) |
 | 3 | Incomplete: a file could not be parsed/checked, a health target could not be reached, or a requested `--output json=PATH` could not be written (beats 1) |
 
-No command exits 2 for a severe finding: a critical rule violation or an expired cert is still 1.
+`ssl:// --check` uses 0 pass / 1 warning / 2 failure, so an expired cert exits 2 there, while `reveal health`
+reports the same cert as a failed check and exits 3. A critical rule violation under `check` is still 1.
 `check` and `health` fail on findings by default. `hotspots` and `pack` are informational:
 they exit 0 unless the request is rejected (2) or the run is incomplete (3), and `hotspots`
 exits 1 only with `--fail-on findings`. Treat 3 as a failure too: it means the finding count
@@ -304,7 +305,7 @@ may be wrong. Each command's `--help` ends with its own exit-code block.
 
 **Advisory vs blocking**: add `--fail-on none` for first-time adoption (findings are reported but the run exits 0; an incomplete scan still exits 3), then drop it once the team is used to the output.
 
-**Caching**: reveal has no index to cache — each run is fresh. This is intentional (no stale data) and keeps setup simple.
+**Caching**: reveal keeps no index you have to build. It does keep a parse cache in `~/.reveal/cache/` (`REVEAL_CACHE_DIR` moves it, `REVEAL_DISK_CACHE=0` turns it off); persisting that directory between CI runs is optional.
 
 ---
 

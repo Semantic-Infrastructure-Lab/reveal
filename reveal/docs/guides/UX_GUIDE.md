@@ -103,7 +103,7 @@ For file targets, convenience flags translate to URI params when you switch to U
 | Sort ascending | `--sort field` | `?sort=field` | Same ✓ |
 | Sort descending | `--sort field --desc` | `?sort=-field` | CLI needs two flags; URI uses `-` prefix |
 | Limit results | `--head N` / `--max-items N` | `?limit=N` | See below — they're not equivalent |
-| SSL expiry filter | `--expiring-within N` | `?expiring-within=N` | Both take effect only with `--check`; URI form preferred in pipelines |
+| SSL expiry filter | `--expiring-within N` | `?expiring-within=N` | The flag runs the check by itself; the URI param needs `--check` |
 | SSL summary | `--summary` | `?summary` | Batch and nginx views only; a single `ssl://host` ignores it with a note |
 | cPanel dns filter | `--dns-verified` | `?dns-verified` | Both work |
 | cPanel live check | `--check-live` | `?check-live` | Both work |
@@ -220,7 +220,7 @@ reveal 'ast://file.py?name~=auth' --format json | jq -r '.results[].file' | sort
 | `ast://` | ✅ Rich filtering | Reference implementation |
 | `json://` | ✅ Rich filtering | Field filters, flatten, schema |
 | `markdown://` | ✅ Frontmatter filtering | `?status=draft`, `?body-contains=X` |
-| `metrics://` | ✅ Metric filtering | `?hotspots`, `?min_complexity=10` (`stats://` is its retired alias) |
+| `metrics://` | ✅ Metric filtering | `?hotspots`, `?min_complexity=10` (`stats://` is a deprecated alias: it still answers, with a note) |
 | `git://` | ✅ Commit filtering | `?author=`, `?since=`, `?type=` |
 | `calls://` | ✅ Call graph | `?callers=fn`, `?top=10` |
 | `patches://` | ✅ Test patch pressure | `?group=target`, `?min=3`, `?limit=20` |
@@ -230,7 +230,7 @@ reveal 'ast://file.py?name~=auth' --format json | jq -r '.results[].file' | sort
 | `cpanel://` | ✅ Domain/SSL filters | `?domain_type=addon`, `?dns-verified` |
 | `letsencrypt://` | ✅ Cert audit | `?check-orphans`, `?check-duplicates` |
 | `autossl://` | ✅ Run filtering | `?only-failures`, `?summary`, `?user=NAME` |
-| `imports://` | ✅ Import graph | `?unused`, `?circular`, `?importers` (`depends://` is retired: use `imports://?importers`) |
+| `imports://` | ✅ Import graph | `?unused`, `?circular`, `?importers` (`depends://` is deprecated: it still answers, with a note; use `imports://?importers`) |
 | `nginx://`, `domain://` | ❌ None | Use element paths; unrecognized `?params` are ignored with a warning |
 | `env://` | ❌ None | Use element paths; a `?query` is read as a variable name and fails |
 | `mysql://`, `sqlite://`, `python://` | ❌ None | Use element paths |

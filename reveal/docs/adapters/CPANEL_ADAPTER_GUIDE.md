@@ -137,7 +137,7 @@ SSL disk certs for cPanel user: myuser
   → reveal cpanel://myuser/ssl --check-live  # Cross-reference disk vs live cert
 ```
 
-Results are sorted: expired → critical → error → expiring → missing → ok. The summary notes how many expired or critical certs belong to subdomains or parked domains.
+Results are sorted: expired → critical → error → expiring → missing → ok. The summary notes how many expired certs belong to subdomains or parked domains.
 
 **Status values:**
 

@@ -19,7 +19,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 _SCHEMA_ELEMENTS = {
     'san': 'Subject Alternative Names (all domain names)',
-    'chain': 'Leaf certificate + verification (chain only for file:// bundles)',
+    'chain': 'Leaf certificate + verification result (no chain array)',
     'issuer': 'Certificate issuer details',
     'subject': 'Certificate subject details',
     'dates': 'Validity dates (not_before, not_after)',
@@ -67,7 +67,7 @@ _SCHEMA_OUTPUT_TYPES = [
         'common_name': {'type': 'string'}, 'san': {'type': 'array', 'items': {'type': 'string'}},
         'san_count': {'type': 'integer'}
     }),
-    _ssl_output_type('ssl_chain', 'Leaf certificate + verification (chain only for file:// bundles)', {
+    _ssl_output_type('ssl_chain', 'Leaf certificate + verification result (no chain array)', {
         'type': {'type': 'string', 'const': 'ssl_chain'}, 'host': {'type': 'string'},
         'leaf': {'type': 'object'}, 'chain': {'type': 'array'},
         'chain_length': {'type': 'integer'}, 'verification': {'type': 'object'}

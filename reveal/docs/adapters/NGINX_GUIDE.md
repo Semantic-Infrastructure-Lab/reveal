@@ -206,14 +206,14 @@ Fleet Audit — (46 sites, 2026-03-19)
   Directive                   Global    With  Without  Action
   ──────────────────────────────────────────────────────────────────────────────
   Strict-Transport-Security     ❌        0       46  Add to nginx.conf http{}
-  server_tokens off             ❌       14       32  Move to nginx.conf http{} ↑
   X-Content-Type-Options        ❌       38        8  Move to nginx.conf http{} ↑
   X-Frame-Options               ❌       38        8  Move to nginx.conf http{} ↑
-  http2 on 443 listener         ❌       21       25  Add per-site (certbot strips http2 on renewal)
-  limit_req applied             ❌        1       45  Add zones to nginx.conf, then limit_req per sensitive location
-  X-XSS-Protection (depr.)     —        38        —  Remove — deprecated since 2019, ignored by Chrome
+  server_tokens off             ❌       14       32  Move to nginx.conf http{}
+  X-XSS-Protection (depr.)      —       38        —  Remove — deprecated since 2019, ignored by Chrome
+  http2 on 443 listener         —       21       25  Add per-site (certbot strips http2 on renewal)
+  limit_req applied             —        1       45  Add zones to nginx.conf, then limit_req per sensitive location
 
-  ↑ Consolidation: server_tokens off, X-Content-Type-Options, X-Frame-Options
+  ↑ Consolidation: X-Content-Type-Options, X-Frame-Options
     Move these to nginx.conf http{} — one change fixes all sites.
 
   Snippet Consistency:

@@ -137,7 +137,7 @@ All 5 adapters support these operators through the unified `compare_values()` fu
 | `>=` | Greater or equal | `priority>=5` | 5, 6, 10... |
 | `<=` | Less or equal | `functions<=20` | 1, 10, 20 |
 | `~=` | Regex match (ignores case; case-sensitive on ast://) | `message~=bug.*fix` | "Bug fix", "fixed bug fix" |
-| `!~` | Regex does not match (json://, git://; matches nothing on markdown:// today) | `email!~@company.com` | any email not at company.com |
+| `!~` | Regex does not match | `email!~@company.com` | any email not at company.com |
 | `..` | Range (inclusive) | `lines=50..200` | 50, 100, 200 |
 
 `~=` and `!~` ignore case on json://, markdown://, git:// and metrics://, and are case-sensitive on
@@ -240,8 +240,8 @@ reveal 'markdown://docs/?created=2026-01-01..2026-12-31'   # Created in 2026
 reveal 'markdown://docs/?updated=2026-01-01..2026-02-28'   # January-February 2026
 ```
 
-Frontmatter dates: use a range with full `YYYY-MM-DD` bounds. `>`/`<` on a frontmatter date
-match nothing (no error), and a short bound such as `2026-02` excludes every February date
+Frontmatter dates compare as ISO strings: `created>2026-01-01` and a range with full `YYYY-MM-DD`
+bounds both work. A short bound such as `2026-02` excludes every February date
 (`"2026-02-01" > "2026-02"`).
 
 **Priority and sorting**:
@@ -609,8 +609,8 @@ The `compare_values()` function accepts options to configure behavior per adapte
 | **ast://** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **git://** | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
 
-The column covers `=`, wildcards and `~=`/`!~`, except that `=` is also case-sensitive on markdown://
-(the unified-query path ignores case; a plain `field=value` filter does not).
+The column is about `=` and wildcards. `~=` and `!~` follow the same setting, except on markdown://:
+there `=` and wildcards are case-sensitive (a plain `field=value` filter) but `~=`/`!~` ignore case.
 
 **Rationale**:
 - **JSON/Markdown**: Have list fields (tags, topics)
@@ -646,8 +646,8 @@ reveal 'ast://src/?type=function&lines>100&sort=-lines'
 # Unfinished high-priority docs
 reveal 'markdown://docs/?status=draft&priority>=5'
 
-# Stale documentation (dates: use a range; > and < on dates match nothing)
-reveal 'markdown://docs/?updated=0000-01-01..2024-12-31'
+# Stale documentation
+reveal 'markdown://docs/?updated<2025-01-01'
 
 # Python API documentation
 reveal 'markdown://docs/?tags~=python&tags~=api&status=complete'
@@ -777,7 +777,7 @@ reveal 'git://.?author=John&message~=bug&sort=-date&limit=10'
 ## Implementation Details
 
 **Phase 3 Completion** (2026-02-08):
-- Unified query parser in `reveal/utils/query_parser.py`, operators in `reveal/utils/query_eval.py` (`reveal/utils/query.py` re-exports both)
+- Unified query parser in `reveal/utils/query_parser.py`, operators in `reveal/utils/query_eval.py`, sort/limit/offset in `reveal/utils/query_control.py` (`reveal/utils/query.py` re-exports all three)
 - Single `compare_values()` function powers all operators
 - 299 lines of duplicate code eliminated
 - All 5 adapters migrated: json, markdown, stats, ast, git

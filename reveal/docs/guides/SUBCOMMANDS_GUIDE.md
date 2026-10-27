@@ -596,8 +596,8 @@ reveal surface . --format json       # Machine-readable output
 ## reveal hotspots — Complexity Hotspot Finder
 
 Identifies high-complexity files and functions that need the most attention.
-Ranks files by a hotspot score (low quality, size, long functions and git churn) and,
-separately, functions by cyclomatic complexity: the worst 10 (or `--top N`) of each.
+Ranks files by a hotspot score (quality below 70, average complexity above 10, functions over 100 lines,
+nesting deeper than 4, and git churn) and, separately, functions by cyclomatic complexity: the worst 10 (or `--top N`) of each.
 
 ### Usage
 

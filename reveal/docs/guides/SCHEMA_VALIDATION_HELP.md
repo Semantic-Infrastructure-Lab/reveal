@@ -384,8 +384,8 @@ README.md:1:1:F003:Required field 'session_id' missing from front matter
 
 ### Exit Codes
 - **0** - All validation passed
-- **1** - Validation failures detected (or, for a single file, an unknown schema)
-- **2** - An unknown schema with `--stdin`
+- **1** - Validation failures detected
+- **2** - Unknown schema (a usage error), for a single file or with `--stdin`
 
 ### GitHub Actions Example
 
@@ -479,10 +479,9 @@ validation_rules:
 ```
 
 Each rule names one `field`; its `check` expression sees that field's value as `value`.
-A rule for a field the document does not have is skipped. A rule without `field` and `check`
-is skipped without a warning, so a rule written in another shape (for example
-`expression: "len(title) >= 10"`) silently checks nothing: run the schema once against a
-document that should fail.
+A rule for a field the document does not have is skipped. A rule without `field` and `check` (for
+example `expression: "len(title) >= 10"`) is reported as F005
+(`Schema rule '<name>' needs both 'field' and 'check' keys`).
 
 ### Using Custom Schema
 
@@ -627,7 +626,6 @@ F005 <the rule's message>
 2. Front matter missing entirely (F001 should catch this)
 3. Schema has no required fields (mkdocs, obsidian)
 4. Rule ignored with `--ignore F003`
-5. A custom rule without `field`/`check` keys (e.g. `expression:`) is skipped silently
 
 **Debug:**
 ```bash

@@ -485,7 +485,7 @@ Reveal is good for people who like Unix-style pipelines, but want higher-level b
 ```bash
 reveal nginx.conf --extract domains | reveal --stdin --check
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
-reveal 'depends://src?format=dot' | dot -Tsvg > depends.svg   # retired spelling; DOT has no imports:// form yet
+reveal 'depends://src?format=dot' | dot -Tsvg > depends.svg   # deprecated spelling; DOT has no imports:// form yet
 reveal @domains.txt --check
 ```
 
@@ -511,7 +511,7 @@ These are good fits, but less central than the top-tier workflows above:
 
 - quick inspection of JSON, env files, SQLite, and MySQL resources
 - documentation quality audits and link validation
-- architecture diagrams via GraphViz output from `calls://` or `depends://?format=dot` (retired spelling; DOT has no imports:// form yet)
+- architecture diagrams via GraphViz output from `calls://` or `depends://?format=dot` (deprecated spelling; DOT has no imports:// form yet)
 - release validation with `diff://` (structural changes in code: functions, classes, imports, interfaces, structs, types)
 - budget-constrained adapter output using `--fields`, `--max-items`, and `--max-snippet-chars`
 
