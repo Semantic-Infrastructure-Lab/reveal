@@ -69,3 +69,5 @@ BACK-1840 maintainer: recall gate partial_files check
 BACK-1912 maintainer: parser attribution counters
 BACK-1914 maintainer: parser-count gate
 BACK-2062 maintainer: recall gate scores through the public request path
+BACK-738 referenced: BACK-2141 corrected its stale open-ticket note; fixed earlier in the language pack
+BACK-768 referenced: BACK-2141 corrected its stale open-ticket note; fixed earlier in the language pack
