@@ -552,6 +552,12 @@ sample.java: ⚠️  W-CAP-1: T006 analyzes Python only; 1 file(s) in other lang
 sample.java: ⚠️  W-CAP-2: I001 has no unused-import detection for these languages; 1 file(s) were not checked by it: .java (1).
 sample.java: ✅ No issues found
 ```
+`check` also prints which rules did not run clean, from the `coverage` block that JSON always carries (per rule: `files.run`, `files.skipped` = not applicable, `files.unavailable`, `reason`). Text shows a rule that was **unavailable** (a prerequisite missing: its "no findings" is not a pass) always, and the rules **not applicable** to some files only when you pass `--select`; exit codes are unchanged:
+```
+Checks: 1 run, 0 skipped, 0 failed, 1 unavailable
+  L001 ran on 1 file, not applicable to 2: target does not match
+  M501 unavailable on 3 files: rules.M501.ignore_patterns must be a list of strings, got 'not-a-list'
+```
 A file that didn't parse cleanly reports `⚠️  file did not parse cleanly — results may be incomplete or incorrect` and `check` exits 3 (exit codes: 0 no issues, 1 issues, 2 usage error, 3 incomplete; `--exit-zero` for CI — see the per-command table under Troubleshooting).
 
 **Example output:**

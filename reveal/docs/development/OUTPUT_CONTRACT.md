@@ -771,6 +771,17 @@ crash or no applicable checks makes the run incomplete. Findings and incomplete
 runs exit 1; a clean completed run exits 0. Ordinary target/config exclusions are
 skips, not unavailable checks. V035 remains a bounded renderer canary.
 
+`reveal check <file|dir>` carries the same ledger as `coverage` (`rules.coverage_report`, one
+renderer): each rule once, with `files` = how many files it ran on, was not applicable to
+(`skipped`), could not inspect (`unavailable`) or crashed on, its deduplicated `reason`, and
+`subjects` for items inside a file that were skipped. A rule never looked at a file that has no
+ledger (no analyzer, generated, lost with a pool worker), so it is not counted as having run on
+it. Text prints one `Checks:` block before the summary: a rule unavailable on any file always
+prints; rules not applicable to some files print only under `--select` (the default view would add
+~50 "target does not match" lines for rules aimed at other targets); JSON carries every rule. The
+block changes no exit code: unlike the `reveal://` self-check, an unavailable rule on a plain
+`check` does not make the run incomplete.
+
 
 
 ---
