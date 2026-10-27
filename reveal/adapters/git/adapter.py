@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, Union
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...errors import NotApplicableError
@@ -17,7 +17,7 @@ from ...utils.query import (
     parse_result_control,
     ResultControl
 )
-from ...utils.query_parser import QueryParams, mark_query_keys, peek_query_items, query_key
+from ...utils.query_parser import QueryParams, filter_expression, mark_query_keys, peek_query_items, query_key
 
 # Import modular components
 from ...utils.path_utils import to_posix
@@ -34,7 +34,7 @@ _SCHEMA_QUERY_PARAMS = {
     'email': {'type': 'string', 'description': 'Filter commits by author email (case-insensitive)', 'examples': ['?email=john@example.com', '?email~=@example.com']},
     'message': {'type': 'string', 'description': 'Filter commits by message (supports regex with ~=)', 'examples': ['?message~=bug', '?message=Initial commit']},
     'hash': {'type': 'string', 'description': 'Filter commits by hash prefix', 'examples': ['?hash=a1b2c3d']},
-    'date': {'type': 'string', 'description': 'Filter commits by date — supports >, <, >=, <= with ISO date string. ?since=YYYY-MM-DD is an ergonomic alias for date>=YYYY-MM-DD', 'examples': ['?date>2026-01-01']},
+    'date': {'type': 'string', 'description': 'Filter commits by date — supports >, <, >=, <= and a range =a..b with an ISO date or timestamp. A date-only bound is the whole day: date>D is after the end of day D, date<D before its start, date>=D/date<=D include it. ?since=YYYY-MM-DD is an ergonomic alias for date>=YYYY-MM-DD', 'examples': ['?date>2026-01-01']},
     'ref': {'type': 'string', 'description': 'Override starting ref — alias for @ref in the URI (branch, tag, or commit)', 'examples': ['?type=history&ref=v0.63.0', '?ref=main']},
     'bucket': {'type': 'string', 'description': 'Modifier on type=history: bucket commits into periods (commit_count + distinct author_count per period) instead of a flat list. Works on a file, directory, or the whole repo.', 'values': ['week', 'month'], 'examples': ['?type=history&bucket=month', '?type=history&bucket=week']},
     'no_merges': {'type': 'string', 'description': 'Set to "1" to exclude merge commits (commits with more than one parent)', 'examples': ['?type=history&no_merges=1']},
@@ -231,30 +231,9 @@ class GitAdapter(ResourceAdapter):
 
         return resource
 
-    def _handle_routing_query_workaround(self, ref: Optional[str],
-                                          query: Optional[Dict[str, str]]) -> tuple:
-        """Handle routing.py passing query string as ref parameter.
-
-        routing.py Try 2 does: adapter_class(path, query)
-
-        Args:
-            ref: Git reference (or query string)
-            query: Query parameters dict
-
-        Returns:
-            Tuple of (ref, query) with query string extracted if needed
-        """
-        if ref is not None and '=' in ref and query is None:
-            # ref looks like a query string, move it to query
-            query_string = ref
-            ref = None
-            query = parse_query_params(query_string)
-
-        return ref, query
-
     def _parse_and_initialize_attributes(self, resource: str, ref: Optional[str],
                                           subpath: Optional[str],
-                                          query: Optional[Dict[str, str]]) -> None:
+                                          query: Optional[Dict[str, Any]]) -> None:
         """Parse resource string or use explicit args to initialize attributes.
 
         Args:
@@ -270,7 +249,7 @@ class GitAdapter(ResourceAdapter):
             # Parse resource string to extract path/subpath/ref
             parsed = self._parse_resource_string(resource)
             self.path = parsed['path']
-            # Only override ref/query if not already set from routing workaround
+            # A ref= keyword wins over an @ref in the resource string
             if ref is None:
                 self.ref = parsed['ref']
             else:
@@ -321,11 +300,11 @@ class GitAdapter(ResourceAdapter):
                 filter_parts.append(f"date{'>' if k == 'since' else '<'}={v}")
                 self._filter_keys.append(k)
                 mark_query_keys(self.query, k)  # the filter parser records 'date'
-            # Filter parameters (a key may already end with its operator: author~, date>)
+            # Filter parameters (a key may already end with its operator: author~, date>). A part
+            # with no '=' (`date>D`, `email!~x`) is a bare key; filter_expression keeps `=True` out
+            # of its value (BACK-2213, BACK-2277).
             else:
-                # `field!~pattern` has no '=', so the URI parser leaves it a bare key (value True):
-                # rebuilding it as `key=True` made the pattern `pattern=True`, which never matched
-                filter_parts.append(k if v is True and '!~' in k else f"{k}={v}")
+                filter_parts.append(filter_expression(k, v))
                 self._filter_keys.append(query_key(k))
 
         return result_control_parts, filter_parts
@@ -355,30 +334,32 @@ class GitAdapter(ResourceAdapter):
             # were the filtered one (BACK-1059). A ValueError here fails the query.
             self.query_filters = parse_query_filters(filter_query)
 
-    def __init__(self, resource: Optional[str] = None, ref: Optional[str] = None,
-                 subpath: Optional[str] = None, query: Optional[Dict[str, str]] = None,
+    def __init__(self, resource: Optional[str] = None,
+                 query: Optional[Union[str, Dict[str, Any]]] = None, *,
+                 ref: Optional[str] = None, subpath: Optional[str] = None,
                  path: Optional[str] = None):
         """
         Initialize Git adapter.
 
-        Supports two initialization styles:
-        1. Single resource string (new style, for generic handler):
-           GitAdapter("path/file.py@ref?type=history")
-        2. Multiple arguments (old style, backward compatibility):
-           GitAdapter(path=".", ref="main", subpath="file.py", query={...})
+        Supports three initialization styles:
+        1. Single resource string: GitAdapter("path/file.py@ref?type=history")
+        2. The router's canonical call (BACK-907): GitAdapter("path/file.py@ref", "type=history")
+        3. Keyword arguments: GitAdapter(path=".", ref="main", subpath="file.py", query={...})
 
         Args:
             resource: Either resource URI string or repository path (optional if path provided)
+            query: The query string after '?', or an already parsed mapping. The second
+                positional parameter is the query, never a ref: the router passes the query
+                string there, and a query with no '=' (`?date>2026-01-01`) read as a ref was
+                "Invalid ref" (BACK-2277).
             ref: Git reference (commit, branch, tag, HEAD~N)
             subpath: Path within repository (file or directory)
-            query: Query parameters (type=history|blame, since, author, etc.)
             path: Alias for resource (backward compatibility with tests)
         """
         # Normalize resource parameter
         resource = self._normalize_resource_parameter(resource, path)
-
-        # Handle routing workaround
-        ref, query = self._handle_routing_query_workaround(ref, query)
+        if isinstance(query, str):
+            query = parse_query_params(query)
 
         # Parse and initialize attributes
         self._parse_and_initialize_attributes(resource, ref, subpath, query)
@@ -862,7 +843,7 @@ class GitAdapter(ResourceAdapter):
                 'email': 'Filter commits by author email (case-insensitive, use ~= for regex)',
                 'message': 'Filter commits by message (use ~= for regex matching)',
                 'hash': 'Filter commits by hash prefix',
-                'date': 'Filter commits by date — supports >, <, >=, <= with ISO date string (e.g. date>2026-01-01). Use since=YYYY-MM-DD as an ergonomic alias for date>=YYYY-MM-DD.',
+                'date': 'Filter commits by date — supports >, <, >=, <= and a range =a..b with an ISO date or timestamp (e.g. date>2026-01-01). A date-only bound is the whole day: date>D excludes day D, date>=D and date<=D include it. Use since=YYYY-MM-DD as an ergonomic alias for date>=YYYY-MM-DD.',
                 'content~': 'Pickaxe search: only commits where the diff added or removed the given string. Works on file-scoped history (?type=history) and repo-wide (git://.?content~=X). Independent of commit message wording.',
                 'no_merges': 'Set to 1 to exclude merge commits (commits with more than one parent). Useful for repos with noisy merge-commit messages.',
             },

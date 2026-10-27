@@ -16,7 +16,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | Adapter | Query Params | Example |
 |---------|--------------|---------|
 | **imports://** | `unused`, `circular`, `circular&verbose`, `violations`, `lazy` | `imports://.?unused` |
-| **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `ref`, `sort`, `limit`, `offset` | `git://file.py?type=history` |
+| **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `date`, `since`, `until`, `ref`, `sort`, `limit`, `offset` | `git://file.py?type=history` |
 | **json://** | `schema`, `flatten`, `gron`, `type`, `keys`, `length`, field filters, `sort`, `limit`, `offset` | `json://data.json?type=object` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
 | **metrics://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `exclude`, `sort`, `limit`, `offset` | `metrics://.?hotspots` |
@@ -151,6 +151,17 @@ reveal 'imports://src?circular&verbose'   # Cycle paths
   - **Example**:
     ```bash
     reveal 'git://app.py?type=history&hash=a1b2c3d'
+    ```
+
+- **`date`** - Filter commits by commit date: `>`, `<`, `>=`, `<=` or a range `=a..b`
+  - A date-only bound names the whole day: `date>2026-02-01` is after the end of that day,
+    `date<2026-02-01` before its start, and `date>=`/`date<=` (and a range) include all of it.
+    A full timestamp bound (`date>2026-02-01 12:00:00`) compares the timestamp.
+  - `since=D` is `date>=D` and `until=D` is `date<=D`
+  - **Examples**:
+    ```bash
+    reveal 'git://.?date>2026-02-01'                       # commits after 1 Feb
+    reveal 'git://.?since=2026-01-01&until=2026-01-31'     # all of January
     ```
 
 - **`ref`** - Override the starting ref (alias for `@ref` in the URI)

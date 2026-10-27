@@ -2926,13 +2926,13 @@ class TestDateFilterCorrectness:
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_until_filters_to_matching_commits(self, git_repo_timeline):
         # 'app v2' is committed AT NOON on 2026-01-20 (fixture's epoch() bakes
-        # in hour=12); a bare date '2026-01-20' compares as that day's
-        # midnight, so a noon commit is > midnight and correctly excluded by
-        # <=. Same lexical-comparison semantics 'since' already had.
+        # in hour=12). A date-only bound names the whole day, so until= (date<=)
+        # includes it (BACK-2277; the lexical compare used to read the bare date
+        # as that day's midnight and drop every commit made on it).
         adapter = GitAdapter(path=str(git_repo_timeline), query={'until': '2026-01-20'})
         r = adapter.get_structure()
         messages = {c['message'] for c in r['commits']['recent']}
-        assert messages == {'app v1'}
+        assert messages == {'app v1', 'app v2'}
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_since_and_until_combine_as_a_range(self, git_repo_timeline):

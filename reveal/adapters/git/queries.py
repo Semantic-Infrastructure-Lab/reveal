@@ -1,8 +1,36 @@
 """Git query filtering and comparison logic."""
 
+import re
 from typing import Any, Optional, Union, Dict
 
 from ...utils.query import compare_values
+
+# A bound written as a day, no time: `date>2026-02-01`.
+_DATE_ONLY = re.compile(r'\d{4}-\d{2}-\d{2}')
+
+
+def _day_aware(commit_date: str, bound: str) -> str:
+    """The commit date at the bound's precision: its day when the bound is a day (BACK-2277).
+
+    A date-only bound names a whole day, so `date>D` is after the end of day D, `date<D` before
+    its start, and `date>=D`/`date<=D` include all of it. Compared as the full
+    'YYYY-MM-DD HH:MM:SS' string, a commit on day D sorts after 'D', so `date<=D` lost day D.
+    A full timestamp bound compares the timestamp.
+    """
+    return commit_date[:10] if _DATE_ONLY.fullmatch(bound) else commit_date
+
+
+def _compare_date(commit_date: str, operator: str, target: str) -> Optional[bool]:
+    """A date bound or range compared at the bound's precision; None for any other operator."""
+    target = target.strip()
+    if operator in ('>', '<', '>=', '<='):
+        return compare_values(_day_aware(commit_date, target), operator, target,
+                              options={'coerce_numeric': False})
+    if operator == '..' and '..' in target:
+        low, high = (part.strip() for part in target.split('..', 1))
+        return ((not low or _day_aware(commit_date, low) >= low)
+                and (not high or _day_aware(commit_date, high) <= high))
+    return None
 
 
 def compare(
@@ -37,6 +65,10 @@ def compare(
     # restores correct behavior without touching the shared compare_values()
     # utility other adapters rely on for genuinely numeric fields.
     coerce_numeric = field_name != 'date'
+    if field_name == 'date' and isinstance(field_value, str) and isinstance(target_value, str):
+        day_aware = _compare_date(field_value, operator, target_value)
+        if day_aware is not None:
+            return day_aware
     return compare_values(
         field_value,
         operator,

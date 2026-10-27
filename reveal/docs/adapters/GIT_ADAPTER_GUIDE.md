@@ -680,7 +680,7 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 | `email` | string | `=`, `~=` | Filter by author email |
 | `message` | string | `=`, `~=` | Filter by commit message |
 | `hash` | string | `=`, `.=` | Filter by commit hash prefix |
-| `date` | ISO date | `>`, `<`, `>=`, `<=` | Filter by commit date, e.g. `date>=2026-01-01` |
+| `date` | ISO date | `>`, `<`, `>=`, `<=`, `=a..b` | Filter by commit date, e.g. `date>=2026-01-01`. A date-only bound is the whole day: `date>D` excludes day D, `date>=D`/`date<=D` include it |
 | `since` | ISO date | `=` only | Ergonomic alias for `date>=YYYY-MM-DD` |
 | `until` | ISO date | `=` only | Ergonomic alias for `date<=YYYY-MM-DD` |
 
@@ -807,9 +807,9 @@ reveal 'git://.@main?author=John&message~=fix.*auth'
 | `=` | Exact match (case-insensitive for author/email) | `author=John` |
 | `~=` | Regex match (case-insensitive) | `message~=bug` |
 | `!=` | Not equal | `author!=bot` |
-| `>` | Greater than (for dates) | `date>2025-01-01` |
-| `<` | Less than | `date<2025-02-01` |
-| `>=`, `<=` | Greater/less or equal | `date>=2025-01-01` |
+| `>` | Greater than; a date-only bound means after the end of that day | `date>2025-01-01` |
+| `<` | Less than; a date-only bound means before the start of that day | `date<2025-02-01` |
+| `>=`, `<=` | Greater/less or equal; a date-only bound includes the whole day | `date>=2025-01-01` |
 
 ---
 

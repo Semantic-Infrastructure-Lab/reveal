@@ -382,6 +382,17 @@ reveal 'git://.?author~=jane&message~=^feat:&sort=-date'
 reveal 'git://.?hash=a1b2c3'                        # Commit by prefix
 ```
 
+**Date filtering**:
+```bash
+reveal 'git://.?date>2026-02-01'                    # After 1 Feb (1 Feb itself excluded)
+reveal 'git://.?date>=2026-02-01'                   # From 1 Feb on (1 Feb included)
+reveal 'git://.?since=2026-01-01&until=2026-01-31'  # All of January
+```
+
+A date-only bound names the whole day: `date>D` is after the end of day D, `date<D` before its
+start, and `date>=D`, `date<=D` and a range `date=D1..D2` include all of day D. A full timestamp
+bound (`date>2026-02-01 12:00:00`) compares the timestamp.
+
 **File history**:
 ```bash
 reveal 'git://app.py?type=history&author=John&sort=-date&limit=10'
