@@ -56,7 +56,7 @@ reveal sqlite:///app.db/comments
 reveal sqlite:///app.db --format=json
 reveal sqlite:///app.db/users --format=json
 
-# 6. Health check (currently a no-op — returns the standard overview; see "Output Formats")
+# 6. Health check: PRAGMA integrity_check + foreign_key_check; exit code reflects findings
 reveal sqlite:///app.db --check
 ```
 
@@ -102,37 +102,40 @@ reveal sqlite:///path/to/app.db
 ```
 
 **Information provided:**
-- **Tables**: All user tables (excluding sqlite_* internal tables)
-- **Indices**: All indices with associated tables
-- **Statistics**: Database size, SQLite version, page size
-- **Configuration**: Journal mode, encoding, foreign key enforcement
-- **Row counts**: Total rows per table
+- **Tables**: All user tables and views (excluding sqlite_* internal tables)
+- **Indices**: per-table index counts
+- **Statistics**: Database size, SQLite version, page size, table/view/row/foreign-key counts
+- **Configuration**: Page size and count, journal mode, encoding
+- **Row counts**: Rows per table
 
-**Example output:**
+**Example output** (`reveal sqlite://./app.db`):
 ```
-Database: app.db
-Size: 524 KB
-SQLite Version: 3.35.5
-Tables: 5
-  users (150 rows)
-  posts (1,234 rows)
-  comments (5,678 rows)
-  tags (45 rows)
-  post_tags (2,567 rows)
-
-Indices: 8
-  idx_users_email on users
-  idx_posts_author on posts
-  idx_posts_created on posts
-  idx_comments_post on comments
-  ...
+SQLite Database: ./app.db
+Version: 3.37.2
+Size: 36.00 KB
 
 Configuration:
   Page Size: 4096 bytes
-  Journal Mode: WAL
+  Page Count: 9
+  Journal Mode: wal
   Encoding: UTF-8
-  Foreign Keys: ON
+
+Statistics:
+  Tables: 2
+  Views: 1
+  Total Rows: 180
+  Foreign Keys: 1
+
+Tables:
+  📋 posts (30 rows, 4 columns, 1 indexes)
+  📋 users (150 rows, 5 columns, 1 indexes)
+  👁️  v_users (view, 2 columns)
+
+Next Steps:
+  ...
 ```
+
+The `Next Steps:` lines suggest opening a table and running `--check`.
 
 ### 2. **Table Structure Inspection**
 
@@ -144,39 +147,36 @@ reveal sqlite:///path/to/app.db/users
 
 **Information provided:**
 - **Columns**: Name, type, nullable, default value, primary key
-- **Indices**: All indices on this table
+- **Indices**: Named indices on this table (automatic indexes for PRIMARY KEY/UNIQUE are not listed)
 - **Foreign keys**: Relationships to other tables
-- **Constraints**: Primary keys, unique constraints
-- **Statistics**: Row count, estimated size
+- **Statistics**: Row count
+- **CREATE statement**: the table's SQL, the only place UNIQUE and AUTOINCREMENT show
 
-**Example output:**
+**Example output** (`reveal sqlite://./app.db/users`):
 ```
 Table: users
-Rows: 150
+Database: ./app.db
+Row Count: 150
 
-Columns:
-  id              INTEGER   PRIMARY KEY  AUTOINCREMENT
-  email           TEXT      NOT NULL     UNIQUE
-  username        VARCHAR   NOT NULL
-  password_hash   TEXT      NOT NULL
-  created_at      TIMESTAMP NOT NULL     DEFAULT CURRENT_TIMESTAMP
-  updated_at      TIMESTAMP
-  is_active       BOOLEAN   NOT NULL     DEFAULT 1
-  role            TEXT                   DEFAULT 'user'
+Columns (5):
+  • id: INTEGER [PK] NOT NULL
+  • email: TEXT NOT NULL
+  • username: VARCHAR NOT NULL
+  • created_at: TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  • role: TEXT NULL DEFAULT 'user'
 
-Indices:
-  PRIMARY KEY (id)
-  UNIQUE (email)
-  idx_users_email on (email)
-  idx_users_username on (username)
+Indexes (1):
+  • idx_users_username (username)
 
-Foreign Keys:
-  None
+CREATE Statement:
+CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, username VARCHAR NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, role TEXT DEFAULT 'user')
 
-Constraints:
-  PRIMARY KEY (id)
-  UNIQUE (email)
+Next Steps:
+  reveal sqlite://./app.db              # Back to database overview
 ```
+
+A view opens the same way (`reveal sqlite://./app.db/v_users`); its header reads `View:` and it
+has no indexes or foreign keys.
 
 ### 3. **Foreign Key Relationships**
 
@@ -186,20 +186,24 @@ Automatically detect and display table relationships:
 reveal sqlite:///app.db/posts
 ```
 
-**Example output:**
+**Example output** (trimmed):
 ```
 Table: posts
-Rows: 1,234
+Database: ./app.db
+Row Count: 30
 
-Columns:
-  id          INTEGER   PRIMARY KEY  AUTOINCREMENT
-  title       TEXT      NOT NULL
-  content     TEXT      NOT NULL
-  author_id   INTEGER   NOT NULL
-  created_at  TIMESTAMP NOT NULL
+Columns (4):
+  • id: INTEGER [PK] NOT NULL
+  • title: TEXT NOT NULL
+  • author_id: INTEGER NOT NULL
+  • created_at: TIMESTAMP NOT NULL
 
-Foreign Keys:
-  author_id → users(id) ON DELETE CASCADE
+Indexes (1):
+  • idx_posts_author (author_id)
+
+Foreign Keys (1):
+  • author_id → users.id
+    ON DELETE CASCADE, ON UPDATE NO ACTION
 ```
 
 ### 4. **Index Information**
@@ -207,17 +211,16 @@ Foreign Keys:
 View all indices with detailed information:
 
 ```bash
-# Database-level (all indices)
+# Database-level (index count per table)
 reveal sqlite:///app.db
 
-# Table-level (table indices)
+# Table-level (the table's named indices)
 reveal sqlite:///app.db/users
 ```
 
-**Index details shown:**
+**Index details shown** (table level):
 - Index name
 - Indexed columns
-- Associated table
 - Unique constraint (if applicable)
 
 ### 5. **Database Statistics**
@@ -225,9 +228,9 @@ reveal sqlite:///app.db/users
 Comprehensive metrics at database and table levels:
 
 **Database-level:**
-- Total size in bytes/KB/MB
-- Number of tables
-- Number of indices
+- Total size in KB/MB
+- Number of tables and views
+- Number of foreign keys
 - Total row count
 - SQLite version
 - Page size
@@ -249,12 +252,12 @@ reveal sqlite:///app.db
 ```
 
 **Configuration shown:**
-- Page size (e.g., 4096 bytes)
-- Journal mode (DELETE, TRUNCATE, PERSIST, MEMORY, WAL, OFF)
+- Page size (e.g., 4096 bytes) and page count
+- Journal mode (delete, truncate, persist, memory, wal, off)
 - Encoding (UTF-8, UTF-16le, UTF-16be)
-- Foreign key enforcement (ON/OFF)
-- Auto-vacuum mode
-- Synchronous mode
+
+Foreign-key enforcement is not shown: `PRAGMA foreign_keys` is a per-connection setting that is
+never stored in the database file, so only the application's own connection can tell you.
 
 ---
 
@@ -272,7 +275,7 @@ sqlite:///<path/to/database.db>[/table]
 |------|-------------|---------|
 | `sqlite://` | Protocol | Required prefix |
 | `//` or `///` | Path type | `//` = relative, `///` = absolute |
-| `path/to/db.db` | Database path | Must end in `.db`, `.sqlite`, or `.sqlite3` |
+| `path/to/db.db` | Database path | Any file name; `.db`, `.sqlite`, `.sqlite3` are conventions |
 | `/table` | Optional table | Table name for detailed inspection |
 
 ### Absolute Paths
@@ -309,13 +312,8 @@ reveal sqlite://./../shared.db
 
 ### File Extensions
 
-Supported database file extensions:
-
-- `.db` - Most common
-- `.sqlite` - Explicit SQLite format
-- `.sqlite3` - Version-specific naming
-
-**All three are treated identically** by the adapter.
+Any file name works; the adapter opens whatever SQLite database the path names. `.db`,
+`.sqlite` and `.sqlite3` are just conventions.
 
 ---
 
@@ -330,9 +328,9 @@ reveal sqlite:///path/to/app.db
 **Output includes:**
 
 1. **Database metadata**: Path, size, version
-2. **Table list**: All user tables with row counts
-3. **Index list**: All indices with associated tables
-4. **Configuration**: Page size, journal mode, encoding
+2. **Table list**: All user tables (rows, columns, index count) and views (column count)
+3. **Statistics**: Table, view, row and foreign-key counts
+4. **Configuration**: Page size and count, journal mode, encoding
 
 **Use cases:**
 - Understand database structure
@@ -351,38 +349,40 @@ reveal sqlite:///app.db --format=json
 **JSON structure:**
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "sqlite_database",
-  "source": "/path/to/app.db",
+  "source": "./app.db",
   "source_type": "database",
-  "db_path": "/path/to/app.db",
-  "size_bytes": 524288,
+  "path": "./app.db",
+  "size": "36.00 KB",
+  "sqlite_version": "3.37.2",
+  "configuration": {
+    "page_size": "4096 bytes",
+    "page_count": 9,
+    "total_pages": "9 pages × 4096 bytes = 0.04 MB",
+    "journal_mode": "wal",
+    "encoding": "UTF-8"
+  },
+  "statistics": {
+    "tables": 2,
+    "views": 1,
+    "total_rows": 180,
+    "foreign_keys": 1
+  },
   "tables": [
-    {
-      "name": "users",
-      "row_count": 150
-    },
-    {
-      "name": "posts",
-      "row_count": 1234
-    }
+    {"name": "posts", "type": "table", "rows": 30, "columns": 4, "indexes": 1},
+    {"name": "users", "type": "table", "rows": 150, "columns": 5, "indexes": 1},
+    {"name": "v_users", "type": "view", "columns": 2}
   ],
-  "indices": [
-    {
-      "name": "idx_users_email",
-      "table": "users",
-      "columns": ["email"]
-    }
-  ],
-  "version": "3.35.5",
-  "config": {
-    "page_size": 4096,
-    "journal_mode": "WAL",
-    "encoding": "UTF-8",
-    "foreign_keys": true
-  }
+  "next_steps": [
+    "reveal sqlite://./app.db/<table>     # Inspect specific table",
+    "reveal sqlite://./app.db --check     # Run integrity check"
+  ]
 }
 ```
+
+`columns` and `indexes` in `tables[]` are counts; a view has no `rows`. Per-table detail
+(column definitions, indices, foreign keys) is in the table view.
 
 ---
 
@@ -396,12 +396,11 @@ reveal sqlite:///path/to/app.db/table_name
 
 **Output includes:**
 
-1. **Table name** and row count
-2. **Column definitions**: Name, type, nullable, default, constraints
-3. **Primary keys**: Single or composite
-4. **Unique constraints**: Unique columns
-5. **Indices**: All indices on table
-6. **Foreign keys**: Relationships to other tables
+1. **Table name**, database and row count
+2. **Column definitions**: Name, type, `[PK]`, nullable, default
+3. **Indices**: Named indices on the table
+4. **Foreign keys**: Relationships to other tables
+5. **CREATE statement**: UNIQUE and AUTOINCREMENT are visible only here
 
 ### Column Information
 
@@ -411,29 +410,26 @@ Each column shows:
 - **Type**: SQLite type (INTEGER, TEXT, REAL, BLOB, NULL)
 - **Nullable**: NOT NULL constraint
 - **Default**: Default value (if any)
-- **Constraints**: PRIMARY KEY, UNIQUE, etc.
+- **Primary key**: `[PK]`
 
 **Example:**
 ```
-id              INTEGER   PRIMARY KEY  AUTOINCREMENT
-email           TEXT      NOT NULL     UNIQUE
-username        VARCHAR   NOT NULL
-created_at      TIMESTAMP NOT NULL     DEFAULT CURRENT_TIMESTAMP
-is_active       BOOLEAN   NOT NULL     DEFAULT 1
+Columns (5):
+  • id: INTEGER [PK] NOT NULL
+  • email: TEXT NOT NULL
+  • username: VARCHAR NOT NULL
+  • created_at: TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  • role: TEXT NULL DEFAULT 'user'
 ```
 
 ### Index Information
 
-Table-specific indices with details:
+Named indices on the table (SQLite's automatic indexes for PRIMARY KEY and UNIQUE are not listed):
 
 **Example:**
 ```
-Indices:
-  PRIMARY KEY (id)
-  UNIQUE (email)
-  idx_users_email on (email)
-  idx_users_username on (username)
-  idx_users_created on (created_at DESC)
+Indexes (1):
+  • idx_users_username (username)
 ```
 
 ### Foreign Key Relationships
@@ -442,9 +438,9 @@ Shows all foreign key constraints:
 
 **Example:**
 ```
-Foreign Keys:
-  author_id → users(id) ON DELETE CASCADE
-  category_id → categories(id) ON DELETE SET NULL
+Foreign Keys (1):
+  • author_id → users.id
+    ON DELETE CASCADE, ON UPDATE NO ACTION
 ```
 
 **Foreign key details:**
@@ -464,49 +460,36 @@ reveal sqlite:///app.db/users --format=json
 **JSON structure:**
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "sqlite_table",
-  "source": "/path/to/app.db",
+  "source": "./app.db",
   "source_type": "table",
-  "table_name": "users",
-  "row_count": 150,
+  "database": "./app.db",
+  "table": "posts",
+  "kind": "table",
+  "row_count": 30,
   "columns": [
-    {
-      "name": "id",
-      "type": "INTEGER",
-      "nullable": false,
-      "primary_key": true,
-      "auto_increment": true
-    },
-    {
-      "name": "email",
-      "type": "TEXT",
-      "nullable": false,
-      "unique": true
-    }
+    {"name": "id", "type": "INTEGER", "nullable": false, "default": null, "primary_key": true},
+    {"name": "title", "type": "TEXT", "nullable": false, "default": null, "primary_key": false}
   ],
-  "indices": [
-    {
-      "name": "PRIMARY",
-      "columns": ["id"],
-      "unique": true
-    },
-    {
-      "name": "idx_users_email",
-      "columns": ["email"],
-      "unique": false
-    }
+  "indexes": [
+    {"name": "idx_posts_author", "columns": ["author_id"], "unique": false}
   ],
   "foreign_keys": [
     {
       "column": "author_id",
       "references_table": "users",
       "references_column": "id",
+      "on_update": "NO ACTION",
       "on_delete": "CASCADE"
     }
-  ]
+  ],
+  "create_statement": "CREATE TABLE posts(...)",
+  "next_steps": ["reveal sqlite://./app.db              # Back to database overview"]
 }
 ```
+
+`kind` is `table` or `view`.
 
 ---
 
@@ -542,7 +525,7 @@ reveal sqlite:///app.db/users --format=json
 
 - `sqlite_database` - Database overview
 - `sqlite_table` - Table structure
-- `sqlite_health` - Health check results (planned)
+- `sqlite_health` - Health check results (`--check`: `integrity`, `foreign_key_violations`, `corruption`, `detections`, `status`, `exit_code`)
 
 ---
 
@@ -630,20 +613,14 @@ diff old_users.txt new_users.txt
 **Scenario**: Verify database integrity before backup or migration.
 
 ```bash
-# Step 1: Check database can be opened
-reveal sqlite:///app.db > /dev/null && echo "✓ Database readable"
+# PRAGMA integrity_check + foreign_key_check; the exit code reflects findings
+reveal sqlite:///app.db --check
+# ./app.db: integrity ok
+# ✅ No issues found
 
-# Step 2: Verify all tables accessible
-for table in $(reveal sqlite:///app.db --format=json | jq -r '.tables[].name'); do
-  reveal sqlite:///app.db/$table > /dev/null && echo "✓ Table $table OK"
-done
-
-# Step 3: Check row counts
+# Row counts, if you also want them
 reveal sqlite:///app.db --format=json | \
-  jq -r '.tables[] | "\(.name): \(.row_count) rows"'
-
-# Step 4: Verify foreign key integrity (manual SQL check)
-sqlite3 app.db "PRAGMA foreign_key_check"
+  jq -r '.tables[] | select(.type=="table") | "\(.name): \(.rows) rows"'
 ```
 
 **Expected outcome**: Confirmation of database integrity.
@@ -655,7 +632,7 @@ sqlite3 app.db "PRAGMA foreign_key_check"
 ```bash
 # Export to JSON and analyze with jq
 reveal sqlite:///app.db --format=json | \
-  jq -r '.tables[] | [.name, .row_count] | @tsv' | \
+  jq -r '.tables[] | select(.type=="table") | [.name, .rows] | @tsv' | \
   sort -k2 -rn | \
   head -10
 
@@ -703,30 +680,27 @@ SQLite adapter operations are fast:
 | Database overview | 10-100ms | Scans table list |
 | Table inspection | 10-50ms | PRAGMA queries |
 | Row count | 10-500ms | `COUNT(*)` query |
-| Large databases (100+ tables) | 100ms-1s | Parallel table scanning |
+| Large databases (100+ tables) | 100ms-1s | One PRAGMA and `COUNT(*)` per table, in turn |
 | Very large tables (1M+ rows) | 500ms-5s | `COUNT(*)` on large tables |
 
 ### Large Database Strategies
 
 For databases with 100+ tables or very large tables:
 
-**Strategy 1: Skip row counts for overview**
-```bash
-# Faster overview (no row counts)
-reveal sqlite:///large.db --format=json | jq 'del(.tables[].row_count)'
-```
+The overview always counts every table's rows (`COUNT(*)`); removing the counts afterwards with
+`jq` saves nothing.
 
-**Strategy 2: Inspect specific tables only**
+**Strategy 1: Inspect specific tables only**
 ```bash
 # Don't scan entire database
 reveal sqlite:///large.db/specific_table
 ```
 
-**Strategy 3: Use JSON and filter**
+**Strategy 2: Use JSON and filter**
 ```bash
-# Get schema only, skip stats
+# Name and column count per table (columns is already a count)
 reveal sqlite:///large.db --format=json | \
-  jq '.tables[] | {name, columns: (.columns | length)}'
+  jq '.tables[] | {name, columns}'
 ```
 
 ### Memory Considerations
@@ -771,12 +745,12 @@ No query performance metrics:
 ❌ "Analyze query plan"
 ✅ Use `EXPLAIN QUERY PLAN` in sqlite3 CLI
 
-**4. Trigger and view definitions**
+**4. Triggers**
 
-Shows triggers and views exist, but not definitions:
+Views are listed in the overview and open like a table (`sqlite:///app.db/v_users` shows the
+columns and the `CREATE VIEW` statement); triggers are not shown anywhere:
 
 ❌ "Show trigger SQL"
-❌ "Show view definition"
 ✅ Use `sqlite3` CLI: `.schema trigger_name`
 
 **5. Attached databases**
@@ -798,7 +772,7 @@ Shows WAL mode, but not WAL file details:
 
 **Row count performance**: `COUNT(*)` queries can be slow on large tables (millions of rows). Consider skipping row counts for very large databases.
 
-**Foreign key runtime**: Foreign keys may be disabled at runtime even if defined in schema. Check database configuration.
+**Foreign key runtime**: Foreign-key enforcement is a per-connection setting (`PRAGMA foreign_keys`) that the database file does not store, so reveal cannot tell whether your application enables it. `--check` runs `foreign_key_check` to find existing violations.
 
 **Virtual tables**: Limited support for virtual table details (FTS, R-Tree).
 
@@ -808,10 +782,13 @@ Shows WAL mode, but not WAL file details:
 
 ### Common errors and solutions:
 
+Each error prints `Error (sqlite://): ...` and exits 1. (The locked and permission-denied
+wordings below are SQLite's own and were not reproduced.)
+
 **1. Database file not found**
 
 ```
-Error: Database file not found: /path/to/app.db
+Error (sqlite://): Database file not found: ./missing.db
 ```
 
 **Cause**: File doesn't exist at specified path.
@@ -823,7 +800,7 @@ Error: Database file not found: /path/to/app.db
 **2. Not a valid SQLite database**
 
 ```
-Error: file is not a database
+Error (sqlite://): Database error during query: file is not a database
 ```
 
 **Cause**: File exists but isn't a SQLite database.
@@ -835,7 +812,7 @@ Error: file is not a database
 **3. Database is locked**
 
 ```
-Error: database is locked
+Error (sqlite://): ... database is locked
 ```
 
 **Cause**: Another process has write lock on database.
@@ -847,7 +824,7 @@ Error: database is locked
 **4. Table not found**
 
 ```
-Error: Table 'nonexistent' not found
+Error (sqlite://): Table not found: nonexistent
 ```
 
 **Cause**: Specified table doesn't exist.
@@ -859,7 +836,7 @@ Error: Table 'nonexistent' not found
 **5. Permission denied**
 
 ```
-Error: unable to open database file: Permission denied
+Error (sqlite://): ... unable to open database file
 ```
 
 **Cause**: Insufficient file permissions.
@@ -912,11 +889,11 @@ reveal sqlite:///app.db --format=json | jq -r '.tables[].name'
 
 # Count total rows across all tables
 reveal sqlite:///app.db --format=json | \
-  jq '[.tables[].row_count] | add'
+  jq '[.tables[].rows] | add'
 
 # Find tables with >1000 rows
 reveal sqlite:///app.db --format=json | \
-  jq -r '.tables[] | select(.row_count > 1000) | .name'
+  jq -r '.tables[] | select(.rows > 1000) | .name'
 ```
 
 ### Document Schema Changes
@@ -931,19 +908,18 @@ reveal sqlite:///app.db --format=json > schema_backup_$(date +%Y%m%d).json
 diff schema_backup_20261201.json schema_backup_20261215.json
 ```
 
-### Verify Foreign Key Enforcement
-
-Check if foreign keys are enforced:
+### Check Foreign Keys
 
 ```bash
-# Method 1: Check database config
-reveal sqlite:///app.db | grep "Foreign Keys"
+# How many foreign keys the schema declares
+reveal sqlite:///app.db --format=json | jq '.statistics.foreign_keys'
 
-# Method 2: JSON output
-reveal sqlite:///app.db --format=json | jq '.config.foreign_keys'
-
-# If disabled, foreign key relationships may not be enforced at runtime
+# Rows that violate them (and the integrity check)
+reveal sqlite:///app.db --check
 ```
+
+Whether the application enforces foreign keys is a setting of its own connection
+(`PRAGMA foreign_keys`); the database file does not record it.
 
 ### Use Wildcards for Multiple Tables
 
@@ -974,15 +950,14 @@ reveal sqlite:///app.db --format=json | jq -r '.tables[].name'
 reveal sqlite:///app.db/users --format=json | \
   jq -r '.columns[].name'
 
-# Find tables with foreign keys
-reveal sqlite:///app.db --format=json | jq -r '
-  .tables[] |
-  select(.foreign_keys | length > 0) |
-  .name'
+# Find tables with foreign keys (the overview has counts only; ask each table)
+for t in $(reveal sqlite:///app.db --format=json | jq -r '.tables[] | select(.type=="table") | .name'); do
+  reveal "sqlite:///app.db/$t" --format=json | jq -r 'select(.foreign_keys | length > 0) | .table'
+done
 
 # Generate CSV of table statistics
 reveal sqlite:///app.db --format=json | \
-  jq -r '.tables[] | [.name, .row_count] | @csv'
+  jq -r '.tables[] | select(.type=="table") | [.name, .rows] | @csv'
 ```
 
 ### With diff (Schema Comparison)
@@ -1030,7 +1005,8 @@ schema = json.loads(result.stdout)
 
 # Process schema
 for table in schema["tables"]:
-    print(f"{table['name']}: {table['row_count']} rows")
+    if table["type"] == "table":  # views have no row count
+        print(f"{table['name']}: {table['rows']} rows")
 
 # Get table details
 result = subprocess.run(
@@ -1104,17 +1080,17 @@ print(f"Columns in users: {', '.join(columns)}")
 
 **Supported SQLite features:**
 - Tables, columns, types
-- Primary keys, unique constraints
-- Foreign keys (if enforced)
+- Primary keys (unique constraints are visible in the CREATE statement)
+- Foreign keys (as declared)
 - Indices (excluding auto-generated)
-- AUTOINCREMENT
+- AUTOINCREMENT (visible in the CREATE statement)
 - DEFAULT values
 - NOT NULL constraints
 
 **Known limitations:**
 - No data querying (schema only)
 - No write operations (read-only)
-- Limited trigger/view definitions
+- Triggers are not shown
 - Row counts can be slow on large tables
 - No attached database support
 
@@ -1140,7 +1116,7 @@ A: No, sqlite:// is read-only. Use `sqlite3` CLI or migration tools for schema c
 
 **Q: What about triggers and views?**
 
-A: The adapter shows they exist but not their definitions. Use `sqlite3` CLI: `.schema trigger_name`
+A: Views are listed and open like a table, with their `CREATE VIEW` statement. Triggers are not shown; use `sqlite3` CLI: `.schema trigger_name`
 
 **Q: Does it work with encrypted SQLite databases?**
 
