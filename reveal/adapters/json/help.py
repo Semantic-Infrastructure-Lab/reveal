@@ -35,6 +35,12 @@ _SCHEMA_OUTPUT_TYPES = [
     _json_output_type('json_keys', 'Object keys or array indices', {
         'keys': {'type': 'array', 'items': {'type': 'string'}}, 'count': {'type': 'integer'}
     }),
+    _json_output_type('json_type', 'Type at the path (?type)', {
+        'value_type': {'type': 'string'}, 'length': {'type': 'integer'}, 'is_container': {'type': 'boolean'}
+    }),
+    _json_output_type('json_length', 'Length of the array, string or object at the path (?length)', {
+        'value_type': {'type': 'string'}, 'length': {'type': 'integer'}
+    }),
 ]
 
 _SCHEMA_NOTES = [
