@@ -670,7 +670,7 @@ The following operators work across adapters that support field filtering (json:
 |----------|-------------|---------|
 | `=` | Exact match (case-insensitive on json://, case-sensitive on markdown://) | `status=published` |
 | `~=` | Regex search (case-sensitive) | `title~=(?i)python` |
-| `!~` | Regex does not match | `title!~draft` |
+| `!~` | Regex does not match (json:// and git://; on markdown:// it matches nothing today) | `role!~admin` |
 | `>`, `<` | Comparison | `count>100` |
 | `>=`, `<=` | Comparison (inclusive) | `age>=18` |
 | `..` | Range (inclusive) | `lines=50..200` |

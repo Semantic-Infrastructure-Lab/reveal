@@ -137,7 +137,7 @@ All 5 adapters support these operators through the unified `compare_values()` fu
 | `>=` | Greater or equal | `priority>=5` | 5, 6, 10... |
 | `<=` | Less or equal | `functions<=20` | 1, 10, 20 |
 | `~=` | Regex match (case-sensitive; prefix `(?i)` to ignore case) | `message~=(?i)bug.*fix` | "Bug fix", "fixed bug fix" |
-| `!~` | Regex does not match | `email!~@company.com` | any email not at company.com |
+| `!~` | Regex does not match (json://, git://; matches nothing on markdown:// today) | `email!~@company.com` | any email not at company.com |
 | `..` | Range (inclusive) | `lines=50..200` | 50, 100, 200 |
 
 `~=` is case-sensitive on every adapter; git's `author` and `email` filters are the exception
