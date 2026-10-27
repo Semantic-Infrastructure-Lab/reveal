@@ -335,6 +335,21 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         ('file', [
             'os.open', 'os.openfile', 'os.create', 'os.remove', 'os.mkdirall',
             'ioutil.readfile', 'ioutil.writefile',
+            # BACK-2259: Go 1.16 moved ioutil's file calls into `os`; `os.ReadFile`
+            # matched the common bare 'readfile' but `os.WriteFile` matched nothing
+            # (6 of the 8 oracle `file` lines missed on client-go). The rest of the
+            # `os` file-tree calls with them: the other ioutil replacements, RemoveAll
+            # beside Remove, and the permission/link/truncate verbs the Node `fs` verb
+            # list (_RECEIVER_VERB_FILTER) already counts. Directory walks read the
+            # tree the way ReadDir does. Not added: os.Stat/Lstat/Readlink (metadata
+            # lookups, like Python's unlisted os.stat), os.DirFS (no I/O),
+            # ioutil.ReadAll (any io.Reader, mostly HTTP bodies). Dotted => no
+            # cross-language collision.
+            'os.writefile', 'os.removeall', 'os.createtemp', 'os.mkdirtemp', 'os.readdir',
+            'os.truncate', 'os.chmod', 'os.chown', 'os.lchown', 'os.chtimes',
+            'os.symlink', 'os.link', 'os.copyfs',
+            'ioutil.readdir', 'ioutil.tempfile', 'ioutil.tempdir',
+            'filepath.walk', 'filepath.walkdir',
         ]),
         # BACK-629 (sideeffects-recall-oracle, real-corpus measurement on
         # k8s.io/client-go): Go had NO http bucket at all — every idiomatic
