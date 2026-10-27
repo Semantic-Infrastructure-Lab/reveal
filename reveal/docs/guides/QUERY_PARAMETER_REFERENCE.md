@@ -153,17 +153,32 @@ reveal 'imports://src?circular&verbose'   # Cycle paths
     reveal 'git://app.py?type=history&hash=a1b2c3d'
     ```
 
-- **`date`** - Filter commits by commit date: `>`, `<`, `>=`, `<=` or a range `=a..b`
-  - A month or day bound names the whole period: `date>2026-02-01` is after the end of that day,
-    `date>2026-02` after the end of February, `date<P` before the start of P, and
-    `date>=`/`date<=` (and a range) include all of it. A full timestamp bound
-    (`date>2026-02-01 12:00:00`, or with a `T`: `2026-02-01T12:00:00`) compares the timestamp.
+- **`date`** - Filter commits by commit date: `=`, `!=`, `>`, `<`, `>=`, `<=` or a range `=a..b`
+  - A year, month or day bound names the whole period: `date=2026-02-06` is any commit that
+    day, `date!=P` any commit outside P, `date>2026-02-01` is after the end of that day,
+    `date>2026-02` after the end of February, `date>2026` after the end of 2026, `date<P`
+    before the start of P, and `date>=`/`date<=` (and a range) include all of it. A full
+    timestamp bound (`date>2026-02-01 12:00:00`, or with a `T`: `2026-02-01T12:00:00`) compares
+    the timestamp.
+  - A commit's `date` is written in the local time of the machine running reveal, with no
+    zone, and a bound with no zone is read in it too. A bound with a zone (`Z`, `+02:00`,
+    `-0700`) is converted to that local time first, so it names the same instant everywhere.
+    Write `+` as itself; git:// does not percent-decode query values.
   - `since=D` is `date>=D` and `until=D` is `date<=D`
   - **Examples**:
     ```bash
     reveal 'git://.?date>2026-02-01'                       # commits after 1 Feb
+    reveal 'git://.?date=2026-02-06'                       # every commit on 6 Feb
     reveal 'git://.?since=2026-01-01&until=2026-01-31'     # all of January
+    reveal 'git://.?date>=2025&date<2026'                  # all of 2025
+    reveal 'git://.?date>2026-10-27T22:00:00Z'             # after 22:00 UTC that day
     ```
+
+- **`timestamp`** - Filter commits by commit time in epoch seconds: `timestamp>1767225600`
+
+- A filter written with an operator on a field a commit does not have (`authr~=Scott`)
+  compares a missing value on every commit; the answer carries an `unknown_filter_field`
+  warning in `meta.warnings` naming it, as on metrics:// and json://.
 
 - **`ref`** - Override the starting ref (alias for `@ref` in the URI)
   - **Example**:

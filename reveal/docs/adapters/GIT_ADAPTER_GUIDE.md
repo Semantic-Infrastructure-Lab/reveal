@@ -680,9 +680,25 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 | `email` | string | `=`, `~=` | Filter by author email |
 | `message` | string | `=`, `~=` | Filter by commit message |
 | `hash` | string | `=`, `.=` | Filter by commit hash prefix |
-| `date` | ISO date | `>`, `<`, `>=`, `<=`, `=a..b` | Filter by commit date, e.g. `date>=2026-01-01`. A month or day bound is the whole period: `date>2026-01` excludes January, `date>=P`/`date<=P` include it. A timestamp may use a space or `T` (`2026-01-31T12:00:00`) |
+| `date` | ISO date | `=`, `!=`, `>`, `<`, `>=`, `<=`, `=a..b` | Filter by commit date, e.g. `date>=2026-01-01`. A year, month or day is the whole period: `date=2026-02-06` is any commit that day, `date>2026-01` excludes January, `date>=P`/`date<=P` include it. A timestamp may use a space or `T` (`2026-01-31T12:00:00`), and may end in a zone (`Z`, `+02:00`) |
+| `timestamp` | integer | `=`, `!=`, `>`, `<`, `>=`, `<=` | The commit time in epoch seconds, e.g. `timestamp>1767225600` |
 | `since` | ISO date | `=` only | Ergonomic alias for `date>=` (`since=2026-01` includes January) |
 | `until` | ISO date | `=` only | Ergonomic alias for `date<=` (`until=2026-01` includes January) |
+
+**Dates and zones.** A commit's `date` is its commit time written in the local time of the machine
+running reveal, with no zone (`2026-10-27 15:46:04`). A bound with no zone is read in that same
+local time. A bound with a zone is converted to local time first, so it names the same instant
+on every machine: in Pacific daylight time `date>2026-10-27T22:00:00Z` and
+`date>2026-10-27T15:00:00-07:00` both mean after 15:00 local. Write `+` as itself
+(`+02:00`); git:// query values are not percent-decoded. In the hour a daylight-saving change
+repeats, two instants print the same local time, in the commit dates and in a converted bound
+alike.
+
+**A filter field no commit has warns.** The fields of a commit are `hash`, `author`, `email`,
+`date`, `timestamp` and `message`. A filter written with an operator on any other field
+(`authr~=Scott`) compares a missing value on every commit; the answer carries an
+`unknown_filter_field` entry in `meta.warnings`, printed under the text output. A bare unknown
+key (`?authr`, `?authr=Scott`) gets the stderr warning "Unknown query param" instead.
 
 ### Result Control Parameters
 
@@ -804,12 +820,12 @@ reveal 'git://.@main?author=John&message~=fix.*auth'
 
 | Operator | Meaning | Example |
 |----------|---------|---------|
-| `=` | Exact match (case-insensitive for author/email) | `author=John` |
+| `=` | Exact match (case-insensitive for author/email); a year, month or day date matches any time in it | `author=John`, `date=2026-02-06` |
 | `~=` | Regex match (case-insensitive) | `message~=bug` |
-| `!=` | Not equal | `author!=bot` |
-| `>` | Greater than; a month or day bound means after the end of that month or day | `date>2025-01-01` |
-| `<` | Less than; a month or day bound means before its start | `date<2025-02` |
-| `>=`, `<=` | Greater/less or equal; a month or day bound includes all of it | `date>=2025-01-01` |
+| `!=` | Not equal; a year, month or day bound means outside that period | `author!=bot` |
+| `>` | Greater than; a year, month or day bound means after the end of that period | `date>2025-01-01` |
+| `<` | Less than; a year, month or day bound means before its start | `date<2025-02` |
+| `>=`, `<=` | Greater/less or equal; a year, month or day bound includes all of it | `date>=2025` |
 | (key alone) | The field is present, as on `json://` and `ast://`; `!key` is absent | `author` |
 
 ---

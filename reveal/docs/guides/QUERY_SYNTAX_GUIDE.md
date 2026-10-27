@@ -387,12 +387,21 @@ reveal 'git://.?hash=a1b2c3'                        # Commit by prefix
 reveal 'git://.?date>2026-02-01'                    # After 1 Feb (1 Feb itself excluded)
 reveal 'git://.?date>=2026-02-01'                   # From 1 Feb on (1 Feb included)
 reveal 'git://.?since=2026-01-01&until=2026-01-31'  # All of January
+reveal 'git://.?date=2026-02-06'                    # Any commit on 6 Feb
+reveal 'git://.?date>2026-10-27T22:00:00Z'          # After 22:00 UTC (zone converted)
 ```
 
-A month or day bound names the whole period: `date>P` is after the end of P, `date<P` before its
-start, and `date>=P`, `date<=P` and a range `date=P1..P2` include all of P, so `date>2026-01` starts
-in February and `until=2026-01` includes January. A full timestamp bound
-(`date>2026-02-01 12:00:00`, or `2026-02-01T12:00:00`) compares the timestamp.
+A year, month or day bound names the whole period: `date=P` is any time in P, `date!=P` any time
+outside it, `date>P` is after the end of P, `date<P` before its start, and `date>=P`, `date<=P`
+and a range `date=P1..P2` include all of P, so `date>2026-01` starts in February,
+`until=2026-01` includes January and `date<=2025` includes all of 2025. A full timestamp bound
+(`date>2026-02-01 12:00:00`, or `2026-02-01T12:00:00`) compares the timestamp. Commit dates are
+written in the local time of the machine running reveal, without a zone; a bound with a zone
+(`Z`, `+02:00`) is converted to that local time first, and `+` is written as itself.
+
+A filter written with an operator on a field no commit has (`git://.?authr~=Scott`) carries an
+`unknown_filter_field` warning, as on metrics:// and json://. The commit fields are `hash`,
+`author`, `email`, `date`, `timestamp` and `message`.
 
 **File history**:
 ```bash
