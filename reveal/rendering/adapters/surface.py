@@ -133,6 +133,12 @@ def _entry(surface_type: str, entry: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _more_hint(key: str, total: int, shown: int, filtered: bool) -> str:
+    """The '… N more' line; a --type filter leaves only its own category, so it isn't suggested again."""
+    by_type = '' if filtered else f" or --type {key}"
+    return f"  … {total - shown} more (use --top {total}{by_type} to see all)"
+
+
 def surface_text(report: Dict[str, Any], top: Optional[int] = None) -> str:
     """The text report for one surface scan."""
     surfaces = report['surfaces']
@@ -170,10 +176,7 @@ def surface_text(report: Dict[str, Any], top: Optional[int] = None) -> str:
             lines.append(f"{label} ({len(entries)}):")
             lines.extend(text for text in (_entry(key, e) for e in shown) if text is not None)
             if len(entries) > len(shown):
-                # A --type filter leaves only its own category: don't suggest it again.
-                by_type = f" or --type {key}" if len(surfaces) > 1 else ''
-                lines.append(f"  … {len(entries) - len(shown)} more "
-                             f"(use --top {len(entries)}{by_type} to see all)")
+                lines.append(_more_hint(key, len(entries), len(shown), filtered=len(surfaces) == 1))
             lines.append('')
         lines.extend([_TAXONOMY_NOTE, ''])
     return '\n'.join(lines) + '\n'

@@ -67,6 +67,15 @@ def _disclose_unrecorded_exec_scripts(result: Dict[str, Any], records: List[Dict
         })
 
 
+def _session_lookup_error(session_id: str, candidates: List[str]) -> str:
+    """The error for a session id that matched no session, or several (a shared prefix)."""
+    if not candidates:
+        return f'Session not found: {session_id}'
+    more = ', ...' if len(candidates) > 5 else ''
+    return (f'Ambiguous session prefix {session_id}: matches '
+            f'{", ".join(candidates[:5])}{more}; use more characters')
+
+
 def _resolve_codex_home() -> Path:
     return Path.home() / '.codex'
 
@@ -299,12 +308,7 @@ class CodexAdapter(ResourceAdapter):
         if session_row is None:
             base = self._get_contract_base()
             base['type'] = 'codex_error'
-            if candidates:
-                more = ', ...' if len(candidates) > 5 else ''
-                base['error'] = (f'Ambiguous session prefix {session_id}: matches '
-                                 f'{", ".join(candidates[:5])}{more}; use more characters')
-            else:
-                base['error'] = f'Session not found: {session_id}'
+            base['error'] = _session_lookup_error(session_id, candidates)
             return base
 
         jsonl_path = self._find_jsonl_for_session(session_row)
