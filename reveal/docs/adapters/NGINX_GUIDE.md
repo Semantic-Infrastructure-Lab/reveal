@@ -341,6 +341,8 @@ Detects `listen 443 ssl` without `ssl_certificate` and `ssl_certificate_key`. Th
 myuser.conf:37:1 🚨 N002 SSL server 'api.example.com' missing both ssl_certificate and ssl_certificate_key
 ```
 
+A directive counts when it is in the server block, in a file that block includes, or at `http{}` level: directly inside `http{}` (of this file or of the `nginx.conf` found next to it) or at the top of a file included there. A certificate inside another `server{}` block covers only that server, so `site.conf:2:1 🚨 N002 SSL server 'a.example.com' missing ssl_certificate_key` still fires when the only key is in a neighbouring vhost of `nginx.conf`. N002 checks that the directives are present, not that the files exist.
+
 #### N003 — Proxy location missing headers
 
 Detects `proxy_pass` locations missing `X-Real-IP` or `X-Forwarded-For`. Without these, the upstream sees the nginx IP, not the real client IP.
@@ -393,7 +395,7 @@ This typically affects self-signed or internal CA certificates. For production L
 
 Detects server blocks listening on port 443 that lack a `Strict-Transport-Security` (HSTS) header — either on the server block itself or in the global `http{}` block. Without HSTS, browsers never learn to pin the site to HTTPS, leaving the first HTTP request vulnerable to SSL stripping.
 
-If HSTS is set globally in `nginx.conf http{}`, it covers all vhosts and no per-server findings are emitted.
+If HSTS is set at `http{}` level in `nginx.conf` (directly inside `http{}`, or at the top of a file included there), it covers all vhosts and no per-server findings are emitted. An `add_header Strict-Transport-Security` inside one of `nginx.conf`'s `server{}` blocks covers only that server.
 
 ```
 myuser.conf:9:1 ❌ N008 'example.com' (line 9): HTTPS site missing Strict-Transport-Security header
@@ -411,7 +413,7 @@ Detects nginx configs where `server_tokens` is not set to `off`. By default ngin
 myuser.conf:1:1 ⚠️  N009 server_tokens not disabled — nginx version exposed in Server header
 ```
 
-Fix: add `server_tokens off;` to the `http{}` block in `nginx.conf`.
+Fix: add `server_tokens off;` to the `http{}` block in `nginx.conf` (directly, or at the top of a file included there; inside a `server{}` block of `nginx.conf` it covers only that server and the finding stays).
 
 Suppress: `# reveal:allow-server-tokens`
 

@@ -1893,8 +1893,8 @@ N001: Duplicate upstream servers
     server localhost:8000;  # ❌ Duplicate
   }
 
-N002: SSL certificate file not found
-  ssl_certificate /etc/nginx/ssl/cert.pem;  # ❌ File doesn't exist
+N002: SSL server missing certificate directives
+  server { listen 443 ssl; }  # ❌ no ssl_certificate / ssl_certificate_key here or at http{} level
 
 N003: Missing proxy headers
   location / {
@@ -4099,9 +4099,13 @@ upstream backend {
 
 **N002: Missing SSL certificate**
 ```nginx
-# ❌ Bad
-ssl_certificate /path/to/missing.pem;  # File doesn't exist
+# ❌ Bad - no ssl_certificate / ssl_certificate_key in the server, its includes or at http{} level
+server {
+    listen 443 ssl;
+    server_name example.com;
+}
 ```
+A certificate inside another `server{}` (in `nginx.conf` or the same file) does not count; one set directly in `http{}` or at the top of a file included there does. N002 does not check that the files exist.
 
 **N003: Missing proxy headers**
 ```nginx
