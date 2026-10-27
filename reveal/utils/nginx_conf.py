@@ -99,3 +99,43 @@ def find_blocks(text: str, name: str) -> List[Tuple[str, str]]:
                 found.append((header, code[body_start:i]))
             stmt_start = i + 1
     return found
+
+
+def _statement_events(code: str) -> Iterator[Tuple[str, str]]:
+    """``('{', '')``, ``('}', '')`` and ``(';', text)`` for the unquoted braces and directives of
+    *code* (comments already stripped), in order. A directive's text runs from the previous ``;``,
+    ``{`` or ``}`` to its ``;``, so ``location /x/ { root /srv/a; }`` yields ``{``,
+    ``(';', 'root /srv/a')``, ``}``: the header before ``{`` is not a directive."""
+    start = 0
+    for i, ch, state in _scan(code):
+        if state != CODE or ch not in '{};':
+            continue
+        yield (ch, code[start:i].strip() if ch == ';' else '')
+        start = i + 1
+
+
+def line_statements(line: str) -> List[str]:
+    """The directives that end on *line*, without their ``;``: ``['root /srv/a']`` for
+    ``location /x/ { root /srv/a; }`` as for ``root /srv/a;`` (BACK-2246). A directive continued
+    from an earlier line yields only its last line's text."""
+    return [text for kind, text in _statement_events(strip_comments(line)) if kind == ';' and text]
+
+
+def block_statements(lines: List[str], start: int) -> Iterator[Tuple[int, int, str]]:
+    """``(index, depth, text)`` for every directive inside the first block that opens at or after
+    ``lines[start]``, until that block closes; depth 1 is a direct child of the block. The block
+    may open and close on one line (``location /x/ { root /srv/a; }``, BACK-2246) and a directive
+    of the next block is never read as this one's."""
+    depth = 0
+    opened = False
+    for index in range(start, len(lines)):
+        for kind, text in _statement_events(strip_comments(lines[index])):
+            if kind == '{':
+                depth += 1
+                opened = True
+            elif kind == '}':
+                depth -= 1
+                if opened and depth <= 0:
+                    return
+            elif opened and text:
+                yield index, depth, text
