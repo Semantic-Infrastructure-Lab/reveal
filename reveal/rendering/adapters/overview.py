@@ -330,14 +330,14 @@ def _render_next_steps(path: str) -> List[str]:
 
 
 def _hotspot_scope_lines(scope: Optional[Dict[str, Any]], listed: bool) -> List[str]:
-    """The rule the Hotspots ranking was made by: test files left out (default) or ranked (``tests=include``)."""
+    """The scope the Hotspots ranking was made by: test files left out (default) or ranked (``tests=include``)."""
     if not isinstance(scope, dict):
         return []
     if scope.get('tests') == 'include':
-        line = '  Rule: test files (path_utils.is_test_path) are ranked with the rest (tests=include)'
+        line = '  Test files (path_utils.is_test_path) are ranked with the rest (tests=include)'
     else:
         n = scope.get('files_excluded', 0)
-        line = (f"  Rule: test files (path_utils.is_test_path) are not ranked: {n} excluded; "
+        line = (f"  Test files (path_utils.is_test_path) are not ranked: {n} excluded; "
                 f"tests=include ranks them")
     if listed:
         return [line]

@@ -61,7 +61,7 @@ def test_the_default_output_says_what_it_excluded_and_how_to_include_them(mixed)
     data = _json('overview', str(mixed), '--no-git', '--top', '20', '--format', 'json')
     assert data['stats']['test_scope'] == {'rule': 'is_test_path', 'tests': 'exclude', 'files_excluded': 4}
     text = run('overview', str(mixed), '--no-git', '--top', '20').stdout
-    rule = [line for line in text.splitlines() if 'test files' in line and 'is_test_path' in line]
+    rule = [line for line in text.splitlines() if 'Test files' in line and 'is_test_path' in line]
     assert len(rule) == 1 and 'tests=include' in rule[0] and '4' in rule[0], rule
 
 

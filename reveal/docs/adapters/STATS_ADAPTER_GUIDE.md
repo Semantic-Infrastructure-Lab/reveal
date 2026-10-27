@@ -22,7 +22,7 @@ answers. Everything it does is documented once, in
 `meta.warnings` (see [Retired spellings](METRICS_ADAPTER_GUIDE.md#retired-spellings)). At the
 cut the same text becomes an exit-2 error. Its parameters are metrics' own: `?view=`,
 `?hotspots=`, `?top=`, `?code_only=`, `?min_lines=`, `?max_lines=`, `?min_complexity=`,
-`?max_complexity=`, `?min_functions=`, `?churn=`, `?since=`, `?no_merges=`, `?summary_only=`,
+`?max_complexity=`, `?min_functions=`, `?churn=`, `?since=`, `?no_merges=`, `?tests=`, `?summary_only=`,
 `?sort=`, `?limit=`, `?offset=`, plus the operator-filter syntax.
 
 ## See Also

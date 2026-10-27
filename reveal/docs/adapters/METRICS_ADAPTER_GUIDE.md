@@ -285,6 +285,7 @@ Default penalties:
 | `churn` | boolean | Fold commit-touch counts into hotspot scoring (default: on for git repos, silently off otherwise) | `?hotspots=true&churn=false` |
 | `since` | string (ISO date) | Bound the churn walk to commits on/after this date (default: full history) | `?hotspots=true&since=2026-01-01` |
 | `no_merges` | boolean | Exclude merge commits from the churn tally | `?hotspots=true&no_merges=1` |
+| `tests` | `include` (default), `exclude` | With `hotspots=true`: leave test files (`path_utils.is_test_path`, judged from the scanned path's own name down) out of the ranking. Only the ranking is narrowed; totals and `files` still count them. A request that names it adds `test_scope` (`rule`, `tests`, `files_excluded`). overview:// passes `exclude` by default; the default here, and `reveal hotspots`, still rank test files. | `?hotspots=true&tests=exclude` |
 | `summary_only` | boolean | Omit the per-file `files` array — aggregate summary (+ hotspots, if requested) only. Use on large repos where the per-file array is impractically large. | `?summary_only=true` |
 
 **Note**: Legacy parameters still work but unified query syntax (below) is preferred for new queries. `churn`/`since`/`no_merges` only affect hotspot scoring (`hotspots=true`) and are ignored otherwise.
@@ -306,6 +307,7 @@ Every parameter above has a flag, and so do `view` and the result controls:
 | `min_functions` | `--min-functions N` |
 | `churn` | `--no-churn` (churn is on by default) |
 | `since`, `no_merges` | `--since DATE`, `--no-merges` |
+| `tests` | `--tests include\|exclude` |
 | `summary_only` | `--summary-only` |
 | `sort`, `limit`, `offset` | `--sort=FIELD` (`--sort=-lines` for descending), `--limit N`, `--offset N` |
 

@@ -39,6 +39,7 @@ reveal overview . --format json
 | `top` | nonnegative whole number (default `5`) | Analysis and presentation cap; `3.0` and `3e0` normalize to 3. Fractions, booleans and negative values reject. |
 | `no_git` | `true`, `false` (default) | Skip the recent-git-activity section. |
 | `no_imports` | `true`, `false` (default) | Skip import graph analysis (architecture section). |
+| `tests` | `exclude` (default), `include` (flag: `--tests include`) | Hotspots leave out test files (`path_utils.is_test_path`, judged from the scanned path's own name down, the rule `patches://` and `testability://` use). The text prints one line with the count left out; JSON has `stats.test_scope`. `include` ranks them. Only the Hotspots ranking is narrowed: `complex_functions`, the file inventory and totals still count test files. |
 | `exclude` | comma-separated glob patterns | Exclude matching files/directories from the `stats`/hotspots, `scope` and `architecture` sections (an excluded file stays resolvable as an import target). Does not affect `complex_functions`. |
 | `respect_gitignore` | `true` (default), `false` | Skip what git ignores, in every section (tracked files are never skipped; `false` or `--no-gitignore` includes ignored files). |
 
@@ -60,6 +61,8 @@ Unsupported `--fail-on findings` rejects with usage 2. Legacy stdin/mixed batche
 retain their separate policy and reject `--fail-on`.
 
 ## Reading The Output
+
+The Architecture section's Components rows are ranked by import cohesion. For a directory with more than half its files in Go, Java, Kotlin, C#, Scala or Swift the number is `n/a` (JSON `cohesion: null` with `cohesion_reason`, plus one `architecture.cohesion_rule`): files of one package or module use each other without an import, so the ratio would read ~0 whatever the structure. Such rows follow every measured one, by file count.
 
 `stats` carries the summary/hotspots/files data from `stats://`.
 `complex_functions` is the `ast://` complexity ranking. `architecture` has

@@ -288,11 +288,11 @@ def test_typed_binder_declaration_defaults_and_roles():
     schema = OverviewAdapter.get_schema()
     assert schema['execution_policy'] == {'default_fail_on': 'none', 'fail_on': ['none']}
     assert 'execution' not in schema
-    assert [(s.name, s.role) for s in specs] == [('top', 'analysis'), ('no_git', 'analysis'), ('no_imports', 'analysis')]
+    assert [(s.name, s.role) for s in specs] == [('top', 'analysis'), ('no_git', 'analysis'), ('no_imports', 'analysis'), ('tests', 'analysis')]
     with collect_query_keys() as keys:
         params = bind_declared_params(specs, {}, transport='typed')
         assert dict(params) == {} and keys.used == set()
-        assert [s.read(params) for s in specs] == [5, False, False]
+        assert [s.read(params) for s in specs] == [5, False, False, 'exclude']
     for value in [True, False, 1.5]:
         with pytest.raises(ValueError):
             bind_declared_params(specs, {'top': value}, transport='typed')
