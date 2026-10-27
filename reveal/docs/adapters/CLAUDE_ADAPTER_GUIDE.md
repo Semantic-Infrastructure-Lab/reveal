@@ -69,13 +69,13 @@ The **claude://** adapter provides two families of resources: **session analysis
 - Token breakdown by turn (`?tokens`)
 - Agent tool call tracking (`/agents` sub-route)
 - Context change tracking (directory, branch changes)
-- Composite query support (filter by tools, errors, text, role)
+- Composite query support (filter by tool, errors, and tool-result text)
 
 **Design Philosophy**:
 - **Progressive disclosure**: Start with overview, drill down as needed
 - **Token-efficient**: Avoid loading full conversations unless necessary
 - **Composable queries**: Combine filters for precise analysis
-- **Actionable insights**: Tool success rates, error context, optimization recommendations
+- **Actionable facts**: Tool success rates, error context (the failing call's input and the thinking before it), message and token counts
 
 ---
 
@@ -97,7 +97,7 @@ reveal claude://session/infernal-earth-0118
 
 ### 2. Session Summary
 
-Get comprehensive summary with key events:
+Get the overview plus per-tool success rates and message sizes:
 
 ```bash
 reveal 'claude://session/infernal-earth-0118?summary'
@@ -197,11 +197,11 @@ reveal claude://session/infernal-earth-0118/digest      # overview + prompts + n
 
 ### 11. Search Session Content
 
-Find a term across all text, thinking blocks, and tool inputs:
+Find a term across all text, thinking blocks, tool inputs and tool results:
 
 ```bash
 reveal 'claude://session/infernal-earth-0118?search=verify'
-reveal 'claude://session/infernal-earth-0118?search=path' traversal
+reveal 'claude://session/infernal-earth-0118?search=path traversal'
 ```
 
 **Returns**: Matches with message index, role, block type, and excerpt
@@ -215,7 +215,7 @@ reveal claude://history
 reveal 'claude://history?search=deploy&since=2026-03-01'
 ```
 
-**Returns**: Prompts grouped by session, newest-first (50 by default)
+**Returns**: Prompts newest-first (50 by default); consecutive entries are grouped under their project path
 
 ### 13. Saved Plans
 
@@ -432,8 +432,7 @@ Extract and analyze all thinking blocks:
 **What it provides**:
 - All thinking blocks from session
 - Token estimates (chars / 4)
-- Thinking patterns analysis
-- Token optimization insights
+- Counts of blocks and of blocks whose text was not stored
 
 **Example output**:
 ```json
@@ -453,8 +452,7 @@ Extract and analyze all thinking blocks:
 
 **Use cases**:
 - Understand agent reasoning process
-- Identify token waste in thinking blocks
-- Optimize thinking patterns
+- Spot long thinking blocks by size
 - Debug reasoning failures
 
 ---
@@ -498,15 +496,16 @@ reveal 'claude://session/my-session?tools=Bash&errors'
 # Assistant narrative turns containing specific text
 reveal 'claude://session/my-session/messages?contains=reveal'
 
-# Summary with error focus
-reveal 'claude://session/my-session?summary&errors'
+# Error list (the summary already carries per-tool failure counts)
+reveal 'claude://session/my-session?errors'
 ```
 
 **Supported combinations**:
 - `?tools=<tool>&errors` - Specific tool failures
 - `/messages?contains=<text>` - Narrative-turn text search (see `?search=<term>` below for a whole-session, all-roles equivalent)
-- `?summary&errors` - Summary with error emphasis
-- `?tools=<tool>&contains=<text>` - Tool usage with text filter
+- `?tools=<tool>&contains=<text>` - Results of that tool whose output contains the text (tool inputs are not searched; use `?search=` for those)
+
+`?summary&errors` is not a combination: `errors` is ignored and the answer is the plain `?summary`.
 
 ---
 
@@ -636,7 +635,7 @@ reveal claude://session/infernal-earth-0118/timeline
 
 ### 7. context
 
-**Description**: Context window changes over session (directory, branch changes)
+**Description**: Working-directory and git-branch changes over the session (read from the `cwd` and `gitBranch` fields Claude Code writes on each record)
 
 **Syntax**:
 ```bash
@@ -648,7 +647,7 @@ reveal 'claude://session/<session-name>/context'
 reveal claude://session/infernal-earth-0118/context
 ```
 
-**Output**: Directory changes, branch switches, repository changes
+**Output**: Each point where the working directory or the git branch differs from the previous record (the first record always counts), with `message_index`, `type` (`cwd` or `branch`), `value` and `timestamp`, plus `final_cwd` and `final_branch`
 
 **Use when**: Track context switches, debug navigation issues, understand agent context management
 
@@ -696,7 +695,7 @@ reveal 'claude://session/<session-name>/messages?raw&full'   # + disable 600-cha
 reveal claude://session/infernal-earth-0118/messages
 ```
 
-**Output**: Each narrative turn's full text, with `turn`/`message_index`/`timestamp`/`char_count`. This is the best resource for reading what the assistant concluded — lighter and cleaner than a raw dump because tool-call-only turns are skipped entirely rather than shown as one-line summaries.
+**Output**: Each narrative turn's text, with `turn`/`message_index`/`timestamp`/`char_count`. Text output cuts each turn at 600 characters (`--verbose` or `--max-snippet-chars N` lifts it; `?full` has no effect on plain `/messages`); JSON always carries the full text. This is the best resource for reading what the assistant concluded — lighter and cleaner than a raw dump because tool-call-only turns are skipped entirely rather than shown as one-line summaries.
 
 **`?raw`**: add `?raw` to get every raw role=assistant record unfiltered instead — text, thinking, tool_use, and tool_result blocks all present for every turn, none skipped. This is a bulk forensic scan (e.g. reading every tool_use's exact arguments across a session at once, or every tool_result's exact output), not narrative reading; prefer plain `/messages` unless you specifically need that. Add `&full` to also disable the 600-char per-message truncation.
 
@@ -855,7 +854,7 @@ reveal claude://session/infernal-earth-0118/exchanges
 
 ### ?summary
 
-**Description**: Session summary with key events and recommendations
+**Description**: Overview plus per-tool success rates, message sizes and thinking-block count
 
 **Syntax**:
 ```bash
@@ -867,7 +866,7 @@ reveal 'claude://session/<session-name>?summary'
 reveal 'claude://session/infernal-earth-0118?summary'
 ```
 
-**Output**: Overview + timeline + critical events + recommendations
+**Output**: The overview fields plus `tool_success_rate` (per tool: success, failure, total, success_rate), `avg_message_size`, `max_message_size` and `thinking_blocks`. There is no timeline, event list or recommendation
 
 **Use when**: Quick session understanding, post-session review
 
@@ -907,7 +906,7 @@ reveal 'claude://session/<session-name>?tokens'
 reveal 'claude://session/infernal-earth-0118?tokens'
 ```
 
-**Output**: Per-turn token counts (input, output, cache_read, cache_creation) plus session totals
+**Output**: One row per API message: `message_index`, `timestamp`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_created_tokens`, `cumulative_input`; `totals` adds `cache_hit_rate`
 
 **Use when**: Audit token cost, identify expensive turns, compare sessions by cost
 
@@ -915,7 +914,7 @@ reveal 'claude://session/infernal-earth-0118?tokens'
 
 ### ?patches
 
-**Description**: Include file patch/diff content in the files-touched view
+**Description**: JSON only: add each Edit's patch to the files-touched view
 
 **Syntax**:
 ```bash
@@ -927,7 +926,7 @@ reveal 'claude://session/<session-name>/files?patches=true'
 reveal 'claude://session/infernal-earth-0118/files?patches=true'
 ```
 
-**Output**: The files-touched list, each entry augmented with its patch/diff content
+**Output**: Each `operations[]` entry gains `patch`, the Edit's structured hunks (`oldStart`, `oldLines`, `newStart`, `newLines`, `lines`); it is `null` for Read, Write and failed edits. The text view is unchanged
 
 **Use when**: Review exactly what changed in a session's edits, not just which files
 
@@ -977,7 +976,7 @@ reveal 'claude://session/infernal-earth-0118?tools=Edit'
 
 ### ?search=\<term\>
 
-**Description**: Case-insensitive search across all session content — text blocks, thinking blocks, and tool inputs/descriptions
+**Description**: Case-insensitive search across all session content — text blocks, thinking blocks, tool inputs/descriptions and tool-result output
 
 **Syntax**:
 ```bash
@@ -987,11 +986,11 @@ reveal 'claude://session/<session-name>?search=<term>'
 **Examples**:
 ```bash
 reveal 'claude://session/infernal-earth-0118?search=verify=False'
-reveal 'claude://session/infernal-earth-0118?search=path' traversal
+reveal 'claude://session/infernal-earth-0118?search=path traversal'
 reveal 'claude://session/infernal-earth-0118?search=credential'
 ```
 
-**Output**: Matching messages with role, block type (`text`, `thinking`, `tool_use:Bash`), timestamp, and a 120-char excerpt centered on the match
+**Output**: Matching messages with role, block type (`text`, `thinking`, `tool_use:Bash`, `tool_result`), timestamp, and a 120-char excerpt centered on the match
 
 **Use when**: Find where a specific topic was discussed, compare findings across sessions, locate the message containing a key conclusion
 
@@ -1021,7 +1020,7 @@ reveal 'claude://session/infernal-earth-0118/messages?contains=import pandas'
 
 ### ?raw
 
-**Description**: On `/prompts` or `/messages`, return every raw role record unfiltered (text, thinking, tool_use, tool_result blocks all included) instead of the narrative-only extract. Replaces the old standalone `/user` and `/assistant` elements and the `?role=user|assistant` query param (both removed) — `/prompts?raw` reaches full parity with `/user`'s old scope (every role=user record, tool-result wrapper turns included, not narrowed to real prompts); `/messages?raw` reaches parity with `/assistant`'s old scope.
+**Description**: On `/prompts` or `/messages`, return every raw role record unfiltered (text, thinking, tool_use, tool_result blocks all included) instead of the narrative-only extract. Replaces the old standalone `/user` and `/assistant` elements and the `?role=user|assistant` query param (both removed; a request for `/user`, `/assistant` or any other unknown element falls back to the session overview with rc 0 and no warning, and `?role=` is ignored with a warning) — `/prompts?raw` reaches full parity with `/user`'s old scope (every role=user record, tool-result wrapper turns included, not narrowed to real prompts); `/messages?raw` reaches parity with `/assistant`'s old scope.
 
 **Syntax**:
 ```bash
@@ -1085,9 +1084,6 @@ reveal 'claude://session/my-session?tools=Bash&errors'
 # Assistant narrative turns about reveal
 reveal 'claude://session/my-session/messages?contains=reveal'
 
-# Summary with error emphasis
-reveal 'claude://session/my-session?summary&errors'
-
 # Read operations with errors
 reveal 'claude://session/my-session?tools=Read&errors'
 ```
@@ -1113,7 +1109,6 @@ reveal claude://session/my-session
 - Tool call count
 - Duration
 - Tool summary (top tools with counts)
-- Next steps
 
 **Use when**: Initial session assessment, quick status check
 
@@ -1142,7 +1137,7 @@ reveal claude://session/my-session/workflow   # Operation sequence
 ```bash
 reveal 'claude://session/my-session?errors'           # Only errors
 reveal 'claude://session/my-session?tools=Bash'       # Only Bash usage
-reveal 'claude://session/my-session?contains=reveal'  # Text search
+reveal 'claude://session/my-session?search=reveal'    # Text search (whole session)
 ```
 
 **Token cost**: ~400-800 tokens (depends on filter match count)
@@ -1164,7 +1159,7 @@ reveal 'claude://session/my-session?tools=Bash&errors' # Composite filter
 
 **Token cost**: ~1000-2000 tokens
 
-**Returns**: Comprehensive analysis with insights and recommendations
+**Returns**: The facts each command prints (success rates, thinking blocks, Bash calls and errors); none of them adds insights or recommendations
 
 **Use when**: Deep understanding needed, optimization analysis, comprehensive review
 
@@ -1199,57 +1194,23 @@ Success Rate = (Successful Calls / Total Calls) × 100
 - **Success**: Tool result returned without error
 - **Failure**: Tool result contains error or exception
 
-**Example**:
+**Example** (`/tools` JSON, one entry per tool under `tools`):
 ```json
 {
-  "name": "Bash",
-  "count": 10,
-  "successful": 8,
-  "failed": 2,
-  "success_rate": 80.0
+  "Bash": {"count": 10, "success_rate": "80.0%", "success": 8, "failure": 2}
 }
 ```
+
+`success_rate` is a string with a `%` sign here; `?summary` reports `tool_success_rate.<Tool>` with `success`, `failure`, `total` and a numeric `success_rate`.
 
 ---
 
 ### Common Tool Patterns
 
-**Read tool patterns**:
-```json
-{
-  "name": "Read",
-  "count": 15,
-  "common_operations": [
-    "/path/to/config.yaml (5 times)",
-    "/path/to/main.py (3 times)",
-    "/path/to/tests/*.py (2 times)"
-  ]
-}
-```
+reveal does not count repeated operations or pair tools. `/tools` lists each call in order, and its JSON `details.<Tool>[]` entries carry `message_index`, `tool_use_id`, `timestamp`, `detail` (the Bash description or the file path) and `caller_type`. Frequencies and patterns are for the reader or a script to derive from those lists, for example:
 
-**Bash tool patterns**:
-```json
-{
-  "name": "Bash",
-  "count": 12,
-  "common_operations": [
-    "git status (4 times)",
-    "pytest tests/ (3 times)",
-    "ls -la (2 times)"
-  ]
-}
-```
-
-**Edit tool patterns**:
-```json
-{
-  "name": "Edit",
-  "count": 8,
-  "common_operations": [
-    "main.py: function refactor (3 times)",
-    "config.yaml: value update (2 times)"
-  ]
-}
+```bash
+reveal claude://session/my-session/tools --format json | jq -r '.details.Bash[].detail' | sort | uniq -c | sort -rn
 ```
 
 ---
@@ -1308,19 +1269,17 @@ Success Rate = (Successful Calls / Total Calls) × 100
 ### File Access Patterns
 
 **Hotspot detection**:
-```json
-{
-  "path": "/home/user/project/src/main.py",
-  "operations": ["Read", "Read", "Edit", "Read", "Edit"],
-  "access_count": 5,
-  "pattern": "Heavy modification (3 reads + 2 edits)"
-}
+
+`/files` JSON has `total_operations`, `unique_files`, `by_operation` (each operation, including empty `Glob` and `Grep`, mapped to the files it touched and how many times) and `operations[]` (`message_index`, `operation`, `file_path`, `timestamp`). reveal does not rank or flag files; count repeats from `operations[]`:
+
+```bash
+reveal claude://session/my-session/files --format json | jq -r '.operations[].file_path' | sort | uniq -c | sort -rn | head
 ```
 
-**Hotspot interpretation**:
-- **access_count > 5**: Potential hotspot, consider why file needs repeated access
+**Interpreting repeats** (your judgement, not a reveal field):
+- **Many accesses to one file**: Potential hotspot, consider why the file needs repeated access
 - **Multiple edits**: Iterative refinement (normal) or indecision (review needed)
-- **Read-only with high count**: Reference file or missing information
+- **Read-only with a high count**: Reference file or missing information
 
 ---
 
@@ -1331,15 +1290,18 @@ Success Rate = (Successful Calls / Total Calls) × 100
 {
   "summary": {
     "total_files": 15,
-    "read_only": 10,
-    "modified": 4,
-    "created": 1
-  }
+```json
+{
+  "total_operations": 31,
+  "unique_files": 15,
+  "by_operation": {"Read": {"a.py": 2, "b.py": 1}, "Edit": {"a.py": 1}, "Write": {"c.py": 1}, "Glob": {}, "Grep": {}}
 }
 ```
 
+There is no `summary` object; derive read-only, modified and created sets from `by_operation`.
+
 **Interpretation**:
-- **High read_only count**: Exploratory session, debugging, learning
+- **High read-only count**: Exploratory session, debugging, learning
 - **High modified count**: Implementation session, bug fixing
 - **High created count**: Feature development, scaffolding
 
@@ -1429,21 +1391,25 @@ Read → Read → Read → Bash (analyze) → Read → Write (summary)
 ### Error Context
 
 Each error includes:
-- **Message ID**: Where error occurred
-- **Tool name**: Which tool failed
-- **Error message**: Specific error text
-- **Context**: Surrounding messages (before/after)
+- **`message_index`** and **`tool_use_id`**: Where the error occurred
+- **`error_type`**: How it was classified (for example `is_error_flag`, `pattern_match`)
+- **`content_preview`**: The first 300 characters of the error text
+- **`timestamp`**
+- **`context`**: The failing call, not surrounding messages: `tool_name`, `tool_input_preview`, `thinking_preview` (the thinking just before it) and `prior_action`
 
 **Example**:
 ```json
 {
-  "message_id": 67,
-  "tool": "Bash",
-  "error": "Command failed with exit code 1",
-  "command": "pytest tests/test_main.py",
+  "message_index": 67,
+  "tool_use_id": "toolu_01...",
+  "error_type": "is_error_flag",
+  "content_preview": "Exit code 1 ...",
+  "timestamp": "2026-10-27T06:17:26.977Z",
   "context": {
-    "previous": "Running tests to verify fix...",
-    "next": "Test failed: AssertionError on line 45"
+    "tool_name": "Bash",
+    "tool_input_preview": "pytest tests/test_main.py",
+    "thinking_preview": "Running tests to verify fix...",
+    "prior_action": "Edit"
   }
 }
 ```
@@ -1482,25 +1448,11 @@ The overview's `token_summary` and the `?tokens` view report the API's own usage
 
 ### Thinking Block Analysis
 
-**Metrics**:
-- Total thinking tokens
-- Average thinking block size
-- Largest thinking block
-- Thinking frequency (High/Medium/Low)
-
-**Example**:
-```json
-{
-  "total_thinking_tokens": 1245,
-  "avg_block_size": 156,
-  "largest_block": 523,
-  "frequency": "High"
-}
-```
+`/thinking` JSON reports `thinking_block_count`, `blocks_without_text` (blocks whose text the transcript did not store, common with current models), `total_chars`, `total_tokens_estimate` and `blocks[]` (`message_index`, `content`, `char_count`, `token_estimate`, `timestamp`). It has no averages, largest block or frequency rating.
 
 ---
 
-### Token Optimization Insights
+### Token Optimization Insights (reader's guide, not reveal output)
 
 **High thinking token usage** (>30% of session):
 - **Potential issue**: Over-analysis, repetitive thinking
@@ -1543,7 +1495,7 @@ reveal claude://session/my-session/files
 
 # Step 5: Comprehensive summary
 reveal 'claude://session/my-session?summary'
-# Returns: Full summary with recommendations
+# Returns: Overview plus per-tool success rates and message sizes
 ```
 
 **Automation**:
@@ -1616,10 +1568,10 @@ reveal 'claude://session/my-session?tools=Read'
 
 # Step 4: Identify file hotspots
 reveal claude://session/my-session/files
-# Returns: Files with high access counts (optimization targets)
+# Returns: Files touched by operation (count repeats yourself, see File Access Patterns)
 ```
 
-**Optimization recommendations**:
+**Optimization ideas** (the reader's judgement, not reveal output):
 - **Repeated reads of same file**: Use context management, pass context explicitly
 - **Large thinking blocks**: Simplify prompts, provide clearer direction
 - **High file access count**: Consider summarizing or caching file content
@@ -1720,15 +1672,7 @@ done
 
 ### Operation Timing
 
-| Operation | Typical Duration | Notes |
-|-----------|-----------------|-------|
-| Overview | 0.1-0.3s | Fast (metadata extraction) |
-| Tools analysis | 0.2-0.5s | Fast (tool call parsing) |
-| Files analysis | 0.2-0.5s | Fast (file operation parsing) |
-| Workflow | 0.3-0.8s | Moderate (full operation sequence) |
-| Errors | 0.1-0.4s | Fast (error pattern matching) |
-| Thinking | 0.2-0.6s | Moderate (thinking block extraction) |
-| Summary | 0.5-1.2s | Slower (comprehensive analysis) |
+Measured on a 1.6 MB and a 5.5 MB transcript: the overview, `?summary`, `/workflow` and `/tools` each took 0.28-0.32 s. The time is dominated by interpreter start-up and loading the JSONL file, which every view pays, so no view is meaningfully faster than another. Choose a view by the size of its output, not by speed.
 
 ---
 
@@ -1786,7 +1730,7 @@ reveal claude://session/my-session/tools  # Only tool analytics
 reveal claude://session/my-session/files  # Only file operations
 ```
 
-**Performance gain**: 2-3x faster
+**Note**: Each view takes about the same time (around 0.3 s on a few-MB transcript, dominated by start-up and loading the file); choose by output size, not speed.
 
 ---
 
@@ -2071,7 +2015,7 @@ echo "Date,Session,Error Count,Success Rate" > $ERROR_LOG
 
 for session in $(ls -1t ~/.claude/projects/my-project | head -20); do
   ERRORS=$(reveal "claude://session/$session?errors" --format json | jq -r '.error_count // 0')
-  SUCCESS=$(reveal claude://session/$session/tools --format json | jq -r '.overall_success_rate // 0')
+  SUCCESS=$(reveal claude://session/$session/tools --format json | jq -r '(([.tools[] | .success] | add) / ([.tools[] | .count] | add) * 100) // 0')
   DATE=$(stat -c %y ~/.claude/projects/my-project/$session | cut -d' ' -f1)
 
   echo "$DATE,$session,$ERRORS,$SUCCESS" >> $ERROR_LOG
@@ -2125,14 +2069,16 @@ def analyze_session(session_name):
     )
 
     data = json.loads(result.stdout)
+    tools = data['tools']  # an object keyed by tool name; success_rate is a string like "85.7%"
 
     return {
         'session': session_name,
-        'overall_success_rate': data['overall_success_rate'],
-        'tool_count': len(data['tools']),
+        'overall_success_rate': round(100 * sum(v['success'] for v in tools.values())
+                                      / max(1, sum(v['count'] for v in tools.values())), 1),
+        'tool_count': len(tools),
         'low_success_tools': [
-            tool['name'] for tool in data['tools']
-            if tool['success_rate'] < 80
+            name for name, v in tools.items()
+            if float(v['success_rate'].rstrip('%')) < 80
         ]
     }
 
@@ -2171,7 +2117,7 @@ reveal claude://session/$SESSION
 # Tool success rates
 echo -e "\n## Tool Success Rates"
 reveal claude://session/$SESSION/tools --format json | \
-  jq -r '.tools[] | "\(.name): \(.success_rate)%"'
+  jq -r '.tools | to_entries[] | "\(.key): \(.value.success_rate)"'
 
 # Error count
 echo -e "\n## Errors"
@@ -2181,13 +2127,13 @@ echo "Total errors: $ERROR_COUNT"
 if [ "$ERROR_COUNT" -gt 0 ]; then
   echo "Error details:"
   reveal "claude://session/$SESSION?errors" --format json | \
-    jq -r '.errors[] | "  - [\(.tool)] \(.error)"'
+    jq -r '.errors[] | "  - [\(.context.tool_name)] \(.content_preview)"'
 fi
 
 # File operations
 echo -e "\n## File Operations"
 reveal claude://session/$SESSION/files --format json | \
-  jq -r '.summary | "Total files: \(.total_files), Modified: \(.modified), Created: \(.created)"'
+  jq -r '"Files: \(.unique_files), operations: \(.total_operations), edited: \(.by_operation.Edit | length), written: \(.by_operation.Write | length)"'
 
 echo ""
 echo "Report complete."
@@ -2218,7 +2164,7 @@ while true; do
 
   for session in $(ls -1t $SESSION_DIR | head -5); do
     SUCCESS=$(reveal claude://session/$session/tools --format json 2>/dev/null | \
-      jq -r '.overall_success_rate // "N/A"')
+      jq -r '(([.tools[] | .success] | add) / ([.tools[] | .count] | add) * 100) // "N/A"')
     ERRORS=$(reveal "claude://session/$session?errors" --format json 2>/dev/null | \
       jq -r '.error_count // 0')
 
@@ -2586,7 +2532,7 @@ tools:
 
 ### `claude://hooks` — Hook Scripts
 
-List or read hook scripts from `~/.claude/hooks/`. Hooks are shell scripts (or directories of scripts) organized by Claude Code event name. Executability is shown for each entry.
+List or read the files and directories under `~/.claude/hooks/`. Each entry's name is shown in the EVENT column even when it is not an event name (a README or a helper script is listed the same way). Which hooks Claude Code actually runs is set by the `hooks` block in `settings.json`: see `claude://settings?key=hooks`. Executability is shown for each entry.
 
 ```bash
 # List all hook events
@@ -2613,7 +2559,7 @@ Hook storage can be either:
 
 **Returns (directory event)**: List of scripts within the event directory, each with path, size, executable flag, modified.
 
-**Common event names**: `PreToolUse`, `PostToolUse`, `Stop`, `SubagentStop`, `NotificationCreated`.
+**Common event names** (when a file or directory is named after one): `PreToolUse`, `PostToolUse`, `Stop`, `SubagentStop`, `Notification`.
 
 ---
 
@@ -2638,19 +2584,19 @@ list can't go stale the way a hand-maintained one did.
 
 **Q: What's the difference between claude:// and json://?**
 
-A: **claude://** provides high-level conversation analysis (tool usage, errors, workflow). **json://** provides low-level JSONL navigation. Use claude:// for session analysis, json:// for raw data access.
+A: **claude://** provides high-level conversation analysis (tool usage, errors, workflow). A session transcript is JSON Lines (one record per line), which `json://` rejects (`conversation.jsonl is a JSON Lines file ... Use 'reveal <path>.jsonl'`). For the raw records use `reveal <file>.jsonl` (for example with `--head N`).
 
 ---
 
 **Q: Can I analyze a currently running session?**
 
-A: No. claude:// only analyzes saved conversation files. Wait for the session to complete and save.
+A: Yes. claude:// reads whatever has been appended to the transcript so far, so the results reflect the session up to the last record written.
 
 ---
 
 **Q: Where are conversation files stored?**
 
-A: `~/.claude/projects/<project-dir>/<session-name>/conversation.jsonl`
+A: `~/.claude/projects/<project-dir>/<uuid>.jsonl` on a stock Claude Code install (with a same-named directory holding `tool-results/`). A `conversation.jsonl` exists only in TIA-style session directories, where it is a link to that file.
 
 ---
 
@@ -2662,7 +2608,7 @@ A: Approximate (±10%). Formula: `tokens ≈ characters / 4`. Use for relative c
 
 **Q: Can I analyze multiple sessions at once?**
 
-A: Not directly. Use shell loops for multi-session analysis. See [Integration Examples](#integration-examples).
+A: Some views span sessions: `claude://` (the session list), `claude://sessions/?search=<term>` (cross-session search) and `claude://history`. For per-session analysis across many sessions use shell loops. See [Integration Examples](#integration-examples).
 
 ---
 
@@ -2698,7 +2644,7 @@ Review: `reveal 'claude://session/my-session?tools=Bash&errors'`
 
 **Q: Can I see specific tool parameters?**
 
-A: Yes, use workflow: `reveal claude://session/my-session/workflow`
+A: `/workflow` shows only a `detail` per step (the Bash description or the file path). The parameters are in `?tools=<Name>` (each `calls[].input`, for example `command` and `description`) or in `/message/<n>`.
 
 ---
 
@@ -2706,7 +2652,7 @@ A: Yes, use workflow: `reveal claude://session/my-session/workflow`
 
 **Q: What's a "hotspot" file?**
 
-A: File with high access count (>5 reads). Indicates:
+A: A file the session touched many times. reveal does not flag hotspots; count repeats in `/files` JSON (`operations[].file_path`). Many repeats can indicate:
 - Complex file structure
 - Repeated exploration
 - Missing information
@@ -2723,7 +2669,7 @@ A: `reveal claude://session/my-session/files --format json | jq '.files[] | sele
 
 **Q: Can I see file diffs?**
 
-A: No. claude:// tracks operations only, not content changes. Use git for diffs.
+A: Partly. `reveal 'claude://session/my-session/files?patches=true' --format json` returns each Edit's hunks in `operations[].patch`. For the resulting diff of a file, use git.
 
 ---
 
@@ -2739,7 +2685,7 @@ reveal 'claude://session/failed-session?errors'
 # Step 2: View workflow to find failure point
 reveal claude://session/failed-session/workflow
 
-# Step 3: Review error context
+# Step 3: Review error context (the failing call's input and the thinking before it)
 reveal claude://session/failed-session/errors
 ```
 
@@ -2770,7 +2716,7 @@ reveal claude://session/my-session/files
 Look for:
 - Large thinking blocks (>500 tokens)
 - Repeated file reads (same file multiple times)
-- High file access counts (>5)
+- Many accesses to the same file (count them from `/files` JSON)
 
 ---
 
@@ -2801,7 +2747,7 @@ reveal 'claude://session/my-session/messages?contains=reveal'
 **Q: What's the difference between ?summary and /workflow?**
 
 A:
-- **?summary**: Comprehensive session summary with recommendations
+- **?summary**: The overview plus per-tool success rates, message sizes and thinking-block count
 - **/workflow**: Chronological tool operation sequence only
 
 ---
@@ -2831,7 +2777,7 @@ A: Use JSON output and parse with jq. See [Monitoring Dashboard](#4-monitoring-d
 A: Yes, parse JSON output:
 ```bash
 reveal claude://session/my-session/tools --format json | \
-  jq -r '.tools[] | "session_tool_success_rate{session=\"my-session\",tool=\"\(.name)\"} \(.success_rate)"'
+  jq -r '.tools | to_entries[] | "session_tool_success_rate{session=\"my-session\",tool=\"\(.key)\"} \(.value.success_rate | rtrimstr("%"))"'
 ```
 
 ---
@@ -2842,8 +2788,3 @@ A: See [GitHub Actions Integration](#5-github-actions-integration) example.
 
 ---
 
----
-
-**Last Updated**: 2026-03-02
-**Adapter Version**: reveal 0.54.7+
-**Documentation Version**: 1.0
