@@ -19,8 +19,8 @@ from ...utils.query import (
     unknown_sort_field_warning,
 )
 from ...utils.query_parser import (
-    CliBinding, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema,
-    peek_query_items, split_exclude_param, whole_number,
+    CliBinding, ParamSpec, QueryParams, ResourceSpec, filter_expression, nonnegative_display_limit,
+    param_schema, peek_query_items, split_exclude_param, whole_number,
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.gitignore import respect_gitignore_param
@@ -420,7 +420,7 @@ class MetricsAdapter(ResourceAdapter):
         respect_gitignore) are not expressions.
         """
         claimed = {spec.name for spec in PARAM_SPECS} | _SCOPE_KEYS
-        return '&'.join(key if value is True else f'{key}={value}'
+        return '&'.join(filter_expression(key, value)
                         for key, value in peek_query_items(self.query_params) if key not in claimed)
 
     def _merge_query_params(self, hotspots, code_only, min_lines, max_lines,

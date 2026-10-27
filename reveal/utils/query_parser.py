@@ -447,6 +447,18 @@ def parse_query_params(query: str, coerce: bool = False) -> QueryParams:
     return params
 
 
+def filter_expression(key: str, value: Any) -> str:
+    """One parsed query item as the filter text it was written as; the inverse of
+    ``parse_query_params`` for an adapter that routes some keys to ``parse_query_filters``.
+
+    A part with no ``=`` (``lines>50``, ``date>2026-01-01``, ``email!~@x``) parses as a bare key
+    whose value is True, so the key alone is the expression; rebuilding it as ``key=True`` puts
+    ``=True`` into the compared value. ``complexity>=5`` parses as key ``complexity>`` with value
+    ``5`` and rebuilds as written.
+    """
+    return key if value is True else f'{key}={value}'
+
+
 def warn_unknown_query_params(
     query_params: Dict[str, Any],
     known_keys: Iterable[str],
