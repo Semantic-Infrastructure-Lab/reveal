@@ -773,12 +773,12 @@ class RuleRegistry:
                 logger.debug(
                     f"Rule {rule_class.code} found {num_issues} issues in {file_path}"
                 )
-            except Exception as e:  # boundary-ok: broad-except -- rule.check runs rules (including user plugins) over arbitrary files; one failing rule must not end the run, and it is recorded as a failed rule in coverage and the errors list, and logged at error with traceback
+            except Exception as e:  # boundary-ok: broad-except -- rule.check runs rules (including user plugins) over arbitrary files; one failing rule must not end the run, and it is recorded as a failed rule in coverage and the errors list, and logged at error (one line; traceback at debug)
                 _record_coverage(coverage, rule_class.code, "failed", f"{type(e).__name__}: {e}")
-                logger.error(
-                    f"Rule {rule_class.code} failed on {file_path}: {e}",
-                    exc_info=True
-                )
+                # One line for the user; the traceback goes to debug, or it reaches stderr
+                # ahead of the command's own output (BACK-2256).
+                logger.error(f"Rule {rule_class.code} failed on {file_path}: {e}")
+                logger.debug(f"Rule {rule_class.code} traceback for {file_path}", exc_info=True)
                 if errors is not None:
                     errors.append({"rule": rule_class.code, "error": f"{type(e).__name__}: {e}"})
 
