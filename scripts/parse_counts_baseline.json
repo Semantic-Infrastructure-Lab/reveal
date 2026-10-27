@@ -796,13 +796,13 @@
               {
                 "files": {
                   "failed": 0,
-                  "run": 1,
-                  "skipped": 2,
+                  "run": 0,
+                  "skipped": 3,
                   "unavailable": 0
                 },
                 "reason": "target does not match",
                 "rule": "V017",
-                "status": "run"
+                "status": "skipped"
               },
               {
                 "files": {
@@ -895,13 +895,13 @@
               {
                 "files": {
                   "failed": 0,
-                  "run": 1,
-                  "skipped": 2,
+                  "run": 0,
+                  "skipped": 3,
                   "unavailable": 0
                 },
                 "reason": "target does not match",
                 "rule": "V026",
-                "status": "run"
+                "status": "skipped"
               },
               {
                 "files": {
@@ -1005,84 +1005,84 @@
               {
                 "files": {
                   "failed": 0,
-                  "run": 1,
-                  "skipped": 2,
+                  "run": 0,
+                  "skipped": 3,
                   "unavailable": 0
                 },
                 "reason": "target does not match",
                 "rule": "V036",
-                "status": "run"
+                "status": "skipped"
               },
               {
                 "files": {
                   "failed": 0,
-                  "run": 1,
-                  "skipped": 2,
+                  "run": 0,
+                  "skipped": 3,
                   "unavailable": 0
                 },
                 "reason": "target does not match",
                 "rule": "V037",
-                "status": "run"
+                "status": "skipped"
               },
               {
                 "files": {
                   "failed": 0,
-                  "run": 1,
-                  "skipped": 2,
+                  "run": 0,
+                  "skipped": 3,
                   "unavailable": 0
                 },
                 "reason": "target does not match",
                 "rule": "V038",
-                "status": "run"
+                "status": "skipped"
               },
               {
                 "files": {
                   "failed": 0,
-                  "run": 1,
-                  "skipped": 2,
+                  "run": 0,
+                  "skipped": 3,
                   "unavailable": 0
                 },
                 "reason": "target does not match",
                 "rule": "V039",
-                "status": "run"
+                "status": "skipped"
               },
               {
                 "files": {
                   "failed": 0,
-                  "run": 1,
-                  "skipped": 2,
+                  "run": 0,
+                  "skipped": 3,
                   "unavailable": 0
                 },
                 "reason": "target does not match",
                 "rule": "V040",
-                "status": "run"
+                "status": "skipped"
               },
               {
                 "files": {
                   "failed": 0,
-                  "run": 1,
-                  "skipped": 2,
+                  "run": 0,
+                  "skipped": 3,
                   "unavailable": 0
                 },
                 "reason": "target does not match",
                 "rule": "V041",
-                "status": "run"
+                "status": "skipped"
               },
               {
                 "files": {
                   "failed": 0,
-                  "run": 1,
-                  "skipped": 2,
+                  "run": 0,
+                  "skipped": 3,
                   "unavailable": 0
                 },
                 "reason": "target does not match",
                 "rule": "V042",
-                "status": "run"
+                "status": "skipped"
               }
             ],
-            "run": 42,
+            "run": 33,
             "scope": "Rule execution and reported prerequisite coverage, per rule across the files checked. A clean list means only completed checks found nothing.",
-            "skipped": 55,
+            "skipped": 64,
             "unavailable": 0
           },
           "files": [],
@@ -1234,8 +1234,8 @@
             "issue_count": {
               "field": "local_check_issues",
               "rule": "file-local rules only",
-              "rule_count": 37,
-              "rule_set_id": "b10cb2ea",
+              "rule_count": 36,
+              "rule_set_id": "74a40781",
               "rules": [
                 "B001",
                 "B002",
@@ -1272,7 +1272,6 @@
                 "T005",
                 "U501",
                 "V016",
-                "V017",
                 "V023"
               ]
             },
@@ -1481,8 +1480,8 @@
             "issue_count": {
               "field": "local_check_issues",
               "rule": "file-local rules only",
-              "rule_count": 37,
-              "rule_set_id": "b10cb2ea",
+              "rule_count": 36,
+              "rule_set_id": "74a40781",
               "rules": [
                 "B001",
                 "B002",
@@ -1519,7 +1518,6 @@
                 "T005",
                 "U501",
                 "V016",
-                "V017",
                 "V023"
               ]
             },
@@ -1653,8 +1651,8 @@
               "issue_count": {
                 "field": "local_check_issues",
                 "rule": "file-local rules only",
-                "rule_count": 37,
-                "rule_set_id": "b10cb2ea",
+                "rule_count": 36,
+                "rule_set_id": "74a40781",
                 "rules": [
                   "B001",
                   "B002",
@@ -1691,7 +1689,6 @@
                   "T005",
                   "U501",
                   "V016",
-                  "V017",
                   "V023"
                 ]
               }
