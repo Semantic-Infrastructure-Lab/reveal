@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from ..base import FileAnalyzer
 from ..registry import register
-from ..utils.nginx_conf import block_header, brace_delta, strip_comments
+from ..utils.nginx_conf import block_header, block_statements, brace_delta, line_statements, strip_comments
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -176,19 +176,14 @@ class NginxAnalyzer(FileAnalyzer):
             'path': path,
             'server': current_server['name'] if current_server else 'unknown'
         }
-        # Look ahead for proxy_pass or root
-        for j in range(line_num, min(line_num + 15, len(self.lines) + 1)):
-            next_line = self.lines[j-1].strip()
-            if next_line.startswith('proxy_pass '):
-                match_proxy = re.match(r'proxy_pass\s+(.*?);', next_line)
-                if match_proxy:
-                    loc_info['target'] = match_proxy.group(1)
-                    break
-            elif next_line.startswith('root '):
-                match_root = re.match(r'root\s+(.*?);', next_line)
-                if match_root:
-                    loc_info['target'] = f"static: {match_root.group(1)}"
-                    break
+        # The first proxy_pass or root inside this block; a one-line block counts, and the
+        # next block's directive is not this one's (BACK-2246)
+        for _, _, directive in block_statements(self.lines, line_num - 1):
+            match = re.match(r'(proxy_pass|root)\s+(.*)', directive)
+            if match:
+                proxy, value = match.group(1) == 'proxy_pass', match.group(2).strip()
+                loc_info['target'] = value if proxy else f"static: {value}"
+                break
         return loc_info
 
     @staticmethod
@@ -639,26 +634,18 @@ class NginxAnalyzer(FileAnalyzer):
 
     def _parse_location_root(self, line_num: int) -> Optional[str]:
         """Return the root or alias directive value from a location block body."""
-        for j in range(line_num, min(line_num + 20, len(self.lines) + 1)):
-            line = self.lines[j - 1].strip()
-            m = re.match(r'^(?:root|alias)\s+(.*?)\s*;', line)
+        for _, _, directive in block_statements(self.lines, line_num - 1):
+            m = re.match(r'(?:root|alias)\s+(.*)', directive)
             if m:
-                return m.group(1).strip('"\'')
-            if line == '}':
-                break
+                return m.group(1).strip().strip('"\'')
         return None
 
     def _parse_server_root(self, server_line: int) -> Optional[str]:
         """Return the root directive value from a server block."""
-        depth = 0
-        for j in range(server_line - 1, min(server_line + 200, len(self.lines))):
-            line = self.lines[j].strip()
-            depth += line.count('{') - line.count('}')
-            m = re.match(r'^root\s+(.*?)\s*;', line)
+        for _, depth, directive in block_statements(self.lines, server_line - 1):
+            m = re.match(r'root\s+(.*)', directive)
             if m and depth == 1:
-                return m.group(1).strip('"\'')
-            if depth <= 0 and j > server_line:
-                break
+                return m.group(1).strip().strip('"\'')
         return None
 
     def _find_server_start_for_location(self, location_line: int) -> Tuple[int, Dict]:
@@ -767,25 +754,27 @@ class NginxAnalyzer(FileAnalyzer):
             if in_server and depth == 0:
                 in_server = False
 
-            m = re.match(r'^root\s+(.*?)\s*;', stripped)
-            if not m:
-                continue
-            root = m.group(1)
-            domain = current_server_info.get('name', 'unknown') if current_server_info else 'unknown'
+            # Every root on the line, one inside `location /x/ { root ...; }` too (BACK-2246)
+            for directive in line_statements(stripped):
+                m = re.match(r'root\s+(.*)', directive)
+                if not m:
+                    continue
+                root = m.group(1).strip()
+                domain = current_server_info.get('name', 'unknown') if current_server_info else 'unknown'
 
-            if root in seen:
-                continue
-            seen.add(root)
+                if root in seen:
+                    continue
+                seen.add(root)
 
-            acl = _check_nobody_access(root)
-            results.append({
-                'domain': domain,
-                'root': root,
-                'acl_status': acl['status'],
-                'acl_message': acl['message'],
-                'acl_failing_path': acl.get('failing_path'),
-                'line': i,
-            })
+                acl = _check_nobody_access(root)
+                results.append({
+                    'domain': domain,
+                    'root': root,
+                    'acl_status': acl['status'],
+                    'acl_message': acl['message'],
+                    'acl_failing_path': acl.get('failing_path'),
+                    'line': i,
+                })
 
         return results
 
