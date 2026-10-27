@@ -364,11 +364,19 @@ def _boundary_effect_finding(effect: Dict[str, Any], transitive: bool) -> Dict[s
     return finding
 
 
+def _boundary_warnings(boundary: Dict[str, Any], transitive: bool) -> List[str]:
+    """The --boundary JSON `warnings`: what a --transitive walk skipped, lost or declined, then the coverage note."""
+    from .adapters.ast.nav_effects import ambiguous_hops_note, skipped_files_note, _traversal_note  # noqa: I006
+    note = skipped_files_note(boundary.get('skipped') or []) if transitive else None
+    notes = (note, _traversal_note(boundary.get('traversal_failures') or []),
+             ambiguous_hops_note(boundary.get('ambiguous') or []), boundary.get('assignment_coverage_note'))
+    return [n for n in notes if n]
+
+
 def _nav_boundary(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import (  # noqa: I006
         collect_boundary, collect_boundary_transitive, render_boundary, render_boundary_transitive,
     )
-    from .adapters.ast.nav_effects import ambiguous_hops_note, skipped_files_note, _traversal_note  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
     language = getattr(ctx.analyzer, 'language', None)
     transitive = getattr(ctx.args, 'transitive', False)
@@ -401,10 +409,7 @@ def _nav_boundary(ctx: _NavCtx) -> None:
             + [_boundary_effect_finding(e, transitive)
                for e in boundary['effects'] if e['kind'] is not None]
         )
-        note = skipped_files_note(boundary.get('skipped') or []) if transitive else None
-        directory_note = _traversal_note(boundary.get('traversal_failures') or [])
-        ambiguous = ambiguous_hops_note(boundary.get('ambiguous') or [])
-        warnings = [n for n in (note, directory_note, ambiguous, boundary.get('assignment_coverage_note')) if n]
+        warnings = _boundary_warnings(boundary, transitive)
         _nav_json('boundary', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
                   warnings=warnings)
     elif transitive:
