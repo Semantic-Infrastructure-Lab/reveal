@@ -27,7 +27,7 @@ from ..analyzers.imports import service as import_analysis
 from ..utils.entry_points import entry_point_filter
 from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
-from ..utils.path_utils import as_spelled, display_name_for_path, traversal_failed_warning, failure_of
+from ..utils.path_utils import as_spelled, display_name_for_path, failure_of, in_test_scope, traversal_failed_warning
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..rendering.adapters.overview import (  # noqa: F401 -- the render helpers are re-exported
     OverviewRenderer,
@@ -424,17 +424,39 @@ def _run_git_log(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dic
     return data.get('history', data.get('commits', []))
 
 
-def _run_complex_functions(adapter: 'OverviewAdapter', path: Path, limit: int, *,
+class ComplexFunctions(List[Dict[str, Any]]):
+    """The ranked rows, carrying how many test-file functions the ranking left out (BACK-2257)."""
+    functions_excluded = 0
+
+
+def _run_complex_functions(adapter: 'OverviewAdapter', path: Path, limit: int, *, tests: str = 'exclude',
                            observations: Optional[Dict[str, bool]] = None) -> List[Dict[str, Any]]:
-    """Fetch top complex functions via AstAdapter."""
+    """Fetch top complex functions via AstAdapter.
+
+    BACK-2257: ``tests`` is the parameter that narrows Hotspots (BACK-1428): by default functions in test
+    files (``is_test_path``, judged from the scanned path down) are left out. The filter runs here, on the
+    whole ranking, and the cut after it, so the top N are N non-test functions when they exist; a limit given
+    to ast:// first would leave fewer than N. With ``tests=include`` the query is the one it always was.
+    """
+    exclude = tests == 'exclude'
     data = _required_child(adapter, AstAdapter, path, _validate_ast,
                             observations=observations,
-                            query=f'complexity>9&sort=-complexity&limit={limit}',
+                            query=f'complexity>9&sort=-complexity&limit={UNLIMITED_TOP if exclude else limit}',
                             cut_as=('complex_functions', 'raise ?top=N'))
     if observations is not None and data.get('total_results', 0) > 0:
         # This validated domain count is authoritative even when limit=0 hides rows.
         observations['usable'] = True
-    return data.get('results', data.get('elements', []))
+    ranked = ComplexFunctions(data.get('results', data.get('elements', [])))
+    rows = ranked
+    if exclude:
+        root = path.resolve()  # ast:// rows carry resolved paths; a relative root would fall back to the whole path
+        kept = [fn for fn in rows if not in_test_scope(Path(fn['file']), root)]
+        ranked = ComplexFunctions(kept[:limit])
+        ranked.functions_excluded = len(rows) - len(kept)
+        cut: Dict[str, Any] = {}
+        note_truncation(cut, 'complex_functions', len(ranked), len(kept), 'top', hint='raise ?top=N')
+        adapter.fold_meta(cut.get('meta'))
+    return ranked
 
 
 def _imports_metadata(adapter: 'OverviewAdapter', metadata: Dict[str, Any]) -> Dict[str, Any]:
@@ -619,9 +641,9 @@ class OverviewAdapter(ResourceAdapter):
                   False, boolean_value, role='analysis', examples=('no_imports=true',),
                   cli=CliBinding(('--no-imports',), action='store_true')),
         ParamSpec('tests', 'string',
-                  'Test files in the Hotspots ranking (path_utils.is_test_path: a tests/ or test/ directory, test_*.py, '
-                  '*_test.go, *Tests.java, *.spec.ts, ...): exclude them (default) or include them. Complex functions '
-                  'and the other sections are not filtered by it',
+                  'Test files in the Hotspots ranking and the Complex functions list (path_utils.is_test_path: a tests/ or '
+                  'test/ directory, test_*.py, *_test.go, *Tests.java, *.spec.ts, ...): exclude them (default) or include '
+                  'them. The other sections are not filtered by it',
                   'exclude', _tests_value, role='analysis', examples=('tests=include',), choices=TEST_CHOICES,
                   cli=CliBinding(('--tests',), metavar='{include,exclude}')),
     )
@@ -702,13 +724,13 @@ class OverviewAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Hotspots leave out test files (path_utils.is_test_path, judged from the scanned path\'s own name down) and say so in one line with the count; '
-                '?tests=include (--tests include) ranks them. Only the ranking is narrowed: Complex functions, totals and Languages still count test files.',
+                '?tests=include (--tests include) ranks them. The Complex functions list follows the same parameter and prints the same line with the number of functions left out (JSON: complex_test_scope); its top N is N non-test functions when they exist. Totals and Languages still count test files.',
                 'Component cohesion is n/a (null in JSON, with one cohesion_rule) for directories mostly in Go, Java, Kotlin, C#, Scala or Swift, where files share a package without importing.',
                 'Static imports only for the architecture section — dynamically loaded files may appear as entry points.',
                 'The architecture section states the rule it counted by (Rule: lines in text, edge_rule and '
                 'edge_rule_sections in JSON under architecture): function-level imports count, circulars use the load-time view.',
                 '?exclude= applies to stats/hotspots, scope and the Imports architecture section. '
-                'Complex functions retain their existing scope; global --exclude also filters AST.',
+                'Complex functions are filtered by tests= (above); global --exclude also filters AST.',
                 'Every section skips what git ignores (tracked files are never skipped); '
                 'respect_gitignore=false / --no-gitignore includes it everywhere (BACK-1386).',
                 'Both spellings use the overview v1.1 answer and none-only execution policy. '
@@ -776,7 +798,8 @@ class OverviewAdapter(ResourceAdapter):
         # Compare resolved: 'overview://.' at a repo root is not foreign to itself.
         if git_log and git_root is not None and git_root.resolve() != path.resolve():
             git_foreign_root = git_root
-        complex_fns = _run_complex_functions(self, path, top, observations=observations)
+        tests = tests_spec.read(self.query_params)
+        complex_fns = _run_complex_functions(self, path, top, tests=tests, observations=observations)
         architecture = {} if no_imports else _run_imports_analysis(self, path, observations=observations)
         _relativize_paths(complex_fns, architecture, path)
         _annotate_provenance(complex_fns, architecture)
@@ -788,6 +811,8 @@ class OverviewAdapter(ResourceAdapter):
             'git_log': git_log,
             'git_foreign_root': as_spelled(git_foreign_root, path) if git_foreign_root else None,
             'complex_functions': complex_fns,
+            'complex_test_scope': {'rule': 'is_test_path', 'tests': tests,
+                                   'functions_excluded': getattr(complex_fns, 'functions_excluded', 0)},
             'architecture': architecture,
             'scope': _run_scope(self, path, failures=scope_failures),
         }
