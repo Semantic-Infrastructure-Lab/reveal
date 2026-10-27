@@ -25,8 +25,8 @@ _LAYER = {'name': 'domain', 'paths': ['models'], 'deny_imports': ['db']}
                  r"layers\[0\].*'allows_imports'.*allow_imports", id='misspelled-allow-suggests-the-key'),
     pytest.param({'architecture': {'layers': [{'name': 'd', 'paths': ['m']}]}},
                  r"layers\[0\].*neither.*allow_imports.*deny_imports", id='layer-enforces-nothing'),
-    pytest.param({'architecture': {'layers': [{'name': 'd', 'paths': ['m'], 'allow_imports': []}]}},
-                 r"layers\[0\].*neither a non-empty allow_imports", id='empty-allow-list-enforces-nothing'),
+    pytest.param({'architecture': {'layers': [{'name': 'd', 'paths': ['m'], 'deny_imports': []}]}},
+                 r"layers\[0\].*neither allow_imports nor a non-empty deny_imports", id='empty-deny-list-enforces-nothing'),
 ])
 def test_wrong_shape_fails_naming_its_source(config, wanted):
     with pytest.raises(LayerConfigError, match=r'/p/\.reveal\.yaml.*' + wanted):
@@ -37,6 +37,7 @@ def test_wrong_shape_fails_naming_its_source(config, wanted):
     pytest.param({'name': 'a', 'paths': ['a'], 'allow_imports': ['b']}, id='allow-only'),
     pytest.param({'name': 'a', 'paths': ['a'], 'deny_imports': ['b']}, id='deny-only'),
     pytest.param({'name': 'a', 'paths': ['a'], 'allow_imports': [], 'deny_imports': ['b']}, id='empty-allow-with-deny'),
+    pytest.param({'name': 'a', 'paths': ['a'], 'allow_imports': []}, id='empty-allow-alone-forbids-everything-outside'),
 ])
 def test_valid_layers_still_load(layer):
     assert [x.name for x in LayerConfig.from_dict({'architecture': {'layers': [layer]}}).layers] == ['a']

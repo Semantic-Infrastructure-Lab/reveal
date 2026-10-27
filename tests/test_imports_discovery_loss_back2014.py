@@ -181,7 +181,7 @@ def test_directory_loss_does_not_render_definitive_clean_conclusions(tmp_path, m
     if query != 'entrypoints':
         write(root / 'visible.py', 'VALUE = 1\n')
     if query == 'violations':
-        write(root / '.reveal.yaml', 'architecture:\n  layers:\n    - name: app\n      paths: [app/]\n      allow_imports: []\n      deny_imports: [db/]\n')
+        write(root / '.reveal.yaml', 'architecture:\n  layers:\n    - name: app\n      paths: [app/]\n      deny_imports: [db/]\n')
     deny_child(monkeypatch, child)
     result = ImportsAdapter(str(root), query).get_structure()
     ImportsRenderer.render_structure(result)

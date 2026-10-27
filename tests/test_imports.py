@@ -1248,7 +1248,6 @@ class TestBuildProjectNamespaces:
             "  layers:\n"
             "    - name: presentation\n"
             "      paths: [api/]\n"
-            "      allow_imports: []\n"
             "      deny_imports: [db/]\n"
         )
 

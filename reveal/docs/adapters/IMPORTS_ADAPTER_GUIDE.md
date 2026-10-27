@@ -492,7 +492,7 @@ architecture:
   layers:
     - name: presentation
       paths: [api, cli]                     # prefixes, relative to the path you pass to imports://
-      allow_imports: [services, handlers, models]   # if set, every import target must match one of these
+      allow_imports: [services, handlers, models]   # if set, may import only itself and these
 
     - name: application
       paths: [services, handlers]
@@ -517,8 +517,15 @@ cannot pass with 0 violations. The command exits 3 and names the config file and
 when `architecture` or `layers` has the wrong type, a layer is not a mapping
 (`architecture.layers[0] must be a mapping, got str`), `architecture` or a layer has a key
 outside the ones above (`has unknown key(s) 'rules'`, with a "did you mean" for a near
-miss), or a layer has neither a non-empty `allow_imports` nor a non-empty `deny_imports`
-(an empty `allow_imports: []` does not forbid every import; use `deny_imports` to forbid).
+miss), a layer has neither `allow_imports` nor a non-empty `deny_imports`, or `allow_imports` or
+`deny_imports` is not a list of strings (a key written with no value is refused: for `allow_imports`
+"no value" and `[]` mean opposite things).
+
+`allow_imports` is an allow list. When the key is present, a layer may import only its own files and the
+listed prefixes; `allow_imports: []` means "nothing outside this layer" (write it for a domain layer
+that must depend on nothing), and leaving the key out means no allow list. `deny_imports` always wins.
+Only imports of other files in the project are judged: standard-library and third-party imports are
+never checked.
 
 ### Example Output
 
@@ -1900,8 +1907,8 @@ Every `?entrypoints` run ends with a reminder: `Note: static imports only — fi
 ### Q: Can I configure layer rules per team/project?
 
 **A**: Yes, use `.reveal.yaml` in each project root (the nearest one above the scanned path
-applies). Each layer needs `allow_imports` or `deny_imports`; a layer with only `paths` enforces
-nothing. Paths below are for `imports://src?violations`:
+applies). Each layer needs `allow_imports` (possibly `[]`) or a non-empty `deny_imports`; a layer with
+only `paths` is an error. Paths below are for `imports://src?violations`:
 
 ```yaml
 # Project A (microservice)
