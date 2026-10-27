@@ -411,6 +411,9 @@ Control result ordering, limiting, and pagination:
 | `limit` | Limit number of results | `limit=10` |
 | `offset` | Skip first N results | `offset=5` |
 
+A file with no value for the sort field sorts last in either direction, in scan order; it is
+not sorted as a zero.
+
 ### Sortable Fields
 
 Same as filterable fields:

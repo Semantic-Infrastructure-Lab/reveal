@@ -171,8 +171,9 @@ Control how results are sorted and paginated:
 | `limit=N` | Limit to N results | `limit=20` |
 | `offset=M` | Skip first M results | `offset=10` (pagination) |
 
-`null` and missing values sort last in both directions on `json://` and `ast://`, in their
-source order, so `sort=-age` lists the largest ages first and the people with no age at the end.
+`null` and missing values sort last in both directions on `json://`, `ast://`, `markdown://`,
+`metrics://` and `git://`, in their source order, so `sort=-age` lists the largest ages first and
+the people with no age at the end. A missing value is not sorted as a zero.
 
 ### Examples
 

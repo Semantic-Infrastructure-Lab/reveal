@@ -1025,6 +1025,8 @@ reveal 'markdown://docs/?type=guide&body-contains=nginx&limit=10'
 - Multiple `body-contains=` params are AND'd (all must appear)
 - Files without frontmatter are also matched
 - Combines with all frontmatter filters and result control (`sort=`, `limit=`, `offset=`)
+- `sort=FIELD` puts a file whose field is `null` or missing last, ascending or descending (`sort=-status`
+  lists the files with no status at the end, in path order); a list field sorts by its first element
 
 ### Extra Frontmatter Columns (`?fields=`)
 
