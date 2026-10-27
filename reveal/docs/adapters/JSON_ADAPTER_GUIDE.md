@@ -783,7 +783,10 @@ reveal 'json://data.json/users?sort=name'
 reveal 'json://data.json/orders?sort=customer.name'
 ```
 
-**Note**: Sorting works on arrays of objects. The field must exist in all objects.
+**Note**: Sorting works on arrays of objects. An object whose field is `null` or missing sorts
+last, ascending or descending, and such objects keep their source order. Values that do not
+compare with each other (a number and a string) leave the array in source order with a
+`sort_failed` warning.
 
 ### Limit Results
 

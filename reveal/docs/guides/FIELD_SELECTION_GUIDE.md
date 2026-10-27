@@ -154,9 +154,9 @@ Nested under `meta.budget`:
 - `reason`: Why truncation occurred (`max_items_exceeded`)
 - `total_available`: Total results available: the same total the `truncated` warning states, including what an adapter's own cap already cut (ast caps at 200, so `--max-items 5` on 247 matches says 247, not 200). `total_available_exact: false` is added when it is a lower bound (git history)
 - `returned`: Number of results returned
-- `next_cursor`: Pagination hint for next request: `offset=<returned>`. It does not add the
-  request's own offset, so on a request that already had `?offset=M` the next page is
-  `offset=M+returned`
+- `next_cursor`: Pagination hint for next request: the `offset=` where the next page starts.
+  It counts from the request's own offset, so a request with `?offset=M` gets
+  `offset=M+returned`; add it to the query as it is
 
 ---
 
@@ -312,8 +312,8 @@ reveal 'ast://src?type=function&lines>50' --max-items=20 --fields=name,line,comp
 
 # Check truncation in response
 if data['meta']['budget']['truncated']:
-    next_offset = data['meta']['budget']['returned']
-    # Make follow-up query with offset
+    next_cursor = data['meta']['budget']['next_cursor']  # e.g. "offset=20"
+    # Make follow-up query with &offset=20 added
 ```
 
 ---
@@ -345,8 +345,7 @@ reveal 'ast://src?type=function' --max-items=50 --format=json > page1.json
 if data['meta']['budget']['truncated']:
     # Second page
     reveal 'ast://src?type=function&offset=50' --max-items=50 --format=json > page2.json
-    # Third page: offset=100. next_cursor on page 2 still says offset=50 (it ignores the
-    # request's own offset), so add the offsets yourself.
+    # Third page: next_cursor on page 2 says offset=100
 ```
 
 ---
@@ -445,11 +444,10 @@ result = subprocess.run(
 )
 
 data = json.loads(result.stdout)
-offset = 0  # the ?offset= this request used
 
 if data.get('meta', {}).get('budget', {}).get('truncated'):
     print(f"Got {data['meta']['budget']['returned']} of {data['meta']['budget']['total_available']} results")
-    print(f"Next: offset={offset + data['meta']['budget']['returned']}")
+    print(f"Next: {data['meta']['budget']['next_cursor']}")
 else:
     print("Got all results")
 ```

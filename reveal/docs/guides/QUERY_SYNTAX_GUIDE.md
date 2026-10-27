@@ -171,6 +171,9 @@ Control how results are sorted and paginated:
 | `limit=N` | Limit to N results | `limit=20` |
 | `offset=M` | Skip first M results | `offset=10` (pagination) |
 
+`null` and missing values sort last in both directions on `json://` and `ast://`, in their
+source order, so `sort=-age` lists the largest ages first and the people with no age at the end.
+
 ### Examples
 
 ```bash
