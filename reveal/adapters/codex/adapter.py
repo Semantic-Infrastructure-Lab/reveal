@@ -529,7 +529,7 @@ class CodexAdapter(ResourceAdapter):
                 {'type': 'codex_tools', 'description': 'Each tool call paired with its output'},
                 {'type': 'codex_errors', 'description': 'Error/warning events'},
                 {'type': 'codex_shell', 'description': 'Shell commands with exit codes and output'},
-                {'type': 'codex_tokens', 'description': 'Per-turn token breakdown'},
+                {'type': 'codex_tokens', 'description': 'Per-request token breakdown (one row per token_count event)'},
                 {'type': 'codex_workflow', 'description': 'Tools + shell interleaved chronologically'},
                 {'type': 'codex_timeline', 'description': 'Full chronological event stream'},
                 {'type': 'codex_goal', 'description': 'Thread goal objective + token budget'},
@@ -548,7 +548,7 @@ class CodexAdapter(ResourceAdapter):
                 'since': 'Lower-bound date filter (ISO 8601 or "today") on session updated_at — codex://sessions/?filter=<term>&since=<date> or ?search=<term>&since=<date>',
                 'until': 'Upper-bound date filter (ISO 8601) on session updated_at, pairs with ?since= — codex://sessions/?filter=<term>&since=<date>&until=<date>',
                 'last': 'Last agent message only, for fast session recovery — codex://<UUID>?last',
-                'tokens': 'Per-turn token breakdown (input/output/cached/reasoning) — codex://<UUID>?tokens',
+                'tokens': 'Per-request token breakdown (input/output/cached/reasoning), one row per API call — codex://<UUID>?tokens',
                 'goal': 'Thread goal objective + token budget from goals_1.sqlite — codex://<UUID>?goal',
                 'key': 'Dot-path key lookup for codex://config — applied after secret masking — codex://config?key=<dotpath>',
             },
@@ -590,7 +590,7 @@ class CodexAdapter(ResourceAdapter):
                 'codex://sessions/?search=<term>&since=<date>      # content search scoped by date\n'
                 'codex://<UUID>                                     # session overview\n'
                 'codex://<UUID>?last                                # last agent message\n'
-                'codex://<UUID>?tokens                              # per-turn token breakdown\n'
+                'codex://<UUID>?tokens                              # per-request token breakdown\n'
                 'codex://<UUID>?goal                                # thread goal (goals_1.sqlite)\n'
                 'codex://<UUID>/messages                            # user + agent turns\n'
                 'codex://<UUID>/tools                               # tool calls paired with their outputs\n'
@@ -620,7 +620,7 @@ class CodexAdapter(ResourceAdapter):
                 {'uri': 'codex://sessions/?search=authentication&since=2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date'},
                 {'uri': 'codex://019e5cc5', 'description': 'Session overview: turns, tool calls, tokens, duration'},
                 {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern'},
-                {'uri': 'codex://019e5cc5?tokens', 'description': 'Per-turn token breakdown (input/output/cached/reasoning)'},
+                {'uri': 'codex://019e5cc5?tokens', 'description': 'Per-request token breakdown (input/output/cached/reasoning)'},
                 {'uri': 'codex://019e5cc5?goal', 'description': 'Thread goal objective + token budget (goals_1.sqlite)'},
                 {'uri': 'codex://019e5cc5/messages', 'description': 'All user and agent turns in order'},
                 {'uri': 'codex://019e5cc5/tools', 'description': 'Paired function_call + output events'},
@@ -647,8 +647,8 @@ class CodexAdapter(ResourceAdapter):
                 'Exchanges view — each user prompt paired with the agent\'s next reply (BACK-943)',
                 'Single-record access by raw JSONL index, negative indexing supported (BACK-943)',
                 'SQLite-backed session listing (fast, no JSONL scan needed for list/search)',
-                'UUID prefix lookup — type first 7+ hex chars instead of full UUID',
-                'Per-turn token breakdown with input/output/reasoning/cached split',
+                'UUID prefix lookup — a unique prefix of 7+ hex chars instead of the full UUID',
+                'Per-request token breakdown with input/output/reasoning/cached split',
                 'Full-text JSONL content search across all sessions',
                 'Shell command tracking with exit codes, output, and duration',
                 'Tool call pairing (function_call + function_call_output)',
@@ -663,7 +663,7 @@ class CodexAdapter(ResourceAdapter):
             'notes': [
                 'Sessions stored in ~/.codex/sessions/ as per-session JSONL files',
                 'SQLite index at ~/.codex/state_5.sqlite — most queries start here',
-                'UUID prefix: 7+ hex chars uniquely identify a session',
+                'UUID prefix: a unique 7+ hex-char prefix identifies a session; an ambiguous one is an error listing the matches',
                 'Subagent sessions filtered out — only user-visible threads shown',
                 'Override paths: REVEAL_CODEX_HOME, REVEAL_CODEX_DB env vars',
                 'token_count events give per-request token deltas from the API',

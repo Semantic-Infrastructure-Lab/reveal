@@ -133,7 +133,7 @@ reveal 'codex://memories/pipeline'
 | `codex://<UUID>/workflow` | Tool calls + shell commands interleaved chronologically |
 | `codex://<UUID>/timeline` | All events in session order with brief summaries |
 
-**UUID prefix**: You can use the first 7+ hex characters instead of the full UUID. `reveal 'codex://019e5cc5'` resolves to the matching session.
+**UUID prefix**: A unique prefix of 7+ hex characters works instead of the full UUID: `reveal 'codex://019e5cc5'` resolves to the matching session. A prefix several sessions share exits 1 with `Ambiguous session prefix ...: matches <ids>; use more characters`; the first UUID group (8 characters) is usually enough.
 
 **`/digest` vs `/exchanges` vs `/messages`**: `/digest` composes a whole-session readable summary in one call (start here for "what happened in this session"); `/exchanges` pairs each prompt with its final answer (for "what did I ask, what did it finally say," one pair at a time); `/messages` is the flat chronological list of every user/agent turn with no pairing or composition.
 
@@ -160,24 +160,21 @@ reveal 'codex://memories/pipeline'
 `/workflow` interleaves tool calls and shell commands in chronological order — the same sequence the agent executed them. Use this when you want to understand what the session actually did and in what order.
 
 ```bash
-reveal 'codex://019d9da3/workflow'
-# Codex Workflow: 299 action(s)
+reveal 'codex://01a161bb/workflow'
+# Codex Workflow: 216 action(s)
 #
-#   [✓] tool  exec_command({"cmd":"find /home/user/projects -maxdepth 2...)  [2026-04-17T22:51:18]
-#       → Chunk ID: f1427c
+#   [✓] tool  exec(text(await tools.exec_command({cmd:"tia project show watchdo)  [2026-10-22T03:51:31]
+#       → Script completed Wall time 6.4 seconds Output: {"chunk_id":"fec210","wall_time_seconds":6.163628376,
 #
-#   [✓] shell $ find /home/user/projects -maxdepth 2 -type d -iname '*reveal*'  [2026-04-17T22:51:18]
-#       → exit=0
-#
-#   [✓] tool  exec_command({"cmd":"ls -la /home/user/projects/reveal"...})  [2026-04-17T22:51:24]
-#       → Chunk ID: 9e60cd
+#   [✓] shell $ tia project show watchdog  [2026-10-22T03:51:37]
+#       → exit=0 6163ms
 ```
 
-Two event kinds appear:
-- **tool** — a `function_call`/`function_call_output` pair; `[✓]` if an output was paired, `[✗]` if not
-- **shell** — a native `exec_command_end` event (only in sessions using the sandbox shell); `[✓]` if `exit_code == 0`
+Two event kinds appear (JSON `kind`: `tool_call`, `shell`; text: `tool`, `shell`):
+- **tool** — a `function_call`/`function_call_output` pair; `[✓]` if an output was paired, `[✗]` if not. The arguments and the output preview are each cut to one line.
+- **shell** — an `exec_command_end` event; `[✓]` if `exit_code == 0`. The second line is `→ exit=N <ms>ms` (the duration is left out when the rollout records none).
 
-Note: in most recent Codex sessions, shell execution goes through the `exec_command` function_call tool (appears as `tool` kind). Native `exec_command_end` events appear in older or sandbox-mode sessions.
+Current Codex rollouts record both: the `exec`/`exec_command` tool call and an `exec_command_end` event for each command it ran, so one command usually shows as a `tool` row followed by a `shell` row. Rollouts without `exec_command_end` show only the tool row.
 
 ---
 
@@ -201,7 +198,7 @@ reveal 'codex://019e5cc8/timeline'
 ```
 
 Event types in the stream:
-- `session_meta` — session ID, cwd, model, git state
+- `session_meta` — session ID, cwd, CLI version, model provider, git state (no model, so its summary reads `model=?`; the model is in `turn_context`)
 - `turn_context` — model, sandbox policy, approval mode (per-turn)
 - `event_msg/user_message` / `event_msg/agent_message` — conversation turns
 - `response_item/function_call` / `response_item/function_call_output` — tool execution
@@ -209,29 +206,36 @@ Event types in the stream:
 - `event_msg/token_count` — running token totals after each API call
 - `event_msg/task_complete` — turn duration and token summary
 - `response_item/reasoning` — reasoning steps (content encrypted — count only)
+- `event_msg/item_completed` — a completed conversation item (often the commonest payload type in current rollouts)
+- `event_msg/task_started` / `event_msg/thread_settings_applied` — turn start and per-thread settings
+- `world_state` — the session environment (instructions, environments, skills) as `state`; `full` is true for a complete snapshot, false for a partial update
+
+Current rollouts can also carry `token_usage_record`, `inter_agent_communication_metadata` and `response_item/agent_message` records; the timeline lists every record whatever its type.
 
 ---
 
 ## Token Analysis
 
-Codex emits `token_count` events after each API request with a delta (`last_token_usage`) and running total (`total_token_usage`). The `?tokens` route surfaces the per-turn breakdown:
+Codex emits `token_count` events after each API request with a delta (`last_token_usage`) and running total (`total_token_usage`). The `?tokens` route gives the per-request breakdown: one row per `token_count` event (one model API call), so its "turn" count is far higher than the overview's user/agent turn count:
 
 ```bash
-reveal 'codex://019e5cc5?tokens'
-# Codex Token Usage: 12 turn(s)  |  running total: 3,790,050
+reveal 'codex://01a161bb?tokens'
+# Codex Token Usage: 131 turn(s)  |  running total: 19,055,254
 #
-#   TURN  TIMESTAMP              INPUT    CACHED   OUTPUT   REASON    TOTAL
+#   TURN  TIMESTAMP               INPUT   CACHED   OUTPUT   REASON    TOTAL
 #   ----- -------------------- -------- -------- -------- -------- --------
-#   1     2026-05-25 01:35:58   16,343    3,456      205        0   16,548
-#   2     2026-05-25 01:36:19   28,100    8,200      310        0   28,410
+#   1     2026-10-22 03:51:16    17,698   12,032       81        0   17,779
+#   2     2026-10-22 03:51:23    17,837   17,664       40        0   17,877
 #   ...
 ```
+
+JSON: `token_turns[]` (`turn`, `timestamp`, `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `output_tokens`, `reasoning_output_tokens`, `total_tokens`), `total_turns` and `grand_total`.
 
 Fields:
 - **INPUT**: prompt tokens (includes context)
 - **CACHED**: prompt tokens served from the API cache (no cost)
 - **OUTPUT**: completion tokens generated
-- **REASON**: reasoning tokens (gpt-5.5 reasoning steps)
+- **REASON**: reasoning tokens, a subset of OUTPUT
 - **TOTAL**: INPUT + OUTPUT (not INPUT + CACHED + OUTPUT)
 
 ---
@@ -273,7 +277,7 @@ reveal 'codex://019e5cc5?goal'
 
 Status values: `active`, `paused`, `blocked`, `usage_limited`, `budget_limited`, `complete`.
 
-When no goal is set: `Codex Goal: (none set for 019e5cc5)`.
+Without a budget the line reads `Tokens: N (no budget)`. When no goal is set: `Codex Goal: (none set for 019e5cc5)`.
 
 ---
 
@@ -322,7 +326,8 @@ reveal 'codex://sessions/?search=authentication&since=2026-07-01'
 
 ```
 ~/.codex/
-├── state_5.sqlite        ← session index + stage1_outputs (primary lookup)
+├── state_5.sqlite        ← session index (threads; primary lookup)
+├── memories_1.sqlite     ← stage1_outputs (memory pipeline; older installs kept it in state_5.sqlite)
 ├── goals_1.sqlite        ← per-thread objectives + token budgets
 ├── sessions/
 │   └── 2026/05/25/
@@ -346,7 +351,7 @@ reveal 'codex://sessions/?search=authentication&since=2026-07-01'
 | Tool calls | `function_call`/`function_call_output` (JSONL events) | `tool_use`/`tool_result` (message blocks) |
 | Shell execution | Dedicated `exec_command_end` events OR `exec_command` tool | Bash tool call in tool_use |
 | Reasoning | `encrypted_content` — count only | `thinking` blocks — readable |
-| Token data | Per-request via `token_count` events | Estimated from char count |
+| Token data | Per-request via `token_count` events | Per-message API usage records (thinking tokens estimated) |
 | Goals | `goals_1.sqlite` thread_goals | None |
 | Memory pipeline | `stage1_outputs` → `memories/` | None |
 | Config | TOML | JSON |
