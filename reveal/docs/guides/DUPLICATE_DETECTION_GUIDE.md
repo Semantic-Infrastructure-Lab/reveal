@@ -7,9 +7,7 @@ help_category: feature_guides
 ---
 # Duplicate Code Detection in Reveal
 
-**Version:** 0.30.0
-**Status:** D001/D002 single-file (functions); D005 cross-file (literal clusters)
-**Last Updated:** 2026-01-03
+**Status:** D001 (exact) and D002 (opt-in similarity) compare functions within one file; D005 finds literal clusters across files
 
 ---
 
@@ -19,7 +17,7 @@ help_category: feature_guides
 # Find exact duplicate functions in a file
 reveal check file.py --select D001
 
-# Find all duplicates (includes experimental similarity detection)
+# Find all duplicates (adds opt-in similarity D002 and cross-file literals D005)
 reveal check file.py --select D
 
 # Find functions by naming patterns (cross-file)
@@ -36,13 +34,16 @@ reveal 'ast://./src?complexity>10&lines>50'
 ### D001: Exact Duplicates (Reliable)
 
 **Status:** ✅ Production-ready
-**Scope:** Single file only
+**Scope:** Single file only, and within one scope (see below)
 **Method:** Hash-based detection using normalized code
 
-Detects functions with identical implementations, even if:
-- Variable names differ (signature normalization)
-- Whitespace differs
-- Comments differ
+Detects functions whose bodies are identical after removing comments, docstrings and
+whitespace. Identifiers are kept as-is: a copy with renamed variables or parameters is
+not D001 (D002 alpha-renames locals and can surface it).
+
+Within one file, D001 compares functions only inside the same scope: top-level functions
+with each other, and each class's methods with each other. Identical methods in two
+different classes, or a method and a module-level function, are not reported.
 
 **Example:**
 ```bash
@@ -50,9 +51,9 @@ $ reveal check app.py --select D001
 
 app.py: Found 1 issue
 
-app.py:45:1 ⚠️  D001 Duplicate function detected: 'process_b' identical to 'process_a' (line 12)
+app.py:23:1 ⚠️  D001 Duplicate function detected: 'process_c' identical to 'process_a' (line 1)
   💡 Refactor to share implementation with process_a
-  📝 287 chars, hash a3f2c1b4
+  📝 95 chars, hash ef526a198999adec
 ```
 
 **How it works:**
@@ -63,29 +64,29 @@ app.py:45:1 ⚠️  D001 Duplicate function detected: 'process_b' identical to '
 
 **Performance:** ~1-5ms per file
 
-### D002: Similar Code (Experimental)
+### D002: Similar Code (Opt-in)
 
-**Status:** ⚠️ High false positive rate
+**Status:** opt-in: runs with `--select D002` or `--select D`, off in a plain `reveal check`
 **Scope:** Single file only
-**Method:** TF-weighted feature vectors + cosine similarity
+**Method:** a cosine pre-filter on body features, then a token-sequence match with local
+names alpha-renamed (≥0.5) or a literal-identifier match (≥0.7). Functions under 8 lines
+are skipped; at most 5 candidates per file, ranked by similarity × √size.
 
-**Known Issues:**
-- Reports unrelated functions as 95%+ similar
-- Feature extraction needs tuning
-- Not recommended for production use
+D002 is a ranked discovery list for review, not a defect report (severity low). The
+sequence match is what keeps unrelated functions that merely share a skeleton (loops,
+conditionals, similar length) off the list; a copy with renamed variables keeps its token
+sequence and still matches.
 
-**Example output (with false positives):**
+**Example output:**
 ```bash
-$ reveal check app.py --select D002
+$ reveal check adapters/ast/filtering.py --select D002
 
-app.py: Found 5 issues
+adapters/ast/filtering.py: Found 3 issues
 
-app.py:430:1 ℹ️  D002 Potential duplicate candidate: 'extract_markdown_section' ~82% similar to '_register_custom_tools' (line 281)
-  💡 Combined 524 lines. Worth investigating if logic can be shared.
-  📝 Interestingness: 18.8 (similarity 82% × size 524)
+adapters/ast/filtering.py:389:1 ℹ️  D002 Potential duplicate candidate: '_matches_return_type' ~99% similar to '_matches_param_type' (line 361)
+  💡 Combined 50 lines. Worth investigating if logic can be shared.
+  📝 Interestingness: 7.0 (similarity 99% × size 50)
 ```
-
-**Reality:** These functions are often completely different. Use D001 only until D002 is improved.
 
 ---
 
@@ -121,13 +122,14 @@ A failure to analyze an enumerated file remains separate: enumeration can still 
 exact even when `failed_files` is positive. Existing scan-ceiling accounting and
 healthy cache reuse keep their policies.
 
-**Scope and ceiling:** the project root is the nearest ancestor with a marker
-file (`pyproject.toml`, `setup.py`, `package.json`, `go.mod`, `Cargo.toml`). A
-tree exceeding **5,000 `.py` files** is skipped with a logged warning rather
-than stalling an interactive `--check` — raise the bar with
-`REVEAL_D005_MAX_FILES=N` for large monorepos. A marker-less project scopes to
-each sub-directory that *does* have a marker, so cross-directory duplication
-between marker-less siblings is not detected; add a root marker to widen scope.
+**Scope and ceiling:** the project root is resolved like I002's: a `.reveal.yaml`
+with `root: true`, else the nearest package marker (`pyproject.toml`, `setup.py`,
+`setup.cfg`, `package.json`, `go.mod`, `Cargo.toml`, `pom.xml`, `composer.json`, …),
+else the git root, else the file's own directory (no index is built when that
+directory is the temp dir, `$HOME` or `/`). To widen or narrow the scope, put
+`root: true` in a `.reveal.yaml`. A tree exceeding **5,000 `.py` files** is skipped
+with a logged warning rather than stalling an interactive `--check` — raise the bar
+with `REVEAL_D005_MAX_FILES=N` for large monorepos.
 
 ### Function-body duplication (D001/D002)
 
@@ -137,8 +139,9 @@ D001 (exact) and D002 (similar) function detection still analyze each file
 independently — duplicates between `file_a.py` and `file_b.py` are not detected.
 
 ```bash
-# ❌ Per-file only — cross-file function duplicates not detected
-find src/ -name "*.py" | xargs -I {} reveal check {} --select D001
+# Checks every file under src/ in one call, but each file on its own:
+# cross-file function duplicates are not detected
+reveal check src/ --select D001
 ```
 
 **Why not implemented:** Requires a caching layer to store function-body hashes
@@ -194,21 +197,21 @@ reveal 'ast://./src?name=*process*'
 reveal 'ast://./src?name=*handle*'
 ```
 
-**Output shows files and line numbers:**
+**Output shows files and line numbers** (here run on reveal's own `adapters/`):
 ```
-AST Query: ./src
-Filter: name=*parse*
-Files scanned: 45
-Results: 18
+AST Query: ./adapters
+Filter: name=*parse* (glob)
+Files scanned: 214
+Results: 59
 
-File: src/schemas.py
-  src/schemas.py:989   parse_file_annotations [22 lines, complexity: 4]
-  src/schemas.py:1013  _parse_source_info [20 lines, complexity: 8]
-  src/schemas.py:1056  parse_phase1_output [22 lines, complexity: 6]
+File: adapters/ast/analysis.py
+  :  43  parse_recovered_warning [16 lines, complexity: 6]
+           calls:     s.get, to_posix (→ path_utils.py::to_posix), ', '.join
+  : 516  _parser_failure [5 lines, complexity: 3]
+           called by: _complete_structure, _analyzer_outcome
 
-File: src/handlers.py
-  src/handlers.py:145  parse_request [18 lines, complexity: 3]
-  src/handlers.py:203  parse_response [19 lines, complexity: 3]
+File: adapters/ast/nav_narrow.py
+  : 120  _parse_type_node [35 lines, complexity: 15]
 ```
 
 **2. Identify duplication-prone code:**
@@ -230,11 +233,16 @@ reveal 'ast://./src?complexity>10&lines>50'
 # Identify files with quality issues
 reveal 'metrics://./src' --hotspots
 
-# Output:
-Hotspots (Top 10 worst files):
-1. src/processor.py      Quality: 45/100  (complexity: 18.3, 1243 lines)
-2. src/handlers.py       Quality: 52/100  (complexity: 15.7, 987 lines)
-3. src/validators.py     Quality: 58/100  (complexity: 12.4, 756 lines)
+# Output (after the "Codebase Statistics" block):
+Top Hotspots (10):
+
+1. help.py
+   Quality: 59.2/100 | Score: 35.3
+   Issues: Quality: 59.2/100, 1 function(s) >100 lines, Touched 166 times in scope
+
+2. imports.py
+   Quality: 60.0/100 | Score: 26.4
+   Issues: Quality: 60.0/100, Touched 147 times in scope
 ```
 
 **4. Check each file individually:**
@@ -245,18 +253,13 @@ reveal check src/handlers.py --select D001
 reveal check src/validators.py --select D001
 ```
 
-**5. Pipeline approach (batch checking):**
+**5. Batch checking (within-file duplicates only):**
 ```bash
-# Check all Python files (within-file duplicates only)
-find src/ -name "*.py" -type f | while read file; do
-    echo "=== $file ==="
-    reveal "$file" --check --select D001
-done
+# Every Python file under src/, in one call
+reveal check src/ --select D001
 
-# Or with git-tracked files only
-git ls-files "*.py" | while read file; do
-    reveal "$file" --check --select D001 2>/dev/null
-done
+# Or git-tracked files only
+git ls-files '*.py' | reveal --stdin --check --select D001
 ```
 
 ### Finding Similar File Structures
@@ -281,36 +284,41 @@ reveal 'metrics://./src?min_functions=20'
 ### D001 Output Format
 
 ```
-file.py:45:1 ⚠️  D001 Duplicate function detected: 'process_b' identical to 'process_a' (line 12)
+app.py:23:1 ⚠️  D001 Duplicate function detected: 'process_c' identical to 'process_a' (line 1)
   💡 Refactor to share implementation with process_a
-  📝 287 chars, hash a3f2c1b4
+  📝 95 chars, hash ef526a198999adec
 ```
 
 **Breakdown:**
-- `file.py:45:1` - Duplicate function location (line 45, column 1)
-- `'process_b'` - Name of duplicate function
-- `'process_a' (line 12)` - Original function (first occurrence)
-- `287 chars` - Size of normalized function body
-- `hash a3f2c1b4` - First 16 chars of SHA256 hash (for debugging)
+- `app.py:23:1` - Duplicate function location (line 23, column 1)
+- `'process_c'` - Name of duplicate function
+- `'process_a' (line 1)` - Original function (first occurrence)
+- `95 chars` - Size of the function body (raw, before normalization)
+- `hash ef526a198999adec` - First 16 hex chars of the SHA256 hash (for debugging)
 
 **What counts as "identical":**
 - Same control flow
-- Same operations
-- Comments/whitespace ignored
-- Function signature ignored (different param names OK)
+- Same operations, with the same identifiers
+- Comments, docstrings and whitespace ignored
+- Only the `def` line is skipped; parameter names that appear in the body still count
 
 ### AST Query Output
 
 ```
-AST Query: ./src
-Filter: name=*parse*
-Files scanned: 45
-Results: 18
+AST Query: ./adapters
+Filter: name=*parse* (glob)
+Files scanned: 214
+Results: 59
 
-File: src/schemas.py
-  src/schemas.py:989   parse_file_annotations [22 lines, complexity: 4]
-  src/schemas.py:1013  _parse_source_info [20 lines, complexity: 8]
+File: adapters/ast/analysis.py
+  :  43  parse_recovered_warning [16 lines, complexity: 6]
+           calls:     s.get, to_posix (→ path_utils.py::to_posix), ', '.join
+  : 516  _parser_failure [5 lines, complexity: 3]
+           called by: _complete_structure, _analyzer_outcome
 ```
+
+Each row is `:LINE  name [size, complexity]` under its `File:` header, with optional
+`calls:` / `called by:` lines.
 
 **Use this to:**
 - Find functions with similar names across files
@@ -323,7 +331,7 @@ File: src/schemas.py
 
 ### ✅ DO
 
-1. **Use D001 only** (D002 has too many false positives)
+1. **Start with D001** (exact copies); read D002 as a ranked review list
 ```bash
 reveal check file.py --select D001
 ```
@@ -338,9 +346,9 @@ reveal 'ast://./src?name=*pattern*'
 reveal 'ast://./src?complexity>10&lines>50'
 ```
 
-4. **Batch check with scripts**
+4. **Batch check a directory in one call**
 ```bash
-find src/ -name "*.py" | xargs -I {} reveal check {} --select D001
+reveal check src/ --select D001
 ```
 
 5. **Combine with stats for context**
@@ -350,15 +358,17 @@ reveal 'metrics://./src' --hotspots
 
 ### ❌ DON'T
 
-1. **Don't use D002 yet** (false positive rate ~90%)
+1. **Don't gate CI on D002**: it is a ranked candidate list for a human to read, not a
+   defect report
 ```bash
-# ❌ Avoid this
-reveal check file.py --select D002
+# ❌ Not a gate
+reveal check src/ --select D002
 ```
 
-2. **Don't expect cross-file detection**
+2. **Don't expect cross-file function detection**
 ```bash
-# ❌ This won't find duplicates BETWEEN files
+# ❌ Won't find duplicated FUNCTIONS between files
+#    (D005 does catch duplicated list/set/tuple literals across files)
 reveal check ./src --select D
 ```
 
@@ -377,15 +387,15 @@ reveal check file.py --select D001
 
 ### Current Limitations
 
-1. **Single-file only**
+1. **Function detection is single-file only**
    - D001 and D002 only detect duplicates within one file
-   - No cross-file duplicate detection
-   - Must check each file separately
+   - D001 compares only within one scope: top-level functions with each other, and each
+     class's methods with each other
+   - No cross-file function detection (D005 covers cross-file literals)
 
-2. **D002 unusable**
-   - High false positive rate (85-95%)
-   - Reports unrelated functions as similar
-   - Feature extraction needs fundamental redesign
+2. **D002 is a review list, not a verdict**
+   - Opt-in, low severity, at most 5 candidates per file
+   - Functions under 8 lines are skipped
 
 3. **No configuration**
    - Can't tune thresholds
@@ -402,26 +412,15 @@ reveal check file.py --select D001
 The good news: **Complete architecture designed** (see base framework in `reveal/rules/duplicates/`).
 
 **What needs implementation:**
-1. Cross-file detection (caching layer)
+1. Cross-file function detection (caching layer; D005's index is the template)
 2. Configuration system (YAML config files)
-3. D002 feature extraction improvements
-4. Self-reflection feedback system
+3. Self-reflection feedback system
 
 ---
 
 ## Roadmap
 
-### Phase 1: Fix D002 (Reduce False Positives)
-**Priority:** High
-**Status:** Planned
-
-**Changes needed:**
-- Better feature extraction (current TF weighting is too coarse)
-- Adaptive thresholds per language
-- Structural features weighted higher
-- Token features weighted lower
-
-### Phase 2: Cross-File Detection
+### Phase 1: Cross-File Function Detection
 **Priority:** High
 **Status:** Architecture complete
 
@@ -431,7 +430,7 @@ The good news: **Complete architecture designed** (see base framework in `reveal
 - Report duplicates across file boundaries
 - Performance target: <100ms for 1000 files
 
-### Phase 3: Configuration System
+### Phase 2: Configuration System
 **Priority:** Medium
 **Status:** Design complete
 
@@ -441,7 +440,7 @@ The good news: **Complete architecture designed** (see base framework in `reveal
 - Feature toggles
 - Normalization options
 
-### Phase 4: Self-Reflection
+### Phase 3: Self-Reflection
 **Priority:** Medium
 **Status:** Design complete
 
@@ -456,10 +455,10 @@ The good news: **Complete architecture designed** (see base framework in `reveal
 ## FAQ
 
 **Q: Can reveal find duplicates across multiple files?**
-A: Not yet. D001 and D002 only work within single files. Use AST queries (`ast://`) to find similar function names across files, then manually inspect.
+A: Not for functions. D005 finds duplicated list/set/tuple literals across files; for functions use the `ast://` workflow below.
 
 **Q: Should I use D002?**
-A: No, not in production. D002 has a ~90% false positive rate. Use D001 only for exact duplicates.
+A: As a review list, yes: it is opt-in and ranks candidates for a human to read. Do not gate CI on it. Use D001 for exact duplicates.
 
 **Q: How do I find copy-pasted code between files?**
 A: Currently requires manual workflow:
@@ -468,13 +467,13 @@ A: Currently requires manual workflow:
 3. Manually inspect candidate files
 4. Check each file with `reveal check file.py --select D001`
 
-**Q: Why is D002 so bad?**
-A: The TF-weighted feature vectors are too coarse. Functions with similar structural patterns (loops, conditionals) score as 95%+ similar even when logic is completely different. See `DUPLICATE_DETECTION_OPTIMIZATION.md` for planned fixes.
+**Q: Why does D002 need a sequence match on top of the similarity score?**
+A: The cosine score is dominated by shape features (line count, control-flow density), so unrelated functions with the same skeleton score 95%+. Requiring a token-sequence match (locals alpha-renamed) or a literal-identifier match removes those pairs and keeps real copies, renamed variables included.
 
 **Q: Can I configure the similarity threshold?**
 A: Not yet. Configuration system is designed but not implemented. Thresholds are hardcoded.
 
-**Q: Will cross-file detection be implemented?**
+**Q: Will cross-file function detection be implemented?**
 A: Architecture is complete, implementation is planned. It's the highest-priority enhancement for duplicate detection.
 
 ---
@@ -482,13 +481,15 @@ A: Architecture is complete, implementation is planned. It's the highest-priorit
 ## Related Documentation
 
 **User Guides:**
-- `reveal help://agent` - AI agent reference (includes duplicate detection patterns)
+- `reveal help://duplicates` - this guide
+- `reveal help://agent` - AI agent reference
 - `reveal --agent-help` - AI agent orientation (~1,200 tokens; `help://agent/full` for the complete guide)
 
 **Implementation:**
-- `reveal/rules/duplicates/D001.py` - Exact duplicate detection (187 lines)
-- `reveal/rules/duplicates/D002.py` - Similar code detection (236 lines)
-- `reveal/rules/base.py` - Shared `BaseRule` framework (478 lines)
+- `reveal/rules/duplicates/D001.py` - Exact duplicate detection
+- `reveal/rules/duplicates/D002.py` - Similar code detection
+- `reveal/rules/duplicates/D005.py` - Cross-file literal clusters
+- `reveal/rules/base.py` - Shared `BaseRule` framework
 
 ---
 
@@ -499,8 +500,7 @@ Want to help implement these features? See:
 2. GitHub Issues for "duplicate detection" label
 
 **High-impact contributions:**
-- Implement cross-file caching layer
-- Fix D002 feature extraction
+- Implement cross-file function detection
 - Add configuration system
 - Write tests for edge cases
 
@@ -508,8 +508,9 @@ Want to help implement these features? See:
 
 **Status Summary:**
 - ✅ D001 (exact, single-file) - Production ready
-- ⚠️ D002 (similar, single-file) - Experimental, high false positives
-- 🚧 Cross-file detection - Designed, not implemented
+- ℹ️ D002 (similar, single-file) - Opt-in ranked review list
+- ✅ D005 (cross-file literal clusters) - Implemented
+- 🚧 Cross-file FUNCTION detection - not implemented
 - 🚧 Configuration system - Designed, not implemented
 - 🚧 Self-reflection - Designed, not implemented
 
@@ -519,5 +520,3 @@ Want to help implement these features? See:
 - [AGENT_HELP.md](../AGENT_HELP.md) - What NOT to do
 - [PYTHON_ADAPTER_GUIDE.md](../adapters/PYTHON_ADAPTER_GUIDE.md) - Python-specific analysis
 - [README.md](../README.md) - Documentation hub
-
-Last updated: 2026-01-03 | Version: 0.30.0
