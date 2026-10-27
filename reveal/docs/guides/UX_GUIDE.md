@@ -75,7 +75,7 @@ reveal doc.md --links              # markdown-specific
 **URI adapter filtering** — options that belong with the resource:
 ```bash
 reveal 'ast://src?complexity>10'             # Filter by complexity
-reveal 'ssl://host?expiring-within=30' --check   # Expiry threshold (needs --check)
+reveal 'ssl://host?expiring-within=30'           # Expiry threshold (implies --check)
 reveal 'cpanel://USER/ssl?dns-verified'     # Exclude NXDOMAIN domains
 reveal 'git://.?author=Alice&since=2024-01-01'  # Multi-condition git query
 ```
@@ -103,7 +103,7 @@ For file targets, convenience flags translate to URI params when you switch to U
 | Sort ascending | `--sort field` | `?sort=field` | Same ✓ |
 | Sort descending | `--sort field --desc` | `?sort=-field` | CLI needs two flags; URI uses `-` prefix |
 | Limit results | `--head N` / `--max-items N` | `?limit=N` | See below — they're not equivalent |
-| SSL expiry filter | `--expiring-within N` | `?expiring-within=N` | The flag runs the check by itself; the URI param needs `--check` |
+| SSL expiry filter | `--expiring-within N` | `?expiring-within=N` | Either spelling runs the check by itself |
 | SSL summary | `--summary` | `?summary` | Batch and nginx views only; a single `ssl://host` ignores it with a note |
 | cPanel dns filter | `--dns-verified` | `?dns-verified` | Both work |
 | cPanel live check | `--check-live` | `?check-live` | Both work |
@@ -226,7 +226,7 @@ reveal 'ast://file.py?name~=auth' --format json | jq -r '.results[].file' | sort
 | `patches://` | ✅ Test patch pressure | `?group=target`, `?min=3`, `?limit=20` |
 | `claude://` | ✅ Session filtering | `?summary`, `?errors`, `?contains=` |
 | `xlsx://` | ✅ Sheet/range | `?sheet=Sales`, `?range=A1:D10` |
-| `ssl://` | ✅ Expiry/summary | `?expiring-within=30` (with `--check`), `?summary` (batch and nginx views) |
+| `ssl://` | ✅ Expiry/summary | `?expiring-within=30` (implies `--check`), `?summary` (batch and nginx views) |
 | `cpanel://` | ✅ Domain/SSL filters | `?domain_type=addon`, `?dns-verified` |
 | `letsencrypt://` | ✅ Cert audit | `?check-orphans`, `?check-duplicates` |
 | `autossl://` | ✅ Run filtering | `?only-failures`, `?summary`, `?user=NAME` |

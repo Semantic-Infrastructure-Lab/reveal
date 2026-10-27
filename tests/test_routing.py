@@ -1800,5 +1800,47 @@ def test_a_check_only_flag_selects_check_mode():
     assert not _check_mode(NoCheck, Namespace(check=True, expiring_within=30))
 
 
+def test_a_check_only_query_param_selects_check_mode():
+    """BACK-2288: `ssl://host?expiring-within=30` is the URI spelling of --expiring-within,
+    so it implies the check exactly as the flag does; an unrelated param does not."""
+    from argparse import Namespace
+    from reveal.adapters.ssl.adapter import SSLAdapter
+    from reveal.cli.routing.uri import _check_mode
+
+    args = Namespace(check=False, expiring_within=None)
+    assert _check_mode(SSLAdapter('example.com', 'expiring-within=30'), args)
+    assert not _check_mode(SSLAdapter('example.com', 'summary'), args)
+    assert not _check_mode(SSLAdapter('example.com'), args)
+
+
+def test_expiring_within_param_runs_the_check_end_to_end(tmp_path):
+    """BACK-2288: through the real CLI, the param form of an expired cert fails (exit 2) like the flag."""
+    import datetime as dt
+    import subprocess
+    import sys
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'expired.example')])
+    now = dt.datetime.now(dt.timezone.utc)
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(1).not_valid_before(now - dt.timedelta(days=60))
+            .not_valid_after(now - dt.timedelta(days=10)).sign(key, hashes.SHA256()))
+    pem = tmp_path / 'expired.pem'
+    pem.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+
+    def run(uri, *flags):
+        return subprocess.run([sys.executable, '-m', 'reveal', uri, *flags], capture_output=True,
+                              text=True, encoding='utf-8').returncode
+
+    uri = f"ssl://file://{pem.as_posix()}"
+    assert run(uri) == 0                                      # the plain view is not a check
+    assert run(uri + '?expiring-within=400') == 2             # the param runs the check
+    assert run(uri, '--expiring-within', '400') == 2          # as the flag does
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -32,6 +32,7 @@ This release is larger than usual: 1,198 commits since 0.131.0. Every old spelli
 - `patches` exits 3 for a test file it could not read or parse (it exited 0 with a warning), and 2 for a missing path (it exited 1) or an unknown `group` or `view` (BACK-2160).
 - `--top` with a negative, fractional or non-numeric value exits 2 on `overview`, `deps`, `architecture` and `surface`; `overview --top -1` used to drop rows silently (BACK-1839).
 - `calls` with `format=dot` exits 2 on a view with no graph (`?callees=` at depth 1, `?rank=`, `?uncalled`) and names the views that draw one; it printed text and exited 0 (BACK-2108).
+- `ssl://HOST?expiring-within=N` runs the certificate check, as `--expiring-within N` always did; it used to print a certificate view and a note that the parameter had no effect. A script that relied on the old no-op now gets the check's exit code (0, 1 or 2) (BACK-2288).
 - New: `--fail-on none|findings` on `check`, `review` and `health`. `hotspots` and `deps` default to no findings gate and take `--fail-on findings` to opt in. `--help` prints every command's exit codes from one table (BACK-2051, BACK-2052).
 
 **Counts and rules** (every count now states its rule: a `Rule:` line in text, `edge_rule` in JSON)

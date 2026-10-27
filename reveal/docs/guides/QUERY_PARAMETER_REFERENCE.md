@@ -28,7 +28,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **xlsx://** | `sheet`, `range`, `search`, `format`, `limit`, `formulas`, `powerpivot`, `powerquery`, `names`, `connections` | `xlsx://model.xlsx?sheet=Sales` |
 | **help://** | `search`, `top` (only on `help://search`; `top` caps hits, default 20, `0` = all) | `help://search?search=find callers&top=50` |
 | **cpanel://** | `domain_type`, `dns-verified`, `check-live` | `cpanel://USER/ssl?domain_type=addon` |
-| **ssl://** | `expiring-within` (with `--check`), `summary` (batch and nginx views) | `ssl://host?expiring-within=30` + `--check` |
+| **ssl://** | `expiring-within` (implies `--check`), `summary` (batch and nginx views) | `ssl://host?expiring-within=30` |
 | **diff://** | none | N/A |
 | **env://** | none | N/A |
 | **sqlite://** | none | N/A |
@@ -647,7 +647,7 @@ The following adapters still have adapter-specific options expressed as CLI flag
 
 | Adapter | CLI flag | URI query param |
 |---------|---------|-----------------|
-| `ssl://` | `reveal ssl://host --expiring-within 30` | `reveal 'ssl://host?expiring-within=30' --check` ✅ (the flag runs the check by itself; the URI param is a no-op without `--check`) |
+| `ssl://` | `reveal ssl://host --expiring-within 30` | `reveal 'ssl://host?expiring-within=30'` ✅ (both spellings run the check by themselves) |
 | `ssl://` | `reveal 'ssl://nginx:///etc/nginx/*.conf' --summary` | `reveal 'ssl://nginx:///etc/nginx/*.conf?summary'` ✅ |
 | `cpanel://` | `reveal cpanel://USER/ssl --dns-verified` | `reveal 'cpanel://USER/ssl?dns-verified'` ✅ |
 | `cpanel://` | `reveal cpanel://USER/ssl --check-live` | `reveal 'cpanel://USER/ssl?check-live'` ✅ |

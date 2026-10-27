@@ -529,12 +529,19 @@ def resolve_adapter(adapter_class: type, renderer_class: type[Any], scheme: str,
 def _check_mode(adapter: Any, args: 'Namespace') -> bool:
     """Whether this query runs the adapter's check(): --check, or a flag the adapter
     lists in CHECK_IMPLIED_BY because it means nothing outside one (BACK-1593:
-    `ssl://host --expiring-within 30`, the form the docs teach, was a no-op)."""
+    `ssl://host --expiring-within 30`, the form the docs teach, was a no-op). The same
+    holds for the query-param spelling an instance lists in CHECK_IMPLIED_BY_PARAMS
+    (`ssl://host?expiring-within=30`, BACK-2288), so flag and param cannot disagree."""
     if not hasattr(adapter, 'check'):
         return False
     implied = getattr(adapter, 'CHECK_IMPLIED_BY', ())
     implied = implied if isinstance(implied, tuple) else ()  # as _declared() does: a Mock has every attr
-    return bool(peek(args, 'check', False)) or any(peek(args, flag) is not None for flag in implied)
+    implied_params = getattr(adapter, 'CHECK_IMPLIED_BY_PARAMS', ())
+    implied_params = implied_params if isinstance(implied_params, tuple) else ()
+    params = getattr(adapter, 'query_params', None)
+    params = params if isinstance(params, dict) else {}
+    return (bool(peek(args, 'check', False)) or any(peek(args, flag) is not None for flag in implied)
+            or any(key in params for key in implied_params))
 
 
 def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resource: str,

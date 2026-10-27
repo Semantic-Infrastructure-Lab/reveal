@@ -180,6 +180,7 @@ class SSLAdapter(ResourceAdapter):
     # omit the URI-param form (BACK-162).
     # A health threshold: it only means something to check() (BACK-1593).
     CHECK_IMPLIED_BY = ('expiring_within',)
+    CHECK_IMPLIED_BY_PARAMS = ('expiring-within',)  # the URI-param spelling of the same flag (BACK-2288)
     GUARDED_FLAG_CONTEXT = 'the ssl:// adapter'
     GUARDED_FLAG_HELP = 'ssl'
     GUARDED_FLAGS = (
@@ -188,7 +189,7 @@ class SSLAdapter(ResourceAdapter):
             flag='--expiring-within',
             examples=(
                 "  reveal ssl://example.com --expiring-within 30   # single domain (CLI flag)\n"
-                "  reveal 'ssl://example.com?expiring-within=30' --check  # URI param form (preferred for pipelines)\n"
+                "  reveal 'ssl://example.com?expiring-within=30'  # URI param form (preferred for pipelines; implies --check)\n"
                 "  reveal ssl://nginx:///etc/nginx --check --expiring-within 30  # batch"
             ),
         ),
