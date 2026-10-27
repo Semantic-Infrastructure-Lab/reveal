@@ -16,10 +16,6 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
-### Behavior changes
-
-- `.reveal.yaml` `overrides.files`: `*`, `?` and `[...]` no longer match `/`, as the guide always said. `src/*.py` covers `src/b.py` but not `src/a/b.py`, `*.py` covers the project root only, and `**/test_*.py` no longer reaches files inside a `test_x/` directory; before, they matched at any depth. Write `**/*.py` or `src/**/*.py` to keep the old reach. `ignore:` (`.gitignore` rules) is unchanged (BACK-2274).
-
 ## [0.132.0] - 2026-10-26
 
 This release is larger than usual: 1,198 commits since 0.131.0. Every old spelling still works. It prints a "replaced by" note and carries a `retired_spelling` warning in JSON and MCP output, and becomes an error at a later release. Read **Behavior changes** first: it lists what can break a script.
@@ -37,6 +33,8 @@ This release is larger than usual: 1,198 commits since 0.131.0. Every old spelli
 - `--top` with a negative, fractional or non-numeric value exits 2 on `overview`, `deps`, `architecture` and `surface`; `overview --top -1` used to drop rows silently (BACK-1839).
 - `calls` with `format=dot` exits 2 on a view with no graph (`?callees=` at depth 1, `?rank=`, `?uncalled`) and names the views that draw one; it printed text and exited 0 (BACK-2108).
 - `ssl://HOST?expiring-within=N` runs the certificate check, as `--expiring-within N` always did; it used to print a certificate view and a note that the parameter had no effect. A script that relied on the old no-op now gets the check's exit code (0, 1 or 2) (BACK-2288).
+- `.reveal.yaml` `overrides.files`: `*`, `?` and `[...]` no longer match `/`, as the guide always said. `src/*.py` covers `src/b.py` but not `src/a/b.py`, `*.py` covers the project root only, and `**/test_*.py` no longer reaches files inside a `test_x/` directory; before, they matched at any depth. Write `**/*.py` or `src/**/*.py` to keep the old reach. `ignore:` (`.gitignore` rules) is unchanged (BACK-2274).
+- `pack --since REF` counts only the changed files at or under PATH in `meta.changed_files_count` (it counted the whole repository), and a changed file the budget dropped is named in a `changed_files_over_budget` warning; the exit code stays 0 (BACK-2271).
 - New: `--fail-on none|findings` on `check`, `review` and `health`. `hotspots` and `deps` default to no findings gate and take `--fail-on findings` to opt in. `--help` prints every command's exit codes from one table (BACK-2051, BACK-2052).
 
 **Counts and rules** (every count now states its rule: a `Rule:` line in text, `edge_rule` in JSON)
