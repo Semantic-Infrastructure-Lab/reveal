@@ -382,7 +382,7 @@ class MetricsAdapter(ResourceAdapter):
         # Only parse if the query contains new-style operators (>, <, !=, ~=, ..)
         # Legacy parameters (min_lines, max_lines, etc.) are handled via query_params
         self.query_filters = []
-        if filter_query and any(op in filter_query for op in ['>', '<', '!=', '~=', '..']):
+        if filter_query and any(op in filter_query for op in ['>', '<', '!=', '~=', '!~', '..']):
             # No fallback to "no filters": that would answer an unfiltered query as if it
             # were the filtered one (BACK-1059). A ValueError here fails the query.
             self.query_filters = parse_query_filters(filter_query)

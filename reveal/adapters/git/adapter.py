@@ -323,7 +323,9 @@ class GitAdapter(ResourceAdapter):
                 mark_query_keys(self.query, k)  # the filter parser records 'date'
             # Filter parameters (a key may already end with its operator: author~, date>)
             else:
-                filter_parts.append(f"{k}={v}")
+                # `field!~pattern` has no '=', so the URI parser leaves it a bare key (value True):
+                # rebuilding it as `key=True` made the pattern `pattern=True`, which never matched
+                filter_parts.append(k if v is True and '!~' in k else f"{k}={v}")
                 self._filter_keys.append(query_key(k))
 
         return result_control_parts, filter_parts
