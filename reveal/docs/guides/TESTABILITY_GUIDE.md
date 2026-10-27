@@ -143,7 +143,11 @@ reveal patches src --view pressure --tests tests --format json
 The JSON output includes confidence metadata because static target resolution is
 best-effort. Do not treat the report as a precise runtime call graph.
 
-`summary.total_patch_uses` and `summary.total_boundary_profiles` count observations
+The raw scan (`patches://tests`, type `patches_scan`) reports `total_uses`, `total_targets`
+and `displayed_groups` at the top level. The pressure view (type `testability_report`)
+carries the `summary` object below.
+
+In the pressure view, `summary.total_patch_uses` and `summary.total_boundary_profiles` count observations
 before grouping thresholds and display cuts. A pure function with no boundary
 categories still contributes a profile. Empty hotspot arrays therefore do not
 establish that no observations were collected. `--max-items` cuts both hotspot
@@ -157,7 +161,7 @@ Direct CLI and URI requests use these exits:
 | Exit | Meaning |
 |------|---------|
 | `0` | Complete analysis, including genuine zero observations, or omitted-tests not-applicable |
-| `2` | Invalid request, including an empty or missing explicit test root |
+| `2` | Invalid request, including an empty `tests=` value or a test root that does not exist |
 | `3` | Required evidence loss, malformed analysis, operational failure, or requested output failure |
 
 Known required loss with a surviving patch use or function profile is incomplete;
