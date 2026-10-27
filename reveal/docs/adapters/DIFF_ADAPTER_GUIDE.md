@@ -1363,7 +1363,7 @@ cat "$CACHE_FILE"
    - **Not applicable**: resources with no functions, classes or imports are declined (see below)
 
 2. **Git integration dependency**
-   - **Requirement**: the `pygit2` Python package (`pip install "reveal-cli[git]"` or `pip install pygit2`)
+   - **Requirement**: the `pygit2` Python package (`pip install "reveal-cli[git]"`)
    - **Impact**: git objects are read directly, nothing is checked out; without pygit2 a `git://` side fails with `git:// support requires pygit2`
 
 3. **Binary file comparison**

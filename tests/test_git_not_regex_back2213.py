@@ -3,6 +3,7 @@
 The URI parser leaves `email!~@company.com` as a bare key (there is no '='), and the adapter
 rebuilt every filter as `key=value`, so the pattern became `@company.com=True` and never matched.
 """
+import os
 import subprocess
 
 import pytest
@@ -46,5 +47,5 @@ def test_metrics_not_regex_filters_files(tmp_path):
     for name in ('keep_me.py', 'drop_me.py'):
         (tmp_path / name).write_text('def f():\n    return 1\n', encoding='utf-8')
     files = StatsAdapter(str(tmp_path), 'file!~drop').get_structure().get('files', [])
-    names = sorted(f['file'].rsplit('/', 1)[-1] for f in files)
+    names = sorted(os.path.basename(f['file']) for f in files)
     assert names == ['keep_me.py']
