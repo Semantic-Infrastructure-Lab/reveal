@@ -77,8 +77,9 @@ def test_unknown_sort_field_is_in_the_json_result(project, unknown, _known):
     run = _cli(unknown, '--format', 'json', cwd=project)
     assert run.returncode == 0, run.stderr
     result = json.loads(run.stdout)
-    # json:// keeps its disclosures at the top level (sort_failed, unknown_filter_field)
-    warnings = (result.get('meta') or {}).get('warnings', []) + result.get('warnings', [])
+    # Every sorting adapter, json:// included since BACK-2297, records it in meta.warnings.
+    assert 'warnings' not in result
+    warnings = result['meta']['warnings']
     assert [w['field'] for w in warnings if w.get('type') == 'unknown_sort_field'] == ['nosuch']
 
 

@@ -386,7 +386,10 @@ apply after this legacy outcome handling:
   (`cause`: `limit`, `auto_cap`, `max_items`, `head`, `tail`, `range`). The router records
   its own `--max-items`/`--head` cuts the same way and prints every cut once, after the
   render: `⚠ Truncated <field>: showing N of M — <how to see more>` on stdout for text, on
-  stderr for grep. Renderers leave `truncated` warnings alone. An adapter that shows a
+  stderr for grep. A `?sort=` that did not apply is recorded and printed the same way: a
+  `meta.warnings` entry `unknown_sort_field` (no result has the field) or `sort_failed`
+  (json:// values that do not compare), `RESULT_CONTROL_WARNINGS` in `utils/results.py`.
+  Renderers leave these warnings alone. An adapter that shows a
   composed child's list as its own passes `compose(..., cut_as=(field, hint))`.
 - **A cap the adapter applies itself is a cut too.** Count the whole list, then keep the top
   N and record it with the adapter's own knob as the hint (`hint='raise ?top=N'`). Cut where

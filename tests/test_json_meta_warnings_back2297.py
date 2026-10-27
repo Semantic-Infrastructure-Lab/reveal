@@ -104,6 +104,16 @@ def test_renderer_prints_meta_warnings_but_leaves_result_control_notes(capsys):
     assert 'sort note' not in out and 'cut note' not in out
 
 
+def test_renderer_leaves_a_failed_results_errors_to_the_router(capsys):
+    """The router prints the error line once; the renderer must not add it as a warning."""
+    result = {
+        'type': 'json_error', 'error': 'boom',
+        'meta': {'warnings': [], 'errors': [{'code': 'adapter_error', 'message': 'boom'}]},
+    }
+    JsonRenderer.render_structure(result, 'text')
+    assert 'boom' not in capsys.readouterr().out
+
+
 # Negative controls: what must not change.
 
 def test_clean_sort_has_no_warnings(data):

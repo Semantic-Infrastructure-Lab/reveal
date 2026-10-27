@@ -605,7 +605,7 @@ reveal json://config.json/database --format=json
 
 **Output types:**
 
-- `json_value` - Value at path (`value`, `value_type`); a filtered or limited array adds `total_matches`, `displayed_results` and `meta`
+- `json_value` - Value at path (`value`, `value_type`); a filtered or limited array adds `total_matches`, `displayed_results` and `meta`. Warnings (`unknown_filter_field`, `unknown_sort_field`, `sort_failed`, `truncated`) are entries of `meta.warnings` (earlier versions put the first three in a top-level `warnings` list, BACK-2297)
 - `json_schema` - Schema inference result (`?schema`; `schema`)
 - `json_flatten` - Flattened output (`?flatten`; `lines`, `line_count`)
 - `json_keys` - Key listing (`?keys`; `keys` and `count` for an object, `indices` and `count` for an array)
@@ -786,7 +786,7 @@ reveal 'json://data.json/orders?sort=customer.name'
 **Note**: Sorting works on arrays of objects. An object whose field is `null` or missing sorts
 last, ascending or descending, and such objects keep their source order. Values that do not
 compare with each other (a number and a string) leave the array in source order with a
-`sort_failed` warning.
+`sort_failed` entry in `meta.warnings`; the text view prints it after the value.
 
 ### Limit Results
 

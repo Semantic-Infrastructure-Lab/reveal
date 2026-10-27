@@ -1,5 +1,8 @@
 """Renderer for JSON navigation adapter results."""
 
+from ...utils.results import outcome_of
+from ...utils.warning_render import render_meta_warnings
+
 
 class JsonRenderer:
     """Renderer for JSON navigation results."""
@@ -14,8 +17,8 @@ class JsonRenderer:
         """
         from ...rendering import render_json_result
         render_json_result(result, format)
-        if format == 'text':
-            # json:// keeps its disclosures at the top level (unknown_filter_field,
-            # sort_failed); the text view shows them too, not only --format json.
-            for warning in result.get('warnings') or []:
-                print(f"  \u26a0 {warning.get('message', warning.get('type', ''))}")
+        # unknown_filter_field; the ?sort=/?limit= notes (unknown_sort_field, sort_failed,
+        # truncated) are printed once by the output seam, and a failed result's error by
+        # the router (BACK-2297).
+        if format == 'text' and outcome_of(result) != 'failed':
+            render_meta_warnings(result)

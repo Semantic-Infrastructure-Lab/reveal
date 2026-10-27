@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from ...utils.results import ResultBuilder, note_truncation
+from ...utils.results import ResultBuilder, note_truncation, note_warning
 from ...utils.path_utils import to_posix
 from ...utils.query_parser import note_query_parsed
 from ...utils.query import (
@@ -195,9 +195,11 @@ class JsonAdapter(ResourceAdapter):
             }
         )
 
-        # Add metadata if present
-        if metadata:
-            result.update(metadata)
+        # The counts stay top-level; the warnings go to meta.warnings like every adapter's
+        # (they landed top-level, where the output seam never read them, BACK-2297).
+        result.update({k: v for k, v in metadata.items() if k != 'warnings'})
+        for warning in metadata.get('warnings', []):
+            note_warning(result, warning)
         if 'displayed_results' in metadata:
             note_truncation(result, 'value', metadata['displayed_results'],
                             metadata['total_matches'], 'limit')

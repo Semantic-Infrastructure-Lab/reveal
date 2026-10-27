@@ -38,7 +38,7 @@ def _sorted(path, query):
 def test_descending_sort_puts_nulls_last(people):
     names, result = _sorted(people, 'sort=-age')
     assert names == ['c', 'a', 'b', 'nul1', 'miss', 'nul2']
-    assert 'warnings' not in result
+    assert 'warnings' not in result and 'meta' not in result
 
 
 def test_descending_sort_pages_past_the_nulls(people):
@@ -51,7 +51,7 @@ def test_descending_sort_pages_past_the_nulls(people):
 def test_ascending_sort_still_puts_nulls_last(people):
     names, result = _sorted(people, 'sort=age')
     assert names == ['b', 'a', 'c', 'nul1', 'miss', 'nul2']
-    assert 'warnings' not in result
+    assert 'warnings' not in result and 'meta' not in result
 
 
 def test_values_that_do_not_compare_still_disclose(tmp_path):
@@ -60,5 +60,5 @@ def test_values_that_do_not_compare_still_disclose(tmp_path):
     for query in ('sort=a', 'sort=-a'):
         result = JsonAdapter(str(path), query).get_structure()
         assert [v['a'] for v in result['value']] == [1, None, 'x', 3]  # source order
-        [warning] = result['warnings']
+        [warning] = result['meta']['warnings']
         assert warning['type'] == 'sort_failed'

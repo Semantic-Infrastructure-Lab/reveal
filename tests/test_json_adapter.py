@@ -511,7 +511,8 @@ class TestJsonAdapterFiltering(unittest.TestCase):
         result = adapter.get_structure()
 
         self.assertEqual(result['value'], [])
-        warnings = result.get('warnings', [])
+        self.assertNotIn('warnings', result)  # meta.warnings, not top-level (BACK-2297)
+        warnings = result['meta']['warnings']
         self.assertEqual(len(warnings), 1)
         self.assertEqual(warnings[0]['type'], 'unknown_filter_field')
         self.assertIn("'statuz'", warnings[0]['message'])
@@ -523,6 +524,7 @@ class TestJsonAdapterFiltering(unittest.TestCase):
 
         self.assertEqual(result['value'], [])
         self.assertNotIn('warnings', result)
+        self.assertNotIn('meta', result)
 
     def test_unknown_filter_field_nested_path(self):
         """Nested dot-path fields should be checked for literal presence too."""
@@ -530,7 +532,8 @@ class TestJsonAdapterFiltering(unittest.TestCase):
         result = adapter.get_structure()
 
         self.assertEqual(result['value'], [])
-        warnings = result.get('warnings', [])
+        self.assertNotIn('warnings', result)  # meta.warnings, not top-level (BACK-2297)
+        warnings = result['meta']['warnings']
         self.assertEqual(len(warnings), 1)
         self.assertIn("'profile.nickname'", warnings[0]['message'])
 
@@ -542,6 +545,7 @@ class TestJsonAdapterFiltering(unittest.TestCase):
 
         self.assertEqual(result['value'], [])  # every user has 'status'
         self.assertNotIn('warnings', result)
+        self.assertNotIn('meta', result)
 
     def test_sort_missing_field(self):
         """Should handle sorting by missing field."""

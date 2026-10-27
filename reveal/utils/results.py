@@ -383,7 +383,8 @@ def truncations_of(result: Any) -> List[Dict[str, Any]]:
 
 # What ?sort=/?limit= did to the answer that the answer itself can't show. The output
 # seam prints these once after the render; renderers leave them alone (warning_render).
-RESULT_CONTROL_WARNINGS = frozenset({'truncated', 'unknown_sort_field'})
+# 'sort_failed': json://?sort= over values that don't compare kept source order (BACK-2297).
+RESULT_CONTROL_WARNINGS = frozenset({'truncated', 'unknown_sort_field', 'sort_failed'})
 
 
 def result_control_notes_of(result: Any) -> List[Dict[str, Any]]:
