@@ -3,7 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from .sessions import _read_session_title, _read_session_stats
 from ....utils.threadsafe import main_thread_gc
