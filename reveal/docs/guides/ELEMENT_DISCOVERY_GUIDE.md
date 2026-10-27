@@ -136,10 +136,11 @@ Some adapters have **runtime-discovered** elements:
 
 - **env://**: Any environment variable name
 - **json://**: Any JSON key path
-- **git://**: Any commit hash, file path, branch
+- **git://**: Any file path, plus `@commit/branch/tag` for a revision
 - **sqlite://**: Any table name
 
-These adapters return **empty** `available_elements` since elements can't be known statically.
+These adapters omit `available_elements` (the key is absent), since their elements cannot be
+listed statically. Use `.available_elements // []` in jq.
 
 ---
 
@@ -167,6 +168,9 @@ reveal domain://google.com/dns       # DNS records
 reveal domain://google.com/whois     # WHOIS data
 reveal domain://google.com/ssl       # SSL status
 ```
+
+`/whois` needs the optional extra: `pip install "reveal-cli[whois]"` (without it the element
+exits 1 with that hint).
 
 **MySQL elements**:
 ```bash
@@ -229,7 +233,8 @@ reveal ssl://google.com --format=json | jq '.available_elements[].name'
 
 ### Domain Adapter
 
-**Elements**: dns, whois, ssl, registrar, mail, http, ns-audit
+**Elements**: dns, whois, ssl, registrar, mail, http, ns-audit (`/whois` needs
+`pip install "reveal-cli[whois]"`)
 
 **Overview**:
 ```bash
@@ -286,7 +291,7 @@ reveal mysql://localhost/slow-queries
 
 ### Python Adapter
 
-**Elements**: version, env, venv, packages, imports, syspath, doctor
+**Elements**: version, env, venv, packages, packages/<name>, module/<name>, imports, syspath, doctor, debug/bytecode
 
 **Overview**:
 ```bash
@@ -324,11 +329,12 @@ reveal env://PATH          # Specific variable
 reveal env://HOME          # Specific variable
 ```
 
-**Git Adapter** - Element = commit/file/branch:
+**Git Adapter** - Element = file path; a commit/branch/tag is `@ref`:
 ```bash
-reveal git://repo/         # Overview (recent commits)
-reveal git://repo/abc123   # Specific commit
-reveal git://repo/main.py  # Specific file
+reveal git://.                # Overview (branches, tags, recent commits)
+reveal git://.@abc1234        # Specific commit
+reveal git://.@main           # Branch history
+reveal git://src/main.py      # Specific file at HEAD (add @ref for another revision)
 ```
 
 **SQLite Adapter** - Element = table name:
@@ -480,7 +486,7 @@ def get_element_if_available(uri, element_name):
 Fetch multiple elements for comprehensive view:
 
 ```bash
-# Analyze domain health - fetch all elements
+# Analyze domain health - fetch all elements (whois needs reveal-cli[whois])
 for elem in dns whois ssl registrar; do
   echo "=== $elem ==="
   reveal "domain://example.com/$elem"
@@ -598,7 +604,7 @@ reveal ssl://google.com --format=json | jq '.available_elements[].name'
 
 ### Empty available_elements
 
-**Problem**: `available_elements` is empty or missing
+**Problem**: `available_elements` is missing
 
 **Reason**: Adapter has **dynamic elements** (env, git, json, sqlite)
 
@@ -644,11 +650,11 @@ reveal ssl://google.com --format=json | jq 'has("available_elements")'
 | Adapter | Elements | Notes |
 |---------|----------|-------|
 | **ssl** | san, chain, issuer, subject, dates, full | Fixed list |
-| **domain** | dns, whois, ssl, registrar, mail, http, ns-audit | Fixed list |
+| **domain** | dns, whois, ssl, registrar, mail, http, ns-audit | Fixed list (`whois` needs `reveal-cli[whois]`) |
 | **mysql** | connections, performance, innodb, replication, storage, errors, variables, health, databases, indexes, slow-queries, tables | Fixed list |
-| **python** | version, env, venv, packages, imports, syspath, doctor | Fixed list |
+| **python** | version, env, venv, packages, packages/<name>, module/<name>, imports, syspath, doctor, debug/bytecode | Fixed list (two take a name) |
 | **env** | (any variable name) | Dynamic |
-| **git** | (any commit/file/branch) | Dynamic |
+| **git** | any file path, plus `@commit/branch/tag` | Dynamic |
 | **json** | (any JSON key) | Dynamic |
 | **sqlite** | (any table name) | Dynamic |
 | **help** | (any topic/adapter) | Dynamic |
