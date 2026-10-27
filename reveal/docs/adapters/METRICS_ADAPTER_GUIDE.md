@@ -211,7 +211,7 @@ jq '.summary.avg_complexity' stats.json
 
 ### 2. Supported File Types
 
-Stats adapter analyzes:
+The metrics adapter analyzes:
 - **Python** (.py)
 - **JavaScript/TypeScript** (.js, .ts, .jsx, .tsx)
 - **Go** (.go)
@@ -484,8 +484,10 @@ The summary aggregates only the files shown.
 **Structure**:
 ```json
 {
+  "contract_version": "1.1",
   "type": "stats_summary",
   "source": "./src",
+  "source_type": "directory",
   "summary": {
     "total_files": 42,
     "total_lines": 8543,
@@ -493,11 +495,13 @@ The summary aggregates only the files shown.
     "total_functions": 187,
     "total_classes": 34,
     "avg_complexity": 4.2,
-    "avg_quality_score": 78.5
+    "avg_quality_score": 78.5,
+    "excluded": 0,
+    "excluded_by_extension": {}
   },
   "files": [
     {
-      "file": "src/app.py",
+      "file": "app.py",
       "lines": { "total": 342, "code": 289, "comments": 28, "empty": 25 },
       "elements": { "functions": 12, "classes": 3, "imports": 8 },
       "complexity": { "average": 5.2, "max": 12, "min": 1 },
@@ -505,36 +509,45 @@ The summary aggregates only the files shown.
         "score": 82.5,
         "long_functions": 1,
         "deep_nesting": 0,
-        "avg_function_length": 24.1
+        "avg_function_length": 24.1,
+        "local_check_issues": 11
       },
       "issues": {
         "long_functions": [
           { "name": "process_data", "lines": 120, "start_line": 45 }
         ],
-        "deep_nesting": []
+        "deep_nesting": [
+          { "name": "parse_rows", "depth": 5, "start_line": 210 }
+        ]
       }
     }
   ],
   "hotspots": [  // Only if ?hotspots=true
     {
-      "file": "src/core.py",
-      "hotspot_score": 85.3,
-      "quality_score": 45.2,
+      "file": "core.py",
+      "hotspot_score": 6.4,
+      "quality_score": 85.0,
       "issues": [
-        "Quality: 45.2/100",
-        "Avg complexity: 12.5",
-        "3 function(s) >100 lines",
-        "2 function(s) depth >4"
+        "Touched 52 times in scope"
       ],
       "details": {
-        "lines": 567,
-        "functions": 18,
-        "complexity": 12.5
+        "lines": 713,
+        "functions": 23,
+        "complexity": 4.87,
+        "commit_count": 52
       }
     }
-  ]
+  ],
+  "meta": {
+    "warnings": [],
+    "issue_count": { "rule": "file-local rules only", "field": "local_check_issues", "rule_count": 36, "rule_set_id": "..." }
+  },
+  "displayed_results": 42,
+  "total_matches": 42
 }
 ```
+
+`file` paths are relative to the path you passed (`./src`), so the row for `./src/app.py` is `app.py`. `displayed_results` and `total_matches` appear whenever a limit or offset applies; the truncation warning then carries `"exact": true` when the total is known.
 
 ### 2. stats_file (Single File Analysis)
 
@@ -1315,12 +1328,12 @@ reveal metrics://./src/core
 **❌ Don't**:
 - Ignore hotspot warnings (they indicate real issues)
 - Compare metrics across different language ecosystems (Python vs C++ complexity)
-- Use stats as the only code review tool (it's one input, not the complete picture)
+- Use metrics as the only code review tool (it's one input, not the complete picture)
 - Set unrealistic thresholds (complexity <5 may be too strict)
 - Analyze generated code (node_modules, vendor, build outputs)
 
 **✅ Do**:
-- Use stats as a guide, not gospel (context matters)
+- Use metrics as a guide, not gospel (context matters)
 - Combine with manual code review
 - Track trends, not just absolute values
 - Focus on relative improvement over time
@@ -1441,7 +1454,7 @@ Every file with a registered analyzer is counted, including Markdown, YAML/TOML 
 
 ### 3. Generated Code
 
-Stats adapter **does not distinguish** generated code from hand-written code:
+The metrics adapter **does not distinguish** generated code from hand-written code:
 - May inflate metrics if analyzing generated files
 - Use `code_only=true` to reduce noise
 - Manually exclude directories like `node_modules/`, `vendor/`, `dist/`
@@ -1462,7 +1475,7 @@ Quality scores are **relative**, not absolute:
 
 ### 6. No Runtime Analysis
 
-Stats adapter analyzes **static code** only:
+The metrics adapter analyzes **static code** only:
 - Cannot detect runtime performance issues
 - Cannot detect memory leaks or threading issues
 - Use profiling tools for runtime analysis
@@ -1568,8 +1581,9 @@ reveal metrics://./src --format=json | jq '.files[] | select(.quality.score < 70
 
 # If none, your codebase is high quality! ✅
 
-# Lower hotspot threshold (if needed for tuning):
-# Edit .reveal/stats-quality.yaml to adjust thresholds
+# The hotspot thresholds (quality 70, complexity 10, 5 per long function,
+# 3 per deeply nested one, churn above 20 commits) are fixed.
+# stats-quality.yaml only moves the quality score that feeds the first factor.
 ```
 
 ### Issue 6: Config not loaded
@@ -1772,7 +1786,7 @@ lines of a file its path did not classify. It walks the same files as the defaul
 (respecting `REVEAL_IGNORE`, `config.yaml`'s `ignore:`, the well-known skip directories, and
 what git ignores; `?respect_gitignore=false` or `--no-gitignore` includes gitignored files).
 The other parameters of the default view (`hotspots`, filters, `sort`) do not apply here, and
-the CLI says so.
+the CLI says so. A file path lists its whole parent directory, not just that file.
 
 `files` is one entry per analyzable file: `{"file": <relative path>, "provenance": <tag>}`.
 `summary.by_provenance` is a count per tag, so `summary.by_provenance.first_party /
@@ -1845,6 +1859,7 @@ Both retired spellings still answer exactly as before, with one
 - High complexity (impact)
 - Long functions (maintainability risk)
 - Deep nesting (cognitive load)
+- Commit churn in scope (git repositories): more than 20 commits touching the file adds 0.2 per extra commit
 
 A file with quality 65 but 5 long functions may rank higher as a hotspot than a file with quality 55 but no long functions.
 
@@ -1894,7 +1909,7 @@ jq -s '.[0].summary as $a | .[1].summary as $b | {
 
 ### Q7: Why is analysis slow on large repos?
 
-**A**: Stats adapter parses **every supported file** recursively. For large repos:
+**A**: The metrics adapter parses **every supported file** recursively. For large repos:
 1. **Use specific paths**: `metrics://./src/core` instead of `metrics://./`
 2. **Use code_only**: Skip data/config files
 3. **Use filters**: `lines>50` to skip tiny files
@@ -1902,9 +1917,9 @@ jq -s '.[0].summary as $a | .[1].summary as $b | {
 
 **Performance**: ~100-200 files/second on modern hardware.
 
-### Q8: Can I use stats in CI/CD pipelines?
+### Q8: Can I use metrics in CI/CD pipelines?
 
-**A**: Yes! Stats adapter is designed for CI/CD:
+**A**: Yes! The metrics adapter is designed for CI/CD:
 - **JSON output**: `--format=json` for machine parsing
 - **Exit codes**: 0 when every file was counted, 2 for a rejected request (unknown view, bad `top`, missing path, `--fail-on`), 3 when files were lost or not analyzed. There is no findings gate: a low score never fails the run.
 - **Deterministic**: Same code → same stats
@@ -1939,7 +1954,7 @@ A file can have quality 55 (bad) but hotspot 30 (moderate urgency) if issues are
 **Use quality_score** to assess code health.
 **Use hotspot_score** to prioritize refactoring.
 
-### Q11: Can stats detect code duplication?
+### Q11: Can metrics detect code duplication?
 
 **A**: No, the metrics adapter only measures:
 - Size (lines, functions, classes)
@@ -1953,7 +1968,7 @@ For **duplication detection**, use specialized tools like:
 
 ### Q12: Why doesn't stats show specific function complexity?
 
-**A**: Stats adapter shows **aggregate metrics** (file-level, directory-level). For **function-level details**, use:
+**A**: The metrics adapter shows **aggregate metrics** (file-level, directory-level). For **function-level details**, use:
 ```bash
 # Function-level structure
 reveal 'ast://./src/file.py?type=function'
@@ -1992,7 +2007,7 @@ git commit -m "chore: weekly stats snapshot"
 
 **Avg complexity 4.2** means most functions are simple (good!).
 
-### Q15: Can stats analyze Jupyter notebooks (.ipynb)?
+### Q15: Can metrics analyze Jupyter notebooks (.ipynb)?
 
 **A**: Not directly. A notebook is counted as raw text with 0 functions. Options:
 1. **Export to .py**: `jupyter nbconvert --to script notebook.ipynb`
@@ -2005,7 +2020,7 @@ Alternatively, use Jupyter-specific tools like `nbqa`.
 ## Version History
 
 ### Version 1.0.0 (2025-02-14)
-- ✅ Comprehensive stats adapter documentation
+- ✅ Comprehensive metrics adapter documentation
 - ✅ Quality scoring system explained
 - ✅ Hotspot detection algorithm detailed
 - ✅ Unified query syntax documented
