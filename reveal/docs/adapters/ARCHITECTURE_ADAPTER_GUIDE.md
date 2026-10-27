@@ -41,7 +41,7 @@ reveal 'architecture://src?against=main'
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
 | `top` | integer (default `5`) | Section display cap; also bounds the complexity candidate population used by the analysis. |
-| `no_imports` | `true`, `false` (default) | Skip import graph analysis (entry points/core abstractions/cycles all come back empty; complexity-based risks still run). |
+| `no_imports` | `true`, `false` (default) | Skip import graph analysis. Entry points, core abstractions, components, cycles and all risks come back empty, since every risk type is defined over import facts; only the fallback next commands remain. |
 | `against` | Nonempty Git ref | Select `architecture_diff`, comparing that ref with the live working tree. |
 | `verbose` | `true`, `false` (default) | Expand ordinary complexity analysis and text sections. Also available as `--verbose` on both spellings. |
 
@@ -76,10 +76,19 @@ ones with fan-out > 0 that are not test files and not `__init__.py`. The report
 states both numbers and the rule: `entry_point_filter` in JSON
 (`fan_in_zero`, `active`, `rule`) and the `Entry Points  (N active of M fan-in=0
 files)` heading plus an `active = ...` line in text. `facts.core_abstractions` are files many others
-import (fan-in > 0). `facts.circular_groups` are import cycles. `risks`
+import (fan-in > 0); text leaves re-export modules (an `__init__.py`, `index.ts`, `mod.rs` or
+`doc.go`) out of that section while JSON keeps them, so its `... and N more` count is lower
+than the JSON length. `facts.components` groups files by directory: `files`,
+`internal`/`incoming`/`outgoing` edge counts, `cohesion` (internal / (internal + outgoing), 0-1;
+`null` with a `cohesion_reason` for a component mostly in a same-package-visibility language)
+and `top_bridge` (the file with the most outgoing cross-component edges). `facts.circular_groups`
+are import cycles. `scope` and `unsupported_extensions` state what was scanned. `risks`
 flags circular groups, high-complexity entry points (complexity ≥ 20), and
-load-bearing files (fan-in ≥ 8). `next_commands` suggests the next reveal
-invocation for each risk found.
+load-bearing files (fan-in ≥ 8). `next_commands` gives at most one follow-up per
+risk type (the cycle list, `--boundary` on the worst high-complexity entry, a
+complexity query when there are core abstractions, and the top load-bearing file),
+or `reveal overview <path>` / `reveal <path>` when none apply. File fields are
+relative to the target and commands spell paths as the target was given.
 
 Every count states its rule: a `Rule:` line per counting view in text, `edge_rule` (plus `edge_rule_sections` for entry points and cycles) in JSON, built by the same function as `imports://`'s. Fan-in, entry points and components count every static import edge except `TYPE_CHECKING` ones, function-level imports included (entry points ignore importers under a test path); cycles use the load-time view. `architecture://` takes no `&lazy`; `imports://<dir>?rank=fan-in&lazy=exclude` is the load-time view. A git-ref comparison states the same rule once
 (`edge_rule` beside `deltas`; both snapshots are counted by it).
@@ -102,7 +111,8 @@ honors the selected gitignore policy. Use `--no-gitignore` to include ignored
 untracked head files.
 
 Diff JSON records in `analysis` whether it analyzed both snapshots or proved the
-trees identical. Snapshot comparisons disclose imports and complexity completeness
+trees identical; for identical trees `analysis.basis` is `identical_tree` and the
+deltas are empty (text shows only the zero complexity-centroid line). Snapshot comparisons disclose imports and complexity completeness
 for each side. If either required component fails or has missing
 input, including required source or resolution-target directory enumeration loss,
 the result retains attributed diagnostics and returns an `error` with
