@@ -454,19 +454,24 @@ NAV_BOOLEAN_FLAG_NAMES: frozenset = frozenset(
 ) | {'scope'}
 
 
-def _nav_scope(analyzer, element: str, as_json: bool) -> None:
-    """Handle --scope: show lexical scope chain for a line reference."""
+def _single_line_ref(element: str, flag: str) -> int:
+    """The line number a --scope/--around element names; exits when it names none."""
     from .display.element import _parse_element_syntax  # noqa: I006
-    from .adapters.ast.nav import scope_chain, render_scope_chain  # noqa: I006
     syntax = _parse_element_syntax(element)
     if syntax['type'] != 'line':
         print(
-            f'Error: --scope requires a line reference (e.g., reveal file.py :123 --scope)\n'
+            f'Error: {flag} requires a line reference (e.g., reveal file.py :123 {flag})\n'
             f'  Got element: {element!r}',
             file=sys.stderr,
         )
         sys.exit(1)
-    line_no = syntax['start_line']
+    return syntax['start_line']
+
+
+def _nav_scope(analyzer, element: str, as_json: bool) -> None:
+    """Handle --scope: show lexical scope chain for a line reference."""
+    from .adapters.ast.nav import scope_chain, render_scope_chain  # noqa: I006
+    line_no = _single_line_ref(element, '--scope')
     chain = scope_chain(tree_root(analyzer.tree), line_no, analyzer._get_node_text)
     if as_json:
         _nav_json('scope', analyzer.path, element, line_no, line_no, chain)
@@ -478,16 +483,7 @@ def _nav_scope(analyzer, element: str, as_json: bool) -> None:
 
 def _nav_around(analyzer, element: str, as_json: bool, n: int) -> None:
     """Handle --around N: show N lines of context around a line reference."""
-    from .display.element import _parse_element_syntax  # noqa: I006
-    syntax = _parse_element_syntax(element)
-    if syntax['type'] != 'line':
-        print(
-            f'Error: --around requires a line reference (e.g., reveal file.py :123 --around)\n'
-            f'  Got element: {element!r}',
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    line_no = syntax['start_line']
+    line_no = _single_line_ref(element, '--around')
     content_lines = split_lines(analyzer.content)
     total = len(content_lines)
     start = max(1, line_no - n)
