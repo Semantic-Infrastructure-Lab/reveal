@@ -316,7 +316,7 @@ def test_architecture_diff_snapshot_passes_scope_path(fx, builds):
 # ── the URI path ───────────────────────────────────────────────────────────────────────────────
 
 def test_importers_through_the_cli_json(fx, monkeypatch):
-    from tests.conftest import _run_reveal_direct
+    from conftest import _run_reveal_direct
     monkeypatch.chdir(fx)
     out = _run_reveal_direct('imports://pkg/core.py?importers', '--format', 'json')
     data = json.loads(out.stdout)
@@ -341,7 +341,7 @@ def test_importers_text_lists_each_importer_with_stage_and_scope(fx, capsys):
 # ── D6 exit codes (imports is a declared command) ─────────────────────────────────────────────
 
 def test_imports_exits_2_for_usage_and_3_for_partial_analysis(fx, monkeypatch):
-    from tests.conftest import _run_reveal_direct
+    from conftest import _run_reveal_direct
     monkeypatch.chdir(fx)
     assert _run_reveal_direct('imports://pkg?rank=fan-in').returncode == 0
     assert _run_reveal_direct('imports://missing_dir').returncode == 2  # was 1
@@ -352,7 +352,7 @@ def test_imports_exits_2_for_usage_and_3_for_partial_analysis(fx, monkeypatch):
 
 
 def test_reveal_imports_subcommand_answers_like_the_uri(fx, monkeypatch):
-    from tests.conftest import _run_reveal_direct
+    from conftest import _run_reveal_direct
     monkeypatch.chdir(fx)
     typed = _run_reveal_direct('imports', 'pkg/core.py', '--importers', '--tests', 'exclude', '--format', 'json')
     uri = _run_reveal_direct('imports://pkg/core.py?importers&tests=exclude', '--format', 'json')
