@@ -23,7 +23,6 @@ import json
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 from dataclasses import dataclass
-import fnmatch
 import functools
 
 from .utils.path_utils import resolve_project_root, reveal_yaml_is_root, failure_of
@@ -78,44 +77,33 @@ def _cached_resolve(path: Path) -> Path:
     return resolved
 
 
-# Null bytes cannot appear in filesystem paths on any OS, making this the
-# safest possible placeholder for the ** glob wildcard during fnmatch.translate.
-_GLOB_STAR_PLACEHOLDER = '\x00\x00'
-
-
 @functools.lru_cache(maxsize=512)
 def _compile_glob_regex(pattern: str) -> re.Pattern:
-    """Compile a glob pattern to a regex object (cached).
+    """Compile an `overrides.files` glob to a regex anchored at both ends (cached).
 
-    Patterns are fixed across a run, so compiling them once eliminates
-    thousands of redundant fnmatch.translate + re.compile calls.
+    Patterns are fixed across a run, so each is compiled once. The segment rules are the
+    `.gitignore` ones (`gitignore.glob_path_regex`); the anchoring is not: the pattern is matched
+    against the whole project-relative path, so a pattern without `**` never matches deeper.
     """
-    ph = _GLOB_STAR_PLACEHOLDER
-    if '**' in pattern:
-        p = pattern.replace('/**/', f'/{ph}/')  # Middle position
-        p = p.replace('**/', f'{ph}/')           # Start position
-        p = p.replace('/**', f'/{ph}')           # End position
-        p = p.replace('**', ph)                  # Standalone
-        p = fnmatch.translate(p)
-        p = p.replace(f'/{ph}/', '(/|/.*/)')
-        p = p.replace(f'{ph}/', '(.*/)?')
-        p = p.replace(f'/{ph}', '(/.*)?')
-        p = p.replace(ph, '.*')
-    else:
-        p = fnmatch.translate(pattern)
-    return re.compile(p)
+    from .utils.gitignore import glob_path_regex
+    return re.compile('^' + glob_path_regex(pattern) + '$', re.DOTALL)
 
 
 def glob_match(path: Path, pattern: str) -> bool:
-    """Match a path against a glob pattern with ** support (gitignore-style).
+    """Match a project-relative path against an `overrides.files` glob.
 
     Supports:
     - * matches anything except /
-    - ** matches zero or more path components
     - ? matches any single character except /
+    - [...] matches one character of the set, never /
+    - ** as a whole segment matches zero or more path components (`a/**/b`, `**/b`, `a/**`)
+
+    The pattern is anchored at the project root: `*.py` matches `b.py` but not `a/b.py`
+    (write `**/*.py`). Unlike `ignore:` (`.gitignore` rules), a bare name does not match at
+    any depth.
 
     Args:
-        path: Path to match (can be relative or absolute)
+        path: Path to match (relative to the project root)
         pattern: Glob pattern
 
     Returns:

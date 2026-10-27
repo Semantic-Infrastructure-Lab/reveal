@@ -326,8 +326,19 @@ def compile_gitignore_line(line: str) -> Optional[_Rule]:
     # A slash at the start or in the middle anchors the pattern to the
     # .gitignore's own directory; otherwise it matches at any depth.
     anchored = '/' in line
-    line = line.lstrip('/')
-    parts = line.split('/')
+    prefix = '^' if anchored else '^(?:.*/)?'
+    rx = glob_path_regex(line.lstrip('/'))
+    return _Rule(re.compile(prefix + rx + '$', re.DOTALL), negate, dir_only)
+
+
+def glob_path_regex(pattern: str) -> str:
+    """Translate a '/'-separated glob to an unanchored regex body.
+
+    `*`, `?` and `[...]` match within one path segment; a whole `**` segment matches zero or
+    more segments (`a/**/b`, `**/b`, `a/**`). The caller adds the anchors: `.gitignore` lines
+    and `.reveal.yaml` `overrides.files` (`config.glob_match`) both compile through here.
+    """
+    parts = pattern.split('/')
     rx = ''
     for i, seg in enumerate(parts):
         last = i == len(parts) - 1
@@ -335,8 +346,7 @@ def compile_gitignore_line(line: str) -> Optional[_Rule]:
             rx += '.*' if last else '(?:.*/)?'
         else:
             rx += _segment_regex(seg) + ('' if last else '/')
-    prefix = '^' if anchored else '^(?:.*/)?'
-    return _Rule(re.compile(prefix + rx + '$', re.DOTALL), negate, dir_only)
+    return rx
 
 
 def _read_rules(path: str) -> List[_Rule]:

@@ -271,8 +271,8 @@ health:
 	reveal check ./src
 	reveal health ssl://api.yoursite.com domain://yoursite.com
 
-# Pack PR context for AI review (raise --budget until every changed file is listed;
-# a changed file larger than the remaining budget is dropped)
+# Pack PR context for AI review (a changed file larger than the remaining budget is
+# dropped and named in a warning; raise --budget until no warning names one)
 pack:
 	reveal pack src/ --since main --budget 30000 --content
 ```
