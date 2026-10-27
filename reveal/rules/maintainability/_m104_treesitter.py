@@ -18,7 +18,7 @@ M104's own `_extract_list_values` + `ast.Assign` walk produces for Python.
 
 from typing import Any, Iterator, List, Optional, Tuple
 
-from ...core.treesitter_compat import node_children, _zero_arg
+from ...core.treesitter_compat import iter_tree, node_children, _zero_arg
 from ..base_mixins import kind_nodes
 
 _QUOTE_CHARS = '"\'`'
@@ -52,15 +52,14 @@ def _find_child(node: Any, kind: str) -> Optional[Any]:
 
 
 def _find_descendant(node: Any, kinds: frozenset) -> Optional[Any]:
-    """Depth-first search (including `node` itself) for the first node whose
-    kind is in `kinds`. Used to reach a literal buried under type-annotation
-    scaffolding (Go's `expression_list`, Rust's typed `let`, ...)."""
-    if _kind(node) in kinds:
-        return node
-    for child in node_children(node):
-        found = _find_descendant(child, kinds)
-        if found is not None:
-            return found
+    """First node in pre-order (including `node` itself) whose kind is in `kinds`.
+    Used to reach a literal buried under type-annotation scaffolding (Go's
+    `expression_list`, Rust's typed `let`, ...). Walks with the shared cursor
+    (`iter_tree`), so a left-nested chain thousands of levels deep (a packed
+    `"..." + "..." + ...` table) costs no Python frames (BACK-2252)."""
+    for candidate in iter_tree(node):
+        if _kind(candidate) in kinds:
+            return candidate
     return None
 
 
