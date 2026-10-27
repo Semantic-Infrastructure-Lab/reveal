@@ -41,7 +41,6 @@
   "reveal/adapters/ast/nav_varflow.py::VarFlowWalker._dispatch": 20,
   "reveal/adapters/ast/nav_varflow.py::VarFlowWalker._walk_call": 24,
   "reveal/adapters/ast/nav_varflow.py::_member_access_descent": 17,
-  "reveal/adapters/ast/queries.py::parse_query": 16,
   "reveal/adapters/ast/surface_facts.py::_string_value": 17,
   "reveal/adapters/ast/surface_facts.py::handler": 16,
   "reveal/adapters/ast/surface_rules.py::_call_fields": 23,
