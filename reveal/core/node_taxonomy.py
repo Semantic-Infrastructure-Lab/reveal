@@ -714,8 +714,8 @@ MODULE_SCOPE = 'module'
 LOCAL_SCOPE = 'local'
 
 
-def _is_local_scope(node: Any, kind: str) -> bool:
-    """Whether a node of ``kind`` is a function-like body for edge_scope().
+def is_local_scope(node: Any, kind: str) -> bool:
+    """Whether a node of ``kind`` is a function-like body (edge_scope() and other walks).
 
     LOCAL_SCOPE_NODES, except Zig's ``Decl``, which wraps every top-level declaration
     (`const std = @import("std");` too); only one holding an ``FnProto`` is a function."""
@@ -736,7 +736,7 @@ def edge_scope(node: Any) -> str:
     construction; an arrow function in the field is local)."""
     current = _zero_arg(node, 'parent')
     while current is not None:
-        if _is_local_scope(current, _zero_arg(current, 'kind')):
+        if is_local_scope(current, _zero_arg(current, 'kind')):
             return LOCAL_SCOPE
         current = _zero_arg(current, 'parent')
     return MODULE_SCOPE
