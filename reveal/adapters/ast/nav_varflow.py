@@ -1168,13 +1168,40 @@ def _type_reference_children(node: Any) -> List[Any]:
             or (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) in typed]
 
 
+# Call-site named-argument labels name the callee's parameter and bind nothing in the
+# caller, so they are neither reads nor writes: `requests.post(url, json=payload)` listed
+# `json` as a --deps PARAM and a --boundary INPUT (BACK-2272). Python `keyword_argument` and
+# C# `argument` hold the label in a `name` field (PHP 8's `argument` too, as a `name` leaf
+# that is no variable anyway); Dart's `named_argument` in a `label` child; Swift's
+# `value_argument` in `value_argument_label` children (several for `#selector(f(a:b:))`).
+# Kotlin's `value_argument` has no field: the label is the child before `=`. Scala's
+# `f(json = x)` is an `assignment_expression`, see VarFlowWalker._walk_arguments.
+_NAMED_ARGUMENT_NAME_FIELD_KINDS = frozenset({'keyword_argument', 'argument'})
+_NAMED_ARGUMENT_LABEL_KINDS = frozenset({'label', 'value_argument_label'})
+
+
+def _named_argument_labels(node: Any) -> List[Any]:
+    """The label(s) of a named call argument (`json` in `f(json=x)`), or []."""
+    kind = _zero_arg(node, 'kind')
+    if kind in _NAMED_ARGUMENT_NAME_FIELD_KINDS:
+        name = node.child_by_field_name('name')
+        return [name] if name is not None else []
+    if kind not in ('named_argument', 'value_argument'):
+        return []
+    children = _children(node)
+    labels = [c for c in children if _zero_arg(c, 'kind') in _NAMED_ARGUMENT_LABEL_KINDS]
+    if labels or kind == 'named_argument':
+        return labels
+    return [label for label, after in zip(children, children[1:]) if _zero_arg(after, 'kind') == '=']
+
+
 def _non_variable_children(node: Any, get_text: Callable) -> List[Any]:
     """Children of `node` that look like identifiers but are not variables: a
     lowercase JSX tag name, a Java annotation name, a C# attribute name, a Go
-    struct-literal field key, a Scala `s`/`f`/`raw` interpolator, and C# type
-    references. The one table both the candidate-name pass and the --varflow
-    walker consult."""
-    skipped = []
+    struct-literal field key, a Scala `s`/`f`/`raw` interpolator, C# type
+    references and named-argument labels. The one table both the candidate-name
+    pass and the --varflow walker consult."""
+    skipped = _named_argument_labels(node)
     for found in (_jsx_lowercase_tag_name_node(node, get_text),
                   _java_annotation_name_node(node),
                   _csharp_attribute_name_node(node),
