@@ -93,13 +93,14 @@ reveal 'xlsx://file.xlsx?sheet=Sales&range=5:5'
 # One cell
 reveal 'xlsx://file.xlsx?sheet=Sales&range=B2'
 
-# Large ranges (AA-ZZ columns supported)
+# Large ranges (any Excel column, up to XFD)
 reveal 'xlsx://file.xlsx?sheet=Data&range=A1:ZZ1000'
 ```
 
 **What you get:**
 - The cell values in the range, by Excel's own row and column numbers (a blank row
-  in the sheet is an empty row in the result, so later rows keep their numbers)
+  in the sheet is an empty row in the result, so later rows keep their numbers;
+  `?range=A3:C5` prints rows 3-5, and JSON gives the first one as `first_row`)
 - Empty cells as `""` in JSON and blank in text
 - Any other range form is an error naming the forms above, not the whole sheet
 
@@ -421,7 +422,7 @@ reveal 'xlsx://file.xlsx?powerquery=show'
 reveal 'xlsx://file.xlsx?powerquery=SalesData'
 
 # Quoted names with spaces still work (case-insensitive match)
-reveal 'xlsx://file.xlsx?powerquery=Sales' Data
+reveal 'xlsx://file.xlsx?powerquery=Sales Data'
 ```
 
 ### Sample Output
@@ -588,8 +589,6 @@ find reports/ -name "*.xlsx" | while read f; do
   reveal "xlsx://$f?search=Q4 Revenue"
 done
 
-# Or use reveal's stdin mode
-find reports/ -name "*.xlsx" | reveal --stdin xlsx://?search=Q4%20Revenue
 ```
 
 ### Workflow 4: Automated Report Extraction
@@ -602,10 +601,11 @@ for month in jan feb mar apr; do
   reveal "xlsx://reports/${month}_report.xlsx?sheet=Sales&format=csv" > ${month}_sales.csv
 done
 
-# Combine into single file
+# Combine into single file, with the month as the first column
 echo "Month,Date,Product,Amount" > all_sales.csv
 for csv in *_sales.csv; do
-  tail -n +2 "$csv" >> all_sales.csv
+  month=${csv%_sales.csv}
+  tail -n +2 "$csv" | sed "s/^/$month,/" >> all_sales.csv
 done
 ```
 
@@ -615,17 +615,18 @@ done
 
 ```bash
 # Get sheet overview
-reveal report.xlsx?sheet=Data --format json | jq '{
-  file: .file_path,
+reveal 'xlsx://report.xlsx?sheet=Data' --format json | jq '{
+  file: .source,
   sheet: .sheet_name,
-  rows: .dimensions.rows,
-  columns: .dimensions.columns,
-  column_names: .columns,
-  empty_cells: [.rows[][] | select(. == null or . == "")] | length
+  dimension,
+  rows: .rows_count,
+  columns: .cols_count,
+  header: .rows[0],
+  empty_cells: [.rows[][] | select(. == "")] | length
 }'
 
-# Check for expected columns
-reveal report.xlsx?sheet=Data --format json | jq '.columns | contains(["Date", "Amount", "Status"])'
+# Check for expected columns (the first row is the header, if the sheet has one)
+reveal 'xlsx://report.xlsx?sheet=Data' --format json | jq '.rows[0] | contains(["Date", "Amount", "Status"])'
 ```
 
 ---
@@ -655,22 +656,22 @@ reveal 'xlsx://huge_file.xlsx?sheet=FactSales&range=A1:Z1000'
 **For files > 50 MB:**
 ```bash
 # Don't: Load entire sheet
-reveal huge_file.xlsx?sheet=Data  # Slow, memory-intensive
+reveal 'xlsx://huge_file.xlsx?sheet=Data'  # Slow, memory-intensive
 
 # Do: Extract specific range
-reveal huge_file.xlsx?sheet=Data&range=A1:Z1000  # Fast
+reveal 'xlsx://huge_file.xlsx?sheet=Data&range=A1:Z1000'  # Fast
 
 # Do: Export to CSV for external processing
-reveal huge_file.xlsx?sheet=Data&format=csv | split -l 10000 - chunk_
+reveal 'xlsx://huge_file.xlsx?sheet=Data&format=csv' | split -l 10000 - chunk_
 ```
 
 **Row limits:**
 ```bash
 # Preview first 10 rows
-reveal file.xlsx?sheet=Sales&limit=10
+reveal 'xlsx://file.xlsx?sheet=Sales&limit=10'
 
 # Preview last 10 rows (not supported - use CSV + tail)
-reveal file.xlsx?sheet=Sales&format=csv | tail -11
+reveal 'xlsx://file.xlsx?sheet=Sales&format=csv' | tail -11
 ```
 
 ---
@@ -679,7 +680,7 @@ reveal file.xlsx?sheet=Sales&format=csv | tail -11
 
 ### What XLSX Adapter Does NOT Support
 
-1. **Formulas** - Only values shown (formula results, not formula text)
+1. **Formulas** - Values by default; `?formulas=true` shows formula text. A formula with no cached value (a file never opened in Excel) shows empty.
 2. **Formatting** - No colors, fonts, borders, cell styles
 3. **Charts/Images** - Not extracted
 4. **Macros/VBA** - Not executed or extracted (xlsm VBA remains in the binary `vbaProject.bin` blob)
@@ -697,8 +698,8 @@ reveal file.xlsx?sheet=Sales&format=csv | tail -11
 - Other cells in merge appear empty
 
 **Date handling:**
-- Excel serial dates auto-detected and formatted
-- Custom date formats may appear as numbers
+- Dates appear as Excel serial numbers (e.g. 45292 = 2024-01-01); there is no date detection
+- A date stored as text in the cell shows as that text
 
 **Number precision:**
 - Floating point precision matches Excel (15 significant digits)
@@ -712,26 +713,29 @@ reveal file.xlsx?sheet=Sales&format=csv | tail -11
 
 ## Error Messages
 
+Each prints `Error (xlsx://): ...` and exits 1.
+
 **File not found:**
 ```
-Error: File not found: /path/to/file.xlsx
+Error (xlsx://): Invalid file path (file not found): /path/to/file.xlsx
+Example: reveal xlsx:///path/to/existing/file.xlsx
 ```
 
 **Sheet not found:**
 ```
-Error: Sheet 'Salesss' not found in workbook
-Available sheets: Sales, Returns, Summary
+Error (xlsx://): Sheet not found: Salesss. ?sheet= takes a name or a 0-based index: 0=Sheet1, 1=Sales, 2=Summary
 ```
 
 **Invalid range:**
 ```
-Error: Invalid range 'A1:ZZZ10000'
-Valid range format: A1:ZZ9999 (columns AA-ZZ supported)
+Error (xlsx://): Invalid range: A1-C3 -- use A1:C10, B:D (columns), 5:7 (rows) or B2 (one cell)
 ```
 
-**Corrupted file:**
+Any column letters work (`A1:XFD10`); only the shape of the range is checked.
+
+**Corrupted file** (not a zip archive):
 ```
-Error: Failed to parse xlsx file (may be corrupted or not a valid .xlsx file)
+Error (xlsx://): bad.xlsx is not a valid .xlsx workbook (not a zip archive)
 ```
 
 ---
@@ -756,9 +760,9 @@ reveal 'xlsx://report.xlsx?sheet=Sales&range=A1:E100&format=csv'
 
 Sheet names are matched case-insensitively:
 ```bash
-reveal file.xlsx?sheet=SALES    # Matches "Sales"
-reveal file.xlsx?sheet=sales    # Matches "Sales"
-reveal file.xlsx?sheet=Sales    # Matches "Sales"
+reveal 'xlsx://file.xlsx?sheet=SALES'    # Matches "Sales"
+reveal 'xlsx://file.xlsx?sheet=sales'    # Matches "Sales"
+reveal 'xlsx://file.xlsx?sheet=Sales'    # Matches "Sales"
 ```
 
 ### CSV Export Compatibility
@@ -782,7 +786,7 @@ Exported CSVs work with:
 # From start to column
 ?range=A1:C1048576
 
-# Wide ranges (AA-ZZ supported)
+# Wide ranges (any column up to XFD)
 ?range=A1:ZZ100
 ```
 
@@ -793,6 +797,7 @@ Exported CSVs work with:
 ### With pandas
 
 ```python
+import io
 import subprocess
 import pandas as pd
 
@@ -811,9 +816,9 @@ df = pd.read_csv(io.StringIO(csv_data))
 reveal 'xlsx://file.xlsx?sheet=Sales' --format json | \
   jq '.rows[] | [.[0], .[2], .[4]]'
 
-# Filter rows
+# Filter rows (cells are strings: convert before comparing numbers)
 reveal 'xlsx://file.xlsx?sheet=Sales' --format json | \
-  jq '.rows[] | select(.[3] > 100)'
+  jq '.rows[] | select((.[3] | tonumber? // 0) > 100)'
 ```
 
 ### With sqlite
@@ -852,7 +857,7 @@ sqlite3 data.db ".import --csv transactions.csv transactions"
 - ✅ Initial release
 - ✅ Workbook overview and sheet listing
 - ✅ Sheet extraction by name or index (case-insensitive)
-- ✅ Cell range extraction with A1 notation (supports AA-ZZ columns)
+- ✅ Cell range extraction with A1 notation
 - ✅ CSV export with `?format=csv`
 - ✅ Search across sheets
 - ✅ JSON output format
