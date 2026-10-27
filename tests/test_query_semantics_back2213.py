@@ -28,9 +28,9 @@ def test_json_missing_field_filter():
 
 
 def test_markdown_not_regex(tmp_path):
-    (tmp_path / 'a.md').write_text('---\nstatus: draft\n---\nx\n')
-    (tmp_path / 'b.md').write_text('---\nstatus: Complete\n---\nx\n')
-    (tmp_path / 'c.md').write_text('---\nstatus: archived\n---\nx\n')
+    (tmp_path / 'a.md').write_text('---\nstatus: draft\n---\nx\n', encoding='utf-8')
+    (tmp_path / 'b.md').write_text('---\nstatus: Complete\n---\nx\n', encoding='utf-8')
+    (tmp_path / 'c.md').write_text('---\nstatus: archived\n---\nx\n', encoding='utf-8')
     adapter = MarkdownQueryAdapter(str(tmp_path), 'status!~draft')
     names = sorted(os.path.basename(r['path']) for r in adapter.get_structure()['results'])
     assert names == ['b.md', 'c.md']

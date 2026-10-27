@@ -6,6 +6,7 @@ in every language. A method is a function with an owner; ``type=method`` now sel
 ``type=function`` keeps matching every function, methods included.
 """
 
+import os
 import pytest
 
 from reveal.adapters.ast.adapter import AstAdapter
@@ -34,7 +35,7 @@ def _names(tree, query):
 def test_type_method_selects_methods_in_every_language(tree):
     names, results = _names(tree, 'type=method')
     assert set(names) == METHODS
-    assert {r['file'].rsplit('/', 1)[-1] for r in results} == set(SOURCES)
+    assert {os.path.basename(r['file']) for r in results} == set(SOURCES)
     assert all(r['category'] == 'functions' and r['owner'] for r in results)
 
 

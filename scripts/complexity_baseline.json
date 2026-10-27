@@ -69,7 +69,7 @@
   "reveal/adapters/codex/analysis/tools.py::_commands_from_exec_calls": 18,
   "reveal/adapters/codex/handlers/sessions.py::search_sessions": 17,
   "reveal/adapters/codex/render_analytics.py::_render_codex_shell": 18,
-  "reveal/adapters/codex/render_analytics.py::_render_codex_workflow": 17,
+  "reveal/adapters/codex/render_analytics.py::_render_codex_workflow": 16,
   "reveal/adapters/contracts.py::_scan_contracts_go": 16,
   "reveal/adapters/contracts.py::_scan_contracts_python": 17,
   "reveal/adapters/cpanel/adapter.py::CpanelAdapter._get_ssl_structure": 18,

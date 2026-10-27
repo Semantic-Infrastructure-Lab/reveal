@@ -5,13 +5,13 @@ import sys
 
 def _run(tmp_path, stdin):
     doc = tmp_path / 'd.md'
-    doc.write_text('# t\n')
+    doc.write_text('# t\n', encoding='utf-8')
     base = [sys.executable, '-m', 'reveal']
     flag = ['--validate-schema', 'no-such-schema']
     if stdin:
         return subprocess.run(base + flag + ['--stdin'], input=f'{doc}\n',
-                              capture_output=True, text=True)
-    return subprocess.run(base + [str(doc)] + flag, capture_output=True, text=True)
+                              capture_output=True, text=True, encoding='utf-8')
+    return subprocess.run(base + [str(doc)] + flag, capture_output=True, text=True, encoding='utf-8')
 
 
 def test_single_file_unknown_schema_exits_2(tmp_path):
