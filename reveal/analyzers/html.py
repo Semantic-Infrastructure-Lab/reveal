@@ -10,6 +10,9 @@ from ..structure_options import StructureOptions
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
+# The CLI's --link-type values are shared with markdown; map them onto HTML's link types.
+_LINK_TYPE_ALIASES = {'all': None, 'email': 'mailto'}
+
 # BeautifulSoup4 is required for HTML parsing. It is imported when the first HTML file is
 # analyzed, not at startup: bs4 and soupsieve cost ~30 ms that most runs never use (BACK-1870).
 BeautifulSoup: Any = None
@@ -112,7 +115,9 @@ class HTMLAnalyzer(FileAnalyzer):
             return _build({'metadata': self._extract_metadata()})
 
         if options.extract_links:
-            return _build({'links': self._extract_links(options.link_type, options.domain, options.broken)})
+            return _build({'links': self._extract_links(
+                options.link_type, options.domain, options.broken or options.broken_only,
+                broken_only=options.broken_only)})
 
         if options.semantic:
             return _build({'semantic': self._extract_semantic_elements(options.semantic)})
@@ -412,18 +417,23 @@ class HTMLAnalyzer(FileAnalyzer):
     def _extract_links(self,
                       link_type: Optional[str] = None,
                       domain: Optional[str] = None,
-                      check_broken: bool = False) -> List[Dict[str, Any]]:
+                      check_broken: bool = False,
+                      broken_only: bool = False) -> List[Dict[str, Any]]:
         """Extract and classify links.
 
         Args:
-            link_type: Filter by type (internal, external, anchor, mailto, tel)
+            link_type: Filter by type (internal, external, anchor, mailto, tel, relative);
+                `all` is no filter and `email` means mailto (the CLI's --link-type values)
             domain: Filter by domain
             check_broken: Check if local links are broken
+            broken_only: Keep only the links found broken (implies check_broken)
 
         Returns:
             List of links with URL, text, line number, and type
         """
         links = []
+        link_type = _LINK_TYPE_ALIASES.get(link_type, link_type) if link_type else None
+        check_broken = check_broken or broken_only
 
         for a_tag in self.soup.find_all('a'):
             href_raw = a_tag.get('href', '')
@@ -453,6 +463,8 @@ class HTMLAnalyzer(FileAnalyzer):
                 is_broken = self._is_broken_link(href)
                 if is_broken:
                     link_info['broken'] = True
+            if broken_only and not link_info.get('broken'):
+                continue
 
             links.append(link_info)
 
@@ -490,7 +502,12 @@ class HTMLAnalyzer(FileAnalyzer):
         Returns:
             True if link appears broken, False otherwise
         """
-        # Only check local/relative links
+        # Only check local/relative links: never a scheme URL (mailto:, tel:, ftp:, javascript:)
+        if re.match(r'^[A-Za-z][A-Za-z0-9+.-]*:', href):
+            return False
+        href = href.split('#', 1)[0].split('?', 1)[0]
+        if not href:
+            return False  # a bare fragment or query: same page
         if href.startswith('/') or (not href.startswith('http') and not href.startswith('#')):
             # Build target path relative to current file
             if href.startswith('/'):
@@ -749,8 +766,12 @@ class HTMLAnalyzer(FileAnalyzer):
                 # caller reports the normal "not found" (BACK-1766).
                 return None
         else:
-            # Try as ID
-            element = self.soup.find(id=selector.lstrip('#'))
+            if any(ch in selector for ch in '.[:'):
+                # tag.class, tag[attr], tag:pseudo: a compound CSS selector
+                element = self._select_compound(selector)
+            if not element:
+                # Try as ID
+                element = self.soup.find(id=selector.lstrip('#'))
             if not element:
                 # Try as tag name
                 element = self.soup.find(selector)
@@ -780,6 +801,14 @@ class HTMLAnalyzer(FileAnalyzer):
             'text': element.get_text(strip=True) if hasattr(element, 'get_text') else '',
             'line': line_start,
         }
+
+    def _select_compound(self, selector: str):
+        """select_one() for a compound selector, or None when it is not valid CSS."""
+        from soupsieve.util import SelectorSyntaxError  # bs4 is loaded: self.soup exists
+        try:
+            return self.soup.select_one(selector)
+        except SelectorSyntaxError:
+            return None
 
     def extract_element(self, element_type: str, name: str = "") -> Optional[Dict[str, Any]]:
         """Backwards-compatible ``(element_type, name)`` shim over selectors.

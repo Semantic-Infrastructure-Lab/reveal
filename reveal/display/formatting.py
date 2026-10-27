@@ -252,6 +252,9 @@ def _format_single_link(
             print(f"             -> {domain}")
 
 
+_LINK_TYPE_ORDER = ('external', 'internal', 'relative', 'anchor', 'email', 'mailto', 'tel')
+
+
 def _format_links(
     items: List[Dict[str, Any]], path: Path, output_format: str
 ) -> None:
@@ -262,11 +265,10 @@ def _format_links(
         link_type = item.get('type', 'unknown')
         by_type.setdefault(link_type, []).append(item)
 
-    # Display each type
-    for link_type in ['external', 'internal', 'email']:
-        if link_type not in by_type:
-            continue
-
+    # Display each type present: the usual ones first, then any other type the
+    # analyzer emits (HTML: anchor, mailto, tel, relative) in first-seen order.
+    known = [t for t in _LINK_TYPE_ORDER if t in by_type]
+    for link_type in known + [t for t in by_type if t not in _LINK_TYPE_ORDER]:
         type_items = by_type[link_type]
         print(f"\n  {link_type.capitalize()} ({len(type_items)}):")
 
