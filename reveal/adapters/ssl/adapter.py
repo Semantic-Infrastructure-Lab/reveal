@@ -19,7 +19,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 _SCHEMA_ELEMENTS = {
     'san': 'Subject Alternative Names (all domain names)',
-    'chain': 'Certificate chain (intermediate + root)',
+    'chain': 'Leaf certificate + verification (chain only for file:// bundles)',
     'issuer': 'Certificate issuer details',
     'subject': 'Certificate subject details',
     'dates': 'Validity dates (not_before, not_after)',
@@ -67,9 +67,10 @@ _SCHEMA_OUTPUT_TYPES = [
         'common_name': {'type': 'string'}, 'san': {'type': 'array', 'items': {'type': 'string'}},
         'san_count': {'type': 'integer'}
     }),
-    _ssl_output_type('ssl_chain', 'Certificate chain details', {
+    _ssl_output_type('ssl_chain', 'Leaf certificate + verification (chain only for file:// bundles)', {
         'type': {'type': 'string', 'const': 'ssl_chain'}, 'host': {'type': 'string'},
-        'chain_length': {'type': 'integer'}, 'certificates': {'type': 'array'}
+        'leaf': {'type': 'object'}, 'chain': {'type': 'array'},
+        'chain_length': {'type': 'integer'}, 'verification': {'type': 'object'}
     }),
     _ssl_output_type('ssl_subject', 'Certificate subject details (CN, org, country)', {
         'type': {'type': 'string', 'const': 'ssl_subject'}, 'host': {'type': 'string'}, 'subject': {'type': 'object'}
@@ -79,8 +80,8 @@ _SCHEMA_OUTPUT_TYPES = [
     }),
     _ssl_output_type('ssl_dates', 'Validity dates (not_before, not_after, days remaining)', {
         'type': {'type': 'string', 'const': 'ssl_dates'}, 'host': {'type': 'string'},
-        'valid_from': {'type': 'string'}, 'valid_until': {'type': 'string'},
-        'days_until_expiry': {'type': 'integer'}
+        'not_before': {'type': 'string'}, 'not_after': {'type': 'string'},
+        'days_until_expiry': {'type': 'integer'}, 'is_expired': {'type': 'boolean'}
     }),
     _ssl_output_type('ssl_full', 'Complete certificate dump (all fields)', {
         'type': {'type': 'string', 'const': 'ssl_full'}, 'host': {'type': 'string'}, 'certificate': {'type': 'object'}
@@ -90,6 +91,30 @@ _SCHEMA_OUTPUT_TYPES = [
         'type': {'type': 'string', 'const': 'ssl_check'}, 'host': {'type': 'string'},
         'port': {'type': 'integer'}, 'status': {'type': 'string', 'enum': ['pass', 'warning', 'failure']},
         'checks': {'type': 'array'}, 'summary': {'type': 'object'}, 'certificate': {'type': 'object'},
+        'exit_code': {'type': 'integer'},
+    }),
+    _ssl_output_type('ssl_check_advanced', '--check --advanced: ssl_check plus tls_version, self_signed, '
+                     'signature_algorithm and the info items certificate_type, issuer_type, ocsp_stapling', {
+        'type': {'type': 'string', 'const': 'ssl_check_advanced'}, 'host': {'type': 'string'},
+        'port': {'type': 'integer'}, 'status': {'type': 'string', 'enum': ['pass', 'warning', 'failure']},
+        'checks': {'type': 'array'}, 'summary': {'type': 'object'}, 'certificate': {'type': 'object'},
+        'exit_code': {'type': 'integer'},
+    }),
+    _ssl_output_type('ssl_nginx_domains', 'ssl://nginx:///path without --check: the SSL domains the config names', {
+        'type': {'type': 'string', 'const': 'ssl_nginx_domains'}, 'source': {'type': 'string'},
+        'files_processed': {'type': 'integer'}, 'domains': {'type': 'array'}, 'domain_count': {'type': 'integer'},
+    }),
+    _ssl_output_type('ssl_batch_check', 'ssl://nginx:///path --check: one ssl_check per domain under results', {
+        'type': {'type': 'string', 'const': 'ssl_batch_check'}, 'source': {'type': 'string'},
+        'domains_checked': {'type': 'integer'}, 'status': {'type': 'string'},
+        'summary': {'type': 'object'}, 'results': {'type': 'array'}, 'next_steps': {'type': 'array'},
+        'exit_code': {'type': 'integer'},
+    }),
+    _ssl_output_type('ssl_nginx_validation', 'ssl://nginx:///path --check --validate-nginx: nginx config '
+                     'cross-checked against the served certificates', {
+        'type': {'type': 'string', 'const': 'ssl_nginx_validation'}, 'source': {'type': 'string'},
+        'domains_validated': {'type': 'integer'}, 'status': {'type': 'string'},
+        'summary': {'type': 'object'}, 'results': {'type': 'array'}, 'next_steps': {'type': 'array'},
         'exit_code': {'type': 'integer'},
     }),
     _ssl_output_type('ssl_cert_file_validation', 'ssl://nginx://... --check --local-certs, or ssl://file://PEM --check: '
@@ -104,7 +129,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'ssl://example.com', 'description': 'Get certificate overview with health status', 'output_type': 'ssl_certificate'},
     {'uri': 'ssl://example.com:8443', 'description': 'Check certificate on non-standard port', 'output_type': 'ssl_certificate'},
     {'uri': 'ssl://example.com/san', 'description': 'List all domain names in certificate', 'output_type': 'ssl_san'},
-    {'uri': 'ssl://example.com/chain', 'description': 'Show certificate chain (intermediate + root)', 'output_type': 'ssl_chain'},
+    {'uri': 'ssl://example.com/chain', 'description': 'Leaf certificate and verification result', 'output_type': 'ssl_chain'},
     {'uri': 'ssl://example.com/subject', 'description': 'Certificate subject (CN, org, country)', 'output_type': 'ssl_subject'},
     {'uri': 'ssl://example.com/issuer', 'description': 'Certificate issuer (CA name, org)', 'output_type': 'ssl_issuer'},
     {'uri': 'ssl://example.com/dates', 'description': 'Validity dates (not_before, not_after, days remaining)', 'output_type': 'ssl_dates'},
@@ -116,9 +141,10 @@ _SCHEMA_EXAMPLE_QUERIES = [
 _SCHEMA_NOTES = [
     'Default port is 443; use ssl://host:PORT for non-standard ports',
     '--expiring-within=N warns on certs expiring within N days; it runs the health check (implies --check)',
-    '--check uses exit codes for CI: 0=pass, 1=warning (expiring soon), 2=critical (expired)',
+    '--check uses exit codes for CI in every mode (one host, --stdin, nginx batch, --local-certs, file://): '
+    '0=pass, 1=warning, 2=failure (expired, under 7 days, hostname mismatch, connection error)',
     'Reads live certificate from TLS handshake — requires network access',
-    'For offline validation from nginx config path: reveal ssl://nginx:///path --local-certs',
+    'For offline validation from nginx config path: reveal ssl://nginx:///path --check --local-certs',
 ]
 
 

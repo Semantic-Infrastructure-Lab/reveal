@@ -41,7 +41,7 @@ The **ssl adapter** (`ssl://`) provides SSL/TLS certificate inspection with:
 - **Health monitoring** - Expiry warnings, chain validation, hostname matching
 - **Batch processing** - Check multiple domains from nginx configs or stdin
 - **Zero dependencies** - Uses Python's built-in `ssl` module
-- **Exit codes** - Machine-readable status (0=pass, 1=warning, 2=critical)
+- **Exit codes** - Machine-readable status for every `--check` mode (0=pass, 1=warning, 2=failure)
 
 ### Key Features
 
@@ -50,9 +50,9 @@ The **ssl adapter** (`ssl://`) provides SSL/TLS certificate inspection with:
 - ✅ **Batch mode** - Check multiple domains at once; failure reason shown inline (DNS FAILURE, TIMEOUT, CONNECTION REFUSED, etc.)
 - ✅ **On-disk cert inspection** - `ssl://file:///path` — inspect PEM/DER certs without a live connection
 - ✅ **Expiry dates in batch output** - warnings and healthy rows both show human-readable date
-- ✅ **Advanced checks** - TLS version, key strength, self-signed detection
+- ✅ **Advanced checks** - TLS version, self-signed detection, signature algorithm
 - ✅ **Zero external dependencies** - Pure Python `ssl` module
-- ✅ **Exit codes** - 0=healthy, 1=warning, 2=critical (CI/CD friendly)
+- ✅ **Exit codes** - 0=pass, 1=warning, 2=failure (CI/CD friendly)
 
 ### When to Use
 
@@ -83,17 +83,34 @@ reveal ssl://example.com
 
 **Output**:
 ```
-SSL Certificate: example.com:443
-  Common Name: example.com
-  Issuer: Let's Encrypt
-  Valid: 2026-01-01 → 2026-04-01 (54 days remaining)
-  Health: ✅ HEALTHY
-  Domains: 2 (example.com, www.example.com)
+SSL Certificate: example.com
 
-Next steps:
-  reveal ssl://example.com/san      # View all domain names
-  reveal ssl://example.com/issuer   # Issuer details
+Status: ✅ HEALTHY (59 days until expiry)
+
+Certificate:
+  Common Name: example.com
+  Issuer: SSL Corporation
+  Valid: 2026-09-26 to 2026-12-25
+  SANs: 2 domain(s)
+
+Verification:
+  Chain Valid: ✅
+  Hostname Match: ✅
+
+Next Steps:
+  reveal ssl://example.com/san  # View all domain names
+  reveal ssl://example.com/issuer  # Issuer details
   reveal ssl://example.com --check  # Run health checks
+
+📍 Available elements:
+  /san          Subject Alternative Names (2 domains)
+  /chain        Certificate chain (1 certificates)
+  /issuer       Certificate issuer details
+  /subject      Certificate subject details
+  /dates        Validity dates (expires in 59 days)
+  /full         Full certificate details
+
+💡 Try: reveal ssl://example.com/san
 ```
 
 ### Example 2: Non-Standard Port
@@ -114,25 +131,26 @@ reveal ssl://example.com --check
 
 **Output**:
 ```
-SSL Health Check: example.com:443
-
+SSL Health Check: example.com
 Status: ✅ PASS
 
-Checks:
-  ✅ Certificate valid (not expired)
-  ✅ Expires in 54 days (threshold: 30 days)
-  ✅ Certificate chain valid
-  ✅ Hostname matches certificate
+Summary: 3/3 passed, 0 warnings, 0 failures
 
-Certificate:
-  Common Name: example.com
-  Issuer: Let's Encrypt
-  Valid until: 2026-04-01
+Certificate: example.com
+  Expires: 2026-12-25 (59 days)
+
+✅ All Checks Passed:
+  • certificate_expiry: Certificate valid for 59 days
+  • chain_verification: Certificate chain verified by system trust store
+  • hostname_match: Certificate valid for example.com
+
+
+Exit code: 0
 ```
 
 ### Example 4: Advanced Health Check
 
-Run advanced checks (TLS version, key strength, self-signed detection):
+Run advanced checks (TLS version, self-signed detection, signature algorithm):
 
 ```bash
 reveal ssl://example.com --check --advanced
@@ -140,22 +158,32 @@ reveal ssl://example.com --check --advanced
 
 **Output**:
 ```
-SSL Health Check: example.com:443
-
+SSL Health Check: example.com
 Status: ✅ PASS
 
-Basic Checks:
-  ✅ Certificate valid
-  ✅ Expires in 54 days
-  ✅ Certificate chain valid
-  ✅ Hostname matches
+Summary: 6/9 passed, 0 warnings, 0 failures
 
-Advanced Checks:
-  ✅ TLS version: TLSv1.3 (secure)
-  ✅ Key strength: RSA 2048-bit (adequate)
-  ✅ Issuer type: Trusted CA (Let's Encrypt)
-  ✅ Not self-signed
+Certificate: example.com
+  Expires: 2026-12-25 (59 days)
+
+✅ All Checks Passed:
+  • certificate_expiry: Certificate valid for 59 days
+  • chain_verification: Certificate chain verified by system trust store
+  • hostname_match: Certificate valid for example.com
+  • tls_version: Using TLSv1.3 / TLS_AES_256_GCM_SHA384 (256-bit) (recommended)
+  • self_signed: Certificate signed by trusted CA
+  • signature_algorithm: Using secure signature algorithm (SHA256)
+
+ℹ️  Additional Information:
+  • certificate_type: Wildcard certificate (covers *.example.com)
+  • issuer_type: Issued by SSL Corporation
+  • ocsp_stapling: OCSP responder available (http://o.cf-i.ssl.com)
+
+
+Exit code: 0
 ```
+
+The `info` items count in the total but not in `passed`, so "6/9 passed" with no warnings or failures is a full pass. JSON output has `type: ssl_check_advanced`.
 
 ### Example 5: View Subject Alternative Names (SANs)
 
@@ -167,17 +195,20 @@ reveal ssl://example.com/san
 
 **Output**:
 ```
-Subject Alternative Names: example.com
-
+SSL SANs for example.com
 Common Name: example.com
-Domains (2):
-  - example.com
-  - www.example.com
+Total SANs: 2
+
+Wildcard Entries:
+  *.example.com
+
+Specific Domains:
+  example.com
 ```
 
 ### Example 6: View Certificate Chain
 
-Inspect certificate chain (intermediate + root):
+Inspect the leaf certificate and its verification result:
 
 ```bash
 reveal ssl://example.com/chain
@@ -185,17 +216,18 @@ reveal ssl://example.com/chain
 
 **Output**:
 ```
-Certificate Chain: example.com
+SSL Chain for example.com
+Chain Length: 1
 
 Leaf Certificate:
-  Common Name: example.com
-  Issuer: R3 (Let's Encrypt)
+  CN: example.com
+  Issuer: SSL Corporation
 
-Chain (2 certificates):
-  1. R3 (Let's Encrypt)
-     Issuer: ISRG Root X1
-  2. ISRG Root X1 (Self-signed root)
+
+Verified: Yes
 ```
+
+For network hosts the intermediate and root certificates are not retrieved (`chain_length` is 1). Use `openssl s_client -showcerts -connect example.com:443` to see them.
 
 ### Example 7: Batch Check from File
 
@@ -223,19 +255,15 @@ reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --summary
 
 **Output**:
 ```
-SSL Batch Check: /etc/nginx/conf.d/*.conf
+SSL Audit: 2 domains
+✅ Healthy (>30d): 2
+⚠️  Warning (<30d): 0
+❌ Failed/Expired: 0
 
-Status: ⚠️  WARNING
-
-Summary:
-  Total: 12 domains
-  ✅ Passed: 10
-  ⚠️  Warnings: 2 (expiring <30 days)
-  ❌ Failures: 0
-
-Next steps:
-  reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --only-failures
+Exit code: 0
 ```
+
+Without `--summary` the header is `SSL Batch Check: <path>` followed by `Status:`, `Domains Checked:` and `Summary: N passed, N warnings, N failures`, then the per-domain rows and next steps.
 
 ---
 
@@ -246,7 +274,7 @@ Next steps:
 SSL adapter uses **progressive disclosure** to minimize token usage:
 
 **Pattern**:
-1. **Overview** (`ssl://example.com`) - 150 tokens
+1. **Overview** (`ssl://example.com`) - ~200 tokens
 2. **Element** (`ssl://example.com/san`) - 50-100 tokens
 3. **Health check** (`ssl://example.com --check`) - 200-300 tokens
 
@@ -278,9 +306,11 @@ SSL adapter returns machine-readable exit codes:
 
 | Exit Code | Status | Use Case |
 |-----------|--------|----------|
-| `0` | Healthy | CI/CD passed, no issues |
-| `1` | Warning | Certificate expiring <30 days |
-| `2` | Critical | Certificate expiring <7 days or failed checks |
+| `0` | Pass | CI/CD passed, no issues |
+| `1` | Warning | Expires within the warning threshold (30 days), chain not verified by the trust store, TLS < 1.2, self-signed or SHA-1 (advanced) |
+| `2` | Failure | Expired, under 7 days, hostname mismatch, connection error, or failed HTTP redirect (`--probe-http`) |
+
+The same 0/1/2 codes apply to every `--check` mode: one host, `reveal --stdin --check`, `ssl://nginx:///… --check`, `--local-certs` and `ssl://file://… --check`. A plain `reveal ssl://host` (no `--check`) that cannot connect exits 1.
 
 **CI/CD usage**:
 ```bash
@@ -294,18 +324,15 @@ fi
 
 ### 4. Verification vs Diagnostics
 
-SSL adapter performs **two separate operations**:
+SSL adapter fetches the certificate in **up to two steps**:
 
-**1. Diagnostic Connection** (no verification):
-- Connects to retrieve certificate
-- Does NOT validate chain
-- Purpose: Get certificate details even if invalid
+**1. Verified connection first**:
+- Connects with the system trust store and hostname checking
+- If that succeeds, the certificate is valid and matches the host
 
-**2. Separate Verification**:
-- Validates against system trust store
-- Checks hostname match
-- Checks chain validity
-- Reports verification result separately
+**2. Diagnostic fallback** (only if verification fails):
+- Reconnects with verification disabled so the certificate can still be shown
+- Reports the verification error separately
 
 **Why this design?**
 - Can inspect invalid certificates (debugging)
@@ -319,7 +346,7 @@ SSL adapter performs **two separate operations**:
 
 **Command**: `ssl://example.com`
 
-**Returns** (~150 tokens):
+**Returns** (~200 tokens):
 - Common name
 - Issuer
 - Validity dates
@@ -338,7 +365,7 @@ SSL adapter performs **two separate operations**:
 - `ssl://example.com/issuer` - Issuer details (50 tokens)
 - `ssl://example.com/subject` - Subject details (50 tokens)
 - `ssl://example.com/dates` - Validity dates (30 tokens)
-- `ssl://example.com/full` - Complete dump (500+ tokens)
+- `ssl://example.com/full` - Complete dump (~400 tokens)
 
 **When to use**: Focused investigation (e.g., check if SAN covers subdomain)
 
@@ -359,10 +386,9 @@ SSL adapter performs **two separate operations**:
 **Enabled with**: `--check`
 
 **Checks performed**:
-1. **Expiry check** - Is certificate valid (not expired)?
-2. **Expiry warning** - Does certificate expire within 30 days?
-3. **Chain validation** - Is certificate chain valid against system trust store?
-4. **Hostname match** - Does certificate CN/SAN match requested hostname?
+1. **certificate_expiry** - `failure` if expired or under 7 days, `warning` under the warning threshold (30 days), else `pass`.
+2. **chain_verification** - verified against the system trust store (`warning` if not).
+3. **hostname_match** - CN/SAN covers the host (`failure` if not).
 
 **Example**:
 ```bash
@@ -374,11 +400,14 @@ reveal ssl://example.com --check
 **Enabled with**: `--check --advanced`
 
 **Additional checks**:
-1. **TLS version + cipher suite** - Is TLS 1.2+ used? Reports negotiated cipher name and key bits (e.g., `TLS_AES_256_GCM_SHA384 (256-bit)`).
-2. **Key strength** - Is key size adequate (RSA 2048+, ECDSA 256+)?
-3. **Issuer type** - Is issuer a trusted CA (not self-signed)?
-4. **Self-signed detection** - Is certificate self-signed?
-5. **OCSP URL availability** - Does the AIA extension include an OCSP responder URL? Emitted as `info` (not a failure). Note: Let's Encrypt ECDSA certs removed OCSP stapling in 2024; the field may be absent on valid LE certs.
+1. **tls_version** - TLS 1.3 `pass` (recommended), 1.2 `pass` (acceptable), older `warning`. Reports negotiated cipher name and key bits (e.g., `TLS_AES_256_GCM_SHA384 (256-bit)`).
+2. **self_signed** - subject CN equals issuer CN -> `warning`.
+3. **signature_algorithm** - SHA-256 or stronger `pass`, SHA-1 `warning`.
+4. **certificate_type** (`info`) - wildcard vs single-domain.
+5. **issuer_type** (`info`) - the issuer organization; notes Let's Encrypt.
+6. **ocsp_stapling** (`info`) - Does the AIA extension include an OCSP responder URL? Never a failure. Note: Let's Encrypt ECDSA certs removed OCSP stapling in 2024; the field may be absent on valid LE certs.
+
+Key size is not checked.
 
 **Example**:
 ```bash
@@ -410,6 +439,8 @@ reveal ssl://example.com --check --advanced --probe-http
 - Security headers at the HTTPS endpoint: `Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`
 
 **A failing redirect elevates exit code** to 2 when combined with `--check`.
+
+Headers are only shown when the redirect chain ends on HTTPS. `hop_count` counts every URL in the chain, including the first.
 
 ### Custom Expiry Thresholds
 
@@ -459,46 +490,36 @@ reveal ssl://example.com/san
 
 ### chain - Certificate Chain
 
-**Description**: Certificate chain (intermediate + root certificates)
+**Description**: The leaf certificate's CN and issuer plus the verification result. For network hosts the intermediate/root chain is not retrieved (`chain` is empty, `chain_length` is 1); for `ssl://file://` PEM bundles the extra certificates in the file are listed.
 
 **Command**:
 ```bash
 reveal ssl://example.com/chain
 ```
 
-**Output**:
+**Output** (`--format json`, `available_elements` omitted):
 ```json
 {
   "type": "ssl_chain",
   "host": "example.com",
   "leaf": {
     "common_name": "example.com",
-    "issuer": "R3"
+    "issuer": "SSL Corporation"
   },
-  "chain": [
-    {
-      "common_name": "R3",
-      "issuer": "ISRG Root X1",
-      "valid_until": "2025-09-15"
-    },
-    {
-      "common_name": "ISRG Root X1",
-      "issuer": "ISRG Root X1",
-      "valid_until": "2035-06-04"
-    }
-  ],
-  "chain_length": 3,
+  "chain": [],
+  "chain_length": 1,
   "verification": {
-    "chain_valid": true,
-    "error": null
+    "verified": true,
+    "error": null,
+    "hostname_match": true
   }
 }
 ```
 
 **Use cases**:
-- Debug chain validation issues
-- Verify intermediate cert presence
-- Check root CA
+- Confirm the certificate verifies against the system trust store
+- See which issuer signed the leaf
+- To see intermediates, use `openssl s_client -showcerts -connect example.com:443`
 
 ### issuer - Issuer Details
 
@@ -522,6 +543,8 @@ reveal ssl://example.com/issuer
   }
 }
 ```
+
+`issuer_name` is the issuer's organization (CN if absent).
 
 **Use cases**:
 - Verify CA identity
@@ -563,8 +586,8 @@ reveal ssl://example.com/dates
 {
   "type": "ssl_dates",
   "host": "example.com",
-  "not_before": "2026-01-01T00:00:00Z",
-  "not_after": "2026-04-01T23:59:59Z",
+  "not_before": "2026-01-01T00:00:00+00:00",
+  "not_after": "2026-04-01T23:59:59+00:00",
   "days_until_expiry": 54,
   "is_expired": false
 }
@@ -579,7 +602,7 @@ reveal ssl://example.com/dates
 reveal ssl://example.com/full --format=json
 ```
 
-**Warning**: Large output (500+ lines). Use sparingly.
+**Output**: the parsed certificate (subject, issuer, validity, serial, version, SANs, signature algorithm, OCSP URL) plus the verification result — about 65 lines of JSON including the elements list (text mode prints JSON too).
 
 ---
 
@@ -677,7 +700,7 @@ reveal nginx.conf --extract domains | sort | uniq | reveal --stdin --check --onl
 | `--summary` | Show aggregated counts only (no per-domain details) |
 | `--only-failures` | Hide healthy results, show warnings/failures only |
 | `--expiring-within=N` | Filter to certificates expiring within N days |
-| `--advanced` | Run advanced checks (TLS version, key strength, etc.) |
+| `--advanced` | Run advanced checks (TLS version, self-signed, signature algorithm, etc.) |
 
 ---
 
@@ -739,9 +762,10 @@ fi
    reveal ssl://example.com --check
    ```
 
-3. **Check certificate chain** (most common issue):
+3. **Check certificate chain** (most common issue; `chain_verification` in the health check reports whether the chain verifies):
    ```bash
-   reveal ssl://example.com/chain
+   reveal ssl://example.com --check
+   openssl s_client -showcerts -connect example.com:443 </dev/null   # list the intermediates
    ```
 
 4. **Check hostname match** (if SAN mismatch suspected):
@@ -749,7 +773,7 @@ fi
    reveal ssl://example.com/san
    ```
 
-5. **Run advanced checks** (if TLS version or key strength suspected):
+5. **Run advanced checks** (if TLS version or signature algorithm suspected):
    ```bash
    reveal ssl://example.com --check --advanced
    ```
@@ -813,15 +837,15 @@ fi
 3. **List expiring certificates** (<60 days):
    ```bash
    reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --expiring-within=60 --format=json | \
-     jq '.results[] | select(.days_until_expiry < 60) | {domain: .host, days: .days_until_expiry}'
+     jq '.results[] | select(.certificate.days_until_expiry < 60) | {domain: .host, days: .certificate.days_until_expiry}'
    ```
 
 4. **Check issuer diversity**:
    ```bash
-   jq -r '.results[] | .issuer' ssl-audit.json | sort | uniq -c
+   jq -r '.results[] | .certificate.issuer_name' ssl-audit.json | sort | uniq -c
    ```
 
-5. **Identify weak certificates** (non-2048+ keys, old TLS):
+5. **Identify weak certificates** (old TLS, SHA-1 signatures, self-signed):
    ```bash
    reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --advanced --only-failures
    ```
@@ -880,19 +904,19 @@ jobs:
 2. **Group by expiry window**:
    ```bash
    # Expiring in 0-7 days (urgent)
-   jq '.results[] | select(.days_until_expiry >= 0 and .days_until_expiry < 7)' certs.json
+   jq '.results[] | select(.certificate.days_until_expiry >= 0 and .certificate.days_until_expiry < 7)' certs.json
 
    # Expiring in 7-30 days (soon)
-   jq '.results[] | select(.days_until_expiry >= 7 and .days_until_expiry < 30)' certs.json
+   jq '.results[] | select(.certificate.days_until_expiry >= 7 and .certificate.days_until_expiry < 30)' certs.json
 
    # Expiring in 30-60 days (plan ahead)
-   jq '.results[] | select(.days_until_expiry >= 30 and .days_until_expiry < 60)' certs.json
+   jq '.results[] | select(.certificate.days_until_expiry >= 30 and .certificate.days_until_expiry < 60)' certs.json
    ```
 
 3. **Generate renewal schedule**:
    ```bash
-   jq -r '.results[] | select(.days_until_expiry < 60) |
-     "\(.host)\t\(.days_until_expiry) days\t\(.valid_until)"' certs.json | \
+   jq -r '.results[] | select(.certificate.days_until_expiry < 60) |
+     "\(.host)\t\(.certificate.days_until_expiry) days\t\(.certificate.not_after)"' certs.json | \
      sort -t$'\t' -k2 -n > renewal-schedule.txt
    ```
 
@@ -911,7 +935,7 @@ jobs:
 ```bash
 # Get all domains and expiry dates
 reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json | \
-  jq -r '.results[] | "\(.host): \(.days_until_expiry) days"'
+  jq -r '.results[] | "\(.host): \(.certificate.days_until_expiry) days"'
 
 # Count by status
 reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json | \
@@ -969,8 +993,8 @@ for cert in data['results']:
     <tr>
       <td>{cert['host']}</td>
       <td>{status_icon} {cert['status']}</td>
-      <td>{cert['days_until_expiry']}</td>
-      <td>{cert['issuer']}</td>
+      <td>{cert.get('certificate', {}).get('days_until_expiry', 'n/a')}</td>
+      <td>{cert.get('certificate', {}).get('issuer_name', 'n/a')}</td>
     </tr>
     """
 
@@ -1040,7 +1064,7 @@ if [ "$FAILURES" -gt 0 ] || [ "$WARNINGS" -gt 0 ]; then
   MESSAGE+="Warnings: $WARNINGS\n\n"
 
   # Add failed domains
-  FAILED_DOMAINS=$(echo $RESULTS | jq -r '.results[] | "\(.host): \(.days_until_expiry) days remaining"')
+  FAILED_DOMAINS=$(echo $RESULTS | jq -r '.results[] | "\(.host): \(.certificate.days_until_expiry // "n/a") days remaining"')
   MESSAGE+="$FAILED_DOMAINS"
 
   # Send to Slack
@@ -1075,14 +1099,14 @@ curl -XPOST "http://localhost:8086/write?db=monitoring" \
 
 ## Security Considerations
 
-### 1. Certificate Verification Disabled During Fetch
+### 1. Unverified Fallback on Verification Failure
 
-**Why**: SSL adapter connects with verification disabled to fetch certificate details.
+**Why**: SSL adapter connects with the system trust store and hostname checking first. Only if verification fails does it reconnect with verification disabled, so the certificate can still be shown for diagnostics.
 
-**Risk**: Could potentially connect to malicious server.
+**Risk**: In that fallback the certificate shown may come from an untrusted server.
 
 **Mitigation**:
-- Verification performed separately after fetch
+- The verification error is reported alongside the certificate
 - Results include verification status
 - Hostname match checked independently
 
@@ -1180,7 +1204,7 @@ reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --only-failures
 
 **Limitation**: The adapter inspects the leaf certificate the server presents. It does not walk or validate the intermediate/root chain, and no optional dependency adds that.
 
-**Impact**: Chain problems (a missing intermediate, a wrong order) are not reported.
+**Impact**: Chain contents are not listed. A chain that fails to verify (for example a missing intermediate) is reported by `--check` as a `chain_verification` warning, but reveal does not say which certificate is missing.
 
 **Workaround**: Use `openssl s_client -showcerts -connect host:443`.
 
@@ -1214,8 +1238,8 @@ reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --only-failures
 
 **Symptom**:
 ```bash
-reveal ssl://example.com
-# Error: Connection failed
+reveal ssl://nonexistent-host.invalid
+# Error (ssl://): [Errno -2] Name or service not known   (exit 1; exit 2 with --check)
 ```
 
 **Causes**:
@@ -1240,8 +1264,10 @@ curl -v https://example.com
 **Symptom**:
 ```bash
 reveal ssl://example.com --check
-# ❌ Certificate chain validation failed
+# ⚠️  chain_verification: Chain verification failed: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate
 ```
+
+A chain that does not verify is a warning (exit 1), not a failure.
 
 **Causes**:
 - Missing intermediate certificate
@@ -1250,9 +1276,6 @@ reveal ssl://example.com --check
 
 **Solutions**:
 ```bash
-# Inspect chain
-reveal ssl://example.com/chain
-
 # Check issuer
 reveal ssl://example.com/issuer
 
@@ -1265,7 +1288,7 @@ openssl s_client -connect example.com:443 -showcerts
 **Symptom**:
 ```bash
 reveal ssl://subdomain.example.com --check
-# ❌ Hostname does not match certificate
+# ❌ hostname_match: Certificate not valid for subdomain.example.com
 ```
 
 **Cause**: Certificate SAN doesn't include subdomain
@@ -1321,7 +1344,7 @@ echo -e "ssl://example.com\nssl://google.com\nssl://github.com" | \
 ```bash
 # Find certificates expiring within 30 days
 reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json | \
-  jq '.results[] | select(.days_until_expiry < 30)'
+  jq '.results[] | select(.certificate.days_until_expiry < 30)'
 ```
 
 ### Tip 3: Compare Certificates Across Environments
@@ -1344,7 +1367,7 @@ jq -s '.[0].common_name as $prod | .[1].common_name as $staging |
 ```bash
 # Generate certificate renewal calendar
 reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json | \
-  jq -r '.results[] | "\(.valid_until)\t\(.host)\t\(.days_until_expiry) days"' | \
+  jq -r '.results[] | "\(.certificate.not_after)\t\(.host)\t\(.certificate.days_until_expiry) days"' | \
   sort > renewal-calendar.txt
 ```
 
@@ -1483,7 +1506,7 @@ reveal ssl://file:///etc/letsencrypt/live/example.com/fullchain.pem
 ```
 Loads and inspects PEM/DER certificates without a live connection. PEM combined files (leaf + chain) are split automatically; chain length surfaced. Same health/expiry/SAN display as live cert.
 
-**S1 — Batch failure detail** (`--batch --check`):
+**S1 — Batch failure detail** (`reveal --stdin --check` and `ssl://nginx:///… --check`):
 
 Failure reason now shown inline on each row:
 - Expired: `EXPIRED N days ago (Mon DD, YYYY)`
@@ -1498,7 +1521,7 @@ Failure reason now shown inline on each row:
 - Healthy: `N days  (Mon DD, YYYY)`
 
 **U6 — `--dns-verified` (cpanel ssl)**:
-Domains with no DNS record (NXDOMAIN) are tagged `[nxdomain]` and excluded from critical/expiring counts. Prevents false alarms from former-customer domains whose DNS has moved away. Uses `socket.getaddrinfo` (stdlib only). Available via `cpanel://USERNAME/ssl --dns-verified`.
+Domains with no DNS record (NXDOMAIN) are tagged `[nxdomain]`, and domains that resolve to an IP not on this server are tagged `[→ elsewhere]`; both are excluded from the summary counts. Prevents false alarms from former-customer domains whose DNS has moved away. Uses `socket.getaddrinfo` (stdlib only). Available via `cpanel://USERNAME/ssl --dns-verified`.
 
 ---
 

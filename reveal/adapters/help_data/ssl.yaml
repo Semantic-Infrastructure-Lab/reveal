@@ -23,7 +23,7 @@ examples:
   - uri: 'ssl://example.com --check'
     description: 'Run health checks (expiry, chain, hostname)'
   - uri: 'ssl://example.com --check --advanced'
-    description: 'Advanced checks (TLS version + cipher suite, key strength, issuer type, self-signed detection)'
+    description: 'Advanced checks (TLS version + cipher suite, self-signed detection, signature algorithm, issuer type)'
   - uri: 'ssl://example.com --probe-http'
     description: 'Verify HTTP redirects to HTTPS; show redirect chain and security headers (HSTS, CSP, etc.)'
   - uri: 'ssl://example.com --check --probe-http'
@@ -86,7 +86,7 @@ elements:
 
 flags:
   --check: 'Run health checks (expiry, chain validity, hostname match)'
-  --advanced: 'Run advanced checks with --check (TLS version + cipher suite, key strength, issuer type, self-signed) [Universal flag]'
+  --advanced: 'Run advanced checks with --check (TLS version + cipher suite, self-signed, signature algorithm, issuer type, OCSP URL) [Universal flag]'
   --probe-http: 'Check HTTP→HTTPS redirect: follows redirect chain, reports result and security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options). Combinable with --check.'
   --only-failures: 'Hide healthy results, show only warnings and failures [Universal flag]'
   --batch: 'Batch mode with aggregated results (works with --stdin) [Universal flag]'
@@ -98,7 +98,7 @@ flags:
 features:
   - 'Zero dependencies (uses Python ssl module)'
   - 'Progressive disclosure (overview → element → detail)'
-  - 'Health checks with exit codes (0=pass, 1=warning, 2=critical)'
+  - 'Health checks with exit codes (0=pass, 1=warning, 2=failure)'
   - 'Expiry thresholds: warning at 30 days, critical at 7 days'
   - 'Chain verification against system trust store'
   - 'Hostname match validation'
@@ -118,14 +118,14 @@ workflows:
     steps:
       - "reveal ssl://example.com                       # Overview"
       - "reveal ssl://example.com --check               # Full health check"
-      - "reveal ssl://example.com --check --advanced    # Deep inspection (TLS version, key strength, etc.)"
+      - "reveal ssl://example.com --check --advanced    # Deep inspection (TLS version, signature algorithm, etc.)"
       - "reveal ssl://example.com/san                   # If checking domain coverage"
 
   - name: 'Debug SSL Issues'
     scenario: 'Certificate warnings in browser or app'
     steps:
       - "reveal ssl://example.com --check --advanced # Comprehensive diagnosis (includes TLS version + cipher)"
-      - "reveal ssl://example.com/chain              # Check chain validity"
+      - "reveal ssl://example.com/chain              # Leaf issuer + whether the chain verifies"
       - "reveal ssl://example.com/issuer             # Verify issuer"
 
   - name: 'Full TLS + Redirect Audit'
@@ -206,16 +206,16 @@ anti_patterns:
 
 notes:
   - 'Uses Python ssl module (no external dependencies)'
-  - 'Connects with verification disabled for diagnostics, then verifies separately'
+  - 'Connects with verification first; on failure, reconnects unverified for diagnostics'
   - 'Chain information limited without PyOpenSSL (leaf cert only)'
   - 'Default connection timeout is 10 seconds'
-  - 'Exit codes: 0=healthy, 1=warning (<30 days), 2=critical (<7 days or error)'
+  - 'Exit codes (every --check mode): 0=pass, 1=warning (<30 days, unverified chain), 2=failure (<7 days, expired, hostname mismatch or error)'
 
 cli_flags:
   - flag: '--check'
     description: 'Run health checks (expiry, chain validation, hostname match)'
   - flag: '--advanced'
-    description: 'Advanced checks: TLS version + cipher suite, key strength, OCSP, self-signed detection'
+    description: 'Advanced checks: TLS version + cipher suite, self-signed detection, signature algorithm, OCSP URL'
   - flag: '--probe-http'
     description: 'Check HTTP→HTTPS redirect: follows redirect chain from port 80, reports final URL, hop count, and security headers. Combinable with --check for a full TLS + redirect audit in one pass.'
   - flag: '--only-failures'
