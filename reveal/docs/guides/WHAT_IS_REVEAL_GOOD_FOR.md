@@ -144,13 +144,13 @@ Use Reveal for this when:
 Important nuance:
 
 - `calls://` is static, name-based analysis, so it is best for impact estimation and relative coupling, not perfect runtime truth
-- `depends://` answers module import impact, which complements function-level call graph analysis
+- `imports://<path>?importers` answers module import impact, which complements function-level call graph analysis
 
 Reveal is especially good here because it gives you both:
 
 - **function-level impact** with `calls://`
-- **module-level impact** with `depends://`
-- **structural debt signals** with `imports://` and `deps`
+- **module-level impact** with `imports://?importers`
+- **structural debt signals** with `imports://` (`?circular`, `?unused`, `?external`)
 
 ---
 
@@ -167,7 +167,7 @@ reveal diff://git://main/.:git://HEAD/. --format json
 
 Why it is good for this:
 
-- `review` composes structural diff, checks, hotspots, and recommendations
+- `check --changed` runs the rules on just the files a PR changed
 - `diff://` tracks functions and classes added, removed, and modified
 - changed functions can carry `complexity_before`, `complexity_after`, and `complexity_delta`
 - commands return CI-friendly exit codes and JSON
@@ -263,7 +263,7 @@ Why it is good for this:
 
 - `overview` gives a one-glance dashboard
 - `hotspots` points to concentrated complexity and churn
-- `deps` surfaces circular imports, unused imports, and top importers
+- `reveal imports --circular` / `--unused` surface circular and unused imports
 - `imports://` adds lower-level graph queries and layer checks
 - `metrics://` provides project metrics and quality signals
 
@@ -363,7 +363,7 @@ The infrastructure guides make that positioning unusually concrete:
 Reveal is a good fit when you need lightweight inspection across structured resources without switching mental models.
 
 ```bash
-reveal 'mysql://prod/?type=replication'
+reveal mysql://prod/replication
 reveal sqlite:///tmp/app.db
 reveal json://config.json/services/api
 reveal env://DATABASE_URL
@@ -483,9 +483,9 @@ That is a meaningful part of what Reveal is good for: not just answering questio
 Reveal is good for people who like Unix-style pipelines, but want higher-level building blocks than `grep`, `sed`, and `awk` alone.
 
 ```bash
-reveal nginx.conf --extract domains | sed 's/^/ssl:\/\//' | reveal --stdin --check
+reveal nginx.conf --extract domains | reveal --stdin --check
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
-reveal 'depends://src?format=dot' | dot -Tsvg > depends.svg
+reveal 'depends://src?format=dot' | dot -Tsvg > depends.svg   # retired spelling; DOT has no imports:// form yet
 reveal @domains.txt --check
 ```
 
@@ -511,7 +511,7 @@ These are good fits, but less central than the top-tier workflows above:
 
 - quick inspection of JSON, env files, SQLite, and MySQL resources
 - documentation quality audits and link validation
-- architecture diagrams via GraphViz output from `calls://` or `depends://`
+- architecture diagrams via GraphViz output from `calls://` or `depends://?format=dot` (retired spelling; DOT has no imports:// form yet)
 - release validation with `diff://` (structural changes in code: functions, classes, imports, interfaces, structs, types)
 - budget-constrained adapter output using `--fields`, `--max-items`, and `--max-snippet-chars`
 
@@ -601,7 +601,7 @@ Start with the workflow that matches your job:
 | Learn a repo | `reveal .` → `reveal src/` → `reveal file.py` |
 | Find risky code | `reveal overview .` and `reveal hotspots .` |
 | Review a PR | `reveal check --changed main..HEAD` |
-| Estimate refactor blast radius | `reveal 'calls://src/?callers=func'` and `reveal depends://path/to/module.py` |
+| Estimate refactor blast radius | `reveal 'calls://src/?callers=func'` and `reveal 'imports://path/to/module.py?importers'` |
 | Prepare AI context | `reveal pack src/ --since main --budget 8000 --content` |
 | Discover Reveal capabilities | `reveal help://` or `reveal help://schemas` |
 | Investigate docs | `reveal 'markdown://docs/?link-graph'` |
