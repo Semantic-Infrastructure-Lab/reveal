@@ -22,8 +22,8 @@ reveal ssl://example.com --fields=host,days_until_expiry,health_status --format=
 # Stop after N results (budget mode)
 reveal 'ast://src?type=function' --max-items=10 --format=json
 
-# Truncate long string values
-reveal 'markdown://docs/?type=guide' --max-snippet-chars=200 --format=json
+# Truncate long string values (every string, paths and names included)
+reveal 'git://.?type=log&limit=20' --max-snippet-chars=60 --format=json
 
 # Combine field selection + budget
 reveal 'ast://src?type=function' --fields=name,line,complexity --max-items=20 --format=json
@@ -95,6 +95,13 @@ Budget-aware flags enable explicit token budget control for AI agent loops. When
 | `--max-items=N` | Stop after N results | List result limiting |
 | `--max-snippet-chars=N` | Truncate long string values | Log lines, large content fields |
 
+`--max-snippet-chars` cuts *every* string value in the JSON, identifiers included (paths, names,
+hashes), so keep N above the longest path or name you need to reuse.
+
+`--max-items` only cuts below an adapter's default cap (ast:// caps at 200). To get more than the
+cap, use `?limit=N` in the URI; `--max-items=500` on ast:// still returns 200, with no
+`meta.budget` block (the cut is the `auto_cap` entry in `meta.warnings`).
+
 ### Truncation Metadata
 
 A cut list is disclosed the same way for every adapter and every cause (`--max-items`,
@@ -147,7 +154,9 @@ Nested under `meta.budget`:
 - `reason`: Why truncation occurred (`max_items_exceeded`)
 - `total_available`: Total results available: the same total the `truncated` warning states, including what an adapter's own cap already cut (ast caps at 200, so `--max-items 5` on 247 matches says 247, not 200). `total_available_exact: false` is added when it is a lower bound (git history)
 - `returned`: Number of results returned
-- `next_cursor`: Pagination hint for next request
+- `next_cursor`: Pagination hint for next request: `offset=<returned>`. It does not add the
+  request's own offset, so on a request that already had `?offset=M` the next page is
+  `offset=M+returned`
 
 ---
 
@@ -155,12 +164,12 @@ Nested under `meta.budget`:
 
 ### SSL Adapter
 
-**Full output** (~400 lines):
+**Full output** (~60 lines):
 ```bash
 reveal ssl://example.com --format=json
 ```
 
-**Selected fields** (~10 lines, 40x reduction):
+**Selected fields** (~10 lines, about 6x smaller):
 ```bash
 reveal ssl://example.com --fields=host,days_until_expiry,health_status,common_name --format=json
 ```
@@ -336,6 +345,8 @@ reveal 'ast://src?type=function' --max-items=50 --format=json > page1.json
 if data['meta']['budget']['truncated']:
     # Second page
     reveal 'ast://src?type=function&offset=50' --max-items=50 --format=json > page2.json
+    # Third page: offset=100. next_cursor on page 2 still says offset=50 (it ignores the
+    # request's own offset), so add the offsets yourself.
 ```
 
 ---
@@ -371,9 +382,13 @@ Note: --fields: expiry matched no field of this ssl:// result. Fields: common_na
 **Solution**: Use `--max-snippet-chars` to truncate:
 
 ```bash
-# Truncate long string values to 200 chars
-reveal 'markdown://docs/?type=guide' --max-snippet-chars=200 --format=json
+# Truncate long string values (commit messages here) to 60 chars
+reveal 'git://.?type=log&limit=20' --max-snippet-chars=60 --format=json
+# "message": "docs(elements): git @ref syntax, available_elements absent o..."
 ```
+
+Every string is cut, not only long text: on `markdown://`, `--max-snippet-chars=20` also cuts
+`path` and `relative_path` to `docs/OUTPUT_DIAGNOST...`.
 
 ---
 
@@ -430,10 +445,11 @@ result = subprocess.run(
 )
 
 data = json.loads(result.stdout)
+offset = 0  # the ?offset= this request used
 
 if data.get('meta', {}).get('budget', {}).get('truncated'):
     print(f"Got {data['meta']['budget']['returned']} of {data['meta']['budget']['total_available']} results")
-    print(f"Next: offset={data['meta']['budget']['returned']}")
+    print(f"Next: offset={offset + data['meta']['budget']['returned']}")
 else:
     print("Got all results")
 ```
@@ -506,31 +522,27 @@ done
 
 **Scenario**: Fetch large result set incrementally with pagination.
 
+Page with `?limit=` and `?offset=`, not `--max-items`: `--max-items` cannot go above ast://'s
+200 default cap, and above it there is no `meta.budget` block to read.
+
 ```bash
 #!/bin/bash
 offset=0
-page_size=50
-total=0
+page_size=500
 
 while true; do
-    result=$(reveal "ast://src?type=function&offset=$offset" \
-        --max-items=$page_size \
-        --fields=name,line \
-        --format=json)
+    result=$(reveal "ast://src?type=function&limit=$page_size&offset=$offset" --format=json)
+    returned=$(echo "$result" | jq '.results | length')
+    total=$(echo "$result" | jq '.total_results')
+    echo "$result" | jq -c '.results[] | {name, line}' >> functions.jsonl
 
-    # Check if truncated
-    truncated=$(echo "$result" | jq -r '.meta.budget.truncated // false')
-    returned=$(echo "$result" | jq -r '.meta.budget.returned // 0')
+    offset=$((offset + returned))
+    echo "Fetched $offset of $total"
 
-    total=$((total + returned))
-    echo "Fetched $returned results (total: $total)"
-
-    # Stop if not truncated
-    if [ "$truncated" != "true" ]; then
+    # Stop at the end (every page carries a "truncated" warning, so do not stop on that)
+    if [ "$returned" -eq 0 ] || [ "$offset" -ge "$total" ]; then
         break
     fi
-
-    offset=$((offset + page_size))
 done
 ```
 
@@ -596,15 +608,15 @@ of each object (the result's `value` list). Use `jq 'keys'` to explore.
 
 **Monitoring/Status Checks** (minimal output):
 - Use `--fields` to select only status fields
-- Use `--max-items=1` for single-object checks
 
 **Interactive Exploration** (moderate output):
 - Allow medium result sets with `--max-items=50-100`
 - Add `--fields` to drop verbose columns
 
 **Batch Processing** (larger chunks):
-- Use `--max-items=200-500` per iteration
-- Use `--max-snippet-chars=500` if fields contain long text
+- Use `?limit=N&offset=M` per iteration (not `--max-items`, which only cuts below an
+  adapter's default cap; ast:// caps at 200)
+- Use `--max-snippet-chars=500` if fields contain long text (it cuts every string, paths included)
 
 **One-Time Analysis** (no limit):
 - Omit budget flags — get full results
