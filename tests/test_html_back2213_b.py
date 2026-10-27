@@ -75,3 +75,10 @@ def test_tag_class_selectors_are_found(page, selector, needle):
     r = _reveal(page, selector)
     assert r.returncode == 0, (selector, r.stderr)
     assert needle in r.stdout
+
+
+@pytest.mark.parametrize('selector', ['p::before', 'div.content::after', '.data::first-line'])
+def test_unsupported_selectors_report_not_found_without_a_traceback(page, selector):
+    r = _reveal(page, selector)
+    assert 'Traceback' not in r.stderr, (selector, r.stderr)
+    assert 'NotImplementedError' not in r.stderr

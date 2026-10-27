@@ -758,13 +758,9 @@ class HTMLAnalyzer(FileAnalyzer):
 
         # Try as CSS selector first (if it looks like one)
         if selector.startswith('.') or selector.startswith('#') or ' ' in selector or '>' in selector:
-            from soupsieve.util import SelectorSyntaxError  # bs4 is loaded: self.soup exists
-            try:
-                element = self.soup.select_one(selector)
-            except SelectorSyntaxError:
-                # Not a CSS selector (a path, a stray word): no match, so the
-                # caller reports the normal "not found" (BACK-1766).
-                return None
+            # Not a CSS selector (a path, a stray word): no match, so the caller reports
+            # the normal "not found" (BACK-1766); no fallback to an id or tag lookup.
+            element = self._select_compound(selector)
         else:
             if any(ch in selector for ch in '.[:'):
                 # tag.class, tag[attr], tag:pseudo: a compound CSS selector
@@ -803,11 +799,12 @@ class HTMLAnalyzer(FileAnalyzer):
         }
 
     def _select_compound(self, selector: str):
-        """select_one() for a compound selector, or None when it is not valid CSS."""
+        """The one select_one() call: the first match, or None when the selector is not valid
+        CSS or uses a construct soupsieve cannot run (a pseudo-element such as ``p::before``)."""
         from soupsieve.util import SelectorSyntaxError  # bs4 is loaded: self.soup exists
         try:
             return self.soup.select_one(selector)
-        except SelectorSyntaxError:
+        except (SelectorSyntaxError, NotImplementedError):
             return None
 
     def extract_element(self, element_type: str, name: str = "") -> Optional[Dict[str, Any]]:
