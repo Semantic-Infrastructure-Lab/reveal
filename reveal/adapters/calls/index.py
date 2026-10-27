@@ -1115,26 +1115,6 @@ def callee_levels(walk: CalleeWalk) -> Dict[str, Any]:
     }, walk.skipped, traversal_failures=walk.traversal_failures, dropped=walk.dropped)
 
 
-def _build_forward_index(
-    structures: List[Dict[str, Any]],
-    include_builtins: bool,
-) -> Dict[str, List[Dict[str, Any]]]:
-    """Build name → [{file, line, calls}] forward call index from collected structures
-    (``--sideeffects --transitive``; builtins filtered at build, in structure order)."""
-    forward: Dict[str, List[Dict[str, Any]]] = {}
-    for file_path, name, elem in _call_definitions(structures):
-        calls = elem.get('calls', [])
-        builtins = conventions_for(_lang_family(file_path)).builtins
-        if not include_builtins and builtins:
-            calls = [c for c in calls if c.split('.')[-1] not in builtins]
-        record = {'file': to_posix(file_path), 'line': elem.get('line', 0), 'calls': calls,
-                  'references': elem.get('references', []),
-                  'reference_only_calls': elem.get('reference_only_calls', [])}
-        for key in lookup_keys(name):
-            forward.setdefault(key, []).append(record)
-    return forward
-
-
 def find_callers(
     path: str,
     target: str,

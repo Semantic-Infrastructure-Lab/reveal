@@ -40,12 +40,6 @@ def test_callers_index_records_name_their_file_with_forward_slashes(structures):
     assert {rec['file'] for records in index.values() for rec in records} == {'pkg/a.py'}
 
 
-def test_forward_call_index_records_name_their_file_with_forward_slashes(structures):
-    forward = calls_index._build_forward_index(structures, include_builtins=True)
-
-    assert {rec['file'] for records in forward.values() for rec in records} == {'pkg/a.py'}
-
-
 def test_uncalled_entries_name_their_file_with_forward_slashes(structures, monkeypatch, tmp_path):
     monkeypatch.setattr(calls_index, 'collect_structures', lambda *_a, **_k: structures)
 
