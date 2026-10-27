@@ -214,7 +214,11 @@ its totals sum to the flat `total`.
   TypeScript/JavaScript, PHP and C++ detect it in their own scanners. Python reports
   `open(path, 'w')`, `Path.write_text`/`write_bytes`, a handle's `.write`/`.writelines` and
   `shutil.copy`/`copy2`/`copyfile`/`copytree`/`move`; `target` is the path written (the
-  destination for shutil), except for a handle's `.write`, where it is the first argument.
+  destination for shutil). A handle's `.write` reports the path its `with open(PATH) as f`,
+  `f = open(PATH)` or `with p.open('w') as f` opened in the same function
+  (`tempfile.NamedTemporaryFile(...)` for a temporary file); when the handle cannot be traced (a
+  parameter, `self.fh`, a name bound more than once) `target` is the handle expression, never
+  the data written.
 - `env` covers reads with a string-literal key, matched by call shape: `os.Getenv`/`os.LookupEnv`
   (Go), `System.getenv` (Java/Kotlin), `Environment.GetEnvironmentVariable` (C#),
   `env::var`/`env::var_os` (Rust). For these five a key held in a variable or built by

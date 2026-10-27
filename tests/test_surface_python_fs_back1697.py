@@ -5,8 +5,8 @@ was not reported at all, and `Path('out.txt').write_text('x')` reported the text
 the target; `write_bytes` did the same with the bytes. Now the shutil calls that create or replace
 a file or tree report their destination, and the pathlib writers report the path they write to.
 
-Controls that must not change: `open(..., 'w')`, a handle's `.write(data)` (whose target is still
-the data, BACK-1338), shutil calls that do not write a file (`rmtree`, `which`, `copymode`), a
+Controls that must not change: `open(..., 'w')`, a handle's `.write(data)` (whose target is the
+handle since BACK-2268, never the data), shutil calls that do not write a file (`rmtree`, `which`, `copymode`), a
 dict's `.copy()`, and a project's own `copy()` with no shutil import.
 """
 
@@ -91,7 +91,7 @@ def test_controls_unchanged(tmp_path):
             copy("x", "y")
             open("r.txt").read()
     ''')
-    assert rows == [(7, 'open', 'o.txt'), (8, 'fh.write', 'data')]
+    assert rows == [(7, 'open', 'o.txt'), (8, 'fh.write', 'fh')]
 
 
 def test_surface_uri_reports_shutil_copy_and_write_text_target(tmp_path):
