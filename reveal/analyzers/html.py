@@ -718,9 +718,9 @@ class HTMLAnalyzer(FileAnalyzer):
         if not name:
             return 0
 
-        line = self._ordinal_line(name, element)
-        if line:
-            return line
+        ordinal_line = self._ordinal_line(name, element)
+        if ordinal_line:
+            return ordinal_line
 
         # Last resort, when the parsed tree and the source scan disagree on how many <name>
         # tags there are. Match on the opening tag plus a distinctive attribute *value* (id, else

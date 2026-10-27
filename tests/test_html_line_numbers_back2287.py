@@ -84,8 +84,9 @@ def test_grep_output_names_each_link_line(tmp_path, no_sourceline):
     path = _write(tmp_path)
     result = _run_reveal_direct(str(path), '--links', '--format', 'grep')
     assert result.returncode == 0, result.stderr
-    rows = [line for line in result.stdout.split('\n') if line.startswith(str(path))]
-    assert [row[len(str(path)):] for row in rows] == [f':{line}:{url}' for url, line in LINKS]
+    # path:line:url; split from the right so a drive letter's colon cannot shift the fields
+    rows = [row.rsplit(':', 2) for row in result.stdout.split('\n') if row.endswith('.html') and 'ln.html:' in row]
+    assert [(url, int(line)) for _path, line, url in rows] == LINKS
 
 
 def test_html_parser_sourceline_path_is_unchanged(tmp_path):
