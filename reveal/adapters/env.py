@@ -262,17 +262,21 @@ class EnvAdapter(ResourceAdapter):
 
     SENSITIVE_PATTERNS = [
         'PASSWORD', 'SECRET', 'TOKEN', 'KEY', 'CREDENTIAL',
-        'API_KEY', 'AUTH', 'PRIVATE', 'PASSPHRASE'
+        'API_KEY', 'AUTH', 'PRIVATE', 'PASSPHRASE',
+        'DATABASE_URL', 'DSN'
     ]
 
     # Compiled regex: each pattern must appear as a whole word in the var name
     # (delimited by _ or start/end of string, since env var names use _ not spaces)
     _SENSITIVE_RE = re.compile(
         '|'.join(
-            r'(?:^|_)' + p + r'(?:_|$)'
+            r'(?:^|_)' + p + r'S?(?:_|$)'
             for p in SENSITIVE_PATTERNS
         )
     )
+
+    # scheme://user:password@host — a secret in the value, whatever the name
+    _URL_CREDENTIALS_RE = re.compile(r'^[A-Za-z][A-Za-z0-9+.-]*://[^/\s:@]*:[^/\s@]+@')
 
     SYSTEM_VARS = {
         # Unix/Linux/macOS
@@ -317,7 +321,7 @@ class EnvAdapter(ResourceAdapter):
             var_info = {
                 'name': name,
                 'value': self._maybe_redact(name, value, show_secrets),
-                'sensitive': self._is_sensitive(name),
+                'sensitive': self._is_sensitive(name, value),
                 'length': len(value)
             }
             categorized[category].append(var_info)
@@ -357,7 +361,7 @@ class EnvAdapter(ResourceAdapter):
             'name': element_name,
             'value': self._maybe_redact(element_name, value, show_secrets),
             'category': self._categorize(element_name),
-            'sensitive': self._is_sensitive(element_name),
+            'sensitive': self._is_sensitive(element_name, value),
             'length': len(value),
             'raw_value': value if show_secrets else None
         }
@@ -368,7 +372,7 @@ class EnvAdapter(ResourceAdapter):
         Returns:
             Dict with environment metadata
         """
-        sensitive_count = sum(1 for name in self.variables if self._is_sensitive(name))
+        sensitive_count = sum(1 for name, val in self.variables.items() if self._is_sensitive(name, val))
 
         return {
             'type': 'environment',
@@ -377,16 +381,19 @@ class EnvAdapter(ResourceAdapter):
             'categories': self._get_category_counts()
         }
 
-    def _is_sensitive(self, name: str) -> bool:
-        """Check if variable name suggests sensitive data.
+    def _is_sensitive(self, name: str, value: Optional[str] = None) -> bool:
+        """Check if a variable holds sensitive data, by name or by value.
 
         Args:
             name: Variable name to check
+            value: Variable value; a URL with embedded user:password counts
 
         Returns:
-            True if name matches sensitive patterns
+            True if the name matches sensitive patterns or the value embeds credentials
         """
-        return bool(self._SENSITIVE_RE.search(name.upper()))
+        if self._SENSITIVE_RE.search(name.upper()):
+            return True
+        return bool(value and self._URL_CREDENTIALS_RE.match(value))
 
     def _maybe_redact(self, name: str, value: str, show_secrets: bool) -> str:
         """Redact sensitive values unless show_secrets=True.
@@ -399,7 +406,7 @@ class EnvAdapter(ResourceAdapter):
         Returns:
             Original value or redacted string
         """
-        if not show_secrets and self._is_sensitive(name):
+        if not show_secrets and self._is_sensitive(name, value):
             return '***'
         return value
 
