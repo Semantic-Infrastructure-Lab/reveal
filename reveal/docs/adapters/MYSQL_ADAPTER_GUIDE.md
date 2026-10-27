@@ -911,7 +911,7 @@ reveal mysql://localhost | grep -i "buffer"
 
 ## Output Types
 
-### 1. mysql_health
+### 1. mysql_server
 
 **Use case**: Database health overview (`mysql://host`)
 

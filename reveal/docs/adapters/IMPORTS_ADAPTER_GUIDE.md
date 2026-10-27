@@ -126,6 +126,11 @@ Import Analysis: src
   Total Imports: 238
   Cycles Found:  ❌ Yes
 
+  Rule: Cycles Found uses static imports between files under the scan root, tests included; TYPE_CHECKING imports excluded; function-level (lazy) imports excluded (default); ...
+
+  ⚠️  16 code file(s) skipped — no import support for: .sh (10), .ipynb (2), ...
+      (these are not counted above; import graph excludes them)
+
 Query options:
   reveal 'imports://src?unused'    - Find unused imports
   reveal 'imports://src?circular'  - Detect circular deps
@@ -137,6 +142,8 @@ Query options:
 - **Total files**: Number of source files analyzed
 - **Total imports**: Count of import statements
 - **Cycles found**: Quick indicator if circular dependencies exist
+- **Rule**: The counting rule behind the answer (edges, scope, tests, lazy imports); the full line is longer than shown here
+- **Skipped files**: Code files in languages with no import support, counted separately from the totals (the count is for the whole scan root, which can be wider than the requested path)
 - **Query options**: Suggested follow-up commands
 
 **Use cases**:
@@ -267,6 +274,8 @@ Circular Dependencies: 3 cycle groups
   1. 2 files  user.py, auth.py
   2. 2 files  routes.py, users.py
   3. 3 files  models.py, session.py, base.py
+
+  Rule: cycles use static imports between files under the scan root, tests included; TYPE_CHECKING imports excluded; ...
 ```
 
 Each entry is one **strongly-connected component** (SCC) — a group of files that
@@ -355,6 +364,8 @@ reveal 'imports://src?rank=fan-in&top=20'
 Fan-in ranking: src
 Files: 10 of 45  (fan-in = number of files that import this file)
 
+  Rule: fan-in and fan-out count static imports between files under the scan root, tests included; ...
+
   FILE                            FAN-IN   FAN-OUT
   ----------------------------   -------  --------
   db/session.py                       18         2
@@ -367,6 +378,11 @@ Files: 10 of 45  (fan-in = number of files that import this file)
   services/cache.py                    3         3
   api/routes.py                        0         8
   main.py                              0         3
+
+  Note: static imports only — files loaded via dynamic dispatch
+  (importlib, require(), Class.forName, autoload, etc.) show lower fan-in than actual.
+
+⚠ Truncated entries: showing 10 of 45 — raise ?top=N
 ```
 
 **Reading the output:**
@@ -893,15 +909,20 @@ line number. `edge_rule` states which edges were counted (abridged above).
   "source_type": "directory",
   "total_scanned": 45,
   "entries": [
-    { "file": "main.py", "fan_out": 8 },
-    { "file": "cli.py", "fan_out": 3 },
-    { "file": "legacy_util.py", "fan_out": 0 }
-  ]
+    { "file": "main.py", "fan_out": 8, "is_test": false, "test_only_importers": 0 },
+    { "file": "cli.py", "fan_out": 3, "is_test": false, "test_only_importers": 2 },
+    { "file": "legacy_util.py", "fan_out": 0, "is_test": false, "test_only_importers": 0 }
+  ],
+  "edge_rule": {"lazy": "include", "tests": "importers_not_counted", "text": "Rule: fan-in counts static imports ..."},
+  "metadata": {"total_files": 40, "scanned_files": 45}
 }
 ```
 
 **Fields**:
 - `total_scanned` — total files analyzed (entrypoints are a subset)
+- `entries[].is_test` — the file itself sits under a test path
+- `entries[].test_only_importers` — how many files under test paths import it (they are not counted as importers, which is why a tested-only file still lists as an entry point)
+- `metadata.total_files` counts files with an import extractor; `metadata.scanned_files` and `total_scanned` count every scanned code file, so the two differ on a tree with files in languages without import support
 - `entries[].fan_out` — how many files this entry point imports (high = real entry point; zero = likely dead code or test scaffold)
 
 **Note**: Files loaded via dynamic dispatch (plugin registries, `importlib`, etc.) appear here as false positives — they have fan-in=0 statically but are actively loaded at runtime.
