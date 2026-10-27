@@ -491,15 +491,18 @@ architecture:
       allow_imports: [models, entities]
 ```
 
-A layer has `name`, `paths`, `allow_imports` and `deny_imports`. There is no `rules:` or
-`can_import` key: unknown keys are ignored, so a config written in another shape passes with
-0 violations instead of failing. `paths`, `allow_imports` and `deny_imports` are prefixes
-relative to the path given to `imports://`: for `imports://src?violations` write `models`,
-not `src/models`; for `imports://.?violations` write `src/models`.
+A layer has `name`, `paths`, `allow_imports` and `deny_imports`, and `architecture` has only
+`layers`. There is no `rules:` or `can_import` key. `paths`, `allow_imports` and `deny_imports`
+are prefixes relative to the path given to `imports://`: for `imports://src?violations` write
+`models`, not `src/models`; for `imports://.?violations` write `src/models`.
 
-A malformed `architecture` block is an error, not a skipped layer: when `architecture` or
-`layers` has the wrong type, or a layer is not a mapping, the command exits 3 and names the
-config file and the bad entry (`architecture.layers[0] must be a mapping, got str`).
+A malformed `architecture` block is an error, not a skipped layer, so a config in another shape
+cannot pass with 0 violations. The command exits 3 and names the config file and the bad entry
+when `architecture` or `layers` has the wrong type, a layer is not a mapping
+(`architecture.layers[0] must be a mapping, got str`), `architecture` or a layer has a key
+outside the ones above (`has unknown key(s) 'rules'`, with a "did you mean" for a near
+miss), or a layer has neither a non-empty `allow_imports` nor a non-empty `deny_imports`
+(an empty `allow_imports: []` does not forbid every import; use `deny_imports` to forbid).
 
 ### Example Output
 

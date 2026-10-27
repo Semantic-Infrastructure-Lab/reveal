@@ -510,7 +510,7 @@ def _raise_os_error(*_a, **_k):
 
 
 def test_load_layer_config_primary_failure_is_warned_and_falls_back(tmp_path, monkeypatch, caplog):
-    _reveal_yaml(tmp_path, 'architecture:\n  layers:\n    - name: api\n      paths: [api/]\n')
+    _reveal_yaml(tmp_path, 'architecture:\n  layers:\n    - name: api\n      paths: [api/]\n      deny_imports: [db/]\n')
     monkeypatch.setattr('reveal.config.RevealConfig.get', _raise_os_error)
     with caplog.at_level(logging.WARNING):
         config = load_layer_config(tmp_path)
@@ -519,7 +519,7 @@ def test_load_layer_config_primary_failure_is_warned_and_falls_back(tmp_path, mo
 
 
 def test_load_layer_config_valid_file_still_loads(tmp_path):
-    _reveal_yaml(tmp_path, 'root: true\narchitecture:\n  layers:\n    - name: api\n      paths: [api/]\n')
+    _reveal_yaml(tmp_path, 'root: true\narchitecture:\n  layers:\n    - name: api\n      paths: [api/]\n      deny_imports: [db/]\n')
     assert [layer.name for layer in load_layer_config(tmp_path).layers] == ['api']
 
 

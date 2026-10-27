@@ -800,8 +800,11 @@ class RevealConfig:
         Returns:
             List of layer definitions
         """
-        arch = self._config.get('architecture', {})
-        return cast(List[Dict[str, Any]], arch.get('layers', []))
+        return cast(List[Dict[str, Any]], self.get_architecture().get('layers', []))
+
+    def get_architecture(self) -> Dict[str, Any]:
+        """Get the whole `architecture` section, so a loader can reject keys it does not read."""
+        return cast(Dict[str, Any], self._config.get('architecture', {}))
 
     def get_adapter_config(self, adapter_name: str, section: Optional[str] = None) -> Dict[str, Any]:
         """Get adapter-specific configuration.

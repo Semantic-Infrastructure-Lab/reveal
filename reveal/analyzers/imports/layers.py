@@ -20,6 +20,7 @@ Example .reveal.yaml:
           deny_imports: ["src/routes", "src/api"]
 """
 
+import difflib
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,22 @@ logger = logging.getLogger(__name__)
 
 class LayerConfigError(ValueError):
     """The architecture.layers configuration is unusable; the message names where."""
+
+
+_ARCHITECTURE_KEYS = ("layers",)
+_LAYER_KEYS = ("name", "paths", "allow_imports", "deny_imports")
+
+
+def _reject_unknown_keys(mapping: Dict[str, Any], known: Tuple[str, ...], where: str) -> None:
+    """Fail on a key the loader does not read: a rule that silently does not apply reads as a pass."""
+    unknown = [key for key in mapping if key not in known]
+    if not unknown:
+        return
+    parts = []
+    for key in unknown:
+        close = difflib.get_close_matches(str(key), known, n=1)
+        parts.append(f"'{key}'" + (f" (did you mean '{close[0]}'?)" if close else ""))
+    raise LayerConfigError(f"{where} has unknown key(s) {', '.join(parts)}; known keys: {', '.join(known)}")
 
 
 @dataclass
@@ -172,6 +189,7 @@ class LayerConfig:
         arch = config_dict.get("architecture", {})
         if not isinstance(arch, dict):
             raise LayerConfigError(f"{source}: 'architecture' must be a mapping, got {type(arch).__name__}")
+        _reject_unknown_keys(arch, _ARCHITECTURE_KEYS, f"{source}: architecture")
         layer_defs = arch.get("layers", [])
         if not isinstance(layer_defs, list):
             raise LayerConfigError(f"{source}: 'architecture.layers' must be a list, got {type(layer_defs).__name__}")
@@ -180,6 +198,13 @@ class LayerConfig:
             if not isinstance(layer_def, dict):
                 raise LayerConfigError(
                     f"{source}: architecture.layers[{index}] must be a mapping, got {type(layer_def).__name__}"
+                )
+            where = f"{source}: architecture.layers[{index}]"
+            _reject_unknown_keys(layer_def, _LAYER_KEYS, where)
+            if not layer_def.get("allow_imports") and not layer_def.get("deny_imports"):
+                raise LayerConfigError(
+                    f"{where} sets neither a non-empty allow_imports nor deny_imports, so it enforces "
+                    "nothing (an empty allow_imports list does not forbid every import)"
                 )
             layers.append(LayerRule(
                 name=layer_def.get("name", "unnamed"),
@@ -259,7 +284,7 @@ def load_layer_config(start_path: Path) -> Optional[LayerConfig]:
         # Use unified config system (supports precedence, walk-up, etc.)
         from reveal.config import RevealConfig
 
-        layers_list = RevealConfig.get(start_path).get_layers()
+        architecture = RevealConfig.get(start_path).get_architecture()
     except Exception as e:  # boundary-ok: broad-except -- RevealConfig.get/get_layers span config discovery, schema validation and merging; any failure there falls back to reading the nearest .reveal.yaml directly, which raises LayerConfigError naming the file if it is bad
         logger.warning(f"Unified config load failed for {start_path} ({type(e).__name__}: {e}); reading the nearest .reveal.yaml directly")
 
@@ -268,13 +293,14 @@ def load_layer_config(start_path: Path) -> Optional[LayerConfig]:
         config_file = _nearest_reveal_yaml(start_path)
         return _load_yaml_layers(config_file) if config_file else None
 
-    if not layers_list:
+    if not architecture:
         return None
 
-    # Convert to LayerConfig format. The merged config does not remember which file a layer
-    # came from, so a malformed layer names the nearest .reveal.yaml as the place to look.
+    # The merged config does not remember which file a layer came from, so a malformed layer
+    # names the nearest .reveal.yaml as the place to look.
     nearest = _nearest_reveal_yaml(start_path)
-    return LayerConfig.from_dict(
-        {'architecture': {'layers': layers_list}},
+    config = LayerConfig.from_dict(
+        {'architecture': architecture},
         source=f"layer configuration for {start_path} (nearest {nearest or '.reveal.yaml'})",
     )
+    return config if config.layers else None

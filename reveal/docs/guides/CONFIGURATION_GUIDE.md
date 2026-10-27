@@ -203,22 +203,23 @@ display:
 ### Layer Violations (I003)
 
 ```yaml
-layers:
-  - name: presentation
-    pattern: "src/ui/**"
-    can_import:
-      - src/domain/**
-      - src/utils/**
+architecture:
+  layers:
+    - name: presentation
+      paths: [src/ui]
+      allow_imports: [src/domain, src/utils]   # every import target must match one of these
 
-  - name: domain
-    pattern: "src/domain/**"
-    can_import:
-      - src/utils/**
+    - name: domain
+      paths: [src/domain]
+      allow_imports: [src/utils]
 
-  - name: utils
-    pattern: "src/utils/**"
-    can_import: []
+    - name: utils
+      paths: [src/utils]
+      deny_imports: [src/ui, src/domain]       # targets this layer must not reach
 ```
+
+A layer has `name`, `paths`, `allow_imports` and `deny_imports`, all prefixes; a config in any other
+shape exits 3 naming the bad key. Full reference: the imports guide, "Configuration (.reveal.yaml)".
 
 ---
 
