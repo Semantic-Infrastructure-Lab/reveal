@@ -497,6 +497,10 @@ A layer has `name`, `paths`, `allow_imports` and `deny_imports`. There is no `ru
 relative to the path given to `imports://`: for `imports://src?violations` write `models`,
 not `src/models`; for `imports://.?violations` write `src/models`.
 
+A malformed `architecture` block is an error, not a skipped layer: when `architecture` or
+`layers` has the wrong type, or a layer is not a mapping, the command exits 3 and names the
+config file and the bad entry (`architecture.layers[0] must be a mapping, got str`).
+
 ### Example Output
 
 ```
@@ -820,14 +824,16 @@ last node. `count` = number of distinct groups, not simple paths.
   "type": "layer_violations",
   "source": "src",
   "source_type": "directory",
-  "count": 5,
   "violations": [
     {
-      "file": "src/models/user.py",
-      "line": 3,
-      "message": "Layer violation: domain importing infrastructure (src.db.session)"
+      "from_file": "models/user.py",
+      "to_file": "db/session.py",
+      "layer": "domain",
+      "reason": "domain layer cannot import from db"
     }
   ],
+  "count": 1,
+  "edge_rule": {"lazy": "include", "tests": "included", "text": "Rule: violations check static imports ..."},
   "metadata": {
     "total_imports": 238,
     "total_files": 45,
@@ -835,6 +841,9 @@ last node. `count` = number of distinct groups, not simple paths.
   }
 }
 ```
+
+`from_file` and `to_file` are relative to the path given to `imports://`; a violation carries no
+line number. `edge_rule` states which edges were counted (abridged above).
 
 ### 5. fan_in_ranking
 
@@ -1046,35 +1055,30 @@ git commit -m "refactor: Break circular dependency between user and auth"
 **Scenario**: Ensure clean architecture with layer boundaries
 
 ```bash
-# 1. Create .reveal.yaml with layer rules
+# 1. Create .reveal.yaml with layer rules. Paths are prefixes relative to the path
+#    passed to imports:// (here src/), and the rules live on each layer.
 cat > .reveal.yaml <<EOF
 architecture:
   layers:
     - name: presentation
-      paths: [src/api, src/cli]
+      paths: [api, cli]
+      allow_imports: [services, models]
     - name: application
-      paths: [src/services]
+      paths: [services]
+      allow_imports: [models]
     - name: domain
-      paths: [src/models]
+      paths: [models]
+      deny_imports: [api, cli, services, db]
     - name: infrastructure
-      paths: [src/db]
-
-  rules:
-    - layer: presentation
-      can_import: [application, domain]
-    - layer: application
-      can_import: [domain]
-    - layer: domain
-      can_import: []
-    - layer: infrastructure
-      can_import: [domain]
+      paths: [db]
+      allow_imports: [models]
 EOF
 
 # 2. Check for violations
 reveal 'imports://src?violations'
 
 # Example output:
-# src/models/user.py:3 - domain importing infrastructure (src.db.session)
+#   models/user.py -> db/session.py  [domain] domain layer cannot import from db
 
 # 3. Fix violations
 # - Move database logic from domain to infrastructure
@@ -1085,10 +1089,11 @@ reveal 'imports://src?violations'
 reveal 'imports://src?violations'
 # Should show: "✅ No violations found"
 
-# 5. Add to CI/CD
+# 5. Add to CI/CD (--fail-on findings exits 1 when a violation is found;
+#    without it the command exits 0 and the step never fails)
 cat >> .github/workflows/ci.yml <<EOF
   - name: Check architecture layers
-    run: reveal 'imports://src?violations' --format json
+    run: reveal 'imports://src?violations' --fail-on findings
 EOF
 
 # 6. Commit layer config
@@ -1870,26 +1875,33 @@ Every `?entrypoints` run ends with a reminder: `Note: static imports only — fi
 
 ### Q: Can I configure layer rules per team/project?
 
-**A**: Yes, use `.reveal.yaml` in each project root:
+**A**: Yes, use `.reveal.yaml` in each project root (the nearest one above the scanned path
+applies). Each layer needs `allow_imports` or `deny_imports`; a layer with only `paths` enforces
+nothing. Paths below are for `imports://src?violations`:
 
 ```yaml
 # Project A (microservice)
 architecture:
   layers:
     - name: api
-      paths: [src/api]
+      paths: [api]
+      allow_imports: [models]
     - name: domain
-      paths: [src/models]
+      paths: [models]
+      deny_imports: [api]
 
 # Project B (monolith)
 architecture:
   layers:
     - name: presentation
-      paths: [src/web, src/cli]
+      paths: [web, cli]
+      allow_imports: [services, entities]
     - name: application
-      paths: [src/services]
+      paths: [services]
+      allow_imports: [entities]
     - name: domain
-      paths: [src/entities]
+      paths: [entities]
+      deny_imports: [web, cli, services]
 ```
 
 ### Q: What if analysis is slow?
