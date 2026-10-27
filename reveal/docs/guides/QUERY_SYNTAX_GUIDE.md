@@ -512,6 +512,7 @@ reveal 'ast://src/?type=function&lines>100&complexity>15'
 **Behavior**:
 - Filters are ANDed together
 - Each filter narrows results
+- A key may repeat and every condition applies: `ast://src/?type=function&type!=method`, `json://data.json?age>30&age<40`
 - No general OR operator: ast:// accepts `type=a|b`; elsewhere use a regex `~=(foo|bar)`
 
 ---

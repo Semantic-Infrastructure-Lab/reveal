@@ -326,8 +326,9 @@ def _suggest_filter_correction(query: str) -> None:
         return
     # format_query produces "key op value" parts joined by " AND "
     # Extract the leading identifier from each part to get the field names used.
+    # A key given twice prints twice (type!=method AND type==function, BACK-2307); hint it once.
     parts = [p.strip() for p in query.split(' AND ')]
-    fields = [m.group(1) for p in parts for m in [re.match(r'^(\w+)', p)] if m]
+    fields = list(dict.fromkeys(m.group(1) for p in parts for m in [re.match(r'^(\w+)', p)] if m))
 
     for field in fields:
         correction = _FILTER_SHORTHANDS.get(field.lower())

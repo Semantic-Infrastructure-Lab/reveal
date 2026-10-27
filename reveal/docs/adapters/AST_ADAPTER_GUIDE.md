@@ -248,6 +248,10 @@ reveal 'ast://./tests?name=test_*&lines>100'
 
 # Entry points that are complex
 reveal 'ast://./src?name=main*&complexity>10'
+
+# A key may repeat; every condition applies
+reveal 'ast://./src?type=function&type!=method'   # functions that are not methods
+reveal 'ast://./src?lines>20&lines<50'            # same as lines=20..50 but exclusive
 ```
 
 ---
@@ -322,7 +326,7 @@ Combine multiple conditions:
 
 | Operator | Meaning | Example |
 |----------|---------|---------|
-| `&` | AND - all conditions must match | `lines>50&complexity>10` |
+| `&` | AND - all conditions must match, including two on the same key | `lines>50&complexity>10`, `type=function&type!=method` |
 | `\|` or `,` | OR - any condition matches (type only) | `type=class\|function` |
 
 ---

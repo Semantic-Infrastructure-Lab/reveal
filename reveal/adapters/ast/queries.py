@@ -1,6 +1,6 @@
 """Query parsing and formatting for AST adapter."""
 
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterator, List, Tuple
 from ...utils.query import parse_query_filters
 from ...utils.query_parser import note_query_parsed
 
@@ -32,6 +32,21 @@ def parse_equality_value(key: str, value: str) -> Dict[str, Any]:
         return {'op': '==', 'value': value}
 
 
+# A key given more than once (``type=function&type!=method``, ``lines>3&lines<8``) holds
+# ``{'op': ALL_OP, 'value': [condition, ...]}``; every condition must match (BACK-2307).
+ALL_OP = 'all'
+
+
+def condition_pairs(query: Dict[str, Any]) -> Iterator[Tuple[str, Dict[str, Any]]]:
+    """Each ``(key, condition)`` of *query*, one pair per condition of a repeated key."""
+    for key, condition in query.items():
+        if condition.get('op') == ALL_OP:
+            for part in condition['value']:
+                yield key, part
+        else:
+            yield key, condition
+
+
 def _split_alternatives(value: Any) -> List[str]:
     separator = '|' if '|' in str(value) else ','
     return [t.strip() for t in str(value).split(separator)]
@@ -60,6 +75,9 @@ def parse_query(query_string: str) -> Dict[str, Any]:
     """Parse query string into filter conditions.
 
     Uses the unified query parser from utils.query and keys its conditions by field.
+    A field given once maps to its condition; a field given more than once maps to an
+    ``ALL_OP`` condition that holds each of them, so they AND instead of the last one
+    replacing the rest (BACK-2307).
 
     Args:
         query_string: URL query string (e.g., "lines>50&type=function")
@@ -70,7 +88,13 @@ def parse_query(query_string: str) -> Dict[str, Any]:
     if not query_string:
         return {}
 
-    return {qf.field: _condition(qf.op, qf.value) for qf in parse_query_filters(query_string)}
+    by_key: Dict[str, List[Dict[str, Any]]] = {}
+    for qf in parse_query_filters(query_string):
+        by_key.setdefault(qf.field, []).append(_condition(qf.op, qf.value))
+    return {
+        key: conditions[0] if len(conditions) == 1 else {'op': ALL_OP, 'value': conditions}
+        for key, conditions in by_key.items()
+    }
 
 
 def extract_builtins_param(query_string: str):
@@ -162,7 +186,7 @@ def format_query(query: Dict[str, Any]) -> str:
         return "none"
 
     parts = []
-    for key, condition in query.items():
+    for key, condition in condition_pairs(query):
         op = condition['op']
         val = condition['value']
         if op == 'in':

@@ -140,3 +140,9 @@ def test_git_repeated_key_control(tmp_path):
         git('-c', 'user.name=A', '-c', 'user.email=a@example.com', 'commit', '-q', '-m', msg)
     history = GitAdapter(f'{tmp_path}?type=log&message~=feat&message~=fix').get_structure()['history']
     assert [c['message'] for c in history] == ['feat: fix two']
+
+
+def test_unknown_repeated_key_is_hinted_once(capsys):
+    from reveal.rendering.adapters.ast import _suggest_filter_correction
+    _suggest_filter_correction(format_query(parse_query('type=function&nmae=x&nmae!=y')))
+    assert capsys.readouterr().out.count("'nmae' is not a recognized filter key") == 1

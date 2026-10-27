@@ -245,9 +245,15 @@ class TestCallersFilter(unittest.TestCase):
         fns = _results_by_name(self.path, 'callers=0')
         self.assertIn('standalone', fns)
 
-    def test_callers_lt_2_finds_single_caller(self):
-        fns = _results_by_name(self.path, 'callers<2&callers>0')
+    def test_callers_between_bounds(self):
+        # helper_b has 2 callers, helper_a 3. The old name, callers<2&callers>0 finding
+        # helper_b, passed only because the second callers condition replaced the first
+        # (BACK-2307); both bounds now apply.
+        fns = _results_by_name(self.path, 'callers<3&callers>0')
         self.assertIn('helper_b', fns)
+        self.assertNotIn('helper_a', fns)
+        self.assertNotIn('standalone', fns)
+        self.assertEqual(_results_by_name(self.path, 'callers<2&callers>0'), {})
 
     def test_callers_combined_with_complexity(self):
         # Ensure callers filter can be combined with other filters

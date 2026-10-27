@@ -6,6 +6,7 @@ from typing import Dict, List, Any, Set, Tuple, cast
 from ...conventions import decorator_attributes, decorator_name
 from ...reveal_types import ASTElement
 from ...utils.query import compare_values
+from .queries import ALL_OP, condition_pairs
 
 # Filter keys `matches_filters` special-cases (mapped to a differently-named
 # or derived element field, not a literal dict key) — always valid filter
@@ -65,10 +66,8 @@ def apply_filters(structures: List[Dict[str, Any]], query: Dict[str, Any]) -> Li
     # If name= glob is active but no type= filter, skip imports by default.
     # This avoids cluttering results with import declarations when the user
     # is searching for defs/calls (the common case).
-    exclude_imports = (
-        'name' in query
-        and query['name'].get('op') == 'glob'
-        and 'type' not in query
+    exclude_imports = 'type' not in query and any(
+        key == 'name' and condition.get('op') == 'glob' for key, condition in condition_pairs(query)
     )
 
     results = []
@@ -100,6 +99,8 @@ def outline_plan(query: Dict[str, Any], sort_field: Any) -> Tuple[bool, Any]:
     """
     if sort_field not in OUTLINE_SORT_FIELDS or 'name' not in query or set(query) - {'name', 'type'}:
         return False, None
+    if any(condition.get('op') == ALL_OP for condition in query.values()):
+        return False, None  # a repeated name or type key takes the full path (BACK-2307)
     name = query['name']
     if 'type' in query:
         cond = normalize_type_condition(query['type'])
@@ -128,7 +129,7 @@ def matches_filters(element: ASTElement, query: Dict[str, Any]) -> bool:
         True if element matches all filters
     """
     value: Any
-    for key, condition in query.items():
+    for key, condition in condition_pairs(query):  # a repeated key: each condition must hold
         # Handle special key mappings
         if key == 'type':
             # Map 'type' to 'category'. Categories are plural (functions, classes) but
