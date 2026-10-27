@@ -17,6 +17,10 @@ from reveal.cli.commands.health import HEALTH_VERDICTS, HealthResult, _code_resu
 
 _CHECK_FAIL = {'type': 'ssl_check', 'status': 'failure', 'exit_code': 2,
                'checks': [{'name': 'connection', 'status': 'failure', 'severity': 'critical'}]}
+# The batch / file:// shape: a `results` list of per-certificate rows, no `checks` list (BACK-2288).
+_FILE_CERT_FAIL = {'type': 'ssl_cert_file_validation', 'status': 'failure', 'exit_code': 2,
+                   'summary': {'total': 1, 'passed': 0, 'warnings': 0, 'failures': 1},
+                   'results': [{'cert_path': 'expired.pem', 'status': 'failure', 'issue': 'EXPIRED 11 days ago'}]}
 _CHECK_WARN = {'type': 'domain_health_check', 'status': 'warning', 'exit_code': 1, 'checks': []}
 _CHECK_PASS = {'type': 'domain_health_check', 'status': 'pass', 'exit_code': 0, 'checks': []}
 
@@ -32,6 +36,8 @@ def test_verdict_set_is_closed():
     (_CHECK_WARN, 1, 'finding', 1),
     (_CHECK_FAIL, 2, 'finding', 2),                          # exit 2 carrying a real verdict is not a crash
     (_CHECK_FAIL, 0, 'finding', 2),                          # nor is a verdict the exit code did not carry
+    (_FILE_CERT_FAIL, 2, 'finding', 2),                      # an expired file cert is a finding, not INCOMPLETE
+    (_FILE_CERT_FAIL, 0, 'finding', 2),
     ({'applicable': False}, 0, 'not_applicable', 1),
     ({'meta': {'warnings': [{'type': 'parse_degraded'}]}}, 0, 'incomplete', 1),
     ({'meta': {'errors': ['broken']}}, 0, 'incomplete', 1),
@@ -43,6 +49,19 @@ def test_verdict_set_is_closed():
 def test_uri_children_classify_by_the_answer_not_the_exit_code(data, code, verdict, exit_code):
     result = _uri_health_result('ssl', code, json.dumps(data))
     assert (result.verdict, result.exit_code) == (verdict, exit_code)
+
+
+@pytest.mark.parametrize('error', ['Certificate file not found: x.pem', 'Failed to parse certificate file x.pem'])
+def test_unreadable_cert_file_is_lost_evidence_not_a_finding(error):
+    data = dict(_FILE_CERT_FAIL, results=[{'cert_path': 'x.pem', 'status': 'failure', 'error': error}])
+    result = _uri_health_result('ssl', 2, json.dumps(data))
+    assert (result.verdict, result.exit_code) == ('failed', 2)
+
+
+def test_failure_status_without_a_check_list_is_not_a_finding():
+    # `status: failure` alone (no checks/results list) is not a completed check answer.
+    result = _uri_health_result('ssl', 2, json.dumps({'type': 'x', 'status': 'failure', 'exit_code': 2}))
+    assert (result.verdict, result.exit_code) == ('failed', 2)
 
 
 def test_uri_child_that_printed_no_json_is_failed():

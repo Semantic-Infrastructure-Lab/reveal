@@ -289,7 +289,7 @@ pack:
 | 3 | Incomplete: a file could not be parsed/checked, a health target could not be reached, or a requested `--output json=PATH` could not be written (beats 1) |
 
 `ssl:// --check` uses 0 pass / 1 warning / 2 failure, so an expired cert exits 2 there, while `reveal health`
-reports the same cert as a failed check and exits 3. A critical rule violation under `check` is still 1.
+reports the same cert as a failed check (a finding) and exits 1; `--fail-on none` keeps it advisory. A critical rule violation under `check` is still 1.
 `check` and `health` fail on findings by default. `hotspots` and `pack` are informational:
 they exit 0 unless the request is rejected (2) or the run is incomplete (3), and `hotspots`
 exits 1 only with `--fail-on findings`. Treat 3 as a failure too: it means the finding count

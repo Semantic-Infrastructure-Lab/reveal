@@ -401,15 +401,24 @@ def _child_reason(stderr: Optional[str], first: bool = False) -> str:
 def _failing_check_result(scheme: str, output: str) -> Optional[HealthResult]:
     """A completed health-check answer whose own verdict is ``failure`` (an expired certificate,
     a refused connection, a domain that does not resolve) is a finding about the target,
-    however the child's exit code reads. None when the child printed anything else."""
+    however the child's exit code reads. None when the child printed anything else.
+
+    A completed answer carries its rows in ``checks`` (one host) or ``results`` (a certificate
+    file or batch, BACK-2288); a bare ``status: failure`` with neither is not an answer. A
+    ``results`` row that failed with an ``error`` (file missing, not parseable) never reached a
+    verdict about the certificate: that is lost evidence, not a finding."""
     import json
     try:
         data = json.loads(output)
     except (ValueError, TypeError):
         return None
-    if not (isinstance(data, dict) and isinstance(data.get('checks'), list) and data.get('status') == 'failure'):
+    if not isinstance(data, dict) or data.get('status') != 'failure':
         return None
-    failing = sum(1 for c in data['checks'] if isinstance(c, dict) and c.get('status') == 'failure')
+    rows = next((data[key] for key in ('checks', 'results') if isinstance(data.get(key), list)), None)
+    if rows is None or any(isinstance(r, dict) and r.get('status') == 'failure' and 'error' in r
+                           for r in data.get('results', ())):
+        return None
+    failing = sum(1 for c in rows if isinstance(c, dict) and c.get('status') == 'failure')
     return HealthResult(2, f"{scheme}: checks failed" + (f" ({failing} failing)" if failing else ""),
                         'ok', verdict='finding')
 
