@@ -1,7 +1,8 @@
 """Central configuration defaults for Reveal.
 
 All magic numbers and thresholds should be defined here.
-These can be overridden by config files and environment variables.
+Rule settings can be overridden by config files; the REVEAL_* variables that
+override them are listed once, in ``reveal/config.py`` ``_ENV_LAYER``.
 
 Usage:
     from reveal.defaults import RuleDefaults
@@ -341,15 +342,3 @@ CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB = (
     "no language-specific conventions for this language: constructors and framework-invoked "
     "methods may be listed"
 )
-
-
-# Environment variable overrides
-# Maps env var names to (class_name, attribute_name)
-ENV_OVERRIDES = {
-    'REVEAL_C901_THRESHOLD': ('RuleDefaults', 'CYCLOMATIC_COMPLEXITY'),
-    'REVEAL_C905_MAX_DEPTH': ('RuleDefaults', 'NESTING_DEPTH_MAX'),
-    'REVEAL_E501_MAX_LENGTH': ('RuleDefaults', 'MAX_LINE_LENGTH'),
-    'REVEAL_M101_WARN': ('RuleDefaults', 'FILE_LENGTH_WARN'),
-    'REVEAL_M101_ERROR': ('RuleDefaults', 'FILE_LENGTH_ERROR'),
-    'REVEAL_DIR_LIMIT': ('DisplayDefaults', 'TREE_DIR_LIMIT'),
-}
