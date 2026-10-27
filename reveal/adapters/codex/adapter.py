@@ -6,7 +6,7 @@ import os
 import re
 import sqlite3
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -146,10 +146,15 @@ class CodexAdapter(ResourceAdapter):
     # SQLite helpers
     # ------------------------------------------------------------------
 
-    def _find_session_row(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Look up a session row by full or prefix UUID."""
+    def _find_session_row(self, session_id: str) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+        """Look up a session row by full or prefix UUID.
+
+        Returns ``(row, [])`` for a unique match, ``(None, [])`` for none, and
+        ``(None, candidate_ids)`` when a prefix matches several sessions: picking
+        one of them silently opened an arbitrary session (BACK-2213 lane C B3).
+        """
         if not self.CODEX_DB.exists():
-            return None
+            return None, []
         try:
             conn = sqlite3.connect(str(self.CODEX_DB))
             conn.row_factory = sqlite3.Row
@@ -160,16 +165,18 @@ class CodexAdapter(ResourceAdapter):
                     (session_id,)
                 ).fetchone()
                 if row is None and len(session_id) < 36:
-                    # Prefix match
-                    row = conn.execute(
-                        f'SELECT * FROM threads WHERE id LIKE ? AND {_USER_FILTER} LIMIT 1',
+                    rows = conn.execute(
+                        f'SELECT * FROM threads WHERE id LIKE ? AND {_USER_FILTER} ORDER BY id LIMIT 6',
                         (session_id + '%',)
-                    ).fetchone()
-                return dict(row) if row else None
+                    ).fetchall()
+                    if len(rows) > 1:
+                        return None, [r['id'] for r in rows]
+                    row = rows[0] if rows else None
+                return (dict(row) if row else None), []
             finally:
                 conn.close()
         except sqlite3.Error:
-            return None
+            return None, []
 
     # ------------------------------------------------------------------
     # JSONL loading
@@ -288,11 +295,16 @@ class CodexAdapter(ResourceAdapter):
             base['error'] = f'Codex DB not found: {self.CODEX_DB}'
             return base
 
-        session_row = self._find_session_row(session_id)
+        session_row, candidates = self._find_session_row(session_id)
         if session_row is None:
             base = self._get_contract_base()
             base['type'] = 'codex_error'
-            base['error'] = f'Session not found: {session_id}'
+            if candidates:
+                more = ', ...' if len(candidates) > 5 else ''
+                base['error'] = (f'Ambiguous session prefix {session_id}: matches '
+                                 f'{", ".join(candidates[:5])}{more}; use more characters')
+            else:
+                base['error'] = f'Session not found: {session_id}'
             return base
 
         jsonl_path = self._find_jsonl_for_session(session_row)
