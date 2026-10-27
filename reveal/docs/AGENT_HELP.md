@@ -1569,7 +1569,7 @@ reveal overview . --no-git         # Skip git history (useful in CI or non-git d
 reveal overview . --format json    # Machine-readable output
 ```
 
-**Output sections:** codebase stats (files, lines, functions, classes) · language breakdown · quality pulse (avg score, hotspot count) · top hotspots with `→ reveal <file>` hints · top complex functions · architecture (entry points, core abstractions, component cohesion bars, circular count) · recent git commits with age labels. Skip architecture with `--no-imports`. The architecture section states its counting rule (`Rule:` lines, `edge_rule` in JSON): all static import edges except `TYPE_CHECKING` ones, function-level imports included; circulars use the load-time view.
+**Output sections:** codebase stats (files, lines, functions, classes) · language breakdown · quality pulse (avg score, hotspot count) · top hotspots with `→ reveal <file>` hints (test files left out and counted; `--tests include` ranks them) · top complex functions · architecture (entry points, core abstractions, component cohesion bars, `n/a` for directories mostly in Go, Java, Kotlin, C#, Scala or Swift, circular count) · recent git commits with age labels. Skip architecture with `--no-imports`. The architecture section states its counting rule (`Rule:` lines, `edge_rule` in JSON): all static import edges except `TYPE_CHECKING` ones, function-level imports included; circulars use the load-time view.
 
 **Use case:** Fast orientation for an unfamiliar codebase. Combined entry point before deciding which area to investigate with `reveal hotspots`, `reveal imports`, or `ast://`.
 
@@ -1586,7 +1586,7 @@ reveal architecture src/ --no-imports  # Skip import analysis (faster, no graph)
 reveal architecture src/ --against main  # Diff against a git ref
 ```
 
-**Output sections:** entry points (fan-in=0, by fan-out) · core abstractions (most imported) · component cohesion bars · risks (circular groups, high-complexity entry points, load-bearing files) · next commands (dynamically generated from findings). Every count states its rule (`Rule:` lines, `edge_rule` and `edge_rule_sections` in JSON): all static import edges except `TYPE_CHECKING` ones, function-level imports included (entry points ignore importers under a test path); cycles use the load-time view.
+**Output sections:** entry points (fan-in=0, by fan-out) · core abstractions (most imported) · component cohesion bars (`n/a` for directories mostly in Go, Java, Kotlin, C#, Scala or Swift, whose files share a package without importing) · risks (circular groups, high-complexity entry points, load-bearing files) · next commands (dynamically generated from findings). Every count states its rule (`Rule:` lines, `edge_rule` and `edge_rule_sections` in JSON): all static import edges except `TYPE_CHECKING` ones, function-level imports included (entry points ignore importers under a test path); cycles use the load-time view.
 
 **`--against REF` → architectural diff against a git ref**
 ```bash
