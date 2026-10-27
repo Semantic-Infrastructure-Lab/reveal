@@ -356,6 +356,10 @@ The metrics adapter supports **unified query operators** for flexible filtering:
 | `classes` | `elements.classes` | `classes!=0` |
 | `quality` | `quality.score` | `quality<70` |
 
+A dotted path into a file's record (`lines.total`, `quality.avg_function_length`) filters too. When
+nothing matches and a filter names a field no scanned file has (`complxity>5`, `complxity=5..15`),
+the answer carries an `unknown_filter_field` warning naming it: the zero is likely a typo.
+
 ### Combining Filters
 
 Use `&` to combine multiple filters:
