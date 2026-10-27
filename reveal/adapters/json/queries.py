@@ -169,7 +169,8 @@ def apply_result_control(
             field = result_control.sort_field
             # Null and missing values go last in either direction, in source order. They
             # were keyed (0, '') when descending and compared with (0, 30) (BACK-2276).
-            valued, nulls = [], []
+            valued: List[Any] = []
+            nulls: List[Any] = []
             for item in controlled:
                 (nulls if get_field_value_func(item, field) is None else valued).append(item)
             controlled = sorted(valued, key=lambda item: get_field_value_func(item, field),
