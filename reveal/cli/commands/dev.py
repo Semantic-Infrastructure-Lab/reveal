@@ -2,6 +2,7 @@
 
 import argparse
 from argparse import Namespace
+from typing import Any, Dict
 
 
 def create_dev_parser() -> argparse.ArgumentParser:
@@ -72,6 +73,24 @@ def run_dev(args: Namespace) -> None:
         _run_inspect_config()
 
 
+def _print_config_files(sources: Dict[str, Any], meta: Dict[str, Any]) -> None:
+    """The config files read, highest precedence first, then any that could not be loaded."""
+    files = [('custom', sources['custom_config'])] if sources['custom_config'] else []
+    files += [('project', p['path'] + (' (root)' if p['root'] else '')) for p in sources['project_configs']]
+    files += [(layer, sources[f'{layer}_config']) for layer in ('user', 'system') if sources[f'{layer}_config']]
+    if meta['no_config_mode']:
+        print("Config files: skipped (REVEAL_NO_CONFIG=1)")
+    elif files:
+        print("Config files read (highest precedence first):")
+        for layer, path in files:
+            print(f"  {layer:<8} {path}")
+    else:
+        print("No config files found.")
+    for failure in sources['load_failures']:
+        print(f"  could not load {failure['path']}: {failure['reason']} (its settings are not applied)")
+    print()
+
+
 def _run_inspect_config() -> None:
     """Show the config in effect for the current directory: the files read, the REVEAL_*
     variables applied and the merged settings (the same data as ``reveal reveal://config``)."""
@@ -87,21 +106,7 @@ def _run_inspect_config() -> None:
     print(f"  Project root: {meta['project_root']}")
     print()
 
-    # highest precedence first
-    files = ([('custom', sources['custom_config'])] if sources['custom_config'] else [])
-    files += [('project', p['path'] + (' (root)' if p['root'] else '')) for p in sources['project_configs']]
-    files += [(layer, sources[f'{layer}_config']) for layer in ('user', 'system') if sources[f'{layer}_config']]
-    if meta['no_config_mode']:
-        print("Config files: skipped (REVEAL_NO_CONFIG=1)")
-    elif files:
-        print("Config files read (highest precedence first):")
-        for layer, path in files:
-            print(f"  {layer:<8} {path}")
-    else:
-        print("No config files found.")
-    for failure in sources['load_failures']:
-        print(f"  could not load {failure['path']}: {failure['reason']} (its settings are not applied)")
-    print()
+    _print_config_files(sources, meta)
 
     if sources['env_vars']:
         print("Environment variables:")

@@ -542,7 +542,7 @@ class RevealConfig:
         6. System config
         7. Built-in defaults
         """
-        configs = []
+        configs: List[Dict[str, Any]] = []
         read: List[ConfigSource] = sources if sources is not None else []
 
         if not no_config:
@@ -551,34 +551,16 @@ class RevealConfig:
 
             if custom_config_path:
                 # Load only the specified config file
-                custom_config, why = cls._load_file_outcome(Path(custom_config_path), failures)
-                if custom_config is not None:
-                    read.append(ConfigSource('custom', Path(custom_config_path),
-                                             bool(custom_config.get('root'))))
-                if custom_config:
-                    configs.append(custom_config)
-                elif custom_config is None and why is None:
+                custom_config, why = cls._read_layer('custom', Path(custom_config_path),
+                                                     configs, read, failures)
+                if custom_config is None and why is None:
                     logger.warning(
                         f"REVEAL_CONFIG specified but file not found: {custom_config_path}"
                     )
             else:
-                # Normal config discovery
-                # 1. System config
-                system_path = Path('/etc/reveal/config.yaml')
-                system_config, _why = cls._load_file_outcome(system_path, failures)
-                if system_config is not None:
-                    read.append(ConfigSource('system', system_path, bool(system_config.get('root'))))
-                if system_config:
-                    configs.append(system_config)
-
-                # 2. User config
-                user_config_path = cls._get_user_config_path()
-                user_config = cls._load_file_outcome(user_config_path, failures)[0] \
-                    if user_config_path.exists() else None
-                if user_config is not None:
-                    read.append(ConfigSource('user', user_config_path, bool(user_config.get('root'))))
-                if user_config:
-                    configs.append(user_config)
+                # Normal config discovery: 1. system config, 2. user config
+                cls._read_layer('system', Path('/etc/reveal/config.yaml'), configs, read, failures)
+                cls._read_layer('user', cls._get_user_config_path(), configs, read, failures)
 
                 # 3. Project configs (walk up from start_path)
                 project_read: List[ConfigSource] = []
@@ -601,6 +583,19 @@ class RevealConfig:
             merged = deep_merge(merged, config)
 
         return merged
+
+    @classmethod
+    def _read_layer(cls, layer: str, path: Path, configs: List[Dict[str, Any]],
+                    read: List[ConfigSource], failures: Optional[List[Tuple[str, str]]]
+                    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Load one config file: record it in *read* when it loads (an empty file included)
+        and add it to *configs* when it sets anything. Returns ``_load_file_outcome``'s pair."""
+        config, why = cls._load_file_outcome(path, failures)
+        if config is not None:
+            read.append(ConfigSource(layer, path, bool(config.get('root'))))
+        if config:
+            configs.append(config)
+        return config, why
 
     @classmethod
     def _try_load_pyproject_reveal(cls, pyproject: Path,
