@@ -186,6 +186,15 @@ reveal claude://session/infernal-earth-0118/messages
 
 **Returns**: Assistant narrative text per turn (add `?raw` for every raw record unfiltered — text, thinking, tool_use, tool_result all included)
 
+To read the two together, one turn at a time, use the prompt/answer pairing or the composed digest:
+
+```bash
+reveal claude://session/infernal-earth-0118/exchanges   # each prompt next to the final text answer it got
+reveal claude://session/infernal-earth-0118/digest      # overview + prompts + narrative in one call
+```
+
+**Returns**: `/exchanges` pairs each human prompt with the assistant's last text answer before the next prompt (thinking-only and tool-only turns skipped; add `?full` to lift the 600-character cut). `/digest` composes whole-session sections instead of joining prompt to answer.
+
 ### 11. Search Session Content
 
 Find a term across all text, thinking blocks, and tool inputs:

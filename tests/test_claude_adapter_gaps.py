@@ -2131,6 +2131,24 @@ class TestBack346MessagesDiscoverable:
         assert 'claude_messages' in types
 
 
+class TestBack2208ExchangesDiscoverable:
+    """BACK-2208: help://claude never mentioned /exchanges (or /digest, which it is contrasted with)."""
+
+    def test_exchanges_and_digest_in_help_examples(self):
+        from reveal.adapters.claude.adapter import _HELP_EXAMPLES
+        uris = [e.get('uri', '') for e in _HELP_EXAMPLES]
+        assert any(u.endswith('/exchanges') for u in uris)
+        assert any(u.endswith('/digest') for u in uris)
+
+    def test_help_claude_prints_them(self):
+        import subprocess
+        import sys as _sys
+        proc = subprocess.run([_sys.executable, '-m', 'reveal', 'help://claude'], capture_output=True,
+                              text=True, encoding='utf-8')
+        assert proc.returncode == 0, proc.stderr
+        assert '/exchanges' in proc.stdout and '/digest' in proc.stdout
+
+
 # ─── BACK-353: ?summary=true / ?errors=true / ?timeline=true ─────────────────
 
 class TestBack353ValueFormQueryParams:

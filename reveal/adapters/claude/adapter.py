@@ -216,6 +216,14 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Human-typed prompts only (excludes tool-result wrapper messages)'
     },
     {
+        'uri': 'claude://session/infernal-earth-0118/exchanges',
+        'description': 'Each human prompt paired with the assistant\'s final text answer to it — "what was asked, what did it finally say" per turn, without the tool and thinking turns in between'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/digest',
+        'description': 'Composed readable view: overview + human prompts + assistant narrative in one call — start here for "what happened in this session"'
+    },
+    {
         'uri': 'claude://session/infernal-earth-0118/prompts?raw',
         'description': 'Raw role=user records, unfiltered: initial prompts + tool-result turns — bulk forensic scan, prefer /prompts for reading intent'
     },
