@@ -1263,12 +1263,12 @@ class TestHandleFile(unittest.TestCase):
         import sys as _sys
         from pathlib import Path
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outdir:
             for i in range(5):
                 (Path(tmp) / f'm{i}.py').write_text("def f(a):\n    return eval(a)\n")
 
             def artifact_files(*extra):
-                out = Path(tmp) / 'a.json'
+                out = Path(outdir) / 'a.json'  # outside the checked tree: a report inside it is checked too
                 subprocess.run(
                     [_sys.executable, '-m', 'reveal', 'check', tmp, '--exit-zero',
                      '--output', f'json={out}', *extra],

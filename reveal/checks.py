@@ -322,7 +322,7 @@ def _format_detections_text(
         print(f"{path}: ⚠️  {note}")
     if coverage:
         from reveal.rendering.adapters.reveal import render_check_coverage
-        render_check_coverage(coverage, selected=coverage_selected)
+        render_check_coverage(coverage, selected=coverage_selected, said=disclosures or ())
 
     if not detections:
         if parse_degraded:

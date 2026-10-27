@@ -1329,7 +1329,7 @@ def _check_views(formats, checked: List[_CheckedFile], files: List[Path], direct
             def render_text(_result: dict, text=text, limit=limit) -> None:
                 _print_text_report(text, limit, no_group=getattr(args, 'no_group', False),
                                    no_snippets=no_snippets, max_snippet_chars=max_snippet_chars)
-                render_check_coverage(coverage, selected=bool(select))
+                render_check_coverage(coverage, selected=bool(select), said=disclosures)
                 _print_text_summary(
                     len(files), tally.files_with_issues, tally.total_issues, directory, config,
                     files_errored=tally.files_errored, files_degraded=tally.files_degraded,

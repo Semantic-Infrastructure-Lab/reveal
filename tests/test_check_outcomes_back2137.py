@@ -145,3 +145,22 @@ class TestSiblingSurfaceUnchanged:
         payload = json.loads(result.stdout)
         assert set(payload["coverage"]) == {"scope", "rules", "run", "skipped", "failed", "unavailable"}
         assert all("files" not in entry for entry in payload["coverage"]["rules"])
+
+
+class TestRendererRepeatedReasons:
+    def _coverage(self):
+        row = {"rule": "I007", "status": "unavailable", "reason": "scan lost: dir x",
+               "files": {"run": 0, "skipped": 0, "unavailable": 1, "failed": 0}}
+        return {"scope": "s", "rules": [row], "run": 0, "skipped": 0, "failed": 0, "unavailable": 1,
+                "files_covered": 1}
+
+    def test_a_reason_the_scan_disclosures_already_printed_is_not_printed_twice(self, capsys):
+        from reveal.rendering.adapters.reveal import render_check_coverage
+        render_check_coverage(self._coverage(), selected=False, said=["W: scan lost: dir x (3 events)"])
+        out = capsys.readouterr().out
+        assert "I007 unavailable on 1 file" in out and "scan lost" not in out
+
+    def test_an_unsaid_reason_is_printed(self, capsys):
+        from reveal.rendering.adapters.reveal import render_check_coverage
+        render_check_coverage(self._coverage(), selected=False, said=["unrelated"])
+        assert "I007 unavailable on 1 file: scan lost: dir x" in capsys.readouterr().out

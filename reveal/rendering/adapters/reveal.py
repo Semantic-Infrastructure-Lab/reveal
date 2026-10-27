@@ -1,7 +1,7 @@
 """Renderer for reveal:// internal structure adapter."""
 
 from collections import defaultdict
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Sequence, Union
 
 from reveal.utils import print_json_result
 
@@ -10,13 +10,15 @@ def _plural(n: int, noun: str) -> str:
     return f"{n} {noun}{'' if n == 1 else 's'}"
 
 
-def _file_outcome_line(entry: Dict[str, Any], selected: bool) -> str:
+def _file_outcome_line(entry: Dict[str, Any], selected: bool, said: Sequence[str] = ()) -> str:
     """One rule's per-file outcome line for a check on files, or '' when it has nothing to say.
 
     A rule that was unavailable (or crashed) on any file always speaks: its "no findings" is not a
     pass. What it was not applicable to speaks only when the run *selected* rules (--select), where
     the list is short by construction; the default view would otherwise print the ~50 rules aimed at
-    other targets (AGENT_DEVELOPER_GUIDELINES item 8). JSON carries every rule either way."""
+    other targets (AGENT_DEVELOPER_GUIDELINES item 8). JSON carries every rule either way. A reason
+    the output already printed in full (*said*: the scan disclosures, which a rule-wide scan loss
+    reports under the same words) is not printed a second time."""
     files = entry["files"]
     parts = []
     if files["unavailable"]:
@@ -31,18 +33,19 @@ def _file_outcome_line(entry: Dict[str, Any], selected: bool) -> str:
         parts.append(f"not applicable to {files['skipped']}")
     if selected and entry.get("subjects", {}).get("skipped"):
         parts.append(f"{_plural(entry['subjects']['skipped'], 'item')} within not applicable")
-    reason = f": {entry['reason']}" if entry["reason"] else ""
+    repeated = any(entry["reason"] in line for line in said)
+    reason = f": {entry['reason']}" if entry["reason"] and not repeated else ""
     return f"  {entry['rule']} {', '.join(parts)}{reason}"
 
 
-def render_check_coverage(coverage: Dict[str, Any], selected: bool = True) -> None:
+def render_check_coverage(coverage: Dict[str, Any], selected: bool = True, said: Sequence[str] = ()) -> None:
     """Print a check's ``coverage`` block: the reveal:// self-check's flat ledger in full, or a
     file / directory check's per-rule aggregate (``selected``: --select named the rules; see
     ``_file_outcome_line``). Nothing prints when a file check has nothing to disclose."""
     if not coverage:
         return
     flat = "files_covered" not in coverage
-    lines = [] if flat else [ln for ln in (_file_outcome_line(e, selected) for e in coverage["rules"]) if ln]
+    lines = [] if flat else [ln for ln in (_file_outcome_line(e, selected, said) for e in coverage["rules"]) if ln]
     if not flat and not lines:
         return
     print(f"Checks: {coverage['run']} run, {coverage['skipped']} skipped, {coverage['failed']} failed, "
