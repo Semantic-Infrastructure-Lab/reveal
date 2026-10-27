@@ -437,7 +437,7 @@ class TestNginxUriAdapterSchema:
         expected = {
             'nginx_sites_overview', 'nginx_vhost_summary', 'nginx_vhost_not_found',
             'nginx_vhost_ports', 'nginx_vhost_upstream', 'nginx_vhost_auth',
-            'nginx_vhost_locations', 'nginx_vhost_config',
+            'nginx_vhost_locations', 'nginx_vhost_config', 'nginx_fleet_audit',
         }
         assert types == expected
 
