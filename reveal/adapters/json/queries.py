@@ -3,7 +3,7 @@
 from typing import Any, List, Dict
 
 from ...utils.query import compare_values, ResultControl, unknown_sort_field_warning
-from ...utils.query_control import sort_nulls_last
+from ...utils.query_control import sort_failed_warning, sort_nulls_last
 # find_unknown_filter_fields is shared (utils/query_eval, BACK-2299); json/adapter.py reads it from here.
 from ...utils.query_eval import find_unknown_filter_fields, presence_matches  # noqa: F401
 
@@ -140,10 +140,7 @@ def apply_result_control(
         except TypeError as e:
             # Values of types that don't compare (a number and a string): the array
             # stays in source order, and the result says it is not sorted (BACK-1614).
-            metadata['warnings'] = [{
-                'type': 'sort_failed',
-                'message': f"Not sorted by '{result_control.sort_field}': {e}",
-            }]
+            metadata['warnings'] = [sort_failed_warning(result_control.sort_field, e)]
 
     # Offset
     if result_control.offset is not None and result_control.offset > 0:
