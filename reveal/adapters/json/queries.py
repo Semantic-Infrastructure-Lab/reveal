@@ -3,6 +3,7 @@
 from typing import Any, List, Dict, Set
 
 from ...utils.query import compare_values, ResultControl, unknown_sort_field_warning
+from ...utils.query_control import sort_nulls_last
 from ...utils.query_eval import presence_matches
 
 
@@ -169,12 +170,8 @@ def apply_result_control(
             field = result_control.sort_field
             # Null and missing values go last in either direction, in source order. They
             # were keyed (0, '') when descending and compared with (0, 30) (BACK-2276).
-            valued: List[Any] = []
-            nulls: List[Any] = []
-            for item in controlled:
-                (nulls if get_field_value_func(item, field) is None else valued).append(item)
-            controlled = sorted(valued, key=lambda item: get_field_value_func(item, field),
-                                reverse=result_control.sort_descending) + nulls
+            controlled = sort_nulls_last(controlled, lambda item: get_field_value_func(item, field),
+                                         result_control.sort_descending)
         except TypeError as e:
             # Values of types that don't compare (a number and a string): the array
             # stays in source order, and the result says it is not sorted (BACK-1614).

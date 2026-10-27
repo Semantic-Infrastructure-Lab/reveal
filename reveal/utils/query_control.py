@@ -212,35 +212,22 @@ def _detect_value_types(items: List[Dict[str, Any]], field: str) -> tuple:
     return has_numbers, has_strings
 
 
-def _create_sort_key(field: str, has_mixed_types: bool, sort_descending: bool):
-    """Create sort key function for given field and type context."""
-    def sort_key(item):
-        value = item.get(field)
-
-        if has_mixed_types:
-            value = _safe_numeric(value)
-
-        if value is None:
-            return float('inf') if not sort_descending else float('-inf')
-
-        return value
-
-    return sort_key
-
-
 def _apply_sorting(items: List[Dict[str, Any]], field: str, descending: bool) -> List[Dict[str, Any]]:
-    """Apply sorting to items with mixed-type handling and fallback."""
+    """Sort items by ``field``, nulls last (``sort_nulls_last``). Numbers beside text compare as
+    numbers, text that is not a number counting as null; values that still do not compare
+    (a dict and a number) order as text."""
     has_numbers, has_strings = _detect_value_types(items, field)
-    has_mixed = has_numbers and has_strings
-
-    sort_key = _create_sort_key(field, has_mixed, descending)
+    if has_numbers and has_strings:
+        def value(item: Dict[str, Any]) -> Any:
+            return _safe_numeric(item.get(field))
+    else:
+        def value(item: Dict[str, Any]) -> Any:
+            return item.get(field)
 
     try:
-        items.sort(key=sort_key, reverse=descending)
+        return sort_nulls_last(items, value, descending)
     except TypeError:
-        items.sort(key=lambda item: str(item.get(field) or ''), reverse=descending)
-
-    return items
+        return sort_nulls_last(items, lambda item: None if value(item) is None else str(value(item)), descending)
 
 
 def _apply_offset_and_limit(items: List[Dict[str, Any]], offset: int, limit: Optional[int]) -> List[Dict[str, Any]]:

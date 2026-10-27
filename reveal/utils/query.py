@@ -39,7 +39,7 @@ from .query_control import (  # noqa: F401
     parse_result_control,
     _safe_numeric,
     _detect_value_types,
-    _create_sort_key,
+    sort_nulls_last,
     _apply_sorting,
     _apply_offset_and_limit,
     apply_result_control,
