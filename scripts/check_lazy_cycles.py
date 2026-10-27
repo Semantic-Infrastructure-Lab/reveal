@@ -70,17 +70,20 @@ def _import_lines(edge: Edge) -> List[str]:
         return []
     text = source.read_text(encoding='utf-8').split('\n')
     return [f'{importer}:{n}: {line.strip()}' for n, line in enumerate(text, 1)
-            if line.startswith((' ', '\t')) and 'import' in line and stem in line]
+            if line.startswith((' ', '\t')) and line.strip().startswith(('from ', 'import ')) and stem in line]
 
 
 def compare(files: int, edges: Set[Edge], base_files: int, base_edges: Set[Edge]) -> List[str]:
     problems = []
     if files > base_files:
         problems.append(f'files in lazy-import cycles rose: {base_files} -> {files}')
-    for edge in sorted(edges - base_edges):
-        where = _import_lines(edge) or [f'{edge[0]} -> {edge[1]}']
-        problems.append('new lazy import inside a cycle group (import it the other way round, or move the '
-                        'function down a layer): ' + '; '.join(where))
+    new = sorted(edges - base_edges)
+    if new:
+        # One added deferred import can pull a whole group back in, so every lazy edge of that group
+        # is listed; the one the change added is among them (usually in a file the change touched).
+        problems.append(f'{len(new)} lazy import edge(s) now inside a cycle group and not in the baseline '
+                        '(import the other way round, or move the function down a layer):')
+        problems.extend('  ' + '; '.join(_import_lines(edge) or [f'{edge[0]} -> {edge[1]}']) for edge in new)
     gone = sorted(base_edges - edges)
     if gone or files < base_files:
         problems.append(f'baseline is stale ({len(gone)} listed edge(s) no longer close a cycle, files '

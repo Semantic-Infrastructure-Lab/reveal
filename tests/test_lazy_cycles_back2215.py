@@ -55,6 +55,7 @@ def test_compare_names_a_new_edge_a_rise_and_a_stale_list():
     assert lc.compare(2, base, 2, base) == []
     rose = lc.compare(3, base | {('c.py', 'd.py')}, 2, base)
     assert any('rose: 2 -> 3' in p for p in rose)
-    assert any('new lazy import inside a cycle group' in p and 'c.py -> d.py' in p for p in rose)
+    assert any('1 lazy import edge(s) now inside a cycle group' in p for p in rose)
+    assert any(p.strip() == 'c.py -> d.py' for p in rose)
     stale = lc.compare(0, set(), 2, base)
     assert len(stale) == 1 and 'baseline is stale (1 listed edge(s)' in stale[0]
