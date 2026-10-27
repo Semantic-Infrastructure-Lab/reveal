@@ -170,8 +170,10 @@ def surface_text(report: Dict[str, Any], top: Optional[int] = None) -> str:
             lines.append(f"{label} ({len(entries)}):")
             lines.extend(text for text in (_entry(key, e) for e in shown) if text is not None)
             if len(entries) > len(shown):
+                # A --type filter leaves only its own category: don't suggest it again.
+                by_type = f" or --type {key}" if len(surfaces) > 1 else ''
                 lines.append(f"  … {len(entries) - len(shown)} more "
-                             f"(use --top {len(entries)} or --type {key} to see all)")
+                             f"(use --top {len(entries)}{by_type} to see all)")
             lines.append('')
         lines.extend([_TAXONOMY_NOTE, ''])
     return '\n'.join(lines) + '\n'
