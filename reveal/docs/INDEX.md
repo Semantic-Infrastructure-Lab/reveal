@@ -49,8 +49,6 @@ They live in the `adapters/` directory.
 | [CODEX_ADAPTER_GUIDE.md](adapters/CODEX_ADAPTER_GUIDE.md) | OpenAI Codex CLI session analysis |
 | [CONTRACTS_ADAPTER_GUIDE.md](adapters/CONTRACTS_ADAPTER_GUIDE.md) | Contracts and architectural seams |
 | [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md) | cPanel user environment: domains, SSL, ACL health |
-| [DEPENDS_ADAPTER_GUIDE.md](adapters/DEPENDS_ADAPTER_GUIDE.md) | Reverse module dependency graph: who imports this module |
-| [DEPS_ADAPTER_GUIDE.md](adapters/DEPS_ADAPTER_GUIDE.md) | Dependency health: third-party packages, circular and unused imports |
 | [DIFF_ADAPTER_GUIDE.md](adapters/DIFF_ADAPTER_GUIDE.md) | Git diff analysis and structural comparison |
 | [DOMAIN_ADAPTER_GUIDE.md](adapters/DOMAIN_ADAPTER_GUIDE.md) | Domain, DNS and WHOIS analysis |
 | [ENV_ADAPTER_GUIDE.md](adapters/ENV_ADAPTER_GUIDE.md) | Environment variable analysis and validation |
@@ -73,6 +71,7 @@ They live in the `adapters/` directory.
 **Pointer stubs** (kept because rule V024 requires a guide file for every registered adapter):
 [CLASSIFY](adapters/CLASSIFY_ADAPTER_GUIDE.md) and [STATS](adapters/STATS_ADAPTER_GUIDE.md) are retired into `metrics://`;
 [TRACE](adapters/TRACE_ADAPTER_GUIDE.md) into `calls://?callees=&depth=&detail`;
+[DEPS](adapters/DEPS_ADAPTER_GUIDE.md) and [DEPENDS](adapters/DEPENDS_ADAPTER_GUIDE.md) into `imports://` (`?external`, `?circular`, `?unused`, `?importers`);
 [TESTABILITY](adapters/TESTABILITY_ADAPTER_GUIDE.md) into `patches://`;
 [PACK](adapters/PACK_ADAPTER_GUIDE.md) points at the `pack` section of the Subcommands guide.
 

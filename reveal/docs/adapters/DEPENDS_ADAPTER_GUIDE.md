@@ -1,407 +1,57 @@
 ---
-title: Depends Adapter Guide (depends://)
+title: depends:// Adapter Guide (retired)
 category: guide
-beth_topics:
-  - reveal
-  - depends-adapter
-  - reverse-imports
-  - dependency-graph
-  - impact-analysis
----
-# Depends Adapter Guide (depends://)
-
-**Adapter**: `depends://`
-**Purpose**: Reverse module dependency graph — find everything that imports a given module
-**Type**: Analysis adapter (project-level index)
-**Output Formats**: text, json, dot (Graphviz)
-
-**Retired spelling.** `depends://` prints a note naming its replacement,
-`imports://<path>?importers` (one file: `imports://<path>/<file>?importers`, which lists each importer
-with its import line, scope and cascade stage), and otherwise answers as before: the same
-`module_dependents` and `dependency_summary` shapes, warnings and exit code (0 also on a partial
-answer, where `imports://` exits 3) until the cut. The graph is the `imports://` engine's build,
-under depends' own scan root, 5,000-file cap and, for a file target, its own extension family.
-
-## Table of Contents
-
-1. [Quick Start](#quick-start)
-2. [URI Syntax](#uri-syntax)
-3. [How It Works](#how-it-works)
-4. [Query Parameters](#query-parameters)
-5. [Output Formats](#output-formats)
-6. [Workflows](#workflows)
-7. [Relationship to imports://](#relationship-to-imports)
-8. [Limitations](#limitations)
-9. [FAQ](#faq)
-10. [Related Documentation](#related-documentation)
-
 ---
 
-## Quick Start
-
-```bash
-# Who imports utils.py? (anywhere in the project)
-reveal depends://src/utils.py
-
-# Everything that imports any module in models/
-reveal depends://src/models/
-
-# Top 10 most-imported modules (high-coupling candidates)
-reveal 'depends://src?top=10'
-
-# Full reverse dependency graph in GraphViz DOT format
-reveal 'depends://src?format=dot' | dot -Tsvg > depends_graph.svg
-```
-
-**Why use depends://?**
-- **Impact analysis**: Before changing a module, find every file that will be affected
-- **Refactoring safety**: Know what breaks if you move or rename a module
-- **Coupling metrics**: High dependent counts signal fragile modules — refactor candidates
-- **Dead code detection**: A module with no dependents may be unused
-- **Architecture documentation**: Visualize the dependency structure of your codebase
-
----
-
-## URI Syntax
-
-```
-# Find all importers of a specific file
-depends://<file.py>
-
-# Summarize all reverse edges in a directory
-depends://<directory/>[?top=N][?format=dot]
-```
-
-| Component | Description |
-|-----------|-------------|
-| `path` | File (returns importers of that file) or directory (returns summary) |
-| `top` | Cap the list: a directory's N most-imported modules, or a file's first N importers |
-| `format` | Output format: `text` (default), `json`, or `dot` (Graphviz) |
-| `root` | Pin the scan root to `DIR` for this invocation (see below) |
-
-### File vs Directory
-
-| Target | Output type | What you get |
-|--------|-------------|--------------|
-| `depends://src/utils.py` | `module_dependents` | Every file that imports `utils.py`, with line numbers |
-| `depends://src/models/` | `dependency_summary` | All modules in `models/` ranked by how many files import them |
-
----
-
-## How It Works
-
-`depends://` builds the same import graph as `imports://` but queries it in **reverse**.
-
-1. Scans from the project root (detected via `pyproject.toml`, `setup.py`, `.git`, etc.)
-2. Extracts all import statements across supported languages
-3. Resolves relative imports to absolute paths
-4. Inverts the graph: for each `A imports B`, records `B has dependent A`
-5. Returns the dependent set for the requested target
-
-The full project scan makes the results comprehensive — callers outside the target directory are still found.
-
----
-
-## Query Parameters
-
-### `top`
-
-On a directory, limit the summary to the N most-imported modules (`Top N of M module(s)`) -- useful for finding high-coupling candidates. On a file, show the first N importers (`... (showing N)`). `--limit N` becomes `top=N`; `--limit 0` means no cap.
-
-```bash
-reveal 'depends://src?top=5'
-reveal 'depends://src?top=20'
-```
-
-### `format`
-
-Output format for directory mode:
-
-```bash
-reveal 'depends://src?format=dot'    # GraphViz DOT (pipe to dot/graphviz)
-reveal 'depends://src?format=text'   # Default text table
-```
-
-### `root`
-
-Pin the scan root to `DIR` for this one invocation — the highest-precedence
-lever (it beats a `.reveal.yaml root:true` marker, package markers, and the VCS
-root). Use it when auto-detection over-climbs: e.g. a marker-less C/C++ tree
-nested under a larger ancestor `.git`, where the scan would otherwise resolve to
-the wrong repo. Resolved relative to the current directory; it must be an
-existing directory that contains the target, and is refused (with a warning,
-falling back to auto-detection) if it resolves to a filesystem/home/system root.
-Because it rides the URI, the same pin works in CLI and MCP/service mode.
-
-```bash
-reveal 'depends://project/src/server.c?root=project'   # scan only project/, not the ancestor repo
-```
-
----
-
-## Output Formats
-
-### Text (default)
-
-**File target** — lists every importer with file, line, and what was imported:
-
-```
-============================================================
-Dependents of: src/utils.py
-============================================================
-
-  3 file(s) import this module:
-
-  src/api/views.py:12    ← format_response, validate_input
-  src/tasks/worker.py:8  ← format_response
-  tests/test_utils.py:4  ← *
-```
-
-**Directory target** — sorted table of modules by dependent count:
-
-```
-============================================================
-Reverse Dependency Summary: src/models/
-============================================================
-
-  5 module(s) imported internally (12 total import edges)
-
-    4  ████  src/models/user.py
-    3  ███   src/models/post.py
-    3  ███   src/models/base.py
-    1  █     src/models/tag.py
-    1  █     src/models/audit.py
-```
-
-### JSON
-
-```bash
-reveal depends://src/utils.py --format=json
-```
-
-Every path in the output is relative to the scan root (see `root` above), including
-`source`/`target` and a PHP include's resolved `module`.
-
-File target output schema:
-```json
-{
-  "contract_version": "1.1",
-  "type": "module_dependents",
-  "source": "src/utils.py",
-  "target": "src/utils.py",
-  "count": 3,
-  "dependents": [
-    {
-      "file": "src/api/views.py",
-      "line": 12,
-      "module": "src.utils",
-      "names": ["format_response", "validate_input"],
-      "type": "from_import",
-      "is_relative": false,
-      "alias": null
-    }
-  ]
-}
-```
-
-Directory target output schema:
-```json
-{
-  "contract_version": "1.1",
-  "type": "dependency_summary",
-  "source": "src/models",
-  "modules": [
-    {
-      "module": "src/models/user.py",
-      "dependent_count": 4,
-      "dependents": ["src/api/views.py", "src/tasks/worker.py", ...]
-    }
-  ]
-}
-```
-
-### Dot (Graphviz)
-
-```bash
-reveal 'depends://src?format=dot' | dot -Tsvg > depends.svg
-reveal 'depends://src?format=dot' | dot -Tpng > depends.png
-```
-
-Produces a directed graph where arrows point from importer to importee:
-
-```dot
-digraph depends {
-  rankdir=LR;
-  node [shape=box fontname="monospace" fontsize=10];
-  "src/api/views.py" -> "src/utils.py";
-  "src/tasks/worker.py" -> "src/utils.py";
-}
-```
-
----
-
-## Workflows
-
-### Workflow 1: Impact Analysis Before Refactoring
-
-Before moving, renaming, or changing a module's API:
-
-```bash
-# Step 1: See who depends on the file
-reveal depends://src/auth/tokens.py
-
-# Step 2: If many dependents, check what specifically they import
-reveal depends://src/auth/tokens.py --format=json | jq '.dependents[].names'
-
-# Step 3: Check if any are across package boundaries (harder to fix)
-reveal depends://src/auth/tokens.py --format=json | \
-  jq -r '.dependents[].file' | sort
-```
-
-### Workflow 2: Find High-Coupling Modules
-
-High dependent counts mean a change there touches many files:
-
-```bash
-# Find your most-imported modules
-reveal 'depends://src?top=20'
-
-# Deep dive on the top result
-reveal depends://src/most_imported.py
-```
-
-Modules with many dependents are natural candidates for extraction into stable utility libraries, or for extra care when changing.
-
-### Workflow 3: Dead Code Detection
-
-A module with no dependents (inside the project) may be unused:
-
-```bash
-# Check all modules in a directory
-reveal 'depends://src'
-
-# Modules not in the list have 0 dependents
-# Cross-check: are they entry points? (CLI scripts, __main__.py)
-# If not, they may be dead code
-```
-
-### Workflow 4: Architecture Documentation
-
-Generate a full dependency map for architecture review or onboarding:
-
-```bash
-# Full graph for docs
-reveal 'depends://src?format=dot' | dot -Tsvg -o architecture.svg
-
-# Top-level only (less noise)
-reveal 'depends://src?top=15&format=dot' | dot -Tsvg -o arch_toplevel.svg
-```
-
-### Workflow 5: Verify a Refactoring Is Complete
-
-After breaking a circular dependency or extracting a module:
-
-```bash
-# Before: check what imported old_module.py
-reveal depends://src/old_module.py
-
-# After splitting into module_a.py and module_b.py:
-reveal depends://src/module_a.py
-reveal depends://src/module_b.py
-# Verify old_module.py now has 0 dependents (or the expected ones)
-```
-
----
-
-## Relationship to imports://
-
-`depends://` and `imports://` are two views of the same graph:
-
-| Adapter | Question answered | Direction |
-|---------|-------------------|-----------|
-| `imports://src/a.py` | What does `a.py` import? | Forward (a → b, c, d) |
-| `depends://src/a.py` | What imports `a.py`? | Reverse (x, y, z → a) |
-
-Use `imports://` to understand a module's dependencies. Use `depends://` to understand its impact radius.
-
-```bash
-# Forward: what does auth.py need?
-reveal imports://src/auth.py
-
-# Reverse: what needs auth.py?
-reveal depends://src/auth.py
-```
-
----
-
-## Limitations
-
-**Dynamic imports not tracked**: `importlib.import_module()`, `__import__()`, and string-based imports are not detected. The graph is conservative — no false positives, but some dynamic callers will be missed.
-
-**TYPE_CHECKING imports excluded**: Imports under `if TYPE_CHECKING:` are intentionally excluded. These are type-hint-only and don't create runtime dependencies.
-
-**Function-level imports counted**: an `import` inside a function body is an importer like any other (the gate's oracles count it too). Every answer prints its rule (`Rule: ...` in text, `edge_rule` in JSON). `depends://` takes no `&lazy`; for the load-time (architecture) view use `imports://<dir>?rank=fan-in&lazy=exclude`. Python, JavaScript, TypeScript and TSX record where an import sits, so the rule names the other languages it could not classify.
-
-**Name-based resolution**: Imports are resolved to file paths. If two files export the same name, resolution may be ambiguous. Relative imports are resolved correctly; absolute imports use project root detection.
-
-**Language support**: Same as `imports://`. Run `reveal depends://src --format=json | jq '.metadata'` to see the scan result. Language support is determined by available import extractors — Python is fully supported; support for other languages depends on extractor availability.
-
-**Required directory loss**: the main graph discovery pass retains attributed
-source and resolution-target enumeration failures in `meta.warnings` and the
-existing human `warning`. The missing file population is unknown. Source scan
-accounting becomes inexact while observed counts remain intact; descriptive
-`_meta.confidence` becomes `reduced` and `undercount_possible` is true for both
-positive and empty results. Text qualifies observed counts and rankings. DOT
-includes the warning as comments when required directory loss is known. Clean,
-inferred-root and cap-only DOT output retain their existing behavior. Direct
-Depends exits and MCP flags retain their legacy policy, so exit 0 alone does not
-establish complete analysis.
-
-Ruby's separate gemspec discovery for load-path roots retains directory failures
-in the same graph diagnostics. Manifest-only loss leaves a successful independent
-source census exact; it still reduces resolution confidence and discloses possible
-undercount. Combined source and manifest loss retains both causes without estimating
-missing files. Gemspec contents are not evaluated. Ruby classification also retains manifest and existing-lib directory loss in
-its cached inventory. Depends replays that evidence once per inventory root in
-each graph build, including cache hits populated by another consumer. Observed
-local/external classifications and the independent source census keep their
-meaning; known inventory loss still qualifies confidence and undercount. The
-existing host-request reset repairs the inventory on the next request. Direct
-helper memo lifetime, lockfile reads, marker/stat failures and generic fallback
-discovery retain independent limits. Imports keeps its existing explicit
-unresolved annotation when the inventory cannot classify an import.
-
-**Scan-root disclosure**: known scan-root limitations appear in the `warning` field and `metadata` flags. `metadata.scan_capped` (+ a `⚠ Scan capped at N files...` warning) means the scan hit the 5,000-file safety cap under a genuinely huge project root. `metadata.root_inferred` (+ a `⚠ Couldn't determine this file's project boundary...` warning) means no project marker (`pyproject.toml`, `.git`, etc.) was found above the target before the filesystem/`$HOME` boundary, so the scan was scoped to the target's own directory only — pass an explicit root, or run from inside the project, for full coverage.
-
----
-
-## FAQ
-
-**Q: Why does `depends://` scan the whole project instead of just the target directory?**
-
-A: To find all importers. If `api/views.py` imports `utils/helpers.py`, running `depends://utils/helpers.py` needs to see `api/views.py`. Scanning from the project root ensures no importers are missed.
-
-**Q: I got 0 dependents for a module I know is imported.**
-
-A: Check: (1) Is the import under `if TYPE_CHECKING:`? Those are excluded. (2) Is it a dynamic import (`importlib`)? Those are not tracked. (3) Is the project root detected correctly? Try running from the project root.
-
-**Q: How does depends:// relate to the `--verbose` flag?**
-
-A: `--verbose` on a file target expands the dependent listing to show full import detail. Without `--verbose`, each file is shown on one line; with `--verbose`, each import statement is shown separately.
-
-**Q: Can I use depends:// in a pipeline?**
-
-A: Yes — `--format=json` produces machine-readable output suitable for `jq` filtering:
-```bash
-reveal depends://src/auth.py --format=json | jq -r '.dependents[].file'
-```
-
----
-
-## Related Documentation
-
-- [IMPORTS_ADAPTER_GUIDE.md](IMPORTS_ADAPTER_GUIDE.md) — forward dependency graph (what a module imports)
-- [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) — reverse call graph (who calls a function)
-- [AST_ADAPTER_GUIDE.md](AST_ADAPTER_GUIDE.md) — within-file call graph via `ast://`
-- [RECIPES.md](../guides/RECIPES.md) — multi-adapter workflow patterns
-- [AGENT_HELP.md](../AGENT_HELP.md) — complete AI agent reference
+# depends:// Adapter Guide (retired)
+
+`depends://` is retired: the reverse import graph is the `imports://` engine's own build, and
+`imports://` answers it directly with `?importers`, listing each importer with its import line,
+scope and cascade stage. The graph, its rules and its limits are documented once, in
+[IMPORTS_ADAPTER_GUIDE.md](IMPORTS_ADAPTER_GUIDE.md).
+
+| Retired | Use instead |
+|---------|-------------|
+| `reveal depends://src/utils.py` | `reveal 'imports://src/utils.py?importers'` or `reveal 'imports://src?importers=utils.py'` |
+| `reveal depends://src` | `reveal 'imports://src?importers'` (each module with its importers) |
+| `reveal 'depends://src?top=10'` | `reveal 'imports://src?rank=fan-in&top=10'` |
+| `reveal 'depends://src?format=dot'` | no DOT equivalent; `imports://` answers text and JSON |
+
+`depends://` counts function-level (lazy) imports and takes no `&lazy`; `imports://` counts
+them by default too and adds `&lazy=exclude` for the load-time view.
+
+## Until the cut release
+
+`depends://` still answers as before, with one `note: depends:// is deprecated; use ...` line
+on stderr. At the cut the same text becomes an exit-2 error. It exits 0 also on a partial
+answer, where `imports://` exits 3. The graph uses depends' own scan root, 5,000-file cap and,
+for a file target, its own extension family.
+
+- **Parameters:** `top` (caps the module or dependent list), `root` (override the scan root),
+  `verbose` (directory targets: list each module's importers under its row; a file target
+  already prints one row per importing statement) and `format`. Only `?format=dot` changes the
+  output, and only for a directory target; for JSON use the CLI `--format json`. Any other
+  `format` value, and `dot` on a file target, falls back to text without a warning.
+- **File target (`module_dependents`):** text prints a `Rule:` line, then
+  `N file(s) import this module:` (`N file(s) import this module (showing K):` under `?top=`,
+  followed by a `⚠ Truncated dependents` line), one `file:line  ← names` row per importing
+  statement, and `ℹ Import-graph analysis — dynamic imports not followed.` JSON carries
+  `target`, `dependents` (each `file`, `line`, `module`, `names`, `type`, `is_relative`,
+  `alias`), `count`, `edge_rule`, `metadata`, `_meta` (`analysis_kind`, `confidence`,
+  `known_limits`) and `undercount_possible`.
+- **Directory target (`dependency_summary`):** text prints a `Rule:` line, then
+  `N module(s) imported internally (M total import edges)` (capped:
+  `Top N of M module(s) imported internally (K import edges shown)`), one bar row per module,
+  a `Tip:` line, the `ℹ` line and, when capped, `⚠ Truncated modules: showing N of M`. JSON
+  carries `modules` (each `module`, `dependent_count`, `dependents`), `total_modules`,
+  `edge_rule`, `metadata`, `_meta` and `undercount_possible`, plus an internal `_format` field.
+- **Disclosure:** `metadata.scan_capped` means the scan hit the 5,000-file cap;
+  `metadata.root_inferred` means no project marker was found, so only the target's own
+  directory was scanned. Directory loss during the scan is reported in `meta.warnings`, with
+  `_meta.confidence` `reduced` and `undercount_possible` true.
+
+## See Also
+
+- `reveal help://imports` - the replacement
+- `reveal help://schemas/depends` - the retired result types' JSON schema
+- [IMPORTS_ADAPTER_GUIDE.md](IMPORTS_ADAPTER_GUIDE.md)
