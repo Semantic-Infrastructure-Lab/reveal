@@ -75,7 +75,7 @@ reveal doc.md --links              # markdown-specific
 **URI adapter filtering** — options that belong with the resource:
 ```bash
 reveal 'ast://src?complexity>10'             # Filter by complexity
-reveal 'ssl://host?expiring-within=30'      # Cert expiry filter
+reveal 'ssl://host?expiring-within=30' --check   # Expiry threshold (needs --check)
 reveal 'cpanel://USER/ssl?dns-verified'     # Exclude NXDOMAIN domains
 reveal 'git://.?author=Alice&since=2024-01-01'  # Multi-condition git query
 ```
@@ -103,8 +103,8 @@ For file targets, convenience flags translate to URI params when you switch to U
 | Sort ascending | `--sort field` | `?sort=field` | Same ✓ |
 | Sort descending | `--sort field --desc` | `?sort=-field` | CLI needs two flags; URI uses `-` prefix |
 | Limit results | `--head N` / `--max-items N` | `?limit=N` | See below — they're not equivalent |
-| SSL expiry filter | `--expiring-within N` | `?expiring-within=N` | Both work; URI form preferred in pipelines |
-| SSL summary | `--summary` | `?summary` | Both work; URI form preferred in pipelines |
+| SSL expiry filter | `--expiring-within N` | `?expiring-within=N` | Both take effect only with `--check`; URI form preferred in pipelines |
+| SSL summary | `--summary` | `?summary` | Batch and nginx views only; a single `ssl://host` ignores it with a note |
 | cPanel dns filter | `--dns-verified` | `?dns-verified` | Both work |
 | cPanel live check | `--check-live` | `?check-live` | Both work |
 
@@ -207,7 +207,8 @@ reveal file.py --name auth --type function --sort=-complexity
 reveal 'ast://file.py?name~=auth&type=function&complexity>10&lines>20&sort=-complexity'
 
 # Step 5: Combine with cross-adapter patterns
-reveal 'ast://file.py?name~=auth' | reveal --stdin --check
+# (--stdin reads one path per line, so hand it file paths, not the text listing)
+reveal 'ast://file.py?name~=auth' --format json | jq -r '.results[].file' | sort -u | reveal --stdin --check
 ```
 
 ---
@@ -219,19 +220,19 @@ reveal 'ast://file.py?name~=auth' | reveal --stdin --check
 | `ast://` | ✅ Rich filtering | Reference implementation |
 | `json://` | ✅ Rich filtering | Field filters, flatten, schema |
 | `markdown://` | ✅ Frontmatter filtering | `?status=draft`, `?body-contains=X` |
-| `stats://` | ✅ Metric filtering | `?hotspots`, `?min_complexity=10` |
+| `metrics://` | ✅ Metric filtering | `?hotspots`, `?min_complexity=10` (`stats://` is its retired alias) |
 | `git://` | ✅ Commit filtering | `?author=`, `?since=`, `?type=` |
 | `calls://` | ✅ Call graph | `?callers=fn`, `?top=10` |
 | `patches://` | ✅ Test patch pressure | `?group=target`, `?min=3`, `?limit=20` |
 | `claude://` | ✅ Session filtering | `?summary`, `?errors`, `?contains=` |
 | `xlsx://` | ✅ Sheet/range | `?sheet=Sales`, `?range=A1:D10` |
-| `ssl://` | ✅ Expiry/summary | `?expiring-within=30`, `?summary` |
+| `ssl://` | ✅ Expiry/summary | `?expiring-within=30` (with `--check`), `?summary` (batch and nginx views) |
 | `cpanel://` | ✅ Domain/SSL filters | `?domain_type=addon`, `?dns-verified` |
 | `letsencrypt://` | ✅ Cert audit | `?check-orphans`, `?check-duplicates` |
 | `autossl://` | ✅ Run filtering | `?only-failures`, `?summary`, `?user=NAME` |
-| `depends://` | Partial | `?top=10`, `?format=` |
-| `imports://` | Partial | `?unused`, `?circular` |
-| `nginx://`, `domain://`, `env://` | ❌ None | Use element paths; unrecognized `?params` stripped with warning |
+| `imports://` | ✅ Import graph | `?unused`, `?circular`, `?importers` (`depends://` is retired: use `imports://?importers`) |
+| `nginx://`, `domain://` | ❌ None | Use element paths; unrecognized `?params` are ignored with a warning |
+| `env://` | ❌ None | Use element paths; a `?query` is read as a variable name and fails |
 | `mysql://`, `sqlite://`, `python://` | ❌ None | Use element paths |
 
 ---
