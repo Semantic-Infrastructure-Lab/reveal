@@ -3,6 +3,7 @@
 import re
 from fnmatch import fnmatch
 from typing import Dict, List, Any, Set, Tuple, cast
+from ...conventions import decorator_attributes, decorator_name
 from ...reveal_types import ASTElement
 from ...utils.query import compare_values
 
@@ -189,42 +190,71 @@ def matches_filters(element: ASTElement, query: Dict[str, Any]) -> bool:
 
 
 def matches_decorator(decorators: List[str], condition: Dict[str, Any]) -> bool:
-    """Check if any decorator matches the condition.
+    """Check if any decorator matches the condition (BACK-1777 contract).
 
-    Supports:
-    - Exact match: decorator=property
-    - Wildcard: decorator=*cache* (matches @lru_cache, @cached_property, etc.)
+    Each captured decorator holds one or more attributes (``@foo(...)`` one,
+    ``[HttpGet, Authorize]`` and ``#[Route("/a"), Deprecated]`` one per top-level comma,
+    ``conventions.decorator_attributes``). A query term matches an attribute by name:
+
+    - ``decorator=HttpGet`` matches ``[HttpGet]`` and ``[HttpGet("{id}")]``; the term may be
+      spelled as in source (``[HttpGet]``, ``#[Route]``, ``@Override``).
+    - A qualified term matches when its segments end the attribute's name (``::`` and ``\\``
+      read as ``.``): ``Obsolete`` and ``System.Obsolete`` match ``[System.Obsolete]``,
+      ``route`` matches ``@app.route``; never a prefix (``Http`` does not match ``HttpGet``).
+    - A term with arguments (``lru_cache(maxsize=100)``) also needs equal arguments, ignoring
+      whitespace.
+    - A comma list (op ``in``) matches if any term does.
+    - A glob (``*cache*``, ``Http*``) matches the decorator's source text, an attribute's text,
+      or its qualified or bare name. Rust ``#[derive(Debug)]`` is one attribute named
+      ``derive``: ``decorator=Debug`` does not match it, ``decorator=*Debug*`` does.
 
     Args:
-        decorators: List of decorator strings (e.g., ['@property', '@lru_cache(maxsize=100)'])
+        decorators: Decorator source strings (e.g., ['@property', '[HttpGet, Authorize]'])
         condition: Condition dict with 'op' and 'value'
 
     Returns:
         True if any decorator matches
     """
-    if not decorators:
-        return False
-
-    target = condition['value']
     op = condition['op']
-
-    # Normalize target - add @ if not present
-    if not target.startswith('@') and not target.startswith('*'):
-        target = f'@{target}'
-
+    if not decorators or op not in ('==', 'in', 'glob'):
+        return False
+    value = condition['value']
+    raw = ','.join(str(v) for v in value) if isinstance(value, list) else str(value)
+    terms = decorator_attributes(raw)
     for dec in decorators:
-        # Exact match
-        if op == '==':
-            # Match decorator name (ignore args)
-            # @lru_cache(maxsize=100) should match @lru_cache
-            dec_name = dec.split('(')[0]
-            if dec_name == target or dec == target:
+        attributes = decorator_attributes(dec)
+        for term in terms:
+            if op == 'glob' or (op == 'in' and ('*' in term or '?' in term)):
+                if _decorator_glob_matches(dec, attributes, term, raw):
+                    return True
+            elif any(_decorator_term_matches(term, attribute) for attribute in attributes):
                 return True
-        # Wildcard match
-        elif op == 'glob':
-            if fnmatch(dec, target) or fnmatch(dec, f'@{target}'):
-                return True
+    return False
 
+
+def _decorator_args(attribute: str) -> str:
+    """An attribute's argument text from its first ``(``, whitespace removed ('' when it has none)."""
+    _, paren, args = attribute.partition('(')
+    return ''.join((paren + args).split())
+
+
+def _decorator_term_matches(term: str, attribute: str) -> bool:
+    """True when *term*'s name segments end *attribute*'s name, and its arguments (if any) are equal."""
+    wanted = decorator_name(term).split('.')
+    have = decorator_name(attribute).split('.')
+    if not wanted[-1] or len(wanted) > len(have) or have[-len(wanted):] != wanted:
+        return False
+    return '(' not in term or _decorator_args(term) == _decorator_args(attribute)
+
+
+def _decorator_glob_matches(dec: str, attributes: List[str], pattern: str, raw: str) -> bool:
+    """Glob over the source text (as before BACK-1777, ``*cache*`` / ``@lru*``) or any attribute's text or names."""
+    if fnmatch(dec, raw) or fnmatch(dec, f'@{raw}'):
+        return True
+    for attribute in attributes:
+        name = decorator_name(attribute)
+        if any(fnmatch(text, pattern) for text in (attribute, name, name.rsplit('.', 1)[-1])):
+            return True
     return False
 
 
