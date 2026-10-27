@@ -192,6 +192,14 @@ def sort_nulls_last(items: List[Any], value: Callable[[Any], Any], descending: b
     return [item for _, item in valued] + [item for key, item in keyed if key is None]
 
 
+def sort_failed_warning(field: str, error: TypeError) -> Dict[str, Any]:
+    """The ``sort_failed`` warning for a ``?sort=`` whose values do not compare (the
+    TypeError ``sort_nulls_last`` raises): the list keeps its source order and must not read
+    as sorted (json:// BACK-1614, metrics:// BACK-2308). It is one of the
+    RESULT_CONTROL_WARNINGS, which the output seam prints once after the render."""
+    return {'type': 'sort_failed', 'message': f"Not sorted by '{field}': {error}"}
+
+
 def _safe_numeric(v):
     """Convert value to numeric, returning None for non-numeric values."""
     if v is None:
