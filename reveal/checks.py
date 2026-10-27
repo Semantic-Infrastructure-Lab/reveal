@@ -272,6 +272,19 @@ def _format_detections_grep(detections: List[Any]) -> None:
         print(f"{d.file_path}:{d.line}:{d.column}:{d.rule_code}:{d.message}")
 
 
+def _print_run_notes(path: str, rule_errors: Optional[List[dict]], disclosures: Optional[List[str]],
+                     coverage: Optional[dict], coverage_selected: bool) -> None:
+    """What a single-file check says about the run itself, before the findings or the verdict:
+    crashed rules, scan disclosures, then the rules that did not run clean (BACK-2137)."""
+    from reveal.rendering.adapters.reveal import render_check_coverage
+
+    for err in rule_errors or []:
+        print(f"{path}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
+    for note in disclosures or []:
+        print(f"{path}: ⚠️  {note}")
+    render_check_coverage(coverage, selected=coverage_selected, said=disclosures or ())
+
+
 def _format_detections_text(
     path: str,
     detections: List[Any],
@@ -316,13 +329,7 @@ def _format_detections_text(
             before the verdict; *coverage_selected*: --select named the rules, so the rules not
             applicable to the file print too (render_check_coverage).
     """
-    for err in rule_errors or []:
-        print(f"{path}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
-    for note in disclosures or []:
-        print(f"{path}: ⚠️  {note}")
-    if coverage:
-        from reveal.rendering.adapters.reveal import render_check_coverage
-        render_check_coverage(coverage, selected=coverage_selected, said=disclosures or ())
+    _print_run_notes(path, rule_errors, disclosures, coverage, coverage_selected)
 
     if not detections:
         if parse_degraded:

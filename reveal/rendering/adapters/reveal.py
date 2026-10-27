@@ -1,7 +1,7 @@
 """Renderer for reveal:// internal structure adapter."""
 
 from collections import defaultdict
-from typing import Any, Dict, List, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from reveal.utils import print_json_result
 
@@ -38,7 +38,20 @@ def _file_outcome_line(entry: Dict[str, Any], selected: bool, said: Sequence[str
     return f"  {entry['rule']} {', '.join(parts)}{reason}"
 
 
-def render_check_coverage(coverage: Dict[str, Any], selected: bool = True, said: Sequence[str] = ()) -> None:
+def _render_flat_coverage(coverage: Dict[str, Any]) -> None:
+    """The reveal:// self-check's ledger: one entry per rule, every unavailable one and its
+    subject details in full."""
+    print(coverage["scope"])
+    for entry in coverage.get("rules", []):
+        if entry["status"] == "unavailable":
+            print(f"  {entry['rule']} unavailable: {entry['reason']}")
+        for subject in entry.get("subjects", []):
+            if subject["status"] != "run" and subject["subject"]:
+                print(f"    {subject['subject']} {subject['status']}: {subject['reason']}")
+
+
+def render_check_coverage(coverage: Optional[Dict[str, Any]], selected: bool = True,
+                          said: Sequence[str] = ()) -> None:
     """Print a check's ``coverage`` block: the reveal:// self-check's flat ledger in full, or a
     file / directory check's per-rule aggregate (``selected``: --select named the rules; see
     ``_file_outcome_line``). Nothing prints when a file check has nothing to disclose."""
@@ -51,15 +64,9 @@ def render_check_coverage(coverage: Dict[str, Any], selected: bool = True, said:
     print(f"Checks: {coverage['run']} run, {coverage['skipped']} skipped, {coverage['failed']} failed, "
           f"{coverage.get('unavailable', 0)} unavailable")
     if flat:
-        print(coverage["scope"])
+        _render_flat_coverage(coverage)
     for line in lines:
         print(line)
-    for entry in coverage.get("rules", []) if flat else []:
-        if entry["status"] == "unavailable":
-            print(f"  {entry['rule']} unavailable: {entry['reason']}")
-        for subject in entry.get("subjects", []):
-            if subject["status"] != "run" and subject["subject"]:
-                print(f"    {subject['subject']} {subject['status']}: {subject['reason']}")
 
 
 def _render_optional_section(title: str, items: Union[str, List, Dict, None], indent: int = 1) -> None:
