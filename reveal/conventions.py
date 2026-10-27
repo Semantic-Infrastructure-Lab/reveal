@@ -22,7 +22,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, FrozenSet, Optional, Pattern, Tuple
+from typing import Callable, Dict, FrozenSet, List, Optional, Pattern, Tuple
 
 from .registry import language_for_extension
 
@@ -535,3 +535,73 @@ def same_package_families() -> Tuple[str, ...]:
 def is_builtin_anywhere(name: str) -> bool:
     """True if *name* is a builtin in at least one registered family (cheap pre-filter)."""
     return name in _ALL_BUILTIN_NAMES
+
+
+# Decorator, annotation and attribute syntax (BACK-1777). Analyzers keep each captured decorator as its
+# source text, the documented `decorators` field: `@lru_cache(maxsize=1)`, C# `[HttpGet("{id}"), Authorize]`,
+# PHP `#[Route("/x")]`, Rust `#[derive(Debug)]`. Every consumer that compares decorators by name reads that
+# text through these functions, so the at-sign and the bracket spellings parse one way.
+_DECORATOR_BRACKETS = ('#![', '#[', '[')
+# A C# (`return:`, `assembly:`) or Kotlin (`field:`, `get:`) use-site target; `::` is a path, not a target.
+_ATTRIBUTE_TARGET = re.compile(r'^[A-Za-z_]\w*\s*:(?!:)\s*')
+
+
+def _unwrap_decorator(text: str) -> str:
+    """*text* without its leading `@` or its `[...]`/`#[...]`/`#![...]` brackets."""
+    text = text.strip()
+    if text.startswith('@'):
+        return text[1:].strip()
+    for opener in _DECORATOR_BRACKETS:
+        if text.startswith(opener) and text.endswith(']'):
+            return text[len(opener):-1].strip()
+    return text
+
+
+def _split_top_level_commas(text: str) -> List[str]:
+    """*text* split at commas outside brackets and string literals, each part stripped, empty parts dropped."""
+    parts: List[str] = []
+    depth, quote, start, i = 0, '', 0, 0
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            if ch == '\\':
+                i += 1
+            elif ch == quote:
+                quote = ''
+        elif ch in '"\'':
+            quote = ch
+        elif ch in '([{':
+            depth += 1
+        elif ch in ')]}':
+            depth = max(depth - 1, 0)
+        elif ch == ',' and depth == 0:
+            parts.append(text[start:i])
+            start = i + 1
+        i += 1
+    parts.append(text[start:])
+    return [part.strip() for part in parts if part.strip()]
+
+
+def decorator_attributes(text: str) -> List[str]:
+    """The attributes one captured decorator holds, as source text without the wrapper or a use-site target.
+
+    `@lru_cache(maxsize=1)` -> `['lru_cache(maxsize=1)']`; `[HttpGet("{id}"), Authorize]` ->
+    `['HttpGet("{id}")', 'Authorize']`; `#[derive(Debug, Clone)]` -> `['derive(Debug, Clone)']` (one attribute:
+    the commas are inside its arguments); `[return: NotNull]` -> `['NotNull']`.
+    """
+    return [_ATTRIBUTE_TARGET.sub('', part, count=1)
+            for part in _split_top_level_commas(_unwrap_decorator(text))]
+
+
+def decorator_name(attribute: str) -> str:
+    """Qualified name of one attribute from `decorator_attributes`: the text before its arguments, with `::` and
+    `\\` read as `.` and a leading separator dropped (`\\Foo\\Route("/b")` -> `Foo.Route`, `tokio::test` ->
+    `tokio.test`, `app.route('/x')` -> `app.route`)."""
+    name = ''.join(attribute.split('(', 1)[0].split())
+    return name.replace('::', '.').replace('\\', '.').strip('.')
+
+
+def decorator_names(text: str) -> List[str]:
+    """Bare (last-segment) names of the attributes in one captured decorator: `@app.route('/x')` -> `['route']`,
+    `[HttpPost, Authorize(Roles = "a")]` -> `['HttpPost', 'Authorize']`, `#[tokio::test]` -> `['test']`."""
+    return [decorator_name(attribute).rsplit('.', 1)[-1] for attribute in decorator_attributes(text)]
