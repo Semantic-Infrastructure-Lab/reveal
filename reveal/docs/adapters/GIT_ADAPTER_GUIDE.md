@@ -681,7 +681,7 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 | `message` | string | `=`, `~=` | Filter by commit message |
 | `hash` | string | `=`, `.=` | Filter by commit hash prefix |
 | `date` | ISO date | `=`, `!=`, `>`, `<`, `>=`, `<=`, `=a..b` | Filter by commit date, e.g. `date>=2026-01-01`. A year, month or day is the whole period: `date=2026-02-06` is any commit that day, `date>2026-01` excludes January, `date>=P`/`date<=P` include it. A timestamp may use a space or `T` (`2026-01-31T12:00:00`), and may end in a zone (`Z`, `+02:00`) |
-| `timestamp` | integer | `=`, `!=`, `>`, `<`, `>=`, `<=` | The commit time in epoch seconds, e.g. `timestamp>1767225600` |
+| `timestamp` | integer | `=`, `!=`, `>`, `<`, `>=`, `<=` | Filter by commit time in epoch seconds, e.g. `timestamp>1767225600` |
 | `since` | ISO date | `=` only | Ergonomic alias for `date>=` (`since=2026-01` includes January) |
 | `until` | ISO date | `=` only | Ergonomic alias for `date<=` (`until=2026-01` includes January) |
 

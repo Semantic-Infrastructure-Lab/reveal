@@ -116,7 +116,7 @@ def test_the_text_output_shows_the_warning_once(repo, monkeypatch):
 
 @pytest.mark.parametrize('query', [
     'author~=T', 'email~=example', 'message~=a', 'hash~=^[0-9a-f]', 'date>2020-01-01',
-    'timestamp>0',       # a field of every commit record, though the schema does not list it
+    'timestamp>0',       # a field of every commit record (declared in the schema since BACK-2309)
     'since=2026-01-01',  # rewritten to date>=
     '!authr',            # absent: matches every commit, not a typo's zero
 ])
@@ -129,6 +129,12 @@ def test_a_bare_unknown_key_keeps_its_one_warning(repo, capsys):
     result = GitAdapter(str(repo), 'type=log&authr').get_structure()
     assert _unknown(result) == []
     assert "Unknown query param 'authr'" in capsys.readouterr().err
+
+
+def test_a_bare_timestamp_is_a_declared_presence_filter(repo, capsys):
+    # timestamp is a commit field the schema now declares: bare, it is presence, not a typo.
+    assert _messages(repo, 'timestamp') == ['a', 'b', 'c', 'd']
+    assert 'Unknown query param' not in capsys.readouterr().err
 
 
 def test_the_known_fields_are_the_commit_record_fields(repo):
