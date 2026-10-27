@@ -400,7 +400,10 @@ done
 ## Limitations
 
 - **Broken link checking**: Only works for local files (not external URLs)
-- **Line numbers**: Approximate for dynamically generated content
+- **Line numbers**: An element's line is the line its start tag opens on, read from the file as written (not
+  from markup a script generates at run time). With `lxml` installed, a tag name whose count in the parsed
+  tree differs from the file (an element the parser inserted, such as an implied `<body>`) falls back to
+  the first line holding that tag and the element's id or first class
 - **JavaScript**: Analyzes static HTML only (no JS rendering)
 
 ## CLI Flags
@@ -426,10 +429,9 @@ reveal page.html --styles external   # External stylesheets
 
 The HTML analyzer requires:
 
-- `beautifulsoup4>=4.12.0` - HTML parsing
-- `lxml>=4.9.0` - Fast XML/HTML parser backend
-
-Both are included in reveal's default dependencies.
+- `beautifulsoup4>=4.12.0` - HTML parsing (a default dependency)
+- `lxml>=4.9.0` - optional faster parser backend, from the `html` extra (`pip install "reveal-cli[html]"`);
+  without it reveal uses the stdlib `html.parser`
 
 ## See Also
 

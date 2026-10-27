@@ -20,6 +20,32 @@ FeatureNotFound: Any = None
 ParserRejectedMarkup: Any = None
 
 
+def _start_tag_lines(content: str) -> Optional[Dict[str, List[int]]]:
+    """The line of every start tag in ``content``, per tag name in document order.
+
+    The stdlib tokenizer skips what is not markup the way a browser does (comments, the raw
+    text of ``<script>``/``<style>``, an ``<a`` inside a JS string), so the k-th ``<a>`` here is
+    the k-th ``<a>`` a parsed tree holds. It counts ``\\n`` only, like ``split_lines``.
+    None when the tokenizer gives up on the markup (BACK-2287).
+    """
+    from html.parser import HTMLParser
+
+    lines: Dict[str, List[int]] = {}
+
+    class _Starts(HTMLParser):
+        def handle_starttag(self, tag, attrs):  # also reached for <tag/> via handle_startendtag
+            lines.setdefault(tag, []).append(self.getpos()[0])
+
+    try:
+        tokenizer = _Starts(convert_charrefs=False)
+        tokenizer.feed(content)
+        tokenizer.close()
+    except AssertionError as exc:  # _markupbase raises it on declarations it cannot read
+        logging.warning(f"HTML line numbers are approximate: start tags could not be located ({exc})")
+        return None
+    return lines
+
+
 def _ensure_bs4() -> None:
     """Bind the bs4 names on first use; a name already bound (a test double) is kept."""
     global BeautifulSoup, FeatureNotFound, ParserRejectedMarkup
@@ -63,6 +89,9 @@ class HTMLAnalyzer(FileAnalyzer):
 
         # Detect template type
         self.template_type = self._detect_template_type()
+        # Per tag name: element identity -> source line, built on first use (BACK-2287).
+        self._tag_lines: Dict[str, Dict[int, int]] = {}
+        self._source_starts: Optional[Dict[str, List[int]]] = None
 
     @staticmethod
     def _build_structure_options(kwargs) -> 'StructureOptions':
@@ -689,7 +718,12 @@ class HTMLAnalyzer(FileAnalyzer):
         if not name:
             return 0
 
-        # Match on the opening tag plus a distinctive attribute *value* (id, else
+        line = self._ordinal_line(name, element)
+        if line:
+            return line
+
+        # Last resort, when the parsed tree and the source scan disagree on how many <name>
+        # tags there are. Match on the opening tag plus a distinctive attribute *value* (id, else
         # first class) rather than the serialized element string: bs4 reorders
         # attributes alphabetically (so a `<div id="main" class="x">` source line
         # serializes as `<div class="x" id="main">` and a substring match on the
@@ -712,6 +746,24 @@ class HTMLAnalyzer(FileAnalyzer):
                 return i
 
         return 0
+
+    def _ordinal_line(self, name: str, element) -> int:
+        """The source line of ``element``, the k-th ``<name>`` in the tree, from the k-th
+        ``<name>`` start tag in the source; 0 when the two counts differ (BACK-2287).
+
+        lxml keeps no source lines, and a scan for ``<name`` plus an id or class gave every
+        tag without one the first tag's line.
+        """
+        if name not in self._tag_lines:
+            if self._source_starts is None:
+                self._source_starts = _start_tag_lines(self.content) or {}
+            starts = self._source_starts.get(name, [])
+            found = self.soup.find_all(name)
+            # A tree the parser repaired differently (an inserted or dropped <name>) cannot be
+            # paired by position; that tag name keeps the scan below.
+            self._tag_lines[name] = ({id(el): line for el, line in zip(found, starts)}
+                                     if len(found) == len(starts) else {})
+        return self._tag_lines[name].get(id(element), 0)
 
     def _get_line_range(self, element) -> Optional[str]:
         """Get line range for element (start-end).
