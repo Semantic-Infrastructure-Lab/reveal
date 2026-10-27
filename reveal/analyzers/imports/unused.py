@@ -113,12 +113,18 @@ def unused_entries(stmt: 'ImportStatement', symbols_used: Set[str],
 
 
 def describe_unused(record: Dict[str, Any]) -> str:
-    """One unused-import row's label: the module, plus the unused names of a partly-used import.
+    """One unused-import row's label: the module, plus the unused names unless the import binds
+    the whole module.
 
-    Shared by `imports://?unused` and the `deps` dashboard. Whole-module imports
-    (`import os`, Go `"net/http"`, a JS default import) report their bound name in
-    `unused_names`; appending it printed `os.os` in the dashboard (BACK-2213 B1).
+    Shared by `imports://?unused` and the `deps` dashboard. A whole-module import (`import os`,
+    Go `"net/http"`) reports its bound name in `unused_names`; appending it printed `os.os`
+    (BACK-2213 B1). A from-import (`from os import path`) names what is unused, also when every
+    name is: `os` alone would read like `import os`.
     """
     names = record.get('unused_names') or []
-    partial = names and record.get('names') and len(names) < len(record['names'])
-    return f"{record['module']} (unused: {', '.join(names)})" if partial else str(record['module'])
+    module = str(record['module'])
+    if not names:
+        return module
+    bound = module.replace('\\', '/').split('/')[-1].split('.')[-1]
+    whole_module = not record.get('names') or all(n == bound for n in names)
+    return module if whole_module else f"{module} (unused: {', '.join(names)})"
