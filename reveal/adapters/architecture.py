@@ -17,7 +17,7 @@ from ..conventions import conventions_for_path
 from ..registry import language_for_extension
 from ..rendering.adapters.architecture import ArchitectureRenderer
 from ..utils.entry_points import active_entry_points, entry_point_filter
-from ..utils.path_utils import traversal_failed_warning, failure_of
+from ..utils.path_utils import traversal_failed_warning, failure_of, to_posix
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
                                   nonnegative_display_limit, param_schema, peek_query_items)
@@ -601,7 +601,7 @@ class ArchitectureAdapter(ResourceAdapter):
             _resolve_commit(repo, against)
         except ValueError as exc:
             return cast(Dict[str, Any], ResultBuilder.create(
-                'architecture_diff', self.path, contract_version=CONTRACT_VERSION,
+                'architecture_diff', to_posix(self.path), contract_version=CONTRACT_VERSION,
                 errors=[{'code': FailureCause.INVALID_REQUEST.value, 'message': str(exc)}],
                 error=str(exc)))
         return run_architecture_diff(path, against, top_n=max(top, 1) * 4)
@@ -715,8 +715,9 @@ class ArchitectureAdapter(ResourceAdapter):
         next_commands = _build_next_commands(path, risks, imports_data)
 
         scope_failures: List[OSError] = []
+        shown = to_posix(self.path)  # '/' on every OS, like the diff's as_spelled (BACK-2302)
         report = {
-            'path': str(path),
+            'path': shown,
             'facts': {
                 'entry_points': imports_data.get('entry_points', []),
                 'core_abstractions': imports_data.get('core_abstractions', []),
@@ -745,7 +746,7 @@ class ArchitectureAdapter(ResourceAdapter):
         meta = _with_scope_warning(meta, scope_failures, path)
         return ResultBuilder.create(
             result_type='architecture',
-            source=self.path,
+            source=shown,
             contract_version=CONTRACT_VERSION,
             scope=report.pop('scope'),
             data=report,
