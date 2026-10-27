@@ -663,9 +663,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         for child in _children(node):
             kind = _zero_arg(child, 'kind')
             if kind == 'fenced_code_block_delimiter':
-                delimiters.append(cast(str, self._get_node_text(child)))
+                delimiters.append(self._get_node_text(child))
             elif kind == 'code_fence_content':
-                content = cast(str, self._get_node_text(child))
+                content = self._get_node_text(child)
         if content is None:
             return ''
         if len(delimiters) == 1:

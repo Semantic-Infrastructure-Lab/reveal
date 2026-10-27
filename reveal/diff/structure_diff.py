@@ -209,7 +209,7 @@ def compute_element_diff(left_elem: Optional[Dict[str, Any]],
     moved = {field: change for field, change in changes.items() if field in _POSITION_FIELDS}
 
     if len(moved) == len(changes):
-        result = {
+        result: Dict[str, Any] = {
             'type': 'diff_element',
             'change': 'unchanged',
             'name': element_name,
