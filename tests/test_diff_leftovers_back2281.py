@@ -21,10 +21,10 @@ def _tree(root, files):
     return root
 
 
-def _text(result):
+def _text(result, is_element=False):
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        render_diff(result, 'text')
+        render_diff(result, 'text', is_element=is_element)
     return out.getvalue()
 
 
@@ -78,7 +78,7 @@ def test_element_that_only_moved_is_unchanged(tmp_path):
     result = _element(tmp_path, MOVED)
     assert result['change'] == 'unchanged'
     assert result['moved'] == {'line': {'old': 2, 'new': 5}, 'line_end': {'old': 3, 'new': 6}}
-    text = _text(result)
+    text = _text(result, is_element=True)
     assert 'UNCHANGED' in text and 'MODIFIED' not in text
     assert 'moved from line 2 to line 5' in text
 
@@ -88,6 +88,14 @@ def test_element_that_moved_and_changed_is_still_modified(tmp_path):
     result = _element(tmp_path, EDITED)
     assert result['change'] == 'modified'
     assert {'line', 'line_end', 'line_count'} <= set(result['changes'])
+
+
+def test_moved_element_with_a_body_only_edit_is_modified_and_lists_the_move(tmp_path):
+    """Negative control: a source-only edit (same shape) on a moved element is MODIFIED."""
+    result = _element(tmp_path, MOVED.replace('return 1', 'return 10'))
+    assert result['change'] == 'modified'
+    assert set(result['changes']) == {'line', 'line_end', 'body'}
+    assert 'moved' not in result and 'message' not in result
 
 
 def test_identical_element_is_unchanged_without_a_move(tmp_path):

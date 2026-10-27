@@ -63,7 +63,9 @@ _SCHEMA_OUTPUT_TYPES = [
                 'element': {'type': 'object'},
                 'left': {'type': 'object'},
                 'right': {'type': 'object'},
-                'message': {'type': 'string'}
+                'message': {'type': 'string'},
+                'moved': {'type': 'object',
+                          'description': 'unchanged only: old/new line and line_end of an element that only moved'}
             }
         },
         'example': {

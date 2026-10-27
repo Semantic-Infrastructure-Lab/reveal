@@ -36,8 +36,9 @@ def test_element_diff_with_class_dot_method(tmp_path):
     left, right = _pair(tmp_path)
     result = DiffAdapter(f'{left}:{right}').get_element('K.m')
     assert result['change'] == 'modified'
-    # J.m only moved down a line; K.m (one line longer) would show line_count and body too
-    assert set(DiffAdapter(f'{left}:{right}').get_element('J.m')['changes']) == {'line', 'line_end'}
+    # J.m only moved down a line: a move, not a modification (BACK-2281)
+    moved = DiffAdapter(f'{left}:{right}').get_element('J.m')
+    assert moved['change'] == 'unchanged' and set(moved['moved']) == {'line', 'line_end'}
 
 
 def _dirs(tmp_path):

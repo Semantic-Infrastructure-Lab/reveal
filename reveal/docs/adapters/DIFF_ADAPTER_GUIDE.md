@@ -323,7 +323,7 @@ reveal diff://src/:backup/src/
 📊 Summary:
 
   Functions:  +2 -2 ~4
-  Imports:  +1 -0
+  Imports:  +2 -0
 
 🔧 Functions:
 
@@ -798,6 +798,11 @@ reveal diff://git://HEAD/app.py:app.py/process_data
 The body is compared as source text. When a side has no readable source (a directory, another adapter),
 an unchanged verdict says `body not compared` instead of claiming the elements are identical.
 
+An element that only moved (an edit above it shifted its lines) is UNCHANGED, as in the structure
+diff: the message names the move (`it moved from line 2 to line 5`) and JSON lists the old and new
+positions under `moved`. A moved element that also changed is MODIFIED and lists `line`/`line_end`
+with the other changes.
+
 ---
 
 ### Class Comparison
@@ -924,7 +929,7 @@ entry followed by its file (trimmed):
 📊 Summary:
 
   Functions:  +2 -2 ~4
-  Imports:  +1 -0
+  Imports:  +2 -0
 
 🔧 Functions:
 
@@ -945,11 +950,13 @@ entry followed by its file (trimmed):
 
 📥 Imports:
 
-  + import sys
+  + import sys  (sub/m.py)
+  + import sys  (x.py)
 ```
 
-Imports are matched by their text across the whole tree, so the same import added in two
-files counts once and carries no file.
+Imports are matched by file and text, so the same import added in two files counts twice
+and each entry names its file (`file` in JSON); an import moved from one file to another
+is removed from the first and added to the second.
 
 ---
 

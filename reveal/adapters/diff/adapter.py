@@ -272,7 +272,8 @@ class DiffAdapter(ResourceAdapter):
         if old == new:
             return
         if result['change'] == 'unchanged':
-            result.update(change='modified', changes={}, left=left_elem, right=right_elem)
+            # A move is listed with the edit, as a modified element lists it (BACK-2281).
+            result.update(change='modified', changes=result.pop('moved', {}), left=left_elem, right=right_elem)
             result.pop('message', None)
         result['changes']['body'] = {'old': old, 'new': new}
 

@@ -203,16 +203,24 @@ def compute_element_diff(left_elem: Optional[Dict[str, Any]],
             'element': left_elem
         }
 
-    # Both exist - check if modified
+    # Both exist - check if modified. A change of position alone is a move, not a
+    # modification, as in the structure diff (BACK-2281).
     changes = _compute_element_changes(left_elem, right_elem)
+    moved = {field: change for field, change in changes.items() if field in _POSITION_FIELDS}
 
-    if not changes:
-        return {
+    if len(moved) == len(changes):
+        result = {
             'type': 'diff_element',
             'change': 'unchanged',
             'name': element_name,
-            'message': f"Element '{element_name}' is identical in both resources"
+            'message': f"Element '{element_name}' is identical in both resources",
         }
+        if moved:
+            result['moved'] = moved
+            if 'line' in moved:
+                result['message'] = (f"Element '{element_name}' is identical in both resources; it moved "
+                                     f"from line {moved['line']['old']} to line {moved['line']['new']}")
+        return result
 
     return {
         'type': 'diff_element',
@@ -544,33 +552,25 @@ def diff_imports(left_imports: List[Dict],
 
     Returns:
         Tuple of (summary_dict, details_list)
+
+    An import is keyed by (file, text): in a directory diff the same import added to two
+    files is two additions, each naming its file (BACK-2281). The file is None in a
+    two-file diff, so those entries are as before.
     """
-    # Normalize imports for comparison (use content field)
-    left_contents = {imp.get('content', ''): imp for imp in left_imports}
-    right_contents = {imp.get('content', ''): imp for imp in right_imports}
+    left_contents = {(imp.get('file'), imp.get('content', '')): imp for imp in left_imports}
+    right_contents = {(imp.get('file'), imp.get('content', '')): imp for imp in right_imports}
 
     added_contents = right_contents.keys() - left_contents.keys()
     removed_contents = left_contents.keys() - right_contents.keys()
 
+    def order(key: Tuple[Any, str]) -> Tuple[str, str]:
+        return (key[1], key[0] or '')
+
     details = []
-
-    # Added imports
-    for content in sorted(added_contents):
-        imp = right_contents[content]
-        details.append({
-            'type': 'added',
-            'content': content,
-            'line': imp.get('line')
-        })
-
-    # Removed imports
-    for content in sorted(removed_contents):
-        imp = left_contents[content]
-        details.append({
-            'type': 'removed',
-            'content': content,
-            'line': imp.get('line')
-        })
+    for change, keys, side in (('added', added_contents, right_contents),
+                               ('removed', removed_contents, left_contents)):
+        for key in sorted(keys, key=order):
+            details.append(_located({'type': change, 'content': key[1], 'line': side[key].get('line')}, key))
 
     summary = {
         'added': len(added_contents),

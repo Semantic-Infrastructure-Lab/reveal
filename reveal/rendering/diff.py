@@ -283,9 +283,9 @@ def _render_imports_section(imports: list) -> None:
     print()
     for imp in imports:
         if imp['type'] == 'added':
-            print(f"  + {imp['content']}")
+            print(f"  + {imp['content']}{_in_file(imp)}")
         elif imp['type'] == 'removed':
-            print(f"  - {imp['content']}")
+            print(f"  - {imp['content']}{_in_file(imp)}")
     print()
 
 
