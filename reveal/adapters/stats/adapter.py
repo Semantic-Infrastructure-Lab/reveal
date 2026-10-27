@@ -18,7 +18,7 @@ from ...utils.query import (
     parse_result_control,
     unknown_sort_field_warning,
 )
-from ...utils.query_control import sort_nulls_last
+from ...utils.query_control import sort_failed_warning, sort_nulls_last
 from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_parser import (
     CliBinding, ParamSpec, QueryParams, ResourceSpec, filter_expression, nonnegative_display_limit,
@@ -412,6 +412,7 @@ class MetricsAdapter(ResourceAdapter):
         self._analysis_failures: list = []
         self._excluded_by_extension: Dict[str, int] = {}
         self._unknown_filter_fields: List[str] = []
+        self._sort_failure: Optional[Dict[str, Any]] = None
 
     def _control_query(self) -> str:
         """The bound sort/limit/offset as the query text ``parse_result_control`` reads, so a bound
@@ -460,7 +461,6 @@ class MetricsAdapter(ResourceAdapter):
 
         self._analysis_failures = []
         self._excluded_by_extension = {}
-        self._unknown_filter_fields = []
         files = list(find_analyzable_files(
             self.path, code_only=code_only,
             respect_gitignore=respect_gitignore, exclude_patterns=exclude_patterns,
@@ -494,7 +494,13 @@ class MetricsAdapter(ResourceAdapter):
             all_stats = [_analyze_file_worker(a) for a in args]
 
         self._record_analysis_results(all_stats)
-        analyzed = [s for s in all_stats if s and not is_failure(s)]
+        return self._filter_analyzed([s for s in all_stats if s and not is_failure(s)],
+                                     min_lines, max_lines, min_complexity, max_complexity, min_functions)
+
+    def _filter_analyzed(self, analyzed: list, min_lines, max_lines, min_complexity,
+                         max_complexity, min_functions) -> list:
+        """The analyzed files the filters keep, for a directory and a single file alike (a
+        single file was returned whatever the filters said, BACK-2308)."""
         matched = [
             s for s in analyzed
             if matches_filters(
@@ -502,6 +508,7 @@ class MetricsAdapter(ResourceAdapter):
                 self.query_filters, field_value, compare
             )
         ]
+        self._unknown_filter_fields = []
         if analyzed and not matched:
             # A filter field no analyzed file has is why nothing matched: a typo, not a
             # genuine zero (BACK-2299, json:// BACK-1165).
@@ -545,6 +552,7 @@ class MetricsAdapter(ResourceAdapter):
 
     def _apply_sorting(self, file_stats: list) -> list:
         """Apply sorting to file stats if sort field is specified."""
+        self._sort_failure = None
         if not self.result_control.sort_field:
             return list(file_stats)
 
@@ -557,8 +565,12 @@ class MetricsAdapter(ResourceAdapter):
             # sorted as 0.
             return sort_nulls_last(file_stats, lambda x: field_value(x, sort_field),
                                    self.result_control.sort_descending)
-        except (TypeError, KeyError):
-            return list(file_stats)  # Skip sorting if field doesn't exist
+        except TypeError as error:
+            # Values that do not compare (``sort=elements`` reads a dict per file): walk order,
+            # and the result says it is not sorted (BACK-2308; it said nothing). field_value
+            # reads with ``in`` and raises no KeyError.
+            self._sort_failure = sort_failed_warning(sort_field, error)
+            return list(file_stats)
 
     def _apply_pagination(self, file_stats: list) -> list:
         """Apply offset and limit pagination to file stats."""
@@ -796,8 +808,11 @@ class MetricsAdapter(ResourceAdapter):
                 return dict(ResultBuilder.create_error(
                     result_type='stats_file', source=self.path,
                     error=f"analysis failed: {file_stats['analysis_failed']}"))  # type: ignore[index]
-            result = aggregate_stats([file_stats] if file_stats else [], self.path)
+            kept = self._filter_analyzed([file_stats] if file_stats else [], min_lines, max_lines,
+                                         min_complexity, max_complexity, min_functions)
+            result = aggregate_stats(kept, self.path)
             self._record_analysis_results([file_stats])
+            note_warning(result, self._unknown_filter_field_warning())
             self._disclose_failures(result)
             result.update(
                 contract_version=CONTRACT_VERSION,
@@ -806,7 +821,7 @@ class MetricsAdapter(ResourceAdapter):
                 source_type='file',
             )
             if hotspots:
-                self._add_hotspots(result, [file_stats] if file_stats else [])
+                self._add_hotspots(result, kept)
             if summary_only:
                 result.pop('files', None)
             return result
@@ -826,6 +841,7 @@ class MetricsAdapter(ResourceAdapter):
         self._add_truncation_metadata(result, len(controlled_stats), total_filtered)
         note_warning(result, unknown_sort_field_warning(
             self.result_control.sort_field, dir_file_stats, field_value, SORT_FIELDS))
+        note_warning(result, self._sort_failure)
         note_warning(result, self._unknown_filter_field_warning())
         self._disclose_failures(result)
         self._disclose_exclusions(result)
