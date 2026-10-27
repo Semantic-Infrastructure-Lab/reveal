@@ -93,7 +93,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
 ]
 
 _SCHEMA_NOTES = [
-    'Sensitive values are auto-redacted: a name holding PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, AUTH, PRIVATE, PASSPHRASE, DATABASE_URL or DSN as a whole _-delimited word (plural too, any case), or a value that is a URL with user:password@',
+    'Sensitive values are auto-redacted: a name holding PASSWORD, PASSWD, PGPASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, AUTH, PRIVATE, PASSPHRASE, DATABASE_URL, DSN, CONNECTION_STRING or CONNSTR as a whole _-delimited word (plural too, any case) or ending in _PWD, or a value that is a URL with user:password@ or carries a password=/pwd= parameter',
     'Redacted values shown as *** — sensitive values are not accessible via CLI (by design)',
     'env:// groups all vars by category: System, Python, Node, Application, Custom',
     'env://VAR_NAME returns the single variable with sensitivity classification',
@@ -102,8 +102,8 @@ _SCHEMA_NOTES = [
 
 _SCHEMA_SECURITY_FEATURES = [
     'Automatic sensitive value redaction',
-    'Name-based detection: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH, PRIVATE, PASSPHRASE, DATABASE_URL, DSN (whole _-delimited words, plural too)',
-    'Value-based detection: a URL with embedded user:password@ credentials, whatever the name',
+    'Name-based detection: PASSWORD, PASSWD, PGPASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH, PRIVATE, PASSPHRASE, DATABASE_URL, DSN, CONNECTION_STRING, CONNSTR (whole _-delimited words, plural too) and a _PWD suffix',
+    'Value-based detection: a URL with embedded user:password@ credentials or a password=/pwd= parameter, whatever the name',
     'Redacted values shown as ***'
 ]
 
@@ -262,22 +262,26 @@ class EnvAdapter(ResourceAdapter):
         }
 
     SENSITIVE_PATTERNS = [
-        'PASSWORD', 'SECRET', 'TOKEN', 'KEY', 'CREDENTIAL',
+        'PASSWORD', 'PASSWD', 'PGPASSWORD', 'SECRET', 'TOKEN', 'KEY', 'CREDENTIAL',
         'API_KEY', 'AUTH', 'PRIVATE', 'PASSPHRASE',
-        'DATABASE_URL', 'DSN'
+        'DATABASE_URL', 'DSN', 'CONNECTION_STRING', 'CONNSTR'
     ]
 
     # Compiled regex: each pattern must appear as a whole word in the var name
-    # (delimited by _ or start/end of string, since env var names use _ not spaces)
+    # (delimited by _ or start/end of string, since env var names use _ not spaces).
+    # PWD is a secret only as a suffix (MYSQL_PWD): a bare PWD is the working directory.
     _SENSITIVE_RE = re.compile(
         '|'.join(
-            r'(?:^|_)' + p + r'S?(?:_|$)'
-            for p in SENSITIVE_PATTERNS
+            [r'(?:^|_)' + p + r'S?(?:_|$)' for p in SENSITIVE_PATTERNS]
+            + [r'_PWD(?:_|$)']
         )
     )
 
-    # scheme://user:password@host — a secret in the value, whatever the name
-    _URL_CREDENTIALS_RE = re.compile(r'^[A-Za-z][A-Za-z0-9+.-]*://[^/\s:@]*:[^/\s@]+@')
+    # A secret in the value, whatever the name: scheme://user:password@host (scheme may carry a
+    # sub-scheme, jdbc:mysql://), optionally quoted or space-prefixed; a password= / pwd= URL
+    # parameter; or a Password=/Pwd= key in an ADO/ODBC style connection string.
+    _URL_CREDENTIALS_RE = re.compile(r'^[\s"\']*[A-Za-z][A-Za-z0-9+.:-]*://[^/\s:@]*:[^/\s@]+@')
+    _CREDENTIAL_PARAM_RE = re.compile(r'(?:^|[?&;\s])(?:password|passwd|pwd)\s*=\s*[^&;\s]', re.IGNORECASE)
 
     SYSTEM_VARS = {
         # Unix/Linux/macOS
@@ -394,7 +398,8 @@ class EnvAdapter(ResourceAdapter):
         """
         if self._SENSITIVE_RE.search(name.upper()):
             return True
-        return bool(value and self._URL_CREDENTIALS_RE.match(value))
+        return bool(value and (self._URL_CREDENTIALS_RE.match(value)
+                               or self._CREDENTIAL_PARAM_RE.search(value)))
 
     def _maybe_redact(self, name: str, value: str, show_secrets: bool) -> str:
         """Redact sensitive values unless show_secrets=True.

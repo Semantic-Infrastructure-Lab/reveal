@@ -211,11 +211,16 @@ whole `_`-delimited word, singular or plural (`CREDENTIAL` and `CREDENTIALS` bot
 - `AUTH`
 - `PRIVATE`
 - `PASSPHRASE`
+- `PASSWD` and `PGPASSWORD`
 - `DATABASE_URL`
 - `DSN`
+- `CONNECTION_STRING` and `CONNSTR`
+- a name ending in `_PWD` (`MYSQL_PWD`; a bare `PWD` is the working directory and is not sensitive)
 
-A variable is also sensitive, whatever its name, when its value is a URL with embedded
-credentials (`scheme://user:password@host...`, e.g. `REDIS_URL=redis://u:pw@cache:6379`).
+A variable is also sensitive, whatever its name, when its value holds a credential: a URL with
+embedded credentials (`scheme://user:password@host...`, also `jdbc:mysql://u:pw@host`, quoted or
+not, e.g. `REDIS_URL=redis://u:pw@cache:6379`), a `password=`, `passwd=` or `pwd=` parameter in a
+URL or connection string (`...?password=x`, `Server=x;User Id=u;Password=p;`).
 
 **Case-insensitive** - `password`, `Password`, `PASSWORD` all match. A keyword joined to
 another word is not matched: `MYPASSWORD`, `APIKEY`, `SECRETKEY` and `AUTHOR_NAME` are not
@@ -401,7 +406,8 @@ whole `_`-delimited word, singular or plural (case-insensitive):
 | `PASSPHRASE` | `GPG_PASSPHRASE`, `SSH_PASSPHRASE` |
 | `DATABASE_URL` | `DATABASE_URL`, `READONLY_DATABASE_URL` |
 | `DSN` | `SENTRY_DSN`, `DB_DSN` |
-| (value) a URL with `user:password@` | `REDIS_URL=redis://u:pw@cache:6379`, `DB_CONN=postgres://user:pass@host` |
+| `PASSWD`, `PGPASSWORD`, `CONNECTION_STRING`, `CONNSTR`, a `_PWD` suffix | `PGPASSWORD`, `MYSQL_PWD`, `SQLSERVER_CONNECTION_STRING` |
+| (value) a URL with `user:password@`, or a `password=`/`pwd=` parameter | `REDIS_URL=redis://u:pw@cache:6379`, `DB_CONN=postgres://user:pass@host`, `X=Server=s;Password=p;` |
 | **Not detected** (joined forms) | `MYPASSWORD`, `APIKEY`, `SECRETKEY`, `GITHUB_PAT`; a URL without credentials (`REDIS_URL=redis://cache:6379`) |
 
 ### Redaction Behavior
