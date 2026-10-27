@@ -320,12 +320,13 @@ _SCHEMA: Dict[str, Any] = {
     ],
     'notes': [
         'Reads /var/cpanel/logs/autossl/ directly — no WHM API or credentials required',
-        'Timestamps are in YYYY-MM-DD_HH-MM-SS format matching log filenames',
+        'Run timestamps are ISO 8601 UTC (2026-03-03T23:26:01Z), the log directory names; autossl:// lists them newest first',
         'tls_status values: ok (cert valid), incomplete (pending), defective (failed)',
-        'defect_codes explain why AutoSSL failed: DCV_ERROR, RATE_LIMIT, etc.',
+        'defect_codes are the OpenSSL verification codes (CERT_HAS_EXPIRED, DEPTH_ZERO_SELF_SIGNED_CERT, ...); DCV failures are in impediments[{code, detail}]',
         'Only available on cPanel servers — adapter errors cleanly on non-cPanel systems',
-        'jq: get timestamp of most recent run — reveal autossl:// --format=json | jq \'.runs[-1]\'',
-        'jq: chain into the most recent run directly — reveal autossl://$(reveal autossl:// --format=json | jq -r \'.runs[-1]\')',
+        'jq: get timestamp of most recent run — reveal autossl:// --format=json | jq \'.runs[0]\'',
+        'jq: chain into the most recent run directly — reveal autossl://$(reveal autossl:// --format=json | jq -r \'.runs[0]\')',
+        'Code reference: reveal autossl://error-codes',
     ],
 }
 
