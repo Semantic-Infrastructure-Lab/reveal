@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
+from reveal.utils.github_anchors import heading_anchors, html_anchor_ids
 from reveal.utils.lines import split_lines
 from reveal.utils.request_cache import register_request_cache
 
@@ -69,7 +70,7 @@ class L001(BaseRule):
         # _validate_anchor_only_link doesn't need to re-parse the file per link.
         if structure and 'headings' in structure:
             source_path = Path(file_path)
-            anchors = self._headings_to_anchors(structure['headings'])
+            anchors = self._headings_to_anchors(structure['headings'], content)
             _anchor_cache[source_path] = anchors
 
         # The markdown analyzer's link extraction only sees inline `[text](url)`
@@ -110,26 +111,13 @@ class L001(BaseRule):
             self.completed(file_path)
         return detections
 
-    def _headings_to_anchors(self, headings: List[Dict[str, Any]]) -> List[str]:
-        """Convert heading dicts to GitHub-Flavored Markdown anchor slugs."""
-        anchors = []
-        for heading in headings:
-            heading_text = heading.get('name', '').strip()
-            if not heading_text:
-                continue
-            anchor = heading_text.lower()
-            # GitHub strips punctuation (keeping word chars/spaces/hyphens)
-            # then converts each space to a hyphen INDIVIDUALLY -- it does
-            # not collapse runs. A stripped em-dash leaves two flanking
-            # spaces that must survive as two separate hyphens (BACK-1232);
-            # collapsing here silently produced a single-hyphen anchor that
-            # never matched GitHub's actual double-hyphen slug.
-            anchor = re.sub(r'[^\w\s-]', '', anchor)
-            anchor = re.sub(r'[\s_]', '-', anchor)
-            anchor = anchor.strip('-')
-            if anchor:
-                anchors.append(anchor)
-        return anchors
+    def _headings_to_anchors(self, headings: List[Dict[str, Any]], content: str = '') -> List[str]:
+        """Every fragment GitHub resolves in a file: heading slugs plus explicit HTML anchors.
+
+        The slugger is shared with `--links` (reveal/utils/github_anchors.py, BACK-1901).
+        """
+        names = [heading.get('name', '') for heading in headings]
+        return [*heading_anchors(names), *html_anchor_ids(content)]
 
     # CommonMark link reference definition: up to 3 leading spaces, [label]:,
     # then a destination (optionally <bracketed>).  Title is ignored.
@@ -161,7 +149,7 @@ class L001(BaseRule):
         return refs
 
     def _extract_anchors_from_markdown(self, file_path: Path) -> Optional[List[str]]:
-        """Extract valid anchor IDs from markdown headings.
+        """Extract valid anchor IDs from markdown headings and explicit HTML anchors.
 
         Results are cached by file path so the tree-sitter parse runs once per
         file per process rather than once per anchor link in the file.
@@ -194,7 +182,7 @@ class L001(BaseRule):
                 str(file_path))
             return None
 
-        anchors = self._headings_to_anchors(headings)
+        anchors = self._headings_to_anchors(headings, analyzer.content)
         _anchor_cache[file_path] = anchors
         return anchors
 
@@ -368,6 +356,9 @@ class L001(BaseRule):
         suggestions = self._suggestions_for_reason(reason, target_path, file_part, broken_url)
 
         if anchor:
-            suggestions.append(f"Verify anchor '#{anchor}' exists in target")
+            suggestions.append(
+                f"Verify anchor '#{anchor}' exists in target "
+                "(GitHub keeps the hyphen an emoji or symbol leaves at the start or end of a "
+                "heading: '## 🎓 Intro' is '#-intro')")
 
         return " | ".join(suggestions) if suggestions else "File not found - verify path is correct"

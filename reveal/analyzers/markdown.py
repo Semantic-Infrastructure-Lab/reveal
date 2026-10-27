@@ -16,6 +16,7 @@ from ..core import node_children as _children
 from ..core import get_tree, iter_tree, tree_root
 from ..core.treesitter_parse import GrammarUnavailable
 from ..core.treesitter_compat import _zero_arg
+from ..utils.github_anchors import heading_anchors, html_anchor_ids
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -81,6 +82,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         self._inline_tree: Optional[Any] = None
         self._inline_parsed = False
         self._headings_from_disk = False  # set by a heading-index disk-cache hit
+        self._anchor_set: Optional[Set[str]] = None
 
     @property
     def inline_tree(self) -> Optional[Any]:
@@ -560,23 +562,16 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         return link_info
 
-    def _heading_to_slug(self, heading: str) -> str:
-        """Convert a heading to a URL-safe anchor slug.
+    def _anchors(self) -> Set[str]:
+        """Every fragment a link into this file can resolve to, as GitHub computes them.
 
-        Uses GitHub's algorithm, so a link that works on GitHub verifies here:
-        - Lowercase the heading
-        - Drop punctuation (keep word characters, underscores and hyphens)
-        - Turn EACH space into its own hyphen, with no collapsing: "A & B" is
-          `a--b` and `foo_bar` stays `foo_bar`
-
-        Args:
-            heading: The heading text
-
-        Returns:
-            URL-safe anchor slug
+        Heading slugs (duplicates suffixed) plus explicit HTML anchors; one place for both
+        `--links` and the L001 rule (BACK-1901). Cached: it is asked once per link.
         """
-        slug = re.sub(r'[^\w\s-]', '', heading.lower()).strip()
-        return re.sub(r'\s', '-', slug)
+        if self._anchor_set is None:
+            names = [heading['name'] for heading in self._extract_headings()]
+            self._anchor_set = set(heading_anchors(names)) | set(html_anchor_ids(self.content))
+        return self._anchor_set
 
     def _is_broken_link(self, url: str) -> bool:
         """Check if an internal link is broken.
@@ -591,13 +586,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         """
         # Handle anchor links (same-document links)
         if url.startswith('#'):
-            anchor = url[1:]  # Remove the leading #
-            # Get all headings and check if any matches
-            headings = self._extract_headings()
-            for heading in headings:
-                if self._heading_to_slug(heading['name']) == anchor:
-                    return False
-            return True
+            return url[1:] not in self._anchors()
 
         # Split off an anchor fragment (file.md#section) before resolving the
         # file path — otherwise the '#section' suffix is treated as part of
@@ -622,15 +611,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             return False
 
         try:
-            target_analyzer = MarkdownAnalyzer(str(target))
-            target_headings = target_analyzer._extract_headings()
+            return anchor not in MarkdownAnalyzer(str(target))._anchors()
         except OSError:  # the target can't be read: its anchor can't be verified, so not flagged
             return False
-
-        for heading in target_headings:
-            if self._heading_to_slug(heading['name']) == anchor:
-                return False
-        return True
 
     def _extract_fence_language(self, node) -> str:
         """Extract language identifier from fenced code block node.
