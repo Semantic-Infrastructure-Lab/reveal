@@ -300,9 +300,9 @@ reveal 'codex://memories/pipeline'
 #     [ ] 019d9e10  third-session-slug  uses=1
 ```
 
-The sample is rendered by the real adapter from a hand-built `memories_1.sqlite` holding the columns the adapter reads (`thread_id`, `rollout_slug`, `generated_at`, `selected_for_phase2`, `usage_count`, `last_usage`, `source_updated_at`); the ids and slugs are invented.
+The sample is rendered by the real adapter over a `memories_1.sqlite` built from the `stage1_outputs` table that codex-cli 0.163.0 creates; the rows, ids and slugs are invented (the install this was checked on has none).
 
-`[✓]` marks entries selected for Stage 2 consolidation. `uses` counts how many times the memory was cited in a session. `memories/pipeline` reads the `stage1_outputs` table from `memories_1.sqlite`, where current Codex keeps it, or from `state_5.sqlite` (the session index) on installs that predate that file.
+`[✓]` marks rows with `selected_for_phase2 = 1`; `uses` is the `usage_count` column as Codex stores it (Codex does not document what bumps it). `memories/pipeline` reads the `stage1_outputs` table from `memories_1.sqlite`, where current Codex keeps it, or from `state_5.sqlite` (the session index) on installs that predate that file.
 
 ---
 

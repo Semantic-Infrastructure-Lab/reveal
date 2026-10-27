@@ -12,6 +12,7 @@ import pytest
 from reveal.adapters.codex.adapter import CodexAdapter, _UUID_RE
 from reveal.adapters.agent_base import pair_tool_calls
 from codex_session_fixture import (
+    CODEX_STAGE1_OUTPUTS_DDL,
     FIXTURE_JSONL as _FIXTURE_JSONL, FIXTURE_LINES as _FIXTURE_LINES, SESSION_UUID as _SESSION_UUID,
     make_sqlite_db as _make_sqlite_db, write_fixture_jsonl as _write_fixture_jsonl,
 )
@@ -1070,29 +1071,18 @@ class TestMemoriesPipeline:
     def _make_pipeline_db(self, tmp_path: Path) -> Path:
         db_path = tmp_path / 'state_pipeline.sqlite'
         conn = sqlite3.connect(str(db_path))
-        conn.execute("""
-            CREATE TABLE stage1_outputs (
-                thread_id TEXT PRIMARY KEY,
-                source_updated_at INTEGER NOT NULL,
-                raw_memory TEXT NOT NULL,
-                rollout_summary TEXT NOT NULL,
-                generated_at INTEGER NOT NULL,
-                rollout_slug TEXT,
-                usage_count INTEGER,
-                last_usage INTEGER,
-                selected_for_phase2 INTEGER NOT NULL DEFAULT 0,
-                selected_for_phase2_source_updated_at INTEGER
-            )
-        """)
+        conn.execute(CODEX_STAGE1_OUTPUTS_DDL)
+        cols = ('thread_id, source_updated_at, raw_memory, rollout_summary, rollout_slug, generated_at, '
+                'usage_count, last_usage, selected_for_phase2')
         conn.execute(
-            "INSERT INTO stage1_outputs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ('thread-aaa', 1716544800, 'raw memory text', 'Summary of session', 1716544900,
-             'my-session-slug', 3, 1716545000, 1, None)
+            f"INSERT INTO stage1_outputs ({cols}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ('thread-aaa', 1716544800, 'raw memory text', 'Summary of session', 'my-session-slug',
+             1716544900, 3, 1716545000, 1)
         )
         conn.execute(
-            "INSERT INTO stage1_outputs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ('thread-bbb', 1716544700, 'another raw memory', 'Another summary', 1716544750,
-             'other-session-slug', 0, None, 0, None)
+            f"INSERT INTO stage1_outputs ({cols}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ('thread-bbb', 1716544700, 'another raw memory', 'Another summary', 'other-session-slug',
+             1716544750, 0, None, 0)
         )
         conn.commit()
         conn.close()
@@ -1131,23 +1121,31 @@ class TestMemoriesPipeline:
         slugs = [r.get('rollout_slug') for r in result['recent_outputs']]
         assert 'my-session-slug' in slugs
 
+    def test_pipeline_reads_every_column_of_the_real_codex_schema(self, tmp_path):
+        """BACK-2295: the query runs against Codex's own DDL (column set and order as shipped)."""
+        from reveal.adapters.codex.handlers.system import get_memories_pipeline
+        result = get_memories_pipeline(self._make_pipeline_db(tmp_path))
+        assert 'error' not in result
+        assert [(r['thread_id'], r['rollout_slug'], r['selected_for_phase2'], r['usage_count'])
+                for r in result['recent_outputs']] == [
+            ('thread-aaa', 'my-session-slug', 1, 3), ('thread-bbb', 'other-session-slug', 0, 0)]
+
+    def test_pipeline_schema_drift_is_an_error_not_a_zero(self, tmp_path):
+        """A Codex release that drops a column we read must not look like an empty pipeline."""
+        db_path = tmp_path / 'drift.sqlite'
+        conn = sqlite3.connect(str(db_path))
+        conn.execute('CREATE TABLE stage1_outputs (thread_id TEXT, rollout_slug TEXT)')
+        conn.execute("INSERT INTO stage1_outputs VALUES ('t', 's')")
+        conn.commit()
+        conn.close()
+        from reveal.adapters.codex.handlers.system import get_memories_pipeline
+        result = get_memories_pipeline(db_path)
+        assert 'selected_for_phase2' in result['error']
+
     def test_pipeline_zero_when_empty(self, tmp_path):
         db_path = tmp_path / 'empty.sqlite'
         conn = sqlite3.connect(str(db_path))
-        conn.execute("""
-            CREATE TABLE stage1_outputs (
-                thread_id TEXT PRIMARY KEY,
-                source_updated_at INTEGER NOT NULL,
-                raw_memory TEXT NOT NULL DEFAULT '',
-                rollout_summary TEXT NOT NULL DEFAULT '',
-                generated_at INTEGER NOT NULL DEFAULT 0,
-                rollout_slug TEXT,
-                usage_count INTEGER,
-                last_usage INTEGER,
-                selected_for_phase2 INTEGER NOT NULL DEFAULT 0,
-                selected_for_phase2_source_updated_at INTEGER
-            )
-        """)
+        conn.execute(CODEX_STAGE1_OUTPUTS_DDL)
         conn.commit()
         conn.close()
         adapter = CodexAdapter('memories/pipeline')

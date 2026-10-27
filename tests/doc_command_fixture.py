@@ -21,6 +21,7 @@ import warnings
 from pathlib import Path, PurePosixPath
 
 import pytest
+from codex_session_fixture import CODEX_STAGE1_OUTPUTS_DDL
 
 
 def _pad(prefix, count, indent='    '):
@@ -664,11 +665,11 @@ def build_session_extras(home: Path) -> None:
         json.dumps({'session_id': '019e5cc5', 'ts': 1774692000 + i, 'text': text}) + '\n'
         for i, text in enumerate(('refactor auth', 'run the tests'))), encoding='utf-8')
     conn = sqlite3.connect(str(codex / 'memories_1.sqlite'))
-    conn.execute('CREATE TABLE stage1_outputs (thread_id TEXT, rollout_slug TEXT, generated_at TEXT, '
-                 'selected_for_phase2 INTEGER, usage_count INTEGER, last_usage TEXT, '
-                 'source_updated_at TEXT)')
-    conn.execute("INSERT INTO stage1_outputs VALUES ('019e5cc5', 'auth-refactor', '2026-05-24', 1, 2, "
-                 "'2026-05-25', '2026-05-24')")
+    conn.execute(CODEX_STAGE1_OUTPUTS_DDL)
+    conn.execute("INSERT INTO stage1_outputs (thread_id, source_updated_at, raw_memory, rollout_summary, "
+                 "rollout_slug, generated_at, usage_count, last_usage, selected_for_phase2) "
+                 "VALUES ('019e5cc5', 1779600000, 'raw', 'summary', 'auth-refactor', 1779600000, 2, "
+                 "1779686400, 1)")
     conn.commit()
     conn.close()
 

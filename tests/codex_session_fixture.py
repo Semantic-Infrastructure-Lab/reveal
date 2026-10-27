@@ -153,3 +153,22 @@ def build_codex_home(home: Path) -> Path:
     manifest.write_text(json.dumps({'name': 'demo', 'version': '1.0.0', 'description': 'Demo plugin'}),
                         encoding='utf-8')
     return codex
+
+
+# `stage1_outputs` exactly as codex-cli 0.163.0 creates it in ~/.codex/memories_1.sqlite (read from a
+# real install, 2026-10-27; BACK-2295). Fixtures build the table from this so the adapter's query is
+# checked against Codex's own column set and order, not a guess.
+CODEX_STAGE1_OUTPUTS_DDL = """
+CREATE TABLE stage1_outputs (
+    thread_id TEXT PRIMARY KEY,
+    source_updated_at INTEGER NOT NULL,
+    raw_memory TEXT NOT NULL,
+    rollout_summary TEXT NOT NULL,
+    rollout_slug TEXT,
+    generated_at INTEGER NOT NULL,
+    usage_count INTEGER,
+    last_usage INTEGER,
+    selected_for_phase2 INTEGER NOT NULL DEFAULT 0,
+    selected_for_phase2_source_updated_at INTEGER
+)
+"""
