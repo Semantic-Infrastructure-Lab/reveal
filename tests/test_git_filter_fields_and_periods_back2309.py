@@ -210,9 +210,10 @@ def test_zoned_equality_and_ranges(utc_repo, query, expected):
     assert _messages(utc_repo, query) == expected
 
 
-@pytest.mark.parametrize('spelling', ['%2B02:00', '+02:00'])
-def test_a_zoned_bound_through_the_router(utc_repo, monkeypatch, spelling):
-    result = _router(utc_repo, monkeypatch, f'git://.?date>2026-01-15T14:30:00{spelling}', '--format', 'json')
+@pytest.mark.parametrize('bound', ['2026-01-15T14:30:00+02:00', '2026-01-15T12:30:00Z'])
+def test_a_zoned_bound_through_the_router(utc_repo, monkeypatch, bound):
+    # git:// query values are not percent-decoded, so '+' is written as itself.
+    result = _router(utc_repo, monkeypatch, f'git://.?date>{bound}', '--format', 'json')
     assert [c['message'].strip() for c in json.loads(result.stdout)['commits']['recent']] == ['z']
 
 
