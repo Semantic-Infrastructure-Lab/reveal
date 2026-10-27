@@ -153,3 +153,97 @@ def test_inspect_config_defaults_when_nothing_applies(isolated, monkeypatch):
     out = _inspect_config()
     assert 'Using all default settings.' in out, out
     assert 'E501' not in out, out
+
+
+# --- guards on the one owner (reveal.config._ENV_LAYER / CONFIG_ENV_VARS) -----------------------
+
+# A value per env-layer variable that must change what the env layer produces.
+_SAMPLE_VALUES = {
+    'REVEAL_RULES_DISABLE': 'E501',
+    'REVEAL_RULES_SELECT': 'B',
+    'REVEAL_FORMAT': 'json',
+    'REVEAL_IGNORE': 'vendor/**',
+    'REVEAL_C901_THRESHOLD': '20',
+    'REVEAL_E501_MAX_LENGTH': '120',
+    'REVEAL_BREADCRUMBS': '0',
+}
+
+
+def test_listed_variables_are_exactly_the_ones_config_py_reads():
+    """Read but not listed, or listed but not read anywhere in config.py: either fails here."""
+    assert set(config_module.CONFIG_ENV_VARS) == _config_module_env_names()
+
+
+def test_every_env_layer_variable_changes_the_config(isolated, monkeypatch):
+    """Listed but never read: each env-layer variable, set alone, must change the env layer."""
+    layer_names = [name for name, _ in config_module._ENV_LAYER]
+    assert set(layer_names) == set(_SAMPLE_VALUES), 'add a sample value for a new variable'
+    assert RevealConfig._load_from_env() == {}
+    for name in layer_names:
+        monkeypatch.setenv(name, _SAMPLE_VALUES[name])
+        assert RevealConfig._load_from_env() != {}, f'{name} is listed but changes nothing'
+        monkeypatch.delenv(name)
+
+
+def test_source_selectors_change_what_is_read(isolated, monkeypatch, tmp_path):
+    """REVEAL_NO_CONFIG and REVEAL_CONFIG are listed; each must change which files are read."""
+    _write_project_config(isolated)
+    assert _view()['metadata']['config_files_count'] == 1
+    monkeypatch.setenv('REVEAL_NO_CONFIG', '1')
+    RevealConfig.reset_request_cache()
+    assert _view()['metadata']['config_files_count'] == 0
+    monkeypatch.delenv('REVEAL_NO_CONFIG')
+    custom = tmp_path / 'custom.yaml'
+    custom.write_text('rules:\n  disable: [X1]\n', encoding='utf-8')
+    monkeypatch.setenv('REVEAL_CONFIG', str(custom))
+    RevealConfig.reset_request_cache()
+    view = _view()
+    assert view['sources']['project_configs'] == []
+    assert view['active_config']['rules']['disable'] == ['X1']
+    assert view['metadata']['config_files_count'] == 1
+
+
+def test_unread_variables_are_shown_apart(isolated, monkeypatch):
+    monkeypatch.setenv('REVEAL_C905_MAX_DEPTH', '3')
+    view = _view()
+    assert 'REVEAL_C905_MAX_DEPTH' not in view['sources']['env_vars']
+    assert view['sources']['other_env_vars']['REVEAL_C905_MAX_DEPTH'] == '3'
+
+
+def test_sources_layers_in_precedence_order(isolated, monkeypatch):
+    """User config then project files furthest to nearest; the view lists project nearest first."""
+    xdg = isolated.parent / 'xdg' / 'reveal'
+    xdg.mkdir(parents=True)
+    (xdg / 'config.yaml').write_text('ignore: [u/]\n', encoding='utf-8')
+    (isolated / '.reveal.yaml').write_text('root: true\n', encoding='utf-8')
+    sub = isolated / 'sub'
+    sub.mkdir()
+    (sub / '.reveal.yaml').write_text('ignore: [s/]\n', encoding='utf-8')
+    monkeypatch.chdir(sub)
+    RevealConfig.reset_request_cache()
+    config = RevealConfig.get()
+    assert [(s.layer, s.path.parent.name) for s in config.sources] == [
+        ('user', 'reveal'), ('project', 'proj'), ('project', 'sub')]
+    view = _view()
+    assert [Path(p['path']).parent.name for p in view['sources']['project_configs']] == ['sub', 'proj']
+    assert [p['root'] for p in view['sources']['project_configs']] == [False, True]
+    assert view['sources']['user_config'].endswith('reveal/config.yaml')
+
+
+def test_paths_are_posix_whatever_the_os(isolated, monkeypatch):
+    """Windows spelling control: every path the view emits is serialized with '/'."""
+    from pathlib import PureWindowsPath
+    fake = RevealConfig({'rules': {}}, PureWindowsPath('C:\\proj'))  # type: ignore[arg-type]
+    fake.sources = [
+        config_module.ConfigSource('user', PureWindowsPath('C:\\u\\reveal\\config.yaml')),  # type: ignore[arg-type]
+        config_module.ConfigSource('project', PureWindowsPath('C:\\proj\\.reveal.yaml'), True),  # type: ignore[arg-type]
+    ]
+    fake.load_failures = [('C:\\proj\\sub\\.reveal.yaml', 'ValueError: bad')]
+    assert '\\' in str(fake.sources[1].path)  # the spelling a str() would leak
+    monkeypatch.setattr(RevealConfig, 'get', classmethod(lambda cls, *a, **k: fake))
+    view = _view()
+    assert view['metadata']['project_root'] == 'C:/proj'
+    assert view['sources']['project_configs'] == [{'path': 'C:/proj/.reveal.yaml', 'root': True}]
+    assert view['sources']['user_config'] == 'C:/u/reveal/config.yaml'
+    assert view['sources']['load_failures'] == [
+        {'path': 'C:/proj/sub/.reveal.yaml', 'reason': 'ValueError: bad'}]

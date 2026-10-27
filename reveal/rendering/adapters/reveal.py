@@ -124,6 +124,11 @@ def _render_config_sources(sources: Dict[str, Any]) -> None:
     _render_optional_section("Project Configurations", sources.get('project_configs'))
     _render_optional_section("User Configuration", sources.get('user_config'))
     _render_optional_section("System Configuration", sources.get('system_config'))
+    _render_optional_section("Could Not Load (settings not applied)", [
+        f"{failure['path']}: {failure['reason']}" for failure in sources.get('load_failures', [])
+    ])
+    _render_optional_section("Other REVEAL_* Variables (set, not read by the config loader)",
+                             sources.get('other_env_vars'))
 
 
 def _render_config_active_rules(rules: Dict[str, Any]) -> None:
@@ -132,12 +137,14 @@ def _render_config_active_rules(rules: Dict[str, Any]) -> None:
         return
 
     print("  Rules:")
-    # Show disabled rules
+    # Show disabled and selected rules
     if 'disable' in rules:
         print(f"    Disabled: {', '.join(rules['disable'])}")
+    if 'select' in rules:
+        print(f"    Selected: {', '.join(rules['select'])}")
     # Show rule configs
     for rule_code, rule_config in rules.items():
-        if rule_code != 'disable' and isinstance(rule_config, dict):
+        if rule_code not in ('disable', 'select') and isinstance(rule_config, dict):
             print(f"    {rule_code}:")
             for key, value in rule_config.items():
                 print(f"      {key}: {value}")

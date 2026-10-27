@@ -2,7 +2,6 @@
 
 import argparse
 from argparse import Namespace
-from pathlib import Path
 
 
 def create_dev_parser() -> argparse.ArgumentParser:
@@ -74,58 +73,47 @@ def run_dev(args: Namespace) -> None:
 
 
 def _run_inspect_config() -> None:
-    """Show the effective .reveal.yaml for the current directory."""
-    from ...config import RevealConfig
+    """Show the config in effect for the current directory: the files read, the REVEAL_*
+    variables applied and the merged settings (the same data as ``reveal reveal://config``)."""
+    import yaml
 
-    start = Path.cwd()
-    config = RevealConfig.get(start)
+    from ...adapters.reveal.config import get_config
 
-    config_files = getattr(config, '_loaded_files', None) or getattr(config, 'config_files', None)
+    view = get_config()
+    sources, meta = view['sources'], view['metadata']
 
-    print("Effective .reveal.yaml configuration")
-    print(f"  Search root: {start}")
+    print("Effective reveal configuration")
+    print(f"  Search root: {meta['working_directory']}")
+    print(f"  Project root: {meta['project_root']}")
     print()
 
-    if config_files:
-        print("Config files loaded (in priority order):")
-        for f in config_files:
-            print(f"  {f}")
-        print()
+    # highest precedence first
+    files = ([('custom', sources['custom_config'])] if sources['custom_config'] else [])
+    files += [('project', p['path'] + (' (root)' if p['root'] else '')) for p in sources['project_configs']]
+    files += [(layer, sources[f'{layer}_config']) for layer in ('user', 'system') if sources[f'{layer}_config']]
+    if meta['no_config_mode']:
+        print("Config files: skipped (REVEAL_NO_CONFIG=1)")
+    elif files:
+        print("Config files read (highest precedence first):")
+        for layer, path in files:
+            print(f"  {layer:<8} {path}")
     else:
-        # Try to find the config file manually
-        current = start
-        found = None
-        while True:
-            candidate = current / '.reveal.yaml'
-            if candidate.exists():
-                found = candidate
-                break
-            parent = current.parent
-            if parent == current:
-                break
-            current = parent
+        print("No config files found.")
+    for failure in sources['load_failures']:
+        print(f"  could not load {failure['path']}: {failure['reason']} (its settings are not applied)")
+    print()
 
-        if found:
-            print(f"Config file: {found}")
-        else:
-            print("No .reveal.yaml found (using defaults)")
+    if sources['env_vars']:
+        print("Environment variables:")
+        for name, value in sources['env_vars'].items():
+            print(f"  {name}={value}")
         print()
 
-    # Show effective settings
-    settings = {
-        'layers': getattr(config, 'layers', None),
-        'complexity_threshold': getattr(config, 'complexity_threshold', None),
-        'max_line_length': getattr(config, 'max_line_length', None),
-        'exclude': getattr(config, 'exclude', None),
-        'ignore_rules': getattr(config, 'ignore_rules', None),
-        'select_rules': getattr(config, 'select_rules', None),
-    }
-
-    has_settings = any(v is not None for v in settings.values())
-    if has_settings:
+    settings = {key: value for key, value in view['active_config'].items() if key != 'root' and value}
+    if settings:
         print("Effective settings:")
-        for key, value in settings.items():
-            if value is not None:
-                print(f"  {key}: {value}")
+        dumped = yaml.safe_dump(settings, default_flow_style=False, sort_keys=False)
+        for line in dumped.rstrip('\n').split('\n'):
+            print(f"  {line}")
     else:
         print("Using all default settings.")

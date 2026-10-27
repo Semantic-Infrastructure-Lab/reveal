@@ -43,15 +43,80 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def _apply_int_rule_env(config: dict, env_var: str, rule_key: str, field_key: str) -> None:
-    """Read an integer from an env var and set config['rules'][rule_key][field_key]."""
-    value = os.getenv(env_var)
-    if not value:
-        return
-    try:
-        config.setdefault('rules', {})[rule_key] = {field_key: int(value)}
-    except ValueError:
-        logger.warning(f"Invalid {env_var} value: {value}")
+# Source selectors: they choose which files are merged rather than setting a value.
+NO_CONFIG_ENV = 'REVEAL_NO_CONFIG'
+CUSTOM_CONFIG_ENV = 'REVEAL_CONFIG'
+
+_EnvApplier = Callable[[Dict[str, Any], str, str], None]
+
+
+def _env_csv(value: str) -> List[str]:
+    return [part.strip() for part in value.split(',')]
+
+
+def _env_rules_disable(config: Dict[str, Any], _name: str, value: str) -> None:
+    config['rules'] = {'disable': _env_csv(value)}
+
+
+def _env_rules_select(config: Dict[str, Any], _name: str, value: str) -> None:
+    config.setdefault('rules', {})['select'] = _env_csv(value)
+
+
+def _env_format(config: Dict[str, Any], _name: str, value: str) -> None:
+    config['output'] = {'format': value}
+
+
+def _env_ignore(config: Dict[str, Any], _name: str, value: str) -> None:
+    config['ignore'] = _env_csv(value)
+
+
+def _env_int_rule(rule_key: str, field_key: str) -> _EnvApplier:
+    """An applier that sets config['rules'][rule_key][field_key] to the variable's integer."""
+    def apply(config: Dict[str, Any], name: str, value: str) -> None:
+        try:
+            config.setdefault('rules', {})[rule_key] = {field_key: int(value)}
+        except ValueError:
+            logger.warning(f"Invalid {name} value: {value}")
+    return apply
+
+
+def _env_breadcrumbs(config: Dict[str, Any], _name: str, value: str) -> None:
+    # 0/false/no turn breadcrumbs off; any other value turns them on
+    config.setdefault('display', {})['breadcrumbs'] = value.lower() not in ('0', 'false', 'no')
+
+
+# The env layer: every REVEAL_* variable it reads and how a set value lands in the merged config,
+# in the order applied. `_load_from_env` reads exactly these and reveal://config lists exactly
+# these plus the two selectors above, so a variable cannot be read without being shown, nor shown
+# without being read (BACK-2275; tests/test_config_sources_back2275.py checks both ways).
+_ENV_LAYER: Tuple[Tuple[str, _EnvApplier], ...] = (
+    ('REVEAL_RULES_DISABLE', _env_rules_disable),
+    ('REVEAL_RULES_SELECT', _env_rules_select),
+    ('REVEAL_FORMAT', _env_format),
+    ('REVEAL_IGNORE', _env_ignore),
+    ('REVEAL_C901_THRESHOLD', _env_int_rule('C901', 'threshold')),
+    ('REVEAL_E501_MAX_LENGTH', _env_int_rule('E501', 'max_length')),
+    ('REVEAL_BREADCRUMBS', _env_breadcrumbs),
+)
+
+CONFIG_ENV_VARS: Tuple[str, ...] = (NO_CONFIG_ENV, CUSTOM_CONFIG_ENV) + tuple(name for name, _ in _ENV_LAYER)
+
+
+def config_env_vars() -> Dict[str, str]:
+    """The configuration variables that are set to a non-empty value, in CONFIG_ENV_VARS order."""
+    return {name: value for name in CONFIG_ENV_VARS if (value := os.environ.get(name, ''))}
+
+
+@dataclass(frozen=True)
+class ConfigSource:
+    """One config file that was read into a RevealConfig (BACK-2275).
+
+    *layer* is 'system', 'user', 'project' (a .reveal.yaml or a pyproject.toml [tool.reveal])
+    or 'custom' (the file REVEAL_CONFIG names); *root* is its ``root: true``.
+    """
+    layer: str
+    path: Path
+    root: bool = False
 
 
 _ResolveKey = Union[Path, Tuple[str, Path]]  # absolute path, or (cwd, relative path)
@@ -337,6 +402,8 @@ class RevealConfig:
         # (config file, why) for each file that exists but could not be loaded, so its
         # settings are NOT in this config; ``check`` discloses them (BACK-1857).
         self.load_failures: List[Tuple[str, str]] = []
+        # The files that were read into this config, lowest precedence first (BACK-2275).
+        self.sources: List[ConfigSource] = []
         self._overrides = self._parse_overrides()
 
     def _parse_overrides(self) -> List[Override]:
@@ -369,7 +436,7 @@ class RevealConfig:
             RevealConfig instance
         """
         # Check REVEAL_NO_CONFIG environment variable
-        if os.getenv('REVEAL_NO_CONFIG') == '1':
+        if os.getenv(NO_CONFIG_ENV) == '1':
             no_config = True
 
         if start_path is None:
@@ -393,11 +460,13 @@ class RevealConfig:
 
         # Load and merge configs
         failures: List[Tuple[str, str]] = []
-        merged = cls._load_and_merge(start_path, cli_overrides, no_config, failures)
+        sources: List[ConfigSource] = []
+        merged = cls._load_and_merge(start_path, cli_overrides, no_config, failures, sources)
 
         # Create instance
         instance = cls(merged, project_root)
         instance.load_failures = failures
+        instance.sources = sources
 
         # Cache it
         if not no_config:
@@ -456,11 +525,13 @@ class RevealConfig:
                         start_path: Path,
                         cli_overrides: Optional[Dict[str, Any]] = None,
                         no_config: bool = False,
-                        failures: Optional[List[Tuple[str, str]]] = None) -> Dict[str, Any]:
+                        failures: Optional[List[Tuple[str, str]]] = None,
+                        sources: Optional[List[ConfigSource]] = None) -> Dict[str, Any]:
         """Load all configs and merge with precedence rules.
 
         *failures* collects ``(path, why)`` for each config file that exists but could not
-        be loaded (BACK-1857).
+        be loaded (BACK-1857); *sources* collects each file that was read, lowest precedence
+        first (BACK-2275).
 
         Precedence (high to low):
         1. CLI overrides
@@ -472,24 +543,31 @@ class RevealConfig:
         7. Built-in defaults
         """
         configs = []
+        read: List[ConfigSource] = sources if sources is not None else []
 
         if not no_config:
             # Check for REVEAL_CONFIG environment variable
-            custom_config_path = os.getenv('REVEAL_CONFIG')
+            custom_config_path = os.getenv(CUSTOM_CONFIG_ENV)
 
             if custom_config_path:
                 # Load only the specified config file
                 custom_config, why = cls._load_file_outcome(Path(custom_config_path), failures)
+                if custom_config is not None:
+                    read.append(ConfigSource('custom', Path(custom_config_path),
+                                             bool(custom_config.get('root'))))
                 if custom_config:
                     configs.append(custom_config)
-                elif why is None:
+                elif custom_config is None and why is None:
                     logger.warning(
                         f"REVEAL_CONFIG specified but file not found: {custom_config_path}"
                     )
             else:
                 # Normal config discovery
                 # 1. System config
-                system_config, _why = cls._load_file_outcome(Path('/etc/reveal/config.yaml'), failures)
+                system_path = Path('/etc/reveal/config.yaml')
+                system_config, _why = cls._load_file_outcome(system_path, failures)
+                if system_config is not None:
+                    read.append(ConfigSource('system', system_path, bool(system_config.get('root'))))
                 if system_config:
                     configs.append(system_config)
 
@@ -497,12 +575,16 @@ class RevealConfig:
                 user_config_path = cls._get_user_config_path()
                 user_config = cls._load_file_outcome(user_config_path, failures)[0] \
                     if user_config_path.exists() else None
+                if user_config is not None:
+                    read.append(ConfigSource('user', user_config_path, bool(user_config.get('root'))))
                 if user_config:
                     configs.append(user_config)
 
                 # 3. Project configs (walk up from start_path)
-                project_configs = cls._discover_project_configs(start_path, failures)
+                project_read: List[ConfigSource] = []
+                project_configs = cls._discover_project_configs(start_path, failures, project_read)
                 configs.extend(reversed(project_configs))  # Reverse so nearest is last
+                read.extend(reversed(project_read))
 
             # 4. Environment variables (always loaded, even with REVEAL_CONFIG)
             env_config = cls._load_from_env()
@@ -539,11 +621,14 @@ class RevealConfig:
 
     @classmethod
     def _discover_project_configs(cls, start_path: Path,
-                                  failures: Optional[List[Tuple[str, str]]] = None) -> List[Dict[str, Any]]:
+                                  failures: Optional[List[Tuple[str, str]]] = None,
+                                  sources: Optional[List[ConfigSource]] = None) -> List[Dict[str, Any]]:
         """Walk up directory tree finding .reveal.yaml files.
 
+        *sources* collects a ConfigSource for each file read, in walk order (nearest first).
+
         Returns:
-            List of configs from root to start_path (furthest to nearest)
+            List of configs from start_path upward (nearest first)
         """
         configs = []
         current = start_path
@@ -553,12 +638,17 @@ class RevealConfig:
             config_file = current / '.reveal.yaml'
             if config_file.exists():
                 config, _why = cls._load_file_outcome(config_file, failures)
+                if config is not None and sources is not None:
+                    sources.append(ConfigSource('project', config_file, bool(config.get('root'))))
                 if config:
                     configs.append(config)
                 if config and config.get('root'):
                     break
 
-            pyproject_config = cls._try_load_pyproject_reveal(current / 'pyproject.toml', failures)
+            pyproject = current / 'pyproject.toml'
+            pyproject_config = cls._try_load_pyproject_reveal(pyproject, failures)
+            if isinstance(pyproject_config, dict) and sources is not None:
+                sources.append(ConfigSource('project', pyproject, bool(pyproject_config.get('root'))))
             if pyproject_config:
                 configs.append(pyproject_config)
             if pyproject_config and pyproject_config.get('root'):
@@ -629,7 +719,7 @@ class RevealConfig:
 
     @classmethod
     def _load_from_env(cls) -> Dict[str, Any]:
-        """Load configuration from environment variables.
+        """Load configuration from environment variables (the ones in ``_ENV_LAYER``).
 
         Supported environment variables:
         - REVEAL_RULES_DISABLE: Comma-separated list of rules to disable
@@ -650,32 +740,9 @@ class RevealConfig:
             export REVEAL_BREADCRUMBS=0
         """
         config: Dict[str, Any] = {}
-
-        # REVEAL_RULES_DISABLE="E501,D001"
-        if disable := os.getenv('REVEAL_RULES_DISABLE'):
-            config['rules'] = {'disable': [r.strip() for r in disable.split(',')]}
-
-        # REVEAL_RULES_SELECT="B,S"
-        if select := os.getenv('REVEAL_RULES_SELECT'):
-            config.setdefault('rules', {})['select'] = [r.strip() for r in select.split(',')]
-
-        # REVEAL_FORMAT=json
-        if fmt := os.getenv('REVEAL_FORMAT'):
-            config['output'] = {'format': fmt}
-
-        # REVEAL_IGNORE="*.min.js,vendor/**"
-        if ignore := os.getenv('REVEAL_IGNORE'):
-            config['ignore'] = [p.strip() for p in ignore.split(',')]
-
-        _apply_int_rule_env(config, 'REVEAL_C901_THRESHOLD', 'C901', 'threshold')
-        _apply_int_rule_env(config, 'REVEAL_E501_MAX_LENGTH', 'E501', 'max_length')
-
-        # REVEAL_BREADCRUMBS=0 (or 1, false, true, no, yes)
-        if breadcrumbs_env := os.getenv('REVEAL_BREADCRUMBS'):
-            config.setdefault('display', {})['breadcrumbs'] = (
-                breadcrumbs_env.lower() not in ('0', 'false', 'no')
-            )
-
+        for name, apply in _ENV_LAYER:
+            if value := os.getenv(name):
+                apply(config, name, value)
         return config
 
     def get_file_config(self, file_path: Path) -> FileConfig:

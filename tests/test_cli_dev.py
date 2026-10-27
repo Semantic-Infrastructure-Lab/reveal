@@ -112,13 +112,17 @@ class TestRunDev(unittest.TestCase):
 class TestRunInspectConfig(unittest.TestCase):
 
     def _capture(self):
-        from pathlib import Path as RealPath
+        import os
+        import tempfile
         buf = io.StringIO()
-        with patch('reveal.cli.commands.dev.Path') as mock_path_cls:
-            mock_path_cls.cwd.return_value = RealPath('/tmp')
-            mock_path_cls.side_effect = lambda *a, **kw: RealPath(*a, **kw)
-            with redirect_stdout(buf):
-                _run_inspect_config()
+        old_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            try:
+                with redirect_stdout(buf):
+                    _run_inspect_config()
+            finally:
+                os.chdir(old_cwd)
         return buf.getvalue()
 
     def test_no_crash(self):
@@ -135,9 +139,7 @@ class TestRunInspectConfig(unittest.TestCase):
 
     def test_shows_defaults_or_settings(self):
         out = self._capture()
-        self.assertTrue(
-            "default" in out.lower() or "layers" in out or "exclude" in out or "Config file" in out
-        )
+        self.assertTrue("Using all default settings." in out or "Effective settings:" in out)
 
 
 if __name__ == '__main__':

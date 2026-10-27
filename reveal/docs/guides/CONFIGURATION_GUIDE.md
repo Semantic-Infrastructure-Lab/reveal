@@ -56,7 +56,7 @@ ignore:
 ### Verify Configuration
 
 ```bash
-# See the merged active config for this directory
+# See the config files read, the REVEAL_* variables applied and the merged config
 reveal reveal://config
 
 # Test with environment variable
@@ -661,7 +661,7 @@ reveal check src/
 1. Check file is in project root or parent directory
 2. Verify YAML syntax: `python -c "import yaml; yaml.safe_load(open('.reveal.yaml'))"`
 3. Check for `root: true` in parent directory stopping discovery
-4. Use `reveal reveal://config` to see the merged active config, and `reveal dev inspect-config` for the nearest `.reveal.yaml` path
+4. Use `reveal reveal://config` (or the shorter `reveal dev inspect-config`) to see which config files were read; a file that exists but could not be loaded is listed under `Could Not Load` with the parse error
 
 ### Rule Still Running After Disable
 
@@ -689,23 +689,44 @@ print(cfg.dump())
 
 **Problem:** Unsure which config is being used
 
-**Solution:** Use `reveal://config` to see the merged active config:
+**Solution:** Use `reveal://config` to see what was read and what it merged to:
 
 ```bash
 reveal reveal://config
 
 # Shows:
+# - Every config file read (project files nearest first, user, system, or the REVEAL_CONFIG file)
+# - Files that exist but could not be loaded (their settings are not applied)
+# - The config REVEAL_* variables that are set, and apart from them any other REVEAL_* variable
+#   set that the config loader does not read (a cache setting, or a misspelt name)
 # - The merged active config for the current directory (rules, ignore, overrides, root)
-# - The REVEAL_* threshold variables that are set
 # - Precedence order explanation
 ```
 
-It does not yet list which project config files were loaded (`Config Files Found` reads 0 even
-when a `.reveal.yaml` applies), and its environment list leaves out `REVEAL_RULES_SELECT`,
-`REVEAL_IGNORE`, `REVEAL_FORMAT` and `REVEAL_BREADCRUMBS`. It discovers from the current
-directory, not from a file you name. Use `reveal dev inspect-config` for the nearest
-`.reveal.yaml` path (read only its `Config file:` line: it always ends with "Using all default
-settings.", even when the file sets rules).
+It discovers from the current directory, not from a file you name: run it from the directory you
+check. `reveal dev inspect-config` prints the same sources and the merged settings as YAML:
+
+```
+Effective reveal configuration
+  Search root: /home/user/project
+  Project root: /home/user/project
+
+Config files read (highest precedence first):
+  project  /home/user/project/.reveal.yaml (root)
+
+Environment variables:
+  REVEAL_C901_THRESHOLD=20
+
+Effective settings:
+  rules:
+    disable:
+    - E501
+    select:
+    - E
+    - C
+    C901:
+      threshold: 20
+```
 
 **Manual precedence check:**
 1. Check for CLI flags first
@@ -732,19 +753,26 @@ REVEAL_C901_THRESHOLD=20 reveal reveal://config
 ```
 
 **What it shows:**
-- **Overview**: Project root, working directory, no-config mode, counts
-- **Sources**: the `REVEAL_*` threshold variables that are set, and a `REVEAL_CONFIG` file
-- **Active Config**: Merged rules (disabled rules and per-rule settings; the text view omits
-  `select`, the JSON `active_config.rules` has it), ignore patterns, root flag, overrides
+- **Overview**: Project root, working directory, no-config mode, the number of config files read
+  and of config variables set
+- **Sources**: the config `REVEAL_*` variables that are set (`REVEAL_NO_CONFIG`, `REVEAL_CONFIG`,
+  `REVEAL_RULES_DISABLE`, `REVEAL_RULES_SELECT`, `REVEAL_FORMAT`, `REVEAL_IGNORE`,
+  `REVEAL_C901_THRESHOLD`, `REVEAL_E501_MAX_LENGTH`, `REVEAL_BREADCRUMBS`), the `REVEAL_CONFIG`
+  file, the project, user and system files read, files that could not be loaded, and any other
+  `REVEAL_*` variable set (JSON `sources.other_env_vars`), which does not change the config
+- **Active Config**: Merged rules (disabled, selected and per-rule settings), ignore patterns, root
+  flag, overrides
 - **Precedence**: 7-level hierarchy explanation
 
-**Example output** (a project with `.reveal.yaml` = `root: true` and `rules: {disable: [E501]}`):
+**Example output** (a project with `.reveal.yaml` = `root: true` and
+`rules: {disable: [E501], select: [E, C]}`, run as
+`REVEAL_C901_THRESHOLD=20 REVEAL_C905_MAX_DEPTH=3 reveal reveal://config`):
 ```
 Overview:
   Project Root: /home/user/project
   Working Directory: /home/user/project
   No-Config Mode: False
-  Config Files Found: 0
+  Config Files Found: 1
   Environment Variables Set: 1
 
 Configuration Sources:
@@ -752,10 +780,17 @@ Configuration Sources:
   Environment Variables:
     * REVEAL_C901_THRESHOLD = 20
 
+  Project Configurations:
+    * /home/user/project/.reveal.yaml (root)
+
+  Other REVEAL_* Variables (set, not read by the config loader):
+    * REVEAL_C905_MAX_DEPTH = 3
+
 Active Configuration:
 
   Rules:
     Disabled: E501
+    Selected: E, C
     C901:
       threshold: 20
 
@@ -763,8 +798,8 @@ Active Configuration:
     * root: true (stops config search)
 ```
 
-`Config Files Found: 0` is a known gap: the project file was read (its `disable` and `root` are
-in the active config) but is not listed as a source.
+A `.reveal.yaml` that fails to parse is listed, with the parser's first line, under
+`Could Not Load (settings not applied):` (JSON `sources.load_failures`).
 
 ### Pattern Matching Not Working
 

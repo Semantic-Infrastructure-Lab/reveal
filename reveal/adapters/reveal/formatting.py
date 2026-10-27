@@ -133,6 +133,18 @@ def format_sources_section(sources: Dict[str, Any]) -> List[str]:
         lines.append(f"  • {sources['system_config']}")
         lines.append("")
 
+    if sources.get('load_failures'):
+        lines.append("### Could Not Load (settings not applied)")
+        for failure in sources['load_failures']:
+            lines.append(f"  • {failure['path']}: {failure['reason']}")
+        lines.append("")
+
+    if sources.get('other_env_vars'):
+        lines.append("### Other REVEAL_* Variables (set, not read by the config loader)")
+        for var, value in sources['other_env_vars'].items():
+            lines.append(f"  • {var} = {value}")
+        lines.append("")
+
     return lines
 
 
