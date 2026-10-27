@@ -126,6 +126,35 @@ def _unknown_filter_key_warning(structures: List[Dict[str, Any]], filtered: List
     }
 
 
+# Languages with decorator or attribute syntax whose analyzers leave it out of `decorators`
+# (BACK-2265; extraction for Dart and GDScript is BACK-1087). A language with no such syntax
+# (Go, Ruby, C, Lua, Zig) is not listed: a zero there is a real zero.
+_DECORATORS_NOT_EXTRACTED = frozenset({'javascript', 'cpp', 'dart', 'gdscript'})
+
+
+def _decorator_not_extracted_warning(structures: List[Dict[str, Any]], filtered: List[Dict[str, Any]],
+                                     query: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """A zero-result decorator= query over files whose language never extracts decorators:
+    the zero may be a gap in the analyzer, not an absence in the code (BACK-2265)."""
+    if filtered or 'decorator' not in query:
+        return None
+    from ...registry import language_for_extension
+    blind = sorted({
+        language for structure in structures
+        if (language := language_for_extension(os.path.splitext(structure.get('file', ''))[1]))
+        in _DECORATORS_NOT_EXTRACTED
+    })
+    if not blind:
+        return None
+    return {
+        'type': 'decorator_not_extracted',
+        'message': (
+            f"decorator= matched nothing, and the scan includes {', '.join(blind)} files whose "
+            f"analyzers do not extract decorators or attributes; the zero may be a gap, not an absence."
+        ),
+    }
+
+
 def _unfiltered_ranking_warning(controlled: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """BACK-1258: ast://?complexity>N is a ranking a reader treats as "what to look at
     first", and on a repo that commits vendored JS it can be dominated by files nobody
@@ -172,6 +201,7 @@ def _query_warnings(structures: List[Dict[str, Any]], filtered: List[Dict[str, A
         _degraded_conformance_warning(controlled),
         unknown_sort_field_warning(control.sort_field, filtered),  # BACK-1423
         _unknown_filter_key_warning(structures, filtered, query),
+        _decorator_not_extracted_warning(structures, filtered, query),  # BACK-2265
         _unfiltered_ranking_warning(controlled),
         dict(_COMPLEXITY_IS_UNWEIGHTED) if 'complexity' in query else None,
         analysis_skipped_warning(getattr(structures, 'skipped', []), None,
