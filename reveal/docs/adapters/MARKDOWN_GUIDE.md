@@ -209,11 +209,11 @@ Links (5):
 
   External (3):
     Line 10   [Project Website](https://example.com)
-             → example.com
+             -> example.com
     Line 15   [Documentation](https://docs.example.com)
-             → docs.example.com
+             -> docs.example.com
     Line 20   [GitHub](https://github.com/user/repo)
-             → github.com
+             -> github.com
 
   Internal (2):
     Line 25   [API Guide](./api.md)
@@ -223,7 +223,7 @@ Links (5):
 **Key Features**:
 - **Grouped by type**: External, Internal, Email
 - **Domain display**: Quick domain identification
-- **Broken link detection**: ❌ markers for missing internal files
+- **Broken link detection**: an `X` marker and `[BROKEN]` for missing internal files
 - **Line numbers**: Easy navigation to source
 
 ### Link Types
@@ -741,7 +741,7 @@ Links (3):
 
   External (1):
     Line 3    [website](https://example.com)
-             → example.com
+             -> example.com
 
   Internal (1):
     Line 5    [configuration guide](../guides/CONFIGURATION_GUIDE.md)

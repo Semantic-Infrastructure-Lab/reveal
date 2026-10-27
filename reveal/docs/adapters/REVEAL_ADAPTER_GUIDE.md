@@ -38,8 +38,9 @@ reveal reveal://config --format json # JSON output for scripting
 reveal --rules --all | grep V0
 ```
 
-`reveal://` and the V-series rules are internal self-inspection, hidden from
-`reveal --adapters` / `reveal --rules` unless you pass `--all`.
+`reveal://` and the V-series rules that only inspect reveal itself are hidden from
+`reveal --adapters` / `reveal --rules` unless you pass `--all` (V016 and V023, which also check
+ordinary `.py` files, are always listed).
 
 ---
 
@@ -61,7 +62,7 @@ Adapters aren't limited to file types. They can inspect ANY resource:
 
 ### 2. **Validation Rules**
 
-The V-series rules (V001–V042, 41 rules; there is no V010; `reveal --rules --all` lists them) check reveal's internal state:
+The V-series rules (`reveal --rules --all` lists them) check reveal's internal state:
 
 ```python
 # reveal/rules/validation/V001.py
@@ -113,7 +114,7 @@ reveal/
 │       ├── V004.py        # Test coverage
 │       ├── V005.py        # Help file sync
 │       ├── V006.py        # Output format support
-│       └── ...            # 35 more, up to V042
+│       └── ...            # more V-rules
 └── docs/adapters/
     └── REVEAL_ADAPTER_GUIDE.md  # This file
 ```
@@ -339,7 +340,7 @@ class C001(BaseRule):
             return detections
 
         # Your validation logic here
-        if something_wrong:
+        if not structure.get('items'):
             detections.append(self.create_detection(
                 file_path=file_path,
                 line=1,
@@ -528,7 +529,7 @@ Running `reveal reveal:// --check` in CI ensures reveal stays well-maintained.
 ## Learning Path
 
 1. **Study reveal://** - Read the `reveal/adapters/reveal/` package (adapter.py, renderer.py, operations.py, etc.)
-2. **Study V-series rules** - Read `reveal/rules/validation/V*.py` (V001-V042)
+2. **Study V-series rules** - Read `reveal/rules/validation/V*.py`
 3. **Run it yourself** - `reveal reveal:// --check`
 4. **Adapt the pattern** - Create your own `project://` or `api://` adapter
 5. **Share it** - Contribute back if useful to others!

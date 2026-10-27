@@ -29,13 +29,13 @@ for a file target, its own extension family.
 
 - **Parameters:** `top` (caps the module or dependent list), `root` (override the scan root),
   `verbose` (directory targets: list each module's importers under its row; a file target
-  already prints one row per importing statement) and `format`. Only `?format=dot` changes the
+  already lists each importing file) and `format`. Only `?format=dot` changes the
   output, and only for a directory target; for JSON use the CLI `--format json`. Any other
   `format` value, and `dot` on a file target, falls back to text without a warning.
 - **File target (`module_dependents`):** text prints a `Rule:` line, then
   `N file(s) import this module:` (`N file(s) import this module (showing K):` under `?top=`,
   followed by a `⚠ Truncated dependents` line), one `file:line  ← names` row per importing
-  statement, and `ℹ Import-graph analysis — dynamic imports not followed.` JSON carries
+  file (the first statement that resolves to the target), and `ℹ Import-graph analysis — dynamic imports not followed.` JSON carries
   `target`, `dependents` (each `file`, `line`, `module`, `names`, `type`, `is_relative`,
   `alias`), `count`, `edge_rule`, `metadata`, `_meta` (`analysis_kind`, `confidence`,
   `known_limits`) and `undercount_possible`.

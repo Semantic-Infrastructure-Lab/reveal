@@ -163,10 +163,12 @@ reveal 'codex://memories/pipeline'
 reveal 'codex://01a161bb/workflow'
 # Codex Workflow: 216 action(s)
 #
-#   [✓] tool  exec(text(await tools.exec_command({cmd:"tia project show watchdo)  [2026-10-22T03:51:31]
+#   ...
+#
+#   [✓] tool  exec(text(await tools.exec_command({cmd:"git status --short")  [2026-10-22T03:51:31]
 #       → Script completed Wall time 6.4 seconds Output: {"chunk_id":"fec210","wall_time_seconds":6.163628376,
 #
-#   [✓] shell $ tia project show watchdog  [2026-10-22T03:51:37]
+#   [✓] shell $ git status --short  [2026-10-22T03:51:37]
 #       → exit=0 6163ms
 ```
 

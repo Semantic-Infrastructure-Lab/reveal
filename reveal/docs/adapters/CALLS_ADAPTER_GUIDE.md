@@ -428,6 +428,7 @@ When the function is not found (exit 2; stderr has `Error (calls://): Function '
 Callees of: unknown_fn
 Project:    src/
 Total:      0 call(s) across 0 definition(s)
+Rule:       callees by definition: ...; depth 1 (clamped 1-5). Measured: depth-1 call lists only.
 
   No definition of 'unknown_fn' found.
 ```

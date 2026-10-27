@@ -192,7 +192,7 @@ reveal 'ast://./src?type!=function'
 
 **Valid types:**
 - `function` - Every function, methods included (a method is reported with `category: "functions"`)
-- `method` - Only functions with an owner (the `owner` field names their class, struct or impl)
+- `method` - Functions with an `owner` (their class, struct, impl, or enclosing Rust `mod`; a function nested in a method inherits the method's class)
 - `class` - Class definitions
 - `struct`, `interface` (`trait` is an alias), `module`, `namespace` - Where the language has them
 - `import` - Import statements
@@ -350,6 +350,7 @@ File: adapters/ast/analysis.py
   : 234  create_element_dict [65 lines, complexity: 14]
            calls:     item.get, cast, _add_function_metrics
            called by: _flatten_structure
+  ...
   : 400  call_sources [20 lines, complexity: 20]
            calls:     file_struct.get, elem.get, dict.fromkeys, _owner_call_lines, _class_field_sources, s.get
 ...
@@ -420,10 +421,10 @@ reveal 'ast://./src?complexity>10' --format=json
 - `displayed_results`: Number of results in output
 - `results`: Array of matched code elements — each has `name` (not `symbol`), `category` (not `type`; the plural of the element kind: `functions`, `classes`, `imports`, `structs`, `interfaces`, `modules`, `namespaces`, `tests`; methods are `functions` with an `owner`), and `line_count` (not `lines`). Functions also carry `signature`, `depth`, `calls`, `called_by` and, when a call resolves to another file, `resolved_calls`; classes carry `bases`. Import rows have no `complexity`.
 - `meta`: Trust metadata (parse mode, confidence) and `warnings`. When `results` holds fewer
-  than `total_results` (`?limit=`, `?offset=`, the 200-result cap on an unfiltered query,
+  than `total_results` (`?limit=`, `?offset=`, the 200-result cap on any query without `limit=`,
   `--max-items`, `--head`), one warning says so: `{"type": "truncated", "field": "results",
   "shown", "total", "exact", "cause", "message"}`. Text output prints the same message last.
-  Whenever complexity is shown, a `complexity_is_unweighted` warning is there too.
+  When the query filters on `complexity`, a `complexity_is_unweighted` warning is there too.
 
 ### 3. Grep Format
 
@@ -851,8 +852,8 @@ AST queries require parsing source code, so they're slower than text search but 
    jq '.results[] | select(.complexity > 10)' structure_cache.json
    ```
 
-An unfiltered `ast://` query is capped at 200 results (`meta.warnings` entry with
-`cause: auto_cap`); pass `limit=` (or a filter) whenever the output feeds a script or export.
+An `ast://` query without `limit=` is capped at 200 results, filtered or not (`meta.warnings` entry with
+`cause: auto_cap`); pass `limit=` (or `--all`) whenever the output feeds a script or export.
 
 ### Large Codebase Strategies
 

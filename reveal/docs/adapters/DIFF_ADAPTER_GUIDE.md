@@ -267,6 +267,9 @@ Every function entry in `.diff.functions` now carries top-level complexity field
 | `complexity_after` | new value | `null` | new value |
 | `complexity_delta` | new value | −prior value | after − before |
 
+On an added function `complexity_delta` is its whole complexity, so a "complexity increase" filter
+also fires on any new function above the threshold; add `.type == "modified"` to compare like with like.
+
 **Filter by complexity spike in JSON output**:
 ```bash
 # Functions that got >5 more complex (CI gate pattern)
@@ -563,8 +566,7 @@ example a Python module-level constant (`X = 1` vs `X = 2`; Python's analyzer ex
 or a body edit below the function change thresholds, the text output still says "No structural
 changes detected" and then warns that the files differ (`meta.warnings` entry of type
 `not_compared` in JSON); compare the text to see the change. A category whose items carry no name
-is listed as not compared when it differs. A plain-directory diff (`diff://dir1:dir2`) still
-aggregates only functions, classes and imports; a `git://REF/dir` diff aggregates every category.
+is listed as not compared when it differs. Directory diffs (plain or `git://REF/dir`) aggregate every category.
 
 A resource whose structure has no functions, classes or imports is declined: diff:// answers "not applicable" (exit 0,
 `applicable: false` in JSON, with the reason) instead of comparing, so it never reports a clean

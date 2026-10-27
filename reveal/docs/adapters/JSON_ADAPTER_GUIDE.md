@@ -608,7 +608,7 @@ reveal json://config.json/database --format=json
 - `json_value` - Value at path (`value`, `value_type`); a filtered or limited array adds `total_matches`, `displayed_results` and `meta`
 - `json_schema` - Schema inference result (`?schema`; `schema`)
 - `json_flatten` - Flattened output (`?flatten`; `lines`, `line_count`)
-- `json_keys` - Key listing (`?keys`; `keys`, `count`; for an array `count` is its length)
+- `json_keys` - Key listing (`?keys`; `keys` and `count` for an object, `indices` and `count` for an array)
 - `json_type` - Type at path (`?type`; `value_type`, `length`, `is_container`)
 - `json_length` - Length at path (`?length`; `value_type`, `length`)
 

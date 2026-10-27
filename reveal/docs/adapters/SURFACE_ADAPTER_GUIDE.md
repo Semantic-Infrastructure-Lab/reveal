@@ -218,9 +218,9 @@ its totals sum to the flat `total`.
 - `env` covers reads with a string-literal key, matched by call shape: `os.Getenv`/`os.LookupEnv`
   (Go), `System.getenv` (Java/Kotlin), `Environment.GetEnvironmentVariable` (C#),
   `env::var`/`env::var_os` (Rust). For these five a key held in a variable or built by
-  interpolation is not reported. The Python scanner does report it, with `name` set to the
+  interpolation is not reported. The Python scanner does report it for `os.getenv(...)` and `os.environ.get(...)`, with `name` set to the
   source text of the key expression (`k`, `f'P_{k}'`), so an `env` name is not always a literal
-  variable name. Those five languages share one rule table (`reveal/adapters/ast/surface_rules_env.py`);
+  variable name; a subscript read with a non-literal key (`os.environ[k]`) is not reported. Those five languages share one rule table (`reveal/adapters/ast/surface_rules_env.py`);
   Python, TypeScript/JavaScript, Ruby, PHP, Swift and C++ detect it in their own scanners
   (subscript and property forms such as `ENV['X']` and `process.env.X` are not table-expressible yet).
   The scanners read `process.env.X` / `process.env['X']` and Vite's `import.meta.env.X` (an exact
