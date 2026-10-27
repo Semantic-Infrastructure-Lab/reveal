@@ -5,44 +5,16 @@ Constants are defined here for shared use across rules.
 
 import os
 import re
-from typing import List, Optional
+from typing import Iterator, Optional
+
+from ...utils.nginx_conf import find_blocks, top_level_statements
 
 # Nginx configuration file patterns
 # Used by N001, N002, N003 rules
 NGINX_FILE_PATTERNS = ['.conf', '.nginx', 'nginx.conf']
 
-_NGINX_HTTP_OPEN_RE = re.compile(r'http\s*\{')
 NGINX_INCLUDE_PATTERN = re.compile(r'include\s+([^;]+);', re.IGNORECASE)
 
-
-def nginx_extract_http_blocks(content: str) -> List[str]:
-    """Return the inner body of every top-level http{} block in `content`.
-
-    Depth-aware brace matching, not a fixed-nesting regex — the previous
-    `NGINX_HTTP_BLOCK_PATTERN` (`http\\s*\\{((?:[^{}]|\\{[^{}]*\\})*)\\}`) only
-    tolerated one level of nesting inside http{}, which silently failed to
-    match (returned zero blocks) whenever a single-file config nested a
-    server{} containing a location{} inside http{} — exactly the
-    `http { include ssl-common.conf; server { location { ... } } }` idiom
-    BACK-1103 is about. A missing http{} match meant every http-level
-    directive check (this rule's cert/key, N008's HSTS, N009's
-    server_tokens) silently saw nothing to search, rather than erroring —
-    the honest-decline concern applies to internal parsing helpers too, not
-    just top-level output.
-    """
-    blocks = []
-    for m in _NGINX_HTTP_OPEN_RE.finditer(content):
-        depth = 1
-        i = m.end()
-        while i < len(content) and depth > 0:
-            if content[i] == '{':
-                depth += 1
-            elif content[i] == '}':
-                depth -= 1
-            i += 1
-        if depth == 0:
-            blocks.append(content[m.end():i - 1])
-    return blocks
 
 # A whole-line nginx comment: optional leading whitespace, then '#' to end of
 # line. Does NOT match a trailing comment after real directive text on the
@@ -111,26 +83,39 @@ def nginx_find_nginx_conf(file_path: str) -> Optional[str]:
     return None
 
 
-def nginx_http_level_has(source: str, base_path: str, pattern: 're.Pattern[str]') -> bool:
-    """Return True if `pattern` matches a directive set at http{} level in `source`:
-    inside one of its http{} blocks, or in a file such a block includes (resolved
-    relative to `base_path`, one level deep). An include that cannot be resolved or
-    read does not count: a global setting is never assumed (N002, N008, N009).
+def nginx_http_level_statements(source: str, base_path: str) -> Iterator[str]:
+    """The directives set at http{} level in `source`, without their `;`: the direct
+    children of each http{} block, then the top-level directives of each file one of
+    them includes (resolved relative to `base_path`, one level deep). A directive inside
+    a server{}, location{} or other nested block is not http-level, inline or included:
+    reading the whole http{} text let one vhost's ssl_certificate in nginx.conf cover
+    every other vhost (BACK-2280). An include that cannot be resolved (a glob, a
+    missing file) or read is skipped: a global setting is never assumed.
     """
-    for http_block in nginx_extract_http_blocks(source):
-        if pattern.search(http_block):
-            return True
-        for inc_match in NGINX_INCLUDE_PATTERN.finditer(http_block):
-            resolved = nginx_resolve_include(inc_match.group(1).strip(), base_path)
+    for _header, body in find_blocks(source, 'http'):
+        for statement in top_level_statements(body):
+            yield statement
+            words = statement.split(None, 1)
+            if words[0] != 'include' or len(words) < 2:
+                continue
+            resolved = nginx_resolve_include(words[1].strip().strip('\'"'), base_path)
             if resolved is None:
                 continue  # can't verify -- don't assume a global setting exists
             try:
                 with open(resolved, encoding='utf-8', errors='replace') as fh:
-                    if pattern.search(nginx_strip_comments(fh.read())):
-                        return True
+                    included = fh.read()
             except (OSError, ValueError):
                 continue  # unreadable -- don't assume a global setting exists
-    return False
+            yield from top_level_statements(included)
+
+
+def nginx_http_level_has(source: str, base_path: str, pattern: 're.Pattern[str]') -> bool:
+    """Return True if `pattern` matches a directive set at http{} level in `source`
+    (`nginx_http_level_statements`), each read as written with its `;` (N002, N008,
+    N009).
+    """
+    return any(pattern.search(statement + ';')
+               for statement in nginx_http_level_statements(source, base_path))
 
 
 def nginx_conf_http_level_has(file_path: str, pattern: 're.Pattern[str]') -> bool:
