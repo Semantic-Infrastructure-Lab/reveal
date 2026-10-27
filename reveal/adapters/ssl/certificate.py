@@ -998,7 +998,7 @@ def live_cert_state(ssl_result: dict) -> tuple:
         return 'healthy', ''
     if status == 'warning':
         return 'warning', ''
-    failing = next((c for c in ssl_result.get('checks', []) if c.get('status') == 'failure'), {})
+    failing: dict = next((c for c in ssl_result.get('checks', []) if c.get('status') == 'failure'), {})
     message = (failing.get('message') or ssl_result.get('error') or 'ssl check failed')
     if days is not None and failing.get('name') == 'certificate_expiry':
         return 'critical', message
