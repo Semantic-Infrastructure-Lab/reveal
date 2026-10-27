@@ -30,7 +30,7 @@ reveal nginx://example.com          # Full vhost summary
 reveal nginx://                     # Overview of all enabled sites
 ```
 
-**Searches**: `/etc/nginx/sites-enabled/` (extension-less files) and `/etc/nginx/conf.d/` (`*.conf` files). Both symlinks and regular files are handled.
+**Searches**: `/etc/nginx/sites-enabled/` (all files), `/etc/nginx/conf.d/` (`*.conf`, plus one subdirectory level such as `conf.d/users/`), and `/usr/local/nginx/conf/sites-enabled/` and `/usr/local/etc/nginx/sites-enabled/`. Backup files (`.bak`, `.backup`, `.old`, `.disabled`, `.orig`, `~`) are skipped. Both symlinks and regular files are handled.
 
 ---
 
@@ -85,39 +85,56 @@ reveal nginx://app.example.com/config
 #### `reveal nginx://app.example.com`
 
 ```
-nginx://app.example.com
+============================================================
+Nginx Vhost: app.example.com
+============================================================
 
-Config: /etc/nginx/sites-enabled/app.example.com
-  Symlink: → /etc/nginx/sites-available/app.example.com
+Config file: /etc/nginx/sites-enabled/app.example.com
+Symlinked:   ✅ → /etc/nginx/sites-available/app.example.com
 
 Ports:
-  80   HTTP  → redirect to https
-  443  HTTPS  ssl_certificate /etc/nginx/ssl/app.example.com.crt
+  HTTP  (80): ✅ → redirect to HTTPS
+  HTTPS (443): ✅ ssl
 
-Upstream: backend (proxy_pass http://127.0.0.1:8080)
-  127.0.0.1:8080  ✅ reachable (3ms)
+Upstream: backend
+  server 127.0.0.1:59998    ❌ unreachable — [Errno 111] Connection refused
 
-Auth:
-  None
+Auth: none
 
-Locations (3):
-  /.well-known/acme-challenge/  root /home/smd/public_html
-  /static/                      root /home/smd/app/static
-  /                             proxy_pass http://backend
+Locations:
+  /.well-known/acme-challenge/   → static /home/appuser/public_html
+  /                              → return 301 https://$host$request_uri
+  /.well-known/acme-challenge/   → static /home/appuser/public_html
+  /static/                       → static /home/appuser/app/static
+  /                              → proxy http://backend
+
+⚠️  Warnings:
+  • Upstream 'backend' server 127.0.0.1:59998 is not reachable: [Errno 111] Connection refused
+
+------------------------------------------------------------
+Next Steps:
+  • reveal nginx://app.example.com/upstream  # upstream health detail
+  • reveal nginx://app.example.com/config    # full compiled config
+  • reveal ssl://app.example.com --check     # cert detail
 ```
+
+Locations lists every server block that names the domain (here both the port-80 redirect block and the 443 block).
 
 #### `reveal nginx://`
 
 ```
-nginx:// — Enabled Sites (44 sites)
+Nginx Sites Overview — 2 configs found
 
-  File                                          Domains                       Symlink
-  ──────────────────────────────────────────────────────────────────────────────────
-  sites-enabled/app.example.com               app.example.com             → sites-available/
-  sites-enabled/frono.example.com                 frono.example.com               → sites-available/
-  conf.d/default.conf                           _                             (regular file)
-  ...
+  ✅ /etc/nginx/sites-enabled/app.example.com → symlink
+       app.example.com, www.app.example.com
+  ✅ /etc/nginx/conf.d/default.conf
+
+Next Steps:
+  • Inspect a specific domain: reveal nginx://DOMAIN
+  • Check SSL certs across all nginx: reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check
 ```
+
+A catch-all `server_name _` block shows no domain line.
 
 ---
 
@@ -202,11 +219,11 @@ Fleet Audit — (46 sites, 2026-03-19)
   Snippet Consistency:
     snippets/security-headers.conf  — included by 38, missing from 8
        Missing from: api.example.com, motion.example.com, ...
-
-Exit code: 2 (gaps found)
 ```
 
-**Exit codes:** fleet audits exit 2 when gaps are found and 0 when clean, in both text and JSON. A failed request exits 1.
+**Exit codes:** fleet audits exit 2 when gaps are found and 0 when clean, in both text and JSON. A failed request exits 1. `Snippet Consistency` appears only when sites include snippets.
+
+JSON (`--format json`) has `type: nginx_fleet_audit` and a `matrix` list whose entries carry `id`, `label`, `severity`, `global_present`, `deprecated`, `sites_with`, `sites_without`, `sites_with_names`, `sites_without_names`, `consolidation_opportunity` and `action`.
 
 **Consolidation hint**: when a directive appears in ≥50% of site configs but is absent from nginx.conf http{}, it's marked with `↑` as a consolidation opportunity — one line in nginx.conf fixes the whole fleet.
 
@@ -220,7 +237,7 @@ Exit code: 2 (gaps found)
 reveal nginx://example.com --format=json
 ```
 
-Returns a structured object with `config_file`, `symlink`, `ports`, `upstream`, `auth`, `locations` keys — suitable for scripting.
+Returns `type: nginx_vhost_summary` with `domain`, `config_file`, `symlink`, `ports`, `upstreams` (keyed by upstream name, each with `definition` and `reachability`), `auth`, `locations`, and `warnings` — suitable for scripting.
 
 ---
 
@@ -306,38 +323,38 @@ reveal check /etc/nginx/conf.d/users/myuser.conf --select N004
 reveal check /etc/nginx/conf.d/users/myuser.conf --ignore N011,E501
 ```
 
-Runs the N001–N012 nginx rules against the config. Results are grouped when a rule fires many times in one file (configurable with `--no-group`).
+Runs the N001–N012 nginx rules against the config. Results are grouped when a rule fires many times in one file (configurable with `--no-group`). Each finding prints as `file:line:col <icon> CODE message`, followed by a `💡` fix line and usually a `📝` context line; the samples below show the first line.
 
 #### N001 — Duplicate backends
 
 Detects multiple `upstream` blocks pointing to the same `server:port`. A common copy-paste misconfiguration that can cause confusing traffic distribution.
 
 ```
-N001  HIGH  Upstream app2 (line 45) duplicates backend of app1 (127.0.0.1:8000)
+myuser.conf:5:1 ❌ N001 Upstream 'app2' shares backend 127.0.0.1:8000 with 'app1'
 ```
 
-#### N002 — SSL server missing certificate
+#### N002 — SSL server missing certificate (CRITICAL)
 
 Detects `listen 443 ssl` without `ssl_certificate` and `ssl_certificate_key`. The server will fail to start.
 
 ```
-N002  HIGH  Server block at line 12 listens on SSL (443) but lacks ssl_certificate directives
+myuser.conf:37:1 🚨 N002 SSL server 'api.example.com' missing both ssl_certificate and ssl_certificate_key
 ```
 
 #### N003 — Proxy location missing headers
 
-Detects `proxy_pass` locations missing recommended headers (`X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`, `Host`). Without these, the upstream sees the nginx IP, not the real client IP.
+Detects `proxy_pass` locations missing `X-Real-IP` or `X-Forwarded-For`. Without these, the upstream sees the nginx IP, not the real client IP.
 
 ```
-N003  MEDIUM  proxy_pass at line 34: missing X-Real-IP, X-Forwarded-For headers
+myuser.conf:22:1 ⚠️  N003 Proxy location '~ \.php$' missing headers: X-Forwarded-For, X-Real-IP
 ```
 
-#### N004 — ACME challenge path inconsistency
+#### N004 — ACME challenge path inconsistency (HIGH)
 
 Detects server blocks with different `root` paths for `/.well-known/acme-challenge/` locations. Let's Encrypt uses one certbot/webroot directory — if some server blocks point elsewhere, renewal fails for those domains silently.
 
 ```
-N004  MEDIUM  ACME challenge root '/home/olduser/public_html' differs from common path '/home/myuser/public_html'
+myuser.conf:31:1 ❌ N004 ACME challenge root '/home/olduser/public_html' differs from common path '/home/myuser/public_html' (1 server(s) affected)
 ```
 
 **Context**: This pattern is a common cause of AutoSSL renewal failures. `--validate-nginx-acme` is the recommended command for diagnosing this class of failure.
@@ -347,8 +364,8 @@ N004  MEDIUM  ACME challenge root '/home/olduser/public_html' differs from commo
 Flags http{} timeout and buffer directives outside operational bounds. Covers: `send_timeout`, `proxy_read_timeout`, `proxy_send_timeout`, `proxy_connect_timeout`, `keepalive_timeout`, `client_body_timeout`, `client_header_timeout`, `client_body_buffer_size`, `proxy_buffer_size`, `client_max_body_size`.
 
 ```
-N005  MEDIUM  send_timeout 3s is below minimum of 10s (may cause silent connection drops)
-N005  MEDIUM  proxy_read_timeout 600s exceeds maximum of 300s (resource exhaustion risk)
+nginx.conf:2:1 ⚠️  N005 send timeout '3s' is below the minimum recommended value of 10s
+nginx.conf:3:1 ⚠️  N005 proxy read timeout '600s' exceeds the maximum recommended value of 300s
 ```
 
 #### N006 — send_timeout too short for upload size (HIGH)
@@ -356,18 +373,18 @@ N005  MEDIUM  proxy_read_timeout 600s exceeds maximum of 300s (resource exhausti
 Detects the dangerous combination of a short `send_timeout` or `proxy_read_timeout` (< 60s) alongside a large `client_max_body_size` (> 10m). Large file uploads will be silently killed mid-transfer.
 
 ```
-N006  HIGH  send_timeout 30s with client_max_body_size 200m: uploads over ~110MB will time out silently
-            Minimum send_timeout for 200m at typical speeds: ~300s
+myuser.conf:13:1 ❌ N006 send_timeout 3s is too short for client_max_body_size 200m — transfers larger than ~4 MB will time out silently
+  💡 Raise send_timeout to at least 60s, or to match your largest expected transfer time (e.g. 300s for 200 MB on slow links)
 ```
 
 **Real-world failure mode**: this config silently drops large media uploads in production. Fix: raise `send_timeout` to 300s.
 
-#### N007 — ssl_stapling enabled but no OCSP URL
+#### N007 — ssl_stapling enabled but no OCSP URL (LOW)
 
 Detects `ssl_stapling on;` on a certificate that lacks an OCSP responder URL (i.e. the cert's AIA extension has no `OCSP` entry). nginx will silently skip stapling — no error, no warning — and clients that expect OCSP stapling will fall back to their own OCSP lookup, adding latency.
 
 ```
-N007  INFO  ssl_stapling on but /etc/nginx/ssl/domain.com.crt has no OCSP responder URL — stapling ineffective
+myuser.conf:49:1 ℹ️  N007 ssl_stapling on, but 'domain.com.crt' has no OCSP responder URL
 ```
 
 This typically affects self-signed or internal CA certificates. For production Let's Encrypt certs this rule rarely fires.
@@ -379,7 +396,7 @@ Detects server blocks listening on port 443 that lack a `Strict-Transport-Securi
 If HSTS is set globally in `nginx.conf http{}`, it covers all vhosts and no per-server findings are emitted.
 
 ```
-N008  HIGH  Server block 'example.com' missing Strict-Transport-Security header
+myuser.conf:9:1 ❌ N008 'example.com' (line 9): HTTPS site missing Strict-Transport-Security header
 ```
 
 Fix: `add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;`
@@ -391,7 +408,7 @@ Suppress per-server: `# reveal:allow-no-hsts`
 Detects nginx configs where `server_tokens` is not set to `off`. By default nginx advertises its version in `Server` response headers and error pages (e.g. `Server: nginx/1.18.0`), giving attackers a free vulnerability shortlist. Fires once per file — it's a config gap, not a per-server issue.
 
 ```
-N009  MEDIUM  server_tokens not disabled — nginx version exposed in response headers
+myuser.conf:1:1 ⚠️  N009 server_tokens not disabled — nginx version exposed in Server header
 ```
 
 Fix: add `server_tokens off;` to the `http{}` block in `nginx.conf`.
@@ -403,7 +420,7 @@ Suppress: `# reveal:allow-server-tokens`
 Detects `add_header X-XSS-Protection` in server blocks. This header was removed from the W3C spec and is ignored by Chrome (since 2019) and Firefox (since 2023). Its presence signals an outdated config and can introduce vulnerabilities in older IE/Edge versions. When the header comes from a shared snippet, the snippet path is surfaced so one edit fixes all affected sites.
 
 ```
-N010  LOW  Deprecated X-XSS-Protection header in server block at line 45
+myuser.conf:16:1 ℹ️  N010 Deprecated X-XSS-Protection header — remove and add Content-Security-Policy instead
 ```
 
 Modern replacement: `Content-Security-Policy`. Suppress: `# reveal:allow-xss-protection`
@@ -413,7 +430,7 @@ Modern replacement: `Content-Security-Policy`. Suppress: `# reveal:allow-xss-pro
 Detects `listen 443 ssl` without `http2` on the same line. Certbot's `--nginx` plugin consistently strips `http2` when it rewrites listen directives, making this a repeat pattern after Let's Encrypt renewals. Note: nginx 1.25.1+ uses a separate `http2 on;` directive — this rule only fires on the inline form; a standalone `http2 on;` suppresses the finding.
 
 ```
-N011  LOW  listen 443 ssl at line 12 missing http2 — HTTP/2 disabled for this site
+myuser.conf:8:1 ℹ️  N011 'example.com' (line 8): SSL listener missing http2
 ```
 
 Fix: change `listen 443 ssl;` → `listen 443 ssl http2;` (or add `http2 on;` for nginx ≥ 1.25.1).
@@ -425,8 +442,8 @@ Suppress per-server: `# reveal:allow-no-http2`
 Two-level detection: **MEDIUM** if no `limit_req_zone` is defined anywhere in the file (rate limiting completely absent); **LOW** if a zone is defined but this server block uses no `limit_req` directive.
 
 ```
-N012  MEDIUM  No limit_req_zone defined — server block has no rate limiting at all
-N012  LOW     limit_req_zone defined but not applied to this server block (line 8)
+myuser.conf:8:1 ⚠️  N012 'example.com': no rate limiting configured (no limit_req_zone defined)
+nginx.conf:7:1 ℹ️  N012 'example.com': limit_req_zone is configured but not applied to this server block
 ```
 
 Suppress per-server: `# reveal:allow-no-rate-limit`
@@ -462,16 +479,15 @@ reveal /etc/nginx/conf.d/users/myuser.conf --check-acl
 ```
 
 ```
-ACL check: /etc/nginx/conf.d/users/myuser.conf
+❌ ACL failures (1):
+  /home/myuser/api/public   (api.example.com)  nobody cannot traverse /home/myuser/api (mode 700, no ACL entry)
 
-  domain               root                              status
-  ──────────────────────────────────────────────────────────────
-  example.com          /home/myuser/public_html          ✅ ok
-  shop.example.com     /home/myuser/shop                 ✅ ok
-  api.example.com      /home/myuser/api/public           ❌ denied
+✅ OK (2):
+  /home/myuser/public_html  (example.com)
+  /home/myuser/shop         (www.example.com)
 ```
 
-Exit code 2 on any failure. Fix: `chmod o+x` each path component of the denied docroot.
+There is one row per distinct root path, so two domains that share a root show only the first domain. Exit code 2 on any failure. Fix: `chmod o+x` each path component of the denied docroot.
 
 Uses standard Unix `other` permission bits; falls back to `getfacl` ACL entries when standard permissions are insufficient.
 
@@ -484,14 +500,14 @@ reveal /etc/nginx/conf.d/users/myuser.conf --extract acme-roots
 ```
 
 ```
-ACME challenge roots: /etc/nginx/conf.d/users/myuser.conf
-
-  domain                root                              acl
-  ────────────────────────────────────────────────────────────
-  example.com           /home/myuser/public_html          ✅ ok
-  shop.example.com      /home/myuser/shop                 ✅ ok
-  api.example.com       /home/myuser/api/public           ❌ denied
+  domain           acme root path            acl status
+  -----------------------------------------------------
+  example.com      /home/myuser/public_html  ✅ nobody:read OK
+  www.example.com  /home/myuser/shop         ✅ nobody:read OK
+  api.example.com  /home/myuser/api/public    ❌ DENIED  (nobody cannot traverse /home/myuser/api (mode 700, no ACL entry))
 ```
+
+Exit code is 0 regardless of ACL status; use `--check-acl` or `--validate-nginx-acme` to gate.
 
 #### `--check-conflicts`
 
@@ -505,14 +521,19 @@ reveal /etc/nginx/conf.d/users/myuser.conf --check-conflicts
 ```
 
 ```
-Location conflicts: /etc/nginx/conf.d/users/myuser.conf
+⚠️  Conflicts (1):
 
-  server: example.com (line 12)
-  ⚠️  prefix_overlap:
-      location /.well-known/acme-challenge/ (line 15, 31 chars)
-      location /.well-known/ (line 22, 15 chars)
-      explanation: /.well-known/ is a prefix of /.well-known/acme-challenge/
-                   nginx longest-prefix-wins applies
+  [example.com]
+    /app.php  (line 17)
+    ~ \.php$  (line 14)
+    → regex location "~ \.php$" (line 14) may match requests also handled by prefix "/app.php" (line 17) — regex locations are evaluated after longest-prefix match; verify intended priority
+
+ℹ️  Prefix overlaps (1):
+
+  [example.com]
+    /.well-known/  (line 11)
+    /.well-known/acme-challenge/  (line 8)
+    → "/.well-known/" (line 11) is a prefix of "/.well-known/acme-challenge/" (line 8) — nginx picks the longer match; requests to "/.well-known/" that don't match "/.well-known/acme-challenge" fall through to the shorter block
 ```
 
 Exit code 2 on regex conflicts; info-only for prefix overlaps.
@@ -526,19 +547,14 @@ reveal /etc/nginx/conf.d/users/myuser.conf --validate-nginx-acme
 ```
 
 ```
-ACME+ACL+SSL audit: /etc/nginx/conf.d/users/myuser.conf
-
-  domain                acme root                  acl    ssl cert
-  ──────────────────────────────────────────────────────────────────────
-  example.com           /home/myuser/public_html   ✅ ok  ✅ 87d
-  shop.example.com      /home/myuser/shop          ✅ ok  ✅ 87d
-  api.example.com       /home/myuser/api/public    ❌ denied  ⚠️  18d
-  old.example.com       /home/myuser/public_html   ✅ ok  ❌ EXPIRED
-
-Exit: 2 (failures found)
+  domain           acme root path            acl             ssl status
+  ─────────────────────────────────────────────────────────────────────
+  example.com      /home/myuser/public_html  ✅ ACL ok        ✅ 59d  (Dec 25, 2026)
+  www.example.com  /home/myuser/shop         ✅ ACL ok        ✅ 59d  (Dec 25, 2026)
+  api.example.com  /home/myuser/api/public   ❌ ACL DENIED    ❌ [Errno -2] Name or service not known
 ```
 
-Exit code 2 on any ACL failure or SSL expiry/critical status.
+Exit code 2 on any ACL failure or failing live SSL check (expired, under 7 days, unreachable, hostname mismatch).
 
 With `--only-failures` on 500+ domain configs, hide passing rows:
 
@@ -557,14 +573,14 @@ reveal /etc/nginx/conf.d/users/myuser.conf --cpanel-certs
 ```
 
 ```
-Disk vs live cert comparison: /etc/nginx/conf.d/users/myuser.conf
-
-  domain                disk expiry     live expiry     match
-  ─────────────────────────────────────────────────────────────────
-  example.com           2026-05-25      2026-05-25      ✅ match
-  shop.example.com      2026-06-01      2026-03-15      ⚠️  STALE (reload nginx)
-  api.example.com       2026-05-28      2026-05-28      ✅ match
+  domain           disk cert                     live cert                     match
+  ──────────────────────────────────────────────────────────────────────────────────
+  api.example.com  ⚫ not found                   ⚠️  error: [Errno -2] Name or service not known  ⚫ no disk cert
+  example.com      ⚫ not found                   ✅ 59d  (Dec 25, 2026)         ⚫ no disk cert
+  www.example.com  ⚫ not found                   ✅ 59d  (Dec 25, 2026)         ⚫ no disk cert
 ```
+
+(Run on a host without `/var/cpanel/ssl`, so every disk cell is `⚫ not found`. On a cPanel server the disk cell reads like `✅ 87d  (May 25, 2026)` and the match cell compares serial numbers.)
 
 Exit code 2 on stale or expired certs. `STALE` means the disk cert is newer than the live cert — nginx is serving a cert that AutoSSL has already renewed. Fix: `nginx -s reload`.
 
@@ -579,16 +595,20 @@ reveal /etc/nginx/conf.d/users/myuser.conf --diagnose
 ```
 
 ```
-nginx error log audit: /etc/nginx/conf.d/users/myuser.conf
-  log: /var/log/nginx/error.log (last 5000 lines)
+nginx error log: /var/log/nginx/error.log
+  domain            pattern                 count  last seen
+  ──────────────────────────────────────────────────────────
+  example.com       ⚠️  Not Found (ENOENT)      1  2026/10/26 09:11:00
+  shop.example.com  ❌ Permission Denied         2  2026/10/26 14:05:01
 
-  domain                pattern                count  last seen
-  ─────────────────────────────────────────────────────────────────────
-  api.example.com       permission_denied        47   2026-02-27 14:03
-  shop.example.com      ssl_error                 3   2026-02-27 09:11
-
-Exit: 2 (permission_denied or ssl_error hits found)
+Sample (most recent match per type):
+  [example.com / not_found]
+    2026/10/26 09:11:00 [error] 1234#0: *3 open() "/home/myuser/public_html/.well-known/acme-challenge/x" failed (2: No such
+  [shop.example.com / permission_denied]
+    2026/10/26 14:05:01 [error] 1234#0: *2 open() "/home/myuser/shop/.well-known/acme-challenge/def" failed (13: Permission
 ```
+
+Timestamps keep nginx's `YYYY/MM/DD HH:MM:SS` form; SSL errors read `❌ SSL Error`.
 
 **Detected patterns:**
 - `permission_denied` — nginx can't read `/.well-known/acme-challenge/` (ACL failure)
@@ -601,7 +621,7 @@ Auto-detects error log path from the config's `error_log` directive, or falls ba
 reveal /etc/nginx/conf.d/users/myuser.conf --diagnose --log-path /var/log/nginx/error.log
 ```
 
-Exit code 2 on `permission_denied` or `ssl_error` hits; exit 0 on `not_found` only or clean log.
+Exit code 2 on `permission_denied` or `ssl_error` hits; exit 0 on `not_found` only or clean log. Exits 1 when no error log can be found (`⚠️  No nginx error log found.`).
 
 #### `--global-audit`
 
@@ -613,23 +633,21 @@ reveal /etc/nginx/nginx.conf --global-audit --only-failures
 ```
 
 ```
-Global http{} Audit: /etc/nginx/nginx.conf
-
-  directive                      severity  context  status
-  ─────────────────────────────────────────────────────────────────────
-  gzip on                        INFO      http{}   ✅ present
-  server_tokens off              MEDIUM    http{}   ❌ missing
-  add_header Strict-Transport-Security  HIGH  http{}  ❌ missing
-  add_header X-Content-Type-Options     MEDIUM  http{}  ❌ missing
-  add_header X-Frame-Options            MEDIUM  http{}  ❌ missing
-  ssl_protocols                  MEDIUM    http{}   ❌ missing
-  resolver                       LOW       http{}   ❌ missing
-  limit_req_zone                 LOW       http{}   ❌ missing
-  client_max_body_size           LOW       http{}   ❌ missing
-  worker_processes               INFO      main     ✅ present
+  directive                             severity  context  status
+  ───────────────────────────────────────────────────────────────
+  add_header Strict-Transport-Security  HIGH    http{}   ❌ missing
+  add_header X-Content-Type-Options     MED     http{}   ❌ missing
+  add_header X-Frame-Options            MED     http{}   ❌ missing
+  server_tokens off                     MED     http{}   ✅ present
+  ssl_protocols                         MED     http{}   ❌ missing
+  client_max_body_size                  LOW     http{}   ❌ missing
+  limit_req_zone                        LOW     http{}   ❌ missing
+  resolver                              LOW     http{}   ❌ missing
+  gzip on                               INFO    http{}   ❌ missing
+  worker_processes                      INFO    main     ✅ present
 ```
 
-Exit code 2 when any directives are missing. Supports `--only-failures` and `--format json`.
+Rows are sorted by severity. Exit code 2 when any check is missing, including INFO ones such as `gzip on`. Supports `--only-failures` and `--format json`.
 
 ---
 
@@ -720,12 +738,12 @@ Files containing `# reveal: generated`, `# Generated by ...`, `# @generated`, or
 | Rule | Severity | Detects |
 |------|----------|---------|
 | N001 | HIGH | Duplicate upstream backends |
-| N002 | HIGH | SSL server missing certificate directives |
+| N002 | CRITICAL | SSL server missing certificate directives |
 | N003 | MEDIUM | Proxy location missing forwarding headers |
-| N004 | MEDIUM | ACME challenge root path inconsistency across server blocks |
+| N004 | HIGH | ACME challenge root path inconsistency across server blocks |
 | N005 | MEDIUM | Timeout/buffer values outside safe operational ranges |
 | N006 | HIGH | `send_timeout` too short relative to `client_max_body_size` (silent upload kills) |
-| N007 | INFO | `ssl_stapling on` but certificate has no OCSP responder URL — stapling will silently fail |
+| N007 | LOW | `ssl_stapling on` but certificate has no OCSP responder URL — stapling will silently fail |
 | N008 | HIGH | HTTPS server block missing `Strict-Transport-Security` header |
 | N009 | MEDIUM | `server_tokens` not disabled (nginx version exposed in response headers) |
 | N010 | LOW | Deprecated `X-XSS-Protection` header present (removed from W3C spec, ignored by Chrome) |

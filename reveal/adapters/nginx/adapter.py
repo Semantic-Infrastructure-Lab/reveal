@@ -170,6 +170,21 @@ _SCHEMA_OUTPUT_TYPES = [
             }
         }
     },
+    {
+        'type': 'nginx_fleet_audit',
+        'description': 'nginx:// --audit: fleet consistency matrix, one row per directive check',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'nginx_fleet_audit'},
+                'nginx_conf': {'type': ['string', 'null']},
+                'site_count': {'type': 'integer'},
+                'matrix': {'type': 'array'},
+                'snippet_consistency': {'type': 'array'},
+                'has_gaps': {'type': 'boolean'},
+            }
+        }
+    },
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
@@ -1022,7 +1037,7 @@ class NginxUriAdapter(ResourceAdapter):
             artifact_files.extend(_find_artifact_files(search_dir))
 
         next_steps = [
-            "Inspect a specific domain: reveal nginx://<domain>",
+            "Inspect a specific domain: reveal nginx://DOMAIN",
             "Check SSL certs across all nginx: reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check",
         ]
         if artifact_files:
