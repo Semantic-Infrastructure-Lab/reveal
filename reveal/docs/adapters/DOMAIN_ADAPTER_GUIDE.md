@@ -216,6 +216,8 @@ Comprehensive domain health validation:
 - **Nameserver response**: Are nameservers responding?
 - **DNS propagation**: Are records consistent across nameservers?
 - **SSL certificate**: Is certificate valid and not expiring soon?
+- **HTTP response**, **HTTP redirect**: Do HTTP/HTTPS answer, and does port 80 redirect to HTTPS?
+- **MX, SPF, DMARC**: Email deliverability records
 
 **Check statuses**:
 - **pass**: Check succeeded, no issues
@@ -232,8 +234,11 @@ Comprehensive domain health validation:
     {
       "name": "dns_resolution",
       "status": "pass",
-      "value": "Resolved",
-      "message": "Domain resolves to 93.184.216.34"
+      "value": "4 IPs",
+      "threshold": "Resolves",
+      "message": "Domain resolves to 4 IP(s): 192.0.2.10, 192.0.2.11, 2001:db8::1",
+      "severity": "high",
+      "details": {"ips": ["192.0.2.10", "192.0.2.11", "192.0.2.12", "2001:db8::1"]}
     },
     {
       "name": "ssl_certificate",
@@ -244,14 +249,14 @@ Comprehensive domain health validation:
     }
   ],
   "summary": {
-    "total": 4,
-    "passed": 3,
+    "total": 9,
+    "passed": 8,
     "warnings": 1,
     "failures": 0
   },
   "next_steps": [
-    "Renew SSL certificate: reveal ssl://example.com --check --advanced",
-    "View full DNS records: reveal domain://example.com/dns"
+    "View DNS records: reveal domain://example.com/dns",
+    "View SSL certificate: reveal ssl://example.com"
   ],
   "exit_code": 1
 }
@@ -284,19 +289,21 @@ Every response includes contextual next steps:
 
 **Example**: After domain overview:
 ```
-Next steps:
-- Full health check: reveal domain://example.com --check
-- View all DNS records: reveal domain://example.com/dns
-- Check SSL certificate: reveal ssl://example.com --check
+Next Steps:
+  • DNS details: reveal domain://example.com/dns
+  • WHOIS details: reveal domain://example.com/whois
+  • SSL details: reveal ssl://example.com
+  • Email DNS: reveal domain://example.com/mail
+  • HTTP redirect chain: reveal domain://example.com/http
+  • Health check: reveal domain://example.com --check
 ```
 
-**Example**: After health check with SSL warning:
-```
-Next steps:
-- Renew SSL certificate: reveal ssl://example.com --check --advanced
-- View certificate chain: reveal ssl://example.com/chain
-- Monitor expiry: reveal ssl://example.com --check >> monitoring.log
-```
+**Example**: After a health check (JSON `next_steps`), steps depend on what failed or warned:
+- `dns_resolution` failure: `Check DNS configuration with registrar`, `View DNS records: reveal domain://HOST/dns`
+- `dns_propagation` warning: `DNS propagation in progress - wait and check again` (or, when lookups failed, `Investigate failed nameserver lookups and retry the DNS consistency check`)
+- `ssl_certificate` warning or failure: `Inspect SSL certificate: reveal ssl://HOST --check --advanced`
+- `http_response` failure: `Check nginx config: reveal nginx://HOST` and `Verify nginx upstream is reachable: reveal nginx://HOST/upstream`
+- Nothing to suggest (or only `http_redirect`/mail warnings): `View DNS records: reveal domain://HOST/dns`, `View SSL certificate: reveal ssl://HOST`
 
 ---
 
@@ -401,12 +408,23 @@ reveal domain://example.com/ssl
   "type": "domain_ssl_status",
   "domain": "example.com",
   "ssl_check": {
+    "type": "ssl_check",
+    "host": "example.com",
+    "port": 443,
     "status": "pass",
     "certificate": {
+      "subject": {"commonName": "example.com"},
+      "issuer": {"countryName": "US", "organizationName": "Example CA", "commonName": "Example TLS CA 1"},
+      "not_before": "2026-09-01T00:00:00",
+      "not_after": "2026-12-01T23:59:59",
       "days_until_expiry": 45,
-      "subject": "example.com",
-      "issuer": "Let's Encrypt Authority X3"
-    }
+      "is_expired": false,
+      "common_name": "example.com",
+      "issuer_name": "Example CA"
+    },
+    "checks": [],
+    "summary": {"total": 3, "passed": 3, "warnings": 0, "failures": 0},
+    "exit_code": 0
   },
   "next_steps": [
     "Full SSL details: reveal ssl://example.com",
@@ -414,6 +432,8 @@ reveal domain://example.com/ssl
   ]
 }
 ```
+
+`ssl_check` is the whole `ssl://` check result. `subject` and `issuer` are objects (certificate name fields); `common_name` and `issuer_name` hold the plain strings. `checks` lists the individual certificate checks (elided here).
 
 **Use when**: Need SSL status in domain context (for deep SSL inspection, use `ssl://` directly)
 
@@ -481,6 +501,9 @@ reveal domain://example.com --check
 2. **Nameserver response**: Are authoritative nameservers responding?
 3. **DNS propagation**: Are DNS records consistent across all nameservers?
 4. **SSL certificate**: Is the certificate valid and not expiring soon?
+5. **HTTP response** (`http_response`): Do HTTP and HTTPS answer with 2xx/3xx?
+6. **HTTP redirect** (`http_redirect`): Does port 80 redirect to HTTPS?
+7. **MX records** (`mx_records`), 8. **SPF record** (`spf_record`), 9. **DMARC record** (`dmarc_record`): Can the domain receive and protect email? (the `/mail` element)
 
 **Exit codes**:
 - `0` = All checks passed (status: pass)
@@ -536,6 +559,8 @@ reveal 'domain://<domain>' --check --only-failures
 reveal domain://example.com --check --only-failures
 ```
 
+Only `checks` is filtered. `summary`, `status` and the exit code still describe all 9 checks, so `summary.total` stays 9 while `checks` lists only the warnings and failures.
+
 **Use cases**:
 - Production monitoring (focus on problems)
 - Log analysis (reduce noise)
@@ -549,7 +574,7 @@ reveal domain://example.com --check --only-failures
   "status": "pass",
   "checks": [],
   "summary": {"total": 9, "passed": 9, "warnings": 0, "failures": 0},
-  "next_steps": []
+  "next_steps": ["View DNS records: reveal domain://example.com/dns", "View SSL certificate: reveal ssl://example.com"]
 }
 ```
 
@@ -569,7 +594,7 @@ reveal domain://example.com --check --only-failures
     }
   ],
   "summary": {"total": 9, "passed": 8, "warnings": 1, "failures": 0},
-  "next_steps": ["Renew SSL certificate"]
+  "next_steps": ["Inspect SSL certificate: reveal ssl://example.com --check --advanced"]
 }
 ```
 
@@ -739,7 +764,7 @@ reveal domain://example.com --check
 **Pass criteria**: Domain resolves to at least one A or AAAA record
 
 **Failure scenarios**:
-- Domain doesn't resolve (NXDOMAIN)
+- Domain doesn't resolve (`Domain does not resolve: [Errno -2] Name or service not known`)
 - DNS timeout
 - No A/AAAA records found
 
@@ -748,10 +773,11 @@ reveal domain://example.com --check
 {
   "name": "dns_resolution",
   "status": "pass",
-  "value": "Resolved",
-  "threshold": "Resolves to IPs",
-  "message": "Domain resolves to 93.184.216.34",
-  "severity": "high"
+  "value": "4 IPs",
+  "threshold": "Resolves",
+  "message": "Domain resolves to 4 IP(s): 192.0.2.10, 192.0.2.11, 2001:db8::1",
+  "severity": "high",
+  "details": {"ips": ["192.0.2.10", "192.0.2.11", "192.0.2.12", "2001:db8::1"]}
 }
 ```
 
@@ -761,22 +787,21 @@ reveal domain://example.com --check
 
 **What it validates**: Authoritative nameservers are responding
 
-**Pass criteria**: At least one nameserver responds successfully
+**Pass criteria**: The domain has NS records and the first listed nameserver answers an A query. Only that one nameserver is queried; use the propagation check for the others. A subdomain is skipped (pass, `Skipped (subdomain)`).
 
 **Failure scenarios**:
-- All nameservers timeout
-- No authoritative nameservers found
-- Nameserver configuration errors
+- No NS records found (`No nameservers found for domain`)
+- The first nameserver does not answer, or the lookup errors (`Nameserver query failed: <error>`)
 
 **Example result**:
 ```json
 {
   "name": "nameserver_response",
   "status": "pass",
-  "value": "2/2 responding",
-  "threshold": "At least 1 responds",
-  "message": "All nameservers responding normally",
-  "severity": "high"
+  "value": "2 nameservers",
+  "threshold": "Responsive",
+  "message": "Nameservers respond (2 found)",
+  "severity": "medium"
 }
 ```
 
@@ -869,8 +894,8 @@ Health check results include summary metrics:
 ```json
 {
   "summary": {
-    "total": 4,
-    "passed": 3,
+    "total": 9,
+    "passed": 8,
     "warnings": 1,
     "failures": 0
   }
@@ -890,19 +915,15 @@ Every health check includes contextual next steps based on results:
 
 **Example** (SSL expiring soon):
 ```
-Next steps:
-- Renew SSL certificate: reveal ssl://example.com --check --advanced
-- View certificate details: reveal ssl://example.com/full
-- Check certificate chain: reveal ssl://example.com/chain
+Inspect SSL certificate: reveal ssl://example.com --check --advanced
 ```
 
 **Example** (DNS propagation issue):
 ```
-Next steps:
-- View current DNS records: reveal domain://example.com/dns
-- Check specific nameserver: dig @ns1.example.com example.com
-- Wait for propagation and re-check: reveal domain://example.com --check
+DNS propagation in progress - wait and check again
 ```
+
+The full rules are listed under "Actionable Next Steps" in the feature overview above.
 
 ---
 
@@ -943,7 +964,7 @@ reveal domain://example.com --check
 
 # During migration: Some nameservers updated
 reveal domain://example.com --check
-# Status: warning, message: "DNS propagating (1/2 nameservers updated)"
+# Status: warning, message: "Inconsistent records across 2 nameservers (propagation in progress)"
 
 # After migration: All nameservers updated
 reveal domain://example.com --check
@@ -960,7 +981,7 @@ reveal domain://example.com --check
 
 ```bash
 reveal domain://example.com --check
-# Status: failure, message: "Domain does not resolve (NXDOMAIN)"
+# Status: failure, message: "Domain does not resolve: [Errno -2] Name or service not known"
 ```
 
 **Diagnosis**:
@@ -983,7 +1004,7 @@ reveal domain://example.com/registrar
 
 ```bash
 reveal domain://example.com --check
-# Status: failure, message: "Nameservers not responding"
+# Status: failure, message: "Nameserver query failed: <error>"
 ```
 
 **Diagnosis**:
@@ -1006,7 +1027,7 @@ dig @ns1.example.com example.com
 
 ```bash
 reveal domain://example.com --check
-# Status: warning, message: "DNS records propagating (1/3 nameservers updated)"
+# Status: warning, message: "Inconsistent records across 3 nameservers (propagation in progress)"
 ```
 
 **Diagnosis**:
@@ -1149,7 +1170,7 @@ echo "Domain health: OK"
 ```bash
 # Step 1: Run health check (includes propagation validation)
 reveal domain://example.com --check
-# Status: warning, message: "DNS propagating (1/2 nameservers updated)"
+# Status: warning, message: "Inconsistent records across 2 nameservers (propagation in progress)"
 
 # Step 2: View all DNS records
 reveal domain://example.com/dns
@@ -1157,7 +1178,7 @@ reveal domain://example.com/dns
 
 # Step 3: Extract specific record types
 reveal domain://example.com/dns --format json | jq '.records.a'
-# Output: ["93.184.216.34"]
+# Output: ["192.0.2.10"]
 
 # Step 4: Check nameserver configuration
 reveal domain://example.com/registrar
@@ -1510,9 +1531,9 @@ cat domains.txt | xargs -P 10 -I {} sh -c 'reveal domain://{} --check'
 
 ### Common Errors and Solutions
 
-#### Error: "Domain does not resolve (NXDOMAIN)"
+#### Error: "Domain does not resolve: ..."
 
-**Meaning**: Domain doesn't exist or has no DNS records
+**Meaning**: Domain doesn't exist or has no DNS records (the text after the colon is the resolver's error)
 
 **Solutions**:
 ```bash
@@ -1528,7 +1549,7 @@ reveal domain://example.com/dns
 
 ---
 
-#### Error: "Nameservers not responding"
+#### Error: "Nameserver query failed: ..."
 
 **Meaning**: Authoritative nameservers are unreachable or timing out
 
@@ -1545,9 +1566,9 @@ dig @ns1.example.com example.com
 
 ---
 
-#### Error: "DNS records propagating (1/2 nameservers updated)"
+#### Warning: "Inconsistent records across N nameservers (propagation in progress)"
 
-**Meaning**: DNS change in progress, not all nameservers updated
+**Meaning**: DNS change in progress, the nameservers return different answers. (A different warning, "Incomplete DNS observation: X of N nameservers responded", means some lookups failed, so consistency could not be established.)
 
 **Status**: Warning (not failure)
 
@@ -2226,7 +2247,7 @@ See [Python Integration](#2-python-integration) for complete example.
 
 ### Troubleshooting
 
-**Q: Error "Domain does not resolve (NXDOMAIN)" - what does this mean?**
+**Q: Error "Domain does not resolve: ..." - what does this mean?**
 
 A: The domain doesn't exist or has no DNS records. Check:
 1. Domain registration is active (`whois example.com`)
@@ -2235,16 +2256,16 @@ A: The domain doesn't exist or has no DNS records. Check:
 
 ---
 
-**Q: Error "Nameservers not responding" - how do I fix this?**
+**Q: Error "Nameserver query failed: ..." - how do I fix this?**
 
-A: Nameservers are unreachable. Check:
+A: The first listed nameserver did not answer. Check:
 1. Nameserver hostnames are correct (`reveal domain://example.com/registrar`)
 2. Nameservers are online (`dig @ns1.example.com example.com`)
 3. Network connectivity to nameservers
 
 ---
 
-**Q: Warning "DNS propagating" - how long should I wait?**
+**Q: Warning "Inconsistent records ... (propagation in progress)" - how long should I wait?**
 
 A: Propagation between authoritative nameservers typically takes 5-15 minutes. Wait and re-check:
 ```bash
