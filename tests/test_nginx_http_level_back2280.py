@@ -26,6 +26,8 @@ from reveal.rules.infrastructure.N009 import N009
 pytestmark = pytest.mark.component
 
 
+MISSING_BOTH = 'missing both ssl_certificate and ssl_certificate_key'
+
 SITE_NO_CERT = """server {
     listen 443 ssl;
     server_name a.example.test;
@@ -79,7 +81,7 @@ class TestN002NeighbourCertIsNotGlobal(_TmpConfigDir):
         self._write('nginx.conf', NGINX_CONF_SERVER_HAS_ALL)
         detections = self._check(N002(), 'site.conf', SITE_NO_CERT)
         self.assertEqual([d.message for d in detections],
-                         ["SSL server 'a.example.test' missing both ssl_certificate and ssl_certificate_key"])
+                         [f"SSL server 'a.example.test' {MISSING_BOTH}"])
 
     def test_cert_in_a_vhost_file_nginx_conf_includes_does_not_cover_the_vhost(self):
         self._write('other-site.conf', SITE_WITH_CERT.replace('a.example', 'b.example'))
@@ -119,7 +121,7 @@ class TestN002NeighbourCertIsNotGlobal(_TmpConfigDir):
 """
         detections = self._check(N002(), 'both.conf', content)
         self.assertEqual([(d.line, d.message) for d in detections],
-                         [(9, "SSL server 'second.example.test' missing both ssl_certificate and ssl_certificate_key")])
+                         [(9, f"SSL server 'second.example.test' {MISSING_BOTH}")])
 
     # --- controls: what really is http{} level still covers every vhost ---
 
@@ -168,12 +170,14 @@ class TestN002NeighbourCertIsNotGlobal(_TmpConfigDir):
         self._write('nginx.conf', 'http {\n}\n')
         self._write('a-cert.conf', 'ssl_certificate /srv/certs/a.crt;\n'
                                    'ssl_certificate_key /srv/certs/a.key;\n')
-        content = SITE_NO_CERT.replace('    server_name', '    include a-cert.conf;\n    server_name')
+        content = SITE_NO_CERT.replace('    server_name',
+                                       '    include a-cert.conf;\n    server_name')
         self.assertEqual(self._check(N002(), 'site.conf', content), [])
 
     def test_control_both_servers_of_one_file_with_certs_are_clean(self):
         self._write('nginx.conf', 'http {\n}\n')
-        content = 'http {\n' + SITE_WITH_CERT + SITE_WITH_CERT.replace('a.example', 'b.example') + '}\n'
+        second = SITE_WITH_CERT.replace('a.example', 'b.example')
+        content = 'http {\n' + SITE_WITH_CERT + second + '}\n'
         self.assertEqual(self._check(N002(), 'both.conf', content), [])
 
 

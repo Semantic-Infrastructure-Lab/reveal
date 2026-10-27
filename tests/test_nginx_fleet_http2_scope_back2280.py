@@ -45,7 +45,8 @@ def test_port_80_only_site_is_not_counted_without_http2():
 
 
 def test_fleet_of_port_80_only_sites_has_no_http2_gap():
-    result = _fleet({'c.conf': PORT_80_ONLY, 'd.conf': PORT_80_ONLY.replace('c.example', 'd.example')})
+    other = PORT_80_ONLY.replace('c.example', 'd.example')
+    result = _fleet({'c.conf': PORT_80_ONLY, 'd.conf': other})
     row = _row(result, 'http2')
     assert (row['sites_with'], row['sites_without']) == (0, 0)
 
@@ -76,8 +77,8 @@ def test_control_site_with_80_and_443_servers_counts_for_http2():
 
 
 def test_control_ssl_listener_on_another_port_still_counts():
-    row = _row(_fleet({'e.conf': 'server {\n    listen 8443 ssl;\n    server_name e.example.test;\n}\n'}),
-               'http2')
+    site = 'server {\n    listen 8443 ssl;\n    server_name e.example.test;\n}\n'
+    row = _row(_fleet({'e.conf': site}), 'http2')
     assert (row['sites_with'], row['sites_without']) == (0, 1)
 
 
