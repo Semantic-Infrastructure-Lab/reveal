@@ -639,12 +639,27 @@ def _find_nginx_conf(main_configs: List[str]) -> Optional[str]:
     return None
 
 
-def _audit_site_content(content: str) -> Dict[str, bool]:
-    """Check which fleet directives are present in a single site config's raw content."""
-    return {
-        check_id: bool(re.search(pattern, content, re.IGNORECASE))
-        for check_id, _label, _sev, pattern, _consol, _depr, _action in _FLEET_CHECK_DEFS
-    }
+# Checks that apply only to some sites: a site whose config does not match the pattern is
+# counted in neither sites_with nor sites_without of that row. http2 is set on a TLS
+# listener (port 443 or the ssl parameter); a port-80-only site has none (BACK-2280).
+_FLEET_CHECK_APPLIES_TO = {
+    'http2': r'\blisten\b[^;]*(?:\b443\b|\bssl\b)',
+}
+
+
+def _audit_site_content(content: str) -> Dict[str, Optional[bool]]:
+    """Check which fleet directives are present in a single site config's raw content.
+
+    None for a check that does not apply to the site (``_FLEET_CHECK_APPLIES_TO``).
+    """
+    checks: Dict[str, Optional[bool]] = {}
+    for check_id, _label, _sev, pattern, _consol, _depr, _action in _FLEET_CHECK_DEFS:
+        applies_to = _FLEET_CHECK_APPLIES_TO.get(check_id)
+        if applies_to and not re.search(applies_to, content, re.IGNORECASE):
+            checks[check_id] = None
+        else:
+            checks[check_id] = bool(re.search(pattern, content, re.IGNORECASE))
+    return checks
 
 
 def _extract_includes(content: str) -> List[str]:
@@ -767,8 +782,8 @@ def _build_fleet_matrix(
     """Cross-reference every fleet check against every site + the global config."""
     matrix = []
     for check_id, label, severity, _pattern, consol_eligible, deprecated, action_template in _FLEET_CHECK_DEFS:
-        sites_with = [r for r in site_records if r['checks'].get(check_id)]
-        sites_without = [r for r in site_records if not r['checks'].get(check_id)]
+        sites_with = [r for r in site_records if r['checks'].get(check_id) is True]
+        sites_without = [r for r in site_records if r['checks'].get(check_id) is False]
 
         global_present = global_checks.get(check_id)  # None if nginx.conf not found
 

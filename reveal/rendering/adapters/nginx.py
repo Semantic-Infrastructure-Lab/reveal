@@ -124,7 +124,15 @@ def _is_gap(entry: dict) -> bool:
     return bool(entry['sites_without'] > 0)
 
 
-def _fleet_matrix_rows(matrix: list, only_failures: bool) -> List[str]:
+def _not_applicable_note(entry: dict, site_count: int) -> str:
+    """Sites a per-listener row left out (http2 on a port-80-only site, BACK-2280)."""
+    left_out = site_count - entry['sites_with'] - entry['sites_without']
+    if left_out <= 0:
+        return ''
+    return f"  ({left_out} site{'s' if left_out != 1 else ''} not applicable)"
+
+
+def _fleet_matrix_rows(matrix: list, only_failures: bool, site_count: int) -> List[str]:
     col_directive = max(max(len(e['label']) for e in matrix), len('Directive'))
     header = (f"  {'Directive':<{col_directive}}  {'Global':^6}"
               f"  {'With':>5}  {'Without':>7}  Action")
@@ -143,7 +151,8 @@ def _fleet_matrix_rows(matrix: list, only_failures: bool) -> List[str]:
         without_col = f'{"—":>7}' if entry.get('deprecated', False) else f"{entry['sites_without']:>7}"
         consol_marker = ' ↑' if entry.get('consolidation_opportunity', False) else ''
         lines.append(f"  {entry['label']:<{col_directive}}  {global_col}  {entry['sites_with']:>5}"
-                     f"  {without_col}  {entry.get('action', '')}{consol_marker}")
+                     f"  {without_col}  {entry.get('action', '')}{consol_marker}"
+                     f"{_not_applicable_note(entry, site_count)}")
         printed += 1
     if only_failures and printed == 0:
         lines.append("  ✅ No gaps found.")
@@ -285,7 +294,8 @@ class NginxRenderer(TypeDispatchRenderer):
                          "global directives are not checked")
         if not matrix:
             return _body(lines + ["  No site configs found."])
-        lines.extend(_fleet_matrix_rows(matrix, result.get('only_failures', False)))
+        lines.extend(_fleet_matrix_rows(matrix, result.get('only_failures', False),
+                                        result.get('site_count', 0)))
         lines.extend(_consolidation_summary(matrix))
         lines.extend(_snippet_consistency(result.get('snippet_consistency', [])))
         return _body(lines)
