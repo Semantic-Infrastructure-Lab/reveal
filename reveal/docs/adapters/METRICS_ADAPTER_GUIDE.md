@@ -360,6 +360,10 @@ A dotted path into a file's record (`lines.total`, `quality.avg_function_length`
 nothing matches and a filter names a field no scanned file has (`complxity>5`, `complxity=5..15`),
 the answer carries an `unknown_filter_field` warning naming it: the zero is likely a typo.
 
+A single file is filtered the same way: `metrics://src/app.py?lines>99999` answers 0 files (the
+file does not pass), and `metrics://src/app.py?complxity>5` adds the `unknown_filter_field`
+warning. Earlier versions returned the file whatever the filters said.
+
 ### Combining Filters
 
 Use `&` to combine multiple filters:
@@ -416,7 +420,10 @@ Control result ordering, limiting, and pagination:
 | `offset` | Skip first N results | `offset=5` |
 
 A file with no value for the sort field sorts last in either direction, in scan order; it is
-not sorted as a zero.
+not sorted as a zero. A field whose values do not compare (`sort=elements` reads an object per
+file) leaves the files in scan order and says so: a `sort_failed` entry in `meta.warnings`, and
+in text output `⚠ Not sorted by 'elements': ...` after the summary. Sort on a number inside it
+instead (`sort=functions`, `sort=elements.imports`).
 
 ### Sortable Fields
 
