@@ -185,6 +185,12 @@ def _format_acme_ssl_col(ssl_status: str, ssl_days, ssl_not_after: str) -> tuple
     return ssl_status, False
 
 
+def _cert_state(ssl_result: dict) -> tuple:
+    """(state, message) for a check_ssl_health result; see ssl.certificate.live_cert_state."""
+    from reveal.adapters.ssl.certificate import live_cert_state  # noqa: I006 — optional heavy dep
+    return live_cert_state(ssl_result)
+
+
 def _fetch_acme_ssl_data(rows: list, check_ssl_health) -> list:
     """Enrich ACME rows with live SSL data for each domain."""
     results = []
@@ -192,9 +198,10 @@ def _fetch_acme_ssl_data(rows: list, check_ssl_health) -> list:
         try:
             ssl_result = check_ssl_health(r['domain'], warn_days=30, critical_days=7)
             leaf = ssl_result.get('certificate', {})
-            results.append({**r, 'ssl_status': ssl_result.get('status', 'unknown'),
+            state, message = _cert_state(ssl_result)
+            results.append({**r, 'ssl_status': state,
                             'ssl_days': leaf.get('days_until_expiry'),
-                            'ssl_not_after': leaf.get('not_after', '')})
+                            'ssl_not_after': message[:60] if state == 'error' else leaf.get('not_after', '')})
         except _CERT_CHECK_ERRORS as exc:
             results.append({**r, 'ssl_status': 'error', 'ssl_days': None,
                             'ssl_not_after': str(exc)[:60], 'error': str(exc)})
@@ -468,8 +475,11 @@ def _load_live_cert(domain: str, check_ssl_health) -> dict:
                 not_after = datetime.fromisoformat(not_after_str.replace('Z', '+00:00'))
             except (ValueError, TypeError):
                 pass
+        state, message = _cert_state(ssl_result)
+        if state == 'error':
+            state = f"error: {message[:40]}"
         return {
-            'status': ssl_result.get('status', 'unknown'),
+            'status': state,
             'expiry': leaf_data.get('days_until_expiry'),
             'serial': leaf_data.get('serial_number'),
             'not_after': not_after,

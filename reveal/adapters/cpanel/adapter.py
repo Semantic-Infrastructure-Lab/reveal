@@ -868,7 +868,7 @@ class CpanelAdapter(ResourceAdapter):
         if os.path.exists(nginx_conf):
             try:
                 from ...analyzers.nginx import NginxAnalyzer
-                from ...adapters.ssl.certificate import check_ssl_health
+                from ...adapters.ssl.certificate import check_ssl_health, live_cert_state
                 analyzer = NginxAnalyzer(nginx_conf)
                 rows = analyzer.extract_acme_roots()
                 if rows:
@@ -878,10 +878,12 @@ class CpanelAdapter(ResourceAdapter):
                             ssl_result = check_ssl_health(row['domain'], warn_days=30,
                                                           critical_days=7)
                             leaf = ssl_result.get('certificate', {})
+                            state, message = live_cert_state(ssl_result)
                             enriched = {**row,
-                                        'ssl_status': ssl_result.get('status', 'unknown'),
+                                        'ssl_status': state,
                                         'ssl_days': leaf.get('days_until_expiry'),
-                                        'ssl_not_after': leaf.get('not_after', '')}
+                                        'ssl_not_after': (message[:60] if state == 'error'
+                                                          else leaf.get('not_after', ''))}
                         except _CERT_CHECK_ERRORS as exc:
                             enriched = {**row, 'ssl_status': 'error', 'ssl_days': None,
                                         'ssl_not_after': str(exc)[:60]}

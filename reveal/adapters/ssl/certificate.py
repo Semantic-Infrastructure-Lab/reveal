@@ -980,3 +980,26 @@ def _generate_remediation_steps(checks: List[Dict[str, Any]], host: str) -> List
     """
     issues = _detect_ssl_issues(checks)
     return _add_remediation_for_issues(issues, host)
+
+
+def live_cert_state(ssl_result: dict) -> tuple:
+    """Map a check_ssl_health() result to (state, message) for audit tables.
+
+    state is one of 'healthy', 'warning', 'critical', 'expired', 'error'.
+    check_ssl_health reports pass/warning/failure; audits need to tell an
+    expired or expiring certificate from an unreachable host.
+    """
+    cert = ssl_result.get('certificate') or {}
+    days = cert.get('days_until_expiry')
+    status = ssl_result.get('status')
+    if days is not None and days < 0:
+        return 'expired', 'expired'
+    if status == 'pass':
+        return 'healthy', ''
+    if status == 'warning':
+        return 'warning', ''
+    failing = next((c for c in ssl_result.get('checks', []) if c.get('status') == 'failure'), {})
+    message = (failing.get('message') or ssl_result.get('error') or 'ssl check failed')
+    if days is not None and failing.get('name') == 'certificate_expiry':
+        return 'critical', message
+    return 'error', message

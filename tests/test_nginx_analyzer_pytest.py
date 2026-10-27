@@ -1921,7 +1921,7 @@ server {
         analyzer = self._make_analyzer(self.SSL_CONFIG)
         cert = self._make_cert_info(cn='alpha.example.com', days=60, serial='LIVE01')
         live_result = {
-            'status': 'healthy',
+            'status': 'pass',
             'certificate': {
                 'days_until_expiry': 60,
                 'serial_number': 'LIVE01',
@@ -1945,7 +1945,7 @@ server {
         serial = 'MATCHSERIAL'
         disk_cert = self._make_cert_info(cn='alpha.example.com', days=60, serial=serial)
         live_result = {
-            'status': 'healthy',
+            'status': 'pass',
             'certificate': {
                 'days_until_expiry': 60,
                 'serial_number': serial,
@@ -1977,7 +1977,7 @@ server {
 """)
         disk_cert = self._make_cert_info(cn='alpha.example.com', days=5, serial='OLDSERIAL')
         live_result = {
-            'status': 'healthy',
+            'status': 'pass',
             'certificate': {
                 'days_until_expiry': 60,
                 'serial_number': 'NEWSERIAL',
@@ -2010,7 +2010,7 @@ server {
 """)
         disk_cert = self._make_cert_info(cn='mysite.example.com', days=60, serial='S1')
         live_result = {
-            'status': 'healthy',
+            'status': 'pass',
             'certificate': {'days_until_expiry': 60, 'serial_number': 'S1', 'not_after': ''},
         }
 
@@ -2101,7 +2101,7 @@ server {
         analyzer = self._make_analyzer(self.MULTI_ALIAS_CONFIG)
 
         disk_cert = self._make_cert_info(cn='primary.example.com', days=60, serial='S1')
-        live_result = {'status': 'healthy', 'certificate': {
+        live_result = {'status': 'pass', 'certificate': {
             'days_until_expiry': 60, 'serial_number': 'S1', 'not_after': ''}}
 
         with patch('os.path.exists', return_value=True), \
@@ -2126,7 +2126,7 @@ server {
         args = argparse.Namespace(all=True, only_failures=False)
 
         disk_cert = self._make_cert_info(cn='primary.example.com', days=60, serial='S1')
-        live_result = {'status': 'healthy', 'certificate': {
+        live_result = {'status': 'pass', 'certificate': {
             'days_until_expiry': 60, 'serial_number': 'S1', 'not_after': ''}}
 
         with patch('os.path.exists', return_value=True), \
@@ -2149,7 +2149,7 @@ server {
         args = argparse.Namespace(all=False, only_failures=True)
 
         disk_cert = self._make_cert_info(cn='alpha.example.com', days=60, serial='S1')
-        live_result = {'status': 'healthy', 'certificate': {
+        live_result = {'status': 'pass', 'certificate': {
             'days_until_expiry': 60, 'serial_number': 'S1', 'not_after': ''}}
 
         # alpha has cert, beta does not
@@ -2476,7 +2476,7 @@ server {
     def test_without_only_failures_shows_all(self, tmp_path, monkeypatch, capsys):
         """Without --only-failures, all rows are printed."""
         def fake_ssl(domain, **_):
-            return {'status': 'healthy', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
+            return {'status': 'pass', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
         def fake_acl(path):
             return self._ACL_OK if 'ok' in path else self._ACL_DENIED
         monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', fake_acl)
@@ -2492,7 +2492,7 @@ server {
     def test_only_failures_hides_ok_rows(self, tmp_path, monkeypatch, capsys):
         """With --only-failures, passing rows are suppressed."""
         def fake_ssl(domain, **_):
-            return {'status': 'healthy', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
+            return {'status': 'pass', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
         def fake_acl(path):
             return self._ACL_OK if 'ok' in path else self._ACL_DENIED
         monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', fake_acl)
@@ -2508,7 +2508,7 @@ server {
     def test_only_failures_all_pass_prints_clean_message(self, tmp_path, monkeypatch, capsys):
         """With --only-failures, if nothing fails, prints clean message instead of empty output."""
         def fake_ssl(domain, **_):
-            return {'status': 'healthy', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
+            return {'status': 'pass', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
         monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
                             lambda p: self._ACL_OK)
         monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
@@ -2555,7 +2555,7 @@ server {
     def test_json_output_is_valid_json(self, tmp_path, monkeypatch, capsys):
         import json
         def fake_ssl(domain, **_):
-            return {'status': 'healthy', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
+            return {'status': 'pass', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
         monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
                             lambda p: self._ACL_OK)
         monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
@@ -2571,7 +2571,7 @@ server {
     def test_json_output_contains_domain_rows(self, tmp_path, monkeypatch, capsys):
         import json
         def fake_ssl(domain, **_):
-            return {'status': 'healthy', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
+            return {'status': 'pass', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
         monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
                             lambda p: self._ACL_OK)
         monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
@@ -2586,7 +2586,7 @@ server {
     def test_json_only_failures_filters_rows(self, tmp_path, monkeypatch, capsys):
         import json
         def fake_ssl(domain, **_):
-            return {'status': 'healthy', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
+            return {'status': 'pass', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
         def fake_acl(path):
             return self._ACL_OK if 'ok' in path else self._ACL_DENIED
         monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', fake_acl)
@@ -2604,7 +2604,7 @@ server {
     def test_json_has_failures_false_when_all_pass(self, tmp_path, monkeypatch, capsys):
         import json
         def fake_ssl(domain, **_):
-            return {'status': 'healthy', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
+            return {'status': 'pass', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
         monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
                             lambda p: self._ACL_OK)
         monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
@@ -2649,7 +2649,7 @@ server {
     def test_verbose_shows_config_lines(self, tmp_path, monkeypatch, capsys):
         """--verbose should print the matched location block after each row."""
         def fake_ssl(domain, **_):
-            return {'status': 'healthy', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
+            return {'status': 'pass', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
         monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
                             lambda p: self._ACL_OK)
         monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
@@ -2663,7 +2663,7 @@ server {
     def test_non_verbose_does_not_show_config_lines(self, tmp_path, monkeypatch, capsys):
         """Without --verbose, config lines should not appear in output."""
         def fake_ssl(domain, **_):
-            return {'status': 'healthy', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
+            return {'status': 'pass', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
         monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
                             lambda p: self._ACL_OK)
         monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
@@ -2679,7 +2679,7 @@ server {
     def test_verbose_shows_line_number(self, tmp_path, monkeypatch, capsys):
         """--verbose snippet should include line numbers."""
         def fake_ssl(domain, **_):
-            return {'status': 'healthy', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
+            return {'status': 'pass', 'certificate': {'days_until_expiry': 90, 'not_after': ''}}
         monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
                             lambda p: self._ACL_OK)
         monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
