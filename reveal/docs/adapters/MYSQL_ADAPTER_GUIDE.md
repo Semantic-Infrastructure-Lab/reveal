@@ -209,43 +209,31 @@ reveal mysql://localhost
 ```
 MySQL Server: localhost:3306
 Version: 8.0.35-0ubuntu0.22.04.1
-Uptime: 15d 7h 23m
-Server Start: 2025-01-29T08:30:00+00:00
+Uptime: 15d 23h 20m
 
-Connection Health:
-  Current: 12/151 (7.9%)
-  Max Used: 45/151 (29.8%) - No connection rejections since server start
-  Note: If max_used_pct was 100%, connections were rejected
+Connection Health: ✅
+  Current: 12 / 151 max (7.9%)
 
 Performance:
-  QPS: 156.3
-  Slow Queries: 234 total (0.12% of all queries since server start)
+  QPS: 155.8 queries/sec
+  Slow Queries: 234 total (0.00% of all queries since server start)
   Threads Running: 3
 
-InnoDB Health:
+InnoDB Health: ✅
   Buffer Pool Hit Rate: 99.87% (since server start)
-  Status: healthy
   Row Lock Waits: 12 (since server start)
   Deadlocks: 0 (since server start)
 
-Replication:
-  Role: Slave
+Replication: Slave
   Lag: 2s
-  IO Running: true
-  SQL Running: true
 
 Storage:
-  Total Size: 45.67 GB
-  Database Count: 8
-  Largest DB: production (38.45 GB)
+  Total: 45.67 GB across 2 databases
+  Largest: production (38.45 GB)
 
-Resource Limits:
-  Open Files: 234/10000 (2.3%)
-  Note: Approaching limit (>75%) can cause "too many open files" errors
-
-Health Status: ⚠️ WARNING
-Health Issues:
-  - Replication lag (2s)
+Health Status: ✅ HEALTHY
+Issues:
+  • No issues detected
 
 Next Steps:
   reveal mysql://localhost/connections       # Connection details
@@ -254,13 +242,15 @@ Next Steps:
   reveal mysql://localhost --check           # Run health checks
 ```
 
+The text view omits some fields the JSON carries: server start time, peak connection use (`max_used_ever`, `max_used_pct`), replication thread state (`io_running`, `sql_running`) and `resource_limits` (open files). The health issues are connection use above 80%, a buffer pool hit rate below 99%, and replication lag above 60 seconds. One or two issues give `⚠️ WARNING`; three give `❌ CRITICAL`.
+
 **Key Sections**:
-- **Connection Health**: Current usage, max usage, rejection detection
+- **Connection Health**: Current usage and the configured maximum (peak use and rejection detection are in the JSON)
 - **Performance**: QPS, slow queries, active threads
 - **InnoDB Health**: Buffer pool hit rate, locks, deadlocks
-- **Replication**: Role (master/slave/standalone), lag, thread status
+- **Replication**: Role (master/slave/standalone) and lag
 - **Storage**: Total size, database count, largest database
-- **Resource Limits**: Open files, approaching threshold warnings
+- **Resource limits** (JSON `resource_limits`): open files against the limit
 - **Health Status**: Overall assessment (✅ HEALTHY / ⚠️ WARNING / ❌ CRITICAL)
 - **Next Steps**: Suggested follow-up commands
 
@@ -288,6 +278,8 @@ Use `/element` to drill into specific areas:
 | `indexes` | Index usage statistics | Find unused indexes, optimize queries |
 | `slow-queries` | Slow query log analysis | Analyze slow query patterns (requires slow_log) |
 
+An element name that is not in this table does not fail: the overview is returned (and, with no reachable server, its connection error).
+
 ### Element Examples
 
 #### 1. Connections
@@ -298,30 +290,21 @@ reveal mysql://localhost/connections
 
 **Returns**:
 ```
-Snapshot Time: 2025-02-14T08:45:23+00:00
-Server Start: 2025-01-29T08:30:00+00:00
-Uptime: 15d 23h 15m
+MySQL Connections
+Measurement window: 15d 23h (since server start)
 
-Total Connections: 45
+Total Connections: 1
 
 By State:
-  Sleep: 38
-  Query: 5
-  Sending data: 2
+  executing: 1
 
-Long Running Queries (>5s):
-  ID: 12345
-  User: app_user
-  DB: production
-  Time: 127s
-  State: Sending data
-  Query: SELECT * FROM large_table WHERE...
+Long-Running Queries (>5s): 0
 ```
 
 **Use cases**:
 - Debug connection pool exhaustion
 - Find long-running queries blocking resources
-- Identify connection states (Sleep, Query, Sending data)
+- Identify connection states
 - Monitor active query count
 
 #### 2. Performance
@@ -332,33 +315,24 @@ reveal mysql://localhost/performance
 
 **Returns**:
 ```
-Snapshot Time: 2025-02-14T08:45:23+00:00
-Server Start: 2025-01-29T08:30:00+00:00
-Measurement Window: 15d 23h 15m
+MySQL Performance
+Measurement window: 15d 23h (since server start)
 
-Query Performance:
-  Total Questions: 12,456,789
-  QPS: 156.3 (avg since server start)
-  Slow Queries: 234 (0.12% of all queries)
-  Threads Running: 3
+QPS: 155.80
+Slow Queries: 234 (since server start)
+Sort Merge Passes: 0 (since server start)
 
-DBA Tuning Ratios:
-  Table Scan Ratio: 12.5% (⚠️ WARN; pass <10%, warning <25%)
-    - Full table scans / queries ratio
-    - Lower is better (use indexes instead of scans)
+Full Table Scans: ❌ 90.00%
+  High scan ratio (>25%) or Handler_read_rnd_next indicates missing indexes
 
-  Thread Cache Miss Rate: 3.2% (✅ PASS <10%)
-    - Thread creation overhead
-    - Lower is better (cache more threads)
+Thread Cache: ✅ 1.20% miss rate
+  Miss rate >10% suggests increasing thread_cache_size
 
-  Temp Tables to Disk: 18.7% (✅ PASS <25%)
-    - Temp tables written to disk vs memory
-    - Lower is better (increase tmp_table_size)
-
-Query Cache (if enabled):
-  Hit Rate: 85.3%
-  Prunes: 1,234 (cache evictions)
+Temp Tables: ✅ 9.00% on disk
+  Ratio >25% suggests increasing tmp_table_size or max_heap_table_size
 ```
+
+JSON keys: `queries_per_second`, `slow_queries_total`, `full_table_scans` (`select_scan_ratio`, `status`, `select_scan`, `select_range`, `handler_read_rnd_next`, `note`), `thread_cache_efficiency` (`miss_rate`, ...), `temp_tables` (`disk_ratio`, ...) and `sort_merge_passes`, plus the timing fields. There is no query-cache section.
 
 **Use cases**:
 - Identify slow query patterns
@@ -374,39 +348,23 @@ reveal mysql://localhost/innodb
 
 **Returns**:
 ```
-Snapshot Time: 2025-02-14T08:45:23+00:00
-Server Start: 2025-01-29T08:30:00+00:00
+MySQL InnoDB
+Measurement window: 15d 23h (since server start)
 
-InnoDB Buffer Pool:
-  Size: 8.00 GB
-  Hit Rate: 99.87% (since server start)
-  Reads: 1,234,567
-  Read Requests: 987,654,321
-  Status: ✅ healthy (>99% is excellent)
-
-Lock Information:
-  Current Waits: 0
-  Row Lock Waits: 12 (since server start)
-  Avg Wait Time: 1.2 seconds
-  Deadlocks: 0 (since server start)
-
-Pending I/O:
-  Reads: 0
-  Writes: 2
-  Log Flushes: 0
-
-Data:
-  Rows Read: 45,678,901
-  Rows Inserted: 123,456
-  Rows Updated: 234,567
-  Rows Deleted: 12,345
+Buffer Pool Hit Rate: 99.87%
+  Reads: 1300000 (since server start)
+  Read Requests: 1000000000 (since server start)
+Row Lock Waits: 12 (since server start)
+Row Lock Time (avg): 8 ms
+Deadlocks: 0 (since server start)
 ```
+
+JSON keys: `buffer_pool_hit_rate`, `buffer_pool_reads`, `buffer_pool_read_requests`, `row_lock_waits`, `row_lock_time_avg`, `deadlocks`, plus the timing fields. Buffer pool size, pending I/O and row counters are not reported.
 
 **Use cases**:
 - Optimize buffer pool size (target >99% hit rate)
 - Debug lock contention issues
-- Monitor I/O performance
-- Track data modification patterns
+- Track deadlocks
 
 #### 4. Replication
 
@@ -414,36 +372,23 @@ Data:
 reveal mysql://localhost/replication
 ```
 
-**Returns**:
+**Returns** (a replica):
 ```
-Snapshot Time: 2025-02-14T08:45:23+00:00
+MySQL Replication: Slave
 
-Replication Status:
-  Role: Slave
-  Lag: 2 seconds
-  IO Thread: Running ✅
-  SQL Thread: Running ✅
-
-  Master Info:
-    Master Host: master.example.com
-    Master Port: 3306
-    Master Log File: mysql-bin.000123
-    Master Log Position: 456789012
-
-  Relay Info:
-    Relay Log File: relay-bin.000045
-    Relay Log Position: 234567890
-
-  Last Error: (none)
-
-Health Status: ⚠️ WARNING (lag > 60s threshold)
+Master: db1.internal:3306
+IO Running: Yes
+SQL Running: Yes
+Seconds Behind Master: 2
+Last Error: None
 ```
+
+A server that serves replicas prints `MySQL Replication: Master`, `Slaves: N` and one `server_id=... host=...` line per replica; a server with neither prints `MySQL Replication: Standalone` and `No replication configured`. JSON keys for a replica: `role`, `master_host`, `master_port`, `io_running` and `sql_running` (the strings `Yes`/`No`), `seconds_behind_master`, `last_error`. The result carries no health verdict; the lag threshold lives in the overview and in `--check`.
 
 **Use cases**:
 - Monitor replication lag
 - Verify replication threads are running
 - Debug replication errors
-- Track master/slave position
 
 #### 5. Storage
 
@@ -453,24 +398,14 @@ reveal mysql://localhost/storage
 
 **Returns**:
 ```
-Snapshot Time: 2025-02-14T08:45:23+00:00
-Server Start: 2025-01-29T08:30:00+00:00
+MySQL Storage
+Measurement window: 15d 23h (since server start)
 
-Total Storage: 45.67 GB
-Database Count: 8
-
-Databases by Size:
-  production: 38.45 GB
-  analytics: 5.23 GB
-  staging: 1.45 GB
-  development: 0.34 GB
-  test: 0.12 GB
-  backup: 0.05 GB
-  logs: 0.02 GB
-  temp: 0.01 GB
-
-Largest Database: production (38.45 GB)
+  production: 38.45 GB (120 tables, 30.1 data / 8.35 index)
+  analytics: 7.22 GB (40 tables, 6.0 data / 1.22 index)
 ```
+
+JSON: `databases` is a list of `{db_name, table_count, size_gb, data_gb, index_gb}`, largest first, plus the timing fields. The total, the database count and the largest database are on the overview (`.storage`), not here.
 
 **Use cases**:
 - Track storage growth trends
@@ -486,26 +421,19 @@ reveal mysql://localhost/storage/production
 
 **Returns**:
 ```
-Snapshot Time: 2025-02-14T08:45:23+00:00
+MySQL Storage: production
+Measurement window: 15d 23h (since server start)
 
-Database: production
-Total Size: 38.45 GB
-
-Tables by Size:
-  users: 12.34 GB (32.1%)
-  orders: 10.23 GB (26.6%)
-  products: 8.45 GB (22.0%)
-  logs: 4.56 GB (11.9%)
-  sessions: 1.87 GB (4.9%)
-  cache: 0.78 GB (2.0%)
-  metadata: 0.22 GB (0.6%)
+  orders (InnoDB): 512.3 MB, 1200000 rows
+  users (InnoDB): 64.0 MB, 80000 rows
 ```
+
+JSON: `database` and `tables`, a list of `{table_name, engine, table_rows, size_mb}`, largest first. Sizes are in MB and carry no percentages.
 
 **Use cases**:
 - Identify largest tables in a database
 - Find candidates for archiving
 - Analyze table growth patterns
-- Optimize storage allocation
 
 #### 7. Indexes
 
@@ -515,37 +443,20 @@ reveal mysql://localhost/indexes
 
 **Returns**:
 ```
-Snapshot Time: 2025-02-14T08:45:23+00:00
-Server Start: 2025-01-29T08:30:00+00:00
-Measurement Basis: since_server_start
-Measurement Start: 2025-01-29T08:30:00+00:00
+MySQL Index Usage
+Measurement basis: since_server_start (since 2026-10-11T07:35:53+00:00)
+Performance Schema: enabled
 
-Performance Schema Status:
-  Counters Reset Detected: false
-  Note: Metrics are accurate since server start
+Most Used Indexes (top 2):
+  production.users.idx_email: 12345678 accesses (99.99% read)
+  production.orders.idx_user_id: 9876543 accesses (100.0% read)
 
-Most Used Indexes (Top 20):
-  DB: production | Table: users | Index: idx_email
-    Total Accesses: 12,345,678
-    Read Accesses: 12,345,600 (99.99%)
-    Write Accesses: 78 (0.01%)
-
-  DB: production | Table: orders | Index: idx_user_id
-    Total Accesses: 9,876,543
-    Read Accesses: 9,876,500 (99.99%)
-    Write Accesses: 43 (0.01%)
-
-Unused Indexes (50):
-  DB: production | Table: legacy_users | Index: idx_old_field
-  DB: production | Table: products | Index: idx_deprecated
-  DB: staging | Table: test_data | Index: idx_unused
-
-Unused Count: 50 indexes
-
-Note: If counters_reset_detected is true, measurement basis becomes
-      'since_reset' with reset timestamp in measurement_start_time.
-      This prevents misinterpretation of fresh counters as "unused".
+Unused Indexes: 2
+  production.legacy_users.idx_old_field
+  production.products.idx_deprecated
 ```
+
+The JSON carries `measurement_basis`, `measurement_start_time`, `performance_schema_status` (`enabled`, `counters_reset_detected`, `likely_reset_time`), `most_used` (top 20), `unused` (first 50) and `unused_count`. When `counters_reset_detected` is true the basis becomes `since_reset` and `measurement_start_time` is the likely reset time, so fresh counters are not read as "unused".
 
 **Use cases**:
 - Find unused indexes consuming storage and write overhead
@@ -560,25 +471,21 @@ reveal mysql://localhost/slow-queries
 ```
 
 **Returns** (requires slow query log enabled):
+
 ```
-Period: 24 hours
+MySQL Slow Queries (last 24 hours)
 
 Summary:
-  Total Slow Queries: 234
-  Min Time: 5.2s
-  Max Time: 127.5s
-  Avg Time: 18.3s
-  Total Rows Examined: 45,678,901
+  Total: 234
+  Avg time: 18.3s (min 5s, max 127s)
+  Rows examined: 45678901
 
-Top 20 Slow Queries:
-  Start: 2025-02-14T08:30:15+00:00
-  User: app_user@10.0.1.23
-  Time: 127.5s
-  Lock Time: 0.2s
-  Rows Sent: 10
-  Rows Examined: 12,345,678
-  Query: SELECT * FROM users u JOIN orders o ON u.id = o.user_id WHERE...
+Top Queries (1):
+  [127s] app_user[app_user] @ [10.0.1.23] - 12345678 rows examined
+    SELECT * FROM users u JOIN orders o ON u.id = o.user_id WHERE ...
 ```
+
+The JSON has `period`, `summary` and `top_queries` (up to 20, each with `start_time`, `user_host`, `query_time_seconds`, `lock_time_seconds`, `rows_sent`, `rows_examined`, `query_preview`). Without a readable `mysql.slow_log` table it returns `error` and `message: "Slow query log may not be enabled or accessible"`.
 
 **Use cases**:
 - Identify slowest queries in last 24 hours
@@ -600,32 +507,26 @@ reveal mysql://localhost --check
 ```
 Health Check Results
 
-Status: ⚠️ WARNING
-Exit Code: 1
-Summary: 7 total, 4 passed, 3 warnings, 0 failures
-
-Checks:
-  ⚠️ WARN - Table Scan Ratio: 12.5% (threshold: <10%)
-     Severity: high
-
-  ✅ PASS - Thread Cache Miss Rate: 3.2% (threshold: <10%)
-     Severity: medium
-
-  ⚠️ WARN - Temp Disk Ratio: 32.1% (threshold: <25%)
-     Severity: medium
-
-  ⚠️ WARN - Max Used Connections %: 85.3% (threshold: <80%)
-     Severity: critical
-
-  ✅ PASS - Open Files %: 23.4% (threshold: <75%)
-     Severity: critical
-
-  ✅ PASS - Current Connection %: 45.2% (threshold: <80%)
-     Severity: high
-
-  ✅ PASS - Buffer Hit Rate: 99.87% (threshold: >99%)
-     Severity: high
 ```
+MySQL Health Check: ⚠️ WARNING
+
+Summary: 4/7 passed, 3 warnings, 0 failures
+
+⚠️ Warnings:
+  • Table Scan Ratio: 12.50% (threshold: <10%, severity: high)
+  • Temp Disk Ratio: 32.10% (threshold: <25%, severity: medium)
+  • Max Used Connections %: 85.30% (threshold: <80%, severity: critical)
+
+✅ Passed:
+  • Thread Cache Miss Rate: 3.20% (threshold: <10%)
+  • Open Files %: 23.40% (threshold: <75%)
+  • Current Connection %: 45.20% (threshold: <80%)
+  • Buffer Hit Rate: 99.87% (threshold: >99%)
+
+Exit code: 1
+```
+
+Checks are grouped by status; a failure group prints first. Only warnings and failures show their severity.
 
 ### Show Only Failures
 
@@ -793,9 +694,9 @@ reveal mysql://localhost/indexes --format=json | \
 
 **How to fix**:
 ```bash
-# Check current thread_cache_size
-reveal mysql://localhost/variables --format=json | \
-  jq '.variables.thread_cache_size'
+# Check current thread_cache_size (the /variables element lists only max_connections,
+# innodb_buffer_pool_size, query_cache_size, tmp_table_size and max_heap_table_size)
+mysql -e "SHOW VARIABLES LIKE 'thread_cache_size'"
 
 # Increase thread cache (MySQL config)
 # [mysqld]
@@ -1012,98 +913,89 @@ reveal mysql://localhost | grep -i "buffer"
 
 ### 1. mysql_health
 
-**Use case**: Database health overview
+**Use case**: Database health overview (`mysql://host`)
 
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
-  "type": "mysql_health",
+  "contract_version": "1.1",
+  "type": "mysql_server",
   "source": "localhost:3306",
   "source_type": "database",
-  "snapshot_time": "2025-02-14T08:45:23+00:00",
+  "snapshot_time": "2026-10-27T06:55:53+00:00",
   "server": "localhost:3306",
   "version": "8.0.35-0ubuntu0.22.04.1",
-  "uptime": "15d 7h 23m",
-  "server_start_time": "2025-01-29T08:30:00+00:00",
+  "uptime": "15d 23h 20m",
+  "server_start_time": "2026-10-11T07:35:53+00:00",
   "connection_health": {
     "current": 12,
     "max": 151,
     "percentage": "7.9%",
-    "max_used": 45,
-    "max_used_pct": "29.8%"
+    "max_used_ever": 45,
+    "max_used_pct": "29.8%",
+    "status": "✅",
+    "max_used_status": "✅",
+    "note": "If max_used_pct was 100%, connections were rejected (since server start)"
   },
   "performance": {
-    "qps": "156.3",
-    "slow_queries": "234 total (0.12% since start)",
+    "qps": "155.8",
+    "slow_queries": "234 total (0.00% of all queries since server start)",
     "threads_running": 3
   },
   "innodb_health": {
-    "buffer_pool_hit_rate": "99.87%",
-    "status": "healthy",
-    "row_lock_waits": "12",
-    "deadlocks": "0"
+    "buffer_pool_hit_rate": "99.87% (since server start)",
+    "status": "✅",
+    "row_lock_waits": "12 (since server start)",
+    "deadlocks": "0 (since server start)"
   },
-  "replication": {
-    "role": "Slave",
-    "lag": 2,
-    "io_running": true,
-    "sql_running": true
-  },
-  "storage": {
-    "total_size_gb": 45.67,
-    "database_count": 8,
-    "largest_db": "production (38.45 GB)"
-  },
+  "replication": {"role": "Slave", "lag": 2, "io_running": true, "sql_running": true},
+  "storage": {"total_size_gb": 45.67, "database_count": 2, "largest_db": "production (38.45 GB)"},
   "resource_limits": {
-    "open_files": {
-      "current": 234,
-      "limit": 10000,
-      "percentage": "2.3%"
-    }
+    "open_files": {"current": 234, "limit": 10000, "percentage": "2.3%", "status": "✅", "note": "..."}
   },
-  "health_status": "⚠️ WARNING",
-  "health_issues": ["Replication lag (2s)"]
+  "health_status": "✅ HEALTHY",
+  "health_issues": ["No issues detected"],
+  "next_steps": ["reveal mysql://localhost/connections       # Connection details"]
 }
 ```
 
-### 2. mysql_replication
+Status fields are emoji (`✅`, `⚠️`, `❌`), not words. A standalone server reports `"replication": {"role": "Standalone"}`, a master `{"role": "Master", "slaves": N}`, and a replica whose lag is unknown `"lag": "Unknown"`.
 
-**Use case**: Replication monitoring
+### 2. replication element
+
+**Use case**: Replication monitoring (`mysql://host/replication`)
+
+**Schema** (a plain object; the element results carry no `contract_version`):
+```json
+{
+  "type": "replication",
+  "role": "Slave",
+  "master_host": "db1.internal",
+  "master_port": 3306,
+  "io_running": "Yes",
+  "sql_running": "Yes",
+  "seconds_behind_master": 2,
+  "last_error": "None"
+}
+```
+
+A master returns `{"type": "replication", "role": "Master", "slaves": [{"server_id": ..., "host": ...}]}`; a standalone server returns `{"type": "replication", "role": "Standalone", "message": "No replication configured"}`.
+
+### 3. storage element
+
+**Use case**: Storage analysis (`mysql://host/storage`)
 
 **Schema**:
 ```json
 {
-  "contract_version": "1.0",
-  "type": "mysql_replication",
-  "source": "localhost:3306",
-  "source_type": "database",
-  "snapshot_time": "2025-02-14T08:45:23+00:00",
-  "io_running": true,
-  "sql_running": true,
-  "lag_seconds": 2,
-  "master_log_file": "mysql-bin.000123",
-  "relay_log_file": "relay-bin.000045"
-}
-```
-
-### 3. mysql_storage
-
-**Use case**: Storage analysis
-
-**Schema**:
-```json
-{
-  "contract_version": "1.0",
-  "type": "mysql_storage",
-  "source": "localhost:3306",
-  "source_type": "database",
-  "snapshot_time": "2025-02-14T08:45:23+00:00",
+  "type": "storage",
+  "snapshot_time": "2026-10-27T06:55:53+00:00",
+  "server_start_time": "2026-10-11T07:35:53+00:00",
+  "uptime_seconds": 1380000,
+  "measurement_window": "15d 23h (since server start)",
   "databases": [
-    {"name": "production", "size_gb": 38.45},
-    {"name": "analytics", "size_gb": 5.23}
-  ],
-  "total_size_gb": 45.67
+    {"db_name": "production", "table_count": 120, "size_gb": 38.45, "data_gb": 30.1, "index_gb": 8.35}
+  ]
 }
 ```
 
@@ -1195,7 +1087,7 @@ reveal mysql:///storage --format=json | \
 
 # 5. Monitor replication lag (if slave)
 reveal mysql:///replication --format=json | \
-  jq '{lag: .lag, io: .io_running, sql: .sql_running}'
+  jq '{lag: .seconds_behind_master, io: .io_running, sql: .sql_running}'
 
 # 6. Find unused indexes (after 1+ week uptime)
 reveal mysql:///indexes --format=json | \
@@ -1704,9 +1596,9 @@ mysql:// is designed for AI agent consumption:
 
 ## Troubleshooting
 
-### Error: "pymysql module not found"
+### Error: "pymysql is required for mysql:// adapter"
 
-**Problem**: pymysql dependency not installed
+**Problem**: pymysql dependency not installed (the error also prints `Install with: pip install "reveal-cli[database]"`)
 
 **Solution**:
 ```bash
@@ -2020,7 +1912,7 @@ reveal mysql://
 
 **A**: Check three things:
 
-1. **uptime > 1 week**: `reveal mysql://localhost/indexes | grep "Uptime"`
+1. **uptime > 1 week**: `reveal mysql://localhost/indexes --format=json | jq .measurement_window`
 2. **reset_detected = false**: `reveal mysql://localhost/indexes --format=json | jq '.performance_schema_status.counters_reset_detected'`
 3. **Test in staging**: Drop index in staging, monitor for 1 week
 

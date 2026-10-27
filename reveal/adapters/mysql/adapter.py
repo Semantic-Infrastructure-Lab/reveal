@@ -29,83 +29,80 @@ class HealthCheckThresholds:
 
 _SCHEMA_OUTPUT_TYPES = [
     {
-        'type': 'mysql_health',
-        'description': 'Database health overview with connection, InnoDB, and resource metrics',
+        'type': 'mysql_server',
+        'description': 'Server overview (mysql://host) with connection, InnoDB, replication, storage and health assessment',
         'schema': {
             'type': 'object',
             'properties': {
                 'contract_version': {'type': 'string'},
-                'type': {'type': 'string', 'const': 'mysql_health'},
+                'type': {'type': 'string', 'const': 'mysql_server'},
                 'source': {'type': 'string'},
                 'source_type': {'type': 'string', 'const': 'database'},
                 'server': {'type': 'string'},
                 'version': {'type': 'string'},
-                'uptime': {'type': 'integer'},
-                'connections': {'type': 'object'},
-                'innodb': {'type': 'object'},
-                'resources': {'type': 'object'}
+                'uptime': {'type': 'string'},
+                'connection_health': {'type': 'object'},
+                'performance': {'type': 'object'},
+                'innodb_health': {'type': 'object'},
+                'replication': {'type': 'object'},
+                'storage': {'type': 'object'},
+                'resource_limits': {'type': 'object'},
+                'health_status': {'type': 'string'},
+                'health_issues': {'type': 'array'}
             }
         }
     },
     {
-        'type': 'mysql_replication',
-        'description': 'Replication status including lag and IO/SQL thread state',
+        'type': 'replication',
+        'description': 'Replication element: role (Master/Slave/Standalone) and, for a replica, thread state and lag',
         'schema': {
             'type': 'object',
             'properties': {
-                'contract_version': {'type': 'string'},
-                'type': {'type': 'string', 'const': 'mysql_replication'},
-                'source': {'type': 'string'},
-                'source_type': {'type': 'string', 'const': 'database'},
-                'io_running': {'type': 'boolean'},
-                'sql_running': {'type': 'boolean'},
-                'lag_seconds': {'type': ['integer', 'null']},
-                'master_log_file': {'type': 'string'},
-                'relay_log_file': {'type': 'string'}
+                'type': {'type': 'string', 'const': 'replication'},
+                'role': {'type': 'string'},
+                'master_host': {'type': 'string'},
+                'master_port': {'type': 'integer'},
+                'io_running': {'type': 'string'},
+                'sql_running': {'type': 'string'},
+                'seconds_behind_master': {'type': ['integer', 'null']},
+                'last_error': {'type': 'string'}
             }
         }
     },
     {
-        'type': 'mysql_storage',
-        'description': 'Database and table size information',
+        'type': 'storage',
+        'description': 'Storage element: size per database, plus snapshot timing fields',
         'schema': {
             'type': 'object',
             'properties': {
-                'contract_version': {'type': 'string'},
-                'type': {'type': 'string', 'const': 'mysql_storage'},
-                'source': {'type': 'string'},
-                'source_type': {'type': 'string', 'const': 'database'},
-                'databases': {'type': 'array'},
-                'total_size_mb': {'type': 'number'}
+                'type': {'type': 'string', 'const': 'storage'},
+                'databases': {'type': 'array'}
             }
         }
     },
     {
-        'type': 'mysql_performance',
-        'description': 'Query performance metrics (slow queries, throughput)',
+        'type': 'performance',
+        'description': 'Performance element: throughput, slow queries and DBA tuning ratios, plus snapshot timing fields',
         'schema': {
             'type': 'object',
             'properties': {
-                'contract_version': {'type': 'string'},
-                'type': {'type': 'string', 'const': 'mysql_performance'},
-                'source': {'type': 'string'},
-                'source_type': {'type': 'string', 'const': 'database'},
-                'slow_queries': {'type': 'integer'},
+                'type': {'type': 'string', 'const': 'performance'},
                 'queries_per_second': {'type': 'number'},
-                'top_tables': {'type': 'array'}
+                'slow_queries_total': {'type': 'integer'},
+                'full_table_scans': {'type': 'object'},
+                'thread_cache_efficiency': {'type': 'object'},
+                'temp_tables': {'type': 'object'},
+                'sort_merge_passes': {'type': 'integer'}
             }
         }
     },
     {
-        'type': 'mysql_variables',
-        'description': 'Server configuration variables',
+        'type': 'variables',
+        'description': 'Variables element: five key server variables (max_connections, innodb_buffer_pool_size, query_cache_size, tmp_table_size, max_heap_table_size)',
         'schema': {
             'type': 'object',
             'properties': {
-                'contract_version': {'type': 'string'},
-                'type': {'type': 'string', 'const': 'mysql_variables'},
-                'source': {'type': 'string'},
-                'source_type': {'type': 'string', 'const': 'database'},
+                'type': {'type': 'string', 'const': 'variables'},
                 'variables': {'type': 'object'}
             }
         }
@@ -114,28 +111,28 @@ _SCHEMA_OUTPUT_TYPES = [
 
 _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'mysql://localhost', 'description': 'Database health overview',
-     'output_type': 'mysql_health'},
+     'output_type': 'mysql_server'},
     {'uri': 'mysql://localhost --check',
      'description': 'Run health checks (connection, InnoDB, resources)',
-     'cli_flag': '--check', 'output_type': 'mysql_health'},
+     'cli_flag': '--check'},
     {'uri': 'mysql://localhost/connections',
      'description': 'Connection pool and thread details',
-     'element': 'connections', 'output_type': 'mysql_health'},
+     'element': 'connections'},
     {'uri': 'mysql://localhost/replication',
      'description': 'Replication status and lag',
-     'element': 'replication', 'output_type': 'mysql_replication'},
+     'element': 'replication', 'output_type': 'replication'},
     {'uri': 'mysql://localhost/storage',
      'description': 'Database and table sizes',
-     'element': 'storage', 'output_type': 'mysql_storage'},
+     'element': 'storage', 'output_type': 'storage'},
     {'uri': 'mysql://user:pass@prod.db.host:3306/innodb',
      'description': 'InnoDB buffer pool status',
-     'element': 'innodb', 'output_type': 'mysql_health'},
+     'element': 'innodb'},
     {'uri': 'mysql://localhost/performance',
      'description': 'Query performance metrics (slow queries, throughput)',
-     'element': 'performance', 'output_type': 'mysql_performance'},
+     'element': 'performance', 'output_type': 'performance'},
     {'uri': 'mysql://localhost/variables',
      'description': 'Server configuration variables',
-     'element': 'variables', 'output_type': 'mysql_variables'},
+     'element': 'variables', 'output_type': 'variables'},
 ]
 
 _SCHEMA_NOTES = [
@@ -183,9 +180,10 @@ class MySQLAdapter(ResourceAdapter):
                 'storage': 'Database and table sizes',
                 'performance': 'Query performance metrics',
                 'variables': 'Server configuration variables',
-                'errors': 'Recent server errors from error log',
-                'databases': 'List of databases with sizes',
-                'indexes': 'Index usage and fragmentation stats',
+                'errors': 'Error counters since server start (aborted clients and connects, connection errors)',
+                'databases': 'Database names',
+                'indexes': 'Index usage statistics (most used and unused)',
+                'tables': 'Table I/O statistics and hotspots',
                 'slow-queries': 'Slow query log entries and stats',
                 'health': 'Overall server health summary',
             },
@@ -1048,7 +1046,8 @@ class MySQLAdapter(ResourceAdapter):
                 status = 'failure'
 
         # Format value string
-        is_percentage = 'rate' in name.lower() or 'ratio' in name.lower() or 'pct' in name.lower()
+        lowered = name.lower()
+        is_percentage = any(word in lowered for word in ('rate', 'ratio', 'pct', '%'))
         value_str = f'{value:.2f}%' if is_percentage else str(value)
 
         return {
