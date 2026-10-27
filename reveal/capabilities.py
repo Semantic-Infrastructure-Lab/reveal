@@ -568,7 +568,7 @@ _TIER1: Dict[str, LanguageCapability] = {
                             sample_note="8/bucket sampling"),
             MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 99.79, "tivi",
                             sample_note="20/bucket sampling",
-                            open_tickets=["BACK-738 (tree-sitter grammar bug, not fixable in reveal)"]),
+                            fixed_tickets=["BACK-738 (grammar fix in the language pack, after this measurement; not re-measured)"]),
         ],
     ),
     "SwiftAnalyzer": _tier1(
@@ -739,8 +739,9 @@ _SMOKE: Dict[str, LanguageCapability] = {
             MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 97.55, "AppFlowy",
                             pre_fix_pct=100.0,
                             fixed_tickets=["BACK-760", "BACK-761", "BACK-763", "BACK-764",
-                                           "BACK-765", "BACK-766", "BACK-767", "BACK-769"],
-                            open_tickets=["BACK-768 (tree-sitter grammar bug, not fixable in reveal)"]),
+                                           "BACK-765", "BACK-766", "BACK-767", "BACK-769",
+                                           "BACK-768 (every residual miss; grammar fix in the language pack, "
+                                           "after this measurement; not re-measured)"]),
         ],
     ),
     "LuaAnalyzer": _smoke(

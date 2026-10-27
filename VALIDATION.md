@@ -33,6 +33,15 @@ ground-truth oracle on a real codebase** — the difference between "the command
 runs" and "we have proven the answer is right." Anything marked *not measured*
 is a claim we have not yet checked, **not** a claim it is broken.
 
+The call-graph column is a sample on the named corpus at the time of its measurement. It is
+not the `meta.confidence` that `calls://` prints: per-language call-graph confidence
+(`defaults.CALL_GRAPH_EXTRACTION_CONFIDENCE`) is the lowest edge recall, found over oracle
+edges to four places, across the callers, depth 2 and callees runs of the committed recall
+snapshot (snapshot_2026-10-20, pinned corpora); javascript takes the lower of its two corpora,
+tsx is scored inside typescript, and a refreshed snapshot requires re-deriving every row
+(`tests/test_call_graph_confidence_back2105.py` pins this where the private snapshot is
+reachable). The two can differ for the same language because they measure different corpora.
+
 | Language | Import recall | Side-effect recall | Call-graph recall | Status |
 |---|---|---|---|---|
 | Python | ✅ 100% (Home Assistant, celery¹⁰) | ✅ 83.5% (Home Assistant) | ✅ 99.96%→100%³⁴ (Home Assistant, 3 query directions) | **Measured** |
