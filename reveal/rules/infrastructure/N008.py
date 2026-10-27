@@ -22,8 +22,7 @@ from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import (
     NGINX_FILE_PATTERNS,
     NGINX_INCLUDE_PATTERN,
-    nginx_extract_http_blocks,
-    nginx_find_nginx_conf,
+    nginx_conf_http_level_has,
     nginx_resolve_include,
     nginx_strip_comments,
 )
@@ -98,28 +97,7 @@ class N008(BaseRule):
         Checks the http{} block and one level of includes from it.  When nginx.conf
         cannot be found or read, returns False (no suppression).
         """
-        nginx_conf = nginx_find_nginx_conf(file_path)
-        if nginx_conf is None:
-            return False
-        try:
-            with open(nginx_conf, encoding='utf-8', errors='replace') as fh:
-                conf_content = nginx_strip_comments(fh.read())
-        except (OSError, ValueError):
-            return False
-        for http_block in nginx_extract_http_blocks(conf_content):
-            if self.HSTS_PATTERN.search(http_block):
-                return True
-            for inc_match in NGINX_INCLUDE_PATTERN.finditer(http_block):
-                resolved = nginx_resolve_include(inc_match.group(1).strip(), nginx_conf)
-                if resolved is None:
-                    continue  # can't verify — don't suppress on uncertainty
-                try:
-                    with open(resolved, encoding='utf-8', errors='replace') as fh:
-                        if self.HSTS_PATTERN.search(nginx_strip_comments(fh.read())):
-                            return True
-                except (OSError, ValueError):
-                    pass
-        return False
+        return nginx_conf_http_level_has(file_path, self.HSTS_PATTERN)
 
     def _has_hsts(self, block: str, file_path: str) -> bool:
         """Return True if HSTS header is set in block or any included snippet."""

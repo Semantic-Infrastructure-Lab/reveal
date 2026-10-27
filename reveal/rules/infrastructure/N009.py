@@ -20,10 +20,7 @@ from typing import List, Dict, Any, Optional
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import (
     NGINX_FILE_PATTERNS,
-    NGINX_INCLUDE_PATTERN,
-    nginx_extract_http_blocks,
-    nginx_find_nginx_conf,
-    nginx_resolve_include,
+    nginx_conf_http_level_has,
     nginx_strip_comments,
 )
 
@@ -83,25 +80,4 @@ class N009(BaseRule):
         Checks the http{} block and one level of includes from it.  When nginx.conf
         cannot be found or read, returns False (no suppression).
         """
-        nginx_conf = nginx_find_nginx_conf(file_path)
-        if nginx_conf is None:
-            return False
-        try:
-            with open(nginx_conf, encoding='utf-8', errors='replace') as fh:
-                conf_content = nginx_strip_comments(fh.read())
-        except (OSError, ValueError):
-            return False
-        for http_block in nginx_extract_http_blocks(conf_content):
-            if self.SERVER_TOKENS_OFF.search(http_block):
-                return True
-            for inc_match in NGINX_INCLUDE_PATTERN.finditer(http_block):
-                resolved = nginx_resolve_include(inc_match.group(1).strip(), nginx_conf)
-                if resolved is None:
-                    continue
-                try:
-                    with open(resolved, encoding='utf-8', errors='replace') as fh:
-                        if self.SERVER_TOKENS_OFF.search(nginx_strip_comments(fh.read())):
-                            return True
-                except (OSError, ValueError):
-                    pass
-        return False
+        return nginx_conf_http_level_has(file_path, self.SERVER_TOKENS_OFF)

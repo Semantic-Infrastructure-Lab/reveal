@@ -17,8 +17,8 @@ from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from . import (
     NGINX_FILE_PATTERNS,
     NGINX_INCLUDE_PATTERN,
-    nginx_extract_http_blocks,
-    nginx_find_nginx_conf,
+    nginx_conf_http_level_has,
+    nginx_http_level_has,
     nginx_resolve_include,
     nginx_strip_comments,
 )
@@ -121,44 +121,17 @@ class N002(BaseRule):
                 return True  # unreadable — suppress
         return False
 
-    def _http_blocks_have_directive(self, source: str, base_path: str, pattern: re.Pattern) -> bool:
-        """Return True if `pattern` matches any http{} block in `source`, or
-        an include resolved from one (relative to `base_path`)."""
-        for http_block in nginx_extract_http_blocks(source):
-            if pattern.search(http_block):
-                return True
-            for inc_match in NGINX_INCLUDE_PATTERN.finditer(http_block):
-                resolved = nginx_resolve_include(inc_match.group(1).strip(), base_path)
-                if resolved is None:
-                    continue  # can't verify — don't assume a global setting exists
-                try:
-                    with open(resolved, encoding='utf-8', errors='replace') as fh:
-                        if pattern.search(nginx_strip_comments(fh.read())):
-                            return True
-                except (OSError, ValueError):
-                    pass
-        return False
-
     def _has_global_directive(self, content: str, file_path: str, pattern: re.Pattern) -> bool:
         """Return True if `pattern` is set at http{} level -- either this
         file's own http{} block (a single-file config, common in the
         `include ssl-common.conf; server { ... }` idiom -- BACK-1103) or a
         separately discovered nginx.conf's http{} block and its includes
-        (mirrors N008's `_has_global_hsts`). When neither source has the
+        (the lookup N008 and N009 share). When neither source has the
         directive or nginx.conf can't be found/read, returns False (no
         suppression) rather than assuming a global setting exists.
         """
-        if self._http_blocks_have_directive(content, file_path, pattern):
-            return True
-        nginx_conf = nginx_find_nginx_conf(file_path)
-        if nginx_conf is None:
-            return False
-        try:
-            with open(nginx_conf, encoding='utf-8', errors='replace') as fh:
-                conf_content = nginx_strip_comments(fh.read())
-        except (OSError, ValueError):
-            return False
-        return self._http_blocks_have_directive(conf_content, nginx_conf, pattern)
+        return (nginx_http_level_has(content, file_path, pattern)
+                or nginx_conf_http_level_has(file_path, pattern))
 
     def _is_ssl_server(self, server_body: str) -> bool:
         """Check if server block has SSL enabled."""

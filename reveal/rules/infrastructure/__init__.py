@@ -109,3 +109,41 @@ def nginx_find_nginx_conf(file_path: str) -> Optional[str]:
         if path and os.path.isfile(path):
             return path
     return None
+
+
+def nginx_http_level_has(source: str, base_path: str, pattern: 're.Pattern[str]') -> bool:
+    """Return True if `pattern` matches a directive set at http{} level in `source`:
+    inside one of its http{} blocks, or in a file such a block includes (resolved
+    relative to `base_path`, one level deep). An include that cannot be resolved or
+    read does not count: a global setting is never assumed (N002, N008, N009).
+    """
+    for http_block in nginx_extract_http_blocks(source):
+        if pattern.search(http_block):
+            return True
+        for inc_match in NGINX_INCLUDE_PATTERN.finditer(http_block):
+            resolved = nginx_resolve_include(inc_match.group(1).strip(), base_path)
+            if resolved is None:
+                continue  # can't verify -- don't assume a global setting exists
+            try:
+                with open(resolved, encoding='utf-8', errors='replace') as fh:
+                    if pattern.search(nginx_strip_comments(fh.read())):
+                        return True
+            except (OSError, ValueError):
+                continue  # unreadable -- don't assume a global setting exists
+    return False
+
+
+def nginx_conf_http_level_has(file_path: str, pattern: 're.Pattern[str]') -> bool:
+    """Return True if `pattern` is set at http{} level in the nginx.conf found for
+    `file_path` (`nginx_find_nginx_conf`). False when no nginx.conf is found or it
+    cannot be read: no suppression on uncertainty.
+    """
+    nginx_conf = nginx_find_nginx_conf(file_path)
+    if nginx_conf is None:
+        return False
+    try:
+        with open(nginx_conf, encoding='utf-8', errors='replace') as fh:
+            conf_content = nginx_strip_comments(fh.read())
+    except (OSError, ValueError):
+        return False
+    return nginx_http_level_has(conf_content, nginx_conf, pattern)
