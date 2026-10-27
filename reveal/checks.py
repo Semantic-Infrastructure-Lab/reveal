@@ -544,7 +544,7 @@ def run_schema_validation(
         for name in list_schemas():
             print(f"  - {name}", file=sys.stderr)
         print("\nOr provide a path to a custom schema file", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2)
 
     detections, degraded, errors = collect_schema_detections(analyzer, path, schema, args)
     _emit_detections(path, output_format, detections, detections,
