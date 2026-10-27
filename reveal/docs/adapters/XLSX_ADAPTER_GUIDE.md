@@ -120,7 +120,7 @@ reveal 'xlsx://file.xlsx?sheet=Sales&format=csv' > sales.csv
 ```
 
 **CSV output characteristics:**
-- RFC 4180 compliant
+- RFC 4180 compliant: every row has the width of the widest row (short rows are padded with empty fields), so `pd.read_csv()` keeps its columns
 - Double-quoted fields with embedded commas/quotes
 - UTF-8 encoding
 - CRLF line endings (Excel compatible)

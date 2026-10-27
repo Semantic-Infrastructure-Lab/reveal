@@ -888,7 +888,7 @@ class XlsxAdapter(ResourceAdapter):
         if range_param:
             rows_data, first_row = self._apply_cell_range(rows_data, range_param)
 
-        all_rows = rows_data
+        all_rows = rows_data = self._pad_rows(rows_data)
         format_param = self.query_params.get('format')
         limit, cause, hint = self._limit_param(), 'limit', 'raise ?limit=N'
         if not limit and format_param != 'csv':
@@ -952,6 +952,17 @@ class XlsxAdapter(ResourceAdapter):
         listing = ', '.join(f'{i}={n}' for i, n in enumerate(names))
         raise ValueError(
             f"Sheet not found: {identifier}. ?sheet= takes a name or a 0-based index: {listing}")
+
+    @staticmethod
+    def _pad_rows(rows: List[List[Any]]) -> List[List[Any]]:
+        """Every row with cells padded with empty strings to the widest row's width.
+
+        The reader drops trailing empty cells, so a short row had fewer fields than the header,
+        and CSV and JSON consumers (pandas) shifted columns. A row with no cells at all stays
+        empty: it keeps its Excel row number as a blank line.
+        """
+        width = max((len(row) for row in rows), default=0)
+        return [list(row) + [''] * (width - len(row)) if row else list(row) for row in rows]
 
     def _apply_cell_range(self, rows: List[List[Any]], cell_range: str) -> Tuple[List[List[Any]], int]:
         """The cells of *cell_range*: ``A1:C10``, whole columns ``B:D``, whole rows ``5:7``, or one cell ``B2``,

@@ -70,7 +70,7 @@ This release is larger than usual: 1,198 commits since 0.131.0. Every old spelli
 - `--validate-schema NAME` exits 2, not 1, for an unknown schema on a single file. A custom schema rule without `field` and `check` is reported as F005 instead of being skipped.
 - `.reveal.yaml` layers: `allow_imports: []` forbids every import outside the layer (it enforced nothing) and a layer's own files are always allowed. A key written with no value is an error.
 - `surface` reports the path a handle's `.write(...)` writes to (the `open()` or temp file that made it) as the `target`; it reported the data written.
-- `env://` also redacts by value (a URL with `user:pass@`, or a `password=` parameter), so `sensitive` and `sensitive_variables` can rise. Markdown code-block `line_end` is the closing fence, and xlsx `?range=` numbers rows by Excel row.
+- `env://` also redacts by value (a URL with `user:pass@`, or a `password=` parameter), so `sensitive` and `sensitive_variables` can rise. Markdown code-block `line_end` is the closing fence, and xlsx `?range=` numbers rows by Excel row; xlsx rows are padded to the sheet width, so CSV no longer has short rows.
 
 ### Added
 - `reveal NOUN PATH` answers exactly what `NOUN://PATH` answers (equal JSON and exit code) for `calls`, `imports`, `metrics`, `patches`, `pack`, `overview`, `hotspots`, `contracts`, `architecture`, `surface`, `deps` and `trace`. Every parameter is a typed flag, so a bad value exits 2 naming the parameter (BACK-2146, BACK-2160, BACK-2045).
