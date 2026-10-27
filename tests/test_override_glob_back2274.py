@@ -93,3 +93,17 @@ def test_check_reports_e501_in_the_nested_file(tmp_path):
     flagged = sorted({Path(f['file']).as_posix() for f in data['files']
                       if any(d['rule_code'] == 'E501' for d in f.get('detections', []))})
     assert flagged == ['src/app.py', 'tests/deep/test_g.py']
+
+
+@pytest.mark.parametrize('pattern, body', [
+    ('*.py', r'[^/]*\.py'),
+    ('a/**/b', r'a/(?:.*/)?b'),
+    ('**/b', r'(?:.*/)?b'),
+    ('a/**', r'a/.*'),
+    ('a?/[bc]', r'a[^/]/(?!/)[bc]'),
+])
+def test_glob_path_regex_is_the_gitignore_body(pattern, body):
+    """The one segment-aware translator; `.gitignore` lines compile through it unchanged."""
+    from reveal.utils.gitignore import compile_gitignore_line, glob_path_regex
+    assert glob_path_regex(pattern) == body
+    assert compile_gitignore_line('/' + pattern).regex.pattern == '^' + body + '$'
