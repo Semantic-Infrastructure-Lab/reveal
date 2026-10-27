@@ -7,8 +7,10 @@ element's id or first class. A tag with neither matched the first tag of its nam
 link after the first reported the first link's line, and an inline ``<script>`` reported
 the external script's line, so ``--links --format grep``'s ``path:line`` pointed elsewhere.
 
-The CI venvs do not install lxml, so ``no_sourceline`` reproduces the lxml case with the
-stdlib builder and ``store_line_numbers=False``; the ``lxml`` case runs where lxml exists.
+The main test run (every CI leg, ``scripts/ci-local.sh``) does not install lxml, so
+``no_sourceline`` reproduces the lxml case with the stdlib builder and
+``store_line_numbers=False``; the ``lxml`` case runs where lxml exists: the ubuntu-latest
+Python 3.12 leg reruns this file with the ``[html]`` extra installed (BACK-2303).
 """
 import pytest
 

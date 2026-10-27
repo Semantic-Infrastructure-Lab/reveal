@@ -137,6 +137,21 @@ jobs:
             echo "✅ B006 count decreased ($BASELINE -> $COUNT) — update .github/b006_baseline.txt to $COUNT to lock in the improvement."
           fi
 
+      # The [html] extra's lxml builder keeps no source lines, so the HTML analyzer takes another
+      # path with it (BACK-2287). The main run above stays on the stdlib html.parser, the default
+      # without the extra, on every leg and in ci-local.sh; this leg then reruns the HTML tests with
+      # lxml installed (BACK-2303). The import line fails the step if the install did not take, so
+      # the lxml cases cannot skip silently.
+      - name: HTML analyzer tests with the [html] extra (lxml)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        env:
+          PYTHONIOENCODING: utf-8
+          PYTHONWARNDEFAULTENCODING: '1'
+        run: |
+          pip install -e ".[html]"
+          python -c "import lxml.etree; print('lxml', lxml.etree.__version__)"
+          pytest -rs tests/test_html*.py tests/test_analyzers_broad_except_back1059.py
+
   compat-matrix:
     # Per push, only the language-pack floor runs here. The middle versions (1.12.5, 1.14.3 on
     # Python 3.12/3.14) moved to the weekly canary.yml (2026-10-06): across every red run since
