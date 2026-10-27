@@ -35,9 +35,9 @@ reveal 'patches://tests?group=target&limit=20' --format json
 
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
-| `group` | `target`, `test`, `file` | Choose whether repeated patches are grouped by patched target, test function, or file. |
-| `limit` | integer | Maximum groups returned. |
-| `min` | integer | Minimum patch count required for a group. |
+| `group` | `target` (default), `test`, `file` | Choose whether repeated patches are grouped by patched target, test function, or file. |
+| `limit` | integer (default `20`) | Maximum groups returned. |
+| `min` | integer (default `1`) | Minimum patch count required for a group. |
 | `target` | string or glob | Keep only patch targets matching the substring or glob. |
 | `private` | `true`, `false` | Keep only patches of private/internal targets. |
 | `suppress` | `true` (default), `false` | When true, hides `sys.stdout`, `sys.stderr`, `sys.stdin`, `builtins.print`, and `builtins.input` from grouped output. These are always infrastructure noise. Raw scan totals always include them. |
@@ -80,6 +80,14 @@ dropped.
 
 `examples` gives file, test, line, raw target, and patch kind so the next command
 can jump straight to the test.
+
+Each group also carries `key`, `group_by`, `score` (the ranking key), `patch_kinds`
+(kind to count) and `test_files`. The top level carries `total_uses`/`total_targets`
+(raw scan totals, unaffected by `target`/`private` filters; the text header prints
+them too), `displayed_groups`, `query` (the effective parameters) and `uses[]`, every
+observation with its `target_module`/`target_symbol`/`target_qualname`,
+`is_private_target` and `confidence` (1.0 for a literal string target, lower when the
+target is read from an object, a dict or a dynamic expression).
 
 ## Good Review Questions
 
