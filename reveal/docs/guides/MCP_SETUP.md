@@ -33,17 +33,18 @@ The same command adds the extra if reveal is already installed and `mcp` isn't.
 
 ### Claude Code
 
-Add to your Claude Code settings (`~/.claude/settings.json` or project
-`.claude/settings.json`):
+Register the server with `claude mcp add` (Claude Code keeps MCP servers in `~/.claude.json`
+and a project's `.mcp.json`, not in `settings.json`):
+
+```bash
+claude mcp add --scope user reveal -- reveal-mcp     # all projects
+```
+
+Or, per project, commit a `.mcp.json` at the repo root (`claude mcp add --scope project`
+writes the same file):
 
 ```json
-{
-  "mcpServers": {
-    "reveal": {
-      "command": "reveal-mcp"
-    }
-  }
-}
+{ "mcpServers": { "reveal": { "command": "reveal-mcp" } } }
 ```
 
 ### Cursor / Windsurf
@@ -91,7 +92,7 @@ reveal_structure("src/", depth=1)                   → shallow tree on a large 
 reveal_structure("src/", exclude="vendor,*.log")    → tree with noise excluded
 ```
 
-Token cost: 50–500 tokens (vs thousands for raw file content).
+Token cost: ~150-750 tokens for a file (~1,300 for a 1,000-line module), ~100-3,000 for a directory.
 
 ### `reveal_element(path, element)`
 
@@ -120,8 +121,9 @@ reveal_query("ast://src/?name=validate_token", provenance=True)
 CLI-only global flags (`--severity`, `--select`, `--format`) don't pass
 through here — write `?limit=N`, `?sort=field`/`?sort=-field`, and
 `?offset=M` directly in the URI instead. Only `ast://`, `markdown://`,
-`json://`, `git://` and `stats://` apply these; `hotspots://`, `calls://`,
-`depends://` and `patches://?view=pressure` cap with `?top=N`, and other adapters
+`json://`, `git://` and `metrics://` (`stats://` is its retired alias) apply these;
+`hotspots://`, `calls://`, `imports://?rank=` (which replaces the retired `depends://`) and
+`patches://?view=pressure` cap with `?top=N`, and other adapters
 answer `Unknown query param ... ignored`. Everything else is each
 adapter's own `?key=value` vocabulary — check `reveal_query('help://schemas/
 <adapter>')` for what a given scheme accepts, or use a dedicated typed tool
@@ -171,7 +173,7 @@ dedupes remediation guidance per rule rather than per occurrence). Always pass
 `severity` and/or `select` on large directories to keep results bounded
 (`severity="high"` reduced the same call to ~7K characters in that measurement).
 
-### `reveal_nav(path, element, flag)`
+### `reveal_nav(path, element, flag, flag_value='')`
 
 Navigate inside a function using analysis flags — the final level of progressive
 disclosure. Routes all `--flag` options to agents without subprocess overhead.
@@ -181,8 +183,11 @@ reveal_nav("src/auth.py", "validate_token", "boundary")     → inputs + environ
 reveal_nav("src/auth.py", "validate_token", "sideeffects")  → classified outbound calls (db/http/cache/log/file)
 reveal_nav("src/auth.py", "validate_token", "returns")      → exit paths with gate conditions
 reveal_nav("src/auth.py", "validate_token", "ifmap")        → conditional branch map
-reveal_nav("src/auth.py", "validate_token", "varflow")      → variable data-flow
+reveal_nav("src/auth.py", "validate_token", "varflow", "token")  → data flow of one variable
 ```
+
+`flag_value` is required for `varflow`, `keys` and `narrow` (a variable name); it is optional
+for `calls` (a range) and `around` (context lines). `varflow` without it returns a tool error.
 
 Answers "what does this function touch outside itself?" without ever reading source.
 
@@ -342,10 +347,10 @@ reveal_query("help://quick")   # compact intent router, ~1,600 tokens
 
 | Tool | Typical tokens | vs reading directly |
 |------|---------------|---------------------|
-| `reveal_structure(dir)` | 50–200 | — |
-| `reveal_structure(file)` | 200–500 | 10–50× less than cat |
-| `reveal_element(file, fn)` | 100–300 | 20–50× less than cat |
-| `reveal_pack(dir, budget=8000)` | ~8,000 | One call instead of N calls |
+| `reveal_structure(dir)` | ~100–3,000 (by size) | — |
+| `reveal_structure(file)` | ~150–750 (~1,300 for 1,000 lines) | 3.9× less than cat, with `reveal_element` (BENCHMARKS.md) |
+| `reveal_element(file, fn)` | ~100–600 | — |
+| `reveal_pack(dir, budget=8000)` | a few hundred to a few thousand (the budget bounds the files picked, not the answer) | One call instead of N calls |
 | `reveal_query("calls://...?callers=NAME")` | ~100 | 6.7× less than grep (BENCHMARKS.md, scenario 4) |
 | `reveal_grep(dir, pattern)` | 100–500 | each hit's line, grouped by function, vs raw grep output |
 | `reveal_trace(dir, entry_point)` | 300–1000 | one call vs manual multi-file call chasing |
@@ -356,8 +361,11 @@ reveal_query("help://quick")   # compact intent router, ~1,600 tokens
 # Verify reveal-mcp is installed
 reveal-mcp --help
 
-# Test directly (JSON-RPC over stdin)
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | reveal-mcp
+# Test directly (JSON-RPC over stdin; the server answers only after initialize)
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}' \
+  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+  '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | reveal-mcp
 ```
 
 ### Access logging

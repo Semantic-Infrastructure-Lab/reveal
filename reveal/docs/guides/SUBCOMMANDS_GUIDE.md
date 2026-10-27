@@ -74,9 +74,9 @@ replaced-by note on stderr, and carries a `retired_spelling` entry in JSON
 
 ### Exit Codes
 
-The retired command keeps its own table until the cut: `0` pass, `1` warn (only
-`medium`/`low` violations), `2` fail (a `high` or `critical` violation) or an invalid
-target (unknown revision, not a git repository, missing path), `3` incomplete (a
+The retired command keeps its own table until the cut: `0` pass, `1` findings
+(`overall_status` tells `warn` from `fail`: a `high`/`critical` violation is `fail`),
+`2` an invalid target (unknown revision, not a git repository, missing path), `3` incomplete (a
 check crashed or skipped files, or the hotspot step could not rank some files). JSON
 carries `overall_status` (`pass` / `warn` / `fail` / `incomplete` / `error`) and
 `exit_code`. `reveal check --changed` uses `check`'s table instead: `0` clean, `1` any
@@ -144,7 +144,8 @@ reveal health --all
 | `1` | A finding matches the gate (`--fail-on findings`, the default) |
 | `3` | A check was lost: target not found, unsupported scheme, child error, signal, timeout or malformed answer |
 
-`health` never exits 2. `--fail-on none` reports findings without failing. A lost
+`health` exits 2 only for a malformed command line (bad flag or value); every target problem,
+including a missing path, is 3. `--fail-on none` reports findings without failing. A lost
 check is never reported as healthy: the text summary says `INCOMPLETE` and the JSON
 carries `overall_exit: 3`. JSON also records an `outcome` for each file, directory or
 URI target.
@@ -264,7 +265,7 @@ measurement loss does not imply that a separate requested content read failed.
 
 Files are scored and selected in this order:
 
-1. **Changed files** (when `--since` is used) — files in `git diff --name-only <ref>...HEAD`, boosted above all else
+1. **Changed files** (when `--since` is used) — files in `git diff --name-only <ref>...HEAD`, boosted above all else, but a changed file larger than the remaining budget is still skipped (without a warning); raise `--budget` until every changed file is listed
 2. **Entry points** — `main.py`, `app.py`, `index.js`, the root config file (`package.json`, `pyproject.toml`, ...)
 3. **`--focus` matches** — files whose path contains the topic, then files tied to them by imports
 4. **Key directories** — `api/`, `core/`, `models/`, `auth/`, `routes/`, ... and, with `--architecture`, widely imported files
@@ -279,8 +280,10 @@ Near-empty files (e.g., stub `__init__.py`) are excluded automatically.
 Fan-in and focus graph relevance are additive ranking signals. When their
 Imports graph carries native directory or file-integrity diagnostics, Pack
 rejects that partial numeric input and uses filename/entry-point heuristics and
-recency instead. `meta.relevance_warning` retains the requested root and original
-causes, explaining that the signals were not computed completely. In text output, the
+recency instead. `meta.relevance_warning` is present on every run that did not compute
+graph signals: always without `--architecture`/`--focus` (it then says the signals were not
+computed), and when the Imports graph had diagnostics (it then retains the requested root and
+original causes, explaining that the signals were not computed completely). In text output, the
 command and the URI both print this advisory notice on stderr; JSON carries it in meta. Primary candidate measurements and selected
 content remain available, with exit 0; an unusable `--since` ref is advisory in the
 same way, with its cause in `meta.since_error`.
@@ -580,8 +583,8 @@ reveal surface . --format json       # Machine-readable output
 
 ### Known Limitations
 
-- **`env` type false positives:** Any dict `.get()` call (`cache.get("key")`, `config.get("val")`) is currently misclassified as an environment variable read. Until fixed, `--type env` output will be noisy on codebases that use dict `.get()` heavily. Cross-check with `grep -r 'os.getenv\|os.environ' <path>` to identify true env var reads.
-- **Python-only** — surface scans `.py` files only.
+- **Taxonomy-based:** project-specific clients outside known libraries are not detected.
+- **Per-language coverage:** a category a language does not implement is listed as "not implemented", not 0 (see `--format json` `matrix`).
 
 ### See Also
 
@@ -593,7 +596,8 @@ reveal surface . --format json       # Machine-readable output
 ## reveal hotspots — Complexity Hotspot Finder
 
 Identifies high-complexity files and functions that need the most attention.
-Surfaces the worst 10 (or N) files by cyclomatic complexity.
+Ranks files by a hotspot score (low quality, size, long functions and git churn) and,
+separately, functions by cyclomatic complexity: the worst 10 (or `--top N`) of each.
 
 ### Usage
 
@@ -829,7 +833,7 @@ reveal imports . --circular --fail-on findings  # Gate on complete circular find
 
 ## reveal check — Quality Rule Engine
 
-Run 55 built-in quality rules against a file or directory (79 including internal self-check rules, shown with `--all`). Covers bugs, complexity, imports, maintainability, security, types, and more. Exit codes: 0 = complete and clean, 1 = findings, 2 = usage error, 3 = incomplete analysis (including capped or skipped rule-wide scans, and a file that did not parse inside a project-wide rule's index, even when the file you checked is clean). A rule that does not apply to a file's language is a printed note and does not change the exit code. `--exit-zero` overrides scan exits while retaining diagnostics.
+Run reveal's built-in quality rules against a file or directory (`reveal --rules` lists them; `reveal --rules --all` adds reveal's internal self-check rules). Covers bugs, complexity, imports, maintainability, security, types, and more. Exit codes: 0 = complete and clean, 1 = findings, 2 = usage error, 3 = incomplete analysis (including capped or skipped rule-wide scans, and a file that did not parse inside a project-wide rule's index, even when the file you checked is clean). A rule that does not apply to a file's language is a printed note and does not change the exit code. `--exit-zero` overrides scan exits while retaining diagnostics.
 
 T006 also discloses actual directory loss while discovering project-wide TypedDict
 and dict-alias evidence. Surviving suggestions remain available, including matches

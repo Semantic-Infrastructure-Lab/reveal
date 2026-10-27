@@ -126,7 +126,8 @@ Different scope, different question.
 - `--sideeffects --transitive` and `--boundary --transitive` retain required directory enumeration failures through collection and text/JSON warnings. Surviving effects remain visible; empty results describe the analyzed portion when discovery failed. Directory counts identify failed directories, with unknown missing file populations. Existing file-analysis notes remain separate, and CLI exits retain their current policy.
 - PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but classified as READ rather than WRITE.
 - Variable tracking is name-based; same-named variables in different scopes within a flat file may merge.
-- `--scope` and `--around` require a single `:LINE` — they do not accept ranges.
+- `--scope` and `--around` take a single `:LINE`. Given a range (`:100-110`) they use its first line and ignore the rest without a warning.
+- Python keyword-argument names (`f(json=...)`) are currently reported as inputs by `--deps` (PARAM) and `--boundary` (INPUTS); they are not variable reads, so ignore them when deciding an extracted function's parameters.
 
 ---
 

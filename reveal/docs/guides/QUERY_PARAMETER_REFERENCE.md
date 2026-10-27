@@ -28,7 +28,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **xlsx://** | `sheet`, `range`, `search`, `format`, `limit`, `formulas`, `powerpivot`, `powerquery`, `names`, `connections` | `xlsx://model.xlsx?sheet=Sales` |
 | **help://** | `search`, `top` (only on `help://search`; `top` caps hits, default 20, `0` = all) | `help://search?search=find callers&top=50` |
 | **cpanel://** | `domain_type`, `dns-verified`, `check-live` | `cpanel://USER/ssl?domain_type=addon` |
-| **ssl://** | `expiring-within`, `summary` | `ssl://host?expiring-within=30` |
+| **ssl://** | `expiring-within` (with `--check`), `summary` (batch and nginx views) | `ssl://host?expiring-within=30` + `--check` |
 | **diff://** | none | N/A |
 | **env://** | none | N/A |
 | **sqlite://** | none | N/A |
@@ -183,17 +183,19 @@ reveal 'git://.?type=history&author~=john&message~=fix'
   - **Examples**:
     ```bash
     reveal 'json://data.json?type=user'           # Exact match
-    reveal 'json://data.json?name~=john'          # Contains pattern
+    reveal 'json://data.json?name~=john'          # Regex search (case-sensitive)
     reveal 'json://data.json?age>25'              # Numeric comparison
     reveal 'json://data.json?status=active&role=admin'  # Multiple filters
     ```
 
 **Supported Operators**:
-- `=` - Exact match
-- `~=` - Contains (case-insensitive substring match)
-- `>`, `<`, `>=`, `<=` - Numeric/lexical comparison
-- `..` - Range (e.g., `age=25..35`)
-- `!` - Field does not exist (e.g., `!draft`)
+- `=` - Exact match (case-insensitive on json://)
+- `~=` - Regex search (case-sensitive; prefix `(?i)` to ignore case)
+- `!~` - Regex does not match
+- `>`, `<`, `>=`, `<=` - Numeric comparison (a non-numeric value matches nothing)
+- `..` - Range (e.g., `age=25..35`; string bounds compare as strings)
+- `!field` - Field absent: works on markdown:// only today. On json:// `?!draft` matches
+  nothing; use `draft=null`, which matches a missing key or a null value
 - `*` - Wildcard (e.g., `name=*john*`)
 
 ---
@@ -204,20 +206,20 @@ reveal 'git://.?type=history&author~=john&message~=fix'
 
 **Query Parameters**:
 
-Same as **json://** - markdown adapter supports filtering by frontmatter fields using the unified query syntax.
+Same as **json://**, except that `=` and wildcards are case-sensitive - markdown adapter supports filtering by frontmatter fields using the unified query syntax. Frontmatter dates need a range (`>`/`<` on a date match nothing), and `sort=` works only on result fields (`path`, `modified`, `status`, ...), not on arbitrary frontmatter keys.
 
 **Examples**:
 ```bash
 reveal 'markdown://docs/?status=draft'              # Find drafts
 reveal 'markdown://docs/?tags~=python'               # Documents tagged with python
 reveal 'markdown://docs/?!published'                 # Unpublished documents
-reveal 'markdown://docs/?created>2026-01-01'         # Documents created after date
+reveal 'markdown://docs/?created=2026-01-01..2026-12-31'   # Created in 2026 (dates: use a range)
 reveal 'markdown://docs/?priority=high&status=draft' # High-priority drafts
 ```
 
 **Wildcard Search**:
 ```bash
-reveal 'markdown://docs/?title=*api*'    # Titles containing "api"
+reveal 'markdown://docs/?title=*API*'    # Titles containing "API" (case-sensitive)
 ```
 
 **Body Text Search** (markdown-specific, not frontmatter):
@@ -646,7 +648,7 @@ The following adapters still have adapter-specific options expressed as CLI flag
 
 | Adapter | CLI flag | URI query param |
 |---------|---------|-----------------|
-| `ssl://` | `reveal ssl://host --expiring-within 30` | `reveal 'ssl://host?expiring-within=30'` ✅ |
+| `ssl://` | `reveal ssl://host --expiring-within 30 --check` | `reveal 'ssl://host?expiring-within=30' --check` ✅ (either form is a no-op without `--check`) |
 | `ssl://` | `reveal 'ssl://nginx:///etc/nginx/*.conf' --summary` | `reveal 'ssl://nginx:///etc/nginx/*.conf?summary'` ✅ |
 | `cpanel://` | `reveal cpanel://USER/ssl --dns-verified` | `reveal 'cpanel://USER/ssl?dns-verified'` ✅ |
 | `cpanel://` | `reveal cpanel://USER/ssl --check-live` | `reveal 'cpanel://USER/ssl?check-live'` ✅ |
@@ -666,12 +668,13 @@ The following operators work across adapters that support field filtering (json:
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `=` | Exact match | `status=published` |
-| `~=` | Contains (substring) | `title~=python` |
+| `=` | Exact match (case-insensitive on json://, case-sensitive on markdown://) | `status=published` |
+| `~=` | Regex search (case-sensitive) | `title~=(?i)python` |
+| `!~` | Regex does not match (json:// and git://; on markdown:// it matches nothing today) | `role!~admin` |
 | `>`, `<` | Comparison | `count>100` |
 | `>=`, `<=` | Comparison (inclusive) | `age>=18` |
 | `..` | Range (inclusive) | `lines=50..200` |
-| `!` | Field absence | `!draft` (no draft field) |
+| `!` | Field absence (markdown:// only; on json:// use `draft=null`) | `!draft` (no draft field) |
 | `*` | Wildcard | `name=*john*` |
 
 ---
@@ -683,7 +686,9 @@ different questions — knowing which one an adapter uses saves a round trip
 through the wrong syntax.
 
 **`?search=<term>` — free-text content search.** "Does this blob of text
-contain this term?" No other filters combine with it; it's the whole query.
+contain this term?" It does not combine with *field filters* (`field~=`), but it takes its
+adapter's scoping options: `since` and `until` on `claude://` and `codex://`, plus `word` on
+`claude://`.
 Used consistently by `claude://`, `codex://`, `xlsx://`, and `help://search`
 — all four search unstructured or semi-structured content (chat transcripts,
 spreadsheet cells, help docs) where there's no meaningful field to scope the
@@ -702,8 +707,8 @@ filters in the same query — `type=guide&body-contains=nginx`,
 family above, despite the name similarity — it combines with frontmatter
 filters and ranks results, which `?search=` adapters don't do).
 
-**If you're unsure which an adapter uses:** `?search=` never combines with
-other params; `~=`/`body-contains=` always can. `reveal 'help://<scheme>'` documents
+**If you're unsure which an adapter uses:** `?search=` takes scoping options only;
+`~=`/`body-contains=` combine with any filter. `reveal 'help://<scheme>'` documents
 which one a given adapter supports.
 
 ---
