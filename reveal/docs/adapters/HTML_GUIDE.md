@@ -30,11 +30,6 @@ reveal page.html --metadata
 > and line range. (Previously these errored "Element not found" — the
 > element-extraction path built a `"function #id"` descendant selector and
 > matched nothing.)
->
-> **Known issue (current version):**
-> - The bare default view (`reveal page.html` with no flags) currently prints only the file
->   summary line (size/line count), not the `Elements`/`Template_blocks` listing shown below —
->   use `--semantic`, `--links`, or `--metadata` to see structured content.
 
 ## Features
 
@@ -51,18 +46,25 @@ Automatically detects and handles template engines:
 **Example:**
 ```bash
 $ reveal base.html
-File: base.html (6.8KB, 170 lines)
+File: base.html (1.3KB, 37 lines)
 
-Elements (18):
-  base.html:6   <title>: {% block title %}Site{% endblock %}
-  base.html:16  <nav> .sidebar
-  base.html:81  <main> #main-content
-  ...
+Document: <!DOCTYPE html>, lang=en
+Title: {% block title %}Site{% endblock %}
+Meta tags: 4 (charset, description, og:title, twitter:card)
+Sections: nav, header, main, section, footer
+Elements: 7 links, 1 images, 1 forms, 1 tables
+Template: jinja2 (2 variables)
 
-Template_blocks (8):
-  base.html:6   title
-  base.html:9   description
-  base.html:83  content
+Drill down: reveal base.html --metadata | --semantic navigation|content|forms | --links | --scripts all | --styles all
+```
+
+Template block names are in the JSON output (`.structure.template.blocks[]`, each `{name, line}`), not in the text summary:
+
+```bash
+$ reveal base.html --format json | jq -r '.structure.template.blocks[].name'
+title
+description
+content
 ```
 
 ### 2. Semantic Element Extraction
@@ -80,10 +82,7 @@ reveal page.html --semantic forms       # All forms
 reveal page.html --semantic media       # img, video, audio
 ```
 
-**Output shows:**
-- Semantic HTML elements (nav, header, main, article, section, footer)
-- Element IDs and classes
-- Line numbers for quick navigation
+**Output shows:** tag and line number per element (JSON adds `class`/`id` and the element's text).
 
 ### 3. Link Extraction and Validation
 
@@ -91,7 +90,7 @@ reveal page.html --semantic media       # img, video, audio
 # Extract all links
 reveal page.html --links
 
-# Filter by link type
+# Filter by link type (internal, external, email = mailto, all = no filter)
 reveal page.html --links --link-type internal
 reveal page.html --links --link-type external
 
@@ -109,6 +108,8 @@ reveal page.html --links --broken-only
 - `mailto` - Email links
 - `tel` - Phone number links
 - `relative` - `./page.html` links
+
+Text output groups the links by these types. `--link-type` accepts `internal`, `external`, `email` (the `mailto` links) and `all`; for `anchor`, `tel` or `relative` use the JSON (`.structure.links[] | select(.type == "anchor")`). `--broken-only` keeps the relative links whose target file does not exist, marked `[BROKEN]`.
 
 ### 4. Metadata Extraction
 
@@ -184,7 +185,7 @@ See what blocks and variables a template uses:
 reveal templates/base.html
 
 # Find all templates using specific block
-reveal templates/*.html | grep "block content"
+reveal templates/base.html --format json | jq -r '.structure.template.blocks[].name'
 
 # Check template variable usage
 reveal template.html --format json | jq '.structure.template.variables'
@@ -226,8 +227,8 @@ done
 ### Link Validation
 
 ```bash
-# Check for broken internal links
-reveal site/**/*.html --links --broken-only
+# Check for broken local links (--links takes one path per call; --stdin for many)
+ls site/**/*.html | reveal --stdin --links --broken-only
 
 # Find all external links
 reveal page.html --links --link-type external
@@ -246,7 +247,7 @@ reveal docs/api.html
 reveal docs/api.html "#authentication"
 
 # Find all code examples
-reveal docs/*.html --scripts inline
+ls docs/*.html | reveal --stdin --scripts inline
 ```
 
 ## Progressive Disclosure
@@ -280,7 +281,7 @@ The HTML analyzer follows reveal's progressive disclosure philosophy:
 ```
 
 **Detection:** `{% %}` and `{{ }}` syntax
-**Extracts:** Blocks, variables, template directives
+**Extracts:** blocks (name, line) and variables
 
 ### Go Templates (Hugo)
 
@@ -303,7 +304,12 @@ The HTML analyzer follows reveal's progressive disclosure philosophy:
 ```
 
 **Detection:** `{{#if}}`, `{{#each}}` helpers
-**Extracts:** Helpers, variables
+**Extracts:** variables (helpers are not listed)
+
+### ERB and PHP
+
+**Detection:** `<% %>` (ERB) and `<?php ?>` (PHP) syntax
+**Extracts:** detection only (no variables)
 
 ## Integration with Reveal Features
 
@@ -319,7 +325,7 @@ reveal page.html :10-50           # Lines 10-50
 
 # Output formats
 reveal page.html --format json    # JSON output
-reveal page.html --format grep    # Grep-compatible
+reveal page.html --links --format grep  # each link as path:line:url (list views only)
 
 # Element extraction
 reveal page.html form             # First form
@@ -345,10 +351,14 @@ Perfect for AI workflows where you need to understand HTML structure before proc
 reveal app/templates/index.html
 
 # Check all templates for required blocks
-reveal app/templates/*.html | grep "block content"
+for f in app/templates/*.html; do
+  reveal "$f" --format json | jq -e '.structure.template.blocks[]? | select(.name=="content")' >/dev/null || echo "$f"
+done
 
 # Find templates missing navigation
-reveal app/templates/*.html | grep -v "nav"
+for f in app/templates/*.html; do
+  reveal "$f" | grep -q 'Sections:.*nav' || echo "$f"
+done
 ```
 
 ### Hugo Site
@@ -367,11 +377,11 @@ reveal layouts/_default/baseof.html --metadata
 ### Static Website
 
 ```bash
-# Validate all internal links
-reveal public/**/*.html --links --broken-only
+# Validate all local links
+ls public/**/*.html | reveal --stdin --links --broken-only
 
 # Extract all images for optimization
-reveal public/**/*.html --semantic media
+ls public/**/*.html | reveal --stdin --semantic media
 
 # Check SEO metadata across site
 for f in public/**/*.html; do
@@ -400,15 +410,16 @@ These flags apply specifically to HTML files:
 | Flag | Description |
 |------|-------------|
 | `--metadata` | Extract `<meta>` tags (title, description, og:*, etc.) |
-| `--semantic` | Extract semantic HTML elements (nav, main, article, section, aside, footer) |
-| `--scripts` | Extract `<script>` tags and src references |
-| `--styles` | Extract `<link rel="stylesheet">` and `<style>` tags |
+| `--semantic TYPE` | Extract semantic HTML elements: `navigation`, `content`, `forms`, `media` |
+| `--scripts all\|inline\|external` | Extract `<script>` tags and src references |
+| `--styles all\|inline\|external` | Extract `<link rel="stylesheet">` and `<style>` tags |
 
 Examples:
 ```bash
 reveal page.html --metadata          # All meta tags
-reveal page.html --semantic          # Page structure landmarks
-reveal page.html --scripts --styles  # All external resources
+reveal page.html --semantic content  # main, article, section
+reveal page.html --scripts external  # External scripts
+reveal page.html --styles external   # External stylesheets
 ```
 
 ## Dependencies
