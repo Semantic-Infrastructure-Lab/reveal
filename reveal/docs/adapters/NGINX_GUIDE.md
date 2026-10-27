@@ -210,7 +210,7 @@ Fleet Audit — (46 sites, 2026-03-19)
   X-Frame-Options               ❌       38        8  Move to nginx.conf http{} ↑
   server_tokens off             ❌       14       32  Move to nginx.conf http{}
   X-XSS-Protection (depr.)      —       38        —  Remove — deprecated since 2019, ignored by Chrome
-  http2 on 443 listener         —       21       25  Add per-site (certbot strips http2 on renewal)
+  http2 on 443 listener         —       21       17  Add per-site (certbot strips http2 on renewal)  (8 sites not applicable)
   limit_req applied             —        1       45  Add zones to nginx.conf, then limit_req per sensitive location
 
   ↑ Consolidation: X-Content-Type-Options, X-Frame-Options
@@ -228,6 +228,8 @@ JSON (`--format json`) has `type: nginx_fleet_audit` and a `matrix` list whose e
 **Consolidation hint**: when a directive appears in ≥50% of site configs but is absent from nginx.conf http{}, it's marked with `↑` as a consolidation opportunity — one line in nginx.conf fixes the whole fleet.
 
 **`X-XSS-Protection`** is a deprecated header check — "Sites With" means sites that *have* the deprecated header (should remove it). "Sites Without" is `—` because absence is the correct state.
+
+**`http2 on 443 listener`** counts only sites with a TLS listener (a `listen` on port 443 or with `ssl`): a port-80-only site, such as a redirect file next to its 443 twin, is in neither column and the row ends `(N sites not applicable)`. In JSON that number is `site_count - sites_with - sites_without`. The other rows count every site.
 
 ---
 
