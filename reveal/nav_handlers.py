@@ -455,7 +455,11 @@ NAV_BOOLEAN_FLAG_NAMES: frozenset = frozenset(
 
 
 def _single_line_ref(element: str, flag: str) -> int:
-    """The line number a --scope/--around element names; exits when it names none."""
+    """The line number a --scope/--around element names; exits when it names none.
+
+    A range exits 2: both flags answer for one line, and `:100-110 --around 2` used to
+    print 98-102 and drop the rest of the range without a word (BACK-2272).
+    """
     from .display.element import _parse_element_syntax  # noqa: I006
     syntax = _parse_element_syntax(element)
     if syntax['type'] != 'line':
@@ -465,7 +469,16 @@ def _single_line_ref(element: str, flag: str) -> int:
             file=sys.stderr,
         )
         sys.exit(1)
-    return syntax['start_line']
+    start, end = syntax['start_line'], syntax['end_line']
+    if end is not None and end != start:
+        hint = f'drop {flag} to print lines {element[1:]}' if flag == '--around' else 'run it once per line'
+        print(
+            f"Error: {flag} takes a single line, not the range '{element}'; only line {start} would be used.\n"
+            f'  Give one line (:{start}), or {hint}.',
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return start
 
 
 def _nav_scope(analyzer, element: str, as_json: bool) -> None:
