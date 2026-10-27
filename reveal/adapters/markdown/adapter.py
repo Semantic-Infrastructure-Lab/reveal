@@ -276,7 +276,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
         # Parse query filters conditionally (only if new operators present)
         # This prevents legacy parameters from being misinterpreted
         self.query_filters = []
-        has_new_operators = filter_query and any(op in filter_query for op in ['>', '<', '!=', '~=', '..', '=='])
+        has_new_operators = filter_query and any(op in filter_query for op in ['>', '<', '!=', '~=', '!~', '..', '=='])
 
         if has_new_operators:
             # No fallback to "no filters": that would answer an unfiltered query as if it

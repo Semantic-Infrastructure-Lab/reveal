@@ -74,7 +74,13 @@ def matches_all_filters(obj: Any, query_filters: list, get_field_value_func, com
 
     for qf in query_filters:
         field_value = get_field_value_func(obj, qf.field)
-        if not compare_func(field_value, qf.op, qf.value):
+        if qf.op == '!':
+            if field_value is not None and field_value != '':
+                return False
+        elif qf.op == '?':
+            if field_value is None or field_value == '':
+                return False
+        elif not compare_func(field_value, qf.op, qf.value):
             return False
 
     return True

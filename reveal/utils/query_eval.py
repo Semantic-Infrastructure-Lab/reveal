@@ -1,6 +1,7 @@
 """Filter evaluation: compare_values, apply_filter, apply_filters."""
 
 import re
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from .query_parser import REGEX_MAX_LEN as _REGEX_MAX_LEN, QueryFilter
@@ -93,7 +94,9 @@ def _handle_numeric_operator(field_value: Any, operator: str, target_value: Any,
         field_num = field_value if isinstance(field_value, (int, float)) else float(field_value)
         return _apply_ordered_op(field_num, float(target_value), operator)
     except (ValueError, TypeError):
-        if not opts['coerce_numeric']:
+        # YAML dates are datetime.date objects: ISO text orders correctly, so
+        # a date field compares against an ISO date string.
+        if not opts['coerce_numeric'] or isinstance(field_value, (date, datetime)):
             return _apply_ordered_op(str(field_value), str(target_value), operator)
         return False
 
