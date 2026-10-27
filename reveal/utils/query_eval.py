@@ -2,7 +2,7 @@
 
 import re
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from .query_parser import REGEX_MAX_LEN as _REGEX_MAX_LEN, QueryFilter
 
@@ -194,3 +194,39 @@ def apply_filter(item: Dict[str, Any], filter: QueryFilter) -> bool:
 def apply_filters(item: Dict[str, Any], filters: List[QueryFilter]) -> bool:
     """Apply multiple filters to an item (AND logic)."""
     return all(apply_filter(item, f) for f in filters)
+
+
+def find_unknown_filter_fields(
+    arr: List[Any], query_filters: list, get_field_value_func
+) -> List[str]:
+    """Identify query filter fields that never resolve to a non-None value on
+    any scanned item -- the typo-vs-genuine-zero disclosure of json:// (BACK-1165)
+    and metrics:// (BACK-2299), the pattern of ast:///markdown:// in BACK-1111.
+
+    Only meaningful to call when a query filtered out every item: a field
+    that never resolves anywhere is why nothing matched, distinguishing a
+    typo'd field name from a genuine "0 items have this value" answer. The
+    '!' (missing-field) operator is excluded -- for it, zero matches means
+    the field WAS present everywhere, which is unrelated to this disclosure.
+
+    Args:
+        arr: Items scanned by this query (pre-filter)
+        query_filters: List of query filter objects
+        get_field_value_func: Reads a field of an item the way the adapter's filters do
+
+    Returns:
+        Sorted list of filter fields never seen as a resolvable value.
+    """
+    fields = {qf.field for qf in query_filters if qf.op != '!'}
+    if not fields:
+        return []
+
+    remaining: Set[str] = set(fields)
+    for item in arr:
+        for field in list(remaining):
+            if get_field_value_func(item, field) is not None:
+                remaining.discard(field)
+        if not remaining:
+            return []
+
+    return sorted(remaining)
