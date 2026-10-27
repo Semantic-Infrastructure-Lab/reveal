@@ -2,7 +2,6 @@
 
 import re
 from datetime import datetime
-from functools import lru_cache
 from typing import Any, Optional, Union, Dict
 
 from ...utils.query import compare_values
@@ -53,11 +52,11 @@ def _local_time(zoned: 're.Match[str]') -> str:
     return moment.strftime('%Y-%m-%d %H:%M:%S') + fraction
 
 
-@lru_cache(maxsize=256)
 def _date_bound(text: str) -> str:
     """A bound as the commit dates are written: a zoned timestamp in local time (BACK-2309), and
     a 'T' between day and time as the space (BACK-2300), since ' ' sorts before 'T' and
-    `date>DTHH:MM:SS` lost the commits of day D. Cached: every commit compares the same bound."""
+    `date>DTHH:MM:SS` lost the commits of day D. Not cached: a zoned bound's answer depends on
+    the process's local zone, and the conversion costs microseconds beside the commit walk."""
     text = text.strip()
     zoned = _ZONED.fullmatch(text)
     if zoned:
