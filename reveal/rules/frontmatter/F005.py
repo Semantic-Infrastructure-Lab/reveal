@@ -73,6 +73,17 @@ class F005(BaseRule):
             check = rule.get('check')
             message = rule.get('message', 'Validation failed')
 
+            # A rule without field/check can never run; say so rather than pass silently
+            if not field or not check:
+                detections.append(self.create_detection(
+                    file_path=file_path,
+                    line=line,
+                    message=f"Schema rule {rule.get('name', '(unnamed)')!r} needs both 'field' and 'check' keys",
+                    suggestion="Write the rule as {field: <name>, check: <expression on value>, message: ...}",
+                    context=f"Schema: {schema.get('name', 'unknown')}"
+                ))
+                continue
+
             # Skip if field not in data
             if field not in data:
                 continue
