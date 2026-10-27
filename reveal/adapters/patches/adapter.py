@@ -145,11 +145,10 @@ class PatchesAdapter(ResourceAdapter):
                 'Supports Python (unittest.mock/pytest) and TypeScript/JavaScript (Jest/Vitest).',
                 'A tree whose test files are all in another language (Go, Java, Rust, ...) is declined as not applicable (exit 0), naming the language: 0 uses there would mean not scanned, not none. A scanned JS/TS suite with no mock calls is a real 0.',
                 'Patch pressure is advisory. Mocking external boundaries can be normal and correct.',
-                'Use reveal testability <src> --tests <tests> to join patch pressure with production boundary fan-out.',
+                'Use reveal patches <src> --view pressure --tests <tests> to join patch pressure with production boundary fan-out.',
             ],
             'see_also': [
-                'reveal help://testability - Testability workflow guide',
-                'reveal testability src --tests tests - Combined report',
+                'reveal patches src --view pressure --tests tests - Combined patch-pressure and boundary fan-out report',
             ],
             'output_formats': ['text', 'json'],
         }

@@ -162,9 +162,8 @@ notes:
 
 see_also:
   - 'reveal help://ast - Query code structure by complexity'
-  - 'reveal help://depends - Reverse import graph (who imports a specific file)'
   - 'reveal help://calls - Function-level call graph'
-  - 'reveal help://stats - Codebase metrics and hotspots'
+  - 'reveal help://metrics - Codebase metrics and hotspots'
   - 'reveal help://configuration - Layer violation config (.reveal.yaml)'
   - 'reveal file.py --check --select I - Import quality rules (every I rule: reveal --rules)'
 

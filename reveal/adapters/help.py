@@ -1379,12 +1379,14 @@ class HelpAdapter(ResourceAdapter):
         adapters in practice. Treats each curated pair as undirected so both
         adapters in a pair point at each other.
         """
+        from ..cli.handlers.introspection import retired_schemes
+        retired = set(retired_schemes())
         neighbors: Dict[str, List[str]] = {}
         for cluster in self._get_adapter_relationships()['clusters']:
             for a, b, _rationale in cluster['pairs']:
                 for x, y in ((a, b), (b, a)):
                     bucket = neighbors.setdefault(x, [])
-                    if y not in bucket:
+                    if y not in bucket and y not in retired:  # BACK-2213: never lead a reader to a retired page
                         bucket.append(y)
         return [f'reveal help://{s}' for s in neighbors.get(scheme, [])[:2]]
 
