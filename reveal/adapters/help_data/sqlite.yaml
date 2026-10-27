@@ -16,12 +16,12 @@ examples:
     description: 'JSON output for scripting and automation'
 
 elements:
-  '<table>': 'Table structure (columns, indexes, foreign keys)'
+  '<table>': 'Table or view structure (columns, indexes, foreign keys)'
 
 features:
   - 'Schema exploration (tables, columns, indexes)'
   - 'Foreign key relationships'
-  - 'Table statistics (row counts, sizes)'
+  - 'Table statistics (row, column and index counts)'
   - 'SQLite-specific configuration (page size, journal mode, encoding)'
   - 'Zero dependencies (uses Python built-in sqlite3)'
   - 'Read-only access by default for safety'
@@ -67,7 +67,7 @@ notes:
   - 'Read-only mode by default (safe for production inspection)'
   - 'Shows PRIMARY KEY columns as NOT NULL (SQLite implicit constraint)'
   - 'Filters out auto-generated indexes (sqlite_autoindex_*)'
-  - 'Foreign keys may be disabled at runtime (check configuration)'
+  - 'Foreign-key enforcement is a per-connection setting the file does not store; --check runs foreign_key_check for violations'
 
 use_cases:
   - 'Mobile app database inspection (iOS, Android)'

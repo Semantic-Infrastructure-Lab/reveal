@@ -39,7 +39,7 @@ _SCHEMA_OUTPUT_TYPES = [
             'total_count': 42,
             'categories': {
                 'System': [
-                    {'name': 'PATH', 'value': '/usr/local/bin:/usr/bin', 'sensitive': False, 'length': 25},
+                    {'name': 'PATH', 'value': '/usr/local/bin:/usr/bin', 'sensitive': False, 'length': 23},
                     {'name': 'HOME', 'value': '/home/user', 'sensitive': False, 'length': 10}
                 ],
                 'Python': [
@@ -82,7 +82,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
     },
     {
         'uri': 'env:// --format=json',
-        'description': 'Machine-readable: all vars with sensitive flag and category',
+        'description': 'Machine-readable: vars grouped under their category key, each with a sensitive flag',
         'output_type': 'environment'
     },
     {
@@ -93,7 +93,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
 ]
 
 _SCHEMA_NOTES = [
-    'Sensitive values are auto-redacted based on name patterns (PASSWORD, SECRET, TOKEN, KEY, etc.)',
+    'Sensitive values are auto-redacted: a name holding PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, AUTH, PRIVATE, PASSPHRASE, DATABASE_URL or DSN as a whole _-delimited word (plural too, any case), or a value that is a URL with user:password@',
     'Redacted values shown as *** — sensitive values are not accessible via CLI (by design)',
     'env:// groups all vars by category: System, Python, Node, Application, Custom',
     'env://VAR_NAME returns the single variable with sensitivity classification',
@@ -102,7 +102,8 @@ _SCHEMA_NOTES = [
 
 _SCHEMA_SECURITY_FEATURES = [
     'Automatic sensitive value redaction',
-    'Pattern-based detection: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH',
+    'Name-based detection: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH, PRIVATE, PASSPHRASE, DATABASE_URL, DSN (whole _-delimited words, plural too)',
+    'Value-based detection: a URL with embedded user:password@ credentials, whatever the name',
     'Redacted values shown as ***'
 ]
 
@@ -250,7 +251,7 @@ class EnvAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Sensitive values are automatically redacted (shown as ***)',
-                'Patterns that trigger redaction: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH',
+                'Names that trigger redaction: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH, PRIVATE, PASSPHRASE, DATABASE_URL, DSN (whole _-delimited words, plural too); also any value that is a URL with user:password@',
                 'Secret values are never disclosed — redaction is enforced at all output layers'
             ],
             'output_formats': ['text', 'json', 'grep'],

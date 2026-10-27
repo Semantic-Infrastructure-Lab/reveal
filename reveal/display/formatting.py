@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from reveal.base import FileAnalyzer
 from reveal.utils.formatting import lines_label
+from reveal.utils.lines import split_lines
 from reveal.utils.path_utils import to_posix
 from reveal.utils.results import result_control_notes_of
 
@@ -297,7 +298,7 @@ def _format_fenced_block(
         return
 
     print(f"    Lines {line_start}-{line_end} ({lines_label(line_count)})")
-    preview_lines = source.split('\n')[:3]
+    preview_lines = split_lines(source)[:3]
     for preview_line in preview_lines:
         print(f"      {preview_line}")
     if line_count > 3:

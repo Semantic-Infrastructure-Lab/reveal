@@ -23,7 +23,6 @@ class SqliteRenderer(TypeDispatchRenderer):
         print(f"  Page Count: {config['page_count']}")
         print(f"  Journal Mode: {config['journal_mode']}")
         print(f"  Encoding: {config['encoding']}")
-        print(f"  Foreign Keys: {'Enabled' if config['foreign_keys_enabled'] else 'Disabled'}")
         print()
 
         stats = result['statistics']
@@ -83,7 +82,7 @@ class SqliteRenderer(TypeDispatchRenderer):
     @staticmethod
     def _render_sqlite_table(result: dict) -> None:
         """Render table details."""
-        print(f"Table: {result['table']}")
+        print(f"{result.get('kind', 'table').capitalize()}: {result['table']}")
         print(f"Database: {result['database']}")
         print(f"Row Count: {result['row_count']:,}")
         print()

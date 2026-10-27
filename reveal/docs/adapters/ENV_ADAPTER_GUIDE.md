@@ -114,7 +114,7 @@ reveal env://PATH
 Environment Variable: PATH
 Category: System
 Value: /usr/local/bin:/usr/bin:/bin
-Length: 29 characters
+Length: 28 characters
 ```
 
 ### Example 3: Check Sensitive Variable
@@ -146,14 +146,14 @@ reveal env:// --format=json
 **Output**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "environment",
   "source": "system",
   "source_type": "runtime",
   "total_count": 42,
   "categories": {
     "System": [
-      {"name": "PATH", "value": "/usr/local/bin:/usr/bin", "sensitive": false, "length": 25},
+      {"name": "PATH", "value": "/usr/local/bin:/usr/bin", "sensitive": false, "length": 23},
       {"name": "HOME", "value": "/home/user", "sensitive": false, "length": 10}
     ],
     "Application": [
@@ -200,7 +200,8 @@ Variables are automatically grouped into categories:
 
 ### 2. Sensitive Value Detection
 
-Variables are flagged as **sensitive** if their name contains:
+Variables are flagged as **sensitive** when one of these keywords appears in the name as a
+whole `_`-delimited word, singular or plural (`CREDENTIAL` and `CREDENTIALS` both match):
 - `PASSWORD`
 - `SECRET`
 - `TOKEN`
@@ -210,8 +211,15 @@ Variables are flagged as **sensitive** if their name contains:
 - `AUTH`
 - `PRIVATE`
 - `PASSPHRASE`
+- `DATABASE_URL`
+- `DSN`
 
-**Case-insensitive** - `password`, `Password`, `PASSWORD` all match.
+A variable is also sensitive, whatever its name, when its value is a URL with embedded
+credentials (`scheme://user:password@host...`, e.g. `REDIS_URL=redis://u:pw@cache:6379`).
+
+**Case-insensitive** - `password`, `Password`, `PASSWORD` all match. A keyword joined to
+another word is not matched: `MYPASSWORD`, `APIKEY`, `SECRETKEY` and `AUTHOR_NAME` are not
+sensitive.
 
 **Redaction behavior**:
 - Sensitive values shown as `***` in output
@@ -221,7 +229,9 @@ Variables are flagged as **sensitive** if their name contains:
 ### 3. Runtime Snapshot
 
 Environment adapter provides **current runtime environment**:
-- Reads from `os.environ` (Python process environment)
+- Reads from `os.environ` (Python process environment). Python may add `LC_CTYPE` at startup
+  under a C/POSIX locale (an `env -i` run or a minimal container); it is not in the caller's
+  environment.
 - Snapshot at query time (not historical)
 - Includes variables set before process started
 - Does NOT include variables set in child processes
@@ -237,7 +247,7 @@ Environment adapter provides **current runtime environment**:
 **Structure**:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "environment",
   "source": "system",
   "source_type": "runtime",
@@ -270,6 +280,10 @@ Environment adapter provides **current runtime environment**:
 **Structure**:
 ```json
 {
+  "contract_version": "1.1",
+  "type": "env_variable",
+  "source": "env://DATABASE_URL",
+  "source_type": "runtime",
   "name": "DATABASE_URL",
   "value": "***",
   "category": "Application",
@@ -371,19 +385,24 @@ Environment adapter provides **current runtime environment**:
 
 ### Detection Patterns
 
-Variables are flagged as **sensitive** if name contains (case-insensitive):
+Variables are flagged as **sensitive** when one of these keywords appears in the name as a
+whole `_`-delimited word, singular or plural (case-insensitive):
 
 | Pattern | Examples |
 |---------|----------|
 | `PASSWORD` | `DB_PASSWORD`, `ADMIN_PASSWORD` |
-| `SECRET` | `JWT_SECRET`, `SESSION_SECRET` |
+| `SECRET` | `JWT_SECRET`, `SESSION_SECRET`, `OAUTH_SECRET` |
 | `TOKEN` | `API_TOKEN`, `GITHUB_TOKEN`, `NPM_TOKEN` |
-| `KEY` | `API_KEY`, `PRIVATE_KEY`, `ENCRYPTION_KEY` |
-| `CREDENTIAL` | `AWS_CREDENTIALS`, `DB_CREDENTIALS` |
+| `KEY` | `API_KEY`, `PRIVATE_KEY`, `ENCRYPTION_KEY`, `API_KEYS` |
+| `CREDENTIAL` | `AWS_CREDENTIALS`, `DB_CREDENTIALS`, `GCP_CREDENTIAL_FILE` |
 | `API_KEY` | `STRIPE_API_KEY`, `SENDGRID_API_KEY` |
-| `AUTH` | `AUTH_TOKEN`, `OAUTH_SECRET` |
+| `AUTH` | `AUTH_TOKEN` |
 | `PRIVATE` | `PRIVATE_KEY`, `PRIVATE_TOKEN` |
 | `PASSPHRASE` | `GPG_PASSPHRASE`, `SSH_PASSPHRASE` |
+| `DATABASE_URL` | `DATABASE_URL`, `READONLY_DATABASE_URL` |
+| `DSN` | `SENTRY_DSN`, `DB_DSN` |
+| (value) a URL with `user:password@` | `REDIS_URL=redis://u:pw@cache:6379`, `DB_CONN=postgres://user:pass@host` |
+| **Not detected** (joined forms) | `MYPASSWORD`, `APIKEY`, `SECRETKEY`, `GITHUB_PAT`; a URL without credentials (`REDIS_URL=redis://cache:6379`) |
 
 ### Redaction Behavior
 
@@ -400,6 +419,7 @@ reveal env://DATABASE_URL
 **Output**:
 ```
 Environment Variable: DATABASE_URL
+Category: Application
 Value: ***
 Warning: Sensitive - This variable appears to contain sensitive data
     Value is redacted — sensitive values are not accessible via CLI
@@ -559,8 +579,8 @@ Length: 87 characters
 
    # Add each variable
    reveal env:// --format=json | \
-     jq -r '.categories[] | .[] |
-       "| \(.name) | \(.category // "Unknown") | \(if .sensitive then "Yes" else "No" end) | TODO: Add description |"' \
+     jq -r '.categories | to_entries[] | .key as $c | .value[] |
+       "| \(.name) | \($c) | \(if .sensitive then "Yes" else "No" end) | TODO: Add description |"' \
      >> ENV_VARS.md
 
    echo "Documentation generated: ENV_VARS.md"
@@ -860,15 +880,17 @@ PREV=$(ls -1 "$SNAPSHOT_DIR"/*.json | tail -2 | head -1)
 CURR="$SNAPSHOT_DIR/env-$DATE.json"
 
 if [ ! -z "$PREV" ]; then
-  # Check for differences
-  DIFF=$(jq -s '.[0].categories as $prev | .[1].categories as $curr |
-    ($prev | to_entries | .[].value | .[] | .name) as $prev_names |
-    ($curr | to_entries | .[].value | .[] | .name) as $curr_names |
-    {added: [], removed: [], changed: []}' \
+  # Check for differences (redacted values are all ***, so a changed secret is not seen)
+  DIFF=$(jq -s '
+    ([.[0].categories[][] | {(.name): .value}] | add // {}) as $a |
+    ([.[1].categories[][] | {(.name): .value}] | add // {}) as $b |
+    {added: (($b | keys) - ($a | keys)),
+     removed: (($a | keys) - ($b | keys)),
+     changed: [($a | keys)[] | select($b[.] != null and $a[.] != $b[.])]}' \
     "$PREV" "$CURR")
 
   # Log changes
-  if [ ! -z "$DIFF" ]; then
+  if [ "$(echo "$DIFF" | jq '(.added + .removed + .changed) | length')" -gt 0 ]; then
     echo "Environment changed at $DATE" >> /var/log/env-changes.log
     echo "$DIFF" >> /var/log/env-changes.log
   fi
@@ -1045,7 +1067,7 @@ reveal env://VIRTUAL_ENV
 **Symptom**:
 ```bash
 reveal env://MY_VAR
-# Returns null or error
+# Error (env://): Element 'MY_VAR' not found   (exit 1)
 ```
 
 **Cause**: Variable not set in current environment
@@ -1064,18 +1086,21 @@ reveal env://MY_VAR
 
 ### Issue 2: Sensitive value not redacted
 
-**Symptom**: Variable contains "password" but not flagged as sensitive
+**Symptom**: Variable holds a secret but is not flagged as sensitive
 
-**Cause**: Pattern not matched (e.g., `DB_CONN` vs `DB_PASSWORD`)
+**Cause**: No keyword is a whole `_`-delimited word in the name (e.g. `MYPASSWORD`, `APIKEY`),
+and the value is not a URL with `user:password@`
 
-**Solution**: Variable names must contain sensitive keywords. Rename if possible:
+**Solution**: Name it with a sensitive keyword as its own word. Rename if possible:
 ```bash
 # Not detected
-DB_CONN=postgres://user:pass@host
+MYPASSWORD=hunter2
+DB_CONN=hunter2
 
 # Detected
-DB_PASSWORD=postgres://user:pass@host
-DATABASE_URL=postgres://user:pass@host
+DB_PASSWORD=hunter2
+DB_CONN=postgres://user:pass@host     # by value: a URL with user:password@
+DATABASE_URL=postgres://db.internal   # by name
 ```
 
 ### Issue 3: Empty categories
@@ -1142,16 +1167,10 @@ reveal env:// --format=json | \
 ### Tip 4: Environment Diff
 
 ```bash
-# Compare two environment snapshots
-jq -s '.[0].categories as $env1 | .[1].categories as $env2 |
-  {
-    added: [  # Variables in env2 but not env1
-      $env2[] | .[] | select(.name as $n | ($env1[] | .[] | .name) | contains($n) | not)
-    ],
-    removed: [  # Variables in env1 but not env2
-      $env1[] | .[] | select(.name as $n | ($env2[] | .[] | .name) | contains($n) | not)
-    ]
-  }' env1.json env2.json
+# Compare two environment snapshots (variable names added and removed)
+jq -s '([.[0].categories[][] | .name]) as $a |
+       ([.[1].categories[][] | .name]) as $b |
+       {added: ($b - $a), removed: ($a - $b)}' env1.json env2.json
 ```
 
 ### Tip 5: Generate .env.example
@@ -1211,17 +1230,23 @@ reveal env://MY_VAR  # Verify
 
 ### Q2: Why is my sensitive variable not redacted?
 
-**A**: The variable name must contain a sensitive keyword as a whole word (delimited by `_` or string boundaries). Keywords: `PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH, PRIVATE, PASSPHRASE`.
+**A**: The variable name must contain a sensitive keyword as a whole word (delimited by `_` or string boundaries), singular or plural. Keywords: `PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH, PRIVATE, PASSPHRASE, DATABASE_URL, DSN`. A value that is a URL with `user:password@` is sensitive whatever the name.
 ```bash
-# ❌ Not detected (no keyword match)
-DB_CONN="postgres://user:pass@host"
-DATABASE_URL="postgres://user:pass@host"   # "URL" is not a sensitive keyword
+# ❌ Not detected (no whole-word keyword, value is not a URL with credentials)
+DB_CONN="hunter2"
+MYPASSWORD="hunter2"                       # keyword joined to another word
 
 # ✅ Detected (contains "PASSWORD" as whole word)
-DB_PASSWORD="postgres://user:pass@host"
+DB_PASSWORD="hunter2"
 
-# ✅ Detected (contains "KEY" as whole word)
-DATABASE_KEY="some-secret-key"
+# ✅ Detected (CREDENTIALS: plural of a keyword)
+AWS_CREDENTIALS="..."
+
+# ✅ Detected (value is a URL with user:password@)
+REDIS_URL="redis://user:pass@cache:6379"
+
+# ✅ Detected (DATABASE_URL is itself a keyword)
+DATABASE_URL="postgres://db.internal/app"
 ```
 
 ### Q3: Can I customize categories or sensitive patterns?

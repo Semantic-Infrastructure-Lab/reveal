@@ -196,9 +196,6 @@ def test_sqlite_table_detail_repeats_the_overview_numbers(tmp_path):
     assert sum(t['rows'] for t in tables) == overview['statistics']['total_rows']
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    'sqlite:// lists views in get_structure()["tables"] but get_element() only looks '
-    "up type='table', so a listed view is 'not found'"))
 def test_sqlite_every_listed_object_resolves_by_name(tmp_path):
     from reveal.adapters.sqlite import SQLiteAdapter
     adapter = SQLiteAdapter('sqlite://' + str(_sqlite_fixture(tmp_path)))

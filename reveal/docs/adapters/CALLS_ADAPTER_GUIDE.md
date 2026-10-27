@@ -163,7 +163,8 @@ source ownership and are outside JSX reference navigation (calls in the initiali
 name-resolution seam. Callees and trace use the same references; callees text labels a name that is only rendered
 `(JSX reference)` and a name that is both called and rendered `(includes JSX reference)`. Callers text
 names each kind of site: `[call line 3, JSX line 4]` (JSON: `call_lines` and `reference_lines`), `[JSX line 6]`,
-and `[lines 5, 6]` for a name that is only called more than once. `--sideeffects --transitive` follows a
+and `[lines 4, 6]` for a `<module>` or class-field caller that calls the name more than once (a named
+function caller is one record at its definition line, see Limitations). `--sideeffects --transitive` follows a
 render-only reference as a hop (rendering a child runs it) and labels it `(JSX render)`; the `chain` of
 the JSON findings ends in `<Child/>`. Dynamic render scheduling, Angular/HTML strings and Vue/Svelte
 navigation remain outside this relationship model. Known limit: a scope is identified by its name and line, so two same-named functions
@@ -342,7 +343,7 @@ reveal 'calls://src/?callers=validate_item&depth=5'   # up to 5 levels deep (cap
 
 ### Text (default)
 
-Human-readable summary with relative file path, line, and caller context:
+Human-readable summary with file path, line, and caller context:
 
 ```
 Callers of: validate_item
@@ -355,7 +356,7 @@ Rule: callers whose body calls validate_item by bare name or import alias; level
   src/worker/jobs.py:17    run_job  (calls self.validate_item)
 ```
 
-> File paths are relative to the project root — not just the basename — so `auth/handlers.py` and `utils/handlers.py` are never confused.
+> File paths are printed under the path you queried (relative if you passed a relative path, absolute if absolute) — never just the basename, so `auth/handlers.py` and `utils/handlers.py` are never confused.
 
 Every callers and callees answer states its rule: `walk_rule` in JSON (`direction`, `depth`,
 `measured`, `unmeasured_languages`, `text`, plus the direction's own fields) and its `text` as a
@@ -369,6 +370,7 @@ Callers of: validate_item
 Project:    src/
 Depth:      2
 Total:      5
+Rule: callers whose body calls validate_item by bare name or import alias; level k+1 looks each caller up by name, so same-named functions' callers join; each (file, caller) once; depth 2 (clamped 1-5). Measured: levels 1 and 2.
 
 Direct callers:
   src/auth/handlers.py:42  authenticate  (calls validate_item)
@@ -385,9 +387,14 @@ When no callers are found:
 Callers of: orphan_fn
 Project:    src/
 Total:      0
+Rule: callers whose body calls orphan_fn by bare name or import alias; ...; depth 1 (clamped 1-5). Measured: levels 1 and 2.
 
   No callers found for 'orphan_fn'.
+
+⚠ Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; ...
 ```
+
+The `⚠` lines are the language caveats (W-CALLS-*) for the languages scanned.
 
 If `.gitignore` (or `--exclude`/REVEAL_IGNORE) hid every file under the path, the zero is
 not the code's: the output adds `⚠ No files left to analyze: N entries hidden by .gitignore
@@ -397,20 +404,23 @@ with `count`, `hidden` (per cause) and `suggestion`.
 **Callees text output** (`?callees=`):
 
 ```
+  ⚠ Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.
+  ⚠ Method resolution order (MRO) is not considered.
+  ...
 Callees of: validate_item
 Project:    src/
 Total:      4 call(s) across 1 definition(s)
+            (6 builtin(s) hidden — use ?builtins=true to include)
+Rule: callees by definition: each definition of the name, then each definition a call reaches, is expanded once, ...; depth 1 (clamped 1-5). Measured: depth-1 call lists only.
 
   src/auth/validators.py:55  validate_item
     → check_required
     → normalize_value
     → log_validation
     → raise_error
-
-            (6 builtin(s) hidden — use ?builtins=true to include)
 ```
 
-With `?builtins=true` the footer disappears and the full raw list (including `len`, `str`, `isinstance`, etc.) is shown. The footer only appears when at least one builtin was filtered.
+The language caveats print first, before `Callees of:`. With `?builtins=true` the `(N builtin(s) hidden ...)` line under `Total:` disappears and the full raw list (including `len`, `str`, `isinstance`, etc.) is shown. That line only appears when at least one builtin was filtered.
 
 When the function is not found (exit 2; stderr has `Error (calls://): Function 'unknown_fn' not found in src/`):
 
@@ -467,9 +477,22 @@ reveal 'calls://src/?callers=validate_item' --format=json
   "contract_version": "1.1",
   "type": "calls_query",
   "source": "src/",
+  "source_type": "directory",
+  "path": "src/",
+  "meta": {"parse_mode": "tree_sitter_full", "confidence": 1, "warnings": [...], "errors": []},
   "target": "validate_item",
   "depth": 1,
   "total_callers": 3,
+  "walk_rule": {
+    "direction": "callers",
+    "match": "bare_name_or_import_alias",
+    "expansion": "by_name",
+    "once_per": "file_caller",
+    "depth": 1,
+    "measured": {"depth_1": true, "depth_2": true, "beyond_depth_2": false},
+    "unmeasured_languages": [],
+    "text": "Rule: callers whose body calls validate_item by bare name or import alias; ..."
+  },
   "levels": [
     {
       "level": 1,
@@ -615,7 +638,7 @@ For within-file analysis, `ast://` provides lighter-weight call graph features w
 | Filters | `calls=`, `callee_of=` retired (a note names `calls://`) | `callers=<name>`, `callees=<name>` |
 | Display mode | `show=calls` retired (a note names `calls://`) | text / json / dot |
 | Cross-file resolution | `resolved_calls[]` in JSON | full index |
-| Cache | No (per-request) | Yes (mtime-based) |
+| Cache | No (per-request) | In-process only (MCP / `reveal.api`); each CLI run rebuilds |
 
 **Use `ast://` when:**
 - You're already inspecting a single file and want to see call structure inline
@@ -767,7 +790,7 @@ For very large codebases (100K+ lines), point at a subdirectory:
 # Faster — only indexes auth/ module
 reveal 'calls://src/auth/?callers=validate_token'
 
-# Full project — slower first run, cached after
+# Full project — every CLI run indexes the whole tree; an MCP host reuses the index
 reveal 'calls://src/?callers=validate_token'
 ```
 

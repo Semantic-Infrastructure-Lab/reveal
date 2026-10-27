@@ -120,7 +120,7 @@ reveal json://config.json/database/port
 reveal json://data.json/api/endpoints/users/url
 ```
 
-**Output**: Raw value (no quotes for strings, pretty-printed for objects/arrays)
+**Output**: a `File:` / `Path:` / `Type:` header, then the value (strings unquoted, objects/arrays pretty-printed). For the bare value in scripts use `--format=json | jq -r .value`.
 
 ### 2. **Array Access and Slicing**
 
@@ -156,24 +156,39 @@ reveal 'json://config.json?schema'
 reveal 'json://data.json/users?schema'
 ```
 
-**Example output:**
+**Example output** (`reveal 'json://data.json?schema'`):
 ```
+File: data.json
+Path: (root)
+
+Schema:
 {
-  "users": Array[Object] (150 items)
-    {
-      "id": Integer
-      "name": String
-      "email": String
-      "age": Integer
-      "active": Boolean
-      "metadata": Object
-        {
-          "created": String (ISO date)
-          "updated": String (ISO date)
-        }
+  "users": {
+    "Array": {
+      "id": "int",
+      "name": "str",
+      "email": "str",
+      "age": "int",
+      "active": "bool",
+      "status": "str",
+      "metadata": {
+        "created": "str",
+        "verified": "bool"
+      }
     }
+  },
+  "products": {
+    "Array": {
+      "price": "int",
+      "stock": "int",
+      "category": "str"
+    }
+  }
 }
 ```
+
+Types are Python type names (`int`, `str`, `bool`, `float`, ...); arrays show their item
+schema under `"Array"`, with no item count (use `?length`) and no date detection.
 
 **Use cases:**
 - Explore unknown JSON files
@@ -195,15 +210,20 @@ reveal 'json://config.json?gron'
 
 **Example output:**
 ```
-config = {}
-config.database = {}
-config.database.host = "localhost"
-config.database.port = 5432
-config.database.name = "mydb"
-config.api = {}
-config.api.base_url = "https://api.example.com"
-config.api.timeout = 30
+# File: config.json
+# Path: (root)
+
+json = {}
+json.database = {}
+json.database.host = "localhost"
+json.database.port = 5432
+json.database.name = "mydb"
+json.api = {}
+json.api.base_url = "https://api.example.com"
+json.api.timeout = 30
 ```
+
+The root is always named `json`, whatever the file is called.
 
 **Workflow with grep:**
 ```bash
@@ -224,15 +244,17 @@ Get type information at any path:
 ```bash
 # Type of entire file
 reveal 'json://data.json?type'
-# Output: Object
+# Output: Type: Object[2 keys]
+#         Length: 2
 
 # Type of nested path
 reveal 'json://data.json/users?type'
-# Output: Array[Object] (150 items)
+# Output: Type: Array[Object[7 keys]]
+#         Length: 15
 
 # Type of value
 reveal 'json://config.json/database/port?type'
-# Output: Integer
+# Output: Type: int
 ```
 
 ### 6. **Key Listing**
@@ -355,7 +377,7 @@ reveal json://data.json/teams/3/members/0/email
 # Array slice → Object key
 reveal 'json://data.json/users[0:10]/name'  # NOT SUPPORTED
 # Instead: filter and extract
-reveal 'json://data.json/users[0:10]' --format=json | jq '.[].name'
+reveal 'json://data.json/users[0:10]' --format=json | jq '.value[].name'
 ```
 
 ### Dot Notation in Field Names
@@ -526,14 +548,18 @@ The JSON adapter supports two output formats:
 
 ### 1. Text Format (Default)
 
-Human-readable, pretty-printed JSON:
+A `File:` / `Path:` / `Type:` header, then the pretty-printed value:
 
 ```bash
 reveal json://config.json
 ```
 
 **Output:**
-```json
+```
+File: config.json
+Path: (root)
+Type: Object[2 keys]
+
 {
   "database": {
     "host": "localhost",
@@ -548,9 +574,8 @@ reveal json://config.json
 ```
 
 **Features:**
-- Syntax highlighting (if terminal supports colors)
 - 2-space indentation
-- Sorted keys (for consistent diffing)
+- Keys in file order
 
 ### 2. JSON Format
 
@@ -567,27 +592,25 @@ reveal json://config.json/database --format=json
   "type": "json_value",
   "source": "config.json",
   "source_type": "file",
-  "file": "/absolute/path/config.json",
-  "path": "/database",
-  "value_type": "Object",
+  "file": "config.json",
+  "path": "database",
+  "value_type": "Object[3 keys]",
   "value": {
     "host": "localhost",
     "port": 5432,
     "name": "mydb"
-  },
-  "meta": {
-    "parse_mode": "json_standard",
-    "confidence": 1.0
   }
 }
 ```
 
 **Output types:**
 
-- `json_value` - Raw value at path
-- `json_schema` - Schema inference result (`?schema`)
-- `json_flatten` - Flattened output (`?flatten`)
-- `json_keys` - Key listing (`?keys`)
+- `json_value` - Value at path (`value`, `value_type`); a filtered or limited array adds `total_matches`, `displayed_results` and `meta`
+- `json_schema` - Schema inference result (`?schema`; `schema`)
+- `json_flatten` - Flattened output (`?flatten`; `lines`, `line_count`)
+- `json_keys` - Key listing (`?keys`; `keys`, `count`; for an array `count` is its length)
+- `json_type` - Type at path (`?type`; `value_type`, `length`, `is_container`)
+- `json_length` - Length at path (`?length`; `value_type`, `length`)
 
 ---
 
@@ -704,8 +727,8 @@ reveal 'json://response.json?schema' > actual_schema.txt
 reveal 'json://response.json/data/users/0?keys'
 
 # Step 4: Validate field types
-reveal 'json://response.json/data/users/0/id?type'      # Should be Integer
-reveal 'json://response.json/data/users/0/email?type'   # Should be String
+reveal 'json://response.json/data/users/0/id?type'      # Should be int
+reveal 'json://response.json/data/users/0/email?type'   # Should be str
 
 # Step 5: Check array lengths
 reveal 'json://response.json/data/users?length'
@@ -725,7 +748,9 @@ reveal 'json://api_response.json?schema' > API_SCHEMA.md
 reveal 'json://swagger.json/paths?keys'
 
 # Step 3: Document each endpoint
-for endpoint in $(reveal 'json://swagger.json/paths?keys'); do
+# (path keys such as /users contain '/', which the slash path syntax splits; quote-safe
+# per-endpoint navigation is not possible, so this works only for keys without '/')
+for endpoint in $(reveal 'json://swagger.json/paths?keys' --format=json | jq -r '.keys[]'); do
   echo "## $endpoint"
   reveal "json://swagger.json/paths/$endpoint?schema"
   echo ""
@@ -849,7 +874,7 @@ reveal 'json://large_data.json/users[0:10]'
 reveal 'json://large_data.json/users?status=active&limit=100'
 
 # ❌ Slower: load all then filter with jq
-reveal json://large_data.json/users --format=json | jq '.value[] | select(.status == "active") | .[0:100]'
+reveal json://large_data.json/users --format=json | jq '[.value[] | select(.status == "active")] | .[0:100]'
 ```
 
 **Strategy 4: Use schema first**
@@ -940,10 +965,12 @@ No multi-file operations:
 
 ### Common errors and solutions:
 
+Each prints `Error (json://): ...` and exits 1.
+
 **1. Path not found**
 
 ```
-Error: Key 'nonexistent' not found at path /database
+Error (json://): 'Key not found: nonexistent'
 ```
 
 **Cause**: Specified key doesn't exist in JSON.
@@ -955,7 +982,7 @@ Error: Key 'nonexistent' not found at path /database
 **2. Invalid array index**
 
 ```
-Error: Array index 999 out of range (length: 10)
+Error (json://): Array index out of range: 999
 ```
 
 **Cause**: Array index beyond array length.
@@ -967,7 +994,7 @@ Error: Array index 999 out of range (length: 10)
 **3. Type mismatch**
 
 ```
-Error: Cannot index into Integer (expected Array or Object)
+Error (json://): Cannot navigate into int
 ```
 
 **Cause**: Tried to navigate into primitive value.
@@ -978,7 +1005,9 @@ Error: Cannot index into Integer (expected Array or Object)
 **4. Invalid JSON syntax**
 
 ```
-Error: JSON parsing failed: Expecting ',' delimiter at line 42
+Error (json://): bad.json is not valid JSON.
+Parse error at line 2, column 9: Expecting property name enclosed in double quotes
+Suggestion: Check file format or use 'reveal bad.json' for structure analysis
 ```
 
 **Cause**: Malformed JSON file.
@@ -987,10 +1016,11 @@ Error: JSON parsing failed: Expecting ',' delimiter at line 42
 - Check for trailing commas, missing quotes
 - Ensure proper encoding (UTF-8)
 
-**5. Filter field not found**
+**5. Filter field not found** (not an error: exit 0, an empty result and a warning)
 
 ```
-Warning: Filter field 'nonexistent' not found in 15 objects
+[]
+  ⚠ Filter field(s) 'nonexistent' never appear on any scanned item — this may be a typo rather than a genuine zero-match. See: reveal help://json
 ```
 
 **Cause**: Filter field doesn't exist in objects.
@@ -1049,7 +1079,7 @@ reveal 'json://config.json?flatten' > flat.txt
 grep -i "database" flat.txt
 
 # 3. Find all database config
-grep "config.database" flat.txt
+grep "json.database" flat.txt
 
 # 4. Navigate directly to found path
 reveal json://config.json/database/host
@@ -1185,11 +1215,7 @@ diff --suppress-common-lines \
 ### With curl (API Workflow)
 
 ```bash
-# Fetch API, explore structure
-curl -s https://api.example.com/users | \
-  reveal json://- ?schema  # stdin support coming soon
-
-# For now: save then explore
+# json:// does not read stdin: save then explore
 curl -s https://api.example.com/users > response.json
 reveal 'json://response.json?schema'
 
@@ -1230,7 +1256,7 @@ done
 
 # Extract specific value from multiple files
 for file in config/*.json; do
-  host=$(reveal json://$file/database/host)
+  host=$(reveal "json://$file/database/host" --format=json | jq -r .value)
   echo "$file: $host"
 done
 ```
@@ -1302,7 +1328,7 @@ A: json:// is built-in (no external dependency), uses consistent reveal URI synt
 
 **Q: How do I handle large JSON files (>50MB)?**
 
-A: Use direct paths or slicing to avoid loading entire file. For very large files, consider streaming tools like `jq --stream`.
+A: Direct paths and slicing shrink the output, not the load: the whole file is parsed into memory first. For files >50MB use `jq --stream`.
 
 **Q: Can I use JSONPath expressions?**
 

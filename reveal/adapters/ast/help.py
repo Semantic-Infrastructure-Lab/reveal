@@ -20,7 +20,7 @@ _HELP_EXAMPLES = [
     },
     {
         'uri': 'ast://main.py?type=function',
-        'description': 'Only functions (not classes or methods)'
+        'description': 'Functions and methods (not classes); type=method for methods only'
     },
     {
         'uri': 'ast://.?type=class|function',
@@ -192,10 +192,13 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'type': {
         'type': 'string',
-        'description': 'Element type (function, class, method)',
-        'operators': ['==', '|'],
-        'examples': ['type=function', 'type=class|function'],
-        'valid_values': ['function', 'class', 'method']
+        'description': ('Element type. function matches every function, methods included; '
+                        'method only functions with an owning class/struct (their owner field); '
+                        'also struct, import, interface (trait), module, namespace, test'),
+        'operators': ['==', '!=', '|'],
+        'examples': ['type=function', 'type=method', 'type=class|function'],
+        'valid_values': ['function', 'class', 'method', 'struct', 'import', 'interface',
+                         'trait', 'module', 'namespace', 'test']
     },
     'name': {
         'type': 'string',
@@ -254,7 +257,7 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'callers': {
         'type': 'integer',
-        'description': 'Number of inbound callers within the scanned files (length of called_by list). callers>5 finds high-coupling functions; combine with complexity>10 for refactor priorities.',
+        'description': 'Number of inbound callers in the same file (length of called_by list); for project-wide callers use calls://<path>?callers=NAME. callers>5 finds high-coupling functions; combine with complexity>10 for refactor priorities.',
         'operators': ['>', '<', '>=', '<=', '=='],
         'examples': ['callers>5', 'callers>3&complexity>10', 'callers==0']
     },
@@ -474,7 +477,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
     },
     {
         'uri': 'ast://main.py?type=function',
-        'description': 'Only functions (not classes or methods)',
+        'description': 'Functions and methods (not classes); type=method for methods only',
         'output_type': 'ast_query'
     },
     {
@@ -524,7 +527,7 @@ def get_help() -> Dict[str, Any]:
         'filters': {
             'lines': 'Number of lines in function/class (e.g., lines>50, lines=10..100)',
             'complexity': 'McCabe cyclomatic complexity (industry threshold: >10 needs refactoring, >20 is high risk)',
-            'type': 'Element type: function, class, method. Supports OR with | or , (e.g., type=function, type=class|function)',
+            'type': 'Element type: function (methods included), method (functions with an owner), class, struct, import, interface, module, namespace, test. Supports OR with | or , (e.g., type=function, type=class|function)',
             'name': 'Element name pattern with wildcards or regex (e.g., name=test_*, name~=^test_)',
             'decorator': ('Decorator, annotation or attribute name - find decorated functions/classes '
                           '(e.g., decorator=property, decorator=HttpGet for C# [HttpGet], decorator=derive '
@@ -612,7 +615,6 @@ def get_schema() -> Dict[str, Any]:
             'Sort note: text output groups results by file; use --format=json or --format=grep for globally sorted output',
             'Supports the tree-sitter languages listed by reveal --languages (Python, JS, TS, Rust, Go, Java, C, C++, ...)',
             'Complexity is proper McCabe cyclomatic complexity for tree-sitter languages; falls back to a keyword-count estimate (shared with metrics:// and C901) for unsupported languages',
-            'type= shorthand: ?functions → ?type=function, ?classes → ?type=class, ?methods → ?type=method',
             'Call graph fields on functions/methods in JSON: calls[] (outgoing), called_by[] (within-file incoming), resolved_calls[] (cross-file resolved entries)',
             'calls=, callee_of= and show=calls are retired spellings (a replaced-by note until the cut): '
             "use calls://<path>?callers=NAME or ?callees=NAME, or --grep 'PATTERN' for a text pattern",

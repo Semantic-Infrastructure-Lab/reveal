@@ -4,10 +4,6 @@ category: guide
 ---
 # Diff Adapter Guide (diff://)
 
-**Last Updated**: 2026-02-14
-**Version**: 1.0
-**Adapter Version**: reveal 0.1.0+
-
 ---
 
 ## Table of Contents
@@ -128,11 +124,11 @@ reveal diff://git://main/.:git://feature/.
 
 **Semantic diff** (structure-level):
 ```
-function: foo
-  complexity: 3 → 1 ✓ (simplified)
-  lines: 4 → 1 ✓ (reduced)
-  signature: unchanged
-  body: unified diff of the source
+🔧 Functions:
+
+  ~ foo
+      Complexity: 3 → 1 (-2)
+      Lines: 4 → 1 (-3)
 ```
 
 **Why semantic matters**:
@@ -188,36 +184,53 @@ reveal diff://git://HEAD~3/app.py:app.py
 
 ### 4. Two-Level Output
 
-**Level 1: Summary** (counts):
+**Level 1: Summary** (counts per element kind, `+added -removed ~modified`), then
+**Level 2: Details** (one entry per change), for example `reveal diff://a.py:b.py`:
 ```
-Summary:
-  Added: 3 functions
-  Removed: 1 function
-  Modified: 4 functions
-  Unchanged: 12 functions
+======================================================================
+Structure Diff: a.py → b.py
+======================================================================
+
+📊 Summary:
+
+  Functions:  +1 -1 ~2
+  Imports:  +1 -0
+
+🔧 Functions:
+
+  + newf
+      Line 13
+      (a, b)
+      [NEW - 4 lines, complexity 3]
+
+  - gone
+      Line 14
+      ()
+      [REMOVED]
+
+  ~ UserModel.save
+      Complexity: 1 → 2 (+1)
+      Lines: 2 → 4 (+2)
+      Line: 4 → 5
+
+  ~ handle_request
+      Complexity: 3 → 1 (-2)
+      Lines: 6 → 2 (-4)
+      Line: 7 → 10
+
+📥 Imports:
+
+  + import sys
 ```
 
-**Level 2: Details** (changes):
-```
-+ function: new_feature
-    lines: 0 → 15
-    complexity: 0 → 3
-
-- function: deprecated_method
-    lines: 20 → 0
-    complexity: 5 → 0
-
-~ function: handle_request
-    complexity: 8 → 4 ✓ (improved)
-    lines: 45 → 32 ✓ (reduced)
-```
+A method is named by its class (`UserModel.save`); in a directory diff each entry is followed
+by its file, `+ newf  (sub/m.py)`.
 
 **Symbols**:
 - `+` = Added
 - `-` = Removed
 - `~` = Modified
-- `✓` = Improvement (complexity/lines reduced)
-- `⚠` = Concern (complexity/lines increased)
+- `(+N)` / `(-N)` after a change = the delta (negative complexity means simpler)
 
 ---
 
@@ -264,11 +277,11 @@ reveal diff://git://main/.:git://HEAD/. --format json | \
 reveal check --changed main..feature
 ```
 
-**Output**:
+**Output** (text, for a modified function):
 ```
-function: process_data
-  complexity: 12 → 6 ✓ (improved)
-  lines: 85 → 45 ✓ (reduced)
+  ~ process_data
+      Complexity: 12 → 6 (-6)
+      Lines: 85 → 45 (-40)
 ```
 
 **Interpretation**:
@@ -294,28 +307,35 @@ reveal diff://src/:backup/src/
 
 **How it works**:
 1. Recursively finds all analyzable files in both directories
-2. Compares each matching file pair
-3. Aggregates all changes into single summary
-4. Shows per-file breakdown
+2. Matches elements by file (relative path) and name
+3. Aggregates every file's changes into one summary and one list per element kind
+4. Names each entry's file: after the name in text, `file` in JSON
 
 **Skips**:
-- Binary files
-- Hidden files/directories (`.git`, `.env`)
-- Build artifacts (`node_modules`, `__pycache__`, `target`)
-- Non-analyzable files (images, videos, etc.)
+- Directories on reveal's skip list (`.git`, `node_modules`, `__pycache__`, ...) and anything `.gitignore` hides; other dot-directories are compared
+- Binary and other non-analyzable files (images, videos, etc.)
 
-**Example output**:
+**Example output** (the `a.py` → `b.py` change above, made in both `x.py` and `sub/m.py`):
 ```
-Summary:
-  Files changed: 8
-  Added: 12 functions, 3 classes
-  Removed: 4 functions, 1 class
-  Modified: 18 functions, 5 classes
+📊 Summary:
 
-Details by file:
-  src/main.py: +2 -1 ~3
-  src/utils.py: +1 -0 ~2
-  src/models.py: +3 -2 ~4
+  Functions:  +2 -2 ~4
+  Imports:  +1 -0
+
+🔧 Functions:
+
+  + newf  (sub/m.py)
+      Line 13
+      (a, b)
+      [NEW - 4 lines, complexity 3]
+
+  + newf  (x.py)
+      ...
+
+  - gone  (sub/m.py)
+      Line 14
+      ()
+      [REMOVED]
   ...
 ```
 
@@ -397,9 +417,9 @@ reveal diff://git://abc123/file.py:file.py
 
 #### Adapter URIs
 
-`diff://` accepts any registered adapter URI on either side, but only code structure is compared.
-`env://`, `sqlite://` and `mysql://` URIs parse and resolve and then compare equal; see
-[What diff:// does not compare](#what-diff-does-not-compare).
+`diff://` accepts any registered adapter URI on either side, but a side with no functions,
+classes or imports (`env://`, `sqlite://`, `mysql://`, JSON/YAML/Markdown) is declined as not
+applicable; see [What diff:// does not compare](#what-diff-does-not-compare).
 
 ---
 
@@ -442,17 +462,22 @@ reveal diff://file1.py:file2.py
 **Example**:
 ```bash
 echo 'def foo(): return 42' > v1.py
-echo 'def foo(): return 42\ndef bar(): return 99' > v2.py
+printf 'def foo(): return 42\ndef bar(): return 99\n' > v2.py
 reveal diff://v1.py:v2.py
 ```
 
 **Output**:
 ```
-Summary: +1 -0 ~0
+📊 Summary:
 
-+ function: bar
-    lines: 2
-    complexity: 1
+  Functions:  +1 -0
+
+🔧 Functions:
+
+  + bar
+      Line 2
+      ()
+      [NEW - 1 line, complexity 1]
 ```
 
 ---
@@ -613,9 +638,10 @@ reveal diff://git://HEAD/src/:src/
 #!/bin/bash
 # .git/hooks/pre-commit
 
-reveal diff://git://HEAD/.:. --format json | jq -e '.summary.modified < 50'
+reveal diff://git://HEAD/.:. --format json | \
+  jq -e '.summary.functions.modified + .summary.classes.modified < 50' >/dev/null
 if [ $? -ne 0 ]; then
-  echo "Too many files modified (>50), breaking into smaller commits"
+  echo "Too many elements modified (>50), breaking into smaller commits"
   exit 1
 fi
 ```
@@ -782,17 +808,28 @@ reveal diff://models.py:backup/models.py/UserModel
 reveal diff://git://HEAD~1/models.py:models.py/UserModel
 ```
 
-**Example output**:
+**Example output** (a class diff lists each changed field, then a unified diff of the class body):
 ```
-class: UserModel
+~ Element 'UserModel' was MODIFIED
 
-  methods:
-    + validate_email (new)
-    ~ save (modified)
-    - deprecated_method (removed)
+  line_end:
+    - 5
+    + 8
 
-  complexity: 15 → 12 ✓ (improved)
-  lines: 120 → 105 ✓ (reduced)
+  line:
+    - 3
+    + 4
+
+  body:
+    --- old
+    +++ new
+    @@ -1,3 +1,5 @@
+     class UserModel:
+         def save(self):
+    -        return 1
+    +        if self:
+    +            return 1
+    +        return 2
 ```
 
 ---
@@ -807,18 +844,27 @@ reveal diff://api.py:old_api.py/APIHandler.process_request
 reveal diff://git://main/api.py:git://refactor/api.py API.handle
 ```
 
-**Example output**:
+**Example output** (`reveal diff://a.py:b.py/UserModel.save`, trimmed):
 ```
-method: APIHandler.process_request
+~ Element 'UserModel.save' was MODIFIED
 
-  complexity: 6 → 3 ✓ (improved)
-  lines: 28 → 18 ✓ (reduced)
-  signature: (self, request) → (self, request, context) (added parameter)
+  complexity:
+    - 1
+    + 2
 
-  Changes:
-    - Extracted validation logic to separate method
-    - Simplified error handling
-    - Added context support
+  line_count:
+    - 2
+    + 4
+
+  body:
+    --- old
+    +++ new
+    @@ -1,2 +1,4 @@
+         def save(self):
+    -        return 1
+    +        if self:
+    +            return 1
+    +        return 2
 ```
 
 ---
@@ -834,7 +880,7 @@ method: APIHandler.process_request
 **Path matching**:
 - Case-sensitive
 - Exact match required
-- Nested elements use dot notation (`Class.method`)
+- Nested elements use dot notation (`Class.method`); a bare method name matches the first method of that name
 
 ---
 
@@ -843,10 +889,9 @@ method: APIHandler.process_request
 ### How Directory Diffs Work
 
 1. **File discovery**: Recursively find all analyzable files
-2. **Pairing**: Match files by relative paths
-3. **Comparison**: Compare each matched file pair
-4. **Aggregation**: Combine all changes into single summary
-5. **Per-file breakdown**: Show which files changed
+2. **Pairing**: Match elements by file (relative path) and name
+3. **Aggregation**: Combine all changes into one summary and one list per element kind
+4. **Attribution**: Each entry names its file (after the name in text, `file` in JSON)
 
 ---
 
@@ -860,10 +905,8 @@ method: APIHandler.process_request
 
 **Excluded**:
 - Binary files (images, videos, executables)
-- Hidden files/directories (`.git`, `.env`, `.vscode`)
-- Build artifacts (`node_modules`, `__pycache__`, `dist`, `target`)
-- Lock files (`package-lock.json`, `poetry.lock`)
-- Logs (`.log` files)
+- Directories on reveal's skip list (`.git`, `node_modules`, `__pycache__`, ...) and anything
+  `.gitignore` hides. Other dot-directories (`.github`, a `.hid/`) are compared.
 
 ---
 
@@ -873,50 +916,50 @@ method: APIHandler.process_request
 reveal diff://src/:backup/src/
 ```
 
-**Output**:
+**Output**: the same layout as a file diff, one aggregated list per element kind, each
+entry followed by its file (trimmed):
 ```
-Summary:
-  Files changed: 8 / 12
-  Added: 15 functions, 4 classes
-  Removed: 6 functions, 2 classes
-  Modified: 22 functions, 7 classes
+📊 Summary:
 
-Details by file:
+  Functions:  +2 -2 ~4
+  Imports:  +1 -0
 
-  src/main.py: +2 -1 ~4
-    + function: new_feature (15 lines, complexity: 3)
-    - function: old_handler (20 lines, complexity: 5)
-    ~ function: process (complexity: 8 → 4 ✓)
+🔧 Functions:
 
-  src/utils.py: +1 -0 ~2
-    + function: format_output (8 lines, complexity: 2)
-    ~ function: validate (complexity: 5 → 3 ✓)
+  + newf  (sub/m.py)
+      Line 13
+      (a, b)
+      [NEW - 4 lines, complexity 3]
+  ...
+  - gone  (x.py)
+      Line 14
+      ()
+      [REMOVED]
+  ...
+  ~ handle_request  (x.py)
+      Complexity: 3 → 1 (-2)
+      Lines: 6 → 2 (-4)
+      Line: 7 → 10
 
-  src/models.py: +3 -2 ~5
-    + class: NewModel (45 lines, 3 methods)
-    - class: LegacyModel (80 lines, 5 methods)
-    ~ class: User (modified: 2 methods)
+📥 Imports:
 
-  src/api.py: +0 -1 ~3
-    - function: deprecated_endpoint (15 lines)
-    ~ function: handle_request (refactored)
+  + import sys
 ```
+
+Imports are matched by their text across the whole tree, so the same import added in two
+files counts once and carries no file.
 
 ---
 
 ### Directory Diff Metrics
 
-**Summary metrics**:
-- **Files changed**: How many files have differences
-- **Total files**: How many files were compared
-- **Added elements**: New functions/classes across all files
-- **Removed elements**: Deleted functions/classes across all files
-- **Modified elements**: Changed functions/classes across all files
+**Summary metrics** (per element kind: functions, classes, imports, and any other category):
+- **+N**: N elements added across all files
+- **-M**: M elements removed across all files
+- **~K**: K elements modified across all files
 
-**Per-file metrics**:
-- **+N**: N elements added
-- **-M**: M elements removed
-- **~K**: K elements modified
+There is no per-file count; group the JSON entries by `file` for one
+(`jq '.diff.functions | group_by(.file) | map({file: .[0].file, changes: length})'`).
 
 ---
 
@@ -924,18 +967,13 @@ Details by file:
 
 ### Summary Format
 
-**Counts**:
+**Counts**, one line per element kind with changes (unchanged elements are not counted; `~K` is printed only when something was modified):
 ```
-Summary:
-  Added: N
-  Removed: M
-  Modified: K
-  Unchanged: U
-```
+📊 Summary:
 
-**Symbols**:
-```
-+N -M ~K (N added, M removed, K modified)
+  Functions:  +N -M ~K
+  Classes:  +N -M ~K
+  Imports:  +N -M
 ```
 
 ---
@@ -944,30 +982,29 @@ Summary:
 
 **Added elements**:
 ```
-+ function: new_feature
-    lines: 15
-    complexity: 3
-    description: New functionality added
+  + newf
+      Line 13
+      (a, b)
+      [NEW - 4 lines, complexity 3]
 ```
 
 **Removed elements**:
 ```
-- function: deprecated_method
-    lines: 20
-    complexity: 5
-    reason: Functionality removed or renamed
+  - gone
+      Line 14
+      ()
+      [REMOVED]
 ```
 
 **Modified elements**:
 ```
-~ function: handle_request
-    complexity: 8 → 4 ✓ (improved)
-    lines: 45 → 32 ✓ (reduced)
-    signature: (request) → (request, options)
-    changes:
-      - Refactored logic
-      - Added parameter
-      - Reduced complexity
+  ~ handle_request
+      Signature:
+        - (request)
+        + (request, options)
+      Complexity: 8 → 4 (-4)
+      Lines: 45 → 32 (-13)
+      Line: 7 → 10
 ```
 
 ---
@@ -981,9 +1018,10 @@ reveal diff://app.py:old.py --format json
 **Actual structure** (`type` is `diff_comparison`; there is no unified top-level `changes` array — added/removed/modified entries are split into `diff.functions`, `diff.classes`, and `diff.imports`, and `summary` is nested per element kind rather than a flat `{added, removed, modified, unchanged}`):
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "diff_comparison",
   "source": "app.py vs old.py",
+  "source_type": "runtime",
   "left": {"uri": "app.py", "type": "unknown"},
   "right": {"uri": "old.py", "type": "unknown"},
   "summary": {
@@ -1007,8 +1045,12 @@ reveal diff://app.py:old.py --format json
       {
         "type": "modified",
         "name": "process",
-        "complexity": 4,
-        "line_count": 32,
+        "changes": {
+          "complexity": {"old": 8, "new": 4, "delta": -4},
+          "line_count": {"old": 45, "new": 32, "delta": -13}
+        },
+        "left": {"name": "process", "line": 10, "complexity": 8, "...": "..."},
+        "right": {"name": "process", "line": 10, "complexity": 4, "...": "..."},
         "complexity_before": 8,
         "complexity_after": 4,
         "complexity_delta": -4
@@ -1039,12 +1081,13 @@ only the source text differs) plus `left`/`right`; `added`/`removed` carry `elem
 }
 ```
 
+A method's `name` is qualified by its class (`UserModel.save`). In a directory diff every entry
+also has `file`, its path relative to the compared directory.
+
 Any other element category either side has (`interfaces`, `structs`, `enums`, `types`, ...) adds a
 `summary` entry `{"added", "removed", "modified"}` and a `diff` list of `{"type", "name", "line"}`
 entries, with `changes` (`{field: {old, new}}`) on a `modified` one. When the sides differ in
 something no category covers, `meta.warnings` carries `{"type": "not_compared", "message": ...}`.
-
-**Note on the examples below**: several `jq` snippets in this guide (Detailed Workflows, Integration Examples) predate this schema and reference a flat `.changes[]` array with `.element`, `.old`/`.new`, `.delta.complexity`, and `.improvement` fields. Translate them as: `.changes[]` → `(.diff.functions + .diff.classes + .diff.imports)[]`, `.element` → `.name`, `.delta.complexity` → `.complexity_delta` (already correct in most places), and `.improvement == true` → `.complexity_delta < 0`. There is no `.improvement` field in the live output.
 
 ---
 
@@ -1062,7 +1105,7 @@ reveal diff://git://HEAD/src/:src/
 
 # Step 2: Review complexity changes
 reveal diff://git://HEAD/src/:src/ --format json | \
-  jq '.changes[] | select(.delta.complexity > 5)'
+  jq '.diff.functions[] | select(.complexity_delta > 5)'
 
 # Step 3: Verify specific files
 reveal diff://git://HEAD/app.py:app.py
@@ -1079,11 +1122,11 @@ git commit -m "Refactored app logic"
 
 # Check if complexity increased significantly
 RESULT=$(reveal diff://git://HEAD/.:. --format json)
-COMPLEXITY_INCREASE=$(echo "$RESULT" | jq '[.changes[] | select(.delta.complexity > 5)] | length')
+COMPLEXITY_INCREASE=$(echo "$RESULT" | jq '[.diff.functions[] | select(.complexity_delta > 5)] | length')
 
 if [ "$COMPLEXITY_INCREASE" -gt 0 ]; then
   echo "⚠️  Warning: $COMPLEXITY_INCREASE functions with significant complexity increase"
-  echo "$RESULT" | jq -r '.changes[] | select(.delta.complexity > 5) | "  - \(.element): complexity +\(.delta.complexity)"'
+  echo "$RESULT" | jq -r '.diff.functions[] | select(.complexity_delta > 5) | "  - \(.name): complexity +\(.complexity_delta)"'
 
   read -p "Continue anyway? (y/n) " -n 1 -r
   echo
@@ -1113,7 +1156,7 @@ reveal diff://git://main/app.py:git://feature/app.py process_data
 
 # Step 4: Verify complexity improvements
 reveal diff://git://main/.:git://feature/. --format json | \
-  jq '.changes[] | select(.improvement == true)'
+  jq '.diff.functions[] | select(.type == "modified" and .complexity_delta < 0)'
 
 # Step 5: Generate review report
 {
@@ -1124,7 +1167,7 @@ reveal diff://git://main/.:git://feature/. --format json | \
   echo ""
   echo "## Complexity Improvements"
   reveal diff://git://main/.:git://feature/. --format json | \
-    jq -r '.changes[] | select(.improvement == true) | "- \(.element): complexity \(.old.complexity) → \(.new.complexity)"'
+    jq -r '.diff.functions[] | select(.type == "modified" and .complexity_delta < 0) | "- \(.name): complexity \(.complexity_before) → \(.complexity_after)"'
 } > review-report.md
 ```
 
@@ -1145,7 +1188,7 @@ cp -r src/ src.backup/
 
 # Step 3: Compare complexity
 reveal diff://src.backup/:src/ --format json | \
-  jq '.changes[] | {element: .element, complexity_delta: .delta.complexity}'
+  jq '.diff.functions[] | {name, complexity_delta}'
 
 # Step 4: Verify expected improvements
 reveal diff://src.backup/main.py:src/main.py/complex_function
@@ -1174,7 +1217,7 @@ reveal diff://legacy_system/:new_system/
 
 # Step 2: Verify all functions migrated
 reveal diff://legacy_system/:new_system/ --format json | \
-  jq '.changes[] | select(.type == "removed")'
+  jq '.diff.functions[] | select(.type == "removed")'
 
 # Expected: Empty (no removed functions)
 
@@ -1193,7 +1236,7 @@ reveal diff://legacy_system/core.py:new_system/core.py/initialize
   echo ""
   echo "## Missing Functions (CRITICAL)"
   reveal diff://legacy_system/:new_system/ --format json | \
-    jq -r '.changes[] | select(.type == "removed") | "⚠️  \(.element)"'
+    jq -r '.diff.functions[] | select(.type == "removed") | "⚠️  \(.name)"'
 } > migration-report.md
 ```
 
@@ -1214,11 +1257,11 @@ reveal diff://git://v1.0.0/src/api/:git://v1.1.0/src/api/
 
 # Step 3: Check complexity trends
 reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
-  jq '.changes[] | select(.delta.complexity > 0)'
+  jq '.diff.functions[] | select(.complexity_delta > 0)'
 
 # Step 4: Verify expected features added
 reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
-  jq '.changes[] | select(.type == "added")'
+  jq '.diff.functions[] | select(.type == "added")'
 
 # Step 5: Generate release notes
 {
@@ -1226,11 +1269,11 @@ reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
   echo ""
   echo "## New Features"
   reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
-    jq -r '.changes[] | select(.type == "added") | "- \(.element)"'
+    jq -r '.diff.functions[] | select(.type == "added") | "- \(.name)"'
   echo ""
   echo "## Improvements"
   reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
-    jq -r '.changes[] | select(.improvement == true) | "- \(.element): complexity reduced by \(-1 * .delta.complexity)"'
+    jq -r '.diff.functions[] | select(.type == "modified" and .complexity_delta < 0) | "- \(.name): complexity reduced by \(-1 * .complexity_delta)"'
 } > RELEASE_NOTES.md
 ```
 
@@ -1246,7 +1289,7 @@ reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
 | Element-specific | 0.1-0.3s | Fast (element extraction) |
 | Directory (small) | 0.5-2s | Moderate (10-20 files) |
 | Directory (large) | 2-10s | Slower (50-100 files) |
-| Git comparison | 0.5-3s | Moderate (git checkout overhead) |
+| Git comparison | 0.5-3s | Moderate (reads git objects; nothing is checked out) |
 
 ---
 
@@ -1314,14 +1357,12 @@ cat "$CACHE_FILE"
 ### Current Limitations
 
 1. **Language support**
-   - **Supported**: Python, JavaScript (basic)
-   - **Partial**: Other languages (text-level diff fallback)
-   - **Workaround**: Contribute language parsers
+   - **Supported**: every language reveal has an analyzer for (`reveal --languages`) is compared structurally
+   - **Not applicable**: resources with no functions, classes or imports are declined (see below)
 
 2. **Git integration dependency**
-   - **Requirement**: Git must be installed and accessible
-   - **Impact**: Git URI comparisons won't work without git CLI
-   - **Workaround**: Ensure git is in PATH
+   - **Requirement**: the `pygit2` Python package (`pip install "reveal-cli[git]"` or `pip install pygit2`)
+   - **Impact**: git objects are read directly, nothing is checked out; without pygit2 a `git://` side fails with `git:// support requires pygit2`
 
 3. **Binary file comparison**
    - **Limitation**: Binary files not compared (skipped)
@@ -1360,7 +1401,9 @@ cat "$CACHE_FILE"
 
 ### Common Errors and Solutions
 
-#### Error: "Failed to resolve URI: file not found"
+#### Error: "[Errno 2] No such file or directory: 'nope.py'"
+
+Printed as `Error (diff://): [Errno 2] No such file or directory: 'nope.py'` (exit 1).
 
 **Meaning**: One or both resources don't exist
 
@@ -1378,7 +1421,9 @@ git rev-parse HEAD~1
 
 ---
 
-#### Error: "Git ref not found"
+#### Error: "Git error: 'nosuchref'"
+
+Printed as `Error (diff://): Git error: '<ref>'` (exit 1).
 
 **Meaning**: Git reference doesn't exist (branch, commit, tag)
 
@@ -1396,9 +1441,12 @@ git log --oneline -10
 
 ---
 
-#### Error: "Element not found in resource"
+#### Error: "Element 'X' not found"
 
-**Meaning**: Specified element doesn't exist in one or both files
+Printed as `Error (diff://): Element 'X' not found` followed by
+`Available elements: UserModel.save, handle_request, ...` (exit 1).
+
+**Meaning**: The element exists on neither side (one side only is an added/removed verdict, not an error)
 
 **Solutions**:
 ```bash
@@ -1406,23 +1454,24 @@ git log --oneline -10
 reveal app.py
 
 # Check element name spelling
-# (case-sensitive, exact match required)
+# (case-sensitive, exact match required; methods as Class.method)
 
 # Verify element exists in both files
-reveal app.py/handle_request
-reveal old.py/handle_request
+reveal app.py handle_request
+reveal old.py handle_request
 ```
 
 ---
 
-#### Error: "Unsupported resource type for comparison"
+#### "(diff://) not applicable: diff:// compares functions, classes and imports; ..."
 
-**Meaning**: Resource type doesn't support structural comparison
+Not an error: exit 0, and JSON `{"type": "diff", "applicable": false, "reason": "..."}`.
+
+**Meaning**: A side has no functions, classes or imports (JSON, YAML, Markdown, `env://`, `sqlite://`, ...)
 
 **Solutions**:
-- Use supported resource types (files, directories, git refs)
-- For unsupported types, use traditional diff tools
-- Check adapter documentation for comparison support
+- Diff each side's own output with the shell `diff`
+- See [What diff:// does not compare](#what-diff-does-not-compare)
 
 ---
 
@@ -1436,7 +1485,7 @@ reveal diff://git://HEAD/app.py:app.py
 
 # Verify complexity improved
 reveal diff://git://HEAD/app.py:app.py --format json | \
-  jq '.changes[] | select(.delta.complexity < 0)'
+  jq '.diff.functions[] | select(.type == "modified" and .complexity_delta < 0)'
 ```
 
 **Why**: Semantic diff shows if refactoring actually improved code
@@ -1448,7 +1497,7 @@ reveal diff://git://HEAD/app.py:app.py --format json | \
 ```bash
 # ✅ Ensure all functions migrated
 reveal diff://old_system/:new_system/ --format json | \
-  jq '.changes[] | select(.type == "removed")'
+  jq '.diff.functions[] | select(.type == "removed")'
 
 # Expected: Empty (no removed functions)
 ```
@@ -1478,7 +1527,7 @@ reveal diff://git://main/app.py:git://feature/app.py critical_handler
 
 # Alert if complexity increased significantly
 reveal diff://git://HEAD/.:. --format json | \
-  jq -e '.changes[] | select(.delta.complexity > 10) | length' > /dev/null
+  jq -e '[.diff.functions[] | select(.complexity_delta > 10)] | length > 0' > /dev/null
 
 if [ $? -eq 0 ]; then
   echo "⚠️  Warning: Significant complexity increase detected"
@@ -1495,7 +1544,7 @@ fi
 ```bash
 # ✅ Programmatic analysis
 reveal diff://app.py:old.py --format json | \
-  jq '.summary | {added, removed, modified}'
+  jq '.summary.functions'
 ```
 
 **Why**: Easy parsing, integration with monitoring tools
@@ -1532,7 +1581,7 @@ diff <(reveal sqlite:///a.db --format json) <(reveal sqlite:///b.db --format jso
 ```bash
 # ✅ Automated release notes
 reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
-  jq -r '.changes[] | select(.type == "added") | "- \(.element)"' > RELEASE_NOTES.md
+  jq -r '.diff.functions[] | select(.type == "added") | "- \(.name)"' > RELEASE_NOTES.md
 ```
 
 **Why**: Accurate, automated documentation
@@ -1554,11 +1603,11 @@ reveal diff://before.py:after.py/critical_function
 
 ### 10. Compare Environments Outside diff://
 
-`env://` compares equal under `diff://`; export each environment's variables and use the shell `diff`
-on the two listings.
+`env://` is declined as not applicable under `diff://`; export each environment's variables and use
+the shell `diff` on the two listings.
 
-**Why**: config mismatches between environments are a common deployment failure, and a comparison
-that always reports "no changes" hides them
+**Why**: config mismatches between environments are a common deployment failure, and `diff://`
+never compares them
 
 ---
 
@@ -1569,19 +1618,19 @@ that always reports "no changes" hides them
 **Extract added functions**:
 ```bash
 reveal diff://app.py:old.py --format json | \
-  jq '.changes[] | select(.type == "added")'
+  jq '.diff.functions[] | select(.type == "added")'
 ```
 
 **Count complexity improvements**:
 ```bash
 reveal diff://app.py:old.py --format json | \
-  jq '[.changes[] | select(.improvement == true)] | length'
+  jq '[.diff.functions[] | select(.type == "modified" and .complexity_delta < 0)] | length'
 ```
 
 **Find functions with high complexity increase**:
 ```bash
 reveal diff://app.py:old.py --format json | \
-  jq '.changes[] | select(.delta.complexity > 5)'
+  jq '.diff.functions[] | select(.complexity_delta > 5)'
 ```
 
 ---
@@ -1602,12 +1651,14 @@ def compare_files(left, right):
 
     data = json.loads(result.stdout)
 
+    fns = data['diff']['functions']
     return {
-        'summary': data['summary'],
-        'added': [c for c in data['changes'] if c['type'] == 'added'],
-        'removed': [c for c in data['changes'] if c['type'] == 'removed'],
-        'modified': [c for c in data['changes'] if c['type'] == 'modified'],
-        'improvements': [c for c in data['changes'] if c.get('improvement')]
+        'summary': data['summary']['functions'],
+        'added': [c for c in fns if c['type'] == 'added'],
+        'removed': [c for c in fns if c['type'] == 'removed'],
+        'modified': [c for c in fns if c['type'] == 'modified'],
+        'improvements': [c for c in fns
+                         if c['type'] == 'modified' and (c.get('complexity_delta') or 0) < 0]
     }
 
 # Compare files
@@ -1627,11 +1678,11 @@ print(f"Improvements: {len(diff['improvements'])}")
 echo "Checking code complexity..."
 
 RESULT=$(reveal diff://git://HEAD/.:. --format json)
-COMPLEXITY_INCREASE=$(echo "$RESULT" | jq '[.changes[] | select(.delta.complexity > 10)] | length')
+COMPLEXITY_INCREASE=$(echo "$RESULT" | jq '[.diff.functions[] | select(.complexity_delta > 10)] | length')
 
 if [ "$COMPLEXITY_INCREASE" -gt 0 ]; then
   echo "⚠️  Error: $COMPLEXITY_INCREASE functions with significant complexity increase (>10)"
-  echo "$RESULT" | jq -r '.changes[] | select(.delta.complexity > 10) | "  ❌ \(.element): complexity +\(.delta.complexity)"'
+  echo "$RESULT" | jq -r '.diff.functions[] | select(.complexity_delta > 10) | "  ❌ \(.name): complexity +\(.complexity_delta)"'
   echo ""
   echo "Please refactor or justify complexity increase."
   exit 1
@@ -1668,10 +1719,10 @@ jobs:
 
       - name: Check complexity increases
         run: |
-          INCREASES=$(jq '[.changes[] | select(.delta.complexity > 5)] | length' diff-result.json)
+          INCREASES=$(jq '[.diff.functions[] | select(.complexity_delta > 5)] | length' diff-result.json)
           if [ "$INCREASES" -gt 0 ]; then
             echo "⚠️ Warning: $INCREASES functions with significant complexity increase"
-            jq -r '.changes[] | select(.delta.complexity > 5) | "- \(.element): +\(.delta.complexity)"' diff-result.json
+            jq -r '.diff.functions[] | select(.complexity_delta > 5) | "- \(.name): +\(.complexity_delta)"' diff-result.json
           fi
 
       - name: Generate summary
@@ -1709,15 +1760,15 @@ fi
   echo ""
   echo "## New Features"
   reveal diff://git://$FROM_TAG/.:git://$TO_TAG/. --format json | \
-    jq -r '.changes[] | select(.type == "added") | "- **\(.element)**: \(.lines) lines, complexity \(.complexity)"'
+    jq -r '.diff.functions[] | select(.type == "added") | "- **\(.name)**: \(.line_count) lines, complexity \(.complexity)"'
   echo ""
   echo "## Improvements"
   reveal diff://git://$FROM_TAG/.:git://$TO_TAG/. --format json | \
-    jq -r '.changes[] | select(.improvement == true) | "- **\(.element)**: complexity reduced by \(-1 * .delta.complexity)"'
+    jq -r '.diff.functions[] | select(.type == "modified" and .complexity_delta < 0) | "- **\(.name)**: complexity reduced by \(-1 * .complexity_delta)"'
   echo ""
   echo "## Breaking Changes"
   reveal diff://git://$FROM_TAG/.:git://$TO_TAG/. --format json | \
-    jq -r '.changes[] | select(.type == "removed") | "- ⚠️ **\(.element)** removed"'
+    jq -r '.diff.functions[] | select(.type == "removed") | "- ⚠️ **\(.name)** removed"'
 } > RELEASE_NOTES_$TO_TAG.md
 
 echo "Release notes saved: RELEASE_NOTES_$TO_TAG.md"
@@ -1757,7 +1808,7 @@ A: No. diff:// only compares structured text files (code, config). Binary files 
 
 **Q: Does diff:// work with all programming languages?**
 
-A: Currently supports Python and JavaScript well. Other languages fall back to text-level diff. Language support is extensible (contributions welcome).
+A: Every language reveal has an analyzer for (`reveal --languages`) is compared structurally. A resource with no functions, classes or imports is declined as not applicable; there is no text-level fallback.
 
 ---
 
@@ -1791,7 +1842,7 @@ A: Yes: `reveal diff://git://main/.:git://feature/.`
 
 ---
 
-**Q: Why does Git comparison fail with "ref not found"?**
+**Q: Why does Git comparison fail with "Git error: '<ref>'"?**
 
 A: Git reference doesn't exist. Verify with `git branch -a` or `git tag`.
 
@@ -1831,7 +1882,7 @@ A: Recursively finds all analyzable files in both directories, compares each mat
 
 **Q: What files are excluded from directory diffs?**
 
-A: Binary files, hidden files (`.git`, `.env`), build artifacts (`node_modules`, `__pycache__`), lock files.
+A: Binary and non-analyzable files, directories on reveal's skip list (`.git`, `node_modules`, `__pycache__`, ...) and anything `.gitignore` hides. Other dot-directories are compared.
 
 ---
 
@@ -1845,22 +1896,20 @@ Faster than full directory comparison.
 
 ### Output Format Questions
 
-**Q: What does "complexity: 8 → 4 ✓" mean?**
+**Q: What does "Complexity: 8 → 4 (-4)" mean?**
 
-A: Complexity reduced from 8 to 4 (improvement indicated by ✓).
+A: Complexity went from 8 to 4; the delta in parentheses is negative, so the function got simpler.
 
 Complexity measures cyclomatic complexity (branching, loops).
 
 ---
 
-**Q: What do the symbols mean (+, -, ~, ✓, ⚠)?**
+**Q: What do the symbols mean (+, -, ~)?**
 
 A:
 - `+` = Added
 - `-` = Removed
 - `~` = Modified
-- `✓` = Improvement (complexity/lines reduced)
-- `⚠` = Concern (complexity/lines increased)
 
 ---
 
@@ -1884,7 +1933,7 @@ Optimize by comparing specific subdirectories or using element-specific diffs.
 
 **Q: Can I speed up git comparisons?**
 
-A: Git comparisons require git checkout (overhead). Cache results if running repeatedly (dashboards, monitoring).
+A: Git comparisons read git objects through pygit2 (no checkout), so the cost is parsing; a whole large tree can take several seconds. Cache results if running repeatedly (dashboards, monitoring).
 
 ---
 
@@ -1909,7 +1958,3 @@ A: See [Release Notes Generation](#5-release-notes-generation). Compare release 
 ---
 
 ---
-
-**Last Updated**: 2026-02-14
-**Adapter Version**: reveal 0.1.0+
-**Documentation Version**: 1.0

@@ -131,11 +131,10 @@ def matches_filters(element: ASTElement, query: Dict[str, Any]) -> bool:
     for key, condition in query.items():
         # Handle special key mappings
         if key == 'type':
-            # Map 'type' to 'category'
-            value = element.get('category', '')
-            # Normalize singular/plural for type filter
-            # Categories are plural (functions, classes) but users may type singular
+            # Map 'type' to 'category'. Categories are plural (functions, classes) but
+            # users may type singular.
             condition = normalize_type_condition(condition)
+            value = _type_value(element, condition)
         elif key == 'lines':
             # Map 'lines' to 'line_count'
             value = element.get('line_count', 0)
@@ -279,6 +278,22 @@ def _decorator_glob_matches(dec: str, attributes: List[str], pattern: str, raw: 
     return False
 
 
+def _type_value(element: ASTElement, condition: Dict[str, Any]) -> str:
+    """The kind ``type=`` compares: the element's category, except that a function with an
+    owner reads as ``methods`` when the condition names methods.
+
+    No analyzer emits a ``methods`` category (a method is a ``functions`` element whose
+    ``owner`` is its class), so ``type=method`` matched nothing; ``type=function`` still
+    matches methods (BACK-2213).
+    """
+    category = str(element.get('category', ''))
+    wanted = condition.get('value')
+    names_methods = wanted == 'methods' or (isinstance(wanted, list) and 'methods' in wanted)
+    if category == 'functions' and names_methods and cast(Dict[str, Any], element).get('owner'):
+        return 'methods'
+    return category
+
+
 def normalize_type_condition(condition: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize type condition to handle singular/plural forms.
 
@@ -307,11 +322,11 @@ def normalize_type_condition(condition: Dict[str, Any]) -> Dict[str, Any]:
         normalized = [singular_to_plural.get(t.lower(), t.lower()) for t in condition['value']]
         return {'op': 'in', 'value': normalized}
 
-    # Handle single type
-    if condition.get('op') == '==' and isinstance(condition.get('value'), str):
+    # Handle single type (type=X, type!=X)
+    if condition.get('op') in ('==', '!=') and isinstance(condition.get('value'), str):
         value = condition['value'].lower()
         if value in singular_to_plural:
-            return {'op': '==', 'value': singular_to_plural[value]}
+            return {'op': condition['op'], 'value': singular_to_plural[value]}
 
     return condition
 

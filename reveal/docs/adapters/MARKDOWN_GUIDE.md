@@ -91,18 +91,23 @@ The default behavior shows all headings in a document:
 ```bash
 $ reveal README.md
 
-File: README.md
+File: README.md (651B, 52 lines)
 
 Headings (8):
-  README.md:1      Project Title
-  README.md:5      Installation
-  README.md:15     Usage
-  README.md:25     Configuration
-  README.md:30     Advanced Topics
-  README.md:35     API Reference
-  README.md:50     Contributing
-  README.md:60     License
+  :11     Project Title
+    :15     Installation
+      :17     Prerequisites
+      :21     Quick Install
+    :28     Usage
+    :42     Bug 11 Analysis
+      :46     Bug 11 Details
+    :50     Background
+
+
+Next: reveal README.md --section 'Project Title'  # Extract this section
 ```
+
+Each row is `:LINE  Heading`, indented two spaces per heading level.
 
 ### Hierarchical Outline View (NEW in v0.22.0)
 
@@ -212,7 +217,7 @@ Links (5):
 
   Internal (2):
     Line 25   [API Guide](./api.md)
-    ❌ Line 30   [Tutorial](./docs/tutorial.md) [BROKEN]
+    X Line 30   [Tutorial](./docs/tutorial.md) [BROKEN]
 ```
 
 **Key Features**:
@@ -281,7 +286,7 @@ Links (3):
   Internal (3):
     Line 10   [Installation](./docs/install.md)
     Line 15   [Usage Guide](./docs/usage.md)
-    ❌ Line 20   [API Reference](./docs/api.md) [BROKEN]
+    X Line 20   [API Reference](./docs/api.md) [BROKEN]
 ```
 
 **Use Cases**:
@@ -295,30 +300,40 @@ Links (3):
 $ reveal README.md --links --format json
 
 {
+  "analyzer": "...",
   "file": "README.md",
+  "meta": {...},
   "structure": {
     "links": [
       {
-        "line": 10,
+        "line": 30,
         "text": "GitHub",
         "url": "https://github.com/user/repo",
         "type": "external",
         "protocol": "https",
         "domain": "github.com",
-        "broken": false
+        "column": 5,
+        "file": "README.md"
       },
       {
-        "line": 25,
-        "text": "API Guide",
-        "url": "./api.md",
+        "line": 32,
+        "text": "Tutorial",
+        "url": "./docs/tutorial.md",
         "type": "internal",
-        "protocol": "file",
-        "broken": true
+        "target": "./docs/tutorial.md",
+        "broken": true,
+        "column": 37,
+        "file": "README.md"
       }
-    ]
-  }
+    ],
+    ...
+  },
+  "type": "..."
 }
 ```
+
+Internal links carry `target` and `broken`; external links have `protocol` and `domain` and no
+`broken` (they are not checked); email links carry `email`.
 
 ## Code Block Extraction
 
@@ -327,25 +342,24 @@ $ reveal README.md --links --format json
 ```bash
 $ reveal README.md --code
 
-File: README.md
+File: README.md (651B, 52 lines)
 
-Code Blocks (3):
+Code_blocks (2):
 
-  Python (2):
-    Lines 15-18 (4 lines)
+  Bash (1 blocks):
+    Lines 23-26 (2 lines)
+      pip install myproject
+      myproject --version
+
+  Python (1 blocks):
+    Lines 34-40 (5 lines)
       import myproject
       result = myproject.run()
       print(result)
-
-    Lines 30-35 (6 lines)
-      def example():
-          return "Hello"
-
-  Bash (1):
-    Lines 50-52 (3 lines)
-      pip install myproject
-      myproject --version
+      ... (2 more lines)
 ```
+
+`Lines` spans the opening and closing fence; the count is the code inside.
 
 **Features**:
 - **Grouped by language**: Easy navigation
@@ -373,18 +387,18 @@ By default, only fenced code blocks (```) are extracted. Include inline code:
 ```bash
 $ reveal README.md --code --inline
 
-File: README.md
+File: README.md (651B, 52 lines)
 
-Code Blocks (5):
+Code_blocks (3):
 
-  Python (2):
+  Bash (1 blocks):
     [... fenced blocks ...]
 
-  Inline (3):
-    Line 10: `import sys`
-    Line 25: `pip install`
-    Line 40: `myproject.run()`
+  Inline code (1 snippets):
+    Line 13   `import sys`
 ```
+
+Inline spans inside fenced blocks are not reported again.
 
 ## Front Matter Extraction
 
@@ -538,11 +552,12 @@ done | sort | uniq -c | sort -rn
 
 ### Combined with Other Features
 
-Front matter extraction combines with headings by default:
+In text mode `--frontmatter` prints a note and the headings; the parsed data needs `--format json`:
 
 ```bash
 reveal README.md --frontmatter
-# Shows both front matter AND document structure
+# Note: --frontmatter needs --format json to show parsed YAML data (text mode shows structure only). ...
+# then the headings
 ```
 
 Combine with other features:
@@ -551,7 +566,7 @@ Combine with other features:
 # Front matter + links
 reveal README.md --frontmatter --links --format=json
 
-# Front matter + code blocks
+# Front matter + code blocks (text shows the code blocks; front matter needs --format json)
 reveal README.md --frontmatter --code
 ```
 
@@ -567,8 +582,7 @@ Reveal handles malformed front matter gracefully:
 ```bash
 # File without front matter
 reveal no-frontmatter.md --frontmatter
-# Output: Frontmatter (0):
-#           (No front matter found)
+# Output: the headings (text); `structure.frontmatter` is `null` in JSON.
 ```
 
 ### Use Cases
@@ -689,13 +703,16 @@ Final content.
 
 **Output**:
 ```
-File: example.md
+File: example.md (127B, 11 lines)
 
 Headings (4):
-  example.md:1     Main Title
-  example.md:4     Section One
-  example.md:7     Subsection 1.1
-  example.md:10    Section Two
+  :1      Main Title
+    :4      Section One
+      :7      Subsection 1.1
+    :10     Section Two
+
+
+Next: reveal example.md --section 'Main Title'  # Extract this section
 ```
 
 ### Example 2: Link Extraction with Mixed Types
@@ -753,15 +770,15 @@ reveal example.md --outline
 
 **Output**:
 ```
-File: example.md
+File: example.md (76B, 7 lines)
 
-Guide (example.md:1)
-  ├─ Installation (line 2)
-  │  ├─ Linux (line 3)
-  │  └─ macOS (line 4)
-  └─ Usage (line 5)
-     ├─ Basic (line 6)
-     └─ Advanced (line 7)
+Guide (example.md:1, 7 lines)
+  ├─ Installation (line 2, 3 lines)
+  │  ├─ Linux (line 3, 1 line)
+  │  └─ macOS (line 4, 1 line)
+  └─ Usage (line 5, 3 lines)
+     ├─ Basic (line 6, 1 line)
+     └─ Advanced (line 7, 1 line)
 ```
 
 ## Edge Cases & Limitations
@@ -877,13 +894,16 @@ Structured output for programmatic use:
 $ reveal README.md --links --format json
 
 {
+  "analyzer": "...",
   "file": "README.md",
-  "type": "markdown",
+  "meta": {...},
   "structure": {
     "links": [
-      {"line": 10, "text": "GitHub", "url": "https://github.com/user/repo", ...}
-    ]
-  }
+      {"line": 30, "text": "GitHub", "url": "https://github.com/user/repo", "type": "external", ...}
+    ],
+    ...
+  },
+  "type": "..."
 }
 ```
 
@@ -894,8 +914,25 @@ Pipeable format for integration:
 ```bash
 $ reveal README.md --links --format grep
 
-README.md:10:https://github.com/user/repo
-README.md:15:https://docs.example.com
+File: README.md (651B, 52 lines)
+
+Links (5):
+
+  External (2):
+README.md:30:https://github.com/user/repo
+README.md:30:https://docs.example.com/x
+
+  Internal (2):
+README.md:32:./docs/api.md
+README.md:32:./docs/tutorial.md
+...
+```
+
+The `file:line:url` rows are interleaved with the text-mode `File:`, `Links (N):` and group
+headings. Keep only the rows before piping them on:
+
+```bash
+reveal README.md --links --format grep | grep -E '^[^ ]+:[0-9]+:'
 ```
 
 ## Integration with Documentation Workflows

@@ -137,13 +137,18 @@ def _render_functions_section(functions: list) -> None:
         _render_function_change(func)
 
 
+def _in_file(entry: Dict[str, Any]) -> str:
+    """`  (path)` after an entry's name in a directory diff, where names repeat across files."""
+    return f"  ({entry['file']})" if entry.get('file') else ''
+
+
 def _render_function_change(func: Dict[str, Any]) -> None:
     """Render a single function change."""
     change_type = func['type']
     name = func['name']
 
     if change_type == 'added':
-        print(f"  + {name}")
+        print(f"  + {name}{_in_file(func)}")
         _render_function_metadata(func)
         line_count = func.get('line_count', '?')
         complexity = func.get('complexity', '?')
@@ -151,13 +156,13 @@ def _render_function_change(func: Dict[str, Any]) -> None:
         print()
 
     elif change_type == 'removed':
-        print(f"  - {name}")
+        print(f"  - {name}{_in_file(func)}")
         _render_function_metadata(func)
         print("      [REMOVED]")
         print()
 
     elif change_type == 'modified':
-        print(f"  ~ {name}")
+        print(f"  ~ {name}{_in_file(func)}")
         _render_function_modifications(func.get('changes', {}))
         print()
 
@@ -214,12 +219,12 @@ def _render_class_change(cls: Dict[str, Any]) -> None:
     name = cls['name']
 
     if change_type == 'added':
-        print(f"  + {name}")
+        print(f"  + {name}{_in_file(cls)}")
         _render_class_metadata(cls, show_method_count=True)
         print()
 
     elif change_type == 'removed':
-        print(f"  - {name}")
+        print(f"  - {name}{_in_file(cls)}")
         line = cls.get('line')
         if line:
             print(f"      Line {line}")
@@ -227,7 +232,7 @@ def _render_class_change(cls: Dict[str, Any]) -> None:
         print()
 
     elif change_type == 'modified':
-        print(f"  ~ {name}")
+        print(f"  ~ {name}{_in_file(cls)}")
         _render_class_modifications(cls.get('changes', {}))
         print()
 
@@ -293,7 +298,7 @@ def _render_named_section(category: str, elements: list) -> None:
     print()
     for element in elements:
         marker = {'added': '+', 'removed': '-', 'modified': '~'}.get(element['type'], '?')
-        print(f"  {marker} {element['name']}")
+        print(f"  {marker} {element['name']}{_in_file(element)}")
         if element.get('line'):
             print(f"      Line {element['line']}")
         if element['type'] == 'removed':

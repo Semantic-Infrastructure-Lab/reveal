@@ -280,6 +280,10 @@ def create_element_dict(
         'decorators': item.get('decorators', []),
         'bases': item.get('bases', []),
     }
+    # A method is a function element with an owner (its class/struct/impl): what
+    # ?type=method selects (BACK-2213).
+    if item.get('owner'):
+        element['owner'] = cast(Dict[str, Any], item)['owner']
     # Propagate optional flags from the analyzer (e.g. TypeScript abstract classes).
     if item.get('is_abstract'):
         element['is_abstract'] = True
