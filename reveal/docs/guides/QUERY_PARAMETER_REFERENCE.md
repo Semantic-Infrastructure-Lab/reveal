@@ -296,11 +296,19 @@ reveal 'metrics://.?hotspots&code_only'
   reveal 'ast://src?depth>3'             # deeply nested code
   ```
 
-- **`decorator`** - Filter by decorator name
+- **`decorator`** - Filter by decorator, annotation or attribute name
   ```bash
   reveal 'ast://src?decorator=property'
   reveal 'ast://src?decorator=staticmethod'
+  reveal 'ast://src?decorator=HttpGet'         # C# [HttpGet], [HttpGet("{id}"), Authorize]
+  reveal 'ast://src?decorator=derive'          # Rust #[derive(Debug, Clone)]
   ```
+  Bracket attributes match by name like at-style decorators; each attribute of a group such as
+  `[HttpGet, Authorize]` matches on its own. A qualified name matches by its trailing segments
+  (`Obsolete` and `System.Obsolete` both find `[System.Obsolete]`), a term with arguments
+  (`Route("/x")`) needs equal arguments, and a comma list is OR. `derive`'s arguments are not
+  attributes: `decorator=*Debug*` (a glob, matched against the source text too) finds
+  `#[derive(Debug)]`. `decorator!=X` keeps elements without X; `decorator~=RE` is a regex.
 
 - **`calls`**, **`callee_of`**, **`show=calls`** - Retired: each still answers with a replaced-by
   note. Use `calls://` instead
@@ -337,13 +345,6 @@ reveal 'metrics://.?hotspots&code_only'
   reveal 'ast://src?return_type=bool'
   reveal 'ast://src?return_type=Optional*'
   ```
-
-- **`has_decorator=`** - Filter functions that have a specific decorator (presence check, not exact match)
-  ```bash
-  reveal 'ast://src?has_decorator=property'
-  reveal 'ast://src?has_decorator=staticmethod'
-  ```
-  Use `decorator=` for exact decorator value match; use `has_decorator=` for presence.
 
 - **`has_annotations=`** - Filter by annotation presence (`true` = fully annotated, `false` = fully unannotated)
   ```bash

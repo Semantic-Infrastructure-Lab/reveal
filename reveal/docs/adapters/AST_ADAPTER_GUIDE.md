@@ -213,8 +213,14 @@ reveal 'ast://.?decorator=abstractmethod'
 # Find complex properties (code smell - properties should be simple)
 reveal 'ast://.?decorator=property&lines>10'
 
-# Exclude specific decorators (NEW: != operator)
+# Exclude specific decorators
 reveal 'ast://.?decorator!=property'
+
+# Annotations and bracket attributes match by name the same way
+reveal 'ast://.?decorator=Override'      # Java/Kotlin @Override
+reveal 'ast://.?decorator=HttpGet'       # C# [HttpGet], [HttpGet("{id}"), Authorize]
+reveal 'ast://.?decorator=Route'         # PHP #[Route("/x")], C# [Route("api/x")]
+reveal 'ast://.?decorator=derive'        # Rust #[derive(Debug)]; *Debug* globs its arguments
 ```
 
 ### 7. **Combined Filters**
@@ -250,7 +256,7 @@ Complete reference of all supported query parameters:
 | `complexity` | integer | McCabe cyclomatic complexity (>10 needs refactoring, >20 high risk) | `complexity>10`, `complexity<5` |
 | `type` | string | Element type: `function`, `class`, `method`. Supports OR with `\|` or `,` | `type=function`, `type=class\|function` |
 | `name` | string | Element name with wildcards (`*` = any chars, `?` = one char) or regex | `name=test_*`, `name~=^test_` |
-| `decorator` | string | Decorator pattern with wildcards or regex | `decorator=property`, `decorator=*cache*` |
+| `decorator` | string | Decorator, annotation or attribute name (bracket attributes match by name, qualified names by trailing segments), with wildcards or regex | `decorator=property`, `decorator=HttpGet`, `decorator=*cache*` |
 | `calls` | string | Retired (prints a replaced-by note): use `calls://<path>?callers=NAME`, or `--grep 'PATTERN'` for a pattern | `calls=validate_item` |
 | `callee_of` | string | Retired (prints a replaced-by note): use `calls://<path>?callees=NAME` | `callee_of=main` |
 | `callers` | integer | Number of inbound callers within the scanned files (length of `called_by`). High values find high-coupling functions | `callers>5`, `callers>3&complexity>10`, `callers==0` |

@@ -356,8 +356,7 @@ reveal 'ast://./src?complexity>10&lines>50'
 - `type=X` - Element type (function, class, method, async_function)
 - `depth>N` - Nesting depth (complexity indicator)
 - `depth<N` - Shallow nesting
-- `decorator=X` - Has specific decorator (exact match)
-- `has_decorator=X` - Has decorator (presence check; use when exact name uncertain)
+- `decorator=X` - Has a decorator, annotation or attribute named X: `property`, `Override`, C# `HttpGet` (`[HttpGet("{id}"), Authorize]`), PHP `Route` (`#[Route("/x")]`), Rust `derive` (`#[derive(Debug)]`); `System.Obsolete` or `Obsolete` for a qualified name; `*Debug*` globs the source text; `decorator!=X` excludes
 - `param_type=X` - Filter by parameter annotation (glob supported: `List*`)
 - `return_type=X` - Filter by return annotation (glob supported: `Optional*`)
 - `has_annotations=true/false` - `false` = fully unannotated; `true` = fully annotated

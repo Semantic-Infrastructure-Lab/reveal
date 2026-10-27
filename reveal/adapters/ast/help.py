@@ -205,9 +205,13 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'decorator': {
         'type': 'string',
-        'description': 'Decorator pattern with wildcard support',
-        'operators': ['==', '~='],
-        'examples': ['decorator=property', 'decorator=*cache*', 'decorator=staticmethod']
+        'description': ('Decorator/annotation/attribute by name: @property, @Override, C# [HttpGet], '
+                        'PHP #[Route("/x")] and Rust #[derive(...)] all match their bare name; each '
+                        'attribute of a group like [HttpGet, Authorize] matches on its own; a qualified '
+                        'name matches by its trailing segments (Obsolete or System.Obsolete); '
+                        'a comma list is OR; wildcard support (* matches source text too)'),
+        'operators': ['==', '!=', '~='],
+        'examples': ['decorator=property', 'decorator=*cache*', 'decorator=HttpGet', 'decorator=derive']
     },
     'calls': {
         'type': 'string',
@@ -522,7 +526,9 @@ def get_help() -> Dict[str, Any]:
             'complexity': 'McCabe cyclomatic complexity (industry threshold: >10 needs refactoring, >20 is high risk)',
             'type': 'Element type: function, class, method. Supports OR with | or , (e.g., type=function, type=class|function)',
             'name': 'Element name pattern with wildcards or regex (e.g., name=test_*, name~=^test_)',
-            'decorator': 'Decorator pattern - find decorated functions/classes (e.g., decorator=property, decorator!=property)',
+            'decorator': ('Decorator, annotation or attribute name - find decorated functions/classes '
+                          '(e.g., decorator=property, decorator=HttpGet for C# [HttpGet], decorator=derive '
+                          'for Rust #[derive(Debug)], decorator!=property)'),
             'calls': "Retired: use calls://<path>?callers=NAME, or --grep 'PATTERN' (prints a note)",
             'callee_of': 'Retired: use calls://<path>?callees=NAME (prints a note)',
             'param_type': 'Find functions where any param has this type annotation (e.g., param_type=dict, param_type=Dict*)',
