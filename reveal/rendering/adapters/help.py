@@ -12,6 +12,13 @@ from reveal.adapters.base import Stability, _ADAPTER_REGISTRY
 # Stability badge/label are derived from each adapter's own STABILITY class
 # attribute (reveal/adapters/base.py) — never a hand-maintained set here, so a
 # new adapter can't silently render with the wrong badge (BACK-688).
+# Display headings of the adapter groups (cli.handlers.introspection.adapter_group). They live with the
+# renderer, not the CLI handler: a renderer that imported cli closed a 155-file import cycle (BACK-2215).
+ADAPTER_GROUP_HEADINGS = {
+    'ops': 'Hosting and server operations',
+    'retired': 'Retired adapters',
+}
+
 _STABILITY_BADGES = {
     Stability.STABLE: "🟢",
     Stability.BETA: "🟡",
@@ -275,7 +282,6 @@ def _render_help_static_guide(data: Dict[str, Any]) -> None:
 
 def _render_help_adapter_summary(data: Dict[str, Any]) -> None:
     """Render summary of all adapters, code nouns first, then the ops family, then the retired schemes."""
-    from ...cli.handlers.introspection import ADAPTER_GROUP_HEADINGS
     print(f"# URI Adapters ({data['count']} total)")
     print()
     adapters = data['adapters']

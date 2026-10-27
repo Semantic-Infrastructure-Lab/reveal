@@ -54,12 +54,6 @@ def handle_languages(fmt: str = 'text'):
 # The hosting-ops family: adapters that inspect a server, not the user's code (BACK-2197, the cheap part of BACK-1055).
 OPS_SCHEMES = ('autossl', 'cpanel', 'domain', 'letsencrypt', 'mysql', 'nginx', 'ssl')
 
-ADAPTER_GROUP_HEADINGS = {
-    'ops': 'Hosting and server operations',
-    'retired': 'Retired adapters',
-}
-
-
 def retired_schemes() -> 'Dict[str, Retirement]':
     """The scheme:* rows of RETIREMENTS, keyed by scheme: the one place a scheme is called retired."""
     from ..invocation import RETIREMENTS
@@ -111,6 +105,7 @@ def handle_adapters(show_all: bool = False, fmt: str = 'text'):
             printed the text view, BACK-1606).
     """
     from ...adapters.base import _ADAPTER_REGISTRY, list_public_schemes
+    from ...rendering.adapters.help import ADAPTER_GROUP_HEADINGS
 
     if fmt == 'json':
         _print_json(build_discover_payload(show_all))
