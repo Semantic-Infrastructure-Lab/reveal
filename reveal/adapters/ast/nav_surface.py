@@ -483,14 +483,13 @@ def _is_env_access(func_str: str) -> bool:
 
 def _process_subscript(node: ast.Subscript, file_path: str, surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     # BACK-777: os.environ['X'] read or write — the subscript form is
-    # structurally invisible to _process_call's ast.Call dispatch.
+    # structurally invisible to _process_call's ast.Call dispatch. A
+    # non-literal key is named by its source text, like os.getenv(k) (BACK-2285).
     receiver = _unparse_expr(node.value)
     if receiver not in ('os.environ', 'environ'):
         return
-    key = None
-    if isinstance(node.slice, ast.Constant):
-        key = str(node.slice.value)
-    if key is None or key.startswith('{'):
+    key = _arg_text(node.slice)
+    if key.startswith('{'):
         return
     surfaces['env'].append({
         'type': 'env_var',
