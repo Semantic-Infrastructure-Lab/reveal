@@ -47,7 +47,7 @@ reachable). The two can differ for the same language because they measure differ
 | Python | ✅ 100% (Home Assistant, celery¹⁰) | ✅ 83.5% (Home Assistant) | ✅ 99.96%→100%³⁴ (Home Assistant, 3 query directions) | **Measured** |
 | TypeScript | ✅ 100% (VS Code), ✅ 68.48%→99.93%¹⁶ (nest, BACK-694/698/705/772/773 all fixed; 2-edge unexplored residual) | ✅ 91.3%¹ (VS Code) | ✅ 100%³⁵ (VS Code) | **Measured** |
 | Java | ✅ 100% (Elasticsearch, guava¹¹) | ✅ 97.5% (Elasticsearch) | ✅ 9.99%→100%³⁸ (Elasticsearch, BACK-734 fixed) | **Measured** |
-| Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 96.3% (client-go) | ✅ 100%³⁶ (Go compiler internals) | **Measured** |
+| Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 93.8% (client-go; was 96.3% before BACK-1406) | ✅ 100%³⁶ (Go compiler internals) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | ✅ 22.05%→100%³⁹ (Discourse, BACK-735 fixed) | **Measured** |
 | Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 82.5% → **92.9%** (tivi, six-category sweep, BACK-727) | ✅ 99.69%→100%⁴² (8/bucket); 99.79%⁴² (20/bucket, tivi, BACK-738 shape 1 fixed & shipped in 0.123.0 — shape 5 SAM labeled-return spillage remains an accepted residual, grammar-level, not fixable in reveal) | **Measured** |
 | Rust | ✅ 100% (Meilisearch, ripgrep⁹) | ✅ 97.4% (Meilisearch) | ✅ 95.27%→100%³⁷ (Meilisearch, BACK-733 fixed) | **Measured** |
@@ -1703,7 +1703,7 @@ re-measured.
 
 | Language | Real corpus | Recall: before → after | Notable bug found & fixed |
 |---|---|---|---|
-| Go | Kubernetes `client-go` (2,161 files) | 57.4% → **96.3%** | Go had no `http` bucket at all — snake_case `http_get` literals never matched dotted `http.Get(`; `RoundTrip`-shaped transport calls all missed |
+| Go | Kubernetes `client-go` (2,161 files) | 57.4% → 96.3%, now **93.8%** (75/80; `http` 13/18) | Go had no `http` bucket at all — snake_case `http_get` literals never matched dotted `http.Get(`; `RoundTrip`-shaped transport calls all missed. Re-measured at 0.132.0 with the same oracle, seed and sample: `http` fell from 15/18 to 13/18 when BACK-1406 limited the bare `header` pattern to PHP (it matched `header.lower()` as http at about 7,000 non-PHP sites), so `req.Header.Get(...)`-only functions (`Negotiate`, `request`) no longer report `http`; `file` gained `os.WriteFile`-family calls (BACK-2259) and `cache`/`db` extras shrank |
 | Python | Home Assistant (12,150 files) | 80.4% → **83.5%** | `file` bucket missed `os.remove`/`os.makedirs` and `pathlib` `write_text`/`read_bytes` (76.9% → 100% for `file`) |
 | Java | Elasticsearch | 81.0% → **97.5%** | `constructor_declaration` missing from the shared taxonomy leaked a constructor's effects into its enclosing class's whole body (BACK-638) |
 | C# | Jellyfin | 91.5% → **98.3%** | `SaveChangesAsync`/`StreamReader` taxonomy gaps |
