@@ -15,7 +15,7 @@ def check(select: Optional[List[str]] = None, ignore: Optional[List[str]] = None
     """
     from reveal.reveal_types import CONTRACT_VERSION
 
-    from ...rules import RuleRegistry
+    from ...rules import RuleRegistry, coverage_report
 
     # V-series rules inspect reveal source directly
     errors: List[Dict[str, str]] = []
@@ -31,15 +31,10 @@ def check(select: Optional[List[str]] = None, ignore: Optional[List[str]] = None
         'file': 'reveal://',
         'detections': detections,  # Keep as Detection objects for render_check
         'total': len(detections),
-        'coverage': {
-            'scope': 'Rule execution and reported prerequisite coverage. '
-                     'V035 uses a recorded stats fixture, not all adapter renderers.',
-            'rules': coverage,
-            'run': sum(entry['status'] == 'run' for entry in coverage),
-            'skipped': sum(entry['status'] == 'skipped' for entry in coverage),
-            'failed': len(errors),
-            'unavailable': sum(entry['status'] == 'unavailable' for entry in coverage),
-        },
+        'coverage': coverage_report(
+            coverage, len(errors),
+            'Rule execution and reported prerequisite coverage. '
+            'V035 uses a recorded stats fixture, not all adapter renderers.'),
         'errors': errors
     }
 

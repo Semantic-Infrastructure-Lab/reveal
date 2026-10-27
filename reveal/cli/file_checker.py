@@ -50,6 +50,7 @@ from reveal.checks import (  # noqa: E402
 )
 # The rules' project-wide indexes, built once here and seeded into every pool
 # worker (BACK-1051); shared with stats://'s pool.
+from reveal.rules import CoverageTally  # noqa: E402
 from reveal.rules.scan_caches import (  # noqa: E402
     get_scan_budgets,
     get_scan_disclosures,
@@ -468,9 +469,10 @@ def check_and_collect_file(
             return 0, [], {"status": "skipped", "detail": "auto-generated file"}
 
         rule_errors: list = []
+        ledger: list = []
         detections = RuleRegistry.check_file(
             str(file_path), structure, content, select=select, ignore=ignore,
-            profile=profile, errors=rule_errors,
+            profile=profile, errors=rule_errors, coverage=ledger,
         )
 
         status: dict = {"status": "ok"}
@@ -483,6 +485,9 @@ def check_and_collect_file(
             }
         if rule_errors:
             status["rule_errors"] = rule_errors
+        # The rule-outcome ledger rides the status dict across the process pool (plain, picklable
+        # data); _results_in_sorted_order folds it into the run's CoverageTally (BACK-2137).
+        status["coverage"] = ledger
 
         return len(detections), detections, status
 
@@ -798,15 +803,16 @@ def _check_files_json(
 
 
 def _check_json(files: List[Path], directory: Path, select, ignore,
-                severity: Optional[str]) -> List[_CheckedFile]:
+                severity: Optional[str], coverage: Optional[CoverageTally] = None) -> List[_CheckedFile]:
     """Run the JSON/grep path's checks (the same pool or serial run as the text path,
     in sorted order) and apply --severity. A file lost to a dead pool worker is an
-    errored file here too (BACK-1717)."""
-    results = _results_in_sorted_order(sorted(files), directory, select, ignore)
+    errored file here too (BACK-1717). *coverage* collects each file's rule outcomes."""
+    results = _results_in_sorted_order(sorted(files), directory, select, ignore, coverage)
     return _filter_results(results, directory, severity)
 
 
-def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, ignore) -> list:
+def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, ignore,
+                             coverage: Optional[CoverageTally] = None) -> list:
     """Run the text path's checks; (file_path, issue_count, detections, status) per
     file, in ``sorted_files`` order.
 
@@ -819,12 +825,24 @@ def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, 
     byte-identical input. Every file is in the result: one whose worker died is an
     errored file (BACK-1681, and for --format json/grep BACK-1717). The serial
     fallback below is only for a pool that fails to run at all, and says so.
+
+    Each file's rule-outcome ledger (``status["coverage"]``) is folded into *coverage* as the file
+    arrives and removed from its status, so the run keeps O(rules) outcome state, not a ledger per
+    file (BACK-2137). A file with no ledger (errored, lost with its worker, skipped) is not counted.
     """
     results_by_file: dict = {}
+
+    def fold(result: tuple) -> tuple:
+        count, detections, status = result
+        ledger = status.pop("coverage", None)
+        if ledger is not None and coverage is not None:
+            coverage.add(ledger)
+        return count, detections, status
+
     if _check_worker_count(len(sorted_files)) > 1:
         try:
             for file_path, *rest in _run_parallel_streaming(sorted_files, directory, select, ignore):
-                results_by_file[file_path] = tuple(rest)
+                results_by_file[file_path] = fold(tuple(rest))
         except Exception as e:  # boundary-ok: broad-except -- a pool that fails to start falls back to checking the rest serially, logged at warning
             # The pool itself failed (e.g. startup) -- the generator raises when
             # iterated, not when created. Check what it did not deliver serially.
@@ -832,7 +850,7 @@ def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, 
                             type(e).__name__, e)
     for f in sorted_files:
         if f not in results_by_file:
-            results_by_file[f] = check_and_collect_file(f, directory, select, ignore)
+            results_by_file[f] = fold(check_and_collect_file(f, directory, select, ignore))
     return [(f, *results_by_file[f]) for f in sorted_files]
 
 
@@ -933,6 +951,7 @@ def _check_text(
     severity: Optional[str] = None,
     limit: int = 50,
     max_items: Optional[int] = None,
+    coverage: Optional[CoverageTally] = None,
 ) -> _TextReport:
     """Check files for the text report: run, filter, build the report as data.
     Printing it is the render's job (_print_text_report), called by the
@@ -959,7 +978,7 @@ def _check_text(
     counts as errored vs. skipped (BACK-1083); files_degraded is status ==
     "warning" (parsed via error-recovery).
     """
-    results = _results_in_sorted_order(sorted(files), directory, select, ignore)
+    results = _results_in_sorted_order(sorted(files), directory, select, ignore, coverage)
     return _build_text_report(_filter_results(results, directory, severity), limit, max_items)
 
 
@@ -975,6 +994,7 @@ def _check_report(
     exit_zero: bool = False,
     scan_incomplete: bool = False,
     fail_on: Literal['none', 'findings'] = 'findings',
+    coverage: Optional[dict] = None,
 ) -> dict:
     """check's result as plain data; the subcommand seam (emit_subcommand_result /
     subcommand_json) adds the Output Contract envelope (BACK-1545).
@@ -1004,6 +1024,9 @@ def _check_report(
             files_errored/files_degraded (those are per-file); this is
             rule-wide — e.g. "I002 skipped, tree too large" doesn't map to
             any single file. [] means confirmed complete, not omitted.
+        coverage: BACK-2137 -- per-rule outcomes across the files checked (``CoverageTally.report``):
+            which rules ran, were not applicable to some files, or were unavailable. Without it a
+            rule that could not run reads exactly like a clean pass.
     """
     result: dict = {}
     if file_results is not None:
@@ -1022,6 +1045,8 @@ def _check_report(
     }
     if scope is not None:
         result["scope"] = _scope_dict(scope, select, ignore)
+    if coverage is not None:
+        result["coverage"] = coverage
     budget.note_cut(result)
     return result
 
@@ -1193,9 +1218,10 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
 
     sinks = file_sinks(args)
     select, ignore = _rule_filters(args)
-    checked = _check_json(files_to_check, directory, select, ignore, getattr(args, 'severity', None))
+    outcomes = CoverageTally()
+    checked = _check_json(files_to_check, directory, select, ignore, getattr(args, 'severity', None), outcomes)
     views = _check_views({output_format, *(fmt for fmt, _ in sinks)}, checked, files_to_check, directory,
-                         collection, config, args)
+                         collection, config, args, outcomes)
     result, render = views[output_format]
 
     from .routing.subcommand import emit_subcommand_result
@@ -1240,7 +1266,8 @@ def _scan_disclosures(files: List[Path], select, ignore, *,
 
 
 def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Namespace',
-                select, ignore, disclosures: List[str], scan_incomplete: bool):
+                select, ignore, disclosures: List[str], scan_incomplete: bool,
+                coverage: Optional[dict] = None):
     """_check_report with this run's arguments, so --format json and both
     --also-json writers describe the run the same way (BACK-1248): same scope,
     same scan disclosures, same exit_zero and fail_on."""
@@ -1252,6 +1279,7 @@ def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Na
             exit_zero=getattr(args, 'exit_zero', False),
             scan_incomplete=scan_incomplete,
             fail_on=requested_fail_on(args),
+            coverage=coverage,
         )
         if collection.changed and 'scope' in result:
             result['scope']['changed'] = collection.changed
@@ -1263,7 +1291,8 @@ def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Na
 
 
 def _check_views(formats, checked: List[_CheckedFile], files: List[Path], directory: Path,
-                 collection: 'FileCollectionResult', config, args: 'Namespace') -> dict:
+                 collection: 'FileCollectionResult', config, args: 'Namespace',
+                 outcomes: Optional[CoverageTally] = None) -> dict:
     """{format: (result, render)} for each of *formats*, all built from the ONE scan's *checked* files
     (BACK-2145): the primary output and every file sink are views of the same data, so a second sink is a
     second render, never a second scan. Scan disclosures are read once, after the scan recorded its caps.
@@ -1271,12 +1300,19 @@ def _check_views(formats, checked: List[_CheckedFile], files: List[Path], direct
     The views differ in what they print, not in what they found: json carries ``files[]`` under the
     --max-items budget and the snippet flags; grep prints every detection (BACK-1035: no budget, no
     snippets); text carries the summary and the cut of what its blocks print, under --limit and --max-items.
+    Every view carries the rule outcomes (*outcomes*, BACK-2137): JSON as ``coverage``, text as one
+    ``Checks:`` block before the summary (unavailable rules always; not-applicable ones under --select),
+    grep as the unavailable lines on stderr.
     """
+    from contextlib import redirect_stdout
+    from ..rendering.adapters.reveal import render_check_coverage
     select, ignore = _rule_filters(args)
     tally = _tally(checked)
+    coverage = outcomes.report(sum(len(c.status.get("rule_errors", [])) for c in checked)) \
+        if outcomes is not None else None
     disclosures, scan_incomplete = _scan_disclosures(
         files, select, ignore, collection=collection, directory=directory)
-    report = _report_for(files, collection, args, select, ignore, disclosures, scan_incomplete)
+    report = _report_for(files, collection, args, select, ignore, disclosures, scan_incomplete, coverage)
     views: dict = {}
     for fmt in formats:
         # Read a flag only in the view that applies it: the flag ledger reports a flag nobody read (grep never
@@ -1293,6 +1329,7 @@ def _check_views(formats, checked: List[_CheckedFile], files: List[Path], direct
             def render_text(_result: dict, text=text, limit=limit) -> None:
                 _print_text_report(text, limit, no_group=getattr(args, 'no_group', False),
                                    no_snippets=no_snippets, max_snippet_chars=max_snippet_chars)
+                render_check_coverage(coverage, selected=bool(select))
                 _print_text_summary(
                     len(files), tally.files_with_issues, tally.total_issues, directory, config,
                     files_errored=tally.files_errored, files_degraded=tally.files_degraded,
@@ -1309,6 +1346,8 @@ def _check_views(formats, checked: List[_CheckedFile], files: List[Path], direct
                     # BACK-1051: grep output stays machine-parseable (file:line:col:rule:message only);
                     # disclose to stderr rather than pollute stdout with a non-conforming line.
                     print(f"⚠️  {reason}", file=sys.stderr)
+                with redirect_stdout(sys.stderr):
+                    render_check_coverage(coverage, selected=False)
             views[fmt] = (report(tally, budget, entries), render_grep)
         else:
             entries, budget = _json_file_entries(

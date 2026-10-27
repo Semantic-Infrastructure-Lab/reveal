@@ -25,7 +25,7 @@ _BAD_M501 = "rules:\n  M501:\n    ignore_patterns: not-a-list\n"
 def _mixed_tree(tmp_path, py=1):
     for i in range(py):
         (tmp_path / f"m{i}.py").write_text(_CLEAN_PY, encoding="utf-8")
-    (tmp_path / "notes.md").write_text("# Notes\n\nplain text, no links\n", encoding="utf-8")
+    (tmp_path / "notes.md").write_text("---\ntitle: Notes\n---\n\n# Notes\n\nplain text, no links\n", encoding="utf-8")
     return tmp_path
 
 
@@ -72,7 +72,9 @@ class TestDirectoryCoverage:
         assert "M501 unavailable" in result.stdout
         _, payload = _json(tmp_path)
         m501 = _rule(payload, "M501")
-        assert m501["status"] == "unavailable" and m501["files"]["unavailable"] == 1
+        assert m501["status"] == "unavailable"
+        assert m501["files"]["unavailable"] == payload["summary"]["files_checked"]
+        assert "ignore_patterns" in m501["reason"]
         assert payload["coverage"]["unavailable"] >= 1
         assert payload["summary"]["exit_code"] == 0
 

@@ -826,3 +826,67 @@ def _record_rule_outcome(coverage, code, outcomes):
     reasons = "; ".join(dict.fromkeys(item["reason"] for item in outcomes if item["status"] == status))
     if coverage is not None:
         coverage.append({"rule": code, "status": status, "reason": reasons, "subjects": outcomes})
+
+
+# Per-file statuses a coverage entry can carry, most severe first: the one an aggregated rule reports.
+_COVERAGE_ORDER = ("failed", "unavailable", "run", "skipped")
+
+CHECK_COVERAGE_SCOPE = ("Rule execution and reported prerequisite coverage, per rule across the files checked. "
+                        "A clean list means only completed checks found nothing.")
+
+
+def coverage_report(rules: List[Dict[str, Any]], failed: int, scope: str, **extra: Any) -> Dict[str, Any]:
+    """The ``coverage`` block every check surface returns: reveal:// (flat ledger) and
+    ``check`` on a file or directory (``CoverageTally.rules()``), counted one way (BACK-2137).
+    *failed* is the number of rule crashes the caller recorded as errors."""
+    return {
+        'scope': scope,
+        'rules': rules,
+        'run': sum(entry['status'] == 'run' for entry in rules),
+        'skipped': sum(entry['status'] == 'skipped' for entry in rules),
+        'failed': failed,
+        'unavailable': sum(entry['status'] == 'unavailable' for entry in rules),
+        **extra,
+    }
+
+
+class CoverageTally:
+    """Per-rule outcomes folded across files, so a directory check keeps O(rules) state, not a
+    ledger per file (BACK-2137). One ledger is what ``check_file(coverage=)`` appended for one
+    file; a file that never produced one (no analyzer, generated, lost worker) is not counted,
+    so a rule never reads as having run on it."""
+
+    def __init__(self) -> None:
+        self.files = 0
+        self._rules: Dict[str, Dict[str, Any]] = {}
+
+    def add(self, ledger: List[Dict[str, Any]]) -> None:
+        self.files += 1
+        for entry in ledger:
+            row = self._rules.setdefault(entry['rule'], {
+                'files': dict.fromkeys(("run", "skipped", "unavailable", "failed"), 0),
+                'reasons': {}, 'subjects': {}})
+            row['files'][entry['status']] += 1
+            if entry['status'] != 'run' and entry['reason']:
+                row['reasons'][entry['reason']] = None
+            for item in entry.get('subjects', []):
+                if item['status'] != 'run':
+                    row['subjects'][item['status']] = row['subjects'].get(item['status'], 0) + 1
+                    if item['reason']:
+                        row['reasons'][item['reason']] = None
+
+    def rules(self) -> List[Dict[str, Any]]:
+        """One entry per rule, in code order: its most severe status, the reasons it was not run
+        clean (deduplicated), how many files each outcome covers, and the narrower subjects
+        (items inside a file) it skipped or could not inspect."""
+        rows = []
+        for code in sorted(self._rules):
+            row = self._rules[code]
+            status = next(state for state in _COVERAGE_ORDER if row['files'][state])
+            rows.append({'rule': code, 'status': status, 'reason': "; ".join(row['reasons']),
+                         'files': dict(row['files']), **({'subjects': dict(row['subjects'])} if row['subjects'] else {})})
+        return rows
+
+    def report(self, failed: int) -> Dict[str, Any]:
+        return coverage_report(self.rules(), failed, CHECK_COVERAGE_SCOPE, files_covered=self.files)
+

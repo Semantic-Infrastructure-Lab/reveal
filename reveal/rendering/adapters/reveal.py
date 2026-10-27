@@ -6,6 +6,59 @@ from typing import Any, Dict, List, Union
 from reveal.utils import print_json_result
 
 
+def _plural(n: int, noun: str) -> str:
+    return f"{n} {noun}{'' if n == 1 else 's'}"
+
+
+def _file_outcome_line(entry: Dict[str, Any], selected: bool) -> str:
+    """One rule's per-file outcome line for a check on files, or '' when it has nothing to say.
+
+    A rule that was unavailable (or crashed) on any file always speaks: its "no findings" is not a
+    pass. What it was not applicable to speaks only when the run *selected* rules (--select), where
+    the list is short by construction; the default view would otherwise print the ~50 rules aimed at
+    other targets (AGENT_DEVELOPER_GUIDELINES item 8). JSON carries every rule either way."""
+    files = entry["files"]
+    parts = []
+    if files["unavailable"]:
+        parts.append(f"unavailable on {_plural(files['unavailable'], 'file')}")
+    if files["failed"]:
+        parts.append(f"crashed on {_plural(files['failed'], 'file')}")
+    if not parts and not (selected and (files["skipped"] or entry.get("subjects", {}).get("skipped"))):
+        return ""
+    if files["run"]:
+        parts.append(f"ran on {_plural(files['run'], 'file')}")
+    if selected and files["skipped"]:
+        parts.append(f"not applicable to {files['skipped']}")
+    if selected and entry.get("subjects", {}).get("skipped"):
+        parts.append(f"{_plural(entry['subjects']['skipped'], 'item')} within not applicable")
+    reason = f": {entry['reason']}" if entry["reason"] else ""
+    return f"  {entry['rule']} {', '.join(parts)}{reason}"
+
+
+def render_check_coverage(coverage: Dict[str, Any], selected: bool = True) -> None:
+    """Print a check's ``coverage`` block: the reveal:// self-check's flat ledger in full, or a
+    file / directory check's per-rule aggregate (``selected``: --select named the rules; see
+    ``_file_outcome_line``). Nothing prints when a file check has nothing to disclose."""
+    if not coverage:
+        return
+    flat = "files_covered" not in coverage
+    lines = [] if flat else [ln for ln in (_file_outcome_line(e, selected) for e in coverage["rules"]) if ln]
+    if not flat and not lines:
+        return
+    print(f"Checks: {coverage['run']} run, {coverage['skipped']} skipped, {coverage['failed']} failed, "
+          f"{coverage.get('unavailable', 0)} unavailable")
+    if flat:
+        print(coverage["scope"])
+    for line in lines:
+        print(line)
+    for entry in coverage.get("rules", []) if flat else []:
+        if entry["status"] == "unavailable":
+            print(f"  {entry['rule']} unavailable: {entry['reason']}")
+        for subject in entry.get("subjects", []):
+            if subject["status"] != "run" and subject["subject"]:
+                print(f"    {subject['subject']} {subject['status']}: {subject['reason']}")
+
+
 def _render_optional_section(title: str, items: Union[str, List, Dict, None], indent: int = 1) -> None:
     """Render an optional configuration section if items exist.
 

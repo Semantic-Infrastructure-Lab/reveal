@@ -43,7 +43,9 @@ class TestCheckAndCollectFileStatus:
     def test_clean_file_status_is_ok(self, tmp_path):
         f = _write_py(tmp_path, "clean.py", "def f():\n    return 1\n")
         _count, _detections, status = check_and_collect_file(f, tmp_path, None, None)
-        assert status == {"status": "ok"}
+        # the rule-outcome ledger rides the status (BACK-2137); nothing else is added to a clean file's
+        assert {k: v for k, v in status.items() if k != "coverage"} == {"status": "ok"}
+        assert status["coverage"], "every rule that looked at the file recorded an outcome"
 
     def test_syntax_error_file_status_is_warning_not_silently_ok(self, tmp_path):
         """The BACK-1083 headline repro: a syntax-error file with no imports

@@ -117,6 +117,7 @@ def _detections_result(
     total_available: Optional[int] = None,
     disclosures: Optional[List[str]] = None,
     parse_error_reason: Optional[str] = None,
+    coverage: Optional[dict] = None,
 ) -> dict:
     """The single-file check result as plain data; the subcommand seam
     (emit_subcommand_result / subcommand_json) adds the Output Contract envelope
@@ -145,6 +146,8 @@ def _detections_result(
         disclosures: Rules in the effective set that skipped this file's language
             (capability_disclosures, BACK-1466); emitted as ``scan_disclosures``, the
             key recursive check's summary uses.
+        coverage: Per-rule outcomes for this file (``CoverageTally.report``, BACK-2137), emitted
+            as ``coverage``, the key a directory check and ``reveal://`` carry.
     """
     from reveal.utils.path_utils import to_posix
     from reveal.utils.results import note_truncation
@@ -175,6 +178,8 @@ def _detections_result(
         )
     if rule_errors:
         result['errors'] = rule_errors
+    if coverage is not None:
+        result['coverage'] = coverage
     return result
 
 
@@ -229,6 +234,7 @@ def _emit_detections(path: str, output_format: str, detections: List[Any],
     from argparse import Namespace
     from reveal.cli.routing.subcommand import emit_subcommand_result
 
+    coverage_selected = result_fields.pop('coverage_selected', False)
     result = _detections_result(path, rendered, **result_fields)
     printed = _detections_result(path, detections, **result_fields) \
         if output_format == 'grep' else result
@@ -247,6 +253,8 @@ def _emit_detections(path: str, output_format: str, detections: List[Any],
                 max_snippet_chars=result_fields.get('max_snippet_chars'),
                 disclosures=result_fields.get('disclosures'),
                 scan_incomplete=scan_incomplete,
+                coverage=result_fields.get('coverage'),
+                coverage_selected=coverage_selected,
             )
 
     emit_subcommand_result(printed, Namespace(format=output_format), name='check', source=path,
@@ -276,6 +284,8 @@ def _format_detections_text(
     disclosures: Optional[List[str]] = None,
     scan_incomplete: bool = False,
     parse_error_reason: Optional[str] = None,
+    coverage: Optional[dict] = None,
+    coverage_selected: bool = False,
 ) -> None:
     """Format detections as human-readable text.
 
@@ -302,11 +312,17 @@ def _format_detections_text(
             file's parse (a capped/skipped or partly unparsed project-wide scan). The
             verdict says "scan incomplete" exactly when the exit code does (BACK-1826);
             a language gap alone is a note, not an incomplete scan.
+        coverage: this file's rule outcomes (BACK-2137), printed as the shared ``Checks:`` block
+            before the verdict; *coverage_selected*: --select named the rules, so the rules not
+            applicable to the file print too (render_check_coverage).
     """
     for err in rule_errors or []:
         print(f"{path}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
     for note in disclosures or []:
         print(f"{path}: ⚠️  {note}")
+    if coverage:
+        from reveal.rendering.adapters.reveal import render_check_coverage
+        render_check_coverage(coverage, selected=coverage_selected)
 
     if not detections:
         if parse_degraded:
@@ -400,7 +416,7 @@ def run_pattern_detection(
         `artifact_failed` is True when a requested artifact (``--also-json``) could not be
         written: a required output failure, exit 3 (BACK-1939), disclosed on stderr here.
     """
-    from .rules import RuleRegistry
+    from .rules import CoverageTally, RuleRegistry
 
     # Parse select/ignore options
     select = args.select.split(',') if args.select else None
@@ -420,9 +436,12 @@ def run_pattern_detection(
 
     # Run rules
     rule_errors: List[dict] = []
+    ledger: List[dict] = []
     detections = RuleRegistry.check_file(
-        path, structure, content, select=select, ignore=ignore, errors=rule_errors
+        path, structure, content, select=select, ignore=ignore, errors=rule_errors, coverage=ledger
     )
+    outcomes = CoverageTally()
+    outcomes.add(ledger)
     # BACK-1083: a tree-sitter recovery parse (structure['_has_errors'], set by
     # BACK-1084) means rules ran against fabricated/partial structure — surface
     # that instead of letting "0 detections" read as "clean file".
@@ -463,6 +482,7 @@ def run_pattern_detection(
         parse_error_reason=structure.get('error'),  # rendered only when parse_degraded
         max_snippet_chars=max_snippet_chars, total_available=total_available,
         disclosures=disclosures, scan_incomplete=bool(scan_disclosures),
+        coverage=outcomes.report(len(rule_errors)), coverage_selected=bool(select),
     )
 
     # BACK-1248: the json file sinks on a single file. Built from the same detections
@@ -534,7 +554,7 @@ def collect_schema_detections(analyzer: FileAnalyzer, path: str, schema: dict,
     this call and is cleared even if structure extraction or a rule fails.
     """
     from .rules.frontmatter import set_validation_context, clear_validation_context
-    from .rules import RuleRegistry
+    from .rules import CoverageTally, RuleRegistry
 
     structure = analyzer.get_structure(extract_frontmatter=True)
     errors: List[dict] = []
