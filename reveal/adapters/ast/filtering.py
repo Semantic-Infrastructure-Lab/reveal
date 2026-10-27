@@ -207,6 +207,8 @@ def matches_decorator(decorators: List[str], condition: Dict[str, Any]) -> bool:
     - A glob (``*cache*``, ``Http*``) matches the decorator's source text, an attribute's text,
       or its qualified or bare name. Rust ``#[derive(Debug)]`` is one attribute named
       ``derive``: ``decorator=Debug`` does not match it, ``decorator=*Debug*`` does.
+    - ``!=`` keeps an element none of whose attributes match (an undecorated one too);
+      ``~=`` is a regex search of the source text and each attribute's text and name.
 
     Args:
         decorators: Decorator source strings (e.g., ['@property', '[HttpGet, Authorize]'])
@@ -216,19 +218,38 @@ def matches_decorator(decorators: List[str], condition: Dict[str, Any]) -> bool:
         True if any decorator matches
     """
     op = condition['op']
+    value = condition['value']
+    if op == '!=':
+        positive = 'glob' if any(c in str(value) for c in '*?') else '=='
+        return not matches_decorator(decorators, {'op': positive, 'value': value})
+    if op == '~=':
+        return any(compare_value(text, condition) for text in _decorator_texts(decorators))
     if not decorators or op not in ('==', 'in', 'glob'):
         return False
-    value = condition['value']
     raw = ','.join(str(v) for v in value) if isinstance(value, list) else str(value)
     terms = decorator_attributes(raw)
+    return any(_decorator_matches_terms(dec, terms, op, raw) for dec in decorators)
+
+
+def _decorator_texts(decorators: List[str]) -> List[str]:
+    """Every text a ``decorator~=`` regex searches: each decorator's source, attributes and names."""
+    texts: List[str] = []
     for dec in decorators:
-        attributes = decorator_attributes(dec)
-        for term in terms:
-            if op == 'glob' or (op == 'in' and ('*' in term or '?' in term)):
-                if _decorator_glob_matches(dec, attributes, term, raw):
-                    return True
-            elif any(_decorator_term_matches(term, attribute) for attribute in attributes):
+        texts.append(dec)
+        for attribute in decorator_attributes(dec):
+            texts.extend((attribute, decorator_name(attribute)))
+    return texts
+
+
+def _decorator_matches_terms(dec: str, terms: List[str], op: str, raw: str) -> bool:
+    """True when one captured decorator matches any query term (a glob term or a name term)."""
+    attributes = decorator_attributes(dec)
+    for term in terms:
+        if op == 'glob' or (op == 'in' and ('*' in term or '?' in term)):
+            if _decorator_glob_matches(dec, attributes, term, raw):
                 return True
+        elif any(_decorator_term_matches(term, attribute) for attribute in attributes):
+            return True
     return False
 
 
