@@ -211,7 +211,10 @@ its totals sum to the flat `total`.
   (C#), `fs::write`/`File::create` (Rust), `File.write`/`FileUtils.mkdir_p` (Ruby),
   `FileManager.default.createFile` (Swift). Swift's `data.write(to:)` is not detected. Those
   languages share one rule table (`reveal/adapters/ast/surface_rules_fs.py`); Python,
-  TypeScript/JavaScript, PHP and C++ detect it in their own scanners.
+  TypeScript/JavaScript, PHP and C++ detect it in their own scanners. Python reports
+  `open(path, 'w')`, `Path.write_text`/`write_bytes`, a handle's `.write`/`.writelines` and
+  `shutil.copy`/`copy2`/`copyfile`/`copytree`/`move`; `target` is the path written (the
+  destination for shutil), except for a handle's `.write`, where it is the first argument.
 - `env` covers reads with a string-literal key, matched by call shape: `os.Getenv`/`os.LookupEnv`
   (Go), `System.getenv` (Java/Kotlin), `Environment.GetEnvironmentVariable` (C#),
   `env::var`/`env::var_os` (Rust). A key held in a variable or built by interpolation is not

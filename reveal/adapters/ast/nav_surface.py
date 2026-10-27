@@ -67,7 +67,7 @@ def _scan_tree(
             _process_function_def(node, file_path, surfaces, aliases, cli_groups, mcp_instances, http_apps,
                                   mcp_registrars)
         elif isinstance(node, ast.Call):
-            _process_call(node, file_path, surfaces, delegating_writes)
+            _process_call(node, file_path, surfaces, delegating_writes, aliases)
         elif isinstance(node, ast.Subscript):
             # BACK-777: os.environ['X'] (read or write) is ast.Subscript, not
             # ast.Call — _process_call's dispatch never sees it.
@@ -131,6 +131,7 @@ def _process_call(
     file_path: str,
     surfaces: Dict[str, List[Dict[str, Any]]],
     delegating_writes: Optional[set] = None,
+    aliases: Optional[Dict[str, str]] = None,
 ) -> None:
     func_str = _unparse_expr(node.func)
 
@@ -144,12 +145,11 @@ def _process_call(
                 'file': file_path,
                 'line': node.lineno,
             })
-    elif _is_fs_write(func_str, node) and id(node) not in (delegating_writes or ()):
-        target = _truncate(_extract_first_arg(node) or '?')
+    elif (target := _fs_write_target(func_str, node, delegating_writes or set(), aliases or {})) is not None:
         surfaces['fs'].append({
             'type': 'fs_write',
             'name': func_str,
-            'target': target,
+            'target': _truncate(target),
             'file': file_path,
             'line': node.lineno,
         })
@@ -491,6 +491,51 @@ def _process_subscript(node: ast.Subscript, file_path: str, surfaces: Dict[str, 
     })
 
 
+def _fs_write_target(func_str: str, node: ast.Call, delegating_writes: set,
+                     aliases: Dict[str, str]) -> Optional[str]:
+    """What a filesystem write writes to, or None when `node` is not one."""
+    if _is_fs_write(func_str, node):
+        return None if id(node) in delegating_writes else _written_path(node) or '?'
+    return _shutil_destination(func_str, node, aliases)
+
+
+# BACK-1697: pathlib's writers are methods of the path they write, so the target is the
+# receiver, like open(path, 'w')'s path; `Path('a.txt')` reports 'a.txt' as open('a.txt')
+# does. A handle's `.write(data)` keeps its first argument (BACK-1338).
+_PATH_WRITERS: frozenset = frozenset({'write_text', 'write_bytes'})
+_PATH_CONSTRUCTORS: frozenset = frozenset({
+    'Path', 'PosixPath', 'WindowsPath', 'pathlib.Path', 'pathlib.PosixPath', 'pathlib.WindowsPath',
+})
+
+
+def _written_path(node: ast.Call) -> Optional[str]:
+    func = node.func
+    if not (isinstance(func, ast.Attribute) and func.attr in _PATH_WRITERS):
+        return _extract_first_arg(node)
+    receiver = func.value
+    if (isinstance(receiver, ast.Call) and len(receiver.args) == 1 and not receiver.keywords
+            and _unparse_expr(receiver.func) in _PATH_CONSTRUCTORS):
+        return _arg_text(receiver.args[0])
+    return _unparse_expr(receiver)
+
+
+# BACK-1697: shutil calls that create or replace a file or tree at their destination
+# (second positional argument or `dst=`), resolved through the file's imports. Not fs
+# rows: rmtree (a delete; no language's fs row counts deletes), copymode/copystat
+# (metadata only), make_archive/unpack_archive (the written path is not one argument).
+_SHUTIL_WRITES: frozenset = frozenset({'copy', 'copy2', 'copyfile', 'copytree', 'move'})
+
+
+def _shutil_destination(func_str: str, node: ast.Call, aliases: Dict[str, str]) -> Optional[str]:
+    head, dot, rest = func_str.partition('.')
+    module, _, name = f'{aliases.get(head, head)}{dot}{rest}'.rpartition('.')
+    if module != 'shutil' or name not in _SHUTIL_WRITES:
+        return None
+    if len(node.args) >= 2:
+        return _arg_text(node.args[1])
+    return _extract_kwarg(node, 'dst') or '?'
+
+
 def _is_fs_write(func_str: str, node: ast.Call) -> bool:
     if func_str == 'open':
         return _get_open_mode(node) in _WRITE_MODES
@@ -537,11 +582,14 @@ def _extract_first_arg(node: ast.expr) -> Optional[str]:
     if not isinstance(node, ast.Call):
         return None
     if node.args:
-        arg = node.args[0]
-        if isinstance(arg, ast.Constant):
-            return str(arg.value)
-        return _unparse_expr(arg)
+        return _arg_text(node.args[0])
     return None
+
+
+def _arg_text(arg: ast.expr) -> str:
+    if isinstance(arg, ast.Constant):
+        return str(arg.value)
+    return _unparse_expr(arg)
 
 
 def _extract_kwarg(node: ast.expr, key: str) -> Optional[str]:
