@@ -994,8 +994,9 @@ class NginxAnalyzer(FileAnalyzer):
             hits[key] = {'domain': domain, 'pattern': pattern_key, 'count': 0,
                          'last_seen': timestamp, 'sample': line[:120]}
         hits[key]['count'] += 1
-        if timestamp > hits[key]['last_seen']:
+        if timestamp >= hits[key]['last_seen']:
             hits[key]['last_seen'] = timestamp
+            hits[key]['sample'] = line[:120]
 
     @staticmethod
     def _scan_log_for_patterns(

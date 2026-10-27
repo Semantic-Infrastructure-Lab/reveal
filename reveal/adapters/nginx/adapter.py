@@ -728,6 +728,24 @@ def _fleet_site_label(r: Dict) -> str:
     return r['domains'][0] if r['domains'] else os.path.basename(r['file'])
 
 
+def _fleet_action(deprecated: bool, any_site_has_it: bool, global_present: Optional[bool],
+                  consolidation_opportunity: bool, http_block_eligible: bool, action_template: str) -> str:
+    """The Action column of one fleet-audit row.
+
+    Only checks that may live in nginx.conf http{} are ever sent there; per-site checks
+    (http2 on a listener, limit_req) keep their own template even when no site has them.
+    """
+    if deprecated:
+        return action_template if any_site_has_it else ''
+    if global_present:
+        return 'Globally set ✓'
+    if consolidation_opportunity:
+        return 'Move to nginx.conf http{}'
+    if http_block_eligible and not any_site_has_it:
+        return 'Add to nginx.conf http{}'
+    return action_template
+
+
 def _build_fleet_matrix(
     site_records: List[Dict], site_count: int, global_checks: Dict[str, bool]
 ) -> List[Dict]:
@@ -745,16 +763,8 @@ def _build_fleet_matrix(
             and len(sites_with) >= site_count / 2
         )
 
-        if deprecated:
-            action = action_template if sites_with else ''
-        elif global_present:
-            action = 'Globally set ✓'
-        elif consolidation_opportunity:
-            action = 'Move to nginx.conf http{}'
-        elif site_count > 0 and not sites_with:
-            action = 'Add to nginx.conf http{}'
-        else:
-            action = action_template
+        action = _fleet_action(deprecated, bool(sites_with), global_present, consolidation_opportunity,
+                               consol_eligible and site_count > 0, action_template)
 
         matrix.append({
             'id': check_id,
@@ -1013,7 +1023,7 @@ class NginxUriAdapter(ResourceAdapter):
 
         next_steps = [
             "Inspect a specific domain: reveal nginx://<domain>",
-            "Check SSL certs across all nginx: reveal check ssl://nginx:///etc/nginx/conf.d/*.conf",
+            "Check SSL certs across all nginx: reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check",
         ]
         if artifact_files:
             next_steps.append(
@@ -1118,7 +1128,7 @@ class NginxUriAdapter(ResourceAdapter):
                 'next_steps': [
                     f"reveal nginx://{self.domain}/upstream  # upstream health detail",
                     f"reveal nginx://{self.domain}/config    # full compiled config",
-                    f"reveal check ssl://{self.domain}       # cert detail",
+                    f"reveal ssl://{self.domain} --check     # cert detail",
                 ],
             }
         )
@@ -1155,7 +1165,7 @@ class NginxUriAdapter(ResourceAdapter):
             'ports': ports,
             'next_steps': [
                 f"reveal nginx://{self.domain}           # full vhost summary",
-                f"reveal check ssl://{self.domain}       # SSL cert detail",
+                f"reveal ssl://{self.domain} --check     # SSL cert detail",
             ],
         }
 
