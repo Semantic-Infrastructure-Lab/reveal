@@ -177,8 +177,8 @@ class XlsxRenderer:
             print(f" ({dim})", end='')
         print(f"\nRows: {rows_count}, Cols: {cols_count}\n")
 
-        # Data with line numbers
-        for i, row in enumerate(rows_data, 1):
+        # Rows by Excel's own row number: a ?range= starts at its first row (BACK-2213)
+        for i, row in enumerate(rows_data, result.get('first_row', 1)):
             row_str = ' | '.join(str(cell) if cell is not None else '' for cell in row)
             print(f"{i:6}  {row_str}")
 
@@ -740,6 +740,9 @@ class XlsxAdapter(ResourceAdapter):
                 f"Supported formats: .xlsx, .xlsm\n"
                 f"Example: reveal xlsx:///data/sales.xlsx"
             )
+        # A corrupt or renamed file read as an empty workbook, exit 0 (BACK-2213).
+        if self.file_path.is_file() and not zipfile.is_zipfile(self.file_path):
+            raise ValueError(f"{self.file_display} is not a valid .xlsx workbook (not a zip archive)")
 
     def _init_analyzer(self) -> None:
         """Initialize XlsxAnalyzer for the file."""
@@ -881,8 +884,9 @@ class XlsxAdapter(ResourceAdapter):
 
         # Apply cell range if specified
         range_param = self.query_params.get('range')
+        first_row = 1
         if range_param:
-            rows_data = self._apply_cell_range(rows_data, range_param)
+            rows_data, first_row = self._apply_cell_range(rows_data, range_param)
 
         all_rows = rows_data
         format_param = self.query_params.get('format')
@@ -899,6 +903,7 @@ class XlsxAdapter(ResourceAdapter):
         result_data = {
             'sheet_name': sheet_name,
             'rows': rows_data,
+            'first_row': first_row,
             'dimension': sheet.get('dimension', ''),
             'rows_count': sheet.get('rows', len(all_rows)),
             'cols_count': sheet.get('cols', len(rows_data[0]) if rows_data else 0)
@@ -948,8 +953,9 @@ class XlsxAdapter(ResourceAdapter):
         raise ValueError(
             f"Sheet not found: {identifier}. ?sheet= takes a name or a 0-based index: {listing}")
 
-    def _apply_cell_range(self, rows: List[List[Any]], cell_range: str) -> List[List[Any]]:
-        """The cells of *cell_range*: ``A1:C10``, whole columns ``B:D``, whole rows ``5:7``, or one cell ``B2``.
+    def _apply_cell_range(self, rows: List[List[Any]], cell_range: str) -> Tuple[List[List[Any]], int]:
+        """The cells of *cell_range*: ``A1:C10``, whole columns ``B:D``, whole rows ``5:7``, or one cell ``B2``,
+        and the Excel row number of the first row returned.
 
         Raises ValueError on anything else (BACK-1608: an unparsed range, including the
         documented ``B:B`` and ``5:5``, returned the whole sheet as if it were the range).
@@ -966,8 +972,8 @@ class XlsxAdapter(ResourceAdapter):
         first_row, last_row = (int(start_row) - 1, int(end_row)) if has_rows else (0, len(rows))
         if has_cols:
             first_col, last_col = self._col_letter_to_index(start_col), self._col_letter_to_index(end_col) + 1
-            return [row[first_col:last_col] for row in rows[first_row:last_row]]
-        return [list(row) for row in rows[first_row:last_row]]
+            return [row[first_col:last_col] for row in rows[first_row:last_row]], first_row + 1
+        return [list(row) for row in rows[first_row:last_row]], first_row + 1
 
     def _col_letter_to_index(self, col: str) -> int:
         """Convert column letter to 0-based index.
