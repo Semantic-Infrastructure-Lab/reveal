@@ -57,11 +57,12 @@ class ZipXMLAnalyzer(FileAnalyzer):
     NAMESPACES: Dict[str, str] = {}  # Override in subclass
 
     def _error_result(self, result_type: str, message: str) -> Dict[str, Any]:
-        """Build a get_structure() error result with output contract fields."""
-        return ResultBuilder.create(
+        """Build a get_structure() failed result: ``error`` is the message string the
+        Output Contract defines, not a list (``reveal bad.xlsx`` printed the raw list, BACK-2281)."""
+        return ResultBuilder.create_error(
             result_type=result_type,
             source=self.path,
-            data={'error': [{'message': message}]},
+            error=message,
             contract_version=CONTRACT_VERSION,
         )
 
