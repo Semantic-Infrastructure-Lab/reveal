@@ -6,7 +6,7 @@ import pytest
 
 from reveal.adapters.ast import AstAdapter
 from reveal.adapters.base import ResourceAdapter
-from reveal.utils.results import truncations_of
+from reveal.utils.results import ResultBuilder, note_truncation, truncations_of
 
 
 class Parent(ResourceAdapter):
@@ -74,6 +74,26 @@ def test_clean_composition_retains_answer_and_consuming_contract():
     parent = Parent()
     assert parent.compose_answer(AstAdapter, 'relative', lambda: answer) == answer
     assert parent.composed_meta() is None
+
+
+@pytest.mark.parametrize('component', ['base', 'circular', 'unused'])
+def test_deps_projects_cuts_before_diagnostic_snapshot(tmp_path, monkeypatch, component):
+    from reveal.adapters import deps
+
+    payload = {'base': {'files': {}}, 'circular': {'cycles': [], 'count': 0},
+               'unused': {'unused': [], 'count': 0}}[component]
+    child = ResultBuilder.create('imports', '.', data=payload)
+    child['metadata'] = {'files_failed_count': 2, 'files_lost_count': 2,
+                         'files_failed': ['lost.py'], 'files_lost': ['lost.py']}
+    note_truncation(child, 'metadata.files_failed', 1, 2, 'auto_cap')
+    original = deepcopy(child)
+    monkeypatch.setattr(deps, '_build', lambda *args: child)
+    monkeypatch.setattr(deps, '_view', lambda *args: child)
+    adapter = deps.DepsAdapter(str(tmp_path))
+    getattr(deps, f'_run_{component}')(adapter, tmp_path)
+    warning, = truncations_of({'meta': adapter.composed_meta()})
+    assert warning['field'] == f'analysis.components.{component}.diagnostics.files_failed'
+    assert child == original
     parent.record_composed_error('AstAdapter', 'relative', ValueError('required child failed'))
     meta = parent.composed_meta()
     assert meta['confidence'] == 0.0
