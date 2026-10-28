@@ -65,6 +65,13 @@ proves nothing about the adapter's normal output. Invariants:
    Only Windows CI can produce a violation, so this invariant has no strict-xfail list: on
    Linux an entry would XPASS. ``test_the_posix_path_invariant_bites`` checks the needles.
 
+11. ``warning_type``: every ``meta.warnings`` entry of every fixture run names its kind in a
+   ``type`` key (``code`` is the optional catalog id beside it). ``outcome_of``, ``note_warning``'s
+   dedupe and the renderers' skip lists all read ``type``; an entry with only a ``code`` is
+   invisible to them (BACK-2282c, BACK-2148). ``WARNING_URIS`` adds the runs that carry
+   warnings the plain fixture URIs do not, and ``test_the_warning_type_invariant_bites``
+   checks that an untyped entry is caught.
+
 Violations that exist today are listed in ``KNOWN_VIOLATIONS`` as strict xfails, each
 naming its task. A fix makes its case XPASS, which fails the run until the entry is
 deleted. The list can only shrink.
@@ -210,6 +217,15 @@ OWN_CAP_URIS = {
 BATCH_URIS = {
     'testability': ['testability://home'],
 }
+
+# Invariant 11 runs these as well as every FIXTURE_URIS row: queries whose results carry the
+# warnings a plain run does not. ?uncalled is retired (a retired_spelling entry) and adds the
+# derived-signal and exclusion caveats; the fixture home has no tests, so testability://home
+# declines as not applicable.
+WARNING_URIS = [
+    'calls://proj?uncalled',
+    'testability://home',
+]
 
 _REQUIRED_FIELDS = ['contract_version', 'type', 'source', 'source_type']
 _UNSET = object()
@@ -541,7 +557,7 @@ def test_every_registered_adapter_is_covered():
 def test_known_violations_name_real_cases():
     for invariant, scheme in KNOWN_VIOLATIONS:
         assert invariant in ('contract', 'missing', 'error_exit', 'abs_path', 'truncation',
-                             'subcommand', 'subcommand_abs_path', 'own_cap', 'failure')
+                             'subcommand', 'subcommand_abs_path', 'own_cap', 'failure', 'warning_type')
         assert scheme in (SUBCOMMAND_ARGV if invariant.startswith('subcommand') else FIXTURE_URIS)
 
 
@@ -677,6 +693,34 @@ def test_the_posix_path_invariant_bites(harness):
     a clean run on Linux is not a needle set that never matches. A regex escape is not one."""
     payload = {'results': [{'file': 'proj\\app.py'}], 'pattern': r'\d+\.py'}
     assert [w for w, _ in _native_separators(harness, payload)] == ['.results[0].file']
+
+
+def _untyped_warnings(payload):
+    """The ``meta.warnings`` entries of `payload` that name no ``type``."""
+    meta = payload.get('meta') if isinstance(payload, dict) else None
+    entries = meta.get('warnings') if isinstance(meta, dict) else None
+    return [w for w in entries or []
+            if not (isinstance(w, dict) and isinstance(w.get('type'), str) and w['type'])]
+
+
+@pytest.mark.parametrize('uri', sorted(FIXTURE_URIS.values()) + WARNING_URIS)
+def test_every_warning_names_its_type(harness, uri):
+    scheme = uri.partition('://')[0]
+    if scheme in FIXTURE_URIS and uri == FIXTURE_URIS[scheme]:
+        harness.fixture_uri(scheme)  # skips when its optional dependency is missing
+    _, payload, _ = harness.run(uri)
+    assert _untyped_warnings(payload) == [], f'{uri}: a meta.warnings entry has no type'
+
+
+def test_the_warning_type_invariant_bites(harness):
+    """Positive control: an entry with only a code, or an empty type, is reported, and a typed
+    one is not -- so a clean run is not a check that never sees an entry."""
+    untyped = {'meta': {'warnings': [{'code': 'W-X-1', 'message': 'm'},
+                                     {'type': '', 'message': 'm'},
+                                     {'type': 'k', 'code': 'W-X-2', 'message': 'm'}]}}
+    assert [w['message'] for w in _untyped_warnings(untyped)] == ['m', 'm']
+    code, payload, _ = harness.run('calls://proj?uncalled')
+    assert payload['meta']['warnings'], 'the ?uncalled fixture run carries no warnings'
 
 
 def test_the_abs_path_invariant_bites(harness):
