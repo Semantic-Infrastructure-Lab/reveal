@@ -64,7 +64,7 @@ def create_fixture(root: Path, env: dict[str, str]) -> None:
     src.mkdir(parents=True)
     auth = src / 'auth.py'
     auth.write_text('"""Token validation."""\n\n\ndef validate_token(token: str) -> bool:\n'
-                    '    """Accept a nonempty token."""\n    return bool(token)\n', encoding='utf-8')
+                    '    """Validate one token."""\n    return bool(token)\n', encoding='utf-8')
     (src / 'login.py').write_text(
         '"""Login entry point."""\n\nfrom auth import validate_token\n\n\n'
         'def run_login(token: str) -> bool:\n    """Check one login."""\n'
