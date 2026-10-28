@@ -20,6 +20,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - Adapter warnings must include a nonempty string `type`. Python result builders now raise `ValueError` for malformed warnings; declared commands report an invalid adapter answer instead of treating one as valid. Warning `code` stays optional, and error diagnostics keep their separate contract (BACK-2324).
 - `claude://` and `codex://` initialize once through the shared factory. Constructor failures preserve their original exception instead of being retried or wrapped as another error (BACK-2327).
+- Repeated calls to `architecture`, `overview`, `hotspots`, `deps`, `trace`, `calls` and `xlsx://` no longer inherit warnings, errors or confidence from an interrupted prior call. Composing a reused child answer preserves its original source, cuts and warnings (BACK-2329, BACK-2333, BACK-2337).
 
 ## [0.132.0] - 2026-10-27
 
