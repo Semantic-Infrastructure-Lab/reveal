@@ -607,14 +607,21 @@ use their established parser until migrated. `BudgetAccounting` in `query_contro
 labels a count as scan, match, page or text. The existing page and text helpers use
 it without changing their output; common scan-cap policy is a later migration.
 
-Import graph discovery/resolution now has a public analysis-layer service in
-`analyzers/imports/service.py`. Its frozen `ScanScope`, `ImportFileSet` and
-`ResolutionContext` carry scan policy and resolution inputs explicitly. `discover`
-uses the existing file-index walker; `resolve_graph` updates the complete
-`ImportAnalysis` artifact. `resolve_primary` preserves imports' startup-cycle policy;
-`resolve_targets` preserves depends' multi-target Python imports. Both use the same
-extractor dispatch. Depends' project-wide fallback cascade (namespace, member, Swift
-module, Zeitwerk and PHP-constant indexes, gemspec load paths, the honest-decline
-counters) is `analyzers/imports/resolution.py`: `resolve_project(ScanScope)` returns a
-`ProjectResolution` record that `depends://` presents. imports:// and I002 do not use the
-cascade yet (BACK-1054).
+Import graph analysis belongs to `analyzers/imports/service.py`, rather than a URI
+adapter. `analyze(ScanScope)` owns discovery, extraction, process-pool work, graph
+cache lookup/storage and the existing resolution cascade. It returns an `ImportBuild`:
+the complete `ImportAnalysis` artifact, fresh discovery facts (`ImportFileSet`), and
+optional structures. Shared scan inputs live in `analyzers/imports/inputs.py` and
+remain available through the service. Discovery uses the existing file-index walker;
+the cascade in `resolution.py` retains namespace, member, Swift module, Zeitwerk,
+PHP-constant and gemspec resolution and their diagnostics. `imports://` and
+`depends://` use this build; I002 retains its existing `resolve_graph` operation.
+
+Use `analyzers/imports/views.py`'s `ImportView` for shared fan-in, entry-point,
+component, cycle and metadata projections. Resource adapters retain query validation,
+envelopes and display-path conversion. Analysis consumers use the service and artifact;
+dashboard shims may still compose public adapter answers for their presentation.
+Graph cache identity retains the scan root, file cap and extension family; `tests`
+and `lazy` select presentation views. An optional `structure_reader` must be picklable
+when a process pool is used; per-file notifications run in the parent. Either callback
+disables graph reuse, and structures never enter the shared analysis cache.
