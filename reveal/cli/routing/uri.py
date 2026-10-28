@@ -18,6 +18,7 @@ from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
 from ...utils.json_utils import write_requested_artifact
+from ...utils.path_utils import to_posix
 from ...display.formatting import print_result_control_notes
 from ...utils.results import (ExecutionFacts, FailureCause, Outcome, ResultBuilder, echo_source,
                              failure_execution_facts, note_truncation, outcome_of, slice_items, truncations_of)
@@ -81,8 +82,9 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
 
     Every call the router makes into an adapter goes through here: constructing it,
     --base-path, check(), get_element(), get_structure() and post_process(). A raise ends
-    the query as a failed result (exit 1), and a NotApplicableError as a not-applicable one
-    (exit 0, BACK-1210), so both read the same as a returned result: one stderr line, one
+    the query as a failed result (legacy exit 1), and a NotApplicableError as a not-applicable one
+    (exit 0, BACK-1210). Qualified operations supply explicit analysis/validation facts,
+    so both read the same as a returned result: one stderr line, one
     JSON envelope, --also-json written. Each site used to catch for itself, print its own
     error line (three spellings) and hand-build its own envelope, so a raised error printed
     twice in text, carried contract_version 1.0 and source_type 'file', and wrote no
@@ -143,7 +145,7 @@ def _fail(scheme: str, resource: str, message: str, *,
           detail: Optional[Callable[[], None]] = None,
           exception: Optional[Exception] = None, failure_cause: Optional[FailureCause] = None,
           **fields: Any) -> NoReturn:
-    """End the query with an error result; emitted, it exits 1 (_emit_result).
+    """End the query with an error result; its selected policy decides the exit.
 
     ``meta.errors`` carries the error once more with a code (``adapter_error`` for a raise,
     ``element_not_found``, ...), which is how JSON tells a router-built failure from one an
@@ -328,7 +330,7 @@ def _preparation_answer(uri, element, args, exception):
     path = resource.partition('?')[0]
     cause = FailureCause.INVALID_REQUEST if '\x00' in path else FailureCause.ANALYSIS
     return _invalid_answer(adapter_class, scheme, path, _exception_message(exception), args, cause,
-                           default_fail_on=adapter_class.DEFAULT_FAIL_ON)
+                           default_fail_on=getattr(adapter_class, 'DEFAULT_FAIL_ON'))
 
 
 def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> Answer:
@@ -538,11 +540,12 @@ def _reject_missing_path(adapter_class: type, scheme: str, resource: str, *, cla
         try:
             Path(path).stat()
         except (FileNotFoundError, NotADirectoryError):
-            _fail(scheme, resource, f"Path not found: {path}", adapter_class=adapter_class, code='invalid_request',
+            _fail(scheme, resource, f"Path not found: {to_posix(path)}", adapter_class=adapter_class, code='invalid_request',
                   failure_cause=FailureCause.INVALID_REQUEST)
         except ValueError as exc:
-            _fail(scheme, resource, _exception_message(exc), adapter_class=adapter_class, code='invalid_request',
-                  failure_cause=FailureCause.INVALID_REQUEST)
+            cause = FailureCause.INVALID_REQUEST if '\x00' in path else FailureCause.ANALYSIS
+            _fail(scheme, resource, _exception_message(exc), adapter_class=adapter_class, code=cause.value,
+                  failure_cause=cause)
         except OSError as exc:
             _fail(scheme, resource, _exception_message(exc), adapter_class=adapter_class, exception=exc)
         return
@@ -581,11 +584,11 @@ def resolve_adapter(adapter_class: type, renderer_class: type[Any], scheme: str,
                     resource: str, element: Optional[str], args: 'Namespace') -> Answer:
     """Answer a query on an adapter without printing it (see resolve_uri)."""
     facts_of = _uri_execution_facts(adapter_class, resource, element, args)
-    policy = adapter_class.DEFAULT_FAIL_ON if facts_of is not None else None
+    policy = getattr(adapter_class, 'DEFAULT_FAIL_ON') if facts_of is not None else None
     return _answer(lambda: _resolve(adapter_class, renderer_class, scheme, resource, element, args,
                                     facts_of=facts_of, default_fail_on=policy),
                    scheme, args, facts_of=facts_of, default_fail_on=policy,
-                   result_type=adapter_class.RESULT_TYPE if facts_of is not None else None)
+                   result_type=getattr(adapter_class, 'RESULT_TYPE') if facts_of is not None else None)
 
 
 def _check_mode(adapter: Any, args: 'Namespace') -> bool:

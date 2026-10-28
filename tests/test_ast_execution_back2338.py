@@ -242,3 +242,19 @@ def test_nul_resource_is_structured_usage_from_library_transport(root):
     assert failure.value.code == 2
     assert json.loads(out.getvalue())['error']
     assert 'Traceback' not in err.getvalue()
+
+
+def test_non_nul_preparation_valueerror_is_required_failure(root, monkeypatch):
+    def failed(*args):
+        raise ValueError('SCOPE_PREPARATION_FAILED')
+    monkeypatch.setattr('reveal.utils.exclusions.dispatch_scope', failed)
+    result = run(root, '', '--format', 'json')
+    assert result.returncode == 3
+    assert json.loads(result.stdout)['error'] == 'SCOPE_PREPARATION_FAILED'
+
+
+def test_missing_path_diagnostic_serializes_backslash_spelling():
+    result = _run_reveal_direct('ast://missing_back2338\\absent.py', '--format', 'json')
+    assert result.returncode == 2
+    answer = json.loads(result.stdout)
+    assert answer['error'] == 'Path not found: missing_back2338/absent.py'
