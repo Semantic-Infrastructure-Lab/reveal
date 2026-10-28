@@ -16,6 +16,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
+### Changed
+
+- Ordinary `ast://` filter queries exit 2 for rejected regex/controls or a missing path, and 3 for required analysis/output loss (previously 1 or 0); MCP marks fully failed work as an error and keeps useful partial results. Python API validation still raises `ValueError`; dedicated dict/type-evidence modes and legacy element/check/stdin/batch operations keep their existing policy (BACK-2338).
+
 ### Fixed
 
 - Adapter warnings must include a nonempty string `type`. Python result builders now raise `ValueError` for malformed warnings; declared commands report an invalid adapter answer instead of treating one as valid. Warning `code` stays optional, and error diagnostics keep their separate contract (BACK-2324).
