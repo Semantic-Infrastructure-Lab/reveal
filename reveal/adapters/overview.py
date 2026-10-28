@@ -19,6 +19,7 @@ from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, WarningEntry
 from .ast import AstAdapter
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .git import GitAdapter
+from .git import adapter as git_adapter
 from .imports import ImportsAdapter
 from .stats import MetricsAdapter
 from .stats.adapter import TEST_CHOICES
@@ -399,7 +400,6 @@ def _git_unavailable_warning() -> Optional[WarningEntry]:
     git section is left out and this says why. It is not a failed composition, so it does not make
     the result incomplete (BACK-2319).
     """
-    from .git import adapter as git_adapter
     if git_adapter.PYGIT2_AVAILABLE:
         return None
     return {
@@ -407,6 +407,26 @@ def _git_unavailable_warning() -> Optional[WarningEntry]:
         'message': ('recent commit history omitted: pygit2 is not installed '
                     '(pip install "reveal-cli[git]")'),
     }
+
+
+def _git_probe(adapter: 'OverviewAdapter', path: Path,
+               skipped: bool) -> tuple[Optional[Path], Optional[WarningEntry]]:
+    """(git root, unavailable-warning) for one overview: both None when git was skipped
+    (``?no_git``); the warning only when pygit2 is absent, in which case there is no root."""
+    if skipped:
+        return None, None
+    unavailable = _git_unavailable_warning()
+    if unavailable:
+        return None, unavailable
+    return _git_root_or_disclose(adapter, path), None
+
+
+def _with_warning(meta: Optional[RevealMeta], warning: Optional[WarningEntry]) -> Optional[RevealMeta]:
+    """`meta` with `warning` appended to its ``warnings``; unchanged when there is none."""
+    if warning:
+        meta = meta or {}
+        meta.setdefault('warnings', []).append(warning)
+    return meta
 
 
 def _git_root_or_disclose(adapter: 'OverviewAdapter', path: Path) -> Optional[Path]:
@@ -809,8 +829,7 @@ class OverviewAdapter(ResourceAdapter):
 
         observations: Dict[str, bool] = {}
         stats = _run_stats(self, path, top, tests=tests_spec.read(self.query_params), observations=observations)
-        git_unavailable = None if no_git else _git_unavailable_warning()
-        git_root = None if no_git or git_unavailable else _git_root_or_disclose(self, path)
+        git_root, git_unavailable = _git_probe(self, path, no_git)
         git_log = [] if git_root is None else _run_git_log(self, path, top)
         git_foreign_root: Optional[Path] = None
         # Compare resolved: 'overview://.' at a repo root is not foreign to itself.
@@ -835,10 +854,7 @@ class OverviewAdapter(ResourceAdapter):
             'scope': _run_scope(self, path, failures=scope_failures),
         }
 
-        meta = self.composed_meta()
-        if git_unavailable:
-            meta = meta or {}
-            meta.setdefault('warnings', []).append(git_unavailable)
+        meta = _with_warning(self.composed_meta(), git_unavailable)
         error = _directory_loss_error(meta, observations)
         if error:
             meta = meta or {}
