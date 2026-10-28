@@ -23,6 +23,8 @@ from pathlib import Path
 
 import pytest
 
+from reveal.analyzers.imports import extraction as import_extraction
+
 from conftest import needs_forked_workers
 from reveal.adapters import imports as imports_adapter
 from reveal.rules.imports import I002 as i002
@@ -95,7 +97,7 @@ def pools(monkeypatch):
     """Every pool in this module runs with 2 workers on a 6-file tree."""
     monkeypatch.setenv('REVEAL_MAX_WORKERS', '2')
     monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
-    monkeypatch.setattr(imports_adapter, '_PARALLEL_MIN_FILES', 1)
+    monkeypatch.setattr(import_extraction, '_PARALLEL_MIN_FILES', 1)
     monkeypatch.setattr(i002, '_GRAPH_PARALLEL_MIN_FILES', 1)
     i002._graph_cache.clear()
     yield monkeypatch
@@ -227,7 +229,7 @@ def test_grep_files_negative_control_a_healthy_pool(tmp_path, monkeypatch, caplo
 # the real worker captured here (the module attribute is the patched stand-in).
 
 _REAL_I002_EXTRACT = i002._extract_imports_for_file
-_REAL_IMPORTS_EXTRACT = imports_adapter._extract_one_file
+_REAL_IMPORTS_EXTRACT = import_extraction.extract_one_file
 _REAL_SCAN_ONE = parallel._scan_one
 
 
@@ -268,7 +270,7 @@ def test_i002_real_dying_worker_costs_only_lost_files(tmp_path, pools, caplog):
 @needs_forked_workers
 def test_imports_real_dying_worker_costs_only_lost_files(tmp_path, pools):
     root = _tree(tmp_path)
-    pools.setattr(imports_adapter, '_extract_one_file', _imports_extract_dying)
+    pools.setattr(import_extraction, 'extract_one_file', _imports_extract_dying)
     adapter, result = _imports_run(root)
     lost = {fp.name for fp in adapter.analysis.files_failed}
     assert DYING in lost and len(lost) <= N_FILES

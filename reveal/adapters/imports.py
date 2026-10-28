@@ -13,10 +13,8 @@ Usage:
 """
 
 import difflib
-import hashlib
 import os
 import sys
-from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, Sequence, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION, PathFailure, WarningEntry
@@ -38,122 +36,25 @@ from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec
 from ..utils.query_binding import boolean_value
+from ..analyzers.imports.views import (
+    ImportView, _unused_not_checked, detect_autoload_regime, _component_cohesion,
+    _cohesion_fields, _cohesion_declined, COHESION_DECLINED_RULE, COHESION_DECLINED_REASON,
+)
+from ..analyzers.imports import diagnostics as import_diagnostics
+from ..analyzers.imports.diagnostics import worker_lost_warning, parse_failure_warning, file_loss_warnings
 from ..analyzers.imports import service as import_analysis
+from ..analyzers.imports.build_cache import (
+    _ADAPTER_IMPORT_GRAPH_NAMESPACE, _candidate_set_fingerprint, _graph_cache_key, _GRAPH_MEMO,
+)
+from ..analyzers.imports.extraction import (
+    extract_one_file as _extract_one_file, lost_extraction as _lost_extraction,
+)
 from ..analyzers.imports import resolution
-from ..analyzers.imports.file_index import resolution_fingerprint
 from ..registry import get_code_extensions
-from ..utils.parallel import pool_worker_count, submit_each, worker_lost_warning as _worker_lost_warning
 from ..utils.path_utils import hidden_entries_warning, is_test_path, to_posix, to_relative_display
 from ..utils.query_control import ScanBudget
-from ..utils.request_cache import in_host_request, register_request_cache, register_validated_cache
 from ..utils.results import ResultBuilder, note_truncation
 from ..utils.warning_render import meta_warning_lines
-
-# Disk-cache namespace for this adapter's resolved import graph (BACK-834).
-# Mirrors rules/imports/I002.py's own import-graph disk cache (_tree_fingerprint
-# / _IMPORT_GRAPH_NAMESPACE) — same fingerprint recipe (path + mtime_ns + size
-# per source and indexed target file), but this adapter builds a graph rooted at whatever
-# `path` argument the caller gave it (imports://<path>, pack --architecture,
-# pack --focus), not I002's resolved *project* root, so it gets its own
-# namespace rather than sharing I002's cache entries.
-_ADAPTER_IMPORT_GRAPH_NAMESPACE = "adapter_import_graph"
-
-def _candidate_set_fingerprint(candidates: List[Path],
-                               file_index: Optional[Dict[str, List[Path]]] = None, *, root: Path,
-                               traversal_failures: Sequence[PathFailure] = ()) -> Optional[str]:
-    """Shared root/source/target fingerprint; preserve the private source-only call shape."""
-    return resolution_fingerprint(candidates, {} if file_index is None else file_index, excluded_root=disk_cache.cache_root(),
-                                  root=root, traversal_failures=traversal_failures)
-
-
-def _graph_cache_key(candidates: List[Path], file_index: Dict[str, List[Path]], root: Path,
-                     traversal_failures: Sequence[PathFailure], cap: Optional[int],
-                     parsed: Optional[frozenset] = None) -> Optional[str]:
-    """The whole-graph cache key: the resolution fingerprint of the scan root, plus the build's
-    identity (the file cap the walk ran under, the extensions it parsed: every supported one unless
-    a caller narrowed them, ``parse_extensions``). None: not cacheable."""
-    fingerprint = _candidate_set_fingerprint(candidates, file_index, root=root,
-                                             traversal_failures=traversal_failures)
-    if fingerprint is None:
-        return None
-    exts = parsed if parsed is not None else get_all_extensions()
-    identity = f'{fingerprint}|cap={cap}|exts={",".join(sorted(exts))}'
-    return hashlib.sha256(identity.encode('utf-8')).hexdigest()
-
-
-# BACK-1054 (the BACK-2109 pattern): inside a host request (MCP, reveal.api) the resolved graph of
-# a scan root is kept across requests while the tree stamp of that root is unchanged
-# (register_validated_cache), so a repeated per-file ?importers= answers without a rebuild when
-# the disk cache is off or cold. Keyed by the root alone, as resolved; the value holds at most
-# _GRAPH_MEMO_VARIANTS builds, each under the cache key it was built for (which already carries
-# the source set, targets and file cap) and the --exclude/gitignore scope the walk ran under,
-# which the tree stamp cannot see. A build with a gitignore-off scope lives for its request only
-# (the BACK-2118 rule). &scope, &tests and &lazy are applied at presentation: never a variant.
-_GRAPH_MEMO: 'OrderedDict[str, List[Tuple[Tuple[str, Any, bool], ImportAnalysis]]]' = OrderedDict()
-_GRAPH_MEMO_ROOTS = 4
-_GRAPH_MEMO_VARIANTS = 2
-
-
-def _evict_graph_root(root: str) -> None:
-    _GRAPH_MEMO.pop(root, None)
-
-
-def _drop_request_local_graphs() -> None:
-    for root, builds in tuple(_GRAPH_MEMO.items()):
-        kept = [build for build in builds if build[0][2]]
-        if kept:
-            _GRAPH_MEMO[root] = kept
-        else:
-            del _GRAPH_MEMO[root]
-
-
-register_request_cache(__name__ + '.graph_request_local', _drop_request_local_graphs)
-register_validated_cache(__name__ + '.graph', _GRAPH_MEMO, _evict_graph_root)
-
-
-def _memo_variant(key: str) -> Tuple[str, Any, bool]:
-    from ..utils.exclusions import active_exclusions
-    from ..utils.gitignore import gitignore_enabled
-    return key, active_exclusions(), gitignore_enabled()
-
-
-def _recall_graph(root: Path, key: str) -> Optional[ImportAnalysis]:
-    """The build this host request may reuse for *root* and *key*; None outside a request."""
-    if not in_host_request():
-        return None
-    variant = _memo_variant(key)
-    for built_for, analysis in _GRAPH_MEMO.get(str(root), []):
-        if built_for == variant:
-            _GRAPH_MEMO.move_to_end(str(root))
-            return analysis
-    return None
-
-
-def _remember_graph(root: Path, key: str, analysis: ImportAnalysis) -> None:
-    """Keep a cacheable build for the rest of this host request and the next ones (validated)."""
-    if not in_host_request() or not analysis.cacheable:
-        return
-    variant = _memo_variant(key)
-    builds = [build for build in _GRAPH_MEMO.get(str(root), []) if build[0] != variant]
-    _GRAPH_MEMO[str(root)] = [*builds, (variant, analysis)][-_GRAPH_MEMO_VARIANTS:]
-    _GRAPH_MEMO.move_to_end(str(root))
-    if len(_GRAPH_MEMO) > _GRAPH_MEMO_ROOTS:
-        _GRAPH_MEMO.popitem(last=False)
-
-
-def _cached_graph(root: Path, key: Optional[str]) -> Optional[ImportAnalysis]:
-    """The stored build for *key*: the host-request memo first, then the disk layer (a disk hit
-    joins the memo). A record from before the cascade (no ``resolution``) is a miss."""
-    if key is None:
-        return None
-    cached = _recall_graph(root, key)
-    if cached is None:
-        cached = disk_cache.get(_ADAPTER_IMPORT_GRAPH_NAMESPACE, key)
-    if not isinstance(cached, ImportAnalysis) or cached.resolution is None:
-        return None
-    _remember_graph(root, key, cached)
-    return cached
-
 
 def _discovery_incomplete(result: Dict[str, Any]) -> bool:
     """Whether the available import graph lost required directory enumeration."""
@@ -163,16 +64,6 @@ def _discovery_incomplete(result: Dict[str, Any]) -> bool:
 def _module_label(path: str) -> str:
     p = Path(path)
     return '/'.join(p.parts[-2:]) if p.name == '__init__.py' else p.name
-
-
-def _unused_not_checked(scanned_files) -> Dict[str, int]:
-    from ..analyzers.imports.base import extension_detects_unused
-    tally: Dict[str, int] = {}
-    for fp in scanned_files:
-        if not extension_detects_unused(fp.suffix):
-            ext = fp.suffix.lower()
-            tally[ext] = tally.get(ext, 0) + 1
-    return dict(sorted(tally.items()))
 
 
 def unused_not_checked_line(not_checked: Dict[str, int]) -> str:
@@ -208,139 +99,6 @@ def coverage_warning_line(unsupported: Dict[str, int]) -> str:
 # are safe -- callers just keep seeing the generic caveat; a false positive
 # would not be, so detection intentionally requires an unambiguous manifest
 # marker, not a guess from file extensions alone.
-_AUTOLOAD_REGIMES: Tuple[Tuple[str, str, str], ...] = (
-    # (manifest filename, content substring to require (empty = presence-only), framework label)
-    ('Gemfile', "gem 'rails'", 'Ruby on Rails'),
-    ('Gemfile', 'gem "rails"', 'Ruby on Rails'),
-    ('manage.py', '', 'Django'),
-    ('artisan', '', 'Laravel'),
-)
-
-
-_AUTOLOAD_REGIME_MAX_WALK_UP = 6
-
-
-def worker_lost_warning(lost_files: List[str], base: Optional[Path] = None) -> Optional[WarningEntry]:
-    """One meta warning for the files a dead pool worker took down before they were
-    parsed (BACK-1753): not a parse error, and a file with no import extractor loses
-    its structure the same way (BACK-1752)."""
-    return cast(Optional[WarningEntry], _worker_lost_warning(
-        lost_files, "their imports and structure are missing, so results can under-report", base))
-
-
-def parse_failure_warning(failed_files: List[str], base: Optional[Path] = None) -> Optional[WarningEntry]:
-    """One meta warning for the files tree-sitter parsed with errors (BACK-1598).
-
-    The per-file extractor only sets ``parse_failed``; every command that builds
-    an import graph discloses the set once, through this, rather than one log
-    line per file per extraction pass (364 stderr lines on a cold `reveal
-    overview` of Redis src/, none on a warm one, and never in the result).
-    """
-    if not failed_files:
-        return None
-    shown = [to_relative_display(f, base) if base else to_posix(f) for f in sorted(failed_files)[:5]]
-    more = f" and {len(failed_files) - len(shown)} more" if len(failed_files) > len(shown) else ''
-    return {
-        'type': 'partial_parse',
-        'count': len(failed_files),
-        'files': shown,
-        'message': (
-            f"{len(failed_files)} file(s) parsed with errors -- their imports may be incomplete, "
-            f"so import-graph results can under-report: {', '.join(shown)}{more}"
-        ),
-    }
-
-
-def file_loss_warnings(analysis: ImportAnalysis, base: Optional[Path] = None, *,
-                       spell: Optional[Callable[[Optional[str]], Optional[str]]] = None) -> List[WarningEntry]:
-    """The per-file facts of one import build, each under its own cause (BACK-2190).
-
-    ``files_failed`` holds three different things, and the user's next step differs: a file
-    tree-sitter recovered with ERROR nodes (``partial_parse``: its recovered imports are edges), a
-    file never parsed because it could not be read (``analysis_failed``, named by the OSError type:
-    no tree, its imports are missing) and a file a dead pool worker took (``worker_lost``).
-    ``spell`` names each file as the answer does (imports' ``_path_display``) instead of ``base``."""
-    from .ast.analysis import analysis_skipped_warning
-    name = _spelled(spell)
-    if spell is not None:
-        base = None
-    lost = set(analysis.files_lost)
-    partial: List[str] = []
-    unread: List[Tuple[str, str]] = []
-    for path in analysis.files_failed:
-        if path in lost:
-            continue
-        extraction = analysis.extractions.get(path)
-        parse = (extraction.diagnostics.get('parse') or {}) if extraction is not None else {}
-        read_error = extraction.read_error if extraction is not None else None
-        # Only a file whose tree was never built is unreadable (status 'unavailable', or an OSError);
-        # a failed file with no such record is a parse failure, as it was before BACK-2190.
-        if read_error or parse.get('status') == 'unavailable':
-            unread.append((name(path), f'{read_error}: {parse.get("reason", "")}' if read_error
-                           else str(parse.get('reason') or 'not parsed')))
-        else:
-            partial.append(name(path))
-    warnings = [parse_failure_warning(partial, base), worker_lost_warning([name(p) for p in lost], base),
-                analysis_skipped_warning(unread, base, 'analysis is incomplete; its imports are missing from the '
-                                                       'import graph')]
-    return [w for w in warnings if w]
-
-
-def _spelled(spell: Optional[Callable[[Optional[str]], Optional[str]]]) -> Callable[[Any], str]:
-    """``str`` of a path, or the answer's spelling of it when the caller passes one."""
-    if spell is None:
-        return str
-    return lambda path: spell(str(path)) or str(path)
-
-
-def detect_autoload_regime(path: Path) -> Optional[Dict[str, str]]:
-    """Return {'framework': ..., 'evidence': ...} if `path` -- or an ancestor,
-    up to _AUTOLOAD_REGIME_MAX_WALK_UP levels up -- looks like a
-    convention-autoloading project's root; None otherwise. See
-    _AUTOLOAD_REGIMES for what's covered.
-
-    Walks upward because a real invocation typically targets a subdirectory
-    (`imports://app/models`, `architecture://src/entities`), not the project
-    root where Gemfile/manage.py/artisan actually live -- checking only the
-    exact queried path would silently miss the common case (confirmed: the
-    due-diligence recipe this was filed against runs adapters against
-    subdirectories routinely). Crossing into an unrelated enclosing project
-    is possible but low-cost (an extra, still-true disclosure line) compared
-    to the silent miss this fixes.
-    """
-    try:
-        base = (path if path.is_dir() else path.parent).resolve()
-    except OSError:
-        return None
-    seen_frameworks: set = set()
-    current = base
-    for _ in range(_AUTOLOAD_REGIME_MAX_WALK_UP):
-        for filename, needle, framework in _AUTOLOAD_REGIMES:
-            if framework in seen_frameworks:
-                continue
-            candidate = current / filename
-            if not candidate.is_file():
-                continue
-            if not needle:
-                seen_frameworks.add(framework)
-                continue
-            try:
-                if needle in candidate.read_text(errors='ignore', encoding='utf-8'):
-                    seen_frameworks.add(framework)
-            except OSError:
-                continue
-        if seen_frameworks:
-            break
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
-    if not seen_frameworks:
-        return None
-    framework = sorted(seen_frameworks)[0]
-    evidence = next(f"{fn} ({framework.split()[-1].lower()} marker)" for fn, _, fw in _AUTOLOAD_REGIMES if fw == framework)
-    return {'framework': framework, 'evidence': evidence}
-
 
 def autoload_regime_warning(regime: Optional[Dict[str, str]]) -> str:
     """Strong, framework-named disclosure line for when detect_autoload_regime()
@@ -431,7 +189,7 @@ _MAX_FILES = ParamSpec(
     'max_files', 'integer',
     'Source files the walk may keep (default 20000); a capped walk is disclosed in metadata.scan_budget '
     'and as a warning, never silently partial',
-    20000, _max_files_value, examples=('imports://.?importers&max_files=50000',), minimum=1,
+    import_analysis.DEFAULT_FILE_CAP, _max_files_value, examples=('imports://.?importers&max_files=50000',), minimum=1,
 )
 _IMPORTERS = ParamSpec(
     'importers', 'string',
@@ -445,31 +203,7 @@ _REQUEST_SPECS = (_LAZY, _SCOPE, _TESTS, _ROOT, _MAX_FILES, _IMPORTERS)
 
 # Component cohesion (internal / (internal + outgoing) imports) is declined, not computed, for a component whose
 # files are mostly in a language where one package/module sees its own files with no import (BACK-1428).
-COHESION_DECLINED_REASON = 'same-package visibility'
-COHESION_DECLINED_RULE = (
-    'cohesion n/a (' + COHESION_DECLINED_REASON + '): a component with more than half its files in ' + ', '.join(same_package_families())
-    + ' is not scored, because files of one package or module use each other without an import, so internal imports '
-    'would read ~0 whatever the structure; other languages keep their number')
 
-
-def _component_cohesion(internal: int, total: int, files) -> Optional[float]:
-    """internal / (internal + outgoing), or None where the component's language makes it meaningless."""
-    if _cohesion_declined(files):
-        return None
-    return internal / total if total > 0 else 0.0
-
-
-def _cohesion_fields(cohesion: Optional[float]) -> Dict[str, Any]:
-    """The row's cohesion, rounded, or its decline: ``cohesion: None`` and ``cohesion_reason``."""
-    if cohesion is None:
-        return {'cohesion': None, 'cohesion_reason': COHESION_DECLINED_REASON}
-    return {'cohesion': round(cohesion, 3)}
-
-
-def _cohesion_declined(files) -> bool:
-    """Whether a component's files are mostly (strictly more than half) in a same-package-visibility language."""
-    same = sum(1 for f in files if conventions_for_path(str(f)).same_package_visibility)
-    return 2 * same > len(files)
 
 # BACK-2194: the Graphviz module view, the replacement for calls ?modules &format=dot. URI-only, as
 # on calls:// (dot has no --format spelling); it draws the edges ?importers lists for a directory.
@@ -1467,101 +1201,6 @@ from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supp
 
 
 # ── BACK-489 P1: parallel per-file extraction ───────────────────────────────
-# `_build_graph`'s per-file work (import/symbol extraction + optional AST
-# structure) is independent across files — an embarrassingly-parallel map whose
-# only shared step is the cheap graph-assembly reduce that follows. On large
-# repos this map is ~94% of `reveal architecture`'s cost and is otherwise
-# single-threaded (BACK-489). We fan it out across processes (tree-sitter parsing is fork-safe;
-# measured 4.6x on a 12-core box for a 852-file TS subset). Results are
-# consumed in submission order (ProcessPoolExecutor.map preserves order), so
-# the assembled graph and structure list are byte-identical to the serial path.
-_PARALLEL_MIN_FILES = 200   # below this, pool startup/IPC outweighs the win
-_PARALLEL_MAX_WORKERS = 16  # cap so huge core counts don't oversubscribe/thrash
-
-
-def _parallel_worker_count(n_files: int) -> int:
-    """Workers to use for `n_files`. 1 = run serially (no pool).
-
-    `REVEAL_MAX_WORKERS` overrides everything (set to 1 to force the serial
-    path — used by tests and for debugging); otherwise parallelize only above
-    `_PARALLEL_MIN_FILES`, capped at `_PARALLEL_MAX_WORKERS` and the CPU count.
-    """
-    if n_files < _PARALLEL_MIN_FILES:
-        return pool_worker_count(1)
-    return pool_worker_count(min(os.cpu_count() or 1, _PARALLEL_MAX_WORKERS))
-
-
-def _extract_one_file(fp_str: str, want_structure: bool,
-                      inputs: Optional[resolution.ResolutionInputs] = None):
-    """Extract imports/symbols (+ optional AST structure) for a single file.
-
-    Module-level and picklable so it runs unchanged under a
-    `ProcessPoolExecutor` (fork *or* spawn). Returns
-    `(fp_str, imports_or_None, symbols_or_None, structure_or_None, extraction, structure_failure_or_None,
-    entry_or_None)`:
-    `imports`/`symbols` are None when the file has no import extractor (mirrors
-    the serial path only populating them for extractable files); `structure`
-    is None when not requested or when analysis raised (`structure_failure` then
-    names the error). Import extraction errors are NOT
-    swallowed here — the serial path lets them propagate too. `extraction.parse_failed` is True
-    when the extractor had one (i.e. the file's language IS supported) but
-    tree-sitter could not parse it (`extractor.parse_failed`, BACK-982) — such
-    a file's `imports`/`symbols` are an empty/partial result, not a confirmed-
-    clean one, so callers (I001/I002, this adapter's own summary) must not
-    treat it the same as a genuinely-clean file.
-
-    With the cascade's project-wide *inputs* (BACK-1054) the file is read as the cascade reads it
-    (PHP gets the constant index) and also indexed where it was parsed (``resolution.index_file``),
-    so the main process never parses it again; ``entry`` is None without them or an extractor.
-    """
-    fp = Path(fp_str)
-    imports = symbols = structure = structure_failure = entry = None
-    extraction = None
-    extractor = get_extractor(fp)
-    if extractor is not None:
-        if inputs is None:
-            imports = extractor.extract_imports(fp)
-        else:
-            imports = resolution.extract_file(fp, extractor, inputs.constant_index)
-        symbols = extractor.extract_symbols(fp)
-        if hasattr(extractor, 'extract_exports'):
-            symbols = symbols | extractor.extract_exports(fp)
-        extraction = extractor.analysis
-        if inputs is not None:
-            entry = resolution.index_file(fp, extractor, imports, inputs.manifest_dirs)
-    if want_structure:
-        # Structure is a separate add-on (only requested via collect_structures=True).
-        # analyze_file_outcome catches an analysis failure itself and returns it, so it
-        # reaches the run's analysis_failed warning instead of reading as "this file has
-        # no structure"; an exception that still escapes (a failed import, a bug) fails
-        # the chunk, which _extract_files records per file (BACK-1059, BACK-1856).
-        from .ast.analysis import analyze_file_outcome
-        structure, structure_failure = analyze_file_outcome(fp_str)
-    return fp_str, imports, symbols, structure, extraction, structure_failure, entry
-
-
-def _extract_chunk(job: Tuple[List[str], bool, Optional[resolution.ResolutionInputs]]) -> list:
-    """`_extract_one_file` over one chunk of paths: the pool's unit of work."""
-    paths, want_structure, inputs = job
-    return [_extract_one_file(fp_str, want_structure, inputs) for fp_str in paths]
-
-
-def _recording_entries(rows, entries: Optional[Dict[Path, resolution.FileEntry]]):
-    """``_extract_files`` rows without their last element, the file's ``FileEntry``, which lands in
-    *entries* (a file with no extractor, or lost to a dead worker, has none)."""
-    for fp, *rest, entry in rows:
-        if entry is not None and entries is not None:
-            entries[fp] = entry
-        yield (fp, *rest)
-
-
-def _lost_extraction(error: BaseException) -> ImportExtraction:
-    """The extraction record of a file a dead pool worker lost: failed, with the
-    cause, like a file its extractor could not parse (BACK-1726)."""
-    return ImportExtraction(parse_failed=True, worker_lost=True, diagnostics={
-        'parse': {'status': 'unavailable', 'reason': f"{type(error).__name__}: {error}"}})
-
-
 def _path_display(base_path: Path) -> Callable[[Optional[str]], Optional[str]]:
     """Every path an imports answer prints, spelled from the requested directory (a file target's own
     directory): the requested file is named (BACK-1488), a file under the directory is relative to it,
@@ -1988,73 +1627,10 @@ class ImportsAdapter(ResourceAdapter):
 
     def integrity_warnings(self, base: Optional[Path] = None, *,
                            spell: Optional[Callable[[Optional[str]], Optional[str]]] = None) -> List[WarningEntry]:
-        """The graph's disclosures, for the commands that build it through _build_graph
-        rather than get_structure (overview, architecture): files parsed with errors
-        (parse_failure_warning) and files a dead pool worker took down
-        (worker_lost_warning), each under its own cause. Paths are relative to ``base``, or
-        spelled by ``spell`` (imports' own answers, BACK-2185) when one is given."""
-        from .ast.analysis import analysis_skipped_warning, traversal_failed_warning
-        name = _spelled(spell)
-        if spell is not None:
-            base = None
-        traversal = [PathFailure(name(path) if path else path, cause)
-                     for path, cause in getattr(self.analysis.graph, 'traversal_failures', ())]
-        structure_failures = [(name(path), cause) for path, cause in self.analysis.structure_failures]
-        warnings = [traversal_failed_warning(traversal, base),
-                    *file_loss_warnings(self.analysis, base, spell=spell),
-                    analysis_skipped_warning(
-                        structure_failures, base,
-                        "analysis is incomplete; some functions and classes may be missing from the complexity and structure results")]
-        return [w for w in warnings if w]
+        return import_diagnostics.integrity_warnings(self.analysis, base, spell=spell)
 
     def get_metadata(self) -> Dict[str, Any]:
-        """Get metadata about import analysis."""
-        if not self.analysis.graph:
-            return {'status': 'not_analyzed'}
-
-        in_scope = [imports for f, imports in self.analysis.graph.files.items() if self._in_scope(f)]
-        return {
-            'total_imports': sum(len(imports) for imports in in_scope),
-            'total_files': len(in_scope),
-            # Files actually scanned with a working extractor — distinct from
-            # total_files (files that happen to have >=1 import statement).
-            # A file with a supported language but zero imports (common in
-            # older procedural PHP/Ruby, found via real WordPress source
-            # during the BACK-431 feature-breadth pass) legitimately has
-            # total_files == 0 despite being fully, correctly analyzed; the
-            # text renderer needs this count to tell "clean" from "unchecked."
-            'scanned_files': sum(1 for f in self.analysis.scanned_files if self._in_scope(f)),
-            # Cycles leave function-level imports out unless &lazy says otherwise (BACK-2077).
-            'has_cycles': len(self._cycle_groups(self._edges(LAZY_EXCLUDE))) > 0,
-            'cycles_lazy': self._lazy_mode(LAZY_EXCLUDE)[0],
-            'analyzer': 'imports',
-            # Recognized code files whose language has no import extractor yet.
-            'unsupported_extensions': dict(sorted(self.analysis.unsupported_extensions.items())),
-            # BACK-1398: scanned files whose language has an import extractor but
-            # no unused-import detection -- their 0 unused is "not checked".
-            'unused_not_checked_extensions': _unused_not_checked(self.analysis.scanned_files),
-            # Files with a supported language that tree-sitter could not parse
-            # (BACK-982) -- included in scanned_files but their imports/symbols
-            # are incomplete, not confirmed-empty; has_cycles can under-report
-            # when a cycle runs through one of these. Sorted+capped for stable,
-            # bounded JSON/text output; the count alone (below) is exact.
-            'extraction_diagnostics': {
-                to_relative_display(fp, self._target_path): artifact.diagnostics
-                for fp, artifact in self.analysis.extractions.items() if artifact.diagnostics
-            },
-            # files_failed is every file whose imports may be incomplete; files_lost is
-            # the subset a dead pool worker took down before it was parsed (BACK-1753).
-            'files_failed_count': len(self.analysis.files_failed),
-            'files_failed': sorted(str(fp) for fp in self.analysis.files_failed)[:50],
-            'files_lost_count': len(self.analysis.files_lost),
-            'files_lost': sorted(str(fp) for fp in self.analysis.files_lost)[:50],
-            # BACK-1245: None on every corpus except a detected convention-
-            # autoloading framework (Rails/Django/Laravel) -- see
-            # detect_autoload_regime()/autoload_regime_warning() above.
-            'autoload_regime': detect_autoload_regime(self._target_path) if self._target_path else None,
-            # BACK-1054: the one file cap the walk ran under (&max_files) and what it kept.
-            'scan_budget': self._scan_budget_dict(),
-        }
+        return self._analysis_view().get_metadata()
 
     def _scan_budget_dict(self) -> Dict[str, Any]:
         record = self.analysis.resolution
@@ -2113,70 +1689,29 @@ class ImportsAdapter(ResourceAdapter):
             help_data['supported_languages'] = get_supported_languages()
         return help_data
 
-    def _extract_file_imports_and_symbols(self, file_path, extractor):
-        """Extract imports and symbols from a single file using its extractor."""
-        imports = extractor.extract_imports(file_path)
-        symbols = extractor.extract_symbols(file_path)
-        if hasattr(extractor, 'extract_exports'):
-            exports = extractor.extract_exports(file_path)
-            symbols = symbols | exports
-        return imports, symbols
-
-    def _extract_files(self, candidates: List[Path], want_structure: bool,
-                       inputs: Optional[resolution.ResolutionInputs] = None):
-        """Yield ``(Path, imports_or_None, symbols_or_None, structure_or_None, extraction,
-        structure_failure_or_None, entry_or_None)``
-        per candidate file, in candidate order.
-
-        Fans the independent per-file extraction out across processes when the
-        repo is large enough to pay back pool startup (`_parallel_worker_count`);
-        otherwise runs it inline. Chunks are read in submission order, so the
-        caller's assembly is identical either way. A file lost to a dead worker
-        (which fails every pending chunk) is yielded with no imports and a failed
-        extraction (`_lost_extraction`), so it reaches ``files_failed`` and the
-        run's partial-parse warning instead of failing the whole run (BACK-1726).
-        """
-        workers = _parallel_worker_count(len(candidates))
-        if workers <= 1:
-            for fp in candidates:
-                yield (fp, *_extract_one_file(str(fp), want_structure, inputs)[1:])
-            return
-
-        from concurrent.futures import ProcessPoolExecutor
-        from ..logging_setup import worker_bootstrap
-
-        n = len(candidates)
-        # A few chunks per worker balances load without excessive IPC round-trips.
-        chunksize = max(1, n // (workers * 8))
-        chunks = [[str(fp) for fp in candidates[i:i + chunksize]] for i in range(0, n, chunksize)]
-        with ProcessPoolExecutor(
-            max_workers=workers, initializer=worker_bootstrap,
-        ) as executor:
-            futures = submit_each(executor, _extract_chunk, [(chunk, want_structure, inputs) for chunk in chunks])
-            for chunk, future in zip(chunks, futures):
-                try:
-                    rows = future.result()
-                except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever the worker raised: BrokenProcessPool when it died, or any exception an extractor threw on one file of the chunk; the chunk's files are recorded as failed extractions (_lost_extraction carries the cause) and reach files_failed and the partial-parse warning
-                    rows = [(fp_str, None, None, None, _lost_extraction(e), None, None) for fp_str in chunk]
-                for fp_str, *rest in rows:
-                    yield (Path(fp_str), *rest)
+    def _build_graph(self, target_path: Path, on_file_processed: Optional[Callable[[Path], None]] = None,
+                     collect_structures: bool = False) -> None:
+        """Build through the public analysis operation, then retain only this request's state."""
+        self._scan = scan = _scan_root_of(self._query_params, target_path)
+        self._scan_budget = ScanBudget(_MAX_FILES.read(self._query_params))
+        supported = self._parse_extensions if self._parse_extensions is not None else frozenset(get_all_extensions())
+        code = frozenset() if self._parse_extensions is not None else get_code_extensions()
+        reader = None
+        if collect_structures:
+            from .ast.analysis import analyze_file_outcome
+            reader = analyze_file_outcome
+        built = import_analysis.analyze(import_analysis.ScanScope(
+            scan.root, supported, code, cap=self._scan_budget.limit,
+            focus=None if scan.root == target_path else target_path),
+            on_file_processed=on_file_processed, structure_reader=reader)
+        self.analysis = built.analysis
+        self._structures = built.structures
+        self._scope_hidden = hidden_entries_warning(built.files.hidden, built.files.analyzed)
 
     @staticmethod
-    def _discover_candidate_files(
-        target_path: Path, supported_exts: frozenset, code_exts: frozenset, *,
-        traversal_failures: Optional[List[PathFailure]] = None,
-        hidden: Optional[Dict[str, int]] = None,
-    ) -> Tuple[List[Path], Dict[str, List[Path]]]:
-        """Walk target_path for candidate code files (serial, cheap: no parsing).
-
-        One resolution walk (BACK-1580, ``analyzers.imports.file_index``) yields both the
-        graph's files and a ``basename -> [full paths]`` index of every file an import can
-        point to (BACK-491: C/C++ include targets such as .inc/.tcc must resolve too), so
-        ``#include`` resolution is a dict lookup. Gitignored and --exclude'd files stay in
-        the index as targets but are not graph nodes (BACK-1386, BACK-1495); REVEAL_IGNORE
-        drops a file from both (BACK-1362); declaration-only stubs are not nodes (BACK-1467).
-        *hidden* receives the walk's hidden-entry tally (BACK-2065).
-        """
+    def _discover_candidate_files(target_path: Path, supported_exts: frozenset, code_exts: frozenset, *,
+                                  traversal_failures=None, hidden=None):
+        """Compatibility discovery entry point; the service owns the walk."""
         files = import_analysis.discover(import_analysis.ScanScope(target_path, supported_exts, code_exts))
         if traversal_failures is not None:
             traversal_failures.extend(files.traversal_failures)
@@ -2184,185 +1719,15 @@ class ImportsAdapter(ResourceAdapter):
             hidden.update(files.hidden)
         return list(files.candidates), files.index
 
-    def _process_extracted_files(
-        self,
-        candidates: List[Path],
-        collect_structures: bool,
-        on_file_processed: Optional[Callable[[Path], None]],
-        supported_exts: frozenset,
-        code_exts: frozenset,
-        inputs: Optional[resolution.ResolutionInputs] = None,
-        entries: Optional[Dict[Path, resolution.FileEntry]] = None,
-    ) -> List[ImportStatement]:
-        """Run per-file extraction (parallel on large repos, else serial),
-        consumed in candidate order so assembly is deterministic. Populates
-        self.analysis.symbols_by_file/_scanned_files/_unsupported_extensions/_structures/
-        _files_failed and returns the collected import statements; with the cascade's
-        *inputs*, each extracted file's ``FileEntry`` lands in *entries*.
-        """
-        files: List[Path] = []
-        all_imports: List[ImportStatement] = []
-        structures: List[Dict[str, Any]] = []
-        unextractable: Dict[str, int] = {}
-        failed_files: List[Path] = []
-        lost_files: List[Path] = []
-        structure_failures: List[Tuple[str, str]] = []
-
-        for fp, imports, symbols, structure, extraction, structure_failure in _recording_entries(
-                self._extract_files(candidates, collect_structures, inputs), entries):
-            if extraction is not None and extraction.worker_lost:
-                # Lost before its extractor ran, so "no import extractor" is unknown for
-                # it: failed either way, never silently unsupported (BACK-1752).
-                if fp.suffix in supported_exts:
-                    files.append(fp)
-                    self.analysis.extractions[fp] = extraction
-                failed_files.append(fp)
-                lost_files.append(fp)
-            elif fp.suffix in supported_exts:
-                files.append(fp)
-                if imports is not None:
-                    self.analysis.symbols_by_file[fp] = symbols
-                    all_imports.extend(imports)
-                if extraction is not None:
-                    self.analysis.extractions[fp] = extraction
-                    if extraction.parse_failed:
-                        failed_files.append(fp)
-            else:
-                ext = fp.suffix.lower()
-                if ext in code_exts:
-                    unextractable[ext] = unextractable.get(ext, 0) + 1
-            if collect_structures and structure:
-                structures.append(structure)
-            if structure_failure:
-                structure_failures.append((str(fp), structure_failure))
-            if on_file_processed:
-                on_file_processed(fp)
-
-        self.analysis.scanned_files = set(files)
-        self.analysis.unsupported_extensions = unextractable
-        self._structures = structures
-        self.analysis.files_failed = failed_files
-        self.analysis.files_lost = lost_files
-        self.analysis.structure_failures = structure_failures
-        return all_imports
-
-    def _scan_root_for(self, target_path: Path) -> resolution.ScanRoot:
-        return _scan_root_of(self._query_params, target_path)
-
-    def _walk_extensions(self) -> Tuple[frozenset, frozenset]:
-        """The extensions the walk keeps and parses, and the recognized-code extensions without an
-        import extractor it also keeps, to warn honestly (instead of a silent 0) when a scan hits,
-        e.g., Swift or Scala. A caller's own family (``parse_extensions``, depends://) is kept
-        alone, so the file cap counts only it."""
-        if self._parse_extensions is not None:
-            return self._parse_extensions, frozenset()
-        return frozenset(get_all_extensions()), get_code_extensions()
-
-    def _build_graph(
-        self,
-        target_path: Path,
-        on_file_processed: Optional[Callable[[Path], None]] = None,
-        collect_structures: bool = False,
-    ) -> None:
-        """Build the import graph a request about ``target_path`` reads (multi-language).
-
-        The graph is resolved at the scan root ``_scan_root_for`` picks (the project root, or
-        the path itself under ``&scope=path``), through depends://'s cascade
-        (``analyzers/imports/resolution.py``, BACK-1054): direct resolution, the PHP constant
-        index, namespace, member and Swift module fan-out, Zeitwerk convention edges, each edge
-        tagged with the stage that found it. The walk keeps at most ``&max_files`` source files
-        (one ScanBudget, disclosed). ``&scope``, ``&tests`` and ``&lazy`` choose rows and edges at
-        presentation; none of them changes the build or its cache key.
-
-        Only static imports are captured. Dynamic dispatch — Python's
-        importlib.import_module, JS require(), Java Class.forName, Ruby autoload,
-        and similar patterns — is invisible to this graph. All query modes
-        (fan-in, entrypoints, unused, circular, violations) share this limitation.
-
-        Per-file import/symbol extraction, the file's part of the cascade's indices and, when
-        requested, AST structure analysis are independent across files and run in parallel
-        across processes on large repos — see `_extract_one_file` / the module-level BACK-489 P1
-        note. The project-wide inputs extraction reads (PHP constants, Swift manifests, gemspec
-        roots) are built first, the resolution after; results are consumed in file order so
-        output is identical to a serial run.
-
-        Args:
-            target_path: Directory or file the request is about
-            on_file_processed: Optional callback invoked once per code file
-                (import-extractable or not), in deterministic file order, after
-                that file's extraction. A lightweight per-file notification hook
-                (structure is delivered via ``collect_structures`` below, not
-                this callback).
-            collect_structures: When True, also run AST structure analysis
-                (`analyze_file`) on every code file during the same parallel
-                pass and store the truthy results in ``self._structures`` — lets
-                `reveal architecture` get per-file complexity structures without
-                a second full-repo walk/parse. When False (default), no
-                structure analysis is done.
-
-        Caches (BACK-834, BACK-2082, BACK-2109): when `collect_structures` is False and no
-        `on_file_processed` callback was given, the resolved graph is cached on disk keyed by a
-        fingerprint of the scan root, source membership, resolution targets and the build's file
-        cap, and inside a host request it is also kept in memory (``_GRAPH_MEMO``, keyed by the
-        root alone, validated by the tree stamp). A build that lost a file for a reason its
-        content did not cause is returned, never stored (BACK-2083).
-        """
-        supported_exts, code_exts = self._walk_extensions()
-        self._scan = scan = self._scan_root_for(target_path)
-        root = scan.root
-        self._scan_budget = ScanBudget(_MAX_FILES.read(self._query_params))
-        focus = None if root == target_path else target_path
-        files = import_analysis.discover(import_analysis.ScanScope(
-            root, supported_exts, code_exts, cap=self._scan_budget.limit, focus=focus))
-        candidates, file_index = list(files.candidates), files.index
-        if focus is not None and target_path.is_file() and target_path not in candidates and (
-                target_path.suffix in supported_exts or target_path.suffix.lower() in code_exts):
-            # A file the request names is analyzed even when the root's walk leaves it out (a
-            # declaration stub, BACK-1467; an ignored file), as a walk of the file alone keeps it.
-            candidates.append(target_path)
-        traversal_failures = list(files.traversal_failures)
-        # Discovery runs on a cache hit too, so the disclosure is never a cached one.
-        self._scope_hidden = hidden_entries_warning(files.hidden, files.analyzed)
-
-        cacheable = not collect_structures and on_file_processed is None
-        key = _graph_cache_key(candidates, file_index, root, traversal_failures,
-                               self._scan_budget.limit, self._parse_extensions) if cacheable else None
-        cached = _cached_graph(root, key)
-        if cached is not None:
-            self.analysis = cached
-            return
-
-        resolved = self._extract_and_resolve(files, candidates, focus, collect_structures, on_file_processed,
-                                             supported_exts, code_exts)
-
-        # A file lost to a dead worker or unreadable this run is not the tree's answer (BACK-2083).
-        if key is not None and self.analysis.cacheable and not resolved.traversal_failures:
-            disk_cache.put(_ADAPTER_IMPORT_GRAPH_NAMESPACE, key, self.analysis)
-        if key is not None and not resolved.traversal_failures:
-            _remember_graph(root, key, self.analysis)
-
-    def _extract_and_resolve(self, files: import_analysis.ImportFileSet, candidates: List[Path],
-                             focus: Optional[Path], collect_structures: bool,
-                             on_file_processed: Optional[Callable[[Path], None]],
-                             supported_exts: frozenset, code_exts: frozenset) -> resolution.ProjectResolution:
-        """The uncached build: the cascade's project-wide inputs, the (parallel) per-file pass, then
-        the cascade over the files' entries; fills ``self.analysis``."""
-        assert self._scan is not None
-        root = self._scan.root
-        self.analysis = ImportAnalysis()
-        resolver = resolution.ProjectResolver(cap=self._scan_budget.limit, focus=focus)
-        resolver.result.scan_root = root
-        resolver.record_discovery(files)
-        parse_corpus = [fp for fp in candidates if fp.suffix in supported_exts]
-        inputs = resolver.prepare(parse_corpus, root)
-        entries: Dict[Path, resolution.FileEntry] = {}
-        self._process_extracted_files(
-            candidates, collect_structures, on_file_processed, supported_exts, code_exts, inputs, entries)
-        resolved = resolver.resolve_entries(root, [fp for fp in parse_corpus if fp in entries], files.index,
-                                            entries, inputs)
-        self.analysis.graph = resolved.graph
-        self.analysis.resolution = resolved
-        return resolved
+    def _analysis_view(self) -> ImportView:
+        target = self._target_path or Path('.').resolve()
+        scan = self._scan or resolution.ScanRoot(target, 'path')
+        lazy = self._query_params.get(_LAZY.name)
+        top = self._query_params.get('top')
+        return ImportView(self.analysis, target, scan, self._scan_budget.limit,
+                          lazy=None if lazy is None else _LAZY.validate(lazy),
+                          tests=_TESTS.read(self._query_params), scope=_SCOPE.read(self._query_params),
+                          top=int(top) if top else None)
 
     def _build_response(self, response_type: str, **data_fields) -> Dict[str, Any]:
         """Build standardized adapter response with common structure.
@@ -2478,201 +1843,20 @@ class ImportsAdapter(ResourceAdapter):
             edge_rule=self._edge_rule(LAZY_EXCLUDE, 'Cycles Found uses static imports between', cycles=True))
 
     def _format_fan_in(self) -> Dict[str, Any]:
-        """Rank files by fan-in (number of other files that import them).
-
-        High fan-in = core abstractions (base classes, shared utils).
-        Zero fan-in = entry points or dead code.
-        """
-        if not self.analysis.graph:
-            return self._build_response('fan_in_ranking', entries=[], total=0)
-
-        top_param = self._query_params.get('top')
-        top = int(top_param) if top_param else None
-
-        graph = self._edges(LAZY_INCLUDE)
-        # Union: all scanned files + files that appear as import targets (may live outside scan
-        # root); every edge's target, whichever view, so a row never vanishes with &lazy.
-        all_files = self._row_files(graph)
-        entries = sorted(
-            [
-                {
-                    'file': str(f),
-                    'fan_in': len(graph.reverse_deps.get(f, set())),
-                    'fan_out': len(graph.dependencies.get(f, set())),
-                }
-                for f in all_files
-            ],
-            key=lambda e: (-e['fan_in'], -e['fan_out'], e['file']),
-        )
-
-        total = len(entries)
-        if top and top > 0:  # a negative slice would drop the tail, not cap
-            entries = entries[:top]
-
-        response = self._build_response(
-            'fan_in_ranking', entries=entries, total=total,
-            edge_rule=self._edge_rule(LAZY_INCLUDE, 'fan-in and fan-out count static imports between'))
-        # BACK-1543: 'total' said it; the marker is what gets printed.
-        note_truncation(response, 'entries', len(entries), total, 'limit', hint='raise ?top=N')
+        data = self._analysis_view().fan_in()
+        response = self._build_response('fan_in_ranking', **data)
+        note_truncation(response, 'entries', len(data['entries']), data['total'], 'limit', hint='raise ?top=N')
         return response
 
     def _format_entrypoints(self) -> Dict[str, Any]:
-        """Return files with fan-in=0 — nothing imports them.
-
-        These are unambiguously entry points (CLIs, test runners, scripts) or dead code.
-        Sorted by fan-out descending: high fan-out = likely real entry point; low = likely dead code.
-
-        BACK-1263: importers under a test root do not count toward fan-in here.
-        The heuristic's own definition ("no one imports this" = "execution
-        starts here") is falsified by the single most common non-caller
-        importer, the test suite: a production entry point imported by its own
-        tests (`from myapp.worker import main`) has fan-in > 0 and drops off
-        the list, while leaf test files nothing imports flood the top sorted by
-        fan-out, looking like a confident answer. Measured on a conventional
-        src/ + tests/ layout: both real __main__-guarded entry points excluded,
-        3 of the 4 reported were test files. A test importing a module is
-        evidence that module is *testable*, not that something calls it.
-        """
-        if not self.analysis.graph:
-            return self._build_response('entrypoints', entries=[], total_scanned=0)
-
-        from ..utils.path_utils import is_test_path
-
-        graph = self._edges(LAZY_INCLUDE)
-
-        def _non_test_fan_in(f) -> int:
-            return sum(
-                1 for importer in graph.reverse_deps.get(f, set())
-                if not is_test_path(importer)
-            )
-
-        all_files = self._row_files(graph)
-        candidates = [f for f in all_files if _non_test_fan_in(f) == 0]
-        entries = sorted(
-            [
-                {
-                    'file': str(f),
-                    'fan_out': len(graph.dependencies.get(f, set())),
-                    # Kept visible rather than filtered out: a test file with
-                    # no importers genuinely has fan-in 0, and dropping it
-                    # silently would trade one wrong answer for another.
-                    'is_test': is_test_path(f),
-                    'test_only_importers': len(
-                        graph.reverse_deps.get(f, set())
-                    ),
-                }
-                for f in candidates
-            ],
-            # Non-test files first: a production entry point is what the caller
-            # asked for, and previously could not appear at all.
-            key=lambda e: (e['is_test'], -e['fan_out'], e['file']),
-        )
-
-        response = self._build_response(
-            'entrypoints', entries=entries, total_scanned=len(all_files),
-            edge_rule=self._edge_rule(LAZY_INCLUDE, 'fan-in counts static imports between',
-                                      tests_counted=False),
-        )
-        test_share = sum(1 for e in entries if e['is_test'])
-        if entries and test_share:
-            meta = response.setdefault('metadata', {})
-            meta.setdefault('warnings', []).append({
-                'type': 'test_files_in_entrypoints',
-                'message': (
-                    f'{test_share} of {len(entries)} entry points are test files '
-                    f'(is_test=true). Nothing imports a leaf test file, so it '
-                    f'satisfies the fan-in=0 definition without being a place '
-                    f'execution starts.'
-                ),
-            })
+        data = self._analysis_view().entrypoints()
+        warnings = data.pop('metadata', {})
+        response = self._build_response('entrypoints', **data)
+        response['metadata'].update(warnings)
         return response
 
     def _format_components(self) -> Dict[str, Any]:
-        """Score each directory as a component using import graph cohesion.
-
-        Groups scanned files by immediate parent directory. For each directory:
-        - internal: import edges where both source and target are in this directory
-        - outgoing: import edges leaving this directory
-        - incoming: import edges arriving from outside this directory
-        - cohesion: internal / (internal + outgoing) — fraction of imports that stay local
-        - top_bridge: file in this directory with most outgoing cross-boundary edges
-
-        High cohesion = well-encapsulated component.
-        Low cohesion = files import heavily outside — may not be a real component.
-        """
-        from collections import defaultdict
-
-        if not self.analysis.graph:
-            return self._build_response('components', components=[], total=0)
-
-        graph = self._edges(LAZY_INCLUDE)
-        # Group scanned files by immediate parent — only analyze files within the scan root
-        dir_files: dict = defaultdict(set)
-        for f in self.analysis.scanned_files:
-            if self._in_scope(f):
-                dir_files[f.parent].add(f)
-
-        components = []
-        for directory, file_set in dir_files.items():
-            # BACK-1246: compare resolved (canonical, absolute) forms, not the
-            # raw Path objects in file_set. Some per-language resolvers (e.g.
-            # javascript.py's _resolve_target_path) return absolute dependency
-            # targets while _scanned_files keeps whatever path style the CLI
-            # invocation used (often relative) -- an unresolved `dep in
-            # file_set` check then never matches for that language, silently
-            # zeroing internal/cohesion for every component. Resolving both
-            # sides here (comparison-only; `directory`/`file_set` below still
-            # use the original style for display) fixes it regardless of
-            # which side happens to be absolute.
-            resolved_file_set = {f.resolve() for f in file_set}
-            internal = 0
-            outgoing = 0
-            incoming = 0
-            bridge_counts: dict = defaultdict(int)
-
-            for f in file_set:
-                for dep in graph.dependencies.get(f, set()):
-                    if dep.resolve() in resolved_file_set:
-                        internal += 1
-                    else:
-                        outgoing += 1
-                        bridge_counts[f] += 1
-                for src in graph.reverse_deps.get(f, set()):
-                    if src.resolve() not in resolved_file_set:
-                        incoming += 1
-
-            total_out = internal + outgoing
-            cohesion = _component_cohesion(internal, total_out, file_set)
-            # BACK-1243: break ties deterministically -- max() over a dict
-            # with equal-count keys otherwise depends on hash-seed-salted
-            # dict iteration order (PYTHONHASHSEED), varying top_bridge
-            # between runs on identical input. Sort by (count, path string)
-            # so the highest count wins and ties resolve to the same file
-            # every time.
-            top_bridge = (
-                str(max(bridge_counts.items(), key=lambda kv: (kv[1], str(kv[0])))[0])
-                if bridge_counts else None
-            )
-
-            component = {
-                'component': str(directory),
-                'files': len(file_set),
-                'internal': internal,
-                'outgoing': outgoing,
-                'incoming': incoming,
-                **_cohesion_fields(cohesion),
-                'top_bridge': top_bridge,
-            }
-            components.append(component)
-
-        # Sort: measured cohesion descending (best-structured first), files descending as tiebreak.
-        # A declined component has no number to rank by: it follows every measured one (never sorted as 0.00).
-        components.sort(key=lambda c: (c['cohesion'] is None, -(c['cohesion'] or 0.0), -c['files'], c['component']))
-
-        extra = {'cohesion_rule': COHESION_DECLINED_RULE} if any(c['cohesion'] is None for c in components) else {}
-        return self._build_response(
-            'components', components=components, total=len(components), **extra,
-            edge_rule=self._edge_rule(LAZY_INCLUDE, 'internal, outgoing and incoming count static imports between'))
+        return self._build_response('components', **self._analysis_view().components())
 
     def _format_external(self) -> Dict[str, Any]:
         """The package table of the imports under the path (``classify.package_table``; deps://
@@ -2714,24 +1898,9 @@ class ImportsAdapter(ResourceAdapter):
         )
 
     def _format_circular(self) -> Dict[str, Any]:
-        """Format circular dependency groups (one entry per SCC, not per simple path)."""
-        if not self.analysis.graph:
+        if self.analysis.graph is None:
             return {'cycles': []}
-
-        graph = self._edges(LAZY_EXCLUDE)
-        groups = self._cycle_groups(graph)
-        cycle_paths = [
-            [str(p) for p in graph.find_cycle_path(group)]
-            for group in groups
-        ]
-
-        return self._build_response(
-            'circular_dependencies',
-            cycles=[[str(p) for p in group] for group in groups],
-            cycle_paths=cycle_paths,
-            count=len(groups),
-            edge_rule=self._edge_rule(LAZY_EXCLUDE, 'cycles use static imports between', cycles=True),
-        )
+        return self._build_response('circular_dependencies', **self._analysis_view().circular())
 
     def _format_violations(self) -> Dict[str, Any]:
         """Format layer violations using .reveal.yaml layer rules."""

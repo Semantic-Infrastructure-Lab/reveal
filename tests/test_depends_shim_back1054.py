@@ -14,6 +14,10 @@ from pathlib import Path, PureWindowsPath
 
 import pytest
 
+from reveal.analyzers.imports import service as import_service
+
+from reveal.analyzers.imports import extraction as import_extraction
+
 from conftest import _run_reveal_direct
 from reveal.adapters.depends import DependsAdapter
 from reveal.adapters.imports import ImportsAdapter
@@ -135,16 +139,16 @@ def test_imports_prints_no_depends_note(mixed):
 def test_a_file_a_dead_worker_lost_is_disclosed(mixed, monkeypatch):
     """The engine extracts in a process pool on a large tree, and a file a dead worker took down has
     no imports, so its edges are missing: depends says so (the pre-S6 serial walk had no pool)."""
-    real = ImportsAdapter._extract_files
+    real = import_extraction.extract_files
 
-    def losing(self, candidates, want_structure, inputs=None):
-        for row in real(self, candidates, want_structure, inputs):
+    def losing(candidates, want_structure, inputs=None):
+        for row in real(candidates, want_structure, inputs):
             if row[0].name == 'a.py':
                 lost = ImportExtraction(parse_failed=True, worker_lost=True)
                 row = (row[0], None, None, None, lost, None, None)
             yield row
 
-    monkeypatch.setattr(ImportsAdapter, '_extract_files', losing)
+    monkeypatch.setattr(import_extraction, 'extract_files', losing)
     result = DependsAdapter(str(mixed / 'pkg' / 'core.py')).get_structure()
     assert [d['file'] for d in result['dependents']] == ['pkg/b.py']
     lost = [w for w in result.get('meta', {}).get('warnings', []) if 'worker' in w.get('message', '')]
@@ -176,13 +180,13 @@ def test_a_cached_build_does_not_carry_another_requests_hidden_scope(tmp_path, m
     _write(root, {'.gitignore': 'gen/\n', 'app/main.py': 'from app import util\n',
                   'app/util.py': 'def run():\n    return 1\n', 'gen/pkg/a.py': 'import os\n'})
     resolves = []
-    real = ImportsAdapter._extract_and_resolve
+    real = import_service._process_extracted_files
 
     def counting(self, *args, **kwargs):
         resolves.append(1)
         return real(self, *args, **kwargs)
 
-    monkeypatch.setattr(ImportsAdapter, '_extract_and_resolve', counting)
+    monkeypatch.setattr(import_service, '_process_extracted_files', counting)
 
     def hidden(result):
         return [w for w in result.get('meta', {}).get('warnings', []) if w.get('type') == 'scope_hidden']

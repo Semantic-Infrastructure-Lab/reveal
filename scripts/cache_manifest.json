@@ -86,7 +86,7 @@
    "owner": "process-exempt",
    "reason": "reveal's own packaged help YAML, constant for the process; clear_cache() exists"
   },
-  "reveal/adapters/imports.py::_GRAPH_MEMO": {
+  "reveal/analyzers/imports/build_cache.py::_GRAPH_MEMO": {
    "owner": "validated"
   },
   "reveal/adapters/registry.py::_RENDERER_REGISTRY": {

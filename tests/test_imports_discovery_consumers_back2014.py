@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
+from reveal.analyzers.imports import service as import_service
+
 from conftest import _run_reveal_direct as run
 from reveal.adapters.imports import ImportsAdapter, _ADAPTER_IMPORT_GRAPH_NAMESPACE
 from reveal.core import disk_cache
@@ -128,7 +130,7 @@ def test_incomplete_graph_bypasses_real_disk_get_and_put_but_clean_reuse_survive
     monkeypatch.setenv('REVEAL_DISK_CACHE', '1')
     clean = ImportsAdapter(str(root)).get_structure()
     warm_adapter = ImportsAdapter(str(root))
-    with patch.object(warm_adapter, '_process_extracted_files', wraps=warm_adapter._process_extracted_files) as extract:
+    with patch.object(import_service, '_process_extracted_files', wraps=import_service._process_extracted_files) as extract:
         assert warm_adapter.get_structure() == clean
         assert extract.call_count == 0
     with monkeypatch.context() as context:

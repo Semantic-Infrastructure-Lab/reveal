@@ -15,6 +15,10 @@ from pathlib import Path
 
 import pytest
 
+from reveal.analyzers.imports import service as import_service
+
+from reveal.analyzers.imports import extraction as import_extraction
+
 from conftest import _MODULE_CACHES, _run_reveal_direct
 from reveal import base as reveal_base
 from reveal.adapters import imports as imports_adapter
@@ -63,13 +67,13 @@ def deny(monkeypatch):
 def builds(monkeypatch):
     """How many times the graph was built from extraction, i.e. graph-cache misses."""
     calls = []
-    original = ImportsAdapter._process_extracted_files
+    original = import_service._process_extracted_files
 
     def counting(self, *args, **kwargs):
-        calls.append(self._target_path)
+        calls.append(self)
         return original(self, *args, **kwargs)
 
-    monkeypatch.setattr(ImportsAdapter, '_process_extracted_files', counting)
+    monkeypatch.setattr(import_service, '_process_extracted_files', counting)
     return calls
 
 
@@ -120,7 +124,7 @@ def test_recovered_worker_loss_is_seen_on_the_next_run(tree, monkeypatch):
         (tree / f'c{i}.py').write_text('import bb\n', encoding='utf-8')
     with monkeypatch.context() as pool:
         pool.setenv('REVEAL_MAX_WORKERS', '2')
-        pool.setattr(imports_adapter, '_PARALLEL_MIN_FILES', 1)
+        pool.setattr(import_extraction, '_PARALLEL_MIN_FILES', 1)
         pool.setattr('concurrent.futures.ProcessPoolExecutor', _BreaksOnSubmit)
         failed, _ = _fan_in(tree)
         assert failed >= 1, 'fixture: the broken pool should lose at least one file'
@@ -155,17 +159,17 @@ def test_graph_layer_does_not_store_a_read_failure(tree, deny, builds):
 
 
 def test_graph_layer_does_not_store_a_lost_file(tree, monkeypatch, builds):
-    real = ImportsAdapter._extract_files
+    real = import_extraction.extract_files
 
-    def one_lost(self, candidates, want_structure, inputs=None):
-        for row in real(self, candidates, want_structure, inputs):
+    def one_lost(candidates, want_structure, inputs=None):
+        for row in real(candidates, want_structure, inputs):
             if row[0].name == 'a.py':
                 lost = BrokenProcessPool('A process in the process pool was terminated abruptly')
-                row = (row[0], None, None, None, imports_adapter._lost_extraction(lost), None, None)
+                row = (row[0], None, None, None, import_extraction.lost_extraction(lost), None, None)
             yield row
 
     with monkeypatch.context() as patched:
-        patched.setattr(ImportsAdapter, '_extract_files', one_lost)
+        patched.setattr(import_extraction, 'extract_files', one_lost)
         assert _fan_in(tree) == DENIED
     assert _fan_in(tree) == HEALTHY
     assert len(builds) == 2

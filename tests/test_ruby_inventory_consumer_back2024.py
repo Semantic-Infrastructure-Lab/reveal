@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from reveal.analyzers.imports import build_cache
+
 from conftest import _run_reveal_direct as run
 from reveal.adapters import depends
 from reveal.adapters.imports import ImportsAdapter
@@ -204,7 +206,7 @@ def test_normal_decorated_requests_repair_without_clears_and_keep_sibling_exact(
     # depends answers from the imports engine (BACK-1054 S6), whose validated memo would serve the
     # clean build on an unchanged tree: the fault has to reach a cold build.
     from reveal.adapters import imports as imports_adapter
-    imports_adapter._GRAPH_MEMO.clear()
+    build_cache._GRAPH_MEMO.clear()
     with monkeypatch.context() as context:
         fault(context, root, cores, 'manifest')
         lost = query(uri)

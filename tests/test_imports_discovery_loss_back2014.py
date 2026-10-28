@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
+from reveal.analyzers.imports import service as import_service
+
 from reveal.adapters.imports import ImportsAdapter, ImportsRenderer, _ADAPTER_IMPORT_GRAPH_NAMESPACE
 from reveal.analyzers.imports import service
 from reveal.core import disk_cache
@@ -106,7 +108,7 @@ def test_incomplete_actual_disk_backing_is_never_read_or_written(tmp_path, monke
             first = ImportsAdapter(str(root))
             first.get_structure()
             second = ImportsAdapter(str(root))
-            with patch.object(second, '_process_extracted_files', wraps=second._process_extracted_files) as extract:
+            with patch.object(import_service, '_process_extracted_files', wraps=import_service._process_extracted_files) as extract:
                 second.get_structure()
             assert extract.call_count == 1, 'a retained partial graph must not replace required analysis'
             assert not [call for call in get.call_args_list if call.args[0] == _ADAPTER_IMPORT_GRAPH_NAMESPACE]
@@ -127,7 +129,7 @@ def test_clean_actual_graph_disk_cache_preserves_full_artifact(tmp_path, monkeyp
     first = ImportsAdapter(str(root))
     result = first.get_structure()
     second = ImportsAdapter(str(root))
-    with patch.object(second, '_process_extracted_files', wraps=second._process_extracted_files) as extract:
+    with patch.object(import_service, '_process_extracted_files', wraps=import_service._process_extracted_files) as extract:
         assert second.get_structure() == result
     assert extract.call_count == 0
     assert second.analysis == first.analysis
@@ -292,12 +294,12 @@ def test_cache_build_fingerprint_isolates_graph_record_layout(tmp_path, monkeypa
     with monkeypatch.context() as context:
         context.setattr(disk_cache, 'build_fingerprint', lambda: 'different-producer-build')
         second = ImportsAdapter(str(root))
-        with patch.object(second, '_process_extracted_files', wraps=second._process_extracted_files) as extract:
+        with patch.object(import_service, '_process_extracted_files', wraps=import_service._process_extracted_files) as extract:
             second.get_structure()
         assert extract.call_count == 1
         assert second.analysis == first.analysis
     third = ImportsAdapter(str(root))
-    with patch.object(third, '_process_extracted_files', wraps=third._process_extracted_files) as extract:
+    with patch.object(import_service, '_process_extracted_files', wraps=import_service._process_extracted_files) as extract:
         third.get_structure()
     assert extract.call_count == 0
 

@@ -2,90 +2,145 @@
 
 Discovery stays in the shared file-index walker. This module owns graph assembly
 and extractor resolution dispatch, rather than loading a resource adapter in the
-analysis layer. Extraction/cache ownership remains with existing callers in this pilot.
+analysis layer. The public analyze operation owns extraction/cache orchestration over that resolver.
 The project-wide fallback cascade depends:// answers from is ``resolution.py``.
 """
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
-from .base import LanguageExtractor, get_extractor
-from .file_index import discover_import_files
+from .base import get_extractor, get_all_extensions
+from . import build_cache, extraction as file_extraction, resolution
+from ...core import disk_cache
+from ...utils.exclusions import active_exclusions
+from ...utils.gitignore import gitignore_enabled
+from .inputs import (ScanScope, ImportFileSet, ResolutionContext, discover, resolve_primary,
+                     resolve_targets, mark_structural)
 from .types import LAZY_EXCLUDE, LAZY_INCLUDE, LAZY_MODES, LAZY_ONLY, ImportAnalysis, ImportGraph, ImportStatement
-from ...registry import language_for_extension
-from ...utils.path_utils import HiddenTally, failure_of
-from ...reveal_types import PathFailure
+from ...registry import language_for_extension, get_code_extensions
+
+
+DEFAULT_FILE_CAP = 20000
+
+
+def path_scope(root: Path, *, cap: Optional[int] = DEFAULT_FILE_CAP,
+               focus: Optional[Path] = None) -> ScanScope:
+    """The standard multi-language build scope, including unsupported-code coverage."""
+    return ScanScope(root, frozenset(get_all_extensions()), get_code_extensions(), cap, focus)
 
 
 @dataclass(frozen=True)
-class ScanScope:
-    root: Path
-    extensions: frozenset
-    lowercase_extensions: frozenset = frozenset()
-    cap: Optional[int] = None
-    # The file or directory the request is about when the walk is wider than it (depends
-    # walks from the project root): what is left to analyze is judged there (BACK-2075).
-    focus: Optional[Path] = None
+class ImportBuild:
+    """One analysis plus fresh discovery and optional, uncached structure observations."""
+    analysis: ImportAnalysis
+    files: ImportFileSet
+    structures: List[Dict[str, Any]] = field(default_factory=list)
 
 
-@dataclass(frozen=True)
-class ImportFileSet:
-    candidates: Tuple[Path, ...]
-    index: Dict[str, List[Path]]
-    capped: bool = False
-    traversal_failures: Tuple[PathFailure, ...] = ()
-    # Entries the walk hid, by actionable cause (``HiddenTally``; BACK-2065).
-    # With a focus, the causes at the focus once the walk kept files elsewhere.
-    hidden: Dict[str, int] = field(default_factory=dict)
-    # Graph files at the scope's focus (all of them without one): what ``hidden`` is judged against.
-    analyzed: int = 0
+def analyze(scope: ScanScope, *, on_file_processed: Optional[Callable[[Path], None]] = None,
+            structure_reader: Optional[file_extraction.StructureReader] = None) -> ImportBuild:
+    """Discover, extract and resolve one explicit build scope through the existing resolver.
 
-
-@dataclass(frozen=True)
-class ResolutionContext:
-    base_path: Path
-    search_paths: Tuple[Path, ...]
-    file_index: Dict[str, List[Path]]
-
-
-def discover(scope: ScanScope) -> ImportFileSet:
-    def accepts(path: Path) -> bool:
-        return path.suffix in scope.extensions or path.suffix.lower() in scope.lowercase_extensions
-    if scope.root.is_file():
-        kept = (scope.root,) if accepts(scope.root) else ()
-        return ImportFileSet(kept, {}, analyzed=len(kept))
-    failures: List[PathFailure] = []
-
-    def on_error(error: OSError) -> None:
-        failures.append(failure_of(error))
-
-    hidden = HiddenTally(scope.focus)
-    candidates, index, capped = discover_import_files(scope.root, accepts, cap=scope.cap, on_error=on_error,
-                                                      on_hidden=hidden)
+    Callbacks disable graph reuse. Structures live only on this returned build, never in
+    the shared analysis cache. Discovery runs even on a cache hit to retain fresh disclosures.
+    """
+    files = discover(scope)
+    candidates = list(files.candidates)
     focus = scope.focus
-    if focus is None:
-        return ImportFileSet(tuple(candidates), index, capped, tuple(failures), dict(hidden), len(candidates))
-    analyzed = sum(1 for c in candidates if c == focus or focus in c.parents)
-    # A walk that kept nothing at all says everything it hid; one that kept files elsewhere
-    # says only what hides the focus, so an ignored sibling is not blamed for an empty one.
-    return ImportFileSet(tuple(candidates), index, capped, tuple(failures),
-                         dict(hidden if not candidates else hidden.at_focus), analyzed)
+    if focus is not None and focus.is_file() and focus not in candidates and (
+            focus.suffix in scope.extensions or focus.suffix.lower() in scope.lowercase_extensions):
+        candidates.append(focus)
+    key = build_cache._graph_cache_key(candidates, files.index, scope.root, files.traversal_failures,
+                                       scope.cap, scope.extensions) if (structure_reader is None and
+                                       on_file_processed is None) else None
+    variant = (key, active_exclusions(), gitignore_enabled())
+    cached = build_cache._cached_graph(scope.root, key, variant)
+    if cached is not None:
+        return ImportBuild(cached, files)
+    analysis = ImportAnalysis()
+    structures: List[Dict[str, Any]] = []
+    resolver = resolution.ProjectResolver(cap=scope.cap, focus=focus)
+    resolver.result.scan_root = scope.root
+    resolver.record_discovery(files)
+    parse_corpus = [fp for fp in candidates if fp.suffix in scope.extensions]
+    inputs = resolver.prepare(parse_corpus, scope.root)
+    entries: Dict[Path, resolution.FileEntry] = {}
+    _process_extracted_files(analysis, structures, candidates, structure_reader, on_file_processed,
+                             scope.extensions, scope.lowercase_extensions, inputs, entries)
+    resolved = resolver.resolve_entries(scope.root, [fp for fp in parse_corpus if fp in entries],
+                                        files.index, entries, inputs)
+    analysis.graph = resolved.graph
+    analysis.resolution = resolved
+    if key is not None and analysis.cacheable and not resolved.traversal_failures:
+        disk_cache.put(build_cache._ADAPTER_IMPORT_GRAPH_NAMESPACE, key, analysis)
+    if key is not None and not resolved.traversal_failures:
+        build_cache._remember_graph(scope.root, variant, analysis)
+    return ImportBuild(analysis, files, structures)
 
 
-def resolve_primary(stmt: ImportStatement, extractor: LanguageExtractor, context: ResolutionContext) -> Optional[Path]:
-    kwargs: Dict[str, Any] = {'search_paths': list(context.search_paths)}
-    if getattr(extractor, 'spec', None) is not None:
-        kwargs['file_index'] = context.file_index
-    return extractor.resolve_import(stmt, context.base_path, **kwargs)
+def _process_extracted_files(
+    analysis: ImportAnalysis,
+    collected: List[Dict[str, Any]],
+    candidates: List[Path],
+    structure_reader: Optional[file_extraction.StructureReader],
+    on_file_processed: Optional[Callable[[Path], None]],
+    supported_exts: frozenset,
+    code_exts: frozenset,
+    inputs: Optional[resolution.ResolutionInputs] = None,
+    entries: Optional[Dict[Path, resolution.FileEntry]] = None,
+) -> List[ImportStatement]:
+    """Run per-file extraction (parallel on large repos, else serial),
+    consumed in candidate order so assembly is deterministic. Populates the analysis
+    artifact and optional structure list and returns the collected import statements; with the cascade's
+    *inputs*, each extracted file's ``FileEntry`` lands in *entries*.
+    """
+    files: List[Path] = []
+    all_imports: List[ImportStatement] = []
+    structures: List[Dict[str, Any]] = []
+    unextractable: Dict[str, int] = {}
+    failed_files: List[Path] = []
+    lost_files: List[Path] = []
+    structure_failures: List[Tuple[str, str]] = []
 
+    for fp, imports, symbols, structure, extraction, structure_failure in file_extraction.recording_entries(
+            file_extraction.extract_files(candidates, structure_reader, inputs), entries):
+        if extraction is not None and extraction.worker_lost:
+            # Lost before its extractor ran, so "no import extractor" is unknown for
+            # it: failed either way, never silently unsupported (BACK-1752).
+            if fp.suffix in supported_exts:
+                files.append(fp)
+                analysis.extractions[fp] = extraction
+            failed_files.append(fp)
+            lost_files.append(fp)
+        elif fp.suffix in supported_exts:
+            files.append(fp)
+            if imports is not None:
+                analysis.symbols_by_file[fp] = symbols
+                all_imports.extend(imports)
+            if extraction is not None:
+                analysis.extractions[fp] = extraction
+                if extraction.parse_failed:
+                    failed_files.append(fp)
+        else:
+            ext = fp.suffix.lower()
+            if ext in code_exts:
+                unextractable[ext] = unextractable.get(ext, 0) + 1
+        if structure_reader is not None and structure:
+            structures.append(structure)
+        if structure_failure:
+            structure_failures.append((str(fp), structure_failure))
+        if on_file_processed:
+            on_file_processed(fp)
 
-def resolve_targets(stmt: ImportStatement, extractor: LanguageExtractor, context: ResolutionContext) -> List[Path]:
-    if getattr(extractor, 'spec', None) is not None:
-        primary = resolve_primary(stmt, extractor, context)
-        return [primary] if primary else []
-    return extractor.resolve_import_targets(stmt, context.base_path, search_paths=list(context.search_paths))
+    analysis.scanned_files = set(files)
+    analysis.unsupported_extensions = unextractable
+    collected.extend(structures)
+    analysis.files_failed = failed_files
+    analysis.files_lost = lost_files
+    analysis.structure_failures = structure_failures
+    return all_imports
 
 
 def _build_namespace_index(
@@ -105,12 +160,6 @@ def _build_namespace_index(
         for ns in getattr(extractor, 'extract_namespaces')(file_path):
             namespace_index.setdefault(ns, []).append(file_path)
     return namespace_index
-
-
-def mark_structural(graph: ImportGraph, extractor: LanguageExtractor, from_file: Path, to_file: Path) -> None:
-    """Record an edge the importing language calls its module layout (BACK-2129)."""
-    if extractor.is_structural_edge(from_file, to_file):
-        graph.structural_edges.add((from_file, to_file))
 
 
 def resolve_graph(scope: ScanScope, files: ImportFileSet, analysis: ImportAnalysis) -> ImportAnalysis:

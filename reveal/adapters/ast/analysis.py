@@ -15,6 +15,7 @@ from ...utils.path_utils import (
     to_relative_display,
     traversal_failed_warning as traversal_failed_warning,
     failure_of,
+    analysis_skipped_warning as analysis_skipped_warning,
 )
 from ...utils.results import outcome_of
 from .call_graph import build_symbol_map, resolve_callees
@@ -122,24 +123,6 @@ def try_add_file_structure(file_path: str, structures: StructureList, outline: b
     if structure:
         structures.append(structure)
 
-
-def analysis_skipped_warning(skipped: List[Tuple[str, str]], base: Optional[Path] = None,
-                             consequence: str = "analysis is incomplete; some observations may be missing from the result"
-                             ) -> Optional[WarningEntry]:
-    """One ``analysis_failed`` warning for required analysis loss, partial or total."""
-    if not skipped:
-        return None
-    paths = sorted(skipped)
-    shown = [to_relative_display(f, base) if base else to_posix(f) for f, _ in paths[:5]]
-    more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
-    causes = ', '.join(sorted({cause.split(':', 1)[0] for _, cause in paths}))
-    return {
-        'type': 'analysis_failed',
-        'count': len(paths),
-        'files': shown,
-        'message': f"{len(paths)} file(s) could not be analyzed completely ({causes}) -- {consequence}: "
-                   f"{', '.join(shown)}{more}",
-    }
 
 
 def environmental_failure(cause: str) -> bool:

@@ -17,6 +17,10 @@ from pathlib import Path
 
 import pytest
 
+from reveal.analyzers.imports import build_cache
+
+from reveal.analyzers.imports import extraction as import_extraction
+
 from reveal.adapters import imports as imports_adapter
 from reveal.adapters.imports import ImportsAdapter
 from reveal.utils import request_cache
@@ -97,13 +101,13 @@ def test_warm_per_file_importers_extracts_nothing(fx, tmp_path_factory, monkeypa
     monkeypatch.setenv('REVEAL_CACHE_DIR', str(tmp_path_factory.mktemp('cache')))
     monkeypatch.setenv('REVEAL_DISK_CACHE', '1')
     calls = []
-    real = imports_adapter._extract_one_file
+    real = import_extraction.extract_one_file
 
     def counting(fp_str, *args):
         calls.append(fp_str)
         return real(fp_str, *args)
 
-    monkeypatch.setattr(imports_adapter, '_extract_one_file', counting)
+    monkeypatch.setattr(import_extraction, 'extract_one_file', counting)
     cold = _structure(fx / 'pkg' / 'core.py', 'importers')
     assert calls, 'positive control: the cold request extracts'
     calls.clear()
@@ -116,13 +120,13 @@ def test_warm_per_file_importers_extracts_nothing(fx, tmp_path_factory, monkeypa
 def test_a_host_request_reuses_the_graph_with_the_disk_cache_off(fx, monkeypatch):
     monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
     calls = []
-    real = imports_adapter._extract_one_file
+    real = import_extraction.extract_one_file
 
     def counting(fp_str, *args):
         calls.append(fp_str)
         return real(fp_str, *args)
 
-    monkeypatch.setattr(imports_adapter, '_extract_one_file', counting)
+    monkeypatch.setattr(import_extraction, 'extract_one_file', counting)
     # Outside a request nothing would revalidate an entry: every call builds (negative control).
     _structure(fx / 'pkg' / 'core.py', 'importers')
     outside = len(calls)
@@ -368,13 +372,13 @@ def test_reveal_imports_subcommand_answers_like_the_uri(fx, monkeypatch):
 def extraction_calls(monkeypatch):
     monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
     calls = []
-    real = imports_adapter._extract_one_file
+    real = import_extraction.extract_one_file
 
     def counting(fp_str, *args):
         calls.append(Path(fp_str).name)
         return real(fp_str, *args)
 
-    monkeypatch.setattr(imports_adapter, '_extract_one_file', counting)
+    monkeypatch.setattr(import_extraction, 'extract_one_file', counting)
     return calls
 
 
@@ -422,12 +426,12 @@ def test_an_edit_evicts_the_old_build_from_the_memo(fx, extraction_calls):
     root = str(fx.resolve())
     with request_cache.host_request():
         _structure(fx / 'pkg', 'rank=fan-in')
-    assert len(imports_adapter._GRAPH_MEMO[root]) == 1
+    assert len(build_cache._GRAPH_MEMO[root]) == 1
     (fx / 'pkg' / 'core.py').write_text('CONST = 3\n\n\ndef helper():\n    return 2\n', encoding='utf-8')
     os.utime(fx / 'pkg' / 'core.py', ns=(1, 1))
     with request_cache.host_request():
         _structure(fx / 'pkg', 'rank=fan-in')
-    assert len(imports_adapter._GRAPH_MEMO[root]) == 1
+    assert len(build_cache._GRAPH_MEMO[root]) == 1
 
 
 def test_a_php_include_through_a_define_constant_is_tagged_constant(tmp_path):

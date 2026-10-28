@@ -19,9 +19,9 @@ pytestmark = pytest.mark.component
 def tree(tmp_path):
     root = tmp_path / 'project'
     root.mkdir()
-    for name, content in {'a.py': 'import bb\n', 'bb.py': 'VALUE = 1\n',
+    for name, content in {'a.py': 'import bb\n', 'bb.py': 'def value():\n    return 1\n',
                           'main.js': "import { value } from './leaf.js';\n",
-                          'leaf.js': 'export const value = 1;\n'}.items():
+                          'leaf.js': 'export function value() { return 1; }\n'}.items():
         (root / name).write_text(content, encoding='utf-8')
     return root
 

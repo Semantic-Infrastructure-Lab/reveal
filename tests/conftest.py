@@ -508,7 +508,7 @@ _MODULE_CACHES = (
     ('reveal.adapters.calls.index', '_INDEX_CACHE'),
     ('reveal.adapters.calls.index', '_REFERENCE_CACHE'),
     ('reveal.adapters.calls.index', '_CALLEE_CACHE'),
-    ('reveal.adapters.imports', '_GRAPH_MEMO'),
+    ('reveal.analyzers.imports.build_cache', '_GRAPH_MEMO'),
     ('reveal.analyzers.imports.javascript', '_TSCONFIG_FIND_CACHE'),
     ('reveal.analyzers.imports.javascript', '_TSCONFIG_ALIAS_CACHE'),
     ('reveal.analyzers.imports.javascript', '_WORKSPACE_PACKAGES_CACHE'),

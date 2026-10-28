@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from reveal.analyzers.imports import build_cache
+
 from reveal.adapters import imports as imports_mod
 from reveal.adapters.imports import ImportsAdapter
 from reveal.analyzers.imports.base import get_all_extensions
@@ -64,14 +66,14 @@ def test_without_parse_extensions_recognized_code_counts_against_the_cap(tree):
 
 def test_the_cache_key_names_the_family(tree, monkeypatch):
     keys = []
-    real = imports_mod._graph_cache_key
+    real = build_cache._graph_cache_key
 
     def recording(*args, **kwargs):
         key = real(*args, **kwargs)
         keys.append(key)
         return key
 
-    monkeypatch.setattr(imports_mod, '_graph_cache_key', recording)
+    monkeypatch.setattr(build_cache, '_graph_cache_key', recording)
     py_only = _write(tree.parent / 'pyonly', {'pyproject.toml': '[project]\nname = "p"\n', 'm.py': 'import os\n'})
     ImportsAdapter(str(py_only)).analyze()
     ImportsAdapter(str(py_only), parse_extensions=frozenset(get_all_extensions())).analyze()

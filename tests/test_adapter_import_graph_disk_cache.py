@@ -20,6 +20,9 @@ import os
 
 import pytest
 
+from reveal.analyzers.imports import service as import_service
+from reveal.analyzers.imports import extraction as import_extraction
+
 from reveal.adapters.imports import ImportsAdapter, _ADAPTER_IMPORT_GRAPH_NAMESPACE, _candidate_set_fingerprint
 from reveal.analyzers.imports.base import get_all_extensions
 from reveal.core import disk_cache
@@ -69,7 +72,7 @@ def test_second_build_served_from_disk(tmp_path, monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("disk cache miss: _process_extracted_files was re-run")
 
-    monkeypatch.setattr(adapter2, "_process_extracted_files", _boom)
+    monkeypatch.setattr(import_service, "_process_extracted_files", _boom)
     adapter2._build_graph(adapter2._target_path)
 
     cached_fan_in = {f.name: len(deps) for f, deps in adapter2.analysis.graph.reverse_deps.items()}
@@ -174,7 +177,7 @@ def test_kill_switch_writes_nothing(tmp_path, monkeypatch):
 
 def test_complete_artifact_preserves_nested_diagnostics(tmp_path, monkeypatch):
     from reveal.adapters import imports as mod
-    original = mod.get_extractor
+    original = import_extraction.get_extractor
 
     def diagnostic_extractor(path):
         extractor = original(path)
@@ -190,12 +193,12 @@ def test_complete_artifact_preserves_nested_diagnostics(tmp_path, monkeypatch):
         return extractor
 
     _write_tree(tmp_path)
-    monkeypatch.setattr(mod, 'get_extractor', diagnostic_extractor)
+    monkeypatch.setattr(import_extraction, 'get_extractor', diagnostic_extractor)
     cold = ImportsAdapter(resource=str(tmp_path))
     cold._build_graph(cold._target_path)
     expected = cold.get_metadata()['extraction_diagnostics']
     assert expected and all(d['future_detail']['warnings'] for d in expected.values())
-    monkeypatch.setattr(mod, 'get_extractor', lambda path: pytest.fail('warm build extracted again'))
+    monkeypatch.setattr(import_extraction, 'get_extractor', lambda path: pytest.fail('warm build extracted again'))
     warm = ImportsAdapter(resource=str(tmp_path))
     warm._build_graph(warm._target_path)
     assert warm.get_metadata()['extraction_diagnostics'] == expected

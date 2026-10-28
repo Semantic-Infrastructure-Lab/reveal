@@ -10,6 +10,8 @@ import json
 
 import pytest
 
+from reveal.analyzers.imports import service as import_service
+
 from conftest import _MODULE_CACHES, _run_reveal_direct
 from reveal.adapters.imports import ImportsAdapter, _candidate_set_fingerprint
 from reveal.analyzers.imports import generic, go, javascript, python as py_imports, rust, zig
@@ -39,13 +41,13 @@ def tree(tmp_path, monkeypatch):
 def builds(monkeypatch):
     """How many times the graph was built from extraction, i.e. graph-cache misses."""
     calls = []
-    original = ImportsAdapter._process_extracted_files
+    original = import_service._process_extracted_files
 
     def counting(self, *args, **kwargs):
-        calls.append(self._target_path)
+        calls.append(self)
         return original(self, *args, **kwargs)
 
-    monkeypatch.setattr(ImportsAdapter, '_process_extracted_files', counting)
+    monkeypatch.setattr(import_service, '_process_extracted_files', counting)
     return calls
 
 

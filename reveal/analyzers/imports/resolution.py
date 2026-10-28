@@ -2,7 +2,7 @@
 
 Moved from ``adapters/depends.py`` (slice S1 of folding depends://, deps:// and
 calls://?modules into imports://), unchanged in behavior. One build walks the scan root
-(``service.discover``), parses every file once into the resolution indices (namespaces,
+(``analysis_inputs.discover``), parses every file once into the resolution indices (namespaces,
 top-level members, Swift modules, Zeitwerk constant paths, PHP ``define()`` constants,
 gemspec load-path roots), resolves every import through the cascade (direct, namespace,
 member, module), adds the Zeitwerk convention edges, and counts what it could not resolve
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, cast
 
-from . import service
+from . import inputs as analysis_inputs
 from .base import get_extractor
 from .file_index import load_path_manifests
 from .generic import RubyImportExtractor
@@ -276,7 +276,7 @@ def index_file(file_path: Path, extractor: Any, imports: List[ImportStatement],
     return entry
 
 
-def resolve_project(scope: service.ScanScope) -> ProjectResolution:
+def resolve_project(scope: analysis_inputs.ScanScope) -> ProjectResolution:
     """One cascade build of ``scope.root``: the walk is capped at ``scope.cap`` source files and
     judges what it hid at ``scope.focus``; only files with an extension in ``scope.extensions``
     are parsed (resolution targets stay extension-agnostic)."""
@@ -382,12 +382,12 @@ class ProjectResolver:
 
         Records the file-count cap, the walk's losses and what it hid on ``self.result``.
         """
-        files = service.discover(service.ScanScope(
+        files = analysis_inputs.discover(analysis_inputs.ScanScope(
             scan_root, supported_exts, cap=self._cap, focus=self._focus))
         self.record_discovery(files)
         return list(files.candidates), files.index
 
-    def record_discovery(self, files: service.ImportFileSet) -> None:
+    def record_discovery(self, files: analysis_inputs.ImportFileSet) -> None:
         """The walk's census on the record: its losses, what it hid, and the cap's accounting
         (a caller that walked the root itself hands its file set here)."""
         self.result.traversal_failures = files.traversal_failures
@@ -597,7 +597,7 @@ class ProjectResolver:
         importing language calls it its module layout, marked structural (BACK-2129). The statement
         records its first in-tree target (BACK-1193: any one proves it intra-project)."""
         self._graph.add_dependency(file_path, target, stmt.scope, via=via)
-        service.mark_structural(self._graph, extractor, file_path, target)
+        analysis_inputs.mark_structural(self._graph, extractor, file_path, target)
         if stmt.resolved_path is None:
             stmt.resolved_path = target
 
@@ -631,8 +631,8 @@ class ProjectResolver:
         file_index: Dict[str, List[Path]],
     ) -> bool:
         """Stage 1: direct dotted-name resolution."""
-        targets = service.resolve_targets(
-            stmt, extractor, service.ResolutionContext(base_path, tuple(extra_paths), file_index))
+        targets = analysis_inputs.resolve_targets(
+            stmt, extractor, analysis_inputs.ResolutionContext(base_path, tuple(extra_paths), file_index))
         added = False
         via = VIA_CONSTANT if stmt.through_constant else VIA_DIRECT
         for resolved in targets:
