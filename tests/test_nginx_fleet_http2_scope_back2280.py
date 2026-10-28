@@ -86,3 +86,14 @@ def test_control_site_content_checks_stay_booleans_for_tls_sites():
     checks = _audit_site_content(TLS_NO_HTTP2)
     assert checks['http2'] is False and checks['hsts'] is False
     assert _audit_site_content(TLS_HTTP2)['http2'] is True
+
+
+def test_the_matrix_row_names_how_many_sites_the_check_left_out():
+    """JSON readers get sites_not_applicable instead of subtracting from site_count."""
+    result = _fleet({'a.conf': TLS_HTTP2, 'b.conf': TLS_NO_HTTP2, 'c.conf': PORT_80_ONLY})
+    http2 = _row(result, 'http2')
+    assert (http2['sites_with'], http2['sites_without'], http2['sites_not_applicable']) == (1, 1, 1)
+    hsts = _row(result, 'hsts')
+    assert hsts['sites_not_applicable'] == 0
+    assert all(r['sites_with'] + r['sites_without'] + r['sites_not_applicable'] == result['site_count']
+               for r in result['matrix'])
