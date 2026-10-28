@@ -69,3 +69,25 @@ def test_nested_completed_answer_can_be_folded_once_into_outer_run():
         assert outer['confidence'] == 0.0
         assert parent.composed_meta() is None
     assert parent.composed_meta() is None
+
+
+def test_xlsx_analyzer_warning_does_not_leak_after_banner_exception(tmp_path, monkeypatch):
+    import zipfile
+    from reveal.adapters.xlsx import XlsxAdapter
+
+    path = tmp_path / 'book.xlsx'
+    with zipfile.ZipFile(path, 'w') as archive:
+        archive.writestr('xl/workbook.xml', '<workbook/>')
+    adapter = XlsxAdapter(str(path))
+
+    def fail_banner():
+        raise ValueError('banner construction failed')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(adapter.analyzer, 'get_structure', lambda: {
+            'sheets': [], 'meta': {'warnings': [{'type': 'sheet_parse_failed',
+                                               'message': 'previous workbook warning'}]}})
+        patch.setattr(adapter, '_build_powerpivot_banner', fail_banner)
+        with pytest.raises(ValueError, match='banner construction failed'):
+            adapter.get_structure()
+    assert adapter.get_structure() == XlsxAdapter(str(path)).get_structure()

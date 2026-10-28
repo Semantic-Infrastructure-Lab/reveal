@@ -170,6 +170,22 @@ class MyAdapter(ResourceAdapter):
 
 ---
 
+## Composing child analyses
+
+A composite adapter delimits each public analysis entry point with
+`with self.composition_run():`. This scope owns the warnings, errors and confidence
+recorded by `compose()`, `compose_answer()`, `fold_meta()` and
+`record_composed_error()`. Consume `composed_meta()` once when constructing the
+final answer. The scope clears unconsumed diagnostics if construction raises and
+restores the enclosing diagnostic scope after a nested run on the same instance.
+It does not isolate other mutable adapter state or serialize concurrent calls.
+
+`compose_answer()` returns a separate envelope when the child returns a dictionary.
+Source spelling, truncation labels and warning filtering apply to this composed
+view. The child's original answer stays unchanged. Large analysis payloads remain
+shared; composition copies the envelope and diagnostic entry dictionaries it owns,
+not arbitrary nested data. Treat nested diagnostic values as read-only.
+
 ## Help Documentation Schema
 
 ### Required Fields

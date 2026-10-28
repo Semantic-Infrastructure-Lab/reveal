@@ -454,12 +454,9 @@ class ResourceAdapter(ABC):
         Composed confidence is the minimum of any child confidences seen —
         a composite is only as trustworthy as its weakest part.
 
-        Consuming: clears the accumulators after reading (BACK-1019) — a
-        reused adapter instance's next ``get_structure()`` call starts clean
-        instead of re-reporting this call's errors/warnings/confidence.
-        Safe because every in-tree call site already follows the documented
-        contract of calling this once, at the end, building the final result
-        (nothing calls it twice per scan — verified by grep).
+        Consuming: clears the accumulators after reading (BACK-1019).
+        Call once when building the final result. ``composition_run()`` also
+        discards diagnostics when an analysis exits before finalization.
         """
         warnings_list = self.__dict__.get('_composed_warnings')
         errors_list = self.__dict__.get('_composed_errors')
