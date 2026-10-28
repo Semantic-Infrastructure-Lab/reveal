@@ -108,7 +108,7 @@ def test_from_uri_preserves_claude_base_path_override(tmp_path, monkeypatch):
     adapter.reconfigure_base_path(home / 'projects')
     expected = ClaudeAdapter(resource, 'last=2')
     expected.reconfigure_base_path(home / 'projects')
-    assert adapter.conversation_path.is_relative_to(home / 'projects')
+    assert adapter.conversation_path.resolve().is_relative_to((home / 'projects').resolve())
     assert adapter.get_structure() == expected.get_structure()
     assert ClaudeAdapter.CONVERSATION_BASE == initial
 
