@@ -146,3 +146,99 @@ def test_metadata_error_alone_is_not_required_loss(root, monkeypatch):
     result = run(root, '', '--format', 'json')
     assert result.returncode == 0
     assert json.loads(result.stdout)['meta']['errors']
+
+
+def test_returned_required_failure_survives_field_projection(root, monkeypatch):
+    original = AstAdapter.get_structure
+    def failed(self, **kwargs):
+        result = original(self, **kwargs)
+        result['error'] = 'required analysis failed'
+        return result
+    monkeypatch.setattr(AstAdapter, 'get_structure', failed)
+    result = run(root, '', '--format', 'json', '--fields', 'results')
+    assert result.returncode == 3
+    assert json.loads(result.stdout)['results']
+
+
+def test_renderer_failure_is_requested_output_failure(root, monkeypatch):
+    from reveal.adapters.ast.renderer import AstRenderer
+    def failed(*args, **kwargs):
+        raise RuntimeError('RENDER_FAILED')
+    monkeypatch.setattr(AstRenderer, 'render_structure', failed)
+    result = run(root)
+    assert result.returncode == 3
+    assert 'Requested output failed: RENDER_FAILED' in result.stderr
+
+
+def test_stat_permission_failure_is_analysis_not_absence(root, monkeypatch):
+    from pathlib import Path
+    original = Path.stat
+    def denied(self, *args, **kwargs):
+        if self == root:
+            raise PermissionError('SOURCE_STAT_DENIED')
+        return original(self, *args, **kwargs)
+    monkeypatch.setattr(Path, 'stat', denied)
+    result = run(root, '', '--format', 'json')
+    assert result.returncode == 3
+    assert 'SOURCE_STAT_DENIED' in json.loads(result.stdout)['error']
+
+
+def test_full_source_read_loss_differs_from_filtered_empty_and_partial(tmp_path, monkeypatch):
+    import builtins
+    from pathlib import Path
+    from reveal.utils.results import AnalysisCompleteness
+    blocked = tmp_path / 'blocked.py'
+    blocked.write_text('def hidden(): pass\n', encoding='utf-8')
+    original = builtins.open
+    def denied(file, *args, **kwargs):
+        if isinstance(file, (str, Path)) and Path(file) == blocked:
+            raise PermissionError('SOURCE_READ_DENIED')
+        return original(file, *args, **kwargs)
+    monkeypatch.setattr(builtins, 'open', denied)
+    failed = run(tmp_path, '', '--format', 'json')
+    assert failed.returncode == 3
+    result = json.loads(failed.stdout)
+    assert result['total_files'] == 0
+    assert AstAdapter.execution_facts(result).completeness is AnalysisCompleteness.FAILED
+    (tmp_path / 'healthy.py').write_text('def present(): pass\n', encoding='utf-8')
+    partial = run(tmp_path, 'name=absent', '--format', 'json')
+    assert partial.returncode == 3
+    result = json.loads(partial.stdout)
+    assert result['total_files'] == 1 and result['results'] == []
+    assert AstAdapter.execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
+
+
+@pytest.mark.parametrize('malformed', [
+    {}, {'results': []}, {'total_files': 0, 'total_results': 0, 'displayed_results': 0, 'results': None},
+    {'total_files': -1, 'total_results': 0, 'displayed_results': 0, 'results': []},
+    {'total_files': 1, 'total_results': 0, 'displayed_results': 1, 'results': [{}]},
+])
+def test_malformed_success_cannot_be_clean_empty(root, monkeypatch, malformed):
+    from reveal.utils.results import ResultBuilder
+    monkeypatch.setattr(AstAdapter, 'get_structure', lambda self, **kwargs:
+                        ResultBuilder.create('ast_query', self.path, data=malformed))
+    result = run(root, '', '--format', 'json')
+    assert result.returncode == 3
+    assert json.loads(result.stdout)['error']
+
+
+def test_runtime_invalid_request_code_does_not_reclassify_analysis(root, monkeypatch):
+    from reveal.utils.results import ResultBuilder
+    monkeypatch.setattr(AstAdapter, 'get_structure', lambda self, **kwargs:
+                        ResultBuilder.create('ast_query', self.path, error='body failed',
+                                             errors=[{'code': 'invalid_request', 'message': 'body failed'}]))
+    result = run(root, '', '--format', 'json')
+    assert result.returncode == 3
+
+
+def test_nul_resource_is_structured_usage_from_library_transport(root):
+    from contextlib import redirect_stderr, redirect_stdout
+    from io import StringIO
+    from reveal.cli.defaults import _default_args
+    from reveal.cli.routing.uri import handle_uri
+    out, err = StringIO(), StringIO()
+    with redirect_stdout(out), redirect_stderr(err), pytest.raises(SystemExit) as failure:
+        handle_uri(f'ast://{root}\x00invalid', None, _default_args(format='json'))
+    assert failure.value.code == 2
+    assert json.loads(out.getvalue())['error']
+    assert 'Traceback' not in err.getvalue()
