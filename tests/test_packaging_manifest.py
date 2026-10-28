@@ -14,36 +14,10 @@ from pathlib import Path
 
 import pytest
 
+from scripts.packaging_sources import stage_sources as _stage_sources
+
 # BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
 pytestmark = pytest.mark.contract
-
-
-def _stage_sources(project_root: Path, dest: Path, commit: bool = True) -> None:
-    """Copy the working tree (tracked files plus untracked, non-ignored ones)
-    into *dest* and, unless *commit* is false, commit it with git, so the sdist
-    built there holds what a build in the checkout holds. setuptools_scm's file
-    finder adds every file committed in HEAD to the sdist; with commit=False the
-    copy builds like a GitHub zip or source tarball, from the declared
-    package-data and MANIFEST.in alone (BACK-2154).
-
-    Building here and not in the checkout keeps the build's writes
-    (reveal_cli.egg-info/PKG-INFO, the reveal_cli-X.Y.Z/ staging dir) away
-    from every other test (BACK-1895): concurrent builds also need no lock."""
-    listing = subprocess.run(
-        ['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-        cwd=project_root, capture_output=True, check=True,
-    ).stdout.decode('utf-8')
-    for rel in filter(None, listing.split('\0')):
-        src = project_root / rel
-        if src.is_file():  # a tracked file deleted from the tree is not staged
-            (dest / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest / rel)
-    if not commit:
-        return
-    git = ['git', '-c', 'user.name=stage', '-c', 'user.email=stage@localhost',
-           '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=']
-    for args in (['init', '-q'], ['add', '-A'], ['commit', '-q', '--no-verify', '-m', 'stage']):
-        subprocess.run(git + args, cwd=dest, check=True, capture_output=True)
 
 
 def _checkout_fingerprint(project_root: Path):
