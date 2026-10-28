@@ -1793,14 +1793,15 @@ class ImportsAdapter(ResourceAdapter):
         if not self.analysis.graph:
             return {'imports': []}
 
+        view = self._analysis_view()
         imports_by_file = {
             str(file_path): [self._format_import(stmt) for stmt in imports]
-            for file_path, imports in self.analysis.graph.files.items() if self._in_scope(file_path)
+            for file_path, imports in self.analysis.graph.files.items() if view._in_scope(file_path)
         }
 
         return self._build_response(
             'imports', files=imports_by_file,
-            edge_rule=self._edge_rule(LAZY_EXCLUDE, 'Cycles Found uses static imports between', cycles=True))
+            edge_rule=view._edge_rule(LAZY_EXCLUDE, 'Cycles Found uses static imports between', cycles=True))
 
     def _format_fan_in(self) -> Dict[str, Any]:
         data = self._analysis_view(include_top=True).fan_in()
@@ -1824,11 +1825,12 @@ class ImportsAdapter(ResourceAdapter):
         if not self.analysis.graph:
             return self._build_response('external_packages', external_packages=[], stdlib_packages=[],
                                         internal_imports=0, total_imports=0, total_files=0, top_importers=[])
-        excluded = self._tests_excluded()
+        view = self._analysis_view()
+        excluded = view._tests_excluded()
         files = {str(path): [self._format_import(stmt) for stmt in imports]
                  for path, imports in self.analysis.graph.files.items()
-                 if self._in_scope(path) and not (excluded and is_test_path(path))}
-        table = package_table(files, self._base_dir())
+                 if view._in_scope(path) and not (excluded and is_test_path(path))}
+        table = package_table(files, view._base_dir())
         languages = table['external_package_languages']
         return self._build_response(
             'external_packages',
@@ -1845,9 +1847,10 @@ class ImportsAdapter(ResourceAdapter):
         if not self.analysis.graph:
             return {'unused': []}
 
+        view = self._analysis_view()
         unused = [(stmt, names) for stmt, names in
                   self.analysis.graph.find_unused_imports(self.analysis.symbols_by_file)
-                  if self._in_scope(stmt.file_path)]
+                  if view._in_scope(stmt.file_path)]
 
         # `unused_names` narrows a partly-used `from x import a, b` to the names
         # actually unused (BACK-1066); `count` is statements, like `unused`.
@@ -1874,11 +1877,12 @@ class ImportsAdapter(ResourceAdapter):
                 note='Layer violation detection requires .reveal.yaml configuration'
             )
 
+        view = self._analysis_view()
         project_root = self._target_path if self._target_path.is_dir() else self._target_path.parent
         violations = []
 
-        for from_file, to_files in self._edges(LAZY_INCLUDE).dependencies.items():
-            if not self._in_scope(from_file):
+        for from_file, to_files in view._edges(LAZY_INCLUDE).dependencies.items():
+            if not view._in_scope(from_file):
                 continue
             for to_file in to_files:
                 result = layer_config.check_import(from_file, to_file, project_root)
@@ -1895,7 +1899,7 @@ class ImportsAdapter(ResourceAdapter):
             'layer_violations',
             violations=violations,
             count=len(violations),
-            edge_rule=self._edge_rule(LAZY_INCLUDE, 'violations check static imports between'),
+            edge_rule=view._edge_rule(LAZY_INCLUDE, 'violations check static imports between'),
         )
 
     def _scan_warnings(self) -> List[WarningEntry]:
@@ -1931,16 +1935,17 @@ class ImportsAdapter(ResourceAdapter):
             target = named
         if target.is_file():
             return self._format_file_importers(target)
-        graph = self._edges(LAZY_INCLUDE)
+        view = self._analysis_view()
+        graph = view._edges(LAZY_INCLUDE)
         entries = [
             {'file': str(f), 'fan_in': len(sources), 'importers': sorted(str(src) for src in sources)}
-            for f, sources in graph.reverse_deps.items() if sources and self._in_scope(f)
+            for f, sources in graph.reverse_deps.items() if sources and view._in_scope(f)
             and (target == self._target_path or resolution.path_is_under(f, target))
         ]
         entries.sort(key=lambda e: (-cast(int, e['fan_in']), str(e['file'])))
         return self._build_response(
             'importer_summary', entries=entries, total=len(entries),
-            edge_rule=self._edge_rule(LAZY_INCLUDE, 'importers are files whose static imports resolve here, among'))
+            edge_rule=view._edge_rule(LAZY_INCLUDE, 'importers are files whose static imports resolve here, among'))
 
     def _named_importers_target(self, name: str) -> Tuple[Optional[Path], str]:
         """The file or directory ``?importers=NAME`` names, or ``(None, why)``: a name that matches

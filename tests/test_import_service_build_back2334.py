@@ -101,3 +101,34 @@ def test_service_scoped_family_and_cap_preserve_build_inputs(tree):
     assert scoped.analysis.resolution.scan_accounting.returned == 1
     assert scoped.analysis.resolution.scan_accounting.exact is False
     assert {p.suffix for p in scoped.files.candidates} == {'.py'}
+
+
+def test_discovery_build_and_extraction_counts_keep_existing_reuse_and_edit_guards(tree, monkeypatch):
+    from reveal.analyzers.imports import extraction
+    counts = {'discover': 0, 'build': 0, 'extract': 0}
+
+    def counted(original, key):
+        def run(*args, **kwargs):
+            counts[key] += 1
+            return original(*args, **kwargs)
+        return run
+
+    monkeypatch.setattr(service, 'discover', counted(service.discover, 'discover'))
+    monkeypatch.setattr(service, '_extract_and_resolve', counted(service._extract_and_resolve, 'build'))
+    monkeypatch.setattr(extraction, 'extract_one_file', counted(extraction.extract_one_file, 'extract'))
+    with host_request():
+        cold = service.analyze(_scope(tree))
+        warm = service.analyze(_scope(tree))
+    with host_request():
+        next_request = service.analyze(_scope(tree))
+    assert cold.analysis is warm.analysis is next_request.analysis
+    assert counts == {'discover': 3, 'build': 1, 'extract': 4}
+    # An unhosted library request deliberately does not read the validated memo.
+    direct = service.analyze(_scope(tree))
+    assert _edges(direct.analysis) == _edges(cold.analysis)
+    assert counts == {'discover': 4, 'build': 2, 'extract': 8}
+    (tree / 'a.py').write_text('VALUE = 12\n', encoding='utf-8')
+    with host_request():
+        edited = service.analyze(_scope(tree))
+    assert _edges(edited.analysis) == {'main.js': ['leaf.js']}
+    assert counts == {'discover': 5, 'build': 3, 'extract': 12}

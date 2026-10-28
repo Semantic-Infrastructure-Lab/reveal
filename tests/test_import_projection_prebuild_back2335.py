@@ -1,6 +1,10 @@
 """Projection delegation preserves the adapter's state before a scan exists."""
+import pytest
+
 from reveal.adapters.imports import ImportsAdapter
 from reveal.analyzers.imports.types import ImportGraph, LAZY_INCLUDE
+
+pytestmark = pytest.mark.component
 
 
 def test_prebuild_helpers_do_not_invent_a_completed_scan(tmp_path):
