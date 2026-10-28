@@ -450,73 +450,70 @@ class HotspotsAdapter(ResourceAdapter):
 
     def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
         with self.composition_run():
-            return self._get_structure(verbose=verbose, **kwargs)
+            path = Path(self.path)
+            top = _ranking_top(self.query_params, verbose)
+            min_cx = _MIN_COMPLEXITY.read(self.query_params)
+            functions_only = _FUNCTIONS_ONLY.read(self.query_params)
+            files_only = _FILES_ONLY.read(self.query_params)
 
-    def _get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
-        path = Path(self.path)
-        top = _ranking_top(self.query_params, verbose)
-        min_cx = _MIN_COMPLEXITY.read(self.query_params)
-        functions_only = _FUNCTIONS_ONLY.read(self.query_params)
-        files_only = _FILES_ONLY.read(self.query_params)
+            self.stats_summary = {}
+            self._file_findings = False
+            file_hotspots: List[Dict[str, Any]] = [] if functions_only else _run_file_hotspots(self, path, top)
+            fn_hotspots: List[Dict[str, Any]] = [] if files_only else _run_function_hotspots(self, path, min_cx, top)
+            if functions_only:
+                _record_function_scan_coverage(self, path)
 
-        self.stats_summary = {}
-        self._file_findings = False
-        file_hotspots: List[Dict[str, Any]] = [] if functions_only else _run_file_hotspots(self, path, top)
-        fn_hotspots: List[Dict[str, Any]] = [] if files_only else _run_function_hotspots(self, path, min_cx, top)
-        if functions_only:
-            _record_function_scan_coverage(self, path)
+            has_findings = _scan_has_findings(self, file_hotspots, fn_hotspots)
+            _relativize_hotspots_paths(file_hotspots, fn_hotspots, path)
 
-        has_findings = _scan_has_findings(self, file_hotspots, fn_hotspots)
-        _relativize_hotspots_paths(file_hotspots, fn_hotspots, path)
-
-        # BACK-1195: mark each ranked entry with its provenance so a reader
-        # can discount vendored/generated/test noise in place.
-        for entry in file_hotspots:
-            entry['provenance'] = _provenance_for_file(entry.get('file'), path)
-        for fn in fn_hotspots:
-            fn['provenance'] = _provenance_for_file(fn.get('file'), path)
-
-        test_index: Optional[Set[str]] = None
-        unknown_families: Set[str] = set()
-        if not files_only:
-            families = {family_for_path(fn.get('file', '')) for fn in fn_hotspots}
-            test_index = _build_test_name_index(path, families or None)
+            # BACK-1195: mark each ranked entry with its provenance so a reader
+            # can discount vendored/generated/test noise in place.
+            for entry in file_hotspots:
+                entry['provenance'] = _provenance_for_file(entry.get('file'), path)
             for fn in fn_hotspots:
-                family = family_for_path(fn.get('file', ''))
-                if conventions_for(family).has_test_index:
-                    fn['has_test_hint'] = _is_covered(fn.get('name', ''), fn.get('file', ''), test_index)
-                else:
-                    # No test convention known for this language: unknown, not "untested".
-                    fn['has_test_hint'] = None
-                    unknown_families.add(Path(fn.get('file', '')).suffix or family or '?')
-        self.test_index = test_index
+                fn['provenance'] = _provenance_for_file(fn.get('file'), path)
 
-        report = {
-            'path': str(path),
-            'file_hotspots': file_hotspots,
-            'function_hotspots': fn_hotspots,
-            'summary': {**self.stats_summary, 'has_findings': has_findings},
-        }
+            test_index: Optional[Set[str]] = None
+            unknown_families: Set[str] = set()
+            if not files_only:
+                families = {family_for_path(fn.get('file', '')) for fn in fn_hotspots}
+                test_index = _build_test_name_index(path, families or None)
+                for fn in fn_hotspots:
+                    family = family_for_path(fn.get('file', ''))
+                    if conventions_for(family).has_test_index:
+                        fn['has_test_hint'] = _is_covered(fn.get('name', ''), fn.get('file', ''), test_index)
+                    else:
+                        # No test convention known for this language: unknown, not "untested".
+                        fn['has_test_hint'] = None
+                        unknown_families.add(Path(fn.get('file', '')).suffix or family or '?')
+            self.test_index = test_index
 
-        meta = self.composed_meta()
-        from reveal.adapters.overview import without_internal_filter_warnings
-        warnings = without_internal_filter_warnings(meta)
-        if unknown_families:
-            warnings.append({
-                'type': 'test_convention_unknown',
-                'message': 'has_test_hint is null for functions in languages with no known '
-                           'test convention (' + ', '.join(sorted(unknown_families)) + '); '
-                           'null means unknown, not untested',
-            })
-        result = ResultBuilder.create(
-            result_type='hotspots_scan',
-            source=self.path,
-            contract_version=CONTRACT_VERSION,
-            data=report,
-            warnings=warnings or None,
-            errors=meta.get('errors') if meta else None,
-            confidence=meta.get('confidence') if meta else None,
-        )
-        from .stats.issue_count import note_issue_count_basis
-        note_issue_count_basis(result)  # file quality counts file-local rules only (BACK-1884)
-        return result
+            report = {
+                'path': str(path),
+                'file_hotspots': file_hotspots,
+                'function_hotspots': fn_hotspots,
+                'summary': {**self.stats_summary, 'has_findings': has_findings},
+            }
+
+            meta = self.composed_meta()
+            from reveal.adapters.overview import without_internal_filter_warnings
+            warnings = without_internal_filter_warnings(meta)
+            if unknown_families:
+                warnings.append({
+                    'type': 'test_convention_unknown',
+                    'message': 'has_test_hint is null for functions in languages with no known '
+                               'test convention (' + ', '.join(sorted(unknown_families)) + '); '
+                               'null means unknown, not untested',
+                })
+            result = ResultBuilder.create(
+                result_type='hotspots_scan',
+                source=self.path,
+                contract_version=CONTRACT_VERSION,
+                data=report,
+                warnings=warnings or None,
+                errors=meta.get('errors') if meta else None,
+                confidence=meta.get('confidence') if meta else None,
+            )
+            from .stats.issue_count import note_issue_count_basis
+            note_issue_count_basis(result)  # file quality counts file-local rules only (BACK-1884)
+            return result
