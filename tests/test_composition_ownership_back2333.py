@@ -74,6 +74,11 @@ def test_clean_composition_retains_answer_and_consuming_contract():
     parent = Parent()
     assert parent.compose_answer(AstAdapter, 'relative', lambda: answer) == answer
     assert parent.composed_meta() is None
+    parent.record_composed_error('AstAdapter', 'relative', ValueError('required child failed'))
+    meta = parent.composed_meta()
+    assert meta['confidence'] == 0.0
+    assert meta['errors'][0]['code'] == 'E_COMPOSE'
+    assert parent.composed_meta() is None
 
 
 @pytest.mark.parametrize('component', ['base', 'circular', 'unused'])
@@ -94,8 +99,3 @@ def test_deps_projects_cuts_before_diagnostic_snapshot(tmp_path, monkeypatch, co
     warning, = truncations_of({'meta': adapter.composed_meta()})
     assert warning['field'] == f'analysis.components.{component}.diagnostics.files_failed'
     assert child == original
-    parent.record_composed_error('AstAdapter', 'relative', ValueError('required child failed'))
-    meta = parent.composed_meta()
-    assert meta['confidence'] == 0.0
-    assert meta['errors'][0]['code'] == 'E_COMPOSE'
-    assert parent.composed_meta() is None
