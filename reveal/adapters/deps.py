@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -52,24 +52,38 @@ def _view(adapter: 'DepsAdapter', view: str) -> Dict[str, Any]:
 def _run_base(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
     """Fetch base import map via ImportsAdapter (this builds the graph the other components read)."""
     with import_analysis.composed_rules('deps://'):  # BACK-2087
-        result = adapter.compose_answer(ImportsAdapter, str(path), lambda: _build(adapter, path), default={})
-    adapter._record_component('base', result)
+        result = _compose_component(adapter, 'base', path, lambda: _build(adapter, path))
     return result if isinstance(result, dict) and _valid_component_payload('base', result) else {}
 
 
 def _run_circular(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
     """Fetch circular dependency cycles: imports://?circular of the base component's graph."""
     with import_analysis.composed_rules('deps://'):  # BACK-2087
-        result = adapter.compose_answer(ImportsAdapter, str(path), lambda: _view(adapter, 'circular'), default={})
-    adapter._record_component('circular', result)
+        result = _compose_component(adapter, 'circular', path, lambda: _view(adapter, 'circular'))
     return result if _valid_component_payload('circular', result, require_count=False) else {}
 
 
 def _run_unused(adapter: 'DepsAdapter', path: Path) -> List[Dict[str, Any]]:
     """Fetch unused imports: imports://?unused of the base component's graph."""
-    data = adapter.compose_answer(ImportsAdapter, str(path), lambda: _view(adapter, 'unused'), default={})
-    adapter._record_component('unused', data)
+    data = _compose_component(adapter, 'unused', path, lambda: _view(adapter, 'unused'))
     return data['unused'] if _valid_component_payload('unused', data, require_count=False) else []
+
+
+def _compose_component(adapter: 'DepsAdapter', name: str, path: Path, answer: Callable[[], Any]) -> Any:
+    """Project component diagnostics before composition snapshots its envelope."""
+    recorded = False
+
+    def project() -> Any:
+        nonlocal recorded
+        result = adapter._composition_view(answer())
+        adapter._record_component(name, result)
+        recorded = True
+        return result
+
+    result = adapter.compose_answer(ImportsAdapter, str(path), project, default={})
+    if not recorded:
+        adapter._record_component(name, result)
+    return result
 
 
 def _valid_import_entries(entries: Any) -> bool:
@@ -112,7 +126,7 @@ def _component_diagnostics(name: str, metadata: Any, meta: Dict[str, Any]) -> Di
         field = warning.get('field', '')
         if warning.get('type') == 'truncated' and field.removeprefix('metadata.') in diagnostics:
             target = f'analysis.components.{name}.diagnostics.{field.removeprefix("metadata.")}'
-            # compose folds the same entry: keep exact counts/cause and hint text.
+            # Project before compose folds its own diagnostic snapshot.
             warning['field'] = target
             if isinstance(warning.get('message'), str):
                 warning['message'] = warning['message'].replace(field, target)
