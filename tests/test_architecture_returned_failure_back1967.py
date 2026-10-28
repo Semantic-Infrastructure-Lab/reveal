@@ -142,7 +142,7 @@ def test_no_imports_not_applicable_child_remains_non_error(project, monkeypatch)
     def declined(self, **kwargs):
         return ResultBuilder.create(
             'ast_query', str(project), applicable=False, reason='no applicable structures',
-            warnings=[{'code': 'not_applicable', 'message': 'no applicable structures'}])
+            warnings=[{'type': 'not_applicable', 'code': 'not_applicable', 'message': 'no applicable structures'}])
 
     monkeypatch.setattr(AstAdapter, 'get_structure', declined)
     result = ArchitectureAdapter(str(project), 'no_imports=true').get_structure()

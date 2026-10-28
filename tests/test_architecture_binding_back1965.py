@@ -90,7 +90,8 @@ def test_diff_without_explicit_completeness_fails_closed(analysis):
 def test_malformed_type_and_metadata_repair_is_a_required_failure():
     from reveal.cli.routing.declared import qualify_declared_answer
     from reveal.utils.results import ResultBuilder, execution_exit_code
-    wrong = ResultBuilder.create('wrong', '.', meta={'errors': None, 'warnings': None})
+    wrong = ResultBuilder.create('wrong', '.')
+    wrong['meta'] = {'errors': None, 'warnings': None}
     repaired = qualify_declared_answer(wrong, ArchitectureAdapter, '.', 'architecture_diff')
     assert repaired['type'] == 'architecture_diff'
     assert execution_exit_code(ArchitectureAdapter.execution_facts(repaired), fail_on='none') == 3

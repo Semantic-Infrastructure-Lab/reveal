@@ -67,7 +67,7 @@ def test_resource_adapter_create_meta_delegates_to_result_builder():
     inputs = dict(
         parse_mode="tree_sitter_full",
         confidence=1.5,  # exercises the [0,1] clamp
-        warnings=[{"code": "W001", "message": "x"}],
+        warnings=[{"type": "parse_warning", "code": "W001", "message": "x"}],
         errors=[{"code": "E001", "message": "y"}],
     )
     assert ResourceAdapter.create_meta(**inputs) == ResultBuilder.create_meta(**inputs)

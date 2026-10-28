@@ -61,7 +61,7 @@ def test_only_owned_missing_evidence_is_incomplete(evidence):
         warnings = [{'type': 'informational', 'message': 'scope information'}]
     elif evidence == 'unsupported':
         data['unsupported_language'] = 'lua'
-        warnings = [{'code': 'W-CONTRACTS-1', 'message': 'documented language coverage'}]
+        warnings = [{'type': 'coverage_gap', 'code': 'W-CONTRACTS-1', 'message': 'documented language coverage'}]
     result = ResultBuilder.create('contracts', '.', confidence=0.0, data=data,
                                   warnings=warnings, errors=errors)
     facts = ContractsAdapter.execution_facts(result)
