@@ -790,7 +790,7 @@ class TestSSLRenderer(unittest.TestCase):
             'health_status': 'HEALTHY',
             'health_icon': '\u2705',
             'san_count': 3,
-            'verification': {'chain_valid': True, 'hostname_match': True, 'error': None},
+            'verification': {'verified': True, 'hostname_match': True, 'error': None},
             'next_steps': [],
         }
 
@@ -820,7 +820,7 @@ class TestSSLRenderer(unittest.TestCase):
             'health_status': 'HEALTHY',
             'health_icon': '\u2705',
             'san_count': 3,
-            'verification': {'chain_valid': True, 'hostname_match': True, 'error': None},
+            'verification': {'verified': True, 'hostname_match': True, 'error': None},
             'next_steps': ['reveal ssl://example.com/san'],
         }
 

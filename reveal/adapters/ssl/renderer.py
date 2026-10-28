@@ -49,9 +49,9 @@ class SSLRenderer(TypeDispatchRenderer):
         # Verification
         v = result['verification']
         print("Verification:")
-        chain_icon = '\u2705' if v['chain_valid'] else '\u274c'
+        verified_icon = '\u2705' if v['verified'] else '\u274c'
         host_icon = '\u2705' if v['hostname_match'] else '\u274c'
-        print(f"  Chain Valid: {chain_icon}")
+        print(f"  Verified: {verified_icon}")
         print(f"  Hostname Match: {host_icon}")
         if v.get('error'):
             print(f"  Error: {v['error']}")

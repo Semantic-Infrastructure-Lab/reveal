@@ -161,7 +161,9 @@ class SSLFetcher:
             port: Port number
 
         Returns:
-            Tuple of (leaf cert, chain, verification_result)
+            Tuple of (leaf cert, chain, verification_result). ``verified`` is true only when the
+            default-context handshake succeeded (chain and hostname); ``hostname_match`` is
+            whether the leaf's SANs cover ``host``, also when the chain failed.
         """
         verification: Dict[str, bool | str | None] = {
             'verified': False,
@@ -180,14 +182,14 @@ class SSLFetcher:
                     verification['verified'] = True
                     verification['hostname_match'] = True
                     return leaf, [], verification
-        except ssl.CertificateError as e:
-            verification['error'] = str(e)
-            verification['hostname_match'] = False
         except ssl.SSLError as e:
+            # ssl.CertificateError is SSLCertVerificationError: an untrusted chain lands here
+            # too, so the exception cannot say whether the name is covered (BACK-2316).
             verification['error'] = str(e)
 
         # Fallback to unverified fetch for diagnostics
         leaf, chain = self.fetch_certificate(host, port)
+        verification['hostname_match'] = _hostname_matches_san(host, leaf.san)
         return leaf, chain, verification
 
     def _parse_certificate(self, cert: Dict) -> CertificateInfo:

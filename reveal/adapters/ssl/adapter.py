@@ -65,7 +65,7 @@ _SCHEMA_OUTPUT_TYPES = [
             'health_status': {'type': 'string', 'enum': ['HEALTHY', 'WARNING', 'CRITICAL', 'EXPIRED']},
             'san_count': {'type': 'integer'},
             'verification': {'type': 'object', 'properties': {
-                'chain_valid': {'type': 'boolean'}, 'hostname_match': {'type': 'boolean'}, 'error': {'type': ['string', 'null']}
+                'verified': {'type': 'boolean'}, 'hostname_match': {'type': 'boolean'}, 'error': {'type': ['string', 'null']}
             }}
         }},
         'example': {
@@ -73,7 +73,7 @@ _SCHEMA_OUTPUT_TYPES = [
             'common_name': 'example.com', 'issuer': "Let's Encrypt",
             'valid_from': '2026-01-01', 'valid_until': '2026-04-01',
             'days_until_expiry': 54, 'health_status': 'HEALTHY', 'san_count': 2,
-            'verification': {'chain_valid': True, 'hostname_match': True, 'error': None}
+            'verification': {'verified': True, 'hostname_match': True, 'error': None}
         }
     },
     _ssl_output_type('ssl_san', 'Subject Alternative Names list', {
@@ -448,7 +448,7 @@ class SSLAdapter(ResourceAdapter):
 
     def _build_verification(self) -> Dict[str, Any]:
         return {
-            'chain_valid': self._verification.get('verified', False) if self._verification else False,
+            'verified': self._verification.get('verified', False) if self._verification else False,
             'hostname_match': self._verification.get('hostname_match', False) if self._verification else False,
             'error': self._verification.get('error') if self._verification else None,
         }

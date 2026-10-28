@@ -126,7 +126,7 @@ def _is_gap(entry: dict) -> bool:
 
 def _not_applicable_note(entry: dict, site_count: int) -> str:
     """Sites a per-listener row left out (http2 on a port-80-only site, BACK-2280)."""
-    left_out = site_count - entry['sites_with'] - entry['sites_without']
+    left_out = entry['sites_not_applicable']
     if left_out <= 0:
         return ''
     return f"  ({left_out} site{'s' if left_out != 1 else ''} not applicable)"

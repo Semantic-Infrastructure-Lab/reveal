@@ -804,6 +804,7 @@ def _build_fleet_matrix(
             'deprecated': deprecated,
             'sites_with': len(sites_with),
             'sites_without': len(sites_without),
+            'sites_not_applicable': site_count - len(sites_with) - len(sites_without),
             'sites_with_names': [_fleet_site_label(r) for r in sites_with],
             'sites_without_names': [_fleet_site_label(r) for r in sites_without],
             'consolidation_opportunity': consolidation_opportunity,
