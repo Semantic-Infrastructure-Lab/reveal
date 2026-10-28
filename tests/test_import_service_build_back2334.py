@@ -98,5 +98,6 @@ def test_service_scoped_family_and_cap_preserve_build_inputs(tree):
     scoped = service.analyze(service.ScanScope(tree, frozenset({'.py'}), cap=1))
     assert len(scoped.analysis.scanned_files) == 1
     assert scoped.analysis.resolution.capped
-    assert scoped.analysis.resolution.scan_accounting.limit == 1
+    assert scoped.analysis.resolution.scan_accounting.returned == 1
+    assert scoped.analysis.resolution.scan_accounting.exact is False
     assert {p.suffix for p in scoped.files.candidates} == {'.py'}
