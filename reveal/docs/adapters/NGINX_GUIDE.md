@@ -229,7 +229,7 @@ JSON (`--format json`) has `type: nginx_fleet_audit` and a `matrix` list whose e
 
 **`X-XSS-Protection`** is a deprecated header check — "Sites With" means sites that *have* the deprecated header (should remove it). "Sites Without" is `—` because absence is the correct state.
 
-**`http2 on 443 listener`** counts only sites with a TLS listener (a `listen` on port 443 or with `ssl`): a port-80-only site, such as a redirect file next to its 443 twin, is in neither column and the row ends `(N sites not applicable)`. In JSON that number is `site_count - sites_with - sites_without`. The other rows count every site.
+**`http2 on 443 listener`** counts only sites with a TLS listener (a `listen` on port 443 or with `ssl`): a port-80-only site, such as a redirect file next to its 443 twin, is in neither column and the row ends `(N sites not applicable)`. In JSON that number is the row's `sites_not_applicable`. The other rows count every site.
 
 ---
 

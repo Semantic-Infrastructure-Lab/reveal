@@ -190,7 +190,7 @@ Output:
 
 **Nested field selection**:
 ```bash
-reveal ssl://example.com --fields=host,verification.chain_valid,verification.hostname_match --format=json
+reveal ssl://example.com --fields=host,verification.verified,verification.hostname_match --format=json
 ```
 
 Output (envelope omitted):
@@ -198,7 +198,7 @@ Output (envelope omitted):
 {
   "host": "example.com",
   "verification": {
-    "chain_valid": true,
+    "verified": true,
     "hostname_match": true
   }
 }
@@ -460,7 +460,7 @@ Access nested fields with dot notation:
 
 ```bash
 # Access nested certificate data
-reveal ssl://example.com --fields=host,verification.chain_valid,verification.hostname_match --format=json
+reveal ssl://example.com --fields=host,verification.verified,verification.hostname_match --format=json
 
 # Access nested keys of each list item
 reveal metrics://src --fields=file,quality.score,complexity.max --format=json
@@ -558,7 +558,7 @@ Common fields:
 - `days_until_expiry`, `health_status`, `health_icon`
 - `valid_from`, `valid_until`
 - `san_count`
-- `verification.chain_valid`, `verification.hostname_match`
+- `verification.verified`, `verification.hostname_match`
 
 #### AST Adapter
 

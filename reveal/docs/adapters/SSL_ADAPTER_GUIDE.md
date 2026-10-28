@@ -94,7 +94,7 @@ Certificate:
   SANs: 2 domain(s)
 
 Verification:
-  Chain Valid: ✅
+  Verified: ✅
   Hostname Match: ✅
 
 Next Steps:
@@ -515,6 +515,8 @@ reveal ssl://example.com/chain
   }
 }
 ```
+
+`verified` is true only when the default handshake succeeded, so the chain and the hostname both passed (the overview, `/chain` and `/full` spell it the same way). `hostname_match` is whether the certificate's SANs cover the host, and it is computed even when the chain is untrusted: `untrusted-root.badssl.com` reads `verified: false, hostname_match: true`, `wrong.host.badssl.com` reads `verified: false, hostname_match: false`.
 
 **Use cases**:
 - Confirm the certificate verifies against the system trust store
