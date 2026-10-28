@@ -92,10 +92,22 @@ def test_js_helper_requires_all_nine_population_rows(gate, repo, baseline):
     'reveal/conventions.py', 'reveal/core/new_boundary.py',
     'reveal/analyzers/_new_function_values.py', 'reveal/adapters/calls/index.py',
     'reveal/treesitter.py', 'reveal/structure.py',
+    'reveal/adapters/ast/analysis.py', 'reveal/adapters/ast/node_taxonomy.py',
+    'reveal/defaults.py', 'reveal/config.py', 'reveal/utils/path_utils.py',
+    'reveal/utils/gitignore.py', 'reveal/utils/exclusions.py', 'reveal/utils/lines.py',
+    'reveal/analyzers/imports/base.py', 'reveal/analyzers/imports/generic.py',
 ])
 def test_shared_or_unknown_boundary_requires_every_row(gate, repo, baseline, path):
     commit_file(repo, path)
     assert request(gate, repo, baseline)['required_rows'] == sorted(json.loads(baseline.read_text(encoding='utf-8')))
+
+
+def test_alias_extractor_is_gated_but_graph_orchestration_is_unrelated(gate, repo, baseline):
+    commit_file(repo, 'reveal/analyzers/imports/service.py')
+    assert request(gate, repo, baseline)['required_rows'] == []
+    commit_file(repo, 'reveal/analyzers/imports/python.py')
+    assert request(gate, repo, baseline)['required_rows'] == [
+        'python/callees', 'python/callers', 'python/depth2']
 
 
 def test_range_includes_earlier_commits_and_both_renamed_paths(gate, repo, baseline):
