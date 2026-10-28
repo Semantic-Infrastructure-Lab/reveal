@@ -1633,25 +1633,13 @@ class ImportsAdapter(ResourceAdapter):
         return self._analysis_view().get_metadata()
 
     def _scan_budget_dict(self) -> Dict[str, Any]:
-        record = self.analysis.resolution
-        accounting = record.scan_accounting if record is not None else None
-        return {'scope': accounting.scope if accounting else 'source_candidates',
-                'limit': self._scan_budget.limit,
-                'total': accounting.total if accounting else None,
-                'returned': accounting.returned if accounting else None,
-                'exact': accounting.exact if accounting else None,
-                'capped': bool(record.capped) if record is not None else False}
+        return self._analysis_view()._scan_budget_dict()
 
     def _row_files(self, graph: ImportGraph) -> set:
-        """The files an answer has rows for: every scanned file and every edge target (which may
-        live outside the parse corpus), whichever view, so a row never vanishes with &lazy or
-        &tests; under scope=root only those under the requested path."""
-        files = self.analysis.scanned_files | set(graph.files.keys()) | set(self._graph().reverse_deps.keys())
-        return {f for f in files if self._in_scope(f)}
+        return self._analysis_view()._row_files(graph)
 
     def _cycle_groups(self, graph: ImportGraph) -> List[List[Path]]:
-        """Cycle groups of ``graph`` that hold a row of this answer (all of each group is shown)."""
-        return [group for group in graph.find_cycle_groups() if any(self._in_scope(f) for f in group)]
+        return self._analysis_view()._cycle_groups(graph)
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -1719,11 +1707,11 @@ class ImportsAdapter(ResourceAdapter):
             hidden.update(files.hidden)
         return list(files.candidates), files.index
 
-    def _analysis_view(self) -> ImportView:
+    def _analysis_view(self, *, include_top: bool = False) -> ImportView:
         target = self._target_path or Path('.').resolve()
         scan = self._scan or resolution.ScanRoot(target, 'path')
         lazy = self._query_params.get(_LAZY.name)
-        top = self._query_params.get('top')
+        top = self._query_params.get('top') if include_top else None
         return ImportView(self.analysis, target, scan, self._scan_budget.limit,
                           lazy=None if lazy is None else _LAZY.validate(lazy),
                           tests=_TESTS.read(self._query_params), scope=_SCOPE.read(self._query_params),
@@ -1773,60 +1761,32 @@ class ImportsAdapter(ResourceAdapter):
         return (default, True) if raw is None else (_LAZY.validate(raw), False)
 
     def _graph(self) -> ImportGraph:
-        if self.analysis.graph is None:
-            raise ValueError('Import analysis requires a built graph before presentation')
-        return self.analysis.graph
+        return self._analysis_view()._graph()
 
     def _edges(self, default: str) -> ImportGraph:
-        """The graph view an edge-derived answer counts: &lazy, else the view's default, then
-        &scan-root containment (BACK-2251: an edge to a file outside the scan root is not counted), then
-        &tests=exclude (importers under a test path dropped, ``path_utils.is_test_path``)."""
-        view = self._graph().edge_view(self._lazy_mode(default)[0])
-        if self._scan is not None:
-            view = view.within_root(self._scan.root)
-        return view.without_test_importers() if self._tests_excluded() else view
+        return self._analysis_view()._edges(default)
 
     def outside_root_edge_count(self) -> int:
-        """The edges the answer left out because their target is outside the scan root (BACK-2251)."""
-        return self._graph().outside_root_edges(self._scan.root) if self._scan is not None else 0
+        return self._analysis_view().outside_root_edge_count()
 
     def _tests_excluded(self) -> bool:
-        return bool(_TESTS.read(self._query_params) == 'exclude')
+        return self._analysis_view()._tests_excluded()
 
     def _scope_is_root(self) -> bool:
-        return bool(_SCOPE.read(self._query_params) == SCOPE_ROOT)
+        return self._analysis_view()._scope_is_root()
 
     def _base_dir(self) -> Path:
-        target = self._target_path or Path('.').resolve()
-        return target if target.is_dir() else target.parent
+        return self._analysis_view()._base_dir()
 
     def _in_scope(self, path: Path) -> bool:
-        """Whether ``path`` is a row of this answer: every file under the scan root when the requested
-        path is the scan root, else the requested file or files under the requested directory."""
-        target = self._target_path
-        if target is None or self._scan is None:
-            return True
-        if self._scan.source == 'path' or self._scan.root == target:
-            return resolution.path_is_under(path, self._scan.root)
-        return path == target or (target.is_dir() and resolution.path_is_under(path, target))
+        return self._analysis_view()._in_scope(path)
 
     def _resolved_at(self, cycles: bool = False) -> import_analysis.ResolvedAt:
-        scan = self._scan or resolution.ScanRoot(self._target_path or Path('.').resolve(), 'path')
-        return import_analysis.ResolvedAt(
-            root=to_posix(os.path.relpath(scan.root, self._base_dir())), root_source=scan.source,
-            scope=_SCOPE.read(self._query_params), tests=_TESTS.read(self._query_params),
-            gated=resolution.IMPORT_RECALL_GATED, cycles=cycles,
-            outside_root=self._graph().outside_root_edges(scan.root))
+        return self._analysis_view()._resolved_at(cycles)
 
     def _edge_rule(self, default: str, subject: str, *, tests_counted: bool = True,
                    cycles: bool = False) -> Dict[str, Any]:
-        """The rule (JSON and text) of an answer counted on ``self._edges(default)``."""
-        lazy, lazy_default = self._lazy_mode(default)
-        return import_analysis.edge_rule(
-            self._graph(), lazy, lazy_default=lazy_default, subject=subject,
-            scope='scan_root' if self._scope_is_root() else 'scanned_path',
-            tests_counted=tests_counted and not self._tests_excluded(),
-            resolved_at=self._resolved_at(cycles), counted=self._edges(default))
+        return self._analysis_view()._edge_rule(default, subject, tests_counted=tests_counted, cycles=cycles)
 
     def _format_all(self) -> Dict[str, Any]:
         """Format all imports (default view)."""
@@ -1843,7 +1803,7 @@ class ImportsAdapter(ResourceAdapter):
             edge_rule=self._edge_rule(LAZY_EXCLUDE, 'Cycles Found uses static imports between', cycles=True))
 
     def _format_fan_in(self) -> Dict[str, Any]:
-        data = self._analysis_view().fan_in()
+        data = self._analysis_view(include_top=True).fan_in()
         response = self._build_response('fan_in_ranking', **data)
         note_truncation(response, 'entries', len(data['entries']), data['total'], 'limit', hint='raise ?top=N')
         return response
