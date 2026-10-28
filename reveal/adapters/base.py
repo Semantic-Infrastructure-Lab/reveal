@@ -12,10 +12,11 @@ Internal layout:
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
-from typing import Callable, Dict, Any, Iterable, Optional, List, Tuple
+from typing import Callable, Dict, Any, Iterable, Iterator, Optional, List, Tuple
 
 from reveal.reveal_types import ErrorEntry, RevealMeta, RevealResult, WarningEntry
 
@@ -389,6 +390,27 @@ class ResourceAdapter(ABC):
                 self.record_composed_error(child_name, resource, ValueError(str(result['error'])))
 
         return result
+
+    @contextmanager
+    def composition_run(self) -> Iterator[None]:
+        """Own diagnostics for one analysis, restoring an enclosing run on exit.
+
+        Direct entry points delimit their work explicitly. Finalization still consumes
+        ``composed_meta()`` once; interrupted runs discard unconsumed diagnostics.
+        Nested analyses on the same instance have independent diagnostic envelopes.
+        """
+        names = ('_composed_warnings', '_composed_errors', '_composed_confidences')
+        depth = self.__dict__.get('_composition_depth', 0)
+        previous = tuple(self.__dict__.get(name, []) for name in names)
+        self._composition_depth = depth + 1
+        for name in names:
+            self.__dict__[name] = []
+        try:
+            yield
+        finally:
+            for name, outer in zip(names, previous):
+                self.__dict__[name] = outer if depth else []
+            self._composition_depth = depth
 
     def fold_meta(self, meta: Optional[RevealMeta]) -> None:
         """Fold a raw ``meta`` dict (as returned in a result's ``meta`` key)
