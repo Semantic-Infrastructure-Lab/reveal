@@ -35,14 +35,22 @@ def path_languages(path):
     """None requires every baseline row; an empty set is unrelated to calls."""
     shared = {
         'reveal/base.py', 'reveal/treesitter.py', 'reveal/structure.py',
-        'reveal/conventions.py', 'reveal/registry.py',
+        'reveal/conventions.py', 'reveal/registry.py', 'reveal/defaults.py', 'reveal/config.py',
         'reveal/utils/parallel.py', 'reveal/utils/pyparse.py',
+        'reveal/utils/path_utils.py', 'reveal/utils/gitignore.py',
+        'reveal/utils/exclusions.py', 'reveal/utils/lines.py',
     }
     if path in shared or path.startswith('reveal/adapters/calls/'):
         return None
-    if path in {'reveal/adapters/ast/nav_calls.py', 'reveal/adapters/ast/call_graph.py'}:
+    # calls.index consumes analysis.collect_structures and call_graph's alias resolution;
+    # the AST taxonomy shim also defines which declarations/calls those owners see.
+    if path in {'reveal/adapters/ast/nav_calls.py', 'reveal/adapters/ast/call_graph.py',
+                'reveal/adapters/ast/analysis.py', 'reveal/adapters/ast/node_taxonomy.py'}:
         return None
-    if path.startswith('reveal/analyzers/imports/'):
+    # Import graph orchestration is separate, but call_graph uses the extractors to
+    # resolve aliases. New/unknown extractor files take the conservative all-row path.
+    graph_only = {'service', 'file_index', 'classify', 'unused', 'resolver', 'layers', 'resolution'}
+    if path.startswith('reveal/analyzers/imports/') and Path(path).stem in graph_only:
         return set()
     if not path.endswith('.py'):
         return set()

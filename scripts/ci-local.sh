@@ -41,6 +41,8 @@
 #   scripts/ci-local.sh --push              # the push gate (~6 min, see below)
 #   scripts/ci-local.sh --push --calls-evidence FILE  # external calls measurement record
 #   scripts/ci-local.sh --push --skip-calls-gate REASON # visible, persistently logged override
+# Set REVEAL_CALLS_GATE_BASELINE to the external calls runner's baseline JSON.
+# Evidence is bound to this clean checkout, HEAD/tree and the primary CI interpreter.
 #   scripts/ci-local.sh --fresh             # rebuild the venv from scratch
 #
 # --push is the gate before a push: the default run (lints, ratchets, reveal:// self-validation, then
