@@ -212,7 +212,7 @@ These fields are OPTIONAL but recommended for common patterns:
   - `< 0.50` - Low confidence, results may be unreliable
 
 **`meta.warnings`** (optional, array of dicts)
-- **Purpose**: Non-fatal issues encountered during parsing. `type` is the key every reader uses (`outcome_of`, the truncation and sort notes, the renderers' skip lists); an entry with only a `code` is invisible to them, and `tests/test_output_contract_compliance.py` fails on one. `meta.errors` keeps `code`.
+- **Purpose**: Non-fatal issues encountered during parsing. `type` is the key every reader uses (`outcome_of`, the truncation and sort notes, the renderers' skip lists). `ResultBuilder`, prepared metadata and `note_warning` reject a warning without a nonempty string `type` with `ValueError`; `code` remains optional. `meta.errors` has a separate contract and does not require `type`.
 - **Schema**:
   ```python
   {
@@ -649,11 +649,12 @@ operation-specific applicability before analysis.
 
 Required answer qualification runs before and after postprocessing. Generic trust
 frames allow optional `meta.errors`/`meta.warnings`; present fields must be lists of
-diagnostic dictionaries. A diagnostic's optional `type`, consumed by common
-warning/result-control rendering, must be a string when present; unknown strings
-and absent types remain valid. Repair retains usable diagnostic fields/messages,
-removes unusable type values, drops non-dictionary members and records
-`invalid_adapter_answer` as required failure.
+diagnostic dictionaries. Each warning requires a nonempty string `type`; unknown
+warning kinds remain valid and `code` is optional. Error diagnostics retain an
+optional string `type` and do not become fatal solely because they exist.
+Repair preserves valid warnings and usable errors, records malformed warning
+details in a bounded `invalid_adapter_warning` error, and records
+`invalid_adapter_answer` as required failure. The original answer is not mutated.
 An optional adapter-owned `answer_requirement_error(result, expected_type,
 prior_facts=None)` returns a diagnostic or `None` after generic frame validation.
 The postprocess call receives immutable established execution facts, so copied and

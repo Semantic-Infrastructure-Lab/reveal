@@ -2,3 +2,5 @@
 # internal work a user never sees (CI, ratchets, test harnesses, maintainer scripts), or ids
 # covered by a grouped entry. One per line: id, then why (name the grouped entry).
 # Clear this list in the first commit after each release: it only names work since the last tag.
+BACK-2321 CI default-install smoke and shared packaging test support.
+BACK-2204 Maintainer push-gate evidence validation and private measurement recording.
