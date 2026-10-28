@@ -119,3 +119,30 @@ def test_requested_artifact_failure_still_outranks_complete_analysis(root):
     assert result.returncode == 3
     assert 'alpha' in result.stdout
     assert 'Error' in result.stderr
+
+
+@pytest.mark.parametrize('query,qualified', [
+    ('show=dict-heatmap', False), ('show=dict-schemas', False), ('reveal_type=x', False),
+    ('show=dict-heatmap&show=functions', True), ('show=functions&show=dict-heatmap', False),
+    ('reveal_type=x&reveal_type=', True), ('reveal_type=&reveal_type=x', False),
+    ('show=&reveal_type=', True), ('show&reveal_type', True),
+    ('show=dict%2Dheatmap', True), ('reveal_type%3Dx', True),
+    (' show=dict-heatmap ', False),
+])
+def test_mode_selector_matches_actual_constructor_semantics(root, query, qualified):
+    adapter = AstAdapter(str(root), query)
+    dedicated = adapter.show_mode in ('dict-heatmap', 'dict-schemas') or bool(adapter.reveal_type_var)
+    assert dedicated is not qualified
+    assert (AstAdapter.uri_execution_facts(f'{root}?{query}') is not None) is qualified
+
+
+def test_metadata_error_alone_is_not_required_loss(root, monkeypatch):
+    original = AstAdapter.get_structure
+    def answer(self, **kwargs):
+        result = original(self, **kwargs)
+        result['meta']['errors'].append({'code': 'optional_detail', 'message': 'optional evidence unavailable'})
+        return result
+    monkeypatch.setattr(AstAdapter, 'get_structure', answer)
+    result = run(root, '', '--format', 'json')
+    assert result.returncode == 0
+    assert json.loads(result.stdout)['meta']['errors']
