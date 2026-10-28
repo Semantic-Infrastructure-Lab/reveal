@@ -1708,8 +1708,8 @@ class ImportsAdapter(ResourceAdapter):
         return list(files.candidates), files.index
 
     def _analysis_view(self, *, include_top: bool = False) -> ImportView:
-        target = self._target_path or Path('.').resolve()
-        scan = self._scan or resolution.ScanRoot(target, 'path')
+        target = self._target_path
+        scan = self._scan
         lazy = self._query_params.get(_LAZY.name)
         top = self._query_params.get('top') if include_top else None
         return ImportView(self.analysis, target, scan, self._scan_budget.limit,

@@ -114,17 +114,13 @@ class ImportView:
     The adapter owns URI validation, envelopes and display-path conversion.
     """
     analysis: ImportAnalysis
-    target: Path
-    scan: resolution.ScanRoot
+    target: Optional[Path]
+    scan: Optional[resolution.ScanRoot]
     cap: Optional[int]
     lazy: Optional[str] = None
     tests: str = 'include'
     scope: str = 'path'
     top: Optional[int] = None
-
-    @staticmethod
-    def _fields(result_type: str, **fields) -> Dict[str, Any]:
-        return fields
 
     def _lazy_mode(self, default: str) -> Tuple[str, bool]:
         return (default, True) if self.lazy is None else (self.lazy, False)
@@ -263,7 +259,7 @@ class ImportView:
         Zero fan-in = entry points or dead code.
         """
         if not self.analysis.graph:
-            return self._fields('fan_in_ranking', entries=[], total=0)
+            return {'entries': [], 'total': 0}
 
         top = self.top
 
@@ -271,7 +267,7 @@ class ImportView:
         # Union: all scanned files + files that appear as import targets (may live outside scan
         # root); every edge's target, whichever view, so a row never vanishes with &lazy.
         all_files = self._row_files(graph)
-        entries = sorted(
+        entries: List[Dict[str, Any]] = sorted(
             [
                 {
                     'file': str(f),
@@ -287,11 +283,10 @@ class ImportView:
         if top and top > 0:  # a negative slice would drop the tail, not cap
             entries = entries[:top]
 
-        response = self._fields(
-            'fan_in_ranking', entries=entries, total=total,
-            edge_rule=self._edge_rule(LAZY_INCLUDE, 'fan-in and fan-out count static imports between'))
-        # BACK-1543: 'total' said it; the marker is what gets printed.
-        return response
+        return {
+            'entries': entries, 'total': total,
+            'edge_rule': self._edge_rule(LAZY_INCLUDE, 'fan-in and fan-out count static imports between'),
+        }
 
     def entrypoints(self) -> Dict[str, Any]:
         """Return files with fan-in=0 — nothing imports them.
@@ -311,7 +306,7 @@ class ImportView:
         evidence that module is *testable*, not that something calls it.
         """
         if not self.analysis.graph:
-            return self._fields('entrypoints', entries=[], total_scanned=0)
+            return {'entries': [], 'total_scanned': 0}
 
         graph = self._edges(LAZY_INCLUDE)
 
@@ -323,7 +318,7 @@ class ImportView:
 
         all_files = self._row_files(graph)
         candidates = [f for f in all_files if _non_test_fan_in(f) == 0]
-        entries = sorted(
+        entries: List[Dict[str, Any]] = sorted(
             [
                 {
                     'file': str(f),
@@ -343,11 +338,11 @@ class ImportView:
             key=lambda e: (e['is_test'], -e['fan_out'], e['file']),
         )
 
-        response = self._fields(
-            'entrypoints', entries=entries, total_scanned=len(all_files),
-            edge_rule=self._edge_rule(LAZY_INCLUDE, 'fan-in counts static imports between',
-                                      tests_counted=False),
-        )
+        response: Dict[str, Any] = {
+            'entries': entries, 'total_scanned': len(all_files),
+            'edge_rule': self._edge_rule(LAZY_INCLUDE, 'fan-in counts static imports between',
+                                         tests_counted=False),
+        }
         test_share = sum(1 for e in entries if e['is_test'])
         if entries and test_share:
             meta = response.setdefault('metadata', {})
@@ -378,7 +373,7 @@ class ImportView:
         from collections import defaultdict
 
         if not self.analysis.graph:
-            return self._fields('components', components=[], total=0)
+            return {'components': [], 'total': 0}
 
         graph = self._edges(LAZY_INCLUDE)
         # Group scanned files by immediate parent — only analyze files within the scan root
@@ -445,9 +440,10 @@ class ImportView:
         components.sort(key=lambda c: (c['cohesion'] is None, -(c['cohesion'] or 0.0), -c['files'], c['component']))
 
         extra = {'cohesion_rule': COHESION_DECLINED_RULE} if any(c['cohesion'] is None for c in components) else {}
-        return self._fields(
-            'components', components=components, total=len(components), **extra,
-            edge_rule=self._edge_rule(LAZY_INCLUDE, 'internal, outgoing and incoming count static imports between'))
+        return {
+            'components': components, 'total': len(components), **extra,
+            'edge_rule': self._edge_rule(LAZY_INCLUDE, 'internal, outgoing and incoming count static imports between'),
+        }
 
     def circular(self) -> Dict[str, Any]:
         """Format circular dependency groups (one entry per SCC, not per simple path)."""
@@ -461,10 +457,8 @@ class ImportView:
             for group in groups
         ]
 
-        return self._fields(
-            'circular_dependencies',
-            cycles=[[str(p) for p in group] for group in groups],
-            cycle_paths=cycle_paths,
-            count=len(groups),
-            edge_rule=self._edge_rule(LAZY_EXCLUDE, 'cycles use static imports between', cycles=True),
-        )
+        return {
+            'cycles': [[str(p) for p in group] for group in groups],
+            'cycle_paths': cycle_paths, 'count': len(groups),
+            'edge_rule': self._edge_rule(LAZY_EXCLUDE, 'cycles use static imports between', cycles=True),
+        }
