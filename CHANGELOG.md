@@ -106,6 +106,7 @@ This release is larger than usual: 1,198 commits since 0.131.0. Every old spelli
 - `architecture` and `overview` state how many files have fan-in 0 and how many are active entry points, with the rule between them, so "331 entry points" and "78 active" no longer read as a contradiction (BACK-1891). Entry points on reveal's own package read 121 where they read 147, because of the function-level import change above (BACK-2087).
 - Agent help teaches one orientation path and current spellings, states static-analysis limits, and drops unsupported performance claims. Deprecated direct file `--check`/`--lint` and `--search` print replacement notes on stderr (BACK-1894, BACK-1906).
 - Code and markdown extension sets follow analyzer registration, so a plugin's extension is seen by `ast://` (BACK-2120).
+- Every `meta.warnings` entry now has a `type` (calls, surface, contracts, patches, testability limits). `code` stays as the optional id (BACK-2148, BACK-2282).
 
 ### Fixed
 - Wrong or silent answers: `nav --deps` listed keyword-argument labels as inputs; `reveal://config` showed the wrong sources; `mysql --check` warned of a deprecation every run; `metrics://` range filters warned while applying, and a filter on a field no file has returned nothing silently (BACK-2272, BACK-2275, BACK-2270, BACK-2278, BACK-2299).
