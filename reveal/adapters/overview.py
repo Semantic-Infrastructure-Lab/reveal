@@ -392,6 +392,23 @@ def _resolve_git_root(path: Path) -> Optional[Path]:
         return None
 
 
+def _git_unavailable_warning() -> Optional[WarningEntry]:
+    """The disclosure for a missing optional pygit2 (the ``git`` extra), or None when it is installed.
+
+    An absent extra is a capability gap, the same kind of fact as stats' ``churn_unavailable``: the
+    git section is left out and this says why. It is not a failed composition, so it does not make
+    the result incomplete (BACK-2319).
+    """
+    from .git import adapter as git_adapter
+    if git_adapter.PYGIT2_AVAILABLE:
+        return None
+    return {
+        'type': 'git_unavailable',
+        'message': ('recent commit history omitted: pygit2 is not installed '
+                    '(pip install "reveal-cli[git]")'),
+    }
+
+
 def _git_root_or_disclose(adapter: 'OverviewAdapter', path: Path) -> Optional[Path]:
     """Resolve optional Git, retaining operational failures as composed errors.
 
@@ -792,7 +809,8 @@ class OverviewAdapter(ResourceAdapter):
 
         observations: Dict[str, bool] = {}
         stats = _run_stats(self, path, top, tests=tests_spec.read(self.query_params), observations=observations)
-        git_root = None if no_git else _git_root_or_disclose(self, path)
+        git_unavailable = None if no_git else _git_unavailable_warning()
+        git_root = None if no_git or git_unavailable else _git_root_or_disclose(self, path)
         git_log = [] if git_root is None else _run_git_log(self, path, top)
         git_foreign_root: Optional[Path] = None
         # Compare resolved: 'overview://.' at a repo root is not foreign to itself.
@@ -818,6 +836,9 @@ class OverviewAdapter(ResourceAdapter):
         }
 
         meta = self.composed_meta()
+        if git_unavailable:
+            meta = meta or {}
+            meta.setdefault('warnings', []).append(git_unavailable)
         error = _directory_loss_error(meta, observations)
         if error:
             meta = meta or {}

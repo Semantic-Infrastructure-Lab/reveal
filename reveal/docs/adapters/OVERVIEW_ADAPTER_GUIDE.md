@@ -150,6 +150,9 @@ their own failure outcome.
   every section.
 - A directory without its own `.git` inherits the enclosing repo's history
   (disclosed via `git_foreign_root`, not silently hidden).
+- Without `pygit2` (the `git` extra: `pip install "reveal-cli[git]"`) the recent-commit
+  section is left out and a `git_unavailable` warning says so; the exit code stays 0.
+  A repository that exists but cannot be opened is a failed composition (exit 3).
 
 ## See Also
 

@@ -27,7 +27,7 @@ Install one with `pip install "reveal-cli[<extra>]"`, several with
 
 | Extra | Installs | Needed for | Without it |
 |-------|----------|-----------|------------|
-| `git` | `pygit2` | the `git://` adapter and `git://` refs in `diff://` | `git://` fails with `git:// adapter requires pygit2` and the install command |
+| `git` | `pygit2` | the `git://` adapter, `git://` refs in `diff://`, churn ranking and recent commits in `overview` | `git://` fails with `git:// adapter requires pygit2` and the install command; `overview` and `hotspots` run without the git parts and warn (`git_unavailable`, `churn_unavailable`) |
 | `database` | `pymysql` | the `mysql://` adapter (there is no postgres adapter) | `mysql://` fails with `pymysql is required for mysql:// adapter` |
 | `dns` | `dnspython` | `domain://` views `/dns`, `/mail`, `/ns-audit` | those views fail with `dnspython is required for DNS operations` |
 | `whois` | `python-whois` | `domain://` views `/whois`, `/registrar` | the view fails with `python-whois not installed`; `/dns` still works |

@@ -11,6 +11,7 @@ import json
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -26,9 +27,15 @@ pytestmark = pytest.mark.component
 NO_PYGIT2 = 'reveal.adapters.git.adapter.PYGIT2_AVAILABLE'
 
 
+def _project(tmp):
+    """A directory with one analyzable file, so nothing but git can lower the confidence."""
+    Path(tmp, 'app.py').write_text('def main():\n    return 1\n', encoding='utf-8')
+    return tmp
+
+
 def _overview(query='no_imports=true'):
     with tempfile.TemporaryDirectory() as tmp:
-        return OverviewAdapter(tmp, query).get_structure()
+        return OverviewAdapter(_project(tmp), query).get_structure()
 
 
 def _warnings(result, kind):
@@ -46,11 +53,12 @@ def test_absent_pygit2_is_a_warning_with_the_install_hint():
     (warning,) = _warnings(result, 'git_unavailable')
     assert 'pygit2' in warning['message'] and 'reveal-cli[git]' in warning['message']
     assert outcome_of(result) == 'ok'
-    assert result['meta']['confidence'] != 0.0
+    assert result['meta']['confidence'] == 1.0
 
 
 def test_absent_pygit2_exits_zero_and_says_so_in_text_and_json():
     with tempfile.TemporaryDirectory() as tmp, patch(NO_PYGIT2, False):
+        _project(tmp)
         for fmt in ('text', 'json'):
             out, err = StringIO(), StringIO()
             code = 0
