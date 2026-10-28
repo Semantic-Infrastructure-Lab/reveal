@@ -367,7 +367,8 @@ if [[ $RUN_TESTS -eq 1 ]]; then
         rm -f "$LOG.cpu"
         # BACK-2159: the suite grew 30% in one slice (scope=root fixtures) and only a human reading
         # timings.tsv noticed. The full 3.12 suite is compared with .github/pytest_cpu_baseline.txt
-        # (the median of the 10-21 green runs, 1,718-1,910 s): warn at +8%, fail at +15%. A suite
+        # (2,100 s since 10-27: 28,988 tests, four green runs at 1,980-2,198 s; it was 1,850 from the
+        # 10-21 median of 1,718-1,910 s): warn at +8%, fail at +15%. A suite
         # that really grew raises the file in the commit that grew it, with the reason in the message.
         if [[ $PRIMARY -eq 1 && "${PYTEST_TARGETS[*]}" == "tests/" && -f .github/pytest_cpu_baseline.txt ]]; then
             CPU_BASE=$(cat .github/pytest_cpu_baseline.txt)
