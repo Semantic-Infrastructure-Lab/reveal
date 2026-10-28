@@ -238,7 +238,7 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
                    source_path=scope, facts_of=adapter_class.execution_facts)
 
 
-def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_type=None):
+def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_type=None, default_fail_on=None):
     from ...reveal_types import CONTRACT_VERSION
     from ...utils.results import FailureCause, ResultBuilder, failure_execution_facts
     from .uri import Answer, _emit_result, _render_router_result
@@ -249,7 +249,7 @@ def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_ty
     facts = failure_execution_facts(cause)
     answer = Answer(result, 'router', lambda *, announce_error=True: _emit_result(
         result, args, name, _render_router_result, execution_facts=facts, execution_answer=answer,
-        announce_error=announce_error),
+        announce_error=announce_error, default_fail_on=default_fail_on),
         execution_facts=facts, public_diagnostic=message)
     return answer
 

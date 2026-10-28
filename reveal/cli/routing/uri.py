@@ -9,18 +9,18 @@ import os
 import re
 import sys
 from argparse import Namespace
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple
 
-from ...errors import NotApplicableError
+from ...errors import NotApplicableError, RequestValidationError
 from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
 from ...utils.json_utils import write_requested_artifact
 from ...display.formatting import print_result_control_notes
-from ...utils.results import (ExecutionFacts, Outcome, ResultBuilder, echo_source, note_truncation, outcome_of,
-                             slice_items, truncations_of)
+from ...utils.results import (ExecutionFacts, FailureCause, Outcome, ResultBuilder, echo_source,
+                             failure_execution_facts, note_truncation, outcome_of, slice_items, truncations_of)
 from ..invocation import RetiredSpellingError, retirement_note, uri_retirement_keys
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
@@ -54,11 +54,12 @@ class _Answered(Exception):
     into the query's Answer, so a query that stops early is answered like one that ends."""
 
     def __init__(self, result: RevealResult, detail: Optional[Callable[[], None]] = None,
-                 exception: Optional[Exception] = None):
+                 exception: Optional[Exception] = None, execution_facts: Optional[ExecutionFacts] = None):
         super().__init__(result.get('error') or result.get('reason'))
         self.result = result
         self.detail = detail
         self.exception = exception
+        self.execution_facts = execution_facts
 
 
 class UriUsageError(Exception):
@@ -75,7 +76,7 @@ class UriUsageError(Exception):
 
 
 def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
-                  adapter_class: Any = None) -> Any:
+                  adapter_class: Any = None, *, classify_validation=False) -> Any:
     """Run one call into an adapter; what it raises becomes a result like any returned one.
 
     Every call the router makes into an adapter goes through here: constructing it,
@@ -94,7 +95,10 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
         _decline(scheme, resource, e.reason, adapter_class)
     except Exception as e:  # boundary-ok: broad-except -- the router's boundary for every adapter: the query ends as a failed result via _fail, exit 1
         logger.debug('%s:// adapter call raised', scheme, exc_info=True)
-        _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class, exception=e)
+        code = 'invalid_request' if classify_validation and isinstance(e, RequestValidationError) else 'adapter_error'
+        _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class,
+              exception=None if code == 'invalid_request' else e, code=code,
+              failure_cause=FailureCause.INVALID_REQUEST if code == 'invalid_request' else None)
 
 
 def _exception_message(e: Exception) -> str:
@@ -137,7 +141,8 @@ def _router_result(scheme: str, resource: str, adapter_class: Any = None, **fiel
 def _fail(scheme: str, resource: str, message: str, *,
           adapter_class: Any = None, code: str = 'adapter_error',
           detail: Optional[Callable[[], None]] = None,
-          exception: Optional[Exception] = None, **fields: Any) -> NoReturn:
+          exception: Optional[Exception] = None, failure_cause: Optional[FailureCause] = None,
+          **fields: Any) -> NoReturn:
     """End the query with an error result; emitted, it exits 1 (_emit_result).
 
     ``meta.errors`` carries the error once more with a code (``adapter_error`` for a raise,
@@ -146,7 +151,8 @@ def _fail(scheme: str, resource: str, message: str, *,
     """
     result = _router_result(scheme, resource, adapter_class,
                             errors=[{'code': code, 'message': message}], error=message, **fields)
-    raise _Answered(result, detail, exception)
+    facts = failure_execution_facts(failure_cause) if failure_cause is not None else None
+    raise _Answered(result, detail, exception, facts)
 
 
 def _decline(scheme: str, resource: str, reason: str, adapter_class: Any = None) -> NoReturn:
@@ -161,24 +167,28 @@ def _decline(scheme: str, resource: str, reason: str, adapter_class: Any = None)
 
 def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
             result_type: Optional[str] = None, source_path: Optional[str] = None,
-            facts_of: Optional[Callable] = None) -> Answer:
+            facts_of: Optional[Callable] = None, default_fail_on=None) -> Answer:
     """Run one resolution; a query it ended early (_Answered) is answered by the router's result."""
     try:
         return resolve()
     except _Answered as e:
         result, detail, exception = e.result, e.detail, e.exception  # `e` is unbound once the handler ends
+        facts = e.execution_facts
     if result_type is not None:
         result['type'] = result_type
     if source_path is not None:
         echo_source(result, source_path)
         result['source_type'] = ('directory' if os.path.isdir(source_path) else
                                  'file' if os.path.isfile(source_path) else 'unknown')
-    facts = facts_of(result) if facts_of is not None else None
+    facts = facts or (facts_of(result) if facts_of is not None else None)
     answer = Answer(result, 'router',
                     lambda *, announce_error=True: _emit_result(
                         result, args, scheme, _render_router_result, execution_facts=facts,
-                        execution_answer=answer, announce_error=announce_error, detail=detail),
-                    execution_facts=facts, exception=exception)
+                        execution_answer=answer, announce_error=announce_error, detail=detail,
+                        default_fail_on=default_fail_on),
+                    execution_facts=facts, exception=exception,
+                    public_diagnostic=(result.get('error') if facts is not None and
+                                       any(e.get('code') == 'invalid_request' for e in result['meta']['errors']) else None))
     return answer
 
 
@@ -282,13 +292,43 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
         run_declared_uri(uri, element, args, consumed, answer_consumer=answer_consumer)
         return
     try:
-        with _dispatch(uri, element, args, consumed) as (adapter_class, scheme, resource, args):
-            handle_adapter(adapter_class, scheme, resource, element, args)
+        with ExitStack() as dispatch:
+            try:
+                adapter_class, scheme, resource, args = dispatch.enter_context(_dispatch(uri, element, args, consumed))
+            except (OSError, ValueError) as exc:
+                answer = _preparation_answer(uri, element, args, exc)
+                if answer is None:
+                    raise
+                (answer_consumer or (lambda result: result.emit()))(answer)
+                return
+            consumer = {'answer_consumer': answer_consumer} if answer_consumer is not None else {}
+            handle_adapter(adapter_class, scheme, resource, element, args, **consumer)
     except UriUsageError as e:
         print(f"Error: {e.message}", file=sys.stderr)
         if e.hint:
             print(e.hint, file=sys.stderr)
         sys.exit(e.exit_code)
+
+
+def _uri_execution_facts(adapter_class, resource, element, args):
+    """Select owner evidence only for qualified direct URI operations."""
+    select = getattr(adapter_class, 'uri_execution_facts', None) if isinstance(adapter_class, type) else None
+    excluded = element or any(peek(args, key, False) for key in ('stdin', 'batch', 'check'))
+    return select(resource) if select is not None and not excluded else None
+
+
+def _preparation_answer(uri, element, args, exception):
+    """Classify failures entering the dispatch scope, before adapter execution."""
+    from ...adapters.base import get_adapter_class
+    from .declared import _invalid_answer
+    scheme, _, resource = uri.partition('://')
+    adapter_class = get_adapter_class(scheme)
+    if _uri_execution_facts(adapter_class, resource, element, args) is None:
+        return None
+    path = resource.partition('?')[0]
+    cause = FailureCause.INVALID_REQUEST if '\x00' in path else FailureCause.ANALYSIS
+    return _invalid_answer(adapter_class, scheme, path, _exception_message(exception), args, cause,
+                           default_fail_on=adapter_class.DEFAULT_FAIL_ON)
 
 
 def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> Answer:
@@ -483,7 +523,7 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     return resource
 
 
-def _reject_missing_path(adapter_class: type, scheme: str, resource: str) -> None:
+def _reject_missing_path(adapter_class: type, scheme: str, resource: str, *, classify_validation=False) -> None:
     """Fail the query when a path-taking adapter (RESOURCE_IS_PATH) is given a path that
     does not exist (BACK-1321). One shared check instead of per-adapter ones, so
     a typo'd path can no longer read as a clean empty result with exit 0."""
@@ -493,15 +533,29 @@ def _reject_missing_path(adapter_class: type, scheme: str, resource: str) -> Non
     resolve = getattr(adapter_class, 'resource_path', None)  # BACK-1499: calls:// path:name
     if resolve is not None:
         path = resolve(path)
+    if classify_validation and path:
+        from pathlib import Path
+        try:
+            Path(path).stat()
+        except (FileNotFoundError, NotADirectoryError):
+            _fail(scheme, resource, f"Path not found: {path}", adapter_class=adapter_class, code='invalid_request',
+                  failure_cause=FailureCause.INVALID_REQUEST)
+        except ValueError as exc:
+            _fail(scheme, resource, _exception_message(exc), adapter_class=adapter_class, code='invalid_request',
+                  failure_cause=FailureCause.INVALID_REQUEST)
+        except OSError as exc:
+            _fail(scheme, resource, _exception_message(exc), adapter_class=adapter_class, exception=exc)
+        return
     if not path or os.path.exists(path):
         return
     # boundary-ok: display-path -- a str the user typed in the URI, never a Path
-    _fail(scheme, resource, f"Path not found: {path}", adapter_class=adapter_class)
+    _fail(scheme, resource, f"Path not found: {path}", adapter_class=adapter_class,
+          code='invalid_request' if classify_validation else 'adapter_error')
 
 
 def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
                            scheme: str, resource: str, element: Optional[str],
-                           args: 'Namespace') -> None:
+                           args: 'Namespace', *, answer_consumer=None) -> None:
     """Answer a query on any adapter/renderer pair and print it.
 
     Args:
@@ -516,14 +570,22 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
     # mode renders through render_check, which declares no formats.
     if not _check_mode(adapter_class, args):
         require_supported_format(args, declared_output_formats(adapter_class), f"{scheme}://")
-    resolve_adapter(adapter_class, renderer_class, scheme, resource, element, args).emit()
+    answer = resolve_adapter(adapter_class, renderer_class, scheme, resource, element, args)
+    if answer_consumer is not None and answer.execution_facts is not None:
+        answer_consumer(answer)
+    else:
+        answer.emit()
 
 
 def resolve_adapter(adapter_class: type, renderer_class: type[Any], scheme: str,
                     resource: str, element: Optional[str], args: 'Namespace') -> Answer:
     """Answer a query on an adapter without printing it (see resolve_uri)."""
-    return _answer(lambda: _resolve(adapter_class, renderer_class, scheme, resource, element, args),
-                   scheme, args)
+    facts_of = _uri_execution_facts(adapter_class, resource, element, args)
+    policy = adapter_class.DEFAULT_FAIL_ON if facts_of is not None else None
+    return _answer(lambda: _resolve(adapter_class, renderer_class, scheme, resource, element, args,
+                                    facts_of=facts_of, default_fail_on=policy),
+                   scheme, args, facts_of=facts_of, default_fail_on=policy,
+                   result_type=adapter_class.RESULT_TYPE if facts_of is not None else None)
 
 
 def _check_mode(adapter: Any, args: 'Namespace') -> bool:
@@ -545,17 +607,17 @@ def _check_mode(adapter: Any, args: 'Namespace') -> bool:
 
 
 def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resource: str,
-             element: Optional[str], args: 'Namespace') -> Answer:
+             element: Optional[str], args: 'Namespace', *, facts_of=None, default_fail_on=None) -> Answer:
     # Initialize adapter via from_uri.  Use _default_from_uri when adapter_class is
     # not a real type (e.g. a Mock callable in tests) or lacks from_uri.
     from ...adapters.base import _default_from_uri
-    _reject_missing_path(adapter_class, scheme, resource)
+    _reject_missing_path(adapter_class, scheme, resource, classify_validation=facts_of is not None)
     if isinstance(adapter_class, type) and hasattr(adapter_class, 'from_uri'):
         adapter = _call_adapter(lambda: adapter_class.from_uri(scheme, resource, element),
-                                scheme, resource, adapter_class)
+                                scheme, resource, adapter_class, classify_validation=facts_of is not None)
     else:
         adapter = _call_adapter(lambda: _default_from_uri(adapter_class, scheme, resource, element),
-                                scheme, resource, adapter_class)
+                                scheme, resource, adapter_class, classify_validation=facts_of is not None)
 
     # Apply --base-path override for adapters that support it (e.g., claude://)
     # REVEAL_CLAUDE_BASE_PATH env var acts as a persistent default for --base-path.
@@ -575,7 +637,8 @@ def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resour
     if not element and isinstance(embedded, str):
         element = embedded
 
-    return _view_answer(adapter, renderer_class, scheme, resource, element, args)
+    return _view_answer(adapter, renderer_class, scheme, resource, element, args,
+                        facts_of=facts_of, default_fail_on=default_fail_on)
 
 
 def _build_check_kwargs(adapter, args: 'Namespace') -> dict:
@@ -705,7 +768,8 @@ def _emit_check(result: Any, adapter, renderer_class: type[Any], args: 'Namespac
 
 
 def _view_answer(adapter, renderer_class: type[Any], scheme: str,
-                 resource: str, element: Optional[str], args: 'Namespace') -> Answer:
+                 resource: str, element: Optional[str], args: 'Namespace', *,
+                 facts_of=None, default_fail_on=None) -> Answer:
     """Answer with an element or the structure, as the adapter supports.
 
     Args:
@@ -728,7 +792,8 @@ def _view_answer(adapter, renderer_class: type[Any], scheme: str,
 
     if supports_elements and (element or (resource and resource_is_element)):
         return _element_answer(adapter, renderer_class, element, resource, args, scheme)
-    return _structure_answer(adapter, renderer_class, args, scheme, resource)
+    return _structure_answer(adapter, renderer_class, args, scheme, resource,
+                             facts_of=facts_of, default_fail_on=default_fail_on)
 
 
 def _handle_outline_mode(result: dict, args: 'Namespace', text_field: Optional[str], label: Any) -> bool:
@@ -1211,7 +1276,7 @@ def _public_answer_diagnostic(adapter, result: dict, facts) -> Optional[str]:
 def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                       scheme: Optional[str] = None, resource: Optional[str] = None, *,
                       source_path: Optional[str] = None, facts_of: Optional[Callable] = None,
-                      expected_type: Optional[str] = None) -> Answer:
+                      expected_type: Optional[str] = None, default_fail_on=None) -> Answer:
     # Build adapter kwargs
     structure_kwargs = _build_adapter_kwargs(adapter, args, scheme, resource)
 
@@ -1259,6 +1324,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                     lambda *, announce_error=True: _emit_result(result, args, scheme, renderer_class.render_structure,
                                          exit_code=getattr(renderer_class, 'exit_code', None),
                                          execution_facts=facts, execution_answer=answer, announce_error=announce_error,
+                                         default_fail_on=default_fail_on,
                                          **_render_structure_top_kwargs(renderer_class, args, adapter)),
                     execution_facts=facts, private_diagnostic=private_diagnostic, public_diagnostic=public_diagnostic)
     return answer
@@ -1273,7 +1339,8 @@ def _echo_source(result: Any, adapter_class: type, resource: Optional[str]) -> N
 
 def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
                  exit_code: Optional[Callable[[Any, str], int]] = None,
-                 execution_facts=None, execution_answer=None, announce_error=True, **render_kwargs) -> None:
+                 execution_facts=None, execution_answer=None, announce_error=True,
+                 default_fail_on=None, **render_kwargs) -> None:
     """Render a URI result and turn its outcome into the exit code (BACK-1059).
 
     Every printed URI result, for the CLI and MCP alike, ends here (the emit of a
@@ -1294,7 +1361,8 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
     if execution_facts is not None:
         from .declared import emit_declared_result
         emit_declared_result(result, args, scheme, render, execution_facts,
-                             execution_answer=execution_answer, announce_error=announce_error, **render_kwargs)
+                             execution_answer=execution_answer, announce_error=announce_error,
+                             default_fail_on=default_fail_on, **render_kwargs)
         return
     outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
     failure = write_requested_artifact(lambda: write_also_json(result, args, render, **render_kwargs), result)
@@ -1360,7 +1428,7 @@ def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace', adapte
     return {}
 
 def handle_adapter(adapter_class: type, scheme: str, resource: str,
-                   element: Optional[str], args: 'Namespace') -> None:
+                   element: Optional[str], args: 'Namespace', *, answer_consumer=None) -> None:
     """Handle adapter-specific logic for different URI schemes.
 
     All adapters now use the renderer-based system with generic handler.
@@ -1373,7 +1441,7 @@ def handle_adapter(adapter_class: type, scheme: str, resource: str,
         args: CLI arguments
     """
     generic_adapter_handler(adapter_class, _renderer_class_of(scheme), scheme, resource,
-                            element, args)
+                            element, args, **({'answer_consumer': answer_consumer} if answer_consumer is not None else {}))
 
 
 def _renderer_class_of(scheme: str) -> type[Any]:

@@ -32,6 +32,7 @@ from ...utils.query import (
     ResultControl
 )
 from ...utils.results import ResultBuilder, note_truncation
+from ...errors import RequestValidationError
 from ...utils.path_utils import failure_of
 
 # Filter aliases that name a differently-named element field (see filtering.py).
@@ -236,6 +237,53 @@ class AstAdapter(ResourceAdapter):
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
     CLI_QUERY_FLAGS = {'all': 'limit=1000000', 'respect_gitignore': 'respect_gitignore=false'}  # lifts the 200-result auto-cap (BACK-1379)
+    RESULT_TYPE = 'ast_query'
+    DEFAULT_FAIL_ON = 'none'
+
+    @classmethod
+    def uri_execution_facts(cls, resource):
+        """Qualify ordinary filter queries; dedicated analyses retain legacy policy.
+
+        Read mode selection through the same extractors as construction, including
+        their existing spelling, duplicate-key and empty-value behavior.
+        """
+        query = '&'.join(part.strip() for part in resource.partition('?')[2].split('&'))
+        query, show = _extract_show_param(query)
+        query, _ = _extract_builtins_param(query)
+        _, variable = _extract_reveal_type_param(query)
+        if show in ('dict-heatmap', 'dict-schemas') or variable:
+            return None
+        return cls.execution_facts
+
+    @staticmethod
+    def execution_facts(result):
+        """Classify required ordinary-query loss from this owner's disclosures."""
+        from ...utils.results import AnalysisCompleteness, result_execution_facts
+        if isinstance(result, dict):
+            meta = result.get('meta', {})
+            lost = any(entry.get('type') in ('analysis_failed', 'analysis_incomplete', 'parse_recovered')
+                       for entry in meta.get('warnings', []))
+        else:
+            lost = False
+        state = AnalysisCompleteness.INCOMPLETE if lost else AnalysisCompleteness.COMPLETE
+        if lost and result.get('total_files') == 0:
+            state = AnalysisCompleteness.FAILED
+        return result_execution_facts(result, completeness=state)
+
+    @staticmethod
+    def answer_requirement_error(result, expected_type, prior_facts=None):
+        """A completed ordinary answer requires the uncapped counts and observations."""
+        if result.get('error') or result.get('applicable') is False:
+            return None
+        counts = [result.get(key) for key in ('total_files', 'total_results', 'displayed_results')]
+        if any(type(count) is not int or count < 0 for count in counts):
+            return 'AST answer missing required nonnegative analysis counts'
+        observations = result.get('results')
+        if not isinstance(observations, list) or any(not isinstance(row, dict) for row in observations):
+            return 'AST answer missing required observation array'
+        if counts[2] != len(observations) or counts[1] < counts[2]:
+            return 'AST answer observation counts do not match its payload'
+        return None
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -272,7 +320,7 @@ class AstAdapter(ResourceAdapter):
             if left.endswith(code_extensions) \
                     or right.endswith(code_extensions) \
                     or os.path.exists(left) or os.path.exists(right):
-                raise ValueError(
+                raise RequestValidationError(
                     f"ast:// does not support multi-file colon syntax: {path!r}\n"
                     "  Each ast:// query targets one file or directory.\n"
                     "  Run separate queries:\n"
@@ -280,6 +328,15 @@ class AstAdapter(ResourceAdapter):
                     f"    reveal 'ast://{right}?<filter>'"
                 )
 
+        try:
+            self._prepare_query(query_string)
+        except ValueError as exc:
+            raise RequestValidationError(str(exc)) from exc
+
+        self.results: List[Any] = []
+
+    def _prepare_query(self, query_string):
+        """Parse request controls before any source analysis begins."""
         # Extract result control parameters (sort, limit, offset)
         if query_string:
             cleaned_query, self.result_control = parse_result_control(query_string)
@@ -294,8 +351,6 @@ class AstAdapter(ResourceAdapter):
             self.show_mode = None
             self.include_builtins = False
             self.reveal_type_var = None
-
-        self.results: List[Any] = []
 
     def _matches_decorator(self, decorators: List[str], condition: Dict[str, Any]) -> bool:
         """Check if any decorator matches the condition.
