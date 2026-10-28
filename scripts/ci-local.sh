@@ -39,6 +39,8 @@
 #                                           # vs upstream, on every leg incl. the language-pack floor
 #   scripts/ci-local.sh --no-tests          # only the non-pytest CI steps
 #   scripts/ci-local.sh --push              # the push gate (~6 min, see below)
+#   scripts/ci-local.sh --push --calls-evidence FILE  # external calls measurement record
+#   scripts/ci-local.sh --push --skip-calls-gate REASON # visible, persistently logged override
 #   scripts/ci-local.sh --fresh             # rebuild the venv from scratch
 #
 # --push is the gate before a push: the default run (lints, ratchets, reveal:// self-validation, then
@@ -81,6 +83,9 @@ FRESH=0
 MATRIX=0
 CHANGED=0
 PUSH=0
+CALLS_EVIDENCE="${REVEAL_CALLS_GATE_EVIDENCE:-}"
+CALLS_SKIP=""
+CALLS_OPTIONS=0
 PYTEST_TARGETS=(tests/)
 EXPLICIT_TARGETS=0
 while [[ $# -gt 0 ]]; do
@@ -92,17 +97,30 @@ while [[ $# -gt 0 ]]; do
         --matrix) MATRIX=1; shift ;;
         --changed) CHANGED=1; shift ;;
         --push) PUSH=1; shift ;;
+        --calls-evidence) [[ $# -ge 2 && -n "$2" ]] || { echo "--calls-evidence needs a path" >&2; exit 2; }; CALLS_EVIDENCE="$2"; CALLS_OPTIONS=1; shift 2 ;;
+        --skip-calls-gate) [[ $# -ge 2 && -n "$2" ]] || { echo "--skip-calls-gate needs a reason" >&2; exit 2; }; CALLS_SKIP="$2"; CALLS_OPTIONS=1; shift 2 ;;
         --) shift; [[ $# -gt 0 ]] && { PYTEST_TARGETS=("$@"); EXPLICIT_TARGETS=1; }; break ;;
         -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
+if [[ $PUSH -ne 1 && $CALLS_OPTIONS -eq 1 ]]; then
+    echo "calls-gate options require --push" >&2; exit 2
+fi
 
 # --push: the push gate is the default run (the lints run before the suite, so they fail in seconds).
 if [[ $PUSH -eq 1 ]]; then
     [[ $PY_EXPLICIT -eq 1 || -n "$LP_VERSION" || $MATRIX -eq 1 || $CHANGED -eq 1 || $RUN_TESTS -eq 0 || $EXPLICIT_TARGETS -eq 1 || $FRESH -eq 1 ]] \
         && { echo "--push takes no other options" >&2; exit 2; }
+    CALLS_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check_calls_gate.py"
+    CALLS_PY="${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/py3.12/bin/python"
+    CALLS_ARGS=(--repo "$(cd "$(dirname "$CALLS_HELPER")/.." && pwd -P)" --interpreter "$CALLS_PY"
+        --log "${REVEAL_CI_LOG_DIR:-${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/logs}/calls-gate.jsonl")
+    [[ -n "$CALLS_EVIDENCE" ]] && CALLS_ARGS+=(--evidence "$CALLS_EVIDENCE")
+    [[ -n "$CALLS_SKIP" ]] && CALLS_ARGS+=(--skip-reason "$CALLS_SKIP")
+    python3 "$CALLS_HELPER" "${CALLS_ARGS[@]}" || exit 1
     "$0" || { echo "push gate FAILED (ci-local.sh default run)" >&2; exit 1; }
+    python3 "$CALLS_HELPER" "${CALLS_ARGS[@]}" || exit 1
     printf '\nPush gate passed. Push, then: scripts/ci-watch.sh (macOS, Windows and the floor run only on GitHub).\n'
     exit 0
 fi
