@@ -212,11 +212,12 @@ These fields are OPTIONAL but recommended for common patterns:
   - `< 0.50` - Low confidence, results may be unreliable
 
 **`meta.warnings`** (optional, array of dicts)
-- **Purpose**: Non-fatal issues encountered during parsing
+- **Purpose**: Non-fatal issues encountered during parsing. `type` is the key every reader uses (`outcome_of`, the truncation and sort notes, the renderers' skip lists); an entry with only a `code` is invisible to them, and `tests/test_output_contract_compliance.py` fails on one. `meta.errors` keeps `code`.
 - **Schema**:
   ```python
   {
-      'code': str,         # Warning code (e.g., 'W001')
+      'type': str,         # Kind of warning, snake_case (e.g., 'encoding_uncertain'); required
+      'code': str,         # (optional) Stable catalog id (e.g., 'W001', 'W-CALLS-1')
       'message': str,      # Human-readable message
       'file': str,         # (optional) Affected file
       'line': int,         # (optional) Line number
@@ -227,6 +228,7 @@ These fields are OPTIONAL but recommended for common patterns:
   ```python
   'warnings': [
       {
+          'type': 'encoding_uncertain',
           'code': 'W001',
           'message': 'File encoding uncertain, assumed UTF-8',
           'file': 'legacy.py',
@@ -273,6 +275,7 @@ These fields are OPTIONAL but recommended for common patterns:
         'confidence': 0.95,
         'warnings': [
             {
+                'type': 'encoding_uncertain',
                 'code': 'W001',
                 'message': 'File encoding uncertain, assumed UTF-8',
                 'file': 'src/legacy.py'
@@ -343,7 +346,7 @@ or parameter value, or an MCP tool name) is listed once in `RETIREMENTS` in
 still answers as before. Its exit code and answer do not change, and it prints one stderr line,
 `note: <old> is deprecated; use <replacement>.`, once per invocation. `--format json` stdout stays
 one parseable document and carries the same fact as a `meta.warnings` entry:
-`{"code": "retired_spelling", "message": ..., "field": "<table key>", "old": ..., "replacement": ..., "stage": "note"}`.
+`{"type": "retired_spelling", "code": "retired_spelling", "message": ..., "field": "<table key>", "old": ..., "replacement": ..., "stage": "note"}`.
 `field` is the table key (`flag:--search`, `param:calls.root`, ...), so two retired spellings are
 two entries. The MCP server never writes the note to stderr: a JSON result carries the same
 entry, and a text result ends with a `[note: ...]` line. At the `error` stage (the cut release) the

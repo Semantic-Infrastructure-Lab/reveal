@@ -279,7 +279,7 @@ class ResourceAdapter(ABC):
                 - 0.50-0.79 = Partial results
                 - < 0.50 = Low confidence
             warnings: Non-fatal issues
-                [{'code': 'W001', 'message': '...', 'file': '...'}]
+                [{'type': 'encoding_uncertain', 'code': 'W001', 'message': '...', 'file': '...'}]
             errors: Fatal errors with fallback info
                 [{'code': 'E002', 'message': '...', 'file': '...', 'fallback': '...'}]
 
@@ -291,6 +291,7 @@ class ResourceAdapter(ABC):
                 parse_mode='tree_sitter_full',
                 confidence=0.95,
                 warnings=[{
+                    'type': 'encoding_uncertain',
                     'code': 'W001',
                     'message': 'File encoding uncertain',
                     'file': 'legacy.py'

@@ -135,7 +135,7 @@ no scope). It is an optional key, so it needs no `contract_version` change (BACK
 ### `warnings` and `errors`
 
 Both are lists of dicts:
-- `warnings`: non-fatal issues. Format: `{'code': 'W001', 'message': '...', 'file': '...'}`
+- `warnings`: non-fatal issues. Format: `{'type': 'encoding_uncertain', 'code': 'W001', 'message': '...', 'file': '...'}` (`type` names the kind and is required; `code` is an optional catalog id)
 - `errors`: fatal failures where a fallback was used. Format includes a `fallback` key.
 
 ---
