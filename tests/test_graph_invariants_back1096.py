@@ -184,7 +184,8 @@ def test_scoped_public_answers_keep_outside_facts_and_detect_inside_loss(outside
 @pytest.mark.parametrize('field,value', [('outside_root_edges', None), ('outside_root_edges', 0),
                                         ('outside_root_edges', -1), ('outside_root_edges', True),
                                         ('outside_root_edges', 2), ('root', '..'),
-                                        ('root_source', 'inferred')])
+                                        ('root_source', 'inferred'), ('tests_param', 'exclude'),
+                                        ('lazy', 'exclude')])
 def test_scoped_checker_rejects_missing_or_wrong_disclosure(outside_project, field, value):
     views = _outside_views(outside_project)
     if value is None:
@@ -197,6 +198,24 @@ def test_scoped_checker_rejects_missing_or_wrong_disclosure(outside_project, fie
     assert any('counted_scope' in e or 'outside_root_disclosure' in e for e in row['examples'])
 
 
+def test_scoped_checker_keeps_multi_target_disclosure_as_a_lower_bound(outside_project):
+    views = _outside_views(outside_project)
+    for answer in views.values():
+        answer['edge_rule']['outside_root_edges'] = 2
+    row = inv.check_importers_resolved(views['importers'], views['default'], views['fan_in'],
+                                      scan_dir=outside_project / 'src')
+    assert row['status'] == 'green', row
+    assert row['outside_root_resolved_edges'] == 1
+    # Even mutually consistent counted answers must not gain an outside edge.
+    target = next(t for _, t in inv.resolved_edges(views['default'])[0] if t.startswith('../'))
+    views['importers']['entries'].append({'file': target, 'importers': ['a.ts'], 'fan_in': 1})
+    _entry(views['fan_in'], 'a.ts')['fan_out'] = 2
+    row = inv.check_importers_resolved(views['importers'], views['default'], views['fan_in'],
+                                      scan_dir=outside_project / 'src')
+    assert row['status'] == 'red'
+    assert {'outside_root_importer_edge': ['a.ts', target]} in row['examples']
+
+
 def test_scoped_checker_normalizes_lexically_without_following_target_symlinks(tmp_path):
     scan = tmp_path / 'src'
     scan.mkdir()
@@ -206,7 +225,8 @@ def test_scoped_checker_normalizes_lexically_without_following_target_symlinks(t
         (scan / 'link').symlink_to(outside, target_is_directory=True)
     except (OSError, NotImplementedError):
         pytest.skip('directory symlinks are unavailable')
-    rule = {'root': '.', 'root_source': 'root_param', 'scope_param': 'root', 'outside_root_edges': 0}
+    rule = {'root': '.', 'root_source': 'root_param', 'scope_param': 'root', 'outside_root_edges': 0,
+            'tests_param': 'include', 'lazy': 'include'}
     # The product containment rule is lexical on canonical graph paths, not a second
     # filesystem resolution of displayed target names. Both facts must remain required.
     default = {'files': {'a.ts': [{'resolved': 'link/b.ts'}, {'resolved': '../src/c.ts'}]}, 'edge_rule': rule}

@@ -6,15 +6,17 @@ disagreement proves one of them wrong without knowing which. For the import lang
 recall oracle gates (kotlin, scala, csharp, swift, php, dart, lua, gdscript, zig, ruby) this
 is the only regression signal. Every answer comes through the public request path
 (``python -m reveal <uri> --format json``, one process per request, serial), with cwd = the
-corpus root and the scan directory pinned as the project root (``&root=<scan>``), so every
-importer and every target of an answer is a file under the scan.
+corpus root and the scan directory pinned as the project root (``&root=<scan>``). Counted
+edges stay under that scan; the default view also retains resolved outside-scan facts.
 
   fan_in_total        imports ?rank=fan-in and ?importers (directory view): the sum of fan-in
                       equals the sum of fan-out, the edge count the answer's rule reports
                       (edge_rule.via) and the number of importer rows; every module's fan-in
                       is the same in both views and equals its importer list's length
   importers_resolved  the files whose resolved imports (the default view's ``resolved``) name
-                      X are importers of X (?importers); each file's out-degree read off the
+                      X under the declared scan root are importers of X (?importers); outside
+                      facts remain counted separately and require the rule's disclosure.
+                      Each file's out-degree read off the
                       importer lists equals its fan_out (?rank=fan-in, the forward adjacency).
                       Edges beyond a statement's first target (``resolved`` names one) are
                       counted, and sampled by importer_citations
@@ -70,7 +72,7 @@ from imports_fold_snapshot import (UNGATED, _git_head, _representative_file, cor
                                    source_digest)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations', 'calls_inverse', 'callers_view',
               'no_match')
 IMPORT_INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations')
@@ -143,7 +145,7 @@ def check_fan_in_total(fan_in: Dict[str, Any], importers: Dict[str, Any]) -> Dic
 
 def resolved_edges(default_view: Dict[str, Any]) -> Tuple[Set[Edge], int]:
     """(importer, first target) of every statement the default view shows resolved, and how many
-    statements that is. ``resolved`` names a statement's first in-tree target only."""
+    statements that is. ``resolved`` names one target, including outside-scan facts."""
     edges: Set[Edge] = set()
     statements = 0
     for file, stmts in (default_view.get('files') or {}).items():
@@ -159,22 +161,71 @@ def importer_edges(importers: Dict[str, Any]) -> Set[Edge]:
     return {(importer, module) for module, rows in importer_lists(importers).items() for importer in rows}
 
 
+def _under_scan_root(target: str, scan_dir: Path) -> bool:
+    """Containment of displayed graph paths: normalize lexically, never follow target symlinks."""
+    return Path(os.path.abspath(scan_dir / target)).is_relative_to(scan_dir)
+
+
+def _counted_scope(forward: Set[Edge], reverse: Set[Edge], answers: Dict[str, Dict[str, Any]],
+                   scan_dir: Path) -> Tuple[Set[Edge], List[Any]]:
+    """Qualify the runner's pinned scope independently of the reverse answer (BACK-2340).
+
+    First-target facts only bound the outside count from below: convention/multi-target
+    edges may not appear in them. All views must nevertheless disclose the same count.
+    """
+    scan_dir = scan_dir.resolve()
+    counted = {edge for edge in forward if _under_scan_root(edge[1], scan_dir)}
+    outside = len(forward - counted)
+    violations: List[Any] = []
+    disclosures = {}
+    for name, answer in answers.items():
+        rule = answer.get('edge_rule') or {}
+        root = rule.get('root')
+        source = rule.get('root_source')
+        scope = rule.get('scope_param')
+        valid_source = (source, scope) in {('root_param', 'root'), ('path', 'path')}
+        if (not isinstance(root, str) or Path(os.path.abspath(scan_dir / root)) != scan_dir or
+                not valid_source or rule.get('tests_param') != 'include' or
+                (name != 'default' and rule.get('lazy') != 'include')):
+            violations.append({'counted_scope': name, 'root': root, 'root_source': source,
+                               'scope_param': scope, 'tests_param': rule.get('tests_param'),
+                               'lazy': rule.get('lazy')})
+        count = rule.get('outside_root_edges')
+        if type(count) is not int or count < outside:
+            violations.append({'outside_root_disclosure': name, 'reported': count,
+                               'observed_first_target_edges': outside})
+        else:
+            disclosures[name] = count
+    if len(set(disclosures.values())) > 1:
+        violations.append({'outside_root_disclosure': disclosures})
+    for edge in sorted(reverse):
+        if not _under_scan_root(edge[1], scan_dir):
+            violations.append({'outside_root_importer_edge': list(edge)})
+    return counted, violations
+
+
 def check_importers_resolved(importers: Dict[str, Any], default_view: Dict[str, Any],
-                             fan_in: Dict[str, Any]) -> Dict[str, Any]:
-    """Every resolved statement's edge is an importer row; per file, the importer lists' out-degree
-    equals the forward fan_out. Edges no statement's first target shows are counted."""
+                             fan_in: Dict[str, Any], *, scan_dir: Optional[Path] = None) -> Dict[str, Any]:
+    """Every counted first-target edge is an importer row, and reverse out-degree equals fan_out.
+
+    With the runner's explicit pinned scan directory, independently qualify target containment
+    and validate the declared rule. Legacy three-argument callers still compare every fact.
+    """
     forward, statements = resolved_edges(default_view)
     reverse = importer_edges(importers)
-    violations: List[Any] = [{'resolved_not_an_importer': list(edge)} for edge in sorted(forward - reverse)]
+    counted, violations = (forward, []) if scan_dir is None else _counted_scope(
+        forward, reverse, {'importers': importers, 'default': default_view, 'fan_in': fan_in}, scan_dir)
+    violations.extend({'resolved_not_an_importer': list(edge)} for edge in sorted(counted - reverse))
     out_degree = Counter(importer for importer, _ in reverse)
     fan_out = {e['file']: e['fan_out'] for e in fan_in.get('entries', [])}
     for file in sorted(set(fan_out) | set(out_degree)):
         if out_degree.get(file, 0) != fan_out.get(file, 0):
             violations.append({'file': file, 'importer_list_out_degree': out_degree.get(file, 0),
                                'rank_fan_out': fan_out.get(file)})
-    beyond = reverse - forward
+    beyond = reverse - counted
     return make_row('importers_resolved', len(reverse), violations, resolved_statements=statements,
-                    resolved_edges=len(forward), edges_beyond_first_target=len(beyond),
+                    resolved_edges=len(forward), counted_resolved_edges=len(counted),
+                    outside_root_resolved_edges=len(forward - counted), edges_beyond_first_target=len(beyond),
                     beyond_examples=[list(edge) for edge in sorted(beyond)[:EXAMPLES]])
 
 
@@ -433,7 +484,7 @@ def run_imports(req: Requests, scan: str, scan_dir: Path, only: Tuple[str, ...],
     if 'importers_resolved' in wanted:
         bad = err1 or err2 or err3
         rows.append(error_row('importers_resolved', bad) if bad or importers is None or fan_in is None or default_view is None
-                    else check_importers_resolved(importers, default_view, fan_in))
+                    else check_importers_resolved(importers, default_view, fan_in, scan_dir=scan_dir))
     if 'importer_citations' in wanted:
         if err1 or err3 or importers is None or default_view is None:
             rows.append(error_row('importer_citations', err1 or err3 or ''))
