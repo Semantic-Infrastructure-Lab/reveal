@@ -19,6 +19,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 ### Fixed
 
 - Adapter warnings must include a nonempty string `type`. Python result builders now raise `ValueError` for malformed warnings; declared commands report an invalid adapter answer instead of treating one as valid. Warning `code` stays optional, and error diagnostics keep their separate contract (BACK-2324).
+- `claude://` and `codex://` initialize once through the shared factory. Constructor failures preserve their original exception instead of being retried or wrapped as another error (BACK-2327).
 
 ## [0.132.0] - 2026-10-27
 
