@@ -42,6 +42,14 @@ tsx is scored inside typescript, and a refreshed snapshot requires re-deriving e
 (`tests/test_call_graph_confidence_back2105.py` pins this where the private snapshot is
 reachable). The two can differ for the same language because they measure different corpora.
 
+The side-effect column records historical stratified measurements on the named
+populations, not a current-head regression gate. Maintainer reruns preserve the
+independent oracle, sampling seed and sample sizes, and record the oracle hash,
+sampled file hashes, checkout and runtime identity (BACK-2262). Preserved sources
+with unknown historical revisions remain qualified as such: matching file paths
+does not establish the original bytes, and a rerun on current bytes is a separate
+measurement. See [Re-running this yourself](#re-running-this-yourself).
+
 | Language | Import recall | Side-effect recall | Call-graph recall | Status |
 |---|---|---|---|---|
 | Python | ✅ 100% (Home Assistant, celery¹⁰) | ✅ 83.5% (Home Assistant) | ✅ 99.96%→100%³⁴ (Home Assistant, 3 query directions) | **Measured** |
