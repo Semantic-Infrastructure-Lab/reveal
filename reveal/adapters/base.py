@@ -372,13 +372,7 @@ class ResourceAdapter(ABC):
 
         if isinstance(result, dict):
             from reveal.utils.results import echo_source, relabel_truncations
-            # Own the envelope we rewrite, while retaining the child's analysis payload.
-            result = dict(result)
-            if isinstance(result.get('meta'), dict):
-                result['meta'] = dict(result['meta'])
-                if result['meta'].get('warnings'):
-                    result['meta']['warnings'] = [dict(w) if isinstance(w, dict) else w
-                                                  for w in result['meta']['warnings']]
+            result = self._composition_view(result)
             echo_source(result, str(resource))  # the sibling's source, as this adapter named it (BACK-1366)
             if cut_as:
                 relabel_truncations(result, *cut_as)
@@ -389,6 +383,19 @@ class ResourceAdapter(ABC):
             if result.get('error'):
                 self.record_composed_error(child_name, resource, ValueError(str(result['error'])))
 
+        return result
+
+    @staticmethod
+    def _composition_view(result: Any) -> Any:
+        """Own a rewritten envelope while retaining its child's analysis payload."""
+        if not isinstance(result, dict):
+            return result
+        result = dict(result)
+        if isinstance(result.get('meta'), dict):
+            result['meta'] = dict(result['meta'])
+            if result['meta'].get('warnings'):
+                result['meta']['warnings'] = [dict(w) if isinstance(w, dict) else w
+                                              for w in result['meta']['warnings']]
         return result
 
     @contextmanager
