@@ -450,6 +450,19 @@ of `outcome_of()`'s legacy rendering categories:
 | `2` | Invalid invocation, resource or parameter. |
 | `3` | Required analysis or requested output failed or remained incomplete. |
 
+Ordinary `ast://` filter queries use these same execution facts without generated
+parameter bindings (BACK-2338). Rejected query controls, invalid regex or missing resources
+produce structured usage errors (`2`). Failed required source analysis, recovered
+parses, lost files/directories and requested-output failures give `3`. The AST owner
+classifies surviving source structures before filtering: an empty filtered result
+does not erase partial loss; zero surviving structures with required loss is failed,
+while useful partial observations remain usable through MCP. Healthy empty trees,
+expected non-applicability, advisory warnings and presentation cuts remain `0`.
+Python API validation still raises `ValueError`. This slice excludes dedicated
+`show=dict-heatmap`, `show=dict-schemas` and nonempty `reveal_type` modes, element/check
+operations, stdin and mixed batches; their legacy policy is unchanged. It does not
+add a findings gate or a generated AST subcommand.
+
 Surface is an inventory and declares only `--fail-on none`, also its default; it
 rejects `findings`. `none` never suppresses incomplete analysis or output failure.
 `unparsed_files` or `recovered_files` make its scan incomplete; taxonomy limitations,

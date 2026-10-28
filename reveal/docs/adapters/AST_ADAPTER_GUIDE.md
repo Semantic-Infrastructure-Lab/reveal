@@ -968,7 +968,9 @@ reveal --languages
 
 ### Common errors and solutions:
 
-**Note**: A nonexistent path is an error (`Error (ast://): Path not found: <path>`, exit 1; in JSON an `error` field and no `results`). An unsupported operator or malformed filter (`lines>>50`, `name>5`) fails soft: the files are scanned and the result is `Results: 0` / `No matches found.`, exit 0. If a query returns nothing, double-check the operator syntax below rather than expecting an error.
+**Note**: For ordinary filter queries, a nonexistent path or rejected regex/control is a usage error (exit 2; JSON includes an `error` field). Required analysis loss, recovered syntax trees and requested-output failures exit 3, even when surviving results are useful. Healthy empty results, advisory warnings and display cuts exit 0. The dedicated `show=dict-heatmap`, `show=dict-schemas` and nonempty `reveal_type` modes, element/check operations, stdin and mixed batches keep their legacy policy (BACK-2338).
+
+An unsupported operator or malformed filter (`lines>>50`, `name>5`) still fails soft: the files are scanned and the result is `Results: 0` / `No matches found.`, exit 0. If a query returns nothing, double-check the operator syntax below rather than expecting every malformed expression to be rejected.
 
 **1. No matches (bad operator or malformed query)**
 

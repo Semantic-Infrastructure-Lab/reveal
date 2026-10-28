@@ -48,6 +48,10 @@ PATH_ADAPTERS = _flagged_schemes()
 
 def _missing_path_contract(scheme):
     adapter = declared_adapter_class(scheme)
+    if adapter is None:
+        owner = adapters_base.get_adapter_class(scheme)
+        select = getattr(owner, 'uri_execution_facts', None)
+        adapter = owner if select and select('nonexistent_zz_1321') is not None else None
     return (2, adapter.RESULT_TYPE) if adapter is not None else (1, scheme)
 
 

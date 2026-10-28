@@ -2,8 +2,8 @@
 
 `query_eval._handle_regex_operator` caught `re.error` and answered "no match", so
 `ast://DIR?name~=(` printed `Results: 0 / No matches found` and exited 0, the same as a valid
-pattern nothing matches. A broken query must fail loudly naming the pattern and the regex error. The router ends every adapter
-raise as a failed result (exit 1); exit 2 for an invalid request has no seam there yet.
+pattern nothing matches. A broken query must fail loudly naming the pattern and the regex error.
+Ordinary AST queries now classify request validation as exit 2 (BACK-2338).
 """
 
 import subprocess
@@ -24,7 +24,7 @@ def root(tmp_path_factory):
 def _run(root, query):
     return subprocess.run(
         [sys.executable, '-m', 'reveal', f'ast://{root}?{query}'],
-        capture_output=True, text=True, encoding='utf-8',
+        capture_output=True, text=True, encoding='utf-8', timeout=30,
     )
 
 
@@ -46,7 +46,7 @@ def test_valid_pattern_still_matches(root):
 ])
 def test_invalid_pattern_fails_naming_the_pattern(root, query, pattern):
     result = _run(root, query)
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
     assert 'Results: 0' not in result.stdout
     assert pattern in result.stderr
     assert 'regular expression' in result.stderr.lower() or 'regex' in result.stderr.lower()
@@ -54,5 +54,5 @@ def test_invalid_pattern_fails_naming_the_pattern(root, query, pattern):
 
 def test_pattern_over_the_length_cap_fails(root):
     result = _run(root, 'name~=' + 'a' * 300)
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
     assert 'too long' in result.stderr.lower()

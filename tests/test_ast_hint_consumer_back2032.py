@@ -174,7 +174,7 @@ def test_existing_default_two_arguments_missing_and_all_python_empty_prior(tmp_p
     result = owner.get_structure()
     assert result['total_results'] == 0 and result['meta']['confidence'] == 1.0
     assert result['meta']['warnings'] == []
-    assert not hasattr(owner, 'execution_facts')
+    assert owner.uri_execution_facts(f'{tmp_path}?show=dict-heatmap') is None
 
 
 def test_clean_mixed_grep_keeps_existing_silent_capability_warning(tmp_path):

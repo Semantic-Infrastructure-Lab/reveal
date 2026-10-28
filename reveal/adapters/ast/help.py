@@ -563,6 +563,7 @@ def get_help() -> Dict[str, Any]:
         # What NOT to do
         'anti_patterns': _HELP_ANTI_PATTERNS,
         'notes': [
+            'Ordinary filter queries exit 2 for invalid requests and 3 for required analysis/output loss; healthy empty results and display cuts exit 0. Dict/type-evidence modes, checks and mixed batches keep their legacy policy.',
             'Quote URIs with > or < operators: \'ast://path?lines>50\' (shell interprets > as redirect)',
             'NEW operators: != (not equals), ~= (regex), .. (range)',
             'NEW result control: sort=field (or sort=-field for descending), limit=N, offset=M',

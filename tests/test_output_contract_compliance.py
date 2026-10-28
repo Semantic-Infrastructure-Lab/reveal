@@ -630,7 +630,7 @@ def test_the_failure_invariant_bites(harness):
         code, payload, _ = harness.run(_missing_uri(scheme))
         if code and isinstance(payload, dict):
             codes = {e.get('code') for e in (payload.get('meta') or {}).get('errors') or []}
-            (built if codes & {'adapter_error', 'element_not_found'} else returned).append(scheme)
+            (built if codes & {'adapter_error', 'element_not_found', 'invalid_request'} else returned).append(scheme)
     assert {'ast', 'env', 'git', 'json'} <= set(built), built
     assert returned, 'no adapter returned its own failure on a missing resource'
 
@@ -995,9 +995,13 @@ def test_batch_answers_like_the_uri(harness, scheme):
             f"{uri}: --batch says {entry['status']!r}, the URI form exits {code} ({expected!r})")
         from reveal.cli.routing.declared import declared_adapter_class
         declared = declared_adapter_class(scheme)
-        if declared is not None and uri == _missing_uri(scheme):
+        from reveal.adapters.base import get_adapter_class
+        owner = get_adapter_class(scheme)
+        select = getattr(owner, 'uri_execution_facts', None)
+        qualified = declared or (owner if select and select(uri.partition('://')[2]) is not None else None)
+        if qualified is not None and uri == _missing_uri(scheme):
             # Direct D6 adoption leaves mixed batches on their explicit legacy contract.
-            assert payload['type'] == declared.RESULT_TYPE
+            assert payload['type'] == qualified.RESULT_TYPE
             assert payload['meta']['errors'][0]['code'] == 'invalid_request'
             legacy = copy.deepcopy(payload)
             legacy['type'] = scheme
