@@ -1,14 +1,14 @@
-"""Adapter initialization factory — try-chain constructor patterns for from_uri.
+"""Adapter initialization factory — canonical construction and legacy fallback.
 
 These helpers are used by ResourceAdapter.from_uri and by the router when
 initializing adapters that don't inherit ResourceAdapter (e.g. test doubles).
 Each _try_* function returns (adapter_instance, error) — non-None adapter = success.
 
-BACK-948: all 25 production adapters have migrated to the canonical
-__init__(resource='', query=None, **kwargs) signature (LEGACY_INIT = False,
-BACK-907) and construct via _canonical_init instead. The 5-strategy
-try-chain below is now reachable only for third-party/plugin adapters that
-subclass ResourceAdapter without opting in (LEGACY_INIT defaults to True).
+Built-in adapters accept positional resource and query arguments
+(LEGACY_INIT = False, BACK-907) and construct via _canonical_init instead.
+The 5-strategy try-chain below is reachable only for test doubles and
+third-party/plugin adapters that subclass ResourceAdapter without opting in
+(LEGACY_INIT defaults to True).
 It is kept as an explicit, deprecated compatibility shim for that case
 rather than deleted, so existing plugins don't break silently — see
 _default_from_uri's one-time-per-class deprecation warning.

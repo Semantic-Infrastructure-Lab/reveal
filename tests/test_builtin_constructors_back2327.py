@@ -96,6 +96,23 @@ def test_real_factory_answers_match_direct_construction(session_adapter, kind):
     assert actual == expected
 
 
+def test_from_uri_preserves_claude_base_path_override(tmp_path, monkeypatch):
+    initial = tmp_path / 'initial-projects'
+    initial.mkdir()
+    monkeypatch.setattr(ClaudeAdapter, 'CONVERSATION_BASE', initial)
+    home = build_claude_home(tmp_path / 'override-home')
+    resource = 'session/infernal-earth-0118/messages'
+    adapter = ClaudeAdapter.from_uri('claude', resource + '?last=2', None)
+    assert adapter.conversation_path is None
+
+    adapter.reconfigure_base_path(home / 'projects')
+    expected = ClaudeAdapter(resource, 'last=2')
+    expected.reconfigure_base_path(home / 'projects')
+    assert adapter.conversation_path.is_relative_to(home / 'projects')
+    assert adapter.get_structure() == expected.get_structure()
+    assert ClaudeAdapter.CONVERSATION_BASE == initial
+
+
 @pytest.mark.parametrize('resource', ['', '?search=auth', 'sessions'])
 @pytest.mark.parametrize('error_type', [TypeError, ValueError])
 def test_real_constructor_failure_propagates_once(session_adapter, monkeypatch, resource, error_type):

@@ -125,7 +125,7 @@ class ResourceAdapter(ABC):
     # False = this adapter's __init__ matches the canonical signature
     # __init__(self, resource='', query=None, **kwargs) and from_uri() should
     # construct it directly instead of guessing via the 5-strategy try-chain
-    # in factory.py. All 25 production adapters have migrated (BACK-907);
+    # in factory.py. Built-in adapters use canonical construction (BACK-907);
     # the True default now exists only for third-party/plugin adapters and
     # test doubles, and firing it emits a one-time DeprecationWarning
     # (BACK-948) — migrate rather than rely on it. Set False only after
@@ -225,14 +225,10 @@ class ResourceAdapter(ABC):
                  element: Optional[str]) -> 'ResourceAdapter':
         """Initialize adapter from URI components.
 
-        Tries multiple constructor conventions in order. Override in subclasses
-        for deterministic, single-call initialization without a fallback chain.
-
-        Different adapters have different conventions:
-        - No-arg: env, python (take no resource in __init__)
-        - Resource-arg: help, reveal (take resource string as first arg)
-        - Query-parsing: ast, json (parse resource to extract path/query)
-        - URI: mysql (expect full URI like mysql://host:port)
+        Canonical adapters construct once with positional resource and query
+        arguments; their constructor errors propagate unchanged. Legacy plugin
+        adapters retain the deprecated fallback chain. Override when a resource
+        format requires custom construction.
 
         Raises:
             ImportError: If initialization failed due to a missing optional dependency.

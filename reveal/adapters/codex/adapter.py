@@ -89,6 +89,7 @@ class CodexAdapter(ResourceAdapter):
     ~/.codex/sessions/**/*.jsonl (per-session JSONL files).
     """
     HELP_CLUSTER = 'Sessions & Docs'
+    LEGACY_INIT = False
     # BACK-1379: get_structure already reads since/until from query_params and
     # threads them into _h_search_sessions/_h_filter_sessions (below), but nothing
     # declared the flag, so --since/--until were silently dropped on the CLI path

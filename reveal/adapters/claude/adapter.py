@@ -395,6 +395,7 @@ class ClaudeAdapter(ResourceAdapter):
     - Token usage estimates
     """
     HELP_CLUSTER = 'Sessions & Docs'
+    LEGACY_INIT = False
     QUICK_RANK = 3
     # --since/--until reach every claude:// view as ?since=/?until= (BACK-1549). The
     # session list and history read them in post_process from args, which nothing
