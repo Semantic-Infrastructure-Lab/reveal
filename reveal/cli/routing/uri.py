@@ -154,7 +154,7 @@ def _decline(scheme: str, resource: str, reason: str, adapter_class: Any = None)
     (testability:// with no tests, git:// outside a repository): a recorded answer that
     exits 0, not a failure (BACK-1210)."""
     result = _router_result(scheme, resource, adapter_class,
-                            warnings=[{'code': 'not_applicable', 'message': reason}],
+                            warnings=[{'type': 'not_applicable', 'code': 'not_applicable', 'message': reason}],
                             applicable=False, reason=reason)
     raise _Answered(result)
 

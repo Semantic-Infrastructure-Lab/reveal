@@ -104,8 +104,8 @@ def build_testability_report(
     patch_groups = group_patches(patches, group_by='target', min_count=min_patches)
 
     warnings: List[Any] = [
-        {'code': 'W-TESTABILITY-1', 'message': 'Static target resolution is best-effort.'},
-        {'code': 'W-TESTABILITY-2', 'message': 'Patch pressure is advisory; mocking external boundaries can be correct.'},
+        {'type': 'analysis_limit', 'code': 'W-TESTABILITY-1', 'message': 'Static target resolution is best-effort.'},
+        {'type': 'advisory', 'code': 'W-TESTABILITY-2', 'message': 'Patch pressure is advisory; mocking external boundaries can be correct.'},
     ]
     traversal = traversal_failed_warning([*profiles.traversal_failures, *patches.traversal_failures])
     if traversal:

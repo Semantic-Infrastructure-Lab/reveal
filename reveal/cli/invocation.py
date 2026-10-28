@@ -341,8 +341,8 @@ def noted_retirements() -> Dict[str, Retirement]:
 
 def retirement_warnings() -> list:
     """meta.warnings entries for noted_retirements(): code ``retired_spelling``. ``field`` is the
-    key, so two retired spellings are two entries under note_warning's (type, field) dedupe."""
-    return [{'code': 'retired_spelling', 'message': entry.text, 'field': key, 'old': entry.old,
+    key, so two retired spellings are two entries under note_warning's (type, code, field) dedupe."""
+    return [{'type': 'retired_spelling', 'code': 'retired_spelling', 'message': entry.text, 'field': key, 'old': entry.old,
              'replacement': entry.replacement, 'stage': entry.stage}
             for key, entry in noted_retirements().items()]
 

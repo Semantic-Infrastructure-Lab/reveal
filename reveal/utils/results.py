@@ -356,7 +356,7 @@ def echo_source(result: Any, spelling: Union[str, Path, None]) -> None:
 
 def note_warning(result: Any, entry: Optional[Dict[str, Any]]) -> None:
     """Add ``entry`` to ``result``'s ``meta.warnings``; None adds nothing, a repeat of the
-    same ``type`` and ``field`` adds nothing."""
+    same ``type``, ``code`` and ``field`` adds nothing."""
     if not entry or not isinstance(result, dict):
         return
     meta = result.get('meta')
@@ -364,8 +364,8 @@ def note_warning(result: Any, entry: Optional[Dict[str, Any]]) -> None:
         meta = result['meta'] = {}
     if not isinstance(meta.get('warnings'), list):
         meta['warnings'] = []
-    key = (entry.get('type'), entry.get('field'))
-    if not any(isinstance(w, dict) and (w.get('type'), w.get('field')) == key
+    key = (entry.get('type'), entry.get('code'), entry.get('field'))
+    if not any(isinstance(w, dict) and (w.get('type'), w.get('code'), w.get('field')) == key
                for w in meta['warnings']):
         meta['warnings'].append(entry)
 

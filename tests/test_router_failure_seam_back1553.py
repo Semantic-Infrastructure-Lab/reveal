@@ -138,7 +138,8 @@ def test_not_applicable_is_an_answer_with_its_envelope(tmp_path):
     code, out, _, _ = _run(declines, fmt='json')
     envelope = json.loads(out)
     assert code == 0 and envelope['contract_version'] == CONTRACT_VERSION
-    assert envelope['meta']['warnings'] == [{'code': 'not_applicable', 'message': 'Not a repo'}]
+    assert envelope['meta']['warnings'] == [
+        {'type': 'not_applicable', 'code': 'not_applicable', 'message': 'Not a repo'}]
 
 
 def test_a_raise_with_no_message_still_fails():

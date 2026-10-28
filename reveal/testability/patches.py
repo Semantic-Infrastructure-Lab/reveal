@@ -199,6 +199,7 @@ def language_not_scanned_warning(unscanned: Dict[str, int]) -> Optional[Dict[str
     if not unscanned:
         return None
     return {
+        'type': 'language_not_scanned',
         'code': 'language_not_scanned',
         'message': (f'{_languages_phrase(unscanned)} test file(s) not scanned: the patch scan reads Python and '
                     'JavaScript/TypeScript tests only, so the totals cover the scanned languages and say nothing about these.'),

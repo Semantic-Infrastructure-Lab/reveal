@@ -1068,9 +1068,9 @@ class ContractsAdapter(ResourceAdapter):
             warnings.append(census_warning)
         coverage_warning = report.get('coverage', {}).get('warning', '')
         if coverage_warning:
-            warnings.append({'code': 'W-CONTRACTS-1', 'message': coverage_warning})
+            warnings.append({'type': 'coverage_gap', 'code': 'W-CONTRACTS-1', 'message': coverage_warning})
         if report.get('unparsed_files'):
-            warnings.append({'code': 'W-CONTRACTS-2', 'message': _unparsed_note(report['unparsed_files'])})
+            warnings.append({'type': 'unparsed_files', 'code': 'W-CONTRACTS-2', 'message': _unparsed_note(report['unparsed_files'])})
         skipped = report.pop('analysis_skipped', [])
         unparsed = set(report.get('unparsed_files', []))
         failed = analysis_skipped_warning(

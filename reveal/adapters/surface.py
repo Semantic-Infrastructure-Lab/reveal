@@ -546,11 +546,11 @@ class SurfaceAdapter(ResourceAdapter):
             report['_meta'].pop('confidence', None)
         coverage_warning = report.get('coverage', {}).get('warning', '')
         if coverage_warning:
-            warnings.append({'code': 'W-SURFACE-1', 'message': coverage_warning})
+            warnings.append({'type': 'coverage_gap', 'code': 'W-SURFACE-1', 'message': coverage_warning})
         if report['unparsed_files']:
-            warnings.append({'code': 'W-SURFACE-2', 'message': _unparsed_note(report['unparsed_files'])})
+            warnings.append({'type': 'unparsed_files', 'code': 'W-SURFACE-2', 'message': _unparsed_note(report['unparsed_files'])})
         if report['recovered_files']:
-            warnings.append({'code': 'W-SURFACE-3', 'message': _recovered_note(
+            warnings.append({'type': 'parse_recovered', 'code': 'W-SURFACE-3', 'message': _recovered_note(
                 report['recovered_files'], _count_error_region(report['surfaces']))})
 
         return ResultBuilder.create(

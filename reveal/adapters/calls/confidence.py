@@ -30,11 +30,11 @@ from ...reveal_types import PathFailure
 # Index 0's message is rewritten per-request by build_meta() below to name the
 # scanned path's actual dominant-language dispatch idioms.
 _CALL_GRAPH_WARNINGS = [
-    {'code': 'W-CALLS-1',
+    {'type': 'analysis_limit', 'code': 'W-CALLS-1',
      'message': 'Dynamic dispatch (callbacks, getattr, runtime polymorphism) is not resolved.'},
-    {'code': 'W-CALLS-2', 'message': 'Method resolution order (MRO) is not considered.'},
-    {'code': 'W-CALLS-3', 'message': 'Calls via importlib/dynamic imports are not tracked.'},
-    {'code': 'W-CALLS-4',
+    {'type': 'analysis_limit', 'code': 'W-CALLS-2', 'message': 'Method resolution order (MRO) is not considered.'},
+    {'type': 'analysis_limit', 'code': 'W-CALLS-3', 'message': 'Calls via importlib/dynamic imports are not tracked.'},
+    {'type': 'analysis_limit', 'code': 'W-CALLS-4',
      'message': 'Calls inside string-evaluated code (eval/exec) are not detected.'},
 ]
 
@@ -48,6 +48,7 @@ _CALL_GRAPH_WARNINGS = [
 # modelling error this ticket found; BACK-2195 (D8) withholds the number for
 # ?uncalled in every language.
 _UNCALLED_DERIVED_SIGNAL_WARNING = {
+    'type': 'derived_signal',
     'code': 'W-CALLS-5',
     'message': (
         "'Uncalled' is a derived heuristic, not a separately measured "
@@ -257,13 +258,13 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
     # C or PHP scan they described a failure mode that does not exist there
     # (BACK-1391). Kept when the language is unknown.
     warnings: List[Any] = list(_CALL_GRAPH_WARNINGS if dominant in ('python', '') else _CALL_GRAPH_WARNINGS[:1])
-    warnings[0] = {'code': 'W-CALLS-1', 'message': f'Dynamic dispatch ({vocab}) is not resolved.'}
-    warnings.append({'code': 'W-CALLS-7', 'message': (
+    warnings[0] = {'type': 'analysis_limit', 'code': 'W-CALLS-1', 'message': f'Dynamic dispatch ({vocab}) is not resolved.'}
+    warnings.append({'type': 'scope_limit', 'code': 'W-CALLS-7', 'message': (
         'Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; '
         'module calls retain file/line provenance. Class-body initializers, extensionless Ruby DSL files '
         'and top-level scopes in other languages are outside this relationship scope.')})
     if dominant in ('javascript', 'typescript', 'tsx', ''):
-        warnings.append({'code': 'W-CALLS-8', 'message': (
+        warnings.append({'type': 'scope_limit', 'code': 'W-CALLS-8', 'message': (
             'JSX component uses are typed jsx_reference relationships; runtime render scheduling is unresolved. '
             'Class-field initializer navigation, string/HTML/Angular templates and Vue/Svelte component relationships are outside this scope.')})
     declines = _declines(per_language, unmeasured_walk, uncalled,
@@ -283,6 +284,7 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
         # BACK-1197: name what was ACTUALLY excluded for the language being
         # scanned, replacing the renderer's old hardcoded Python-only line.
         warnings.append({
+            'type': 'implicit_exclusion',
             'code': 'W-CALLS-6',
             'message': f'Excludes {implicit_vocab} (implicitly invoked, not statically reachable).',
         })

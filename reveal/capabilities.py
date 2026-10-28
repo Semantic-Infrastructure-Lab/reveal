@@ -136,6 +136,7 @@ def python_only_warning(feature: str, path: Path, *,
     listing = ", ".join(f"{lang} ({n})" for lang, n in ranked[:5])
     more = f", +{len(ranked) - 5} more" if len(ranked) > 5 else ""
     return {
+        "type": "language_not_analyzed",
         "code": W_CAP_PYTHON_ONLY,
         "message": (
             f"{PYTHON_ONLY_FEATURES[feature].invocation} analyzes Python only; "
@@ -151,6 +152,7 @@ def python_only_file_warning(feature: str, path: Path) -> Optional[Dict[str, str
     if cap is None or cap.language == "python":
         return None
     return {
+        "type": "language_not_analyzed",
         "code": W_CAP_PYTHON_ONLY,
         "message": (
             f"{PYTHON_ONLY_FEATURES[feature].invocation}: {PYTHON_ONLY_FEATURES[feature].what} "

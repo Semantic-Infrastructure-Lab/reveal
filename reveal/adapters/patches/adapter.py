@@ -246,6 +246,7 @@ class PatchesAdapter(ResourceAdapter):
         targets = {p.target_qualname or p.target_raw for p in patches}
 
         warnings: List[Any] = [{
+            'type': 'advisory',
             'code': 'W-PATCHES-1',
             'message': 'Patch pressure is advisory; mocking external boundaries can be correct.',
         }]

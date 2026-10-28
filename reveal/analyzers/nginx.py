@@ -503,6 +503,7 @@ class NginxAnalyzer(FileAnalyzer):
             parse_mode='regex',
             confidence=0.5 if unbalanced else 1.0,
             warnings=[{
+                'type': 'unbalanced_braces',
                 'code': 'unbalanced_braces',
                 'message': 'Braces do not balance (an unterminated block or an extra "}"); '
                            'the servers and locations listed may be incomplete',
