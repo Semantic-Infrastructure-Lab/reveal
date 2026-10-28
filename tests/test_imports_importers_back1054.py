@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from reveal.analyzers.imports import service as import_service
+
 from reveal.analyzers.imports import build_cache
 
 from reveal.analyzers.imports import extraction as import_extraction
@@ -267,21 +269,22 @@ def test_gated_languages_are_the_recall_gate_populations():
 
 @pytest.fixture
 def builds(monkeypatch):
-    """Every ImportsAdapter graph build: (requested path, scan root, root source)."""
+    """Every service build: the explicit root and optional request focus."""
     seen = []
-    real = ImportsAdapter._build_graph
+    real = import_service.analyze
 
-    def spy(self, target_path, *args, **kwargs):
-        real(self, target_path, *args, **kwargs)
-        seen.append((Path(target_path).resolve(), self._scan.root, self._scan.source))
+    def spy(scope, *args, **kwargs):
+        built = real(scope, *args, **kwargs)
+        seen.append((scope.root, scope.focus))
+        return built
 
-    monkeypatch.setattr(ImportsAdapter, '_build_graph', spy)
+    monkeypatch.setattr(import_service, 'analyze', spy)
     return seen
 
 
 def _all_path_scoped(seen, path):
     assert seen, 'the caller built no import graph'
-    assert all(root == path.resolve() and source == 'path' for _requested, root, source in seen), seen
+    assert all(root == path.resolve() and focus is None for root, focus in seen), seen
 
 
 def test_architecture_imports_analysis_passes_scope_path(fx, builds):

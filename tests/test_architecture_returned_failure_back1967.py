@@ -2,6 +2,9 @@
 
 import pytest
 
+from dataclasses import replace
+from reveal.analyzers.imports import service as import_service
+
 from reveal.adapters.architecture import (
     ArchitectureAdapter, _run_combined_analysis, _run_complex_functions,
 )
@@ -75,18 +78,19 @@ def test_child_failure_metadata_survives(project, monkeypatch, kind):
 
 @pytest.mark.parametrize('kind', ['analysis_failed', 'parse_recovered', 'harmless'])
 def test_real_ast_warning_producers_reach_architecture(project, monkeypatch, kind):
-    build = ImportsAdapter._build_graph
+    build = import_service.analyze
     structures_seen = []
 
-    def shared(self, path, **kwargs):
-        build(self, path, **kwargs)
-        assert kwargs['collect_structures'] is True
-        self._structures = StructureList(self._structures)
+    def shared(scope, **kwargs):
+        built = build(scope, **kwargs)
+        assert kwargs['structure_reader'] is not None
+        structures = StructureList(built.structures)
         if kind == 'analysis_failed':
-            self._structures.skipped.append((str(project / 'lost.py'), 'OSError: unreadable'))
+            structures.skipped.append((str(project / 'lost.py'), 'OSError: unreadable'))
         elif kind == 'parse_recovered':
-            self._structures[0]['parse_recovered'] = True
-        structures_seen.append(self._structures)
+            structures[0]['parse_recovered'] = True
+        structures_seen.append(structures)
+        return replace(built, structures=structures)
 
     original = AstAdapter.get_structure
 
@@ -97,7 +101,7 @@ def test_real_ast_warning_producers_reach_architecture(project, monkeypatch, kin
     def no_second_walk(self):
         pytest.fail('shared structures must bypass AST collection')
 
-    monkeypatch.setattr(ImportsAdapter, '_build_graph', shared)
+    monkeypatch.setattr(import_service, 'analyze', shared)
     monkeypatch.setattr(AstAdapter, 'get_structure', answer)
     monkeypatch.setattr(AstAdapter, '_collect_structures', no_second_walk)
     report = ArchitectureAdapter(str(project)).get_structure()

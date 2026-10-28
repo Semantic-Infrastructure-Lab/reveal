@@ -139,12 +139,13 @@ def test_ordinary_missing_evidence_survives_projection(project, monkeypatch, kin
             raise OSError('scope unavailable')
         monkeypatch.setattr('reveal.adapters.architecture.scope_dict_for_path', fail)
     elif kind == 'imports':
-        from reveal.adapters.imports import ImportsAdapter
-        build = ImportsAdapter._build_graph
-        def lost(self, path, **kwargs):
-            build(self, path, **kwargs)
-            self.analysis.files_lost.append(path / 'a.py')
-        monkeypatch.setattr(ImportsAdapter, '_build_graph', lost)
+        from reveal.analyzers.imports import service
+        build = service.analyze
+        def lost(scope, **kwargs):
+            built = build(scope, **kwargs)
+            built.analysis.files_lost.append(scope.root / 'a.py')
+            return built
+        monkeypatch.setattr(service, 'analyze', lost)
     else:
         (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
     for argv in (['architecture', 'proj'], ['architecture://proj']):

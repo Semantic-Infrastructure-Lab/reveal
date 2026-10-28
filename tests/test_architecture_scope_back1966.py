@@ -5,6 +5,10 @@ from unittest.mock import patch
 
 import pytest
 
+from reveal.analyzers.imports import service as import_service
+
+from reveal.analyzers.imports.views import ImportView
+
 pygit2 = pytest.importorskip('pygit2')
 
 from reveal.adapters.ast import AstAdapter  # noqa: E402
@@ -51,11 +55,11 @@ def test_dirty_but_equivalent_tree_has_no_false_scope_deltas(tree, relation, pat
 def test_required_component_exception_cannot_render_clean_deltas(tree, component, side, capsys):
     repo, src, ref = tree
     _dirty(src)
-    owner, method = (ImportsAdapter, '_build_graph') if component == 'imports' else (AstAdapter, 'get_structure')
+    owner, method = (import_service, 'analyze') if component == 'imports' else (AstAdapter, 'get_structure')
     original = getattr(owner, method)
 
     def injected(self, *args, **kwargs):
-        is_head = self.path == str(src) if component == 'complexity' else args[0] == src
+        is_head = self.path == str(src) if component == 'complexity' else self.root == src
         if is_head == (side == 'head'):
             raise OSError('injected required '+component+' failure')
         return original(self, *args, **kwargs)
@@ -143,13 +147,14 @@ def test_ignored_untracked_fast_exit_respects_selected_head_policy(tree, enabled
 def test_importer_explicit_missing_inputs_are_incomplete(tree, field):
     repo, src, ref = tree
     _dirty(src)
-    original = ImportsAdapter._build_graph
+    original = import_service.analyze
 
-    def missing(self, root, **kwargs):
-        original(self, root, **kwargs)
-        getattr(self.analysis, field).append(root/'a.py')
+    def missing(scope, **kwargs):
+        built = original(scope, **kwargs)
+        getattr(built.analysis, field).append(scope.root/'a.py')
+        return built
 
-    with patch.object(ImportsAdapter, '_build_graph', missing):
+    with patch.object(import_service, 'analyze', missing):
         result = diff.run_architecture_diff(src, ref)
     assert result['analysis']['snapshots']['base']['imports'] == 'incomplete'
     assert result['deltas'] is None and result['error']
@@ -179,14 +184,14 @@ def test_tracked_base_and_ignored_untracked_head_remain_distinct(tree):
 def test_unsupported_language_scope_is_nonfatal(tree):
     repo, src, ref = tree
     _dirty(src)
-    original = ImportsAdapter.get_metadata
+    original = ImportView.get_metadata
 
     def metadata(self):
         result = original(self)
         result['unsupported_extensions'] = {'.unsupported': 1}
         return result
 
-    with patch.object(ImportsAdapter, 'get_metadata', metadata):
+    with patch.object(ImportView, 'get_metadata', metadata):
         result = diff.run_architecture_diff(src, ref)
     assert result['analysis']['complete'] and not result.get('error')
 

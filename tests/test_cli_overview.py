@@ -1088,20 +1088,20 @@ class TestRunImportsAnalysis(unittest.TestCase):
     def setUp(self):
         self.adapter = OverviewAdapter('/proj')
 
-    @patch('reveal.adapters.overview.ImportsAdapter')
+    @patch('reveal.adapters.overview.ImportView')
     def test_returns_structured_dict(self, MockAdapter):
         instance = MockAdapter.return_value
-        instance._format_fan_in.return_value = {'entries': [{'file': 'a.py', 'fan_in': 5, 'fan_out': 1}]}
-        instance._format_entrypoints.return_value = {'entries': [{'file': 'main.py', 'fan_out': 3}]}
-        instance._format_components.return_value = {'components': [{'component': 'src', 'cohesion': 0.8, 'files': 4}]}
-        instance._format_circular.return_value = {'count': 2}
+        instance.fan_in.return_value = {'entries': [{'file': 'a.py', 'fan_in': 5, 'fan_out': 1}]}
+        instance.entrypoints.return_value = {'entries': [{'file': 'main.py', 'fan_out': 3}]}
+        instance.components.return_value = {'components': [{'component': 'src', 'cohesion': 0.8, 'files': 4}]}
+        instance.circular.return_value = {'count': 2}
         instance.get_metadata.return_value = {**_ARCH_DATA['metadata'], 'unsupported_extensions': {}}
         result = _run_imports_analysis(self.adapter, Path('/proj'))
         self.assertEqual(result['fan_in'], [{'file': 'a.py', 'fan_in': 5, 'fan_out': 1}])
         self.assertEqual(result['entrypoints'], [{'file': 'main.py', 'fan_out': 3}])
         self.assertEqual(result['circular_count'], 2)
 
-    @patch('reveal.adapters.overview.ImportsAdapter')
+    @patch('reveal.adapters.overview.ImportView')
     def test_exception_returns_empty_structure(self, MockAdapter):
         MockAdapter.side_effect = Exception("boom")
         result = _run_imports_analysis(self.adapter, Path('/proj'))
@@ -1111,15 +1111,15 @@ class TestRunImportsAnalysis(unittest.TestCase):
         self.assertEqual(result['circular_count'], 0)
         self.assertEqual(result['unsupported_extensions'], {})
 
-    @patch('reveal.adapters.overview.ImportsAdapter')
+    @patch('reveal.adapters.overview.ImportView')
     def test_propagates_unsupported_extensions(self, MockAdapter):
         """BACK-518 part 2: the coverage signal ImportsAdapter already computes
         must reach the caller, not just live unread in adapter.get_metadata()."""
         instance = MockAdapter.return_value
-        instance._format_fan_in.return_value = {'entries': []}
-        instance._format_entrypoints.return_value = {'entries': []}
-        instance._format_components.return_value = {'components': []}
-        instance._format_circular.return_value = {'count': 0}
+        instance.fan_in.return_value = {'entries': []}
+        instance.entrypoints.return_value = {'entries': []}
+        instance.components.return_value = {'components': []}
+        instance.circular.return_value = {'count': 0}
         instance.get_metadata.return_value = {'unsupported_extensions': {'.hs': 3}}
         result = _run_imports_analysis(self.adapter, Path('/proj'))
         self.assertEqual(result['unsupported_extensions'], {'.hs': 3})

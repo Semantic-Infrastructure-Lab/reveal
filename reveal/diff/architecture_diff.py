@@ -15,8 +15,8 @@ no materialization, the existing analysis helpers just run against ``path``
 directly.
 
 Deliberately small and self-contained: touches no other reveal module's
-internals (``ImportsAdapter`` / ``AstAdapter`` / ``architecture.py``'s own
-helpers are all reused unmodified). Delete this file, the ``--against`` flag
+internals: import analysis and domain projections use their public owners;
+complexity reuses ``architecture.py``'s existing helpers. Delete this file, the ``--against`` flag
 in ``architecture.py``, and this module's export in ``diff/__init__.py`` to
 fully remove the feature.
 
@@ -289,9 +289,7 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     """Run the import-graph + complexity analysis against `root` exactly once,
     returning the raw (absolute-path-keyed) facts needed for diffing.
 
-    Reuses ImportsAdapter's own _format_fan_in()/_format_circular()/
-    _format_components()/_format_entrypoints() (unmodified, per design doc)
-    on a single adapter instance/graph build — avoids the double-parse that
+    Reuses the shared ImportView domain projections over one service build — avoids the double-parse that
     would result from also going through architecture.py's
     _run_imports_analysis() (which discards the raw per-file fan-in/out list
     building only the fan_in>0/fan_out>0 filtered views the base architecture
@@ -300,7 +298,9 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     """
     from reveal.adapters.architecture import _run_complex_functions
     from reveal.adapters.architecture import ArchitectureAdapter
-    from reveal.adapters.imports import ImportsAdapter
+    from reveal.analyzers.imports.views import ImportView
+    from reveal.analyzers.imports.diagnostics import integrity_warnings
+    from reveal.analyzers.imports.resolution import ScanRoot
     from reveal.analyzers.imports import service as import_analysis
 
     fan_in_out: List[Dict[str, Any]] = []
@@ -313,13 +313,13 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     imports_state = 'complete'
 
     try:
-        adapter = ImportsAdapter(str(root), 'scope=path')  # BACK-1054: the requested path is the scan root
-        adapter._build_graph(root)
+        built = import_analysis.analyze(import_analysis.path_scope(root))
+        adapter = ImportView(built.analysis, root, ScanRoot(root, 'path'), import_analysis.DEFAULT_FILE_CAP)
         with import_analysis.composed_rules('architecture://'):  # BACK-2087
-            fan_in_data = adapter._format_fan_in()
-            circular_data = adapter._format_circular()
-            components_data = adapter._format_components()
-            entrypoints_data = adapter._format_entrypoints()
+            fan_in_data = adapter.fan_in()
+            circular_data = adapter.circular()
+            components_data = adapter.components()
+            entrypoints_data = adapter.entrypoints()
         fan_in_out = fan_in_data.get('entries', [])
         circular_groups = circular_data.get('cycles', [])
         components = components_data.get('components', [])
@@ -329,7 +329,7 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
         entry_points = [e['file'] for e in active_entry_points(raw_eps)]
         metadata = adapter.get_metadata()
         unsupported_extensions = metadata.get('unsupported_extensions', {})
-        owner.fold_meta({'warnings': adapter.integrity_warnings(root)})
+        owner.fold_meta({'warnings': integrity_warnings(built.analysis, root)})
         if (adapter.analysis.files_failed or adapter.analysis.files_lost
                 or bool(getattr(adapter.analysis.graph, 'traversal_failures', ()))):
             imports_state = 'incomplete'

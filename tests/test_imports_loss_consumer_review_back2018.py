@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from reveal.analyzers.imports.views import ImportView
+
 from conftest import _run_reveal_direct
 from reveal.adapters.architecture import ArchitectureAdapter
 from reveal.adapters.deps import DepsAdapter
@@ -284,8 +286,8 @@ def test_malformed_relationship_sibling_dominates_real_stats_and_edges(tmp_path,
     from reveal.adapters.imports import ImportsAdapter
     root = tmp_path / 'affected'
     tree(root, 'edges')
-    original_components = ImportsAdapter._format_components
-    original_circular = ImportsAdapter._format_circular
+    original_components = ImportView.components
+    original_circular = ImportView.circular
 
     def components(adapter):
         data = original_components(adapter)
@@ -302,8 +304,8 @@ def test_malformed_relationship_sibling_dominates_real_stats_and_edges(tmp_path,
             data['count'] = 1
         return data
 
-    monkeypatch.setattr(ImportsAdapter, '_format_components', components)
-    monkeypatch.setattr(ImportsAdapter, '_format_circular', circular)
+    monkeypatch.setattr(ImportView, 'components', components)
+    monkeypatch.setattr(ImportView, 'circular', circular)
     attempts = fail_child(monkeypatch, root)
     response = invoke('overview', root)
     result = json.loads(response.stdout)

@@ -101,7 +101,7 @@ Rules (home = where the concern is allowed to live):
     graph has no cycles; every cycle closes through a deferred ``from ..cli.x import y`` inside a
     function, the habit of hiding an upward import instead of moving the function down a layer
     (one such import grew the largest group from 99 to 155 files in a day). Unlike the other rules
-    it is read from reveal's own import graph (``ImportsAdapter``, lazy edges included), not one
+    it is read from reveal's own import graph (``service.analyze``, lazy edges included), not one
     file at a time: a site is the import line of each lazy edge inside a cycle group, counted per
     importing file. Fix it by importing the other way round or moving the function down a layer;
     a deliberate one takes ``# boundary-ok: lazy-cycle -- <why>`` on the import line.
@@ -552,10 +552,11 @@ def lazy_cycle_sites(package: Path, base: Path) -> Dict[str, List[int]]:
     One site per lazy edge inside a cycle group, at the line of the statement that resolved to it.
     The graph is reveal's own (lazy edges included); a statement marked
     ``# boundary-ok: lazy-cycle -- <why>`` is skipped."""
-    from reveal.adapters.imports import ImportsAdapter
+    from reveal.analyzers.imports import service, resolution
 
     base = base.resolve()
-    graph = ImportsAdapter(str(package), 'circular&lazy=include').analyze().graph
+    root = resolution.choose_scan_root(package).root
+    graph = service.analyze(service.path_scope(root, focus=None if root == package else package)).analysis.graph
     sites: Dict[str, List[int]] = {}
     for group in graph.find_cycle_groups():
         members = set(group)

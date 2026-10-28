@@ -43,8 +43,11 @@ def analyze(scope: ScanScope, *, on_file_processed: Optional[Callable[[Path], No
             structure_reader: Optional[file_extraction.StructureReader] = None) -> ImportBuild:
     """Discover, extract and resolve one explicit build scope through the existing resolver.
 
-    Callbacks disable graph reuse. Structures live only on this returned build, never in
-    the shared analysis cache. Discovery runs even on a cache hit to retain fresh disclosures.
+    Callbacks disable graph reuse. A structure_reader must be picklable (normally a
+    module-level function) when extraction uses a process pool; on_file_processed runs
+    only in the parent, after each file, in discovery order. Structures live only on
+    this returned build, never in the shared analysis cache. Discovery runs even on a
+    cache hit to retain fresh disclosures.
     """
     files = discover(scope)
     candidates = list(files.candidates)
@@ -55,10 +58,25 @@ def analyze(scope: ScanScope, *, on_file_processed: Optional[Callable[[Path], No
     key = build_cache._graph_cache_key(candidates, files.index, scope.root, files.traversal_failures,
                                        scope.cap, scope.extensions) if (structure_reader is None and
                                        on_file_processed is None) else None
-    variant = (key, active_exclusions(), gitignore_enabled())
+    variant = (key or '', active_exclusions(), gitignore_enabled())
     cached = build_cache._cached_graph(scope.root, key, variant)
     if cached is not None:
         return ImportBuild(cached, files)
+    built = _extract_and_resolve(scope, files, candidates, structure_reader, on_file_processed)
+    analysis = built.analysis
+    resolved = analysis.resolution
+    if key is not None and analysis.cacheable and not resolved.traversal_failures:
+        disk_cache.put(build_cache._ADAPTER_IMPORT_GRAPH_NAMESPACE, key, analysis)
+    if key is not None and not resolved.traversal_failures:
+        build_cache._remember_graph(scope.root, variant, analysis)
+    return built
+
+
+def _extract_and_resolve(scope: ScanScope, files: ImportFileSet, candidates: List[Path],
+                         structure_reader: Optional[file_extraction.StructureReader],
+                         on_file_processed: Optional[Callable[[Path], None]]) -> ImportBuild:
+    """The uncached build: project inputs, deterministic per-file extraction, then resolution."""
+    focus = scope.focus
     analysis = ImportAnalysis()
     structures: List[Dict[str, Any]] = []
     resolver = resolution.ProjectResolver(cap=scope.cap, focus=focus)
@@ -73,10 +91,6 @@ def analyze(scope: ScanScope, *, on_file_processed: Optional[Callable[[Path], No
                                         files.index, entries, inputs)
     analysis.graph = resolved.graph
     analysis.resolution = resolved
-    if key is not None and analysis.cacheable and not resolved.traversal_failures:
-        disk_cache.put(build_cache._ADAPTER_IMPORT_GRAPH_NAMESPACE, key, analysis)
-    if key is not None and not resolved.traversal_failures:
-        build_cache._remember_graph(scope.root, variant, analysis)
     return ImportBuild(analysis, files, structures)
 
 

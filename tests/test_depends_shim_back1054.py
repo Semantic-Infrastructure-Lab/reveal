@@ -62,13 +62,13 @@ def mixed(tmp_path):
 def builds(monkeypatch):
     """Every imports:// engine build: (target, parse_extensions) per ``_build_graph`` call."""
     calls = []
-    real = ImportsAdapter._build_graph
+    real = import_service.analyze
 
-    def counting(self, target_path, *args, **kwargs):
-        calls.append((target_path, self._parse_extensions))
-        return real(self, target_path, *args, **kwargs)
+    def counting(scope, *args, **kwargs):
+        calls.append((scope.focus or scope.root, scope.extensions))
+        return real(scope, *args, **kwargs)
 
-    monkeypatch.setattr(ImportsAdapter, '_build_graph', counting)
+    monkeypatch.setattr(import_service, 'analyze', counting)
     return calls
 
 

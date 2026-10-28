@@ -5,6 +5,10 @@ from unittest.mock import patch
 
 import pytest
 
+from reveal.analyzers.imports import service as import_service
+
+from reveal.analyzers.imports.views import ImportView
+
 from conftest import _run_reveal_direct as run
 from reveal.adapters.git import GitAdapter
 from reveal.adapters.imports import ImportsAdapter, _lost_extraction
@@ -94,18 +98,20 @@ def test_real_repository_and_foreign_history_preserve_population(project, top, c
 
 @pytest.mark.parametrize('spelling', ['absolute', 'relative'])
 def test_import_loss_retains_exact_counts_paths_and_uncapped_causes(project, spelling):
-    original = ImportsAdapter._build_graph
-    def lost(self, path, **kwargs):
-        original(self, path, **kwargs)
+    original = import_service.analyze
+    def lost(scope, **kwargs):
+        built = original(scope, **kwargs)
+        path = scope.root
         for n in range(53):
             file = path/f'pending{n:02}.py'
-            self.analysis.files_failed.append(file)
-            self.analysis.files_lost.append(file)
-            self.analysis.extractions[file] = _lost_extraction(
+            built.analysis.files_failed.append(file)
+            built.analysis.files_lost.append(file)
+            built.analysis.extractions[file] = _lost_extraction(
                 BrokenProcessPool(f'exact controlled worker loss {n}'))
+        return built
     # Controlled pending-input outcomes use the actual Imports failure artifact owner.
     target = str(project) if spelling == 'absolute' else 'proj'
-    with patch.object(ImportsAdapter, '_build_graph', lost):
+    with patch.object(import_service, 'analyze', lost):
         result = OverviewAdapter(target, 'no_git=true').get_structure()
     metadata = result['architecture']['metadata']
     assert metadata['files_failed_count'] == metadata['files_lost_count'] == 53
@@ -125,10 +131,10 @@ def test_import_loss_retains_exact_counts_paths_and_uncapped_causes(project, spe
 
 def test_import_metadata_reuses_collector_read_without_fabricating_unknown_counts(project):
     adapter = OverviewAdapter(str(project), 'no_git=true')
-    with patch.object(ImportsAdapter, 'get_metadata', return_value={'unsupported_extensions': {'.odd': 2}}) as read:
+    with patch.object(ImportView, 'get_metadata', return_value={'unsupported_extensions': {'.odd': 2}}) as read:
         result = _run_imports_analysis(adapter, project)
-    # Four existing formatter reads plus the one collector read; no new read.
-    assert read.call_count == 5
+    # Raw domain projections need no discarded URI envelopes; only the collector reads metadata.
+    assert read.call_count == 1
     assert result['unsupported_extensions'] == {'.odd': 2}
     assert 'files_failed_count' not in result.get('metadata', {})
     assert 'files_lost_count' not in result.get('metadata', {})
@@ -183,7 +189,7 @@ def test_uri_query_exclusion_keeps_documented_ast_boundary(project):
 
 def test_reused_adapter_clears_failure_and_diagnostic_state(project):
     adapter = OverviewAdapter(str(project), 'no_git=true')
-    with patch.object(ImportsAdapter, '_build_graph', side_effect=OSError('exact imports failure')):
+    with patch.object(import_service, 'analyze', side_effect=OSError('exact imports failure')):
         failed = adapter.get_structure()
     assert failed['meta']['errors']
     restored = adapter.get_structure()

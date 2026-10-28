@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from reveal.analyzers.imports.views import ImportView
+
 from reveal.adapters.imports import ImportsAdapter
 from reveal.analyzers.imports.resolution import ProjectResolver
 from reveal.analyzers.imports.types import ImportGraph
@@ -339,12 +341,12 @@ def test_the_gate_scores_one_stated_rule_and_refuses_another(python_corpus, monk
     root, entry = python_corpus
     measured = gate.measure(entry, root)
     assert measured['edge_rule']['lazy'] == 'include' and measured['edge_rule']['tests'] == 'included'
-    real = ImportsAdapter._edge_rule
+    real = ImportView._edge_rule
 
     def load_time_only(self, *args, **kwargs):
         return {**real(self, *args, **kwargs), 'lazy': 'exclude'}
 
-    monkeypatch.setattr(ImportsAdapter, '_edge_rule', load_time_only)
+    monkeypatch.setattr(ImportView, '_edge_rule', load_time_only)
     with pytest.raises(RuntimeError, match="rule lazy='exclude'"):
         gate.measure(entry, root)
 

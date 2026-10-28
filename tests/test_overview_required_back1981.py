@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
+from reveal.analyzers.imports.views import ImportView
+
 from reveal.adapters.ast import AstAdapter
 from reveal.adapters.git import GitAdapter
 from reveal.adapters.imports import ImportsAdapter
@@ -90,12 +92,12 @@ def test_malformed_scope_is_attributed(project, kind):
     assert any(e['code'] == 'E_COMPOSE' and 'scope_dict_for_path' in e['message'] for e in errors(result))
 
 
-@pytest.mark.parametrize('owner', ['_format_fan_in', '_format_entrypoints', '_format_components', '_format_circular'])
+@pytest.mark.parametrize('owner', ['fan_in', 'entrypoints', 'components', 'circular'])
 @pytest.mark.parametrize('kind', ['empty', 'malformed'])
 def test_malformed_private_import_projection_is_attributed(project, owner, kind):
-    key = 'components' if owner == '_format_components' else 'count' if owner == '_format_circular' else 'entries'
+    key = 'components' if owner == 'components' else 'count' if owner == 'circular' else 'entries'
     data = {} if kind == 'empty' else {key: True if key == 'count' else [None]}
-    with patch.object(ImportsAdapter, owner, return_value=data):
+    with patch.object(ImportView, owner, return_value=data):
         result = OverviewAdapter(str(project), 'no_git=true').get_structure()
     assert any(e['code'] == 'E_COMPOSE' and 'ImportsAdapter' in e['message'] for e in errors(result))
 
@@ -103,7 +105,7 @@ def test_malformed_private_import_projection_is_attributed(project, owner, kind)
 @pytest.mark.parametrize('kind', ['empty', 'missing_count', 'boolean_count', 'lost_exceeds',
                                  'paths', 'cause', 'unsupported', 'missing_unsupported'])
 def test_malformed_import_metadata_is_attributed(project, kind):
-    original = ImportsAdapter.get_metadata
+    original = ImportView.get_metadata
     def malformed(self):
         data = copy.deepcopy(original(self))
         if kind == 'empty':
@@ -123,7 +125,7 @@ def test_malformed_import_metadata_is_attributed(project, kind):
         else:
             data['unsupported_extensions'] = []
         return data
-    with patch.object(ImportsAdapter, 'get_metadata', malformed):
+    with patch.object(ImportView, 'get_metadata', malformed):
         result = OverviewAdapter(str(project), 'no_git=true').get_structure()
     assert any(e['code'] == 'E_COMPOSE' and 'ImportsAdapter' in e['message'] for e in errors(result))
 

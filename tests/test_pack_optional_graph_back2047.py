@@ -7,7 +7,8 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from reveal.adapters import pack
-from reveal.adapters.imports import ImportsAdapter
+from reveal.analyzers.imports import service as import_service
+from reveal.analyzers.imports.diagnostics import integrity_warnings
 
 pytestmark = pytest.mark.component
 
@@ -29,17 +30,17 @@ def project(tmp_path):
 @pytest.fixture
 def observed(monkeypatch):
     state = {'active': False, 'denied': None, 'unknown': False, 'builds': [], 'events': []}
-    real_build, real_scan = ImportsAdapter._build_graph, os.scandir
+    real_build, real_scan = import_service.analyze, os.scandir
     monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
     monkeypatch.setenv('REVEAL_MAX_WORKERS', '1')
 
-    def build(self, *args, **kwargs):
+    def build(scope, *args, **kwargs):
         state['active'] = True
         try:
-            result = real_build(self, *args, **kwargs)
-            state['builds'].append({'graph': self.analysis.graph, 'scanned': self.analysis.scanned_files,
-                                    'warnings': self.integrity_warnings(Path(args[0])),
-                                    'failed': list(self.analysis.files_failed)})
+            result = real_build(scope, *args, **kwargs)
+            state['builds'].append({'graph': result.analysis.graph, 'scanned': result.analysis.scanned_files,
+                                    'warnings': integrity_warnings(result.analysis, scope.root),
+                                    'failed': list(result.analysis.files_failed)})
             return result
         finally:
             state['active'] = False
@@ -52,7 +53,7 @@ def observed(monkeypatch):
             raise PermissionError(13, 'actual optional Pack graph source loss', str(path))
         return real_scan(path)
 
-    monkeypatch.setattr(ImportsAdapter, '_build_graph', build)
+    monkeypatch.setattr(import_service, 'analyze', build)
     monkeypatch.setattr(os, 'scandir', scandir)
     return state
 
@@ -167,7 +168,7 @@ def test_no_seed_and_unrequested_focus_do_not_manufacture_failure(project, obser
 def test_existing_raised_construction_failure_keeps_typed_cause_and_pair(project, monkeypatch):
     def failed(*args, **kwargs):
         raise RuntimeError('controlled existing construction failure')
-    monkeypatch.setattr(ImportsAdapter, '_build_graph', failed)
+    monkeypatch.setattr(import_service, 'analyze', failed)
     failures = []
     assert pack._build_pack_import_graph(project, failures) == (None, set())
     assert failures == ['RuntimeError: controlled existing construction failure']

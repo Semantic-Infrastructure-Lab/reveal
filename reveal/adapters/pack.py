@@ -139,20 +139,19 @@ def _build_pack_import_graph(
     can say the signal it asked for is missing.
     Shared by ``_fetch_fan_in`` (--architecture) and ``_compute_graph_relevance``
     (--focus, BACK-833) so there is exactly one lazy-import/build site for
-    ``ImportsAdapter`` in this module.
+    the public import-analysis service in this module.
     """
     try:
-        from reveal.adapters.imports import ImportsAdapter  # noqa: I006
-        adapter = ImportsAdapter(resource=str(path), query='scope=path')  # BACK-1054: the path is the scan root
-        adapter._build_graph(adapter._target_path)
-        warnings = adapter.integrity_warnings(path)
+        from ..analyzers.imports.diagnostics import integrity_warnings
+        built = import_analysis.analyze(import_analysis.path_scope(path.resolve()))
+        warnings = integrity_warnings(built.analysis, path)
         if warnings:
             if failures is not None:
                 failures.extend(
                     f"Optional import graph for {to_posix(path)} is incomplete: {warning['message']}"
                     for warning in warnings)
             return None, set()
-        return adapter.analysis.graph, adapter.analysis.scanned_files
+        return built.analysis.graph, built.analysis.scanned_files
     except Exception as e:  # boundary-ok: broad-except -- the import graph is an optional ranking signal built by the whole imports walk (tree-sitter parsing of every file, resolution; failure set not bounded) and a pack is still useful without it; the failure is returned in `failures` and shown as meta.relevance_warning
         logger.warning('pack: import graph for %s failed: %s', path, e)
         if failures is not None:
@@ -186,7 +185,7 @@ def _pack_edge_rule(graphs: List[Tuple[str, Any]]) -> Dict[str, Any]:
 
 def _fetch_fan_in(path: Path, failures: Optional[List[str]] = None, *,
                   graphs: Optional[List[Tuple[str, Any]]] = None) -> Dict[str, int]:
-    """Return {abs_path: fan_in} for all files under *path* via ImportsAdapter.
+    """Return {abs_path: fan_in} for all files under *path* via the import-analysis service.
 
     Returns empty dict on any failure — callers treat missing entries as fan_in=0
     (the failure is appended to *failures* when given). The graph the counts came from
@@ -207,7 +206,7 @@ def _compute_graph_relevance(
     """Personalized-PageRank relevance score per file, seeded from --focus (BACK-833).
 
     Builds reveal's own multi-language import/dependency graph (the same one
-    ``--architecture``'s fan-in reads from, via ImportsAdapter) and runs a
+    ``--architecture``'s fan-in reads from, via the shared import analysis) and runs a
     random-walk-with-restart from the files whose path matches *focus* (same
     substring match ``_compute_priority`` already uses). Relevance propagates
     along both edge directions — a file a focus file imports, or a file that

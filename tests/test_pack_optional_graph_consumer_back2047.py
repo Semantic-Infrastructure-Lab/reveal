@@ -7,7 +7,8 @@ import pytest
 
 from conftest import _run_reveal_direct
 from reveal.adapters import pack
-from reveal.adapters.imports import ImportsAdapter
+from reveal.analyzers.imports import service as import_service
+from reveal.analyzers.imports.diagnostics import integrity_warnings
 
 pytestmark = pytest.mark.component
 
@@ -29,16 +30,16 @@ def _project(root):
 def native_fault(monkeypatch):
     state = {'active': False, 'denied': None, 'unknown': False,
              'events': [], 'builds': [], 'crash': False}
-    real_build, real_scandir = ImportsAdapter._build_graph, os.scandir
+    real_build, real_scandir = import_service.analyze, os.scandir
 
-    def build(owner, *args, **kwargs):
+    def build(scope, *args, **kwargs):
         state['active'] = True
         try:
             if state['crash']:
                 raise RuntimeError('actual optional construction boundary failure')
-            result = real_build(owner, *args, **kwargs)
+            result = real_build(scope, *args, **kwargs)
             # Observe actual retained facts, never manufacture graph diagnostics.
-            state['builds'].append((owner, owner.integrity_warnings(Path(args[0]))))
+            state['builds'].append((result, integrity_warnings(result.analysis, scope.root)))
             return result
         finally:
             state['active'] = False
@@ -51,7 +52,7 @@ def native_fault(monkeypatch):
             raise PermissionError(13, 'independent optional graph loss', str(path))
         return real_scandir(path)
 
-    monkeypatch.setattr(ImportsAdapter, '_build_graph', build)
+    monkeypatch.setattr(import_service, 'analyze', build)
     monkeypatch.setattr(os, 'scandir', scandir)
     return state
 

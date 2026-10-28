@@ -103,7 +103,7 @@ def test_required_failure_survives_projection_and_postprocessing(project, monkey
         def fail(*args, **kwargs):
             raise OSError('exact required '+kind+' failure')
         target = {'scope': 'reveal.adapters.overview.scope_dict_for_path',
-                  'imports': 'reveal.adapters.imports.ImportsAdapter._build_graph',
+                  'imports': 'reveal.analyzers.imports.service.analyze',
                   'check': 'reveal.rules.RuleRegistry.check_file',
                   'ast': 'reveal.adapters.ast.AstAdapter.get_structure',
                   'git': 'reveal.adapters.overview._resolve_git_root'}[kind]

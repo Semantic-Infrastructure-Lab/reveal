@@ -3,7 +3,7 @@
 Answer "what depends on this module?" by inverting the import graph.
 
 A retired spelling (BACK-1054 slice S6, Q8): the graph is the one imports:// engine's build
-(``ImportsAdapter.analyze``, under depends' own scan root, file cap and extension family) and the
+(``service.analyze``, under depends' own scan root, file cap and extension family) and the
 answer keeps depends' shapes, warnings and exit code (0 on a partial answer, BACK-2181) until the
 cut; ``imports://<path>?importers`` is the replacement.
 
@@ -22,7 +22,7 @@ from typing import Dict, Any, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
-from .imports import ImportsAdapter, parse_failure_warning, worker_lost_warning
+from ..analyzers.imports.diagnostics import parse_failure_warning, worker_lost_warning
 from ..utils import print_json_result
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.types import ImportAnalysis
@@ -588,7 +588,7 @@ class DependsAdapter(ResourceAdapter):
     def _build_graph(self, scan_root: Path, scan_extensions: Optional[frozenset] = None) -> None:
         """Build the import graph of scan_root through the one imports:// engine (BACK-1054 S6).
 
-        The engine (``ImportsAdapter.analyze``: its walk, per-file extraction, cascade and caches)
+        The engine (``service.analyze``: its walk, per-file extraction, cascade and caches)
         resolves at ``scan_root`` (passed as ``root``, the climb's own choice), under depends' file
         cap (``_SCAN_FILE_CAP`` as ``max_files``) and over depends' extension family.
 
@@ -610,11 +610,14 @@ class DependsAdapter(ResourceAdapter):
         self._scan_root = scan_root
         self._scan_budget = ScanBudget(self._SCAN_FILE_CAP)
         target = self._target_path or scan_root
-        engine = ImportsAdapter(str(target), params={'root': str(scan_root), 'max_files': self._SCAN_FILE_CAP},
-                                parse_extensions=supported_exts)
-        self._analysis = engine.analyze()
+        built = import_analysis.analyze(import_analysis.ScanScope(
+            scan_root, supported_exts, cap=self._SCAN_FILE_CAP,
+            focus=None if scan_root == target else target))
+        self._analysis = built.analysis
         self._resolution = self._analysis.resolution or resolution.ProjectResolution()
-        self._scope_hidden = dict(engine.scope_hidden) if engine.scope_hidden else None
+        from ..utils.path_utils import hidden_entries_warning
+        warning = hidden_entries_warning(built.files.hidden, built.files.analyzed)
+        self._scope_hidden = dict(warning) if warning else None
 
     def _build_meta(self) -> Dict[str, Any]:
         known_limits = [

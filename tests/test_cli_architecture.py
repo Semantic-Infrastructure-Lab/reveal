@@ -584,7 +584,7 @@ class TestRunCombinedAnalysis(unittest.TestCase):
         analysis must still fall back to its own independent walk rather than
         silently losing data because of an unrelated imports failure."""
         adapter = ArchitectureAdapter('/p')
-        with patch('reveal.adapters.imports.ImportsAdapter', side_effect=Exception('fail')):
+        with patch('reveal.adapters.architecture.ImportView', side_effect=Exception('fail')):
             with patch(
                 'reveal.adapters.architecture._run_complex_functions',
                 return_value=_COMPLEX_FNS,
@@ -605,21 +605,19 @@ class TestRunCombinedAnalysis(unittest.TestCase):
             {'file': '/p/a.py', 'functions': [{'name': 'f', 'complexity': 25}]},
         ]
 
-        # _build_graph(collect_structures=True) populates adapter._structures
-        # from the same (parallelized) per-file walk that extracts imports —
-        # no second directory walk / re-parse.
-        def fake_build_graph(path, on_file_processed=None, collect_structures=False):
-            if collect_structures:
-                mock_adapter._structures = fake_structures
+        # The public build carries the optional structures from its one per-file pass.
+        from reveal.analyzers.imports.service import ImportBuild, ImportFileSet
+        from reveal.analyzers.imports.types import ImportAnalysis
+        built = ImportBuild(ImportAnalysis(), ImportFileSet((), {}), fake_structures)
 
-        mock_adapter._build_graph.side_effect = fake_build_graph
-        mock_adapter._format_fan_in.return_value = {'entries': []}
-        mock_adapter._format_entrypoints.return_value = {'entries': []}
-        mock_adapter._format_components.return_value = {'components': []}
-        mock_adapter._format_circular.return_value = {'cycles': [], 'count': 0}
+        mock_adapter.fan_in.return_value = {'entries': []}
+        mock_adapter.entrypoints.return_value = {'entries': []}
+        mock_adapter.components.return_value = {'components': []}
+        mock_adapter.circular.return_value = {'cycles': [], 'count': 0}
 
         adapter = ArchitectureAdapter('/p')
-        with patch('reveal.adapters.imports.ImportsAdapter', return_value=mock_adapter):
+        with patch('reveal.adapters.architecture.ImportView', return_value=mock_adapter), \
+                patch('reveal.adapters.architecture.import_analysis.analyze', return_value=built):
             with patch('reveal.adapters.ast.AstAdapter') as mock_ast_adapter_cls:
                 mock_ast_adapter_cls.return_value.get_structure.return_value = {
                     'results': [{'name': 'f', 'complexity': 25, 'file': '/p/a.py'}]
@@ -667,21 +665,21 @@ class TestRunScope(unittest.TestCase):
 class TestRunImportsAnalysis(unittest.TestCase):
 
     def test_returns_empty_on_failure(self):
-        with patch('reveal.adapters.imports.ImportsAdapter', side_effect=Exception('fail')):
+        with patch('reveal.adapters.architecture.ImportView', side_effect=Exception('fail')):
             result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
         self.assertEqual(result, {})
 
     def test_filters_init_from_entry_points(self):
         mock_adapter = MagicMock()
-        mock_adapter._format_fan_in.return_value = {'entries': []}
-        mock_adapter._format_entrypoints.return_value = {'entries': [
+        mock_adapter.fan_in.return_value = {'entries': []}
+        mock_adapter.entrypoints.return_value = {'entries': [
             {'file': '/p/__init__.py', 'fan_in': 0, 'fan_out': 3},
             {'file': '/p/main.py', 'fan_in': 0, 'fan_out': 5},
         ]}
-        mock_adapter._format_components.return_value = {'components': []}
-        mock_adapter._format_circular.return_value = {'cycles': [], 'count': 0}
+        mock_adapter.components.return_value = {'components': []}
+        mock_adapter.circular.return_value = {'cycles': [], 'count': 0}
 
-        with patch('reveal.adapters.imports.ImportsAdapter', return_value=mock_adapter):
+        with patch('reveal.adapters.architecture.ImportView', return_value=mock_adapter):
             result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
 
         ep_files = [e['file'] for e in result.get('entry_points', [])]
@@ -690,15 +688,15 @@ class TestRunImportsAnalysis(unittest.TestCase):
 
     def test_filters_test_files_from_entry_points(self):
         mock_adapter = MagicMock()
-        mock_adapter._format_fan_in.return_value = {'entries': []}
-        mock_adapter._format_entrypoints.return_value = {'entries': [
+        mock_adapter.fan_in.return_value = {'entries': []}
+        mock_adapter.entrypoints.return_value = {'entries': [
             {'file': '/p/tests/test_main.py', 'fan_in': 0, 'fan_out': 2},
             {'file': '/p/main.py', 'fan_in': 0, 'fan_out': 5},
         ]}
-        mock_adapter._format_components.return_value = {'components': []}
-        mock_adapter._format_circular.return_value = {'cycles': [], 'count': 0}
+        mock_adapter.components.return_value = {'components': []}
+        mock_adapter.circular.return_value = {'cycles': [], 'count': 0}
 
-        with patch('reveal.adapters.imports.ImportsAdapter', return_value=mock_adapter):
+        with patch('reveal.adapters.architecture.ImportView', return_value=mock_adapter):
             result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
 
         ep_files = [e['file'] for e in result.get('entry_points', [])]
@@ -708,13 +706,13 @@ class TestRunImportsAnalysis(unittest.TestCase):
         """BACK-518 part 2: the coverage signal ImportsAdapter already computes
         must reach the caller, not just live unread in adapter.get_metadata()."""
         mock_adapter = MagicMock()
-        mock_adapter._format_fan_in.return_value = {'entries': []}
-        mock_adapter._format_entrypoints.return_value = {'entries': []}
-        mock_adapter._format_components.return_value = {'components': []}
-        mock_adapter._format_circular.return_value = {'cycles': [], 'count': 0}
+        mock_adapter.fan_in.return_value = {'entries': []}
+        mock_adapter.entrypoints.return_value = {'entries': []}
+        mock_adapter.components.return_value = {'components': []}
+        mock_adapter.circular.return_value = {'cycles': [], 'count': 0}
         mock_adapter.get_metadata.return_value = {'unsupported_extensions': {'.hs': 3}}
 
-        with patch('reveal.adapters.imports.ImportsAdapter', return_value=mock_adapter):
+        with patch('reveal.adapters.architecture.ImportView', return_value=mock_adapter):
             result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
 
         self.assertEqual(result['unsupported_extensions'], {'.hs': 3})

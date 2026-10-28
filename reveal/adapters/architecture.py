@@ -12,7 +12,9 @@ from reveal.capabilities import scope_dict_for_path
 from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealMeta, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
-from ..analyzers.imports import service as import_analysis
+from ..analyzers.imports import service as import_analysis, resolution
+from ..analyzers.imports.diagnostics import integrity_warnings
+from ..analyzers.imports.views import ImportView
 from ..conventions import conventions_for_path
 from ..registry import language_for_extension
 from ..rendering.adapters.architecture import ArchitectureRenderer
@@ -153,29 +155,27 @@ def _run_scope(adapter: 'ArchitectureAdapter', path: Path, *,
 
 
 def _run_imports_analysis(adapter: 'ArchitectureAdapter', path: Path) -> Dict[str, Any]:
-    # Uses ImportsAdapter's private walk/format methods directly (not
-    # get_structure()) so cannot go through compose() — record the failure
-    # the same way compose() would (BACK-984).
+    # Analysis is required work; disclose service failures at this composition boundary.
     try:
-        from reveal.adapters.imports import ImportsAdapter
-        importer = ImportsAdapter(str(path), 'scope=path')  # BACK-1054: the requested path is the scan root
-        importer._build_graph(path)
-        warnings = importer.integrity_warnings(path)  # BACK-1598, BACK-1753
+        built = import_analysis.analyze(import_analysis.path_scope(path))
+        importer = ImportView(built.analysis, path, resolution.ScanRoot(path, 'path'),
+                              import_analysis.DEFAULT_FILE_CAP)
+        warnings = integrity_warnings(built.analysis, path)  # BACK-1598, BACK-1753
         if warnings:
             adapter.fold_meta({'warnings': warnings})
         return _format_imports_data(importer, path)
-    except Exception as exc:  # boundary-ok: broad-except -- composition seam that bypasses compose() for the shared ImportsAdapter walk; the sibling adapter's failure set is not bounded (parse, resolution, pool), and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
+    except Exception as exc:  # boundary-ok: broad-except -- required import-service boundary; analyzer, resolution and pool failures are not a bounded exception set, and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
         adapter.record_composed_error('ImportsAdapter', path, exc)
         return {}
 
 
-def _format_imports_data(adapter, path: Path, *,
+def _format_imports_data(adapter: ImportView, path: Path, *,
                          observations: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
     with import_analysis.composed_rules('architecture://'):  # BACK-2087
-        fan_in_data = adapter._format_fan_in()
-        entrypoints_data = adapter._format_entrypoints()
-        components_data = adapter._format_components()
-        circular_data = adapter._format_circular()
+        fan_in_data = adapter.fan_in()
+        entrypoints_data = adapter.entrypoints()
+        components_data = adapter.components()
+        circular_data = adapter.circular()
     _capture_import_observations({
         'entry_points': entrypoints_data.get('entries'),
         'core_abstractions': fan_in_data.get('entries'),
@@ -230,18 +230,18 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
     imports_data: Dict[str, Any] = {}
     graph_built = False
     try:
-        from reveal.adapters.imports import ImportsAdapter
-        importer = ImportsAdapter(str(path), 'scope=path')  # BACK-1054: the requested path is the scan root
-        # collect_structures=True runs per-file AST analysis in the same
-        # (parallelized) walk as import extraction — no second full-repo pass.
-        importer._build_graph(path, collect_structures=True)
-        structures = importer._structures
+        from .ast.analysis import analyze_file_outcome
+        built = import_analysis.analyze(import_analysis.path_scope(path),
+                                        structure_reader=analyze_file_outcome)
+        importer = ImportView(built.analysis, path, resolution.ScanRoot(path, 'path'),
+                              import_analysis.DEFAULT_FILE_CAP)
+        structures = built.structures
         graph_built = True
-        warnings = importer.integrity_warnings(path)  # BACK-1598, BACK-1753
+        warnings = integrity_warnings(built.analysis, path)  # BACK-1598, BACK-1753
         if warnings:
             adapter.fold_meta({'warnings': warnings})
         imports_data = _format_imports_data(importer, path, observations=observations)
-    except Exception as exc:  # boundary-ok: broad-except -- composition seam that bypasses compose() for the shared ImportsAdapter walk; the sibling adapter's failure set is not bounded (parse, resolution, pool), and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
+    except Exception as exc:  # boundary-ok: broad-except -- required import-service boundary; analyzer, resolution and pool failures are not a bounded exception set, and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
         if observations is not None:
             observations['failed'] = True
         adapter.record_composed_error('ImportsAdapter', path, exc)
@@ -441,11 +441,8 @@ def _relativize_architecture_paths(report: Dict[str, Any], base_path: Path) -> N
     absolute host paths (analyst's filesystem layout/username), same gap as
     overview.py's `_relativize_paths` (BACK-1194 follow-up). BACK-1212.
 
-    `facts.*` comes straight from ImportsAdapter's raw (unrelativized)
-    `_format_fan_in`/`_format_entrypoints`/`_format_components`/
-    `_format_circular` via `_format_imports_data()` -- imports.py's own
-    get_structure() relativizes those (BACK-1212), but architecture.py calls
-    the adapter methods directly, bypassing that. See `_relativize_risks()`
+    `facts.*` uses ImportView's raw domain rows through `_format_imports_data()`;
+    this report owns their display-path conversion. See `_relativize_risks()`
     for the separate `risks[]` fix (must run earlier, before
     `_build_next_commands()`). Mutates in place.
     """

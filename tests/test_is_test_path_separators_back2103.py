@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from reveal.adapters.imports import ImportsAdapter
+from reveal.analyzers.imports.views import ImportView
 from reveal.rules.maintainability.M102 import M102
 from reveal.utils.entry_points import is_active_entry_point
 from reveal.utils.path_utils import is_test_path
@@ -23,7 +23,7 @@ SOURCE_SPELLINGS = ['src\\a.py', 'C:\\proj\\src\\a.py', 'src\\latest.py']
 
 
 def _imports_view(path: str) -> bool:
-    """What ``ImportsAdapter._format_entrypoints`` records as ``is_test`` for *path*."""
+    """What ``ImportView.entrypoints`` records as ``is_test`` for *path*."""
     file = Path(path)
     graph = SimpleNamespace(reverse_deps={}, dependencies={}, files={file: None})
     adapter = SimpleNamespace(
@@ -33,7 +33,7 @@ def _imports_view(path: str) -> bool:
         _edge_rule=lambda *args, **kwargs: {},
         _build_response=lambda response_type, **fields: fields,
     )
-    (entry,) = ImportsAdapter._format_entrypoints(adapter)['entries']
+    (entry,) = ImportView.entrypoints(adapter)['entries']
     return entry['is_test']
 
 

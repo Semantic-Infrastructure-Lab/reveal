@@ -10,6 +10,9 @@ import zipfile
 
 import pytest
 
+from reveal.analyzers.imports import service as import_service
+from reveal.adapters.ast import analysis as ast_analysis
+
 from reveal.adapters import help as help_mod
 from reveal.adapters.help import HelpAdapter
 from reveal.adapters.imports import ImportsAdapter, _extract_one_file
@@ -185,7 +188,7 @@ def _pack_dir(tmp_path):
 def test_pack_failed_graph_is_disclosed(tmp_path, monkeypatch, query):
     """--architecture / --focus ask for the import graph; when building it fails the
     pack says so instead of ranking as if the signal were zero."""
-    monkeypatch.setattr(ImportsAdapter, '_build_graph', _raise_bug)
+    monkeypatch.setattr(import_service, 'analyze', _raise_bug)
     adapter = PackAdapter(str(_pack_dir(tmp_path)), query)
     result = adapter.get_structure()
     warning = result['meta'].get('relevance_warning') or ''
@@ -195,7 +198,7 @@ def test_pack_failed_graph_is_disclosed(tmp_path, monkeypatch, query):
 
 def test_pack_failed_graph_still_returns_a_pack(tmp_path, monkeypatch):
     """Control: the failure does not end the pack (the signal is additive)."""
-    monkeypatch.setattr(ImportsAdapter, '_build_graph', _raise_bug)
+    monkeypatch.setattr(import_service, 'analyze', _raise_bug)
     result = PackAdapter(str(_pack_dir(tmp_path)), 'architecture=true').get_structure()
     assert result['meta']['selected'] == 2
 
@@ -215,7 +218,7 @@ def test_imports_structure_bug_propagates(tmp_path, monkeypatch):
     f.write_text('def f():\n    return 1\n', encoding='utf-8')
     monkeypatch.setattr('reveal.adapters.ast.analysis.analyze_file_outcome', _raise_bug)
     with pytest.raises(_InjectedBug):
-        _extract_one_file(str(f), True)
+        _extract_one_file(str(f), ast_analysis.analyze_file_outcome)
 
 
 def test_imports_structure_none_is_still_none(tmp_path, monkeypatch):
@@ -225,14 +228,14 @@ def test_imports_structure_none_is_still_none(tmp_path, monkeypatch):
     f.write_text('def f():\n    return 1\n', encoding='utf-8')
     monkeypatch.setattr('reveal.adapters.ast.analysis.analyze_file_outcome',
                         lambda _p: (None, 'ValueError: x'))
-    row = _extract_one_file(str(f), True)
+    row = _extract_one_file(str(f), ast_analysis.analyze_file_outcome)
     assert row[3] is None and row[5] == 'ValueError: x'
 
 
 def test_imports_structure_collected_for_a_real_file(tmp_path):
     f = tmp_path / 'a.py'
     f.write_text('def f():\n    return 1\n', encoding='utf-8')
-    structure = _extract_one_file(str(f), True)[3]
+    structure = _extract_one_file(str(f), ast_analysis.analyze_file_outcome)[3]
     assert structure and structure['elements']
 
 
