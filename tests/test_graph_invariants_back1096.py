@@ -118,6 +118,107 @@ def test_importers_resolved_red_when_an_importer_list_overstates_out_degree(root
     assert {'file': 'pkg/a.py', 'importer_list_out_degree': 1, 'rank_fan_out': 0} in row['examples']
 
 
+@pytest.fixture(params=['css', 'json'])
+def outside_project(tmp_path, request):
+    """One retained outside fact beside one genuine counted edge (BACK-2340)."""
+    proj = tmp_path / 'proj'
+    (proj / 'src').mkdir(parents=True)
+    (proj / 'package.json').write_text('{"name": "p"}\n', encoding='utf-8')
+    if request.param == 'css':
+        (proj / 'assets').mkdir()
+        (proj / 'assets' / 'x.css').write_text('a {}\n', encoding='utf-8')
+        outside = "import '../assets/x.css';\n"
+    else:
+        outside = "import pkg from '../package.json';\n"
+    (proj / 'src' / 'a.ts').write_text(outside + "import { b } from './b';\n", encoding='utf-8')
+    (proj / 'src' / 'b.ts').write_text('export const b = 1;\n', encoding='utf-8')
+    return proj
+
+
+@pytest.mark.parametrize('scan', ['proj/src', 'proj'])
+def test_pinned_runner_distinguishes_all_facts_from_counted_edges(outside_project, scan):
+    root = outside_project.parent
+    rows = inv.run_imports(InProcessRequests({}, root, 60), scan, root / scan,
+                           ('importers_resolved',), 3)
+    row, = rows
+    assert row['status'] == 'green', row
+    assert row['resolved_statements'] == row['resolved_edges'] == 2
+    outside = int(scan == 'proj/src')
+    assert row['counted_resolved_edges'] == row['population'] == 2 - outside
+    assert row['outside_root_resolved_edges'] == outside
+
+
+def _outside_views(proj, form='uri', scope='root'):
+    path = 'proj/src'
+    views = {}
+    for view, query, flags in [('default', '', []), ('importers', 'importers&', ['--importers']),
+                               ('fan_in', 'rank=fan-in&', ['--rank', 'fan-in'])]:
+        control = f'root={path}' if scope == 'root' else 'scope=path'
+        argv = ([f'imports://{path}?{query}{control}'] if form == 'uri' else
+                ['imports', path, *flags, f'--{scope}', path if scope == 'root' else 'path'])
+        result = _run_reveal_in(proj.parent, *argv, '--format', 'json')
+        assert result.returncode == 0, (argv, result.stderr)
+        views[view] = json.loads(result.stdout)
+    return views
+
+
+@pytest.mark.parametrize('form', ['uri', 'command'])
+@pytest.mark.parametrize('scope', ['root', 'scope'])
+def test_scoped_public_answers_keep_outside_facts_and_detect_inside_loss(outside_project, form, scope):
+    views = _outside_views(outside_project, form, scope)
+    facts, statements = inv.resolved_edges(views['default'])
+    assert statements == len(facts) == 2
+    assert ('a.ts', 'b.ts') in facts
+    assert any(target.startswith('../') for _, target in facts)
+    row = inv.check_importers_resolved(views['importers'], views['default'], views['fan_in'],
+                                      scan_dir=outside_project / 'src')
+    assert row['status'] == 'green', row
+    _entry(views['importers'], 'b.ts')['importers'].remove('a.ts')
+    row = inv.check_importers_resolved(views['importers'], views['default'], views['fan_in'],
+                                      scan_dir=outside_project / 'src')
+    assert row['status'] == 'red'
+    assert {'resolved_not_an_importer': ['a.ts', 'b.ts']} in row['examples']
+    assert any('importer_list_out_degree' in e for e in row['examples'])
+
+
+@pytest.mark.parametrize('field,value', [('outside_root_edges', None), ('outside_root_edges', 0),
+                                        ('outside_root_edges', -1), ('outside_root_edges', True),
+                                        ('outside_root_edges', 2), ('root', '..'),
+                                        ('root_source', 'inferred')])
+def test_scoped_checker_rejects_missing_or_wrong_disclosure(outside_project, field, value):
+    views = _outside_views(outside_project)
+    if value is None:
+        views['importers']['edge_rule'].pop(field)
+    else:
+        views['importers']['edge_rule'][field] = value
+    row = inv.check_importers_resolved(views['importers'], views['default'], views['fan_in'],
+                                      scan_dir=outside_project / 'src')
+    assert row['status'] == 'red', row
+    assert any('counted_scope' in e or 'outside_root_disclosure' in e for e in row['examples'])
+
+
+def test_scoped_checker_normalizes_lexically_without_following_target_symlinks(tmp_path):
+    scan = tmp_path / 'src'
+    scan.mkdir()
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    try:
+        (scan / 'link').symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip('directory symlinks are unavailable')
+    rule = {'root': '.', 'root_source': 'root_param', 'scope_param': 'root', 'outside_root_edges': 0}
+    # The product containment rule is lexical on canonical graph paths, not a second
+    # filesystem resolution of displayed target names. Both facts must remain required.
+    default = {'files': {'a.ts': [{'resolved': 'link/b.ts'}, {'resolved': '../src/c.ts'}]}, 'edge_rule': rule}
+    reverse = {'entries': [], 'edge_rule': rule}
+    rank = {'entries': [{'file': 'a.ts', 'fan_out': 2}], 'edge_rule': rule}
+    row = inv.check_importers_resolved(reverse, default, rank, scan_dir=scan)
+    assert row['counted_resolved_edges'] == 2
+    assert row['outside_root_resolved_edges'] == 0
+    assert {'resolved_not_an_importer': ['a.ts', 'link/b.ts']} in row['examples']
+    assert {'resolved_not_an_importer': ['a.ts', '../src/c.ts']} in row['examples']
+
+
 def test_type_checking_import_is_no_edge_in_either_view(root):
     """Negative control: the TYPE_CHECKING `from pkg import c` (b.py line 7) shows unresolved and
     adds no edge, so the two views agree without it."""
