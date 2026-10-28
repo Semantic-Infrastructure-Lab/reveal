@@ -61,6 +61,13 @@ jobs:
           pip install -e ".[dev]"
           pip install build  # Required for packaging manifest tests
 
+      # Exercise the installed wheel without [dev], outside the source checkout.
+      # All supported Python versions on Linux/macOS/Windows; Windows shard 2 and
+      # the duplicate Ubuntu leg do not repeat the build/install (BACK-2321).
+      - name: Default-install README smoke (built wheel, no extras)
+        if: matrix.os != 'ubuntu-26.04' && matrix.shard != '2/2'
+        run: python scripts/default_install_smoke.py
+
       - name: Run tests
         env:
           PYTHONIOENCODING: utf-8

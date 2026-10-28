@@ -9,7 +9,9 @@ from scripts.default_install_smoke import (
     SmokeFailure,
     clean_environment,
     create_fixture,
+    readme_commands,
     validate_overview,
+    validate_queries,
 )
 
 pytestmark = pytest.mark.component
@@ -57,6 +59,39 @@ def test_environment_removes_source_and_user_configuration(monkeypatch, tmp_path
     assert env['PYTHONNOUSERSITE'] == '1'
     assert env['REVEAL_DISK_CACHE'] == '0'
     assert env['XDG_CONFIG_HOME'] == str(tmp_path / 'config')
+
+
+def test_readme_commands_preserve_quoted_uri_and_drop_comments(tmp_path):
+    readme = tmp_path / 'README.md'
+    readme.write_text('# Example\n```bash\nreveal \'ast://src/?complexity>10\' # a question\n'
+                      'reveal check src/\n```\n', encoding='utf-8')
+    assert readme_commands(readme) == [('ast://src/?complexity>10',), ('check', 'src/')]
+
+
+def test_readme_with_no_examples_is_not_a_passing_empty_smoke(tmp_path):
+    readme = tmp_path / 'README.md'
+    readme.write_text('# No examples\n', encoding='utf-8')
+    with pytest.raises(SmokeFailure, match='no first-screen'):
+        readme_commands(readme)
+
+
+@pytest.mark.parametrize('wrong', [None, 'calls', 'ast'])
+def test_queries_require_the_expected_answers(wrong):
+    calls = {'total_callers': 1, 'levels': [{'callers': [
+        {'file': 'src/login.py', 'caller': 'run_login'},
+    ]}]}
+    ast = {'total_results': 1, 'results': [
+        {'file': 'src/complexity.py', 'name': 'classify', 'complexity': 11},
+    ]}
+    if wrong == 'calls':
+        calls['levels'][0]['callers'] = []
+    if wrong == 'ast':
+        ast['results'][0]['complexity'] = 1
+    if wrong:
+        with pytest.raises(SmokeFailure, match=wrong):
+            validate_queries(calls, ast)
+    else:
+        validate_queries(calls, ast)
 
 
 def test_fixture_has_real_callers_complexity_and_changes_since_main(tmp_path):
