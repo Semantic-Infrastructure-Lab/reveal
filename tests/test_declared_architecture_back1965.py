@@ -298,13 +298,15 @@ def test_fields_projection_retains_preanalysis_facts(project, incomplete):
 ])
 @pytest.mark.parametrize('phase', ['analysis', 'postprocess'])
 @pytest.mark.parametrize('field', ['errors', 'warnings'])
-@pytest.mark.parametrize('bad', [None, 7, ['unusable'], [{'code': 'retained', 'message': 'valid diagnostic'}, 'unusable']])
+@pytest.mark.parametrize('bad', [None, 7, ['unusable'], [{'type': 'retained', 'code': 'retained', 'message': 'valid diagnostic'}, 'unusable']])
 def test_malformed_trust_frame_is_canonical_failure(project, monkeypatch, name, identity, phase, field, bad):
     from reveal.adapters.surface import SurfaceAdapter
     from reveal.utils.results import ResultBuilder
     owner = ArchitectureAdapter if name == 'architecture' else SurfaceAdapter
-    result = ResultBuilder.create(identity, 'proj', meta={field: bad},
+    result = ResultBuilder.create(identity, 'proj',
                                   data={'analysis': {'complete': True}} if identity == 'architecture_diff' else {})
+    # Simulate a malformed plugin answer after construction, not a builder rejection.
+    result['meta'] = {field: bad}
     if phase == 'analysis':
         monkeypatch.setattr(owner, 'get_structure', lambda self, **kwargs: result)
     else:
@@ -365,14 +367,15 @@ def test_malformed_consumed_warning_type_is_required_failure(project, monkeypatc
     assert 'Traceback' not in result.stderr
     if format == 'json':
         payload = json.loads(result.stdout)
-        assert any(w.get('message') == 'retain malformed diagnostic detail' for w in payload['meta']['warnings'])
+        assert any('retain malformed diagnostic detail' in e.get('message', '') for e in payload['meta']['errors'])
+        assert all(isinstance(w.get('type'), str) and w['type'] for w in payload['meta']['warnings'])
         assert any(e.get('code') == 'invalid_adapter_answer' for e in payload['meta']['errors'])
 
 
 @pytest.mark.parametrize('name', ['architecture', 'surface'])
 @pytest.mark.parametrize('warning', [{'type': 'unknown_custom_warning', 'message': 'valid detail'},
                                    {'code': 'custom_code', 'message': 'valid detail'}])
-def test_unknown_string_warning_and_absent_type_remain_valid(project, monkeypatch, name, warning):
+def test_unknown_string_warning_is_valid_but_absent_type_is_failure(project, monkeypatch, name, warning):
     from reveal.adapters.surface import SurfaceAdapter
     owner = ArchitectureAdapter if name == 'architecture' else SurfaceAdapter
     original = owner.get_structure
@@ -382,8 +385,13 @@ def test_unknown_string_warning_and_absent_type_remain_valid(project, monkeypatc
         return result
     monkeypatch.setattr(owner, 'get_structure', answer)
     result = run(name + '://proj', '--format', 'json')
-    assert result.returncode == 0
-    assert warning in json.loads(result.stdout)['meta']['warnings']
+    assert result.returncode == (0 if 'type' in warning else 3)
+    payload = json.loads(result.stdout)
+    if 'type' in warning:
+        assert warning in payload['meta']['warnings']
+    else:
+        assert warning not in payload['meta']['warnings']
+        assert any('valid detail' in e.get('message', '') for e in payload['meta']['errors'])
 
 
 @pytest.mark.parametrize('name,identity', [

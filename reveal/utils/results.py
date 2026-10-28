@@ -46,7 +46,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal, Union
 
-from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, RevealResult, WarningEntry
+from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealMeta, RevealResult, WarningEntry
 
 
 _CONTRACT_FIELDS: frozenset = frozenset(
@@ -354,12 +354,38 @@ def echo_source(result: Any, spelling: Union[str, Path, None]) -> None:
         result['source'] = as_spelled(source, spelling)
 
 
+def valid_warning_entry(entry: Any) -> bool:
+    """Warnings name their kind; code and other descriptive fields stay optional."""
+    return isinstance(entry, dict) and isinstance(entry.get('type'), str) and bool(entry['type'])
+
+
+def valid_error_entry(entry: Any) -> bool:
+    """Preserve errors' existing contract without requiring a warning kind."""
+    return isinstance(entry, dict) and ('type' not in entry or isinstance(entry['type'], str))
+
+
+def _validate_diagnostic_entries(entries: Any, kind: str) -> None:
+    valid = valid_warning_entry if kind == 'warnings' else valid_error_entry
+    if not isinstance(entries, list) or not all(valid(entry) for entry in entries):
+        requirement = 'a nonempty string type' if kind == 'warnings' else 'an optional string type'
+        raise ValueError(f'{kind} must be a list of diagnostic dicts with {requirement}')
+
+
+def _validate_meta_diagnostics(meta: Dict[str, Any], *, optional: bool = False) -> None:
+    for kind in ('warnings', 'errors'):
+        if kind in meta and not (optional and meta[kind] is None):
+            _validate_diagnostic_entries(meta[kind], kind)
+
+
 def note_warning(result: Any, entry: Optional[Dict[str, Any]]) -> None:
     """Add ``entry`` to ``result``'s ``meta.warnings``; None adds nothing, a repeat of the
     same ``type``, ``code`` and ``field`` adds nothing."""
-    if not entry or not isinstance(result, dict):
+    if entry is None or not isinstance(result, dict):
         return
+    _validate_diagnostic_entries([entry], 'warnings')
     meta = result.get('meta')
+    if isinstance(meta, dict) and 'warnings' in meta:
+        _validate_diagnostic_entries(meta['warnings'], 'warnings')
     if not isinstance(meta, dict):
         meta = result['meta'] = {}
     if not isinstance(meta.get('warnings'), list):
@@ -405,7 +431,7 @@ class ResultBuilder:
         parse_mode: Optional[str] = None,
         confidence: Optional[float] = None,
         warnings: Optional[List[WarningEntry]] = None,
-        errors: Optional[List[WarningEntry]] = None,
+        errors: Optional[List[ErrorEntry]] = None,
         scope: Optional[Dict[str, Any]] = None,
         meta: Optional[Dict[str, Any]] = None,
         **extra_fields
@@ -449,6 +475,7 @@ class ResultBuilder:
         """
         if data and _CONTRACT_FIELDS & data.keys():
             raise ValueError(f'data collides with contract fields: {sorted(_CONTRACT_FIELDS & data.keys())}')
+        _validate_meta_diagnostics({'warnings': warnings, 'errors': errors}, optional=True)
         # Supplying trust metadata opts into the contract that can carry it.
         if contract_version == '1.0' and any([parse_mode, confidence is not None, warnings, errors]):
             contract_version = CONTRACT_VERSION
@@ -475,6 +502,7 @@ class ResultBuilder:
         if meta is not None:
             if any([parse_mode, confidence is not None, warnings, errors]):
                 raise ValueError('meta cannot be combined with trust metadata arguments')
+            _validate_meta_diagnostics(meta)
             result['meta'] = dict(meta)
 
         # Add v1.1 meta if metadata provided
@@ -558,7 +586,7 @@ class ResultBuilder:
         parse_mode: Optional[str] = None,
         confidence: Optional[float] = None,
         warnings: Optional[List[WarningEntry]] = None,
-        errors: Optional[List[WarningEntry]] = None
+        errors: Optional[List[ErrorEntry]] = None
     ) -> RevealMeta:
         """Create Output Contract v1.1 meta dict with trust metadata.
 
@@ -579,7 +607,7 @@ class ResultBuilder:
                 - 0.50-0.79 = Partial results
                 - < 0.50 = Low confidence
             warnings: Non-fatal issues
-                [{'code': 'W001', 'message': '...', 'file': '...'}]
+                [{'type': 'parse_warning', 'code': 'W001', 'message': '...', 'file': '...'}]
             errors: Fatal errors with fallback info
                 [{'code': 'E002', 'message': '...', 'file': '...', 'fallback': '...'}]
 
@@ -587,6 +615,7 @@ class ResultBuilder:
             Meta dict for Output Contract v1.1
         """
         meta: Dict[str, Any] = {}
+        _validate_meta_diagnostics({'warnings': warnings, 'errors': errors}, optional=True)
 
         if parse_mode is not None:
             meta['parse_mode'] = parse_mode
@@ -643,7 +672,7 @@ def create_meta(
     parse_mode: Optional[str] = None,
     confidence: Optional[float] = None,
     warnings: Optional[List[WarningEntry]] = None,
-    errors: Optional[List[WarningEntry]] = None
+    errors: Optional[List[ErrorEntry]] = None
 ) -> RevealMeta:
     """Convenience function for ResultBuilder.create_meta().
 

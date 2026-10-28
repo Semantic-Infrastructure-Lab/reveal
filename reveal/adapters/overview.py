@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, cast
 
 from reveal.capabilities import scope_dict_for_path
 from reveal.errors import NotApplicableError
-from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, WarningEntry
+from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealMeta, WarningEntry
 
 from .ast import AstAdapter
 from .base import ResourceAdapter, register_adapter, register_renderer
@@ -279,7 +279,7 @@ def _capture_import_observations(fan_in, entrypoints, components, cycles,
         observations['usable'] = True
 
 
-def _directory_loss_error(meta, observations) -> Optional[WarningEntry]:
+def _directory_loss_error(meta, observations) -> Optional[ErrorEntry]:
     if not any(w.get('type') == 'analysis_incomplete' for w in (meta or {}).get('warnings', [])):
         return None
     if observations.get('failed') or not observations.get('usable'):

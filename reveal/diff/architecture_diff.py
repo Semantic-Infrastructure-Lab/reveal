@@ -58,7 +58,7 @@ from ..defaults import (
     AMBIGUOUS_SKIP_DIRECTORIES, SKIP_DIRECTORIES, VENV_DIR_NAMES, VENV_MARKERS,
 )
 
-from ..reveal_types import RevealMeta, WarningEntry
+from ..reveal_types import ErrorEntry, RevealMeta, WarningEntry
 from ..utils.entry_points import active_entry_points
 
 logger = logging.getLogger(__name__)
@@ -661,7 +661,7 @@ def _comparison_report(path: Path, base_ref: str, head_ref: str, deltas: Optiona
     return cast(Dict[str, Any], ResultBuilder.create(
         result_type='architecture_diff', source=shown, data=data, contract_version=CONTRACT_VERSION,
         warnings=cast(List[WarningEntry], [entry for kind, entry in diagnostics if kind == 'warnings']) or None,
-        errors=cast(List[WarningEntry], [entry for kind, entry in diagnostics if kind == 'errors']) or None,
+        errors=cast(List[ErrorEntry], [entry for kind, entry in diagnostics if kind == 'errors']) or None,
         confidence=confidence,
     ))
 

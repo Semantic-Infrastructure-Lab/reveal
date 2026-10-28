@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from reveal.capabilities import scope_dict_for_path
-from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, WarningEntry
+from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealMeta, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.imports import service as import_analysis
@@ -93,7 +93,7 @@ def _valid_cycles(cycles: Any) -> bool:
             and all(isinstance(path, str) and bool(path) for path in cycle) for cycle in cycles))
 
 
-def _directory_loss_error(meta, observations) -> Optional[WarningEntry]:
+def _directory_loss_error(meta, observations) -> Optional[ErrorEntry]:
     if not any(w.get('type') == 'analysis_incomplete' for w in (meta or {}).get('warnings', [])):
         return None
     if observations.get('failed') or not observations.get('usable'):

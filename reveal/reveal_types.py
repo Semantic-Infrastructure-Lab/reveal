@@ -24,11 +24,8 @@ from typing import Any, Dict, List, NamedTuple, Optional, TypedDict
 CONTRACT_VERSION = '1.1'
 
 
-class WarningEntry(TypedDict, total=False):
+class _DiagnosticFields(TypedDict, total=False):
     code: str
-    # ast://, hotspots, stats, and the Kotlin/OpenXML analyzers key the warning's
-    # kind as 'type' rather than 'code' (e.g. 'unknown_sort_field'); both occur.
-    type: str
     message: str
     file: str
     fallback: str
@@ -51,11 +48,21 @@ class WarningEntry(TypedDict, total=False):
     rule: str
 
 
+class WarningEntry(_DiagnosticFields):
+    """A warning always names its kind; a catalog code is optional."""
+    type: str
+
+
+class ErrorEntry(_DiagnosticFields, total=False):
+    """Error diagnostics retain their separate, optionally typed contract."""
+    type: str
+
+
 class RevealMeta(TypedDict, total=False):
     parse_mode: str
     confidence: float
     warnings: List[WarningEntry]
-    errors: List[WarningEntry]
+    errors: List[ErrorEntry]
     # What stats://, overview and hotspots count as issues: the counting rule, the rule set
     # (count, id, codes) and any plugin rule left out for declaring no scope (BACK-1884).
     issue_count: Dict[str, Any]

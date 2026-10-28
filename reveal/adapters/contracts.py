@@ -10,7 +10,7 @@ from pathlib import Path
 from functools import partial
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
-from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
+from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .surface import _supported_coverage_languages, _unparsed_note
@@ -1082,7 +1082,7 @@ class ContractsAdapter(ResourceAdapter):
         if recovered:
             warnings.append({'type': 'parse_recovered', 'count': len(recovered), 'files': recovered,
                              'message': f"{len(recovered)} file(s) contain recovered syntax; their contracts may be incomplete: {', '.join(recovered)}"})
-        errors: List[WarningEntry] = [
+        errors: List[ErrorEntry] = [
             {'code': 'E_CONTRACTS_ANALYSIS', 'file': file, 'message': cause}
             for file, cause in skipped]
 

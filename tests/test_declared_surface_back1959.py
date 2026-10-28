@@ -305,7 +305,7 @@ def test_informational_warning_is_not_incomplete(project, monkeypatch):
     original = SurfaceAdapter.get_structure
     def warned(self, **kwargs):
         answer = original(self, **kwargs)
-        answer['meta']['warnings'].append({'code': 'fixture_note', 'message': 'informational fixture note'})
+        answer['meta']['warnings'].append({'type': 'fixture_note', 'code': 'fixture_note', 'message': 'informational fixture note'})
         return answer
     monkeypatch.setattr(SurfaceAdapter, 'get_structure', warned)
     result = run('surface', 'proj', '--no-gitignore')

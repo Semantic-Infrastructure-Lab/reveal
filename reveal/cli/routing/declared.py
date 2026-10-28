@@ -355,10 +355,20 @@ def _repair_declared_answer(result, path, expected_type, requirement_error):
 
 def _repair_answer_meta(meta, error):
     """Keep usable diagnostics when repairing a malformed required envelope."""
+    from reprlib import Repr
+    from ...utils.results import valid_warning_entry
     meta = dict(meta) if isinstance(meta, dict) else {'warnings': []}
     meta['errors'] = [*_diagnostic_dicts(meta.get('errors')),
                       {'code': 'invalid_adapter_answer', 'message': error}]
-    meta['warnings'] = _diagnostic_dicts(meta.get('warnings'))
+    warnings = meta.get('warnings', [])
+    invalid = [entry for entry in warnings if not valid_warning_entry(entry)] if isinstance(warnings, list) else warnings
+    if not isinstance(warnings, list) or invalid:
+        bounded_repr = Repr()
+        bounded_repr.maxstring = 160
+        detail = bounded_repr.repr(invalid)[:1000]
+        meta['errors'].append({'code': 'invalid_adapter_warning',
+                               'message': f'Invalid warning diagnostic: {detail}'})
+    meta['warnings'] = [entry for entry in warnings if valid_warning_entry(entry)] if isinstance(warnings, list) else []
     return meta
 
 
@@ -376,12 +386,9 @@ def _diagnostic_dicts(entries):
 
 
 def _valid_answer_meta(meta):
+    from ...utils.results import valid_error_entry, valid_warning_entry
     if not isinstance(meta, dict):
         return False
     return all(key not in meta or (isinstance(meta[key], list)
-                                  and all(_valid_diagnostic(entry) for entry in meta[key]))
-               for key in ('errors', 'warnings'))
-
-
-def _valid_diagnostic(entry):
-    return isinstance(entry, dict) and ('type' not in entry or isinstance(entry['type'], str))
+                                  and all(valid(entry) for entry in meta[key]))
+               for key, valid in (('errors', valid_error_entry), ('warnings', valid_warning_entry)))

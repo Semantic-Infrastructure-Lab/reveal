@@ -9,7 +9,7 @@ from io import StringIO
 import json
 import logging
 
-from reveal.reveal_types import WarningEntry
+from reveal.reveal_types import ErrorEntry, WarningEntry
 
 
 def builder_violations():
@@ -22,12 +22,13 @@ def builder_violations():
         except ValueError:
             continue
         failures.append(f'ResultBuilder permits data to overwrite {field}')
-    warning: WarningEntry = {'code': 'W_PROBE', 'message': 'recorded builder warning'}
+    warning: WarningEntry = {'type': 'probe_warning', 'code': 'W_PROBE', 'message': 'recorded builder warning'}
     result = ResultBuilder.create('probe', 'probe', warnings=[warning])
     if warning not in result.get('meta', {}).get('warnings', []):
         failures.append('ResultBuilder silently loses supplied warnings')
-    result = ResultBuilder.create('probe', 'probe', errors=[warning], confidence=0.0, parse_mode='regex')
-    for key, value in (('errors', [warning]), ('confidence', 0.0), ('parse_mode', 'regex')):
+    error: ErrorEntry = {'code': 'E_PROBE', 'message': 'recorded builder error'}
+    result = ResultBuilder.create('probe', 'probe', errors=[error], confidence=0.0, parse_mode='regex')
+    for key, value in (('errors', [error]), ('confidence', 0.0), ('parse_mode', 'regex')):
         if result.get('meta', {}).get(key) != value:
             failures.append(f'ResultBuilder silently loses supplied {key}')
     return failures
@@ -114,7 +115,7 @@ def renderer_violations(renderer=None):
         raise RuntimeError('Registered stats renderer unavailable for recorded fixture')
     result = ResultBuilder.create('stats_file', 'probe', data={'file': 'probe'},
         contract_version=CONTRACT_VERSION,
-        warnings=[{'code': 'W_PROBE', 'message': 'recorded renderer warning'}],
+        warnings=[{'type': 'probe_warning', 'code': 'W_PROBE', 'message': 'recorded renderer warning'}],
         errors=[{'code': 'E_PROBE', 'message': 'recorded partial error'}])
     note_truncation(result, 'files', 1, 2, '--all')
     failures = []

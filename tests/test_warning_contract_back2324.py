@@ -106,6 +106,15 @@ def test_none_writer_entry_remains_an_explicit_noop():
     assert answer == {}
 
 
+@pytest.mark.parametrize('existing', [None, {}, 'bad', [{'message': 'existing untyped warning'}]])
+def test_writer_cannot_silently_replace_invalid_existing_warnings(existing):
+    answer = {'meta': {'warnings': existing}}
+    before = copy.deepcopy(answer)
+    with pytest.raises(ValueError, match='warning'):
+        note_warning(answer, {'type': 'valid'})
+    assert answer == before
+
+
 @pytest.mark.parametrize('errors', [[None], [{'type': []}], 'not a list'])
 def test_error_diagnostic_shape_is_validated_separately(errors):
     with pytest.raises(ValueError, match='error'):

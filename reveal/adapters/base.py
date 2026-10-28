@@ -17,7 +17,7 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Callable, Dict, Any, Iterable, Optional, List, Tuple
 
-from reveal.reveal_types import RevealMeta, RevealResult, WarningEntry
+from reveal.reveal_types import ErrorEntry, RevealMeta, RevealResult, WarningEntry
 
 # Re-exported for backward compatibility — existing importers need not change.
 from .factory import (  # noqa: F401
@@ -258,7 +258,7 @@ class ResourceAdapter(ABC):
         parse_mode: Optional[str] = None,
         confidence: Optional[float] = None,
         warnings: Optional[List[WarningEntry]] = None,
-        errors: Optional[List[WarningEntry]] = None
+        errors: Optional[List[ErrorEntry]] = None
     ) -> RevealMeta:
         """Create Output Contract v1.1 meta dict with trust metadata.
 

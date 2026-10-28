@@ -22,7 +22,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from reveal.reveal_types import CONTRACT_VERSION, RevealResult, WarningEntry
+from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealResult, WarningEntry
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .confidence import build_meta as _call_graph_meta
@@ -839,7 +839,7 @@ class CallsAdapter(ResourceAdapter):
         composed = self.composed_meta()
         warnings: List[WarningEntry] = [*(composed.get('warnings', []) if composed else []),
                                         *_import_file_warnings(child, Path(directory))]
-        errors: List[WarningEntry] = list(composed.get('errors', [])) if composed else []
+        errors: List[ErrorEntry] = list(composed.get('errors', [])) if composed else []
         lost = bool(errors) or any(w.get('type') in _LOSS_WARNINGS for w in warnings)
         return ResultBuilder.create(
             result_type='calls_module_graph',

@@ -96,7 +96,7 @@ class TestResultBuilderCreate:
         test_file.write_text("invalid syntax here")
 
         warnings = [
-            {'code': 'W001', 'message': 'Deprecated syntax', 'line': 10}
+            {'type': 'parse_warning', 'code': 'W001', 'message': 'Deprecated syntax', 'line': 10}
         ]
         errors = [
             {'code': 'E002', 'message': 'Parse failed', 'fallback': 'regex'}
@@ -300,8 +300,8 @@ class TestResultBuilderCreateMeta:
     def test_warnings_list(self):
         """Include warnings list."""
         warnings = [
-            {'code': 'W001', 'message': 'Deprecated'},
-            {'code': 'W002', 'message': 'Unused import'}
+            {'type': 'parse_warning', 'code': 'W001', 'message': 'Deprecated'},
+            {'type': 'parse_warning', 'code': 'W002', 'message': 'Unused import'}
         ]
         meta = ResultBuilder._create_meta(warnings=warnings)
 
@@ -320,7 +320,7 @@ class TestResultBuilderCreateMeta:
 
     def test_full_meta(self):
         """Create meta with all fields."""
-        warnings = [{'code': 'W001', 'message': 'Warning'}]
+        warnings = [{'type': 'parse_warning', 'code': 'W001', 'message': 'Warning'}]
         errors = [{'code': 'E001', 'message': 'Error'}]
 
         meta = ResultBuilder._create_meta(
