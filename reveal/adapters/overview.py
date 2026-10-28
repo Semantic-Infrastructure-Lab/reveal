@@ -820,6 +820,10 @@ class OverviewAdapter(ResourceAdapter):
         }
 
     def get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
+        with self.composition_run():
+            return self._get_structure(all=all, verbose=verbose, **kwargs)
+
+    def _get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
         path = Path(self.path)
         top_spec, no_git_spec, no_imports_spec, tests_spec = self.PARAM_SPECS
         requested_top = top_spec.read(self.query_params)

@@ -627,6 +627,10 @@ class TraceAdapter(ResourceAdapter):
         }
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+        with self.composition_run():
+            return self._get_structure(**kwargs)
+
+    def _get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         root = self.PARAM_SPECS[0].read(self.query_params)
         depth = self.PARAM_SPECS[1].read(self.query_params)
 

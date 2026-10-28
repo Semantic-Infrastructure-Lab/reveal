@@ -428,20 +428,18 @@ class DepsAdapter(ResourceAdapter):
         }
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
-        self._clear_request_evidence()
-        try:
-            return self._get_structure()
-        finally:
-            # A request that fails before construction must not contaminate reuse.
+        with self.composition_run():
             self._clear_request_evidence()
+            try:
+                return self._get_structure()
+            finally:
+                # A request that fails before construction must not contaminate reuse.
+                self._clear_request_evidence()
 
     def _clear_request_evidence(self) -> None:
         self._imports: Optional[ImportsAdapter] = None  # the request's one import graph (BACK-1054)
         self._deps_components: Dict[str, Dict[str, Any]] = {}
         self._deps_findings: Dict[str, Optional[int]] = {}
-        self._composed_errors = []
-        self._composed_warnings = []
-        self._composed_confidences = []
 
     def _qualify_directory_loss(self, base, circular, unused) -> None:
         """An inaccessible population cannot establish absence of dependencies."""

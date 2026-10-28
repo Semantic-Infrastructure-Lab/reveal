@@ -749,6 +749,10 @@ class CallsAdapter(ResourceAdapter):
               f"not ?{mode} — ignored.", file=sys.stderr)
 
     def get_structure(self, **kwargs) -> RevealResult:
+        with self.composition_run():
+            return self._get_structure(**kwargs)
+
+    def _get_structure(self, **kwargs) -> RevealResult:
         self.validate_request(self.query_params)
         params = self.query_params
         # Every mode key is read here, whichever mode answers: the flag ledger counts each as applied.

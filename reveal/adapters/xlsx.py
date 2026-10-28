@@ -755,6 +755,10 @@ class XlsxAdapter(ResourceAdapter):
         Returns:
             Dict containing workbook overview or sheet data
         """
+        with self.composition_run():
+            return self._get_structure(**kwargs)
+
+    def _get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         if not self.analyzer:
             raise ValueError("No file loaded")
 

@@ -674,6 +674,10 @@ class ArchitectureAdapter(ResourceAdapter):
         }
 
     def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
+        with self.composition_run():
+            return self._get_structure(verbose=verbose, **kwargs)
+
+    def _get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
         from argparse import Namespace
         self.validate_request(self.query_params, Namespace(verbose=verbose))
         path = Path(self.path)

@@ -449,6 +449,10 @@ class HotspotsAdapter(ResourceAdapter):
         }
 
     def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
+        with self.composition_run():
+            return self._get_structure(verbose=verbose, **kwargs)
+
+    def _get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
         path = Path(self.path)
         top = _ranking_top(self.query_params, verbose)
         min_cx = _MIN_COMPLEXITY.read(self.query_params)
@@ -457,9 +461,6 @@ class HotspotsAdapter(ResourceAdapter):
 
         self.stats_summary = {}
         self._file_findings = False
-        self._composed_errors = []
-        self._composed_warnings = []
-        self._composed_confidences = []
         file_hotspots: List[Dict[str, Any]] = [] if functions_only else _run_file_hotspots(self, path, top)
         fn_hotspots: List[Dict[str, Any]] = [] if files_only else _run_function_hotspots(self, path, min_cx, top)
         if functions_only:
