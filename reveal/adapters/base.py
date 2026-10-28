@@ -345,7 +345,7 @@ class ResourceAdapter(ABC):
         that way before it is folded (BACK-1059). Without it the child's wording is kept.
 
         ``omit_warnings``: a predicate for child warnings that restate a fact this adapter
-        discloses itself; matching entries are dropped from the child's result before the
+        discloses itself; matching entries are dropped from the composed view before the
         fold, so they neither repeat in nor change the completeness of this adapter.
         """
         if query is None and params:
@@ -371,6 +371,13 @@ class ResourceAdapter(ABC):
 
         if isinstance(result, dict):
             from reveal.utils.results import echo_source, relabel_truncations
+            # Own the envelope we rewrite, while retaining the child's analysis payload.
+            result = dict(result)
+            if isinstance(result.get('meta'), dict):
+                result['meta'] = dict(result['meta'])
+                if result['meta'].get('warnings'):
+                    result['meta']['warnings'] = [dict(w) if isinstance(w, dict) else w
+                                                  for w in result['meta']['warnings']]
             echo_source(result, str(resource))  # the sibling's source, as this adapter named it (BACK-1366)
             if cut_as:
                 relabel_truncations(result, *cut_as)
@@ -395,9 +402,9 @@ class ResourceAdapter(ABC):
         if not meta:
             return
         self.__dict__.setdefault('_composed_warnings', []).extend(
-            meta.get('warnings', []))
+            dict(w) for w in meta.get('warnings', []))
         self.__dict__.setdefault('_composed_errors', []).extend(
-            meta.get('errors', []))
+            dict(e) for e in meta.get('errors', []))
         confidence = meta.get('confidence')
         if confidence is not None:
             self.__dict__.setdefault('_composed_confidences', []).append(confidence)

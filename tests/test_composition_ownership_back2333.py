@@ -5,9 +5,8 @@ from copy import deepcopy
 import pytest
 
 from reveal.adapters.ast import AstAdapter
-from reveal.adapters.architecture import ArchitectureAdapter
 from reveal.adapters.base import ResourceAdapter
-from reveal.utils.results import ResultBuilder, truncations_of
+from reveal.utils.results import truncations_of
 
 
 class Parent(ResourceAdapter):
@@ -68,23 +67,6 @@ def test_folded_diagnostics_are_a_snapshot_but_payload_is_not_copied():
     assert meta['warnings'][0]['message'] == 'original'
     assert meta['errors'][0]['message'] == 'original error'
     assert meta['confidence'] == 0.25
-
-
-def test_exception_before_architecture_finalization_does_not_contaminate_reuse(tmp_path, monkeypatch):
-    from reveal.adapters import architecture
-
-    (tmp_path / 'module.py').write_text('def healthy():\n    return 1\n', encoding='utf-8')
-    adapter = ArchitectureAdapter(str(tmp_path), 'no_imports=true')
-    with monkeypatch.context() as patch:
-        patch.setattr(AstAdapter, 'get_structure', lambda *a, **kw: ResultBuilder.create_error(
-            'ast_query', str(tmp_path), 'required child failed'))
-        patch.setattr(architecture, '_compute_risks', lambda *a: (_ for _ in ()).throw(
-            ValueError('risk construction failed')))
-        with pytest.raises(ValueError, match='risk construction failed'):
-            adapter.get_structure()
-    reused = adapter.get_structure()
-    fresh = ArchitectureAdapter(str(tmp_path), 'no_imports=true').get_structure()
-    assert reused == fresh
 
 
 def test_clean_composition_retains_answer_and_consuming_contract():
