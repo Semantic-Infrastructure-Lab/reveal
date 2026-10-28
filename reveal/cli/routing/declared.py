@@ -271,7 +271,8 @@ def detach_stdout() -> None:
         os.close(fd)
 
 
-def emit_declared_result(result, args, scheme, render, facts, *, execution_answer=None, announce_error=True, **render_kwargs) -> None:
+def emit_declared_result(result, args, scheme, render, facts, *, execution_answer=None, announce_error=True,
+                         default_fail_on=None, **render_kwargs) -> None:
     """Finalize selected D6 facts; legacy emitters keep their existing policy."""
     from ...display.formatting import print_result_control_notes
     from ...rendering.base import emit_rendered
@@ -280,7 +281,9 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
     from ...utils.results import (FailureCause, execution_exit_code,
                                  failure_execution_facts, merge_execution_facts)
     from .uri import announce_outcome
-    policy = getattr(args, 'fail_on', None) or declared_adapter_class(scheme).DEFAULT_FAIL_ON
+    if default_fail_on is None:
+        default_fail_on = declared_adapter_class(scheme).DEFAULT_FAIL_ON
+    policy = getattr(args, 'fail_on', None) or default_fail_on
     result = attach_provenance(result)
     if announce_error:
         announce_outcome(result, f'{scheme}://')

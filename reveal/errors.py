@@ -11,6 +11,14 @@ from typing import List, Optional, Dict, Any
 from pathlib import Path
 
 
+class RequestValidationError(ValueError):
+    """An analysis owner rejected request data before beginning required work.
+
+    This remains a ValueError for library callers; transports may classify the
+    explicit validation fact without treating runtime ValueErrors as usage.
+    """
+
+
 class RevealError(Exception):
     """Base error class for Reveal with actionable suggestions.
 
