@@ -16,9 +16,9 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
-## [0.132.0] - 2026-10-26
+## [0.132.0] - 2026-10-27
 
-This release is larger than usual: 1,198 commits since 0.131.0. Every old spelling still works. It prints a "replaced by" note and carries a `retired_spelling` warning in JSON and MCP output, and becomes an error at a later release. Read **Behavior changes** first: it lists what can break a script.
+This release is larger than usual: 1,569 commits since 0.131.0. Every old spelling still works. It prints a "replaced by" note and carries a `retired_spelling` warning in JSON and MCP output, and becomes an error at a later release. Read **Behavior changes** first: it lists what can break a script.
 
 ### Behavior changes
 
