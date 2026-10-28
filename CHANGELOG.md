@@ -19,6 +19,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 ### Changed
 
 - Ordinary `ast://` filter queries exit 2 for rejected regex/controls or a missing path, and 3 for required analysis/output loss (previously 1 or 0); MCP marks fully failed work as an error and keeps useful partial results. Python API validation still raises `ValueError`; dedicated dict/type-evidence modes and legacy element/check/stdin/batch operations keep their existing policy (BACK-2338).
+- The import-analysis Python service now owns graph builds, cache access and shared graph views for architecture, overview, pack, depends and comparison reports (BACK-2326, BACK-2334, BACK-2335, BACK-2336).
 
 ### Fixed
 
