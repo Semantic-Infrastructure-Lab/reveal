@@ -474,6 +474,16 @@ failures stay complete. Required loss omits full confidence and carries bounded 
 diagnostics. Element/check operations, stdin and mixed batches retain their legacy policy.
 This adoption adds no findings gate or generated AST subcommand.
 
+Direct unqueried root `json://FILE` reads also use owner execution facts. Complete
+values, including empty and null, remain `0`; missing resources or directory misuse
+are `2`; required read/parse failures and attempted output failures are `3`. Errors
+retain the resolved `json_value` identity. Python API exceptions and SDK privacy
+masking are preserved, while fully failed SDK root reads signal an error. Queries,
+navigation, introspection, element/check modes and stdin/batches remain outside this
+adoption. JSON-owned path resolution can change their missing-file diagnostic and
+classify an existing underlying navigation file as `source_type: file`, without
+changing those legacy exits. Existing primary-JSON file-mirror suppression remains.
+
 Surface is an inventory and declares only `--fail-on none`, also its default; it
 rejects `findings`. `none` never suppresses incomplete analysis or output failure.
 `unparsed_files` or `recovered_files` make its scan incomplete; taxonomy limitations,

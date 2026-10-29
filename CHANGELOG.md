@@ -18,6 +18,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Changed
 
+- Direct, unqueried `json://FILE` reads now exit 2 for missing files or directory misuse and 3 for required read/parse failures, previously 1. MCP marks these failures as errors. Empty/null values stay successful; API exceptions, SDK masking and queried/navigation/batch exit policies are preserved. Path diagnostics and underlying-file `source_type` can become more specific (BACK-2361, BACK-2362).
 - Surface omits the unmeasured `meta.confidence: 0.6` and `_meta.confidence: "medium"` estimates. Callers should read scope, coverage, warnings and known limits; missing confidence means unavailable. Results, parse diagnostics, execution outcomes and the optional-field contract version are unchanged (BACK-2357, BACK-2358).
 - The documentation example gate recognizes commands from the CLI registry, so nine `calls` and four `patches` examples now execute against their named fixtures. Missing primary/secondary targets and environment-changing commands stay disclosed skips (BACK-2182, BACK-2355).
 - Surface help and its guide describe known boundary indicators rather than a complete external inventory. Python network/db/sdk counts describe import sites; unused imports, unresolved module origins and dynamic-client limits are explicit. Detector behavior is unchanged (BACK-2354).
@@ -29,6 +30,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Python D001 no longer calls different string values identical after stripping `#`, URLs, comment markers or internal whitespace, and keeps floor division intact. Genuine duplicates still match after actual comments and docstrings are removed; other languages and rule scope/defaults are unchanged (BACK-2360, BACK-2362).
 - Adapter warnings must include a nonempty string `type`. Python result builders now raise `ValueError` for malformed warnings; declared commands report an invalid adapter answer instead of treating one as valid. Warning `code` stays optional, and error diagnostics keep their separate contract (BACK-2324).
 - `claude://` and `codex://` initialize once through the shared factory. Constructor failures preserve their original exception instead of being retried or wrapped as another error (BACK-2327).
 - Repeated calls to `architecture`, `overview`, `hotspots`, `deps`, `trace`, `calls` and `xlsx://` no longer inherit warnings, errors or confidence from an interrupted prior call. Composing a reused child answer preserves its original source, cuts and warnings (BACK-2329, BACK-2333, BACK-2337).

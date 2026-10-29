@@ -966,9 +966,22 @@ No multi-file operations:
 
 ## Error Messages
 
+Direct, unqueried root reads such as `json://data.json` exit `0` for a complete
+value, including empty arrays and JSON null; `2` for a missing file or directory
+misuse; and `3` for required read/parse failure or an attempted output-sink failure.
+JSON errors retain the resolved `json_value` identity. MCP marks these root failures
+as errors and keeps its existing masking of parse diagnostics. CLI JSON keeps the
+authored message; Python API exceptions remain exceptions.
+
+Queries (including a trailing `?`), navigation, introspection, element/check modes
+and stdin/batches retain their existing exit policies. Path preflight can update a
+missing-file diagnostic and identify an existing underlying navigation file as
+`source_type: file`. The existing `--format json` suppression of file mirrors is unchanged.
+
 ### Common errors and solutions:
 
-Each prints `Error (json://): ...` and exits 1.
+Navigation/query failures below print `Error (json://): ...` and retain exit `1`;
+invalid JSON in a direct root read follows exit `3` above.
 
 **1. Path not found**
 

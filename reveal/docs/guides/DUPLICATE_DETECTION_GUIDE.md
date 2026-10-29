@@ -31,9 +31,9 @@ reveal 'ast://./src?complexity>10&lines>50'
 
 ## What's Implemented
 
-### D001: Exact Duplicates (Reliable)
+### D001: Normalized Body Matches
 
-**Status:** ✅ Production-ready
+**Status:** Reports normalized body matches for review
 **Scope:** Single file only, and within one scope (see below)
 **Method:** Hash-based detection using normalized code
 
@@ -41,9 +41,22 @@ Detects functions whose bodies are identical after removing comments, docstrings
 whitespace. Identifiers are kept as-is: a copy with renamed variables or parameters is
 not D001 (D002 alpha-renames locals and can surface it).
 
+For Python, normalization preserves string contents, including comment markers,
+internal whitespace and executable triple-quoted values. It removes actual comments
+and leading function/class docstrings; `//` remains floor division. If lexical analysis
+is uncertain, the original body is retained. Interpolated expressions and inline nested
+docstrings are handled conservatively, so equivalent bodies can remain unmatched.
+Other languages retain their existing heuristic normalization.
+
+A body match does not establish runtime equivalence or justify the suggested refactor.
+Defaults, decorators, independent interfaces and deliberately separate test objects can
+make consolidation inappropriate even when the bodies match.
+
 Within one file, D001 compares functions only inside the same scope: top-level functions
 with each other, and each class's methods with each other. Identical methods in two
-different classes, or a method and a module-level function, are not reported.
+different top-level classes, or a method and a module-level function, are not reported.
+Grouping uses the first containing class in analyzer order; nested classes can therefore
+share an outer group. A finding does not prove nearest-class scope equivalence.
 
 **Example:**
 ```bash
