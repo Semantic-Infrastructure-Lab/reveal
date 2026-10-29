@@ -115,7 +115,7 @@ def test_empty_null_scalar_and_no_match_are_complete(source, value):
     assert response.returncode == 0 and json.loads(response.stdout)['value'] == []
 
 
-@pytest.mark.parametrize('forgery', ['malformed', 'postprocess', 'postprocess_inplace'])
+@pytest.mark.parametrize('forgery', ['malformed', 'postprocess', 'postprocess_inplace', 'prior_failure'])
 def test_repair_and_postprocessing_cannot_manufacture_request_rejection(source, monkeypatch, forgery):
     def rejection():
         return {'type': 'json_value', 'source': source.as_posix(), 'source_type': 'file',
@@ -127,6 +127,10 @@ def test_repair_and_postprocessing_cannot_manufacture_request_rejection(source, 
         result['scope'] = []
         monkeypatch.setattr(JsonAdapter, 'get_structure', lambda self, **kw: result)
     else:
+        if forgery == 'prior_failure':
+            failed = rejection()
+            failed['meta'] = {'errors': [{'code': 'analysis_failed', 'message': 'PRIVATE_ANALYSIS'}]}
+            monkeypatch.setattr(JsonAdapter, 'get_structure', lambda self, **kw: failed)
         def processed(self, result, args):
             forged = rejection()
             if forgery == 'postprocess_inplace':
@@ -142,9 +146,25 @@ def test_repair_and_postprocessing_cannot_manufacture_request_rejection(source, 
     assert resolve_uri(uri(source, '/items'), _default_args()).public_diagnostic is None
 
 
+def test_missing_required_value_is_not_an_empty_success(source, monkeypatch):
+    original = JsonAdapter.get_structure
+
+    def missing(self, **kwargs):
+        result = original(self, **kwargs)
+        result.pop('value')
+        return result
+
+    monkeypatch.setattr(JsonAdapter, 'get_structure', missing)
+    response = run(uri(source, '/items'), '--format', 'json')
+    assert response.returncode == 3
+    assert any(e['code'] == 'invalid_adapter_answer'
+               for e in json.loads(response.stdout)['meta']['errors'])
+
+
 def test_excluded_introspection_and_ordinary_warnings_keep_meaning(source):
     for suffix, result_type in [('?keys&limit=-1', 'json_keys'), ('?schema', 'json_schema'),
-                                ('?gron&data-only', None)]:
+                                ('?flatten', 'json_flatten'), ('?type', 'json_type'),
+                                ('?length', 'json_length'), ('?gron&data-only', None)]:
         response = run(uri(source, suffix), '--format', 'json')
         assert response.returncode == 0
         answer = json.loads(response.stdout)

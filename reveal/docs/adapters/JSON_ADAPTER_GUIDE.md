@@ -966,22 +966,31 @@ No multi-file operations:
 
 ## Error Messages
 
-Direct, unqueried root reads such as `json://data.json` exit `0` for a complete
-value, including empty arrays and JSON null; `2` for a missing file or directory
-misuse; and `3` for required read/parse failure or an attempted output-sink failure.
-JSON errors retain the resolved `json_value` identity. MCP marks these root failures
-as errors and keeps its existing masking of parse diagnostics. CLI JSON keeps the
-authored message; Python API exceptions remain exceptions.
+Root reads, ordinary filters/controls and navigation/index/slice requests exit
+`0` for complete values, including empty arrays, JSON null, no matches, warnings
+and presentation cuts; `2` for invalid requests, missing files or directory misuse;
+and `3` for required read/parse failure or an attempted output-sink failure.
+Errors retain the `json_value` operation identity. MCP marks failures as errors,
+shows authored request diagnostics and masks unexpected parse/analysis details.
 
-Queries (including a trailing `?`), navigation, introspection, element/check modes
-and stdin/batches retain their existing exit policies. Path preflight can update a
-missing-file diagnostic and identify an existing underlying navigation file as
-`source_type: file`. The existing `--format json` suppression of file mirrors is unchanged.
+Python library callers receive failed `json_value` results instead of `json_error`
+for missing navigation targets and unknown ordinary queries. Check the `error`
+field to detect failure. Invalid selectors and controls raise
+`RequestValidationError` (a `ValueError` subtype); content-read/parse errors remain
+exceptions. Selectors validate before content loads, and content loads before
+ordinary query controls validate.
+
+Introspection (`schema`, `flatten`, `gron`, `type`, `keys`, `length`), element/check
+modes and stdin/batches retain their existing execution policies. Malformed slices
+now produce adapter diagnostics instead of preflight tracebacks, including in
+legacy modes (exit `1` there). Successful unused-input diagnostics can still append
+a warning suffix in MCP output; this change does not promise whole-response JSON
+purity. The existing `--format json` suppression of file mirrors is unchanged.
 
 ### Common errors and solutions:
 
-Navigation/query failures below print `Error (json://): ...` and retain exit `1`;
-invalid JSON in a direct root read follows exit `3` above.
+Ordinary navigation/query rejections below print `Error (json://): ...` and exit
+`2`; invalid JSON exits `3`.
 
 **1. Path not found**
 

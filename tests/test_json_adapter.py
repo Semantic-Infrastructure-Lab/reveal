@@ -180,7 +180,7 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(str(self.simple_json), 'invalid')
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json_error')
+        self.assertEqual(result['type'], 'json_value')
         self.assertIn('valid_queries', result)
 
     def test_path_not_found(self):
@@ -188,7 +188,7 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(f'{self.simple_json}/nonexistent', None)
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json_error')
+        self.assertEqual(result['type'], 'json_value')
         self.assertIn('not found', result['error'].lower())
 
     def test_file_not_found(self):

@@ -78,7 +78,7 @@ def test_required_read_denial_is_reached_and_repair_and_output_keep_policy(tmp_p
 
 
 @pytest.mark.parametrize('suffix', ['?keys', '/answer', '?length'])
-def test_legacy_query_navigation_and_missing_resource_exits_are_preserved(tmp_path, suffix):
+def test_introspection_stays_legacy_while_navigation_qualifies(tmp_path, suffix):
     path = tmp_path / 'legacy.json'
     path.write_text('{"answer":42}', encoding='utf-8')
     uri = f'json://{path.as_posix()}{suffix}'
@@ -87,7 +87,7 @@ def test_legacy_query_navigation_and_missing_resource_exits_are_preserved(tmp_pa
     assert json.loads(response.stdout) == api.query(uri)
     path.unlink()
     missing = run(uri, '--format', 'json')
-    assert missing.returncode == 1  # excluded legacy route; preflight wording may change
+    assert missing.returncode == (2 if suffix == '/answer' else 1)
 
 
 @pytest.mark.mcp

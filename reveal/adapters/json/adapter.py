@@ -2,10 +2,11 @@
 
 from typing import Dict, Any, Optional
 from reveal.reveal_types import CONTRACT_VERSION
+from ...errors import RequestValidationError
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from ...utils.results import (AnalysisCompleteness, ResultBuilder, note_truncation, note_warning,
-                             result_execution_facts)
+from ...utils.results import (AnalysisCompleteness, FailureCause, ResultBuilder, note_truncation,
+                             note_warning, result_execution_facts)
 from ...utils.path_utils import to_posix
 from ...utils.query_parser import note_query_parsed
 from ...utils.query import (
@@ -17,7 +18,7 @@ from ...utils.query import (
 # Import modular functions
 from .renderer import JsonRenderer
 from .help import get_help, get_schema
-from .parsing import parse_path, load_json
+from .parsing import parse_path, split_path, load_json
 from .queries import (
     get_field_value,
     compare,
@@ -46,6 +47,20 @@ from .introspection import (
 )
 
 
+_LEGACY_QUERY_MODES = frozenset({'schema', 'flatten', 'gron', 'type', 'keys', 'length'})
+
+
+def _legacy_query(query: str) -> bool:
+    return query.lower().split('&')[0] in _LEGACY_QUERY_MODES
+
+
+def _request_rejection(result) -> bool:
+    """Only an authored rejection, never repaired/malformed output, is usage."""
+    codes = {entry.get('code') for entry in result.get('meta', {}).get('errors', [])}
+    return (isinstance(result.get('error'), str) and bool(result['error'])
+            and 'invalid_request' in codes and 'invalid_adapter_answer' not in codes)
+
+
 @register_adapter('json')
 @register_renderer(JsonRenderer)
 class JsonAdapter(ResourceAdapter):
@@ -60,20 +75,36 @@ class JsonAdapter(ResourceAdapter):
     @staticmethod
     def resource_path(resource: str) -> str:
         """Only the file is a filesystem resource; JSON navigation is inside it."""
-        return to_posix(parse_path(resource)[0])
+        return to_posix(split_path(resource)[0])
 
     @classmethod
     def uri_execution_facts(cls, resource):
-        """Qualify only unqueried roots; selectors and other modes keep their policy."""
-        if '?' in resource:
-            return None
-        _, navigation, slice_spec = parse_path(resource)
-        return None if navigation or slice_spec is not None else cls.execution_facts
+        """Ordinary values/queries/navigation share one policy; introspection stays legacy."""
+        query = resource.partition('?')[2]
+        return None if _legacy_query(query) else cls.execution_facts
 
     @staticmethod
     def execution_facts(result):
-        """A root value requires one complete JSON read; empty and null are values."""
-        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
+        """Values require a full read; navigation/query rejection is a request failure."""
+        cause = FailureCause.INVALID_REQUEST if _request_rejection(result) else FailureCause.ANALYSIS
+        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE,
+                                      failure_cause=cause)
+
+    @staticmethod
+    def answer_requirement_error(result, expected_type, prior_facts=None):
+        """Presentation cannot turn prior work into a newly authored rejection."""
+        if _request_rejection(result) and prior_facts is not None:
+            if (prior_facts.completeness is not AnalysisCompleteness.COMPLETE
+                    or prior_facts.failures != frozenset({FailureCause.INVALID_REQUEST})):
+                return 'JSON postprocessing cannot establish a request rejection from prior analysis'
+        if not result.get('error') and ('value' not in result or not isinstance(result.get('value_type'), str)):
+            return 'JSON value answer missing its value or value type'
+        return None
+
+    @staticmethod
+    def public_diagnostic(result):
+        """Only owner-authored request diagnostics are safe to expose through the SDK."""
+        return result['error'] if _request_rejection(result) else None
 
 
     @staticmethod
@@ -108,14 +139,13 @@ class JsonAdapter(ResourceAdapter):
         # Parse query filters and result control
         if query_string:
             # Detect if this is a legacy query mode (single word flag or flatten&data-only)
-            legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
-            primary_part = query_string.lower().split('&')[0]
-            is_legacy_mode = primary_part in legacy_modes
-
-            if not is_legacy_mode:
+            if not _legacy_query(query_string):
                 # Parse result control first (removes sort/limit/offset from query)
-                filter_query, self.result_control = parse_result_control(query_string)
-                self.query_filters = _parse_filters_safe(filter_query)
+                try:
+                    filter_query, self.result_control = parse_result_control(query_string)
+                    self.query_filters = _parse_filters_safe(filter_query)
+                except ValueError as exc:
+                    raise RequestValidationError(str(exc)) from exc
                 self._filter_query = filter_query
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
@@ -177,7 +207,7 @@ class JsonAdapter(ResourceAdapter):
 
     # Private helper methods
 
-    def _build_error_result(self, error_msg: str) -> Dict[str, Any]:
+    def _build_error_result(self, error_msg: str, **extra_fields) -> Dict[str, Any]:
         """Build error result dict.
 
         Args:
@@ -186,6 +216,13 @@ class JsonAdapter(ResourceAdapter):
         Returns:
             Error result dict
         """
+        if not self._is_legacy_query():
+            return ResultBuilder.create(
+                result_type=self.RESULT_TYPE, source=to_posix(self.file_path),
+                source_type='file', contract_version=CONTRACT_VERSION,
+                meta={'errors': [{'code': 'invalid_request', 'message': error_msg}]},
+                data={'error': error_msg, 'file': to_posix(self.file_path),
+                      'path': '/'.join(str(p) for p in self.json_path), **extra_fields})
         return ResultBuilder.create_error(
             result_type='json_error',
             source=to_posix(self.file_path),
@@ -235,12 +272,7 @@ class JsonAdapter(ResourceAdapter):
         Returns:
             True if legacy query mode
         """
-        legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
-        if not self.query_string:
-            return False
-        # Support ?flatten&data-only, ?gron&data-only variants
-        primary = self.query_string.lower().split('&')[0]
-        return primary in legacy_modes
+        return _legacy_query(self.query_string or '')
 
     def _validate_query_syntax(self) -> Optional[Dict[str, Any]]:
         """Validate query syntax, return error dict if invalid.
@@ -258,14 +290,9 @@ class JsonAdapter(ResourceAdapter):
         has_no_result_control = not self.result_control.any_set()
 
         if has_only_existence_checks or (not self.query_filters and has_no_result_control):
-            legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
-            return ResultBuilder.create_error(
-                result_type='json_error',
-                source=to_posix(self.file_path),
-                error=f"Unknown query: {self.query_string}",
-                contract_version=CONTRACT_VERSION,
-                file=to_posix(self.file_path),
-                valid_queries=list(legacy_modes) + ['field=value', 'field>value', 'sort=field', 'limit=N'],
+            return self._build_error_result(
+                f"Unknown query: {self.query_string}",
+                valid_queries=sorted(_LEGACY_QUERY_MODES) + ['field=value', 'field>value', 'sort=field', 'limit=N'],
             )
 
         return None

@@ -27,7 +27,9 @@ def _json_output_type(type_name: str, description: str, extra_props: dict) -> di
     return {'type': type_name, 'description': description, 'schema': {'type': 'object', 'properties': base}}
 
 _SCHEMA_OUTPUT_TYPES = [
-    _json_output_type('json_value', 'Raw JSON value at specified path', {'value_type': {'type': 'string'}, 'value': {}}),
+    _json_output_type('json_value', 'JSON value or failed ordinary query', {
+        'value_type': {'type': 'string'}, 'value': {}, 'error': {'type': 'string'}
+    }),
     _json_output_type('json_schema', 'Type structure inferred from data', {'schema': {}}),
     _json_output_type('json_flatten', 'Gron-style flattened output for grep', {
         'lines': {'type': 'array', 'items': {'type': 'string'}}, 'line_count': {'type': 'integer'}
@@ -51,6 +53,9 @@ _SCHEMA_NOTES = [
     'Field names in filters support dot notation for nested access (e.g., user.name)',
     'Result control (sort, limit, offset) only applies when filtering arrays',
     'Array slices use Python-style [start:end] syntax — end index is exclusive',
+    'Ordinary values, filters and navigation exit 0 when complete, 2 for invalid requests or missing files, '
+    'and 3 for required read/parse/output failures; failed answers retain type json_value',
+    'Introspection (schema/flatten/gron/type/keys/length), element/check and stdin/batch modes retain their legacy exit policies',
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [

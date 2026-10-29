@@ -1,4 +1,4 @@
-"""Direct unqueried JSON roots use owner facts; other JSON operations stay legacy."""
+"""JSON roots and ordinary queries use owner facts; introspection stays legacy."""
 import builtins
 import io
 import json
@@ -97,7 +97,7 @@ def test_actual_required_open_loss_repairs_and_keeps_sibling_and_api(files, monk
     assert json.loads(run(uri(source), '--format', 'json').stdout)['value'][0]['name'] == 'fresh'
 
 
-def test_api_exception_and_returned_error_contracts_stay(files):
+def test_api_exceptions_and_canonical_returned_errors(files):
     with pytest.raises(FileNotFoundError, match='JSON file not found'):
         api.query(uri(files / 'missing.json'))
     with pytest.raises(ValueError, match='not valid JSON'):
@@ -106,24 +106,25 @@ def test_api_exception_and_returned_error_contracts_stay(files):
         api.query(uri(files))
     with pytest.raises(ValueError, match='non-negative'):
         api.query(uri(files / 'good.json') + '?limit=-1')
-    assert api.query(uri(files / 'object.json') + '/absent')['type'] == 'json_error'
+    assert api.query(uri(files / 'object.json') + '/absent')['type'] == 'json_value'
 
 
 @pytest.mark.parametrize('suffix,code,result_type', [
-    ('?limit=-1', 1, 'json'), ('?limit=1', 0, 'json_value'),
-    ('?keys', 0, 'json_keys'), ('/absent', 1, 'json_error'),
+    ('?limit=-1', 2, 'json_value'), ('?limit=1', 0, 'json_value'),
+    ('?keys', 0, 'json_keys'), ('/absent', 2, 'json_value'),
     ('/items[0:1]', 0, 'json_value'), ('?', 0, 'json_value'),
 ])
-def test_queried_navigation_and_introspection_policies_stay_legacy(files, suffix, code, result_type):
+def test_ordinary_queries_qualify_while_introspection_stays_legacy(files, suffix, code, result_type):
     result = run(uri(files / 'object.json') + suffix, '--format', 'json')
     assert result.returncode == code
     assert json.loads(result.stdout)['type'] == result_type
-    assert resolve_uri(uri(files / 'object.json') + suffix, _default_args(format='json')).execution_facts is None
+    facts = resolve_uri(uri(files / 'object.json') + suffix, _default_args(format='json')).execution_facts
+    assert (facts is None) == (suffix == '?keys')
 
 
-def test_excluded_queries_keep_source_before_control_validation(files):
+def test_queries_keep_source_before_control_validation(files):
     result = run(uri(files / 'bad.json') + '?limit=-1', '--format', 'json')
-    assert result.returncode == 1
+    assert result.returncode == 3
     assert 'not valid JSON' in json.loads(result.stdout)['error']
     assert 'non-negative' not in result.stderr
 
@@ -145,8 +146,10 @@ def test_admission_uses_resource_syntax_before_any_content_load(files, monkeypat
     monkeypatch.setattr(owner, 'load_json', unexpected)
     args = _default_args()
     assert callable(_uri_execution_facts(JsonAdapter, (files / 'missing.json').as_posix(), None, args))
-    for resource in ('missing.json?keys', 'missing.json?limit=-1', 'missing.json/a', 'missing.json/[0:1]', 'missing.json?'):
+    for resource in ('missing.json?keys', 'missing.json?schema', 'missing.json?gron&data-only'):
         assert _uri_execution_facts(JsonAdapter, resource, None, args) is None
+    for resource in ('missing.json?limit=-1', 'missing.json/a', 'missing.json/[0:1]', 'missing.json?'):
+        assert callable(_uri_execution_facts(JsonAdapter, resource, None, args))
     for flag in ('stdin', 'batch', 'check'):
         assert _uri_execution_facts(JsonAdapter, 'missing.json', None, _default_args(**{flag: True})) is None
     assert _uri_execution_facts(JsonAdapter, 'missing.json', 'scalar', args) is None
@@ -178,17 +181,17 @@ def test_requested_output_failure_and_primary_json_noop_stay(files):
 
 def test_resource_resolver_serializes_the_file_before_legacy_missing_diagnostic(monkeypatch):
     from reveal.adapters.json import adapter as owner
-    monkeypatch.setattr(owner, 'parse_path', lambda resource: (
-        PureWindowsPath(r'C:\project\missing.json'), ['key'], None))
+    monkeypatch.setattr(owner, 'split_path', lambda resource: (
+        PureWindowsPath(r'C:\project\missing.json'), '/key'))
     assert JsonAdapter.resource_path(r'C:\project\missing.json/key') == 'C:/project/missing.json'
 
 
-def test_legacy_navigation_constructor_error_reports_the_underlying_file(files):
+def test_navigation_constructor_error_reports_the_underlying_file(files):
     request = uri(files / 'object.json') + '/items?limit=-1'
     result = run(request, '--format', 'json')
     answer = json.loads(result.stdout)
-    assert result.returncode == 1 and answer['type'] == 'json'
+    assert result.returncode == 2 and answer['type'] == 'json_value'
     assert answer['source'] == request.removeprefix('json://')
     assert answer['source_type'] == 'file'
     assert answer['error'] == "limit must be a non-negative integer: '-1'"
-    assert answer['meta']['errors'][0]['code'] == 'adapter_error'
+    assert answer['meta']['errors'][0]['code'] == 'invalid_request'

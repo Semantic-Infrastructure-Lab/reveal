@@ -21,6 +21,16 @@ def parse_path(path: str) -> Tuple[Path, List[str | int], Optional[Tuple[Optiona
     Returns:
         Tuple of (file_path, json_path_components, slice_spec)
     """
+    file_path, json_nav = split_path(path)
+    json_path, slice_spec = parse_json_path(json_nav) if json_nav else ([], None)
+    return file_path, json_path, slice_spec
+
+
+def split_path(path: str) -> Tuple[Path, str]:
+    """Resolve the underlying file without interpreting an authored selector.
+
+    Filesystem preflight uses this; selector validation belongs to construction.
+    """
     # Strip json:// scheme prefix if present (from _try_full_uri_init routing)
     if isinstance(path, str) and path.startswith('json://'):
         path = path[7:]
@@ -28,24 +38,17 @@ def parse_path(path: str) -> Tuple[Path, List[str | int], Optional[Tuple[Optiona
     # Expand ~ to home directory first
     path = os.path.expanduser(path)
 
-    json_path: List[str | int] = []
-    slice_spec: Optional[Tuple[Optional[int], Optional[int]]] = None
-
     # Find the .json file boundary
     json_match = re.search(r'(.*?\.json[l]?)(/.+)?$', path, re.IGNORECASE)
 
     if json_match:
         file_path = Path(json_match.group(1))
-        json_nav = json_match.group(2)
-
-        if json_nav:
-            # Parse JSON path: /key/0/subkey or /arr[0:3]
-            json_path, slice_spec = parse_json_path(json_nav)
+        json_nav = json_match.group(2) or ''
     else:
         # No .json extension found, treat entire path as file
         file_path = Path(path)
-
-    return file_path, json_path, slice_spec
+        json_nav = ''
+    return file_path, json_nav
 
 
 def parse_json_path(nav_path: str) -> Tuple[List[str | int], Optional[Tuple[Optional[int], Optional[int]]]]:
@@ -66,8 +69,11 @@ def parse_json_path(nav_path: str) -> Tuple[List[str | int], Optional[Tuple[Opti
     # Check for array slice at end: key[0:3]
     slice_match = re.search(r'\[(-?\d*):(-?\d*)\]$', nav_path)
     if slice_match:
-        start = int(slice_match.group(1)) if slice_match.group(1) else None
-        end = int(slice_match.group(2)) if slice_match.group(2) else None
+        try:
+            start = int(slice_match.group(1)) if slice_match.group(1) else None
+            end = int(slice_match.group(2)) if slice_match.group(2) else None
+        except ValueError as exc:
+            raise RequestValidationError(f'Invalid JSON slice: {slice_match.group(0)}') from exc
         slice_spec = (start, end)
         nav_path = nav_path[:slice_match.start()]
 
