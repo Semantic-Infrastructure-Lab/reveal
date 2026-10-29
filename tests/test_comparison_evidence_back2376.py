@@ -48,7 +48,10 @@ def test_absent_or_malformed_comparison_proof_is_not_success(identity, analysis)
 
 @pytest.mark.parametrize('identity', IDENTITIES)
 def test_incomplete_comparison_keeps_canonical_proof_but_fails_execution(identity):
-    result = _result(identity, {'analysis': {'complete': False}, 'deltas': None})
+    result = _result(identity, {'analysis': {'complete': False, 'basis': 'snapshots', 'snapshots': {
+        'base': {'imports': 'complete', 'complexity': 'complete'},
+        'head': {'imports': 'complete', 'complexity': 'incomplete'},
+    }}, 'deltas': None})
     assert comparison_answer_requirement_error(result) is None
     assert comparison_execution_facts(result) == ExecutionFacts(State.INCOMPLETE)
     assert execution_exit_code(comparison_execution_facts(result), fail_on='none') == 3
