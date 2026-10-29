@@ -700,6 +700,16 @@ def _named_fixture_skip(tokens):
         for flag in ('--against', '--since'):
             if flag in stage and stage[stage.index(flag) + 1] not in refs:
                 return f'names ref {stage[stage.index(flag) + 1]}, which the named fixture lacks'
+        if stage[1] == 'patches' and '--tests' in stage:
+            for root in stage[stage.index('--tests') + 1:]:
+                if root.startswith('-'):
+                    break
+                targets.append(root)
+        if stage[1] == 'calls' and '--callees' in stage:
+            from reveal.adapters.calls.index import _split_root
+            file_filter, _ = _split_root(stage[stage.index('--callees') + 1])
+            if file_filter:
+                targets.append(file_filter)
         if '--from' in stage and ':' in stage[stage.index('--from') + 1]:
             targets.append(stage[stage.index('--from') + 1].split(':', 1)[0])
     elif stage[1].startswith('-'):
