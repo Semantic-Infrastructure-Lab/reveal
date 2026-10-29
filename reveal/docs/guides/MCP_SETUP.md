@@ -139,6 +139,8 @@ manifest (git state, command, timestamp) to the result, e.g. for a DD finding
 contract that needs to cite evidence provenance. This forces JSON output —
 provenance only attaches to dict results — so the response shape differs from
 a plain-text query; only set it when the caller actually needs the manifest.
+Unknown or unused query inputs are retained in `meta.warnings` in the JSON answer,
+with the input names in `fields`. Text queries retain their warning notes.
 
 ### `reveal_pack(path, budget, since, content, focus, architecture)`
 
@@ -215,9 +217,9 @@ Both trace spellings retain a normal MCP response when canonical evidence proves
 entry point is absent; CLI/URI shell invocations use exit 2 for that request.
 Incomplete evidence cannot prove absence. Required analysis/output failure remains
 an MCP error, while usable partial narratives disclose incompleteness. For proven absence, provenance
-JSON retains the structured error without a duplicate stderr echo. Other captured
-notes keep their existing behavior; ignored-parameter warnings can follow the JSON
-body.
+JSON retains the structured error without a duplicate stderr echo. Ignored-input
+diagnostics are included in `meta.warnings`, keeping the response parseable as one
+JSON value. Other captured stderr keeps its existing behavior.
 
 ```
 reveal_trace("src/", "process_order", depth=2)

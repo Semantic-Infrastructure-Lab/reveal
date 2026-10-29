@@ -5,7 +5,7 @@ import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Mapping, Optional, Set, TextIO, Tuple, Union
 
 # Characters that only appear in a *filter* key (e.g. `complexity>10`, `msg~=x`),
@@ -26,6 +26,8 @@ _KEY_END = _re.compile(r'[=<>!~.?]')
 class QueryKeyLog:
     seen: Set[str]  # handed to some parser
     used: Set[str]  # read by the adapter (for a filter parser: parsed)
+    warnings: List[dict] = field(default_factory=list)
+    warnings_to_stderr: bool = True
 
 
 _KEY_LOG: ContextVar[Optional[QueryKeyLog]] = ContextVar('reveal_query_key_log', default=None)
@@ -38,9 +40,9 @@ def query_key(part: str) -> str:
 
 
 @contextmanager
-def collect_query_keys() -> Iterator[QueryKeyLog]:
+def collect_query_keys(*, warnings_to_stderr: bool = True) -> Iterator[QueryKeyLog]:
     """Log the keys query parsers see and the adapter uses until the block exits."""
-    log = QueryKeyLog(seen=set(), used=set())
+    log = QueryKeyLog(seen=set(), used=set(), warnings_to_stderr=warnings_to_stderr)
     token = _KEY_LOG.set(log)
     try:
         yield log
@@ -461,25 +463,27 @@ def filter_expression(key: str, value: Any) -> str:
 
 def warn_unknown_query_params(
     query_params: Dict[str, Any],
-    known_keys: Iterable[str],
+    known_keys: Optional[Iterable[str]],
     *,
     adapter: str = '',
     skip_filter_keys: bool = False,
     stream: Optional[TextIO] = None,
 ) -> List[str]:
-    """Warn (to stderr) about query params an adapter doesn't recognize.
+    """Disclose query params an adapter doesn't recognize, as text or a dispatch JSON warning.
 
     Closed-param adapters read a fixed key set via ``.get()`` and silently
     ignore everything else, so a typo'd or unsupported param (the BACK-507
     repro ``stats://?complexity=true``) returns a valid-looking-but-wrong
     result with no signal. This surfaces that: it emits one stderr warning per
     unrecognized key and returns the list, but does *not* raise — the result is
-    still produced (a warning contract, not an error contract).
+    still produced (a warning contract, not an error contract). A JSON dispatch
+    retains the diagnostic for its shared writer instead of printing a suffix.
 
     Args:
         query_params: parsed ``{key: value}`` dict from ``parse_query_params``.
         known_keys: the adapter's recognized param names (its closed set,
-            usually ``get_schema()['query_params'].keys()``).
+            usually ``get_schema()['query_params'].keys()``). None means unknown
+            vocabulary: disclose the ignored key without claiming a valid-key set.
         adapter: scheme name for the message (e.g. ``'stats'``).
         skip_filter_keys: for *mixed* adapters (``stats://``, ``git://``) that
             parse the same query string as both params and filters — skip any
@@ -492,7 +496,7 @@ def warn_unknown_query_params(
         The list of unrecognized keys (empty if all recognized).
     """
     out = stream if stream is not None else sys.stderr
-    known = set(known_keys)
+    known = set(known_keys or ())
     unknown = []
     for key, _ in peek_query_items(query_params):  # validating is not reading
         if key in known:
@@ -506,13 +510,22 @@ def warn_unknown_query_params(
         prefix = f"{adapter}://" if adapter else "this resource"
         valid = ', '.join(sorted(known)) if known else '(none)'
         for key in unknown:
-            print(
-                f"⚠ Unknown query param '{key}' for {prefix} — ignored. "
-                f"Valid params: {valid}",
-                file=out,
-            )
+            _warn_unknown_query_param(key, prefix, valid if known_keys is not None else None, out)
 
     return unknown
+
+
+def _warn_unknown_query_param(key: str, prefix: str, valid: Optional[str], out: TextIO) -> None:
+    """One warning fact, rendered as text or retained for the dispatch's JSON writer."""
+    message = f"⚠ Unknown query param '{key}' for {prefix} — ignored."
+    if valid is not None:
+        message += f" Valid params: {valid}"
+    log = _KEY_LOG.get()
+    if log is not None:
+        log.warnings.append({'type': 'unknown_query_param', 'code': 'unknown_query_param',
+                             'fields': [key], 'message': message})
+    if log is None or log.warnings_to_stderr:
+        print(message, file=out)
 
 
 REGEX_MAX_LEN = 200

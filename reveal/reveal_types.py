@@ -41,7 +41,8 @@ class _DiagnosticFields(TypedDict, total=False):
     # What a walk hid by cause and how to show it ('scope_hidden', BACK-2065).
     hidden: Dict[str, int]
     suggestion: str
-    # The --fields names that matched nothing ('fields_unmatched', BACK-1607).
+    # Fields/input names the diagnostic concerns: unmatched --fields selections
+    # (BACK-1607), or ignored flags/query parameters (BACK-1998).
     fields: List[str]
     # The check rule whose scan produced the warning. Stats' rule-scan disclosures (BACK-2042) were
     # its only producer and ended with BACK-1884; compose(omit_warnings=) can still filter on it.

@@ -9,7 +9,7 @@ import os
 import re
 import sys
 from argparse import Namespace
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple
 
@@ -448,15 +448,6 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
     # onto its resource ("Element '?limit=2' not found"). Strip them with the same warning every
     # other adapter gives an unsupported param, and run the query.
     resource, stripped_keys = strip_result_control_keys(resource, adapter_class)
-    if stripped_keys:
-        from ...utils.query_parser import warn_unknown_query_params
-        schema = adapter_class.get_schema() if hasattr(adapter_class, 'get_schema') else None
-        if isinstance(schema, dict):
-            known = schema.get('query_params') or {}
-            warn_unknown_query_params(dict.fromkeys(stripped_keys, True), known, adapter=scheme)
-        else:  # no schema: do not claim "Valid params: (none)" (help://search takes search=)
-            for key in stripped_keys:
-                print(f"⚠ Unknown query param '{key}' for {scheme}:// — ignored.", file=sys.stderr)
 
     # Dispatch to scheme-specific handler. BACK-1257: the --exclude walk scope
     # _inject_exclude_flag published is process-global, so it must not outlive
@@ -469,12 +460,15 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
     from ...utils.gitignore import gitignore_scope, split_respect_gitignore
     resource, respect_gitignore = split_respect_gitignore(resource)
     try:
-        with gitignore_scope(respect_gitignore):
-            if ledger is None:
-                yield adapter_class, scheme, resource, args
-            else:
-                with ledger.dispatching(resource):
-                    yield adapter_class, scheme, resource, args
+        accounting = ledger.dispatching(resource, scheme) if ledger is not None else nullcontext()
+        with gitignore_scope(respect_gitignore), accounting:
+            if stripped_keys:
+                from ...utils.query_parser import warn_unknown_query_params
+                schema = adapter_class.get_schema() if hasattr(adapter_class, 'get_schema') else None
+                known = (schema.get('query_params') or {}) if isinstance(schema, dict) else None
+                warn_unknown_query_params(dict.fromkeys(stripped_keys, True), known, adapter=scheme)
+            yield adapter_class, scheme, resource, args
+            if ledger is not None:
                 ledger.complete = True
     finally:
         clear_active_exclusions()

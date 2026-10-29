@@ -26,7 +26,9 @@ uses every key it parses, while ``parse_query_params`` and ``parse_result_contro
 objects that record a key only when a view reads it (BACK-1537 -- git://FILE parses ?limit=
 for its history view and the file view never reads it). Whatever is left when the dispatch
 finishes gets one note, which says whether the adapter parsed the key and then left it unused
-here, or never parsed it at all. Process-global flags (``cli.global_flags.PROCESS_GLOBAL_FLAGS``) are never reported.
+here, or never parsed it at all. The shared JSON writer includes these facts in
+``meta.warnings``; text dispatches print their notes on stderr. Process-global flags
+(``cli.global_flags.PROCESS_GLOBAL_FLAGS``) are never reported.
 A dispatch that ends in ``sys.exit`` after producing its result (check mode, a subcommand's
 findings exit) calls ``complete`` first; an error exit reports nothing.
 """
@@ -36,6 +38,7 @@ from __future__ import annotations
 import sys
 from argparse import ArgumentParser, Namespace
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Dict, Iterator, List, Optional, Set, TextIO
 from urllib.parse import unquote_plus
 
@@ -48,6 +51,7 @@ _NOT_FLAGS = frozenset({'path', 'element'})
 _BARE_PATH_FLAGS = ('depth', 'ext', 'type', 'fast')
 # The adapter parsed the key and no code on this query's path read it (git://FILE --limit).
 _NOT_HERE = 'the adapter accepts it, but not for this view.'
+_ACTIVE_LEDGER: ContextVar[Optional['FlagLedger']] = ContextVar('reveal_flag_ledger', default=None)
 
 
 
@@ -92,6 +96,10 @@ class FlagLedger:
         self.seen_keys: Set[str] = set()  # handed to a query parser
         self.used_keys: Set[str] = set()  # read by the adapter
         self.complete = False
+        self.scheme = subcommand or ''
+        self.json_primary = getattr(args, 'format', 'text') == 'json'
+        self.structured_emitted = False
+        self.query_warnings: List[dict] = []
 
     def track(self, args: Namespace) -> TrackedArgs:
         tracked = TrackedArgs(**vars(args))
@@ -103,18 +111,26 @@ class FlagLedger:
         self.delegated[dest] = key
 
     @contextmanager
-    def dispatching(self, resource: str) -> Iterator[None]:
+    def dispatching(self, resource: str, scheme: str = '') -> Iterator[None]:
         """Run the adapter for ``resource`` (the final one, after injection)."""
         query = resource.partition('?')[2]
         self.query_keys = [query_key(p) for p in query.split('&') if query_key(p)]
+        self.scheme = scheme or self.scheme
+        self.structured_emitted = False
         typed = _query_values(query)
         for dest, value in self.set_flags.items():
             if dest not in self.delegated and str(value) in typed.get(dest, []):
                 self.delegated[dest] = dest
-        with collect_query_keys() as log:
+        with collect_query_keys(warnings_to_stderr=not self.json_primary) as log:
+            # Live sets let the JSON writer see facts after analysis/postprocessing,
+            # before dispatch unwinds. The final snapshot still supports text reports.
+            self.seen_keys, self.used_keys = log.seen, log.used
+            self.query_warnings = log.warnings
+            token = _ACTIVE_LEDGER.set(self)
             try:
                 yield
             finally:
+                _ACTIVE_LEDGER.reset(token)
                 self.seen_keys, self.used_keys = set(log.seen), set(log.used)
                 if exclusions_consulted():  # a walk applied the --exclude scope
                     self.used.add('exclude')
@@ -133,48 +149,105 @@ class FlagLedger:
         return seen
 
     def report(self, scheme: str = '', stream: Optional[TextIO] = None) -> None:
-        from ..defaults import _option_names, option_names_of
-
+        if self.structured_emitted:
+            return
         out = stream if stream is not None else sys.stderr
+        # JSON paths that bypass the shared writer must still disclose the
+        # deferred parser warnings. Text parsers already printed theirs.
+        if self.json_primary:
+            for warning in self.query_warnings:
+                print(warning['message'], file=out)
+        for warning in self._notes(scheme):
+            print(warning['message'], file=out)
+
+    def warnings(self, scheme: str = '') -> List[dict]:
+        """Structured unused-input facts, from the same accounting as the text report."""
+        # The text recovery sentence names the CLI spelling; JSON facts must
+        # answer alike for a typed command and its equivalent URI query.
+        return [{**note, 'message': f"Input {', '.join(note['fields'])} has no effect for this operation."}
+                for note in self._notes(scheme)]
+
+    def _notes(self, scheme: str = '') -> List[dict]:
+        from ..defaults import _option_names, option_names_of
         names = _option_names() if self.parser is None else option_names_of(self.parser)
+        scheme = scheme or self.scheme
+        return self._flag_warnings(names, scheme) + self._key_warnings(scheme)
+
+    def _flag_warnings(self, names: Dict[str, str], scheme: str) -> List[dict]:
         flags = self.unused_flags()
-        spelled = ', '.join(names.get(dest, f'--{dest}') for dest in flags)
-        if flags and self.subcommand:
-            print(f"Note: {spelled} has no effect on 'reveal {self.subcommand}' -- this "
-                  f"subcommand does not use it.", file=out)
-        elif flags and self.view:
-            print(f"Note: {spelled} has no effect on {self.view} -- this view does not use it.",
-                  file=out)
-        elif flags:
-            parsed = [d for d in flags if self.delegated.get(d) in self.seen_keys]
-            self._report_flags([d for d in flags if d not in parsed], names, scheme, out)
-            if parsed:
-                spelled = ', '.join(names.get(dest, f'--{dest}') for dest in parsed)
-                print(f"Note: {spelled} has no effect on this {scheme}:// query -- {_NOT_HERE}",
-                      file=out)
-        self._report_keys(scheme, out)
+        if exclusions_consulted():
+            flags = [flag for flag in flags if flag != 'exclude']
+        if not flags:
+            return []
+        fields = [names.get(dest, f'--{dest}') for dest in flags]
+        spelled = ', '.join(fields)
+        if self.subcommand:
+            message = (f"Note: {spelled} has no effect on 'reveal {self.subcommand}' -- this "
+                       f"subcommand does not use it.")
+            return [_input_warning('unused_flag', fields, message)]
+        if self.view:
+            message = f"Note: {spelled} has no effect on {self.view} -- this view does not use it."
+            return [_input_warning('unused_flag', fields, message)]
+        parsed = [dest for dest in flags if self.delegated.get(dest) in self.seen_keys]
+        warnings = self._unsupported_flags([dest for dest in flags if dest not in parsed], names, scheme)
+        if parsed:
+            fields = [names.get(dest, f'--{dest}') for dest in parsed]
+            warnings.append(_input_warning('unused_flag', fields,
+                f"Note: {', '.join(fields)} has no effect on this {scheme}:// query -- {_NOT_HERE}"))
+        return warnings
 
     @staticmethod
-    def _report_flags(flags: List[str], names: Dict[str, str], scheme: str, out: TextIO) -> None:
-        """Flags no parser saw: the adapter does not support them at all."""
+    def _unsupported_flags(flags: List[str], names: Dict[str, str], scheme: str) -> List[dict]:
         if not flags:
-            return
-        spelled = ', '.join(names.get(dest, f'--{dest}') for dest in flags)
-        bare = [names.get(d, f'--{d}') for d in flags if d in _BARE_PATH_FLAGS]
+            return []
+        fields = [names.get(dest, f'--{dest}') for dest in flags]
+        bare = [names.get(dest, f'--{dest}') for dest in flags if dest in _BARE_PATH_FLAGS]
         hint = f" Use a bare path scan (reveal <path> {' '.join(bare)}) instead." if bare else ''
-        print(f"Note: {spelled} has no effect on {scheme}:// queries -- not supported "
-              f"by this adapter.{hint}", file=out)
+        return [_input_warning('unused_flag', fields,
+            f"Note: {', '.join(fields)} has no effect on {scheme}:// queries -- not supported "
+            f"by this adapter.{hint}")]
 
-    def _report_keys(self, scheme: str, out: TextIO) -> None:
+    def _key_warnings(self, scheme: str) -> List[dict]:
         keys = self.unused_query_keys()
-        unparsed = ', '.join(f"'{key}'" for key in keys if key not in self.seen_keys)
-        unread = ', '.join(f"'{key}'" for key in keys if key in self.seen_keys)
-        if unparsed:
-            print(f"Note: query param {unparsed} has no effect on {scheme}:// -- this adapter "
-                  f"does not read it.", file=out)
-        if unread:
-            print(f"Note: query param {unread} has no effect on this {scheme}:// query -- "
-                  f"{_NOT_HERE}", file=out)
+        unparsed = [key for key in keys if key not in self.seen_keys]
+        unread = [key for key in keys if key in self.seen_keys]
+        warnings = []
+        for fields, message in (
+            (unparsed, f"on {scheme}:// -- this adapter does not read it."),
+            (unread, f"on this {scheme}:// query -- {_NOT_HERE}"),
+        ):
+            if fields:
+                spelled = ', '.join(f"'{key}'" for key in fields)
+                warnings.append(_input_warning('unused_query_param', fields,
+                    f"Note: query param {spelled} has no effect {message}"))
+        return warnings
+
+
+def _input_warning(kind: str, fields: List[str], message: str) -> dict:
+    return {'type': kind, 'code': kind, 'fields': fields, 'message': message}
+
+
+def attach_input_warnings(result):
+    """Attach current dispatch facts before the existing JSON writer emits the answer."""
+    ledger = _ACTIVE_LEDGER.get()
+    if ledger is None or not isinstance(result, dict):
+        return result
+    from ...utils.results import outcome_of
+    # Match the ledger's existing error-exit policy: an operation rejected
+    # before it could run did not get a chance to consume its input. Parser
+    # warnings already authored during preparation remain visible.
+    entries = ledger.query_warnings + (ledger.warnings() if outcome_of(result) != 'failed' else [])
+    if not entries:
+        return result
+    meta = dict(result['meta']) if isinstance(result.get('meta'), dict) else {}
+    warnings = list(meta['warnings']) if isinstance(meta.get('warnings'), list) else []
+    for entry in entries:
+        if entry not in warnings:
+            warnings.append(entry)
+    meta['warnings'] = warnings
+    if ledger.json_primary:
+        ledger.structured_emitted = True
+    return {**result, 'meta': meta}
 
 
 def _query_values(query: str) -> Dict[str, List[str]]:

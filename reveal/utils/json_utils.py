@@ -200,4 +200,5 @@ def print_json_result(result, file=None) -> None:
     When provenance is enabled (see set_provenance_enabled), attaches an
     'execution' block to dict results that don't already carry one.
     """
-    print(safe_json_dumps(attach_provenance(attach_retirements(result))), file=file or sys.stdout)
+    from ..cli.routing.ledger import attach_input_warnings
+    print(safe_json_dumps(attach_provenance(attach_retirements(attach_input_warnings(result)))), file=file or sys.stdout)

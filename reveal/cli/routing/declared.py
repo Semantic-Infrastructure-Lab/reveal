@@ -155,7 +155,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     if transport == 'uri':
         source = query_resource.partition('?')[2]
     respect = respect if respect is not None else peek(args, 'respect_gitignore', True)
-    dispatch = ledger.dispatching(query_resource) if ledger is not None else nullcontext()
+    dispatch = ledger.dispatching(query_resource, name) if ledger is not None else nullcontext()
     try:
         with dispatch:
             source = prepare_declared_params(adapter.PARAM_SPECS, source, transport)
