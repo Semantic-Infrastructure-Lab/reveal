@@ -23,8 +23,9 @@ def source():
     fans = [{'file': f'pkg/a{n}.py', 'fan_in': 9-n, 'fan_out': 1} for n in range(8)]
     entries = [{'file': f'pkg/e{n}.py', 'fan_out': 1, 'is_test': False,
                 'test_only_importers': 2} for n in range(8)]
-    entries += [{'file': 'tests/test_a.py', 'fan_out': 1}, {'file': 'pkg/__init__.py', 'fan_out': 1},
-                {'file': 'pkg/leaf.py', 'fan_out': 0}]
+    entries += [{'file': 'tests/test_a.py', 'fan_out': 1, 'is_test': True, 'test_only_importers': 0},
+                {'file': 'pkg/__init__.py', 'fan_out': 1, 'is_test': False, 'test_only_importers': 0},
+                {'file': 'pkg/leaf.py', 'fan_out': 0, 'is_test': False, 'test_only_importers': 0}]
     components = [{'component': f'pkg/c{n}', 'files': 2, 'internal': 1, 'outgoing': 3,
                    'incoming': 4, 'cohesion': None, 'cohesion_reason': 'declined fixture',
                    'top_bridge': f'pkg/c{n}/a.py'} for n in range(8)]
@@ -229,6 +230,23 @@ def test_active_predicate_keeps_producer_path_scope_before_display(source, tmp_p
     assert result['entrypoints']['total'] == 0
     assert result['entry_point_filter']['fan_in_zero'] == 11
     assert result['entry_point_filter']['active'] == 0
+
+
+@pytest.mark.parametrize('top', [0, 5])
+@pytest.mark.parametrize('index', [0, -1])
+@pytest.mark.parametrize('field', ['is_test', 'test_only_importers'])
+def test_all_source_entrypoint_proof_is_required_before_cuts(source, tmp_path, top, index, field):
+    source[1]['entries'][index].pop(field)
+    with pytest.raises(ValueError, match=field):
+        project_map_facts(*source, path=tmp_path, top=top)
+
+
+@pytest.mark.parametrize('field,value', [('is_test', 'false'), ('is_test', True),
+                                        ('test_only_importers', True), ('test_only_importers', -1)])
+def test_source_entrypoint_labels_and_counts_match_producer_semantics(source, tmp_path, field, value):
+    source[1]['entries'][0][field] = value
+    with pytest.raises(ValueError, match=field):
+        project_map_facts(*source, path=tmp_path, top=0)
 
 
 @pytest.mark.parametrize('damage', ['loss', 'causes', 'count', 'witness', 'rule'])
