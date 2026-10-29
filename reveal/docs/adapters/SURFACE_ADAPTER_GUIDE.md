@@ -32,7 +32,7 @@ SDK), or acts on the machine (a file write, a launched process).
 - *Data flow or behavior.* An entry says a boundary exists at that site, not what flows through it
   or whether the path is reachable at run time.
 - *Complete.* It matches a curated list of libraries and call shapes (see Limits), so project-specific
-  clients are missed and the confidence is `medium`.
+  clients can be missed. Scope, coverage and diagnostics describe those limits.
 
 The categories do not all detect the same way, and the difference changes how to read a count:
 `network`, `db` and `sdk` are **import-detected** (importing a known client is the entry; no call is
@@ -126,8 +126,11 @@ Required source collection and independent language-coverage census walks disclo
 actual directory enumeration failures separately. Usable requested rows produce an
 incomplete result; no usable requested rows, or malformed required rows, produce a
 failed analysis. These outcomes are decided before output cuts such as `top=0`.
-Directory loss omits numeric and categorical confidence estimates. A healthy empty
-scan keeps its existing complete outcome; census loss does not prove that Surface
+Surface omits both `meta.confidence` and `_meta.confidence`: its former fixed `0.6`
+and `medium` values were unmeasured estimates. Missing confidence means unavailable,
+so callers should inspect scope, coverage, diagnostics and `_meta.known_limits`
+rather than substitute zero or one. Parse mode and the contract version stay unchanged.
+A healthy empty scan keeps its existing complete outcome; census loss does not prove that Surface
 rows or parser results are missing.
 
 `--output json=PATH` works with human output in either spelling. Primary JSON retains
@@ -278,9 +281,9 @@ its totals sum to the flat `total`.
   as the declaration `CLEAN_PIPES execvp(..)`) from the declaration, inside a block. A macro-looking
   type (`CLEAN_PIPES`, `Py_BEGIN_ALLOW_THREADS`) gives a plain entry; any other type
   (`Runner system(cfg);`) gives an entry tagged `declaration_shaped`, because it may be a variable.
-- The existing `medium` label and numeric confidence are heuristic metadata,
-  not measured per-category accuracy. Treat results as a map to review, not a
-  compliance-grade inventory.
+- No calibrated accuracy estimate is supplied. Coverage counts supported scanner
+  population, not successful parses or per-category accuracy; consult parse/recovery
+  diagnostics too. Treat results as a map to review, not a compliance-grade inventory.
 
 ## See Also
 

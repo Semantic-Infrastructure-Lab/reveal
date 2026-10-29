@@ -18,6 +18,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Changed
 
+- Surface omits the unmeasured `meta.confidence: 0.6` and `_meta.confidence: "medium"` estimates. Callers should read scope, coverage, warnings and known limits; missing confidence means unavailable. Results, parse diagnostics, execution outcomes and the optional-field contract version are unchanged (BACK-2357, BACK-2358).
 - The documentation example gate recognizes commands from the CLI registry, so nine `calls` and four `patches` examples now execute against their named fixtures. Missing primary/secondary targets and environment-changing commands stay disclosed skips (BACK-2182, BACK-2355).
 - Surface help and its guide describe known boundary indicators rather than a complete external inventory. Python network/db/sdk counts describe import sites; unused imports, unresolved module origins and dynamic-client limits are explicit. Detector behavior is unchanged (BACK-2354).
 - The independent TypeScript compiler import oracle now scores `lazy=exclude` and `lazy=only` for the pinned TypeScript, JavaScript and TSX populations. Mixed module/function imports keep their declared counting rule; default edges and existing parse-loss disclosures are unchanged. Side-effect validation now distinguishes static HTTP-related hints from observed network requests (BACK-2350, BACK-2351, BACK-2352).

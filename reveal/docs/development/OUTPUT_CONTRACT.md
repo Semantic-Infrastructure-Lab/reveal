@@ -483,6 +483,13 @@ raised operational error retains the resolved `surface_scan` identity and exits 
 an invalid resource/parameter produces a structured error when JSON is requested.
 Unknown CLI options rejected by argparse still use stderr usage and empty stdout.
 
+Surface withholds optional `meta.confidence` and adapter-owned `_meta.confidence`
+because its former fixed estimates were unmeasured. Existing parse mode, limits,
+scope, coverage and diagnostics remain available. Their omission uses the existing
+optional-field contract; other adapters' confidence policies and the envelope version
+are unchanged. Completeness and exit classification continue to use execution facts,
+not the presence of a confidence value.
+
 Architecture also supports only `--fail-on none`. Ordinary scope census errors,
 import input loss and failed/recovered parses establish incomplete execution;
 ranking cuts, confidence alone and harmless warnings do not. Diff requires explicit

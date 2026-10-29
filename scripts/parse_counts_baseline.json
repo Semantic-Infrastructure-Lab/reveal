@@ -1780,7 +1780,6 @@
         "result": {
           "_meta": {
             "analysis_kind": "surface-scan",
-            "confidence": "medium",
             "known_limits": [
               "taxonomy covers common libraries only \u2014 project-specific clients not detected",
               "dynamic surface registrations (e.g. plugin-loaded routes) not tracked"
@@ -1807,7 +1806,6 @@
             "not_implemented": {}
           },
           "meta": {
-            "confidence": 0.6,
             "errors": [],
             "parse_mode": "ast+tree_sitter",
             "warnings": []
