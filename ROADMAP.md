@@ -84,7 +84,7 @@ Two problems shape the current work.
    same table.
 2. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
    through `imports`; finish per-language parity before the old names stop working (BACK-2063,
-   BACK-2064, BACK-1054), measure through the public request path (BACK-2062), and keep the
+   BACK-2064, BACK-2061), measure through the public request path (BACK-2062), and keep the
    oracle-free graph invariants green in every language (BACK-1096).
 3. **One quality family.** `metrics` absorbs `hotspots` (BACK-2069, BACK-2149); repeatable
    `--output FORMAT[=PATH]` sinks replace `--also-json` (BACK-2089); `overview` absorbs
