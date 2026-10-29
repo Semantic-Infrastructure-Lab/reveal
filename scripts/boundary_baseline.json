@@ -21,7 +21,6 @@
   "reveal/adapters/python/adapter.py": 1,
   "reveal/adapters/reveal/adapter.py": 1,
   "reveal/adapters/sqlite/adapter.py": 1,
-  "reveal/adapters/trace.py": 1,
   "reveal/adapters/xlsx.py": 1
  },
  "broad-except": {},

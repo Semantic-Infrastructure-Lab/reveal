@@ -509,6 +509,7 @@ class TraceAdapter(ResourceAdapter):
     FINDINGS_POLICIES = ('none',)
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    BOUND_QUERY_CALL = True
     PARAM_SPECS = (
         ParamSpec('from', 'string', 'Entry-point function; FILE:FUNC selects a definition', None,
                   nonempty_scalar, required=True, uri_codec='percent', role='analysis',
@@ -626,11 +627,11 @@ class TraceAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         with self.composition_run():
-            return self._get_structure(**kwargs)
+            return self._get_structure()
 
-    def _get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def _get_structure(self) -> Dict[str, Any]:
         root = self.PARAM_SPECS[0].read(self.query_params)
         depth = self.PARAM_SPECS[1].read(self.query_params)
 
