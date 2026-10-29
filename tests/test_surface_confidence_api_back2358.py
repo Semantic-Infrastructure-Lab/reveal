@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+from pathlib import PurePosixPath, PureWindowsPath
 
 import pytest
 
@@ -35,7 +36,9 @@ def _without_estimates(answer):
 
 def _digest(answer, root):
     text = json.dumps(_without_estimates(answer), sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(text.replace(str(root), '<ROOT>').encode('utf-8')).hexdigest()
+    for spelling in (str(root), root.as_posix()):
+        text = text.replace(json.dumps(spelling, ensure_ascii=False)[1:-1], '<ROOT>')
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 
 def _absent(answer):
@@ -92,9 +95,23 @@ def test_cli_json_text_and_artifact_preserve_requested_rows(tmp_path, spelling):
     assert result['total'] == 2
     _absent(result)
     artifact = tmp_path / 'answer.json'
-    text = run(*args, '--also-json', str(artifact), '--top', '0', '--no-gitignore')
+    text_args = [*args, '--top', '0'] if spelling == 'noun' else [args[0] + '&top=0']
+    text = run(*text_args, '--also-json', str(artifact), '--no-gitignore')
     assert text.returncode == 0
     assert '2 more' in text.stdout
     saved = json.loads(artifact.read_text(encoding='utf-8'))
     assert saved['surfaces'] == result['surfaces']
     _absent(saved)
+
+
+def test_baseline_digest_normalizes_native_and_posix_windows_roots():
+    windows = PureWindowsPath('C:/fixture/project')
+    posix = PurePosixPath('/fixture/project')
+    def answer(root):
+        return {'meta': {'warnings': []}, '_meta': {'known_limits': ['unchanged']},
+                'source': root.as_posix(), 'path': str(root),
+                'nested': [str(root)]}
+    assert _digest(answer(windows), windows) == _digest(answer(posix), posix)
+    changed = answer(windows)
+    changed['_meta']['known_limits'] = ['changed']
+    assert _digest(changed, windows) != _digest(answer(posix), posix)
