@@ -3,7 +3,7 @@ import builtins
 import io
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -176,5 +176,8 @@ def test_requested_output_failure_and_primary_json_noop_stay(files):
     assert primary.returncode == 0 and json.loads(primary.stdout)['type'] == 'json_value'
 
 
-def test_resource_resolver_serializes_the_file_before_legacy_missing_diagnostic():
+def test_resource_resolver_serializes_the_file_before_legacy_missing_diagnostic(monkeypatch):
+    from reveal.adapters.json import adapter as owner
+    monkeypatch.setattr(owner, 'parse_path', lambda resource: (
+        PureWindowsPath(r'C:\project\missing.json'), ['key'], None))
     assert JsonAdapter.resource_path(r'C:\project\missing.json/key') == 'C:/project/missing.json'
