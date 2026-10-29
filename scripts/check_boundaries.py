@@ -137,6 +137,12 @@ Home = Tuple[str, ...]
 _ENTRY_POINTS: Tuple[Home, ...] = (('prefix', 'reveal/main.py'), ('prefix', 'reveal/__main__.py'))
 
 RULES: Dict[str, Dict[str, Any]] = {
+    'bare-get-structure-kwargs': {
+        'task': 'BACK-2344',
+        'fix': 'bind declared controls before analysis and use get_structure(self)',
+        'home': (),
+        'scope': (('prefix', 'reveal/adapters/'),),
+    },
     'walker': {
         'task': 'BACK-1515 (removal: BACK-1223)',
         'fix': 'walk through reveal.utils.path_utils (_walk_code_files, walk_tree, walk_with_causes, list_dir)',
@@ -340,6 +346,13 @@ class _Scanner(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.class_stack.append(node.name)
+        for method in node.body:
+            if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) and method.name == 'get_structure':
+                args = method.args
+                positional = [*args.posonlyargs, *args.args]
+                if (len(positional) == 1 and positional[0].arg == 'self' and args.kwarg is not None
+                        and args.vararg is None and not args.kwonlyargs):
+                    self._add('bare-get-structure-kwargs', method)
         self.generic_visit(node)
         self.class_stack.pop()
 

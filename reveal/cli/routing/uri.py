@@ -1288,8 +1288,9 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                       scheme: Optional[str] = None, resource: Optional[str] = None, *,
                       source_path: Optional[str] = None, facts_of: Optional[Callable] = None,
                       expected_type: Optional[str] = None, default_fail_on=None) -> Answer:
-    # Build adapter kwargs
-    structure_kwargs = _build_adapter_kwargs(adapter, args, scheme, resource)
+    from ...adapters.factory import uses_bound_query_call
+    structure_kwargs = {} if uses_bound_query_call(type(adapter)) else _build_adapter_kwargs(
+        adapter, args, scheme, resource)
 
     # Get structure from adapter
     scheme_name, source = scheme or 'unknown', resource or ''

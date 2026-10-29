@@ -17,7 +17,7 @@ _default_from_uri's one-time-per-class deprecation warning.
 from __future__ import annotations
 
 import warnings
-from typing import Any, Optional, Set, Tuple
+from typing import Any, Mapping, Optional, Set, Tuple
 
 # Adapter classes already warned about LEGACY_INIT — one warning per class,
 # not per call, so a hot loop through a legacy plugin adapter doesn't spam.
@@ -112,13 +112,22 @@ def _try_full_uri_init(adapter_class: type, scheme: str, resource: str,
         return None, e
 
 
-def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any] = None) -> Any:
+def uses_bound_query_call(adapter_class: type) -> bool:
+    """Only a class's own declaration adopts constructor-bound structure calls."""
+    return isinstance(adapter_class, type) and adapter_class.__dict__.get('BOUND_QUERY_CALL') is True
+
+
+def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any] = None,
+                    overrides: Optional[Mapping[str, Any]] = None) -> Any:
     """Construct a canonically-migrated adapter directly (BACK-907).
 
     Canonical signature is __init__(self, resource='', query=None, **kwargs).
     Splits resource on '?' the same way _try_query_parsing_init does, then
     calls the constructor once — no try-chain, no guessing, and any error
-    raised inside __init__ propagates to the caller unmodified.
+    raised inside __init__ propagates to the caller unmodified. Optional typed
+    overrides bind after validating the URI query and reach the constructor as
+    params, without serializing values or decoding resource paths. Already-bound
+    params and overrides are mutually exclusive.
 
     An empty resource defaults to adapter_class.CANONICAL_EMPTY_RESOURCE
     (see adapters/base.py) — '.' for path-based adapters (bare ast:// means
@@ -126,6 +135,8 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
     must stay empty so the adapter's own validation/fallback fires instead
     of misreading '.' as a literal path/host).
     """
+    if params is not None and overrides is not None:
+        raise TypeError('params and overrides cannot be supplied together')
     if params is not None:
         # Already-bound input keeps literal '?' paths out of URI serialization.
         return adapter_class(resource, params=params)
@@ -136,6 +147,11 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
     else:
         path = resource or empty_default
         query = None
+    if overrides is not None:
+        from ..utils.query_binding import bind_declared_params
+        bound = bind_declared_params(adapter_class.PARAM_SPECS, query or '', transport='uri',
+                                     overrides=overrides)
+        return adapter_class(path, params=bound)
     return adapter_class(path, query)
 
 

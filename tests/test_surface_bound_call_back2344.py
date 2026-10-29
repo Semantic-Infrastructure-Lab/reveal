@@ -153,3 +153,62 @@ def test_adopter_callable_and_class_local_capability():
     class Child(SurfaceAdapter):
         pass
     assert not uses_bound_query_call(Child)
+
+
+def test_bound_uri_and_declared_calls_bypass_legacy_kwargs_builder(project, monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError('bound operation reached legacy keyword forwarding')
+    monkeypatch.setattr('reveal.cli.routing.uri._build_adapter_kwargs', forbidden)
+    for argv in [(f'surface://{project}?type=env&source_only=true',),
+                 ('surface', str(project), '--type', 'env', '--source-only')]:
+        response = _run_reveal_direct(*argv, '--format', 'json')
+        assert response.returncode == 0 and json.loads(response.stdout)['total'] == 1
+
+
+def test_uri_unknowns_remain_disclosed_and_api_question_split_stays_legacy(project, capsys):
+    result = query(project, 'type=env&unrecognized=example', source_only=True)
+    assert result['total'] == 1
+    assert "Unknown query param 'unrecognized'" in capsys.readouterr().err
+    calls = []
+    class Target:
+        CANONICAL_EMPTY_RESOURCE = '.'
+        PARAM_SPECS = SurfaceAdapter.PARAM_SPECS
+        def __init__(self, resource, query=None, *, params=None):
+            calls.append((resource, query, params))
+    _canonical_init(Target, 'literal?name?type=env', overrides={})
+    assert calls[0][0] == 'literal'
+    assert calls[0][2]['name?type'] == 'env'
+
+
+def test_bare_kwargs_inventory_ratchet_and_surface_mutation():
+    import ast
+    from scripts.check_boundaries import ROOT, compare, find_sites
+    baseline = json.loads((ROOT / 'scripts/boundary_baseline.json').read_text(encoding='utf-8'))
+    rule = 'bare-get-structure-kwargs'
+    identities = []
+    total = 0
+    for path in sorted((ROOT / 'reveal/adapters').rglob('*.py')):
+        source = path.read_text(encoding='utf-8')
+        sites = find_sites(source, path.relative_to(ROOT).as_posix())[rule]
+        for cls in ast.walk(ast.parse(source)):
+            if isinstance(cls, ast.ClassDef):
+                for method in cls.body:
+                    if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) and method.name == 'get_structure':
+                        total += 1
+                        if method.lineno in sites:
+                            identities.append((path.relative_to(ROOT).as_posix(), cls.name))
+    assert total == 37 and len(identities) == 23
+    assert ('reveal/adapters/base.py', 'ResourceAdapter') in identities
+    assert ('reveal/adapters/demo.py', 'DemoAdapter') in identities
+    assert ('reveal/adapters/surface.py', 'SurfaceAdapter') not in identities
+    surface_path = ROOT / 'reveal/adapters/surface.py'
+    restored_sink = surface_path.read_text(encoding='utf-8').replace(
+        'def get_structure(self)', 'def get_structure(self, **kwargs)')
+    assert len(find_sites(restored_sink, 'reveal/adapters/surface.py')[rule]) == 1
+    changed = dict(baseline)
+    changed[rule] = {**baseline[rule], 'reveal/adapters/surface.py': 1}
+    regressions, _ = compare(baseline, changed)
+    assert (rule, 'reveal/adapters/surface.py', 0, 1) in regressions
+    standalone = 'def get_structure(self, **kwargs):\n    pass\n'
+    explicit = 'class Named:\n    def get_structure(self, depth=None):\n        pass\n'
+    assert not find_sites(standalone + explicit, 'reveal/adapters/example.py')[rule]

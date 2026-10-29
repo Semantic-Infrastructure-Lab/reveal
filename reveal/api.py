@@ -173,8 +173,8 @@ def query(
             Examples: ``"ast://mydir/"``, ``"claude://sessions/"``,
             ``"nginx:///etc/nginx/nginx.conf"``.
         element_name: Optional element to extract from the resource.
-        **kwargs: Additional keyword arguments forwarded to the adapter's
-            ``get_structure()`` or ``get_element()`` method.
+        **kwargs: Declared typed query controls for constructor-bound structure
+            adapters; otherwise forwarded to ``get_structure()`` or ``get_element()``.
 
     Each call is one host request with the MCP server's evidence lifetime: an edit
     made between two calls is seen by the second, and an unchanged tree's indexes are
@@ -219,6 +219,9 @@ def query(
     # One host request, as an MCP tool call is: owner-registered caches (the calls
     # indexes among them) are reset or revalidated against the tree first (BACK-2093).
     with host_request(), gitignore_scope(respect_gitignore):
+        from .adapters.factory import _canonical_init, uses_bound_query_call
+        if not element_name and uses_bound_query_call(adapter_class):
+            return _canonical_init(adapter_class, resource, overrides=kwargs).get_structure()
         if isinstance(adapter_class, type) and hasattr(adapter_class, "from_uri"):
             adapter = adapter_class.from_uri(scheme, resource, element_name)
         else:

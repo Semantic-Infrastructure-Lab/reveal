@@ -415,6 +415,8 @@ class SurfaceAdapter(ResourceAdapter):
     FINDINGS_POLICIES = ('none',)
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    BOUND_QUERY_CALL = True
+
     PARAM_SPECS = (
         ParamSpec('type', 'string', 'Filter to one surface type', '', str,
                   examples=('type=env',),
@@ -519,7 +521,7 @@ class SurfaceAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         applied = {spec.name: spec.read(self.query_params)
                    for spec in self.PARAM_SPECS if spec.role == 'analysis'}
         type_filter = applied['type']

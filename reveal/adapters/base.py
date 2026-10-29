@@ -135,6 +135,10 @@ class ResourceAdapter(ABC):
     # enforces this.
     LEGACY_INIT: bool = True
 
+    # Explicit class-local adoption: constructor-bound query controls and a zero-argument
+    # get_structure call. Subclasses must opt in themselves; plugin from_uri stays legacy.
+    BOUND_QUERY_CALL: bool = False
+
     # What an empty resource string means for this adapter's canonical
     # __init__ (LEGACY_INIT = False only — ignored otherwise). Default '.'
     # matches path-based adapters, where bare scheme:// means "current
