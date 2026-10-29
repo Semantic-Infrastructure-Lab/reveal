@@ -376,7 +376,6 @@ def _scan_surface(
         'scope': scope,
         '_meta': {
             'analysis_kind': 'surface-scan',
-            'confidence': 'medium',
             'known_limits': [
                 'taxonomy covers common libraries only — project-specific clients not detected',
                 'dynamic surface registrations (e.g. plugin-loaded routes) not tracked',
@@ -535,7 +534,6 @@ class SurfaceAdapter(ResourceAdapter):
 
         source_failures = report.pop('_source_traversal_failures', [])
         census_failures = report.pop('_census_traversal_failures', [])
-        directory_loss = bool(source_failures or census_failures)
         warnings = _surface_traversal_warnings(source_failures, census_failures, Path(self.path))
         scope_hidden = report.pop('_scope_hidden', None)
         if scope_hidden:
@@ -545,8 +543,6 @@ class SurfaceAdapter(ResourceAdapter):
         if discovery_error:
             report['error'] = discovery_error
             errors.append({'code': 'E_SURFACE_DISCOVERY', 'message': discovery_error})
-        if directory_loss:
-            report['_meta'].pop('confidence', None)
         coverage_warning = report.get('coverage', {}).get('warning', '')
         if coverage_warning:
             warnings.append({'type': 'coverage_gap', 'code': 'W-SURFACE-1', 'message': coverage_warning})
@@ -561,7 +557,6 @@ class SurfaceAdapter(ResourceAdapter):
             source=self.path,
             contract_version=CONTRACT_VERSION,
             parse_mode='ast+tree_sitter',
-            confidence=None if directory_loss else 0.6,
             warnings=warnings,
             errors=errors,
             scope=report.pop('scope'),
