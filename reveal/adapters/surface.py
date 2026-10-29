@@ -404,7 +404,7 @@ def _surface_limit(value: Any, name: str) -> int:
 @register_adapter('surface')
 @register_renderer(SurfaceRenderer)
 class SurfaceAdapter(ResourceAdapter):
-    """Adapter for mapping every external surface a codebase touches: CLI,
+    """Adapter for mapping known boundary indicators in source: CLI,
     HTTP routes, env vars, network, filesystem writes, subprocess calls."""
     HELP_CLUSTER = 'Code Analysis'
 
@@ -462,7 +462,7 @@ class SurfaceAdapter(ResourceAdapter):
     def get_help() -> Dict[str, Any]:
         return {
             'name': 'surface',
-            'description': 'Map every external surface the system touches: CLI, HTTP routes, env vars, network, filesystem writes.',
+            'description': 'Map known boundary indicators: CLI, HTTP routes, env vars, client imports and filesystem writes.',
             'syntax': 'surface://<path>[?type=cli|http|mcp|env|network|db|sdk|fs|subprocess&source_only=true&by=dir&depth=N]',
             'examples': [
                 {'uri': 'surface://src', 'description': 'All surfaces in src/'},
@@ -480,6 +480,7 @@ class SurfaceAdapter(ResourceAdapter):
             'notes': [
                 'Taxonomy-based — project-specific clients outside known libraries not detected.',
                 'Dynamic surface registrations (e.g. plugin-loaded routes) not tracked.',
+                'Python network/db/sdk entries are known client import sites, not executed I/O or resolved external-provider identities.',
             ],
             'see_also': [
                 'reveal surface <path> - CLI subcommand form',

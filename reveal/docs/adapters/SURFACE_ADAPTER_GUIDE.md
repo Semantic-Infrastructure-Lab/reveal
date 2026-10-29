@@ -5,7 +5,7 @@ category: guide
 
 # Surface Adapter Guide
 
-`surface://` maps every external boundary a codebase touches: CLI arguments,
+`surface://` maps known boundary indicators in source: CLI arguments,
 HTTP routes, MCP tool registrations, environment variable reads, network/db/sdk
 imports, filesystem writes, and subprocess/shell execution. It answers "what
 does this system talk to?" without reading the whole tree by hand.
@@ -17,7 +17,7 @@ not tracked.
 
 ## What surface:// is and is not
 
-**It is** an inventory of boundary points: the places where the code meets the outside world.
+**It is** a source map of recognized boundary sites to review.
 One entry is one site (`file` and `line`) where something comes in (a CLI argument, an HTTP
 route, an MCP tool, an environment variable), goes out to a client library (network, database,
 SDK), or acts on the machine (a file write, a launched process).
@@ -38,6 +38,19 @@ The categories do not all detect the same way, and the difference changes how to
 `network`, `db` and `sdk` are **import-detected** (importing a known client is the entry; no call is
 needed), `subprocess` is **call-shaped** (a launch call is the entry), `fs` records **writes only**
 (a read is never an entry), and `env` records **reads**.
+
+For Python, `network`, `db` and `sdk` identify **known client import sites**.
+Unused and conditional imports still count. Aliases preserve the imported module
+name; `from requests import get, post` yields two names on one line. Rows deduplicate
+by name and line within each file/category, so totals are observations, not distinct
+services or operations. The categories use separate name sets: an SDK import need
+not also appear under network.
+
+Module origin is unresolved: a local `requests.py` imported as `requests` still
+matches. Dynamic imports, project wrappers and request-shaped calls without a
+matching import can be absent. These counts establish neither external-provider
+identity nor executed network/database/SDK activity. A source-only filter changes
+observations; the broad language census is not its filtered denominator.
 
 ## Categories at a glance
 
@@ -265,7 +278,8 @@ its totals sum to the flat `total`.
   as the declaration `CLEAN_PIPES execvp(..)`) from the declaration, inside a block. A macro-looking
   type (`CLEAN_PIPES`, `Py_BEGIN_ALLOW_THREADS`) gives a plain entry; any other type
   (`Runner system(cfg);`) gives an entry tagged `declaration_shaped`, because it may be a variable.
-- Confidence is `medium` — treat results as a map to review, not a
+- The existing `medium` label and numeric confidence are heuristic metadata,
+  not measured per-category accuracy. Treat results as a map to review, not a
   compliance-grade inventory.
 
 ## See Also
