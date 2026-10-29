@@ -34,6 +34,7 @@ import subprocess
 import pytest
 
 from reveal.adapters.help import _EXAMPLE_RECIPES
+from reveal.cli.invocation import COMMANDS
 from claude_session_fixture import build_claude_home
 from codex_session_fixture import build_codex_home
 from test_output_contract_compliance import _Harness, _build_tree
@@ -593,8 +594,7 @@ def test_documentation_command_inventory_is_not_vacuous():
 # tree built under the names the docs use. A command runs only when every path, ref and
 # session it names exists there; the rest stay skips that say what they need.
 
-SUBCOMMANDS = {'check', 'review', 'pack', 'hotspots', 'overview', 'deps', 'imports', 'surface',
-               'architecture', 'contracts', 'trace', 'testability', 'health', 'dev', 'scaffold'}
+SUBCOMMANDS = frozenset(COMMANDS)
 # Path-less schemes: their target is the environment, the interpreter or the recorded homes.
 PATHLESS_SCHEMES = ('env://', 'python://', 'reveal://', 'adapter://', 'help://', 'claude://',
                     'codex://')
@@ -682,6 +682,8 @@ def _named_fixture_skip(tokens):
     conflict = next((why for key, why in FIXTURE_CONFLICTS.items() if key in ' '.join(stage)), None)
     if conflict:
         return f'fixture conflict: {conflict}'
+    if stage[1] == 'offline':
+        return 'downloads grammars or prepares the installed environment'
     if stage[1] in ('dev', 'scaffold') and len(stage) > 2 and stage[2] != 'inspect-config':
         return 'writes generated files into the tree'
     paths, refs = _fixture_names()
