@@ -968,7 +968,9 @@ reveal --languages
 
 ### Common errors and solutions:
 
-**Note**: For ordinary filter queries, a nonexistent path or rejected regex/control is a usage error (exit 2; JSON includes an `error` field). Required analysis loss, recovered syntax trees and requested-output failures exit 3, even when surviving results are useful. Healthy empty results, advisory warnings and display cuts exit 0. The dedicated `show=dict-heatmap`, `show=dict-schemas` and nonempty `reveal_type` modes, element/check operations, stdin and mixed batches keep their legacy policy (BACK-2338).
+**Note**: For direct filter queries, `show=dict-heatmap`, `show=dict-schemas` and nonempty `reveal_type` modes, a nonexistent path or rejected regex/control is a usage error (exit 2; JSON includes an `error` field). Required source/parse loss and requested-output failures exit 3, even when surviving results are useful. Healthy empty results, advisory warnings and display cuts exit 0. Element/check operations, stdin and mixed batches keep their legacy policy (BACK-2338, BACK-2341, BACK-2342).
+
+Dict and type-evidence JSON includes `analysis` counts for discovered required source candidates, successfully analyzed files, failed files and directory-discovery failure events. Candidate counts do not estimate files hidden by failed directory discovery. Type evidence additionally counts recovered trees and advisory unsupported single-file targets. A successfully analyzed file counts even if it supplies only schema context or no observations for the selected variable. Required loss removes full confidence; recovered type evidence remains available with an incompleteness warning. MCP marks fully failed analysis as an error and retains incomplete answers when source analysis survives, including answers with zero observations. The collectors retain their native Python return shapes.
 
 An unsupported operator or malformed filter (`lines>>50`, `name>5`) still fails soft: the files are scanned and the result is `Results: 0` / `No matches found.`, exit 0. If a query returns nothing, double-check the operator syntax below rather than expecting every malformed expression to be rejected.
 

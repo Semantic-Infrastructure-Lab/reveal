@@ -458,10 +458,21 @@ classifies surviving source structures before filtering: an empty filtered resul
 does not erase partial loss; zero surviving structures with required loss is failed,
 while useful partial observations remain usable through MCP. Healthy empty trees,
 expected non-applicability, advisory warnings and presentation cuts remain `0`.
-Python API validation still raises `ValueError`. This slice excludes dedicated
-`show=dict-heatmap`, `show=dict-schemas` and nonempty `reveal_type` modes, element/check
-operations, stdin and mixed batches; their legacy policy is unchanged. It does not
-add a findings gate or a generated AST subcommand.
+Python API validation still raises `ValueError`. Dedicated `show=dict-heatmap`,
+`show=dict-schemas` and nonempty `reveal_type` modes use the same policy
+(BACK-2341, BACK-2342), with their own operation identities and required source proof.
+Their `analysis` object counts discovered required `candidate_files`, `analyzed_files`,
+`failed_files` and `discovery_failures` (directory events, not a missing-file estimate).
+Type evidence also records `recovered_files` and advisory `unsupported_files`;
+unsupported single-file targets retain their existing scan behavior outside required
+Python source counts. Required candidates equal analyzed plus failed files, and recovered
+files are a subset of analyzed files. These counts precede observation selection and
+schema clustering. No analyzed required source with required loss means failed;
+surviving analyzed source with required loss, or any recovered type tree, means incomplete,
+even when no observations remain. Healthy empty answers and advisory language-census
+failures stay complete. Required loss omits full confidence and carries bounded source
+diagnostics. Element/check operations, stdin and mixed batches retain their legacy policy.
+This adoption adds no findings gate or generated AST subcommand.
 
 Surface is an inventory and declares only `--fail-on none`, also its default; it
 rejects `findings`. `none` never suppresses incomplete analysis or output failure.
@@ -659,6 +670,12 @@ adapter's `result_type_for(params)` reads prepared parameter presence without
 consuming or converting values; the common runner carries that expected identity
 through validation and error construction. `validate_request(params, args)` checks
 operation-specific applicability before analysis.
+
+For qualified direct URI operations without declared parameter binding, an optional
+adapter-owned `uri_result_type(resource)` resolves identity from the original resource
+before construction, including validation and preparation failures. The fallback is
+the adapter's `RESULT_TYPE`; AST mode extraction retains its existing query spelling
+and duplicate-key behavior.
 
 Required answer qualification runs before and after postprocessing. Generic trust
 frames allow optional `meta.errors`/`meta.warnings`; present fields must be lists of
