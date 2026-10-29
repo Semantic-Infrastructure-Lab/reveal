@@ -152,3 +152,32 @@ def test_api_raw_resource_spelling_and_literal_constructor_path_remain(project):
     # Typed construction never serializes a literal question mark into a query.
     adapter = SurfaceAdapter(str(project) + '?literal%26+', params={'type': 'env'})
     assert adapter.path == str(project) + '?literal%26+'
+
+
+def test_unknown_uri_key_still_warns_and_ignores(project, capsys):
+    answer = api.query(uri(project, 'type=env&nonsense=true'))
+    assert names(answer) == {'PRODUCTION_VAR', 'TEST_VAR'}
+    assert "Unknown query param 'nonsense'" in capsys.readouterr().err
+
+
+def test_overlay_constructs_once(project, monkeypatch):
+    original = SurfaceAdapter.__init__
+    constructed = []
+    def initialize(self, *args, **kwargs):
+        constructed.append(True)
+        original(self, *args, **kwargs)
+    monkeypatch.setattr(SurfaceAdapter, '__init__', initialize)
+    answer = api.query(uri(project), source_only=True)
+    assert constructed == [True]
+    assert names(answer) == {'PRODUCTION_VAR'}
+
+
+def test_api_does_not_adopt_uri_resource_decoding(project):
+    decoded = project / 'literal space'
+    decoded.mkdir()
+    (decoded / 'app.py').write_text('import os\nx=os.getenv("DECODED_VAR")\n', encoding='utf-8')
+    encoded = project / 'literal%20space'
+    baseline = api.query(uri(encoded))
+    answer = api.query(uri(encoded), source_only=True)
+    assert baseline['total'] == answer['total'] == 0
+    assert baseline['source'] == answer['source'] == str(encoded)
