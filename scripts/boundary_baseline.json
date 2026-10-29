@@ -6,7 +6,6 @@
   "reveal/adapters/classify.py": 1,
   "reveal/adapters/claude/adapter.py": 1,
   "reveal/adapters/codex/adapter.py": 1,
-  "reveal/adapters/contracts.py": 1,
   "reveal/adapters/demo.py": 1,
   "reveal/adapters/depends.py": 1,
   "reveal/adapters/deps.py": 1,

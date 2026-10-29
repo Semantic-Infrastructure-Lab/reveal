@@ -958,6 +958,7 @@ class ContractsAdapter(ResourceAdapter):
     FINDINGS_POLICIES = ('none',)
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    BOUND_QUERY_CALL = True
     PARAM_SPECS = (_ABSTRACT_ONLY, _IMPLEMENTATIONS, _IMPLS)
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
@@ -1046,7 +1047,7 @@ class ContractsAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         abstract_only = _ABSTRACT_ONLY.read(self.query_params)
         show_implementations = _IMPLEMENTATIONS.read(self.query_params)
 
