@@ -226,13 +226,14 @@ def test_transport_noops_and_explicit_exclusions(project):
         assert not any(frame['file'].endswith('hidden.py') for frame in after['frames'])
 
 
-@pytest.mark.parametrize('values', [
-    {'from': 'main', 'depth': True}, {'from': 'main', 'depth': 2.0},
-    {'from': True}, {'from': []}, {'from': '   '},
+@pytest.mark.parametrize('values,field', [
+    ({'root': 'main', 'depth': True}, 'depth'), ({'root': 'main', 'depth': 2.0}, 'depth'),
+    ({'root': True}, 'from'), ({'root': []}, 'from'), ({'root': '   '}, 'from'),
 ])
-def test_direct_typed_binding_rejects_nonscalar_or_nonwhole_values(project, values):
+def test_direct_typed_binding_rejects_nonscalar_or_nonwhole_values(project, values, field):
     from reveal.adapters.trace import TraceAdapter
-    with pytest.raises(ValueError):
+    assert TraceAdapter(str(project), params={'root': 'main', 'depth': 2}).get_structure()['root'] == 'main'
+    with pytest.raises(ValueError, match=field):
         TraceAdapter(str(project), params=values)
 
 
