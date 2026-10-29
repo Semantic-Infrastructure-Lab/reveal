@@ -208,7 +208,7 @@ def test_all_excluded_is_disclosed_scope_empty(project):
     assert result.returncode == 0
     assert body['scope']['total_code_files'] == 0
     assert body['scope']['hidden']['by_cause']['exclude'] > 0
-    assert any(w['type'] == 'scope_hidden' for w in body['meta']['warnings'])
+    assert len([w for w in body['meta']['warnings'] if w['type'] == 'scope_hidden']) == 1
 
 
 def denied_child(monkeypatch, child):
@@ -323,6 +323,7 @@ def test_final_proof_validator_does_not_consume_query_controls(project):
 
 
 @pytest.mark.parametrize('damage', ['row', 'entry_filter', 'rule', 'budget', 'diagnostics', 'new_error',
+                                  'unsupported_count', 'distinct_rules',
                                   'hidden', 'counting_rule', 'language_count', 'reading_note'])
 def test_postprocessing_cannot_erase_required_map_proof(project, monkeypatch, damage):
     def corrupt(result, args):
@@ -336,6 +337,10 @@ def test_postprocessing_cannot_erase_required_map_proof(project, monkeypatch, da
             result['map']['metadata']['scan_budget']['returned'] = 'not a count'
         elif damage == 'diagnostics':
             result['map']['metadata'].pop('extraction_diagnostics_count')
+        elif damage == 'unsupported_count':
+            result['map']['metadata']['unsupported_extensions'] = {'.ex': -1}
+        elif damage == 'distinct_rules':
+            result['map']['rules']['edge_rule_sections'] = {}
         elif damage == 'new_error':
             result['map'].pop('entry_point_filter')
             result['meta'] = {'errors': [{'code': 'invented', 'message': 'postprocess error'}]}
