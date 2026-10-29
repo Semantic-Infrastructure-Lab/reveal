@@ -172,6 +172,83 @@ def test_a_new_lazy_row_needs_a_baseline_review(lazy_corpus):
         'py: lazy=exclude measurement missing', 'py: lazy=only measurement missing']
 
 
+@pytest.fixture
+def test_import_corpus(tmp_path):
+    return _repo(tmp_path, {
+        'pyproject.toml': '[project]\nname = "pkg"\n',
+        'pkg/__init__.py': '',
+        'pkg/shared.py': '',
+        'pkg/test_only_target.py': '',
+        'pkg/use.py': 'import pkg.shared\nimport tests.helper\n',
+        'tests/__init__.py': '',
+        'tests/helper.py': 'import pkg.shared\nimport pkg.test_only_target\n',
+    }, {'oracle': 'python-ast', 'importer_dirs': ['.'], 'test_importer_dirs': ['tests']})
+
+
+def test_test_exclusion_scores_importers_not_targets_and_detects_ignored_parameter(test_import_corpus, monkeypatch):
+    root, entry = test_import_corpus
+    baseline = gate.measure(entry, root)
+    row = baseline['tests']['exclude']
+    assert row['oracle_edges'] == row['hit_edges'] == 2
+    assert row['recall'] == row['precision'] == 1
+    assert row['edge_rule']['tests'] == 'excluded'
+    assert row['test_population'] == {'directories': ['tests'], 'files': 2, 'edges': 2}
+    # A target under tests/ remains valid: exclusion selects importers, not targets.
+    assert row['targets'] == 2
+    monkeypatch.setattr(ImportGraph, 'without_test_importers', lambda self: self)
+    measured = gate.measure(entry, root)
+    assert measured['recall'] == measured['precision'] == 1
+    assert measured['lazy'] == baseline['lazy']
+    assert measured['tests']['exclude']['differences'] == [
+        {'target': 'pkg/shared.py', 'missed': [], 'extra': ['tests/helper.py']},
+        {'target': 'pkg/test_only_target.py', 'missed': [], 'extra': ['tests/helper.py']},
+    ]
+    assert any('tests=exclude extra-edge population changed' in failure
+               for failure in gate.regressions({'py': measured}, {'py': baseline}))
+
+
+def test_test_exclusion_detects_wrongly_classified_production_importer(test_import_corpus, monkeypatch):
+    from reveal.utils import path_utils
+
+    root, entry = test_import_corpus
+    baseline = gate.measure(entry, root)
+    real = path_utils.is_test_path
+    monkeypatch.setattr(path_utils, 'is_test_path', lambda path: real(path) or Path(path).name == 'use.py')
+    with pytest.raises(RuntimeError, match='tests=exclude.*zero oracle edges'):
+        gate.measure(entry, root)
+    assert baseline['tests']['exclude']['hit_edges'] == 2
+
+
+def test_test_exclusion_zero_truth_is_unavailable_recall_and_still_scores_extras(test_import_corpus, monkeypatch):
+    root, entry = test_import_corpus
+    entry['recall']['importer_dirs'] = ['tests']
+    measured = gate.measure(entry, root)
+    row = measured['tests']['exclude']
+    assert row['oracle_edges'] == row['hit_edges'] == row['extra_edges'] == 0
+    assert row['recall'] is row['precision'] is None
+    monkeypatch.setattr(ImportGraph, 'without_test_importers', lambda self: self)
+    broken = gate.measure(entry, root)['tests']['exclude']
+    assert broken['recall'] is None and broken['precision'] == 0
+    assert broken['extra_edges'] == 2
+
+
+def test_test_exclusion_requires_reviewed_nonvacuous_population(test_import_corpus):
+    root, entry = test_import_corpus
+    measured = gate.measure(entry, root)
+    without = {key: value for key, value in measured.items() if key != 'tests'}
+    assert gate.regressions({'py': measured}, {'py': without}) == [
+        'py: tests=exclude baseline missing; review required']
+    assert gate.regressions({'py': without}, {'py': measured}) == ['py: tests=exclude measurement missing']
+    for directories in ([], ['missing'], ['../escape'], ['/absolute'], ['pkg/shared.py']):
+        entry['recall']['test_importer_dirs'] = directories
+        with pytest.raises(RuntimeError, match='test_importer_dirs'):
+            gate.measure(entry, root)
+    entry['recall']['test_importer_dirs'] = ['tests']
+    entry['recall']['importer_dirs'] = ['pkg']
+    with pytest.raises(RuntimeError, match='test.*population|test.*edges'):
+        gate.measure(entry, root)
+
+
 def test_python_file_the_oracle_cannot_parse_is_a_failure_not_a_smaller_truth(tmp_path):
     root, entry = _repo(tmp_path, {**PYTHON, 'pkg/bad.py': 'def broken(:\n'},
                         {'oracle': 'python-ast', 'importer_dirs': ['.']})
