@@ -190,7 +190,7 @@ def _python_tokens(code: str) -> Optional[List[tokenize.TokenInfo]]:
     return result if depth == 0 else None
 
 
-def _source_span(code: str, start: tuple, end: tuple) -> str:
+def _source_span(code: str, start: tuple[int, int], end: tuple[int, int]) -> str:
     lines = split_lines(code)
     if start[0] == end[0]:
         return lines[start[0] - 1][start[1]:end[1]]
@@ -260,7 +260,7 @@ def _normalize_python(code: str) -> str:
     prefix = '__D001_LITERAL_'
     while prefix in code:
         prefix += '_'
-    literals = {}
+    literals: Dict[str, str] = {}
     for token in tokens:
         if any(start <= token.start and token.end <= end for start, end in docs):
             continue
