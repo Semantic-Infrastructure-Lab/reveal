@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from .service import architecture_edge_rules
-from ...utils.entry_points import active_entry_points, entry_point_filter
+from ...utils.entry_points import is_active_entry_point, entry_point_filter
 from ...utils.path_utils import to_posix, to_relative_display
 
 
@@ -193,17 +193,25 @@ def project_map_facts(fan_in: dict[str, Any], entrypoints: dict[str, Any],
         projected = _relationship(row, path)
         if row['fan_in'] > 0:
             projected_fans.append(projected)
+    # Normalize separators without dropping producer path context: an ancestor
+    # named tests governs this existing predicate even when display is relative.
+    source_entries = [{**row, 'file': to_posix(row['file'])} for row in entries]
     projected_entries = [_relationship(row, path) for row in entries]
-    # Apply the shared predicate after path normalization for native spellings.
-    active = active_entry_points(projected_entries)
+    active = [projected for source, projected in zip(source_entries, projected_entries)
+              if is_active_entry_point(source)]
+    predicate = entry_point_filter(source_entries)
+    predicate['path_basis'] = 'producer paths before target-relative display'
     projected_components = [_relationship(row, path, component=True) for row in component_rows]
     projected_components.sort(key=lambda row: (-row['files'], row['component']))
-    cycles = [_cycle(group, witness, path, top) for group, witness in zip(groups, witnesses)]
+    paired = sorted(zip(groups, witnesses),
+                    key=lambda pair: tuple(sorted(_path(member, path)
+                                                  for member in _paths(pair[0], 'cycle members'))))
+    cycles = [_cycle(group, witness, path, top) for group, witness in paired]
     rules = architecture_edge_rules(fan_in, entrypoints, components, circular)
     rules['component_order'] = 'covered file count descending, then component path ascending'
     if 'cohesion_rule' in components:
         rules['cohesion_rule'] = components['cohesion_rule']
     return {'fan_in': _page(projected_fans, top), 'entrypoints': _page(active, top),
             'components': _page(projected_components, top), 'cycles': _page(cycles, top),
-            'rules': deepcopy(rules), 'entry_point_filter': entry_point_filter(projected_entries),
+            'rules': deepcopy(rules), 'entry_point_filter': predicate,
             'metadata': _metadata(metadata, path)}
