@@ -19,7 +19,7 @@ def answers(root):
 
 @pytest.fixture
 def source():
-    rule = {'text': 'fixture static import rule', 'lazy': 'include', 'tests': 'include', 'scope': 'scanned_path'}
+    rule = {'text': 'fixture static import rule', 'lazy': 'include', 'tests': 'included', 'scope': 'scanned_path'}
     fans = [{'file': f'pkg/a{n}.py', 'fan_in': 9-n, 'fan_out': 1} for n in range(8)]
     entries = [{'file': f'pkg/e{n}.py', 'fan_out': 1, 'is_test': False,
                 'test_only_importers': 2} for n in range(8)]
@@ -182,6 +182,32 @@ def test_uncapped_traversal_lower_bound_remains_inexact(source, tmp_path):
                               'returned': 34, 'exact': False, 'capped': False}
     result = project_map_facts(*source, path=tmp_path)
     assert result['metadata']['scan_budget'] == source[4]['scan_budget']
+
+
+@pytest.mark.parametrize('group,witness', [([], []), (['a.py'], ['a.py']),
+                                        (['a.py', 'a.py'], ['a.py']),
+                                        (['a.py', 'b.py'], []),
+                                        (['a.py', 'b.py'], ['outside.py'])])
+def test_invalid_cycle_evidence_rejected(source, tmp_path, group, witness):
+    source[3]['cycles'][0] = group
+    source[3]['cycle_paths'][0] = witness
+    with pytest.raises(ValueError, match='cycle'):
+        project_map_facts(*source, path=tmp_path)
+
+
+@pytest.mark.parametrize('section', range(4))
+@pytest.mark.parametrize('rule', [{}, {'text': ''},
+                                {'text': 'incomplete rule', 'lazy': 'include'}])
+def test_missing_counting_rule_proof_rejected(source, tmp_path, section, rule):
+    source[section]['edge_rule'] = rule
+    with pytest.raises(ValueError, match='counting rule'):
+        project_map_facts(*source, path=tmp_path)
+
+
+def test_cycle_witness_fallback_need_not_close(source, tmp_path):
+    source[3]['cycle_paths'][0] = source[3]['cycles'][0].copy()
+    result = project_map_facts(*source, path=tmp_path)
+    assert result['cycles']['rows'][0]['path']['total'] == 8
 
 
 @pytest.mark.parametrize('damage', ['loss', 'causes', 'count', 'witness', 'rule'])
