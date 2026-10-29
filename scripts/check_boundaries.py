@@ -96,6 +96,11 @@ Rules (home = where the concern is allowed to live):
     file content (subprocess output, a rendered or help string) is marked
     ``# boundary-ok: splitlines -- <why>``.
 
+``bare-get-structure-kwargs`` (BACK-2214; Surface pilot BACK-2344)
+    Class-body get_structure methods with one positional receiver and bare **kwargs,
+    regardless of receiver spelling. Includes base/demo adapters, excludes module-level
+    functions, and uses the existing per-file baseline for the remaining owners.
+
 ``lazy-cycle`` (BACK-2215)
     A function-level import that closes an import cycle among reveal's own files. The load-time
     graph has no cycles; every cycle closes through a deferred ``from ..cli.x import y`` inside a
@@ -138,7 +143,7 @@ _ENTRY_POINTS: Tuple[Home, ...] = (('prefix', 'reveal/main.py'), ('prefix', 'rev
 
 RULES: Dict[str, Dict[str, Any]] = {
     'bare-get-structure-kwargs': {
-        'task': 'BACK-2344',
+        'task': 'BACK-2214 (pilot BACK-2344)',
         'fix': 'bind declared controls before analysis and use get_structure(self)',
         'home': (),
         'scope': (('prefix', 'reveal/adapters/'),),
