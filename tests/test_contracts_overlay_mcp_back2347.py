@@ -4,7 +4,7 @@ import json
 import pytest
 
 from reveal import api
-from test_contracts_api_overlay_back2347 import SOURCE
+from test_contracts_api_overlay_back2347 import RUST_SOURCE, SOURCE
 from test_mcp_expected_errors_back1992 import _run, _text
 
 pytestmark = [pytest.mark.mcp, pytest.mark.component]
@@ -83,11 +83,26 @@ def test_contracts_budgets_losses_repair_and_siblings_through_stdio(tmp_path, pr
     output.mkdir()
     (output / 'contract.py').write_text(SOURCE, encoding='utf-8')
 
+    implementation_only = tmp_path / 'implementation_only'
+    implementation_only.mkdir()
+    (implementation_only / 'visible.rs').write_text(RUST_SOURCE, encoding='utf-8')
+
     async def scenario(session):
         async def query(query_string='', path=root):
             return await session.call_tool('reveal_query', {
                 'uri': f'contracts://{path.as_posix()}' + ('?' + query_string if query_string else ''),
                 'provenance': provenance})
+        useful_zero = await query('impls=1', implementation_only)
+        assert not useful_zero.is_error and 'First' in _text(useful_zero) and 'Second' in _text(useful_zero)
+        if provenance:
+            answer = json.loads(_text(useful_zero))
+            assert answer['total_contracts'] == 0 and answer['impls_cap'] == 1
+            assert [row['name'] for row in answer['dataclasses']] == ['First', 'Second']
+        for control in ('abstract_only=true', 'implementations=false'):
+            empty = await query(control, implementation_only)
+            assert not empty.is_error and 'incomplete' not in _text(empty).lower()
+            if provenance:
+                assert json.loads(_text(empty))['dataclasses'] == []
         for cap in (1, 0):
             budget = await query(f'impls={cap}&abstract_only=true')
             assert not budget.is_error and 'Contract' in _text(budget)

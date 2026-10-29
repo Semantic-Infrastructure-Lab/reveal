@@ -141,3 +141,18 @@ def test_custom_plugin_structure_and_element_forwarding_remain(project, monkeypa
     assert api.query(f'contracts-plugin://{project.as_posix()}', nonsense=False) == {'received': {'nonsense': False}}
     assert api.query(f'contracts-plugin://{project.as_posix()}', element_name='entry', impls=0) == {
         'element': 'entry', 'received': {'impls': 0}}
+
+
+RUST_SOURCE = ('struct First;\nimpl External for First { fn go(&self) {} }\n'
+               'struct Second;\nimpl External for Second { fn go(&self) {} }\n')
+
+
+def test_implementation_only_zero_contracts_keeps_useful_rows_and_flags(tmp_path):
+    (tmp_path / 'visible.rs').write_text(RUST_SOURCE, encoding='utf-8')
+    expected = ContractsAdapter(str(tmp_path), 'impls=1').get_structure()
+    assert expected['total_contracts'] == 0
+    assert [row['name'] for row in expected['dataclasses']] == ['First', 'Second']
+    assert api.query(uri(tmp_path), impls=1) == expected
+    for override in ({'abstract_only': True}, {'implementations': False}):
+        answer = api.query(uri(tmp_path), **override)
+        assert answer['total_contracts'] == 0 and answer['dataclasses'] == []
