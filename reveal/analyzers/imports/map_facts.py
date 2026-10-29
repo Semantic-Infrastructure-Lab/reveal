@@ -157,6 +157,18 @@ def _metadata(metadata: dict[str, Any], base: Path) -> dict[str, Any]:
     return result
 
 
+def _entrypoint_rows(entries: list[dict[str, Any]], path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    # Normalize separators without dropping producer path context: an ancestor
+    # named tests governs this existing predicate even when display is relative.
+    source_entries = [{**row, 'file': to_posix(row['file'])} for row in entries]
+    projected_entries = [_relationship(row, path) for row in entries]
+    active = [projected for source, projected in zip(source_entries, projected_entries)
+              if is_active_entry_point(source)]
+    predicate = entry_point_filter(source_entries)
+    predicate['path_basis'] = 'producer paths before target-relative display'
+    return active, predicate
+
+
 def project_map_facts(fan_in: dict[str, Any], entrypoints: dict[str, Any],
                       components: dict[str, Any], circular: dict[str, Any],
                       metadata: dict[str, Any], *, path: Path, top: int = 5) -> MapFacts:
@@ -193,14 +205,7 @@ def project_map_facts(fan_in: dict[str, Any], entrypoints: dict[str, Any],
         projected = _relationship(row, path)
         if row['fan_in'] > 0:
             projected_fans.append(projected)
-    # Normalize separators without dropping producer path context: an ancestor
-    # named tests governs this existing predicate even when display is relative.
-    source_entries = [{**row, 'file': to_posix(row['file'])} for row in entries]
-    projected_entries = [_relationship(row, path) for row in entries]
-    active = [projected for source, projected in zip(source_entries, projected_entries)
-              if is_active_entry_point(source)]
-    predicate = entry_point_filter(source_entries)
-    predicate['path_basis'] = 'producer paths before target-relative display'
+    active, predicate = _entrypoint_rows(entries, path)
     projected_components = [_relationship(row, path, component=True) for row in component_rows]
     projected_components.sort(key=lambda row: (-row['files'], row['component']))
     paired = sorted(zip(groups, witnesses),

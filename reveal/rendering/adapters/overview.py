@@ -27,8 +27,7 @@ def _render_scope(scope: dict) -> list[str]:
     return lines
 
 
-def _render_map(facts: dict) -> list[str]:
-    metadata = facts['metadata']
+def _render_import_coverage(metadata: dict, rules: dict) -> list[str]:
     budget = metadata['scan_budget']
     exact = 'exact' if budget['exact'] is True else 'lower bound' if budget['exact'] is False else 'unavailable'
     lines = [f"\nImport coverage  {metadata['scanned_files']} files scanned; source accounting {exact}",
@@ -39,7 +38,12 @@ def _render_map(facts: dict) -> list[str]:
     regime = metadata.get('autoload_regime')
     if regime:
         lines.append(f"  Framework evidence: {regime['framework']} — {regime['evidence']}; static imports can omit convention-loaded files.")
-    lines.extend('  ' + line for line in edge_rule_lines(facts['rules']))
+    lines.extend('  ' + line for line in edge_rule_lines(rules))
+    return lines
+
+
+def _render_map(facts: dict) -> list[str]:
+    lines = _render_import_coverage(facts['metadata'], facts['rules'])
     page = facts['fan_in']
     lines.append(_page_heading('Most imported files', page))
     for row in page['rows']:

@@ -109,6 +109,20 @@ def _observed_relationships(fan_in, entrypoints, components, cycles) -> bool:
             or any(len(set(group)) >= 2 for group in cycles))
 
 
+def _import_warnings(built, target: Path, budget: dict) -> list:
+    warnings = integrity_warnings(built.analysis, target)
+    traversal_warning = traversal_failed_warning(built.files.traversal_failures, target)
+    if traversal_warning and traversal_warning not in warnings:
+        warnings.append(traversal_warning)
+    hidden_warning = hidden_entries_warning(built.files.hidden, built.files.analyzed)
+    if hidden_warning:
+        warnings.append(hidden_warning)
+    if budget['capped']:
+        warnings.append({'type': 'scan_capped', 'limit': budget['limit'],
+                         'message': f"Import discovery stopped at its {budget['limit']} file limit; map totals describe the observed graph only."})
+    return warnings
+
+
 def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, scope_usable: bool) -> tuple[Optional[dict], str]:
     """Validate full owner evidence before any map or diagnostic presentation cuts."""
     try:
@@ -119,22 +133,13 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, s
             built = import_analysis.analyze(scope)
         view = ImportView(built.analysis, target, resolution.ScanRoot(target, 'path'),
                           scope.cap)
-        warnings = integrity_warnings(built.analysis, target)
-        traversal_warning = traversal_failed_warning(built.files.traversal_failures, target)
-        if traversal_warning and traversal_warning not in warnings:
-            warnings.append(traversal_warning)
-        hidden_warning = hidden_entries_warning(built.files.hidden, built.files.analyzed)
-        if hidden_warning:
-            warnings.append(hidden_warning)
         with import_analysis.composed_rules('overview://'):
             fan_in, entries = view.fan_in(), view.entrypoints()
             components, circular = view.components(), view.circular()
         metadata = view.get_metadata()
         facts = project_map_facts(fan_in, entries, components, circular, metadata, path=target, top=top)
         budget = metadata['scan_budget']
-        if budget['capped']:
-            warnings.append({'type': 'scan_capped', 'limit': budget['limit'],
-                             'message': f"Import discovery stopped at its {budget['limit']} file limit; map totals describe the observed graph only."})
+        warnings = _import_warnings(built, target, budget)
         adapter.fold_meta({'warnings': warnings})
         directory_loss = any(w['type'] == 'analysis_incomplete' for w in warnings)
         usable = _observed_relationships(fan_in['entries'], entries['entries'],
