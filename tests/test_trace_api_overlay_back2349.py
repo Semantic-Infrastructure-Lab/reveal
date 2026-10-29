@@ -169,3 +169,23 @@ def test_custom_subclass_structure_and_element_forwarding_remain(project, monkey
     assert api.query(f'trace-plugin://{project.as_posix()}', root=False) == {'received': {'root': False}}
     assert api.query(f'trace-plugin://{project.as_posix()}', element_name='entry', depth=0) == {
         'name': 'entry', 'received': {'depth': 0}}
+
+
+def test_trace_nested_and_interrupted_composition_restore_diagnostic_lifetime(project, monkeypatch):
+    owner = TraceAdapter(str(project), 'from=main')
+    clean = owner.get_structure()
+    outer_warning = {'type': 'outer_control', 'message': 'outer analysis warning'}
+    with owner.composition_run():
+        owner.fold_meta({'warnings': [outer_warning]})
+        assert owner.get_structure() == clean
+        assert owner.composed_meta()['warnings'] == [outer_warning]
+    assert owner.composed_meta() is None
+    def interrupted():
+        owner.record_composed_error('trace_control', project, OSError('interrupted source'))
+        raise RuntimeError('TRACE_INTERRUPTED')
+    with monkeypatch.context() as context:
+        context.setattr(owner, '_get_structure', interrupted)
+        with pytest.raises(RuntimeError, match='TRACE_INTERRUPTED'):
+            owner.get_structure()
+    assert owner.composed_meta() is None
+    assert owner.get_structure() == clean
