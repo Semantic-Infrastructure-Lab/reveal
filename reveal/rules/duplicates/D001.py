@@ -13,7 +13,9 @@ Performance:
 - Cross-file: Deferred (needs caching strategy)
 """
 
+import io
 import logging
+import tokenize
 from typing import List, Dict, Any, Optional
 from hashlib import sha256
 import re
@@ -57,11 +59,14 @@ class D001(BaseRule):
         if len(functions) < 2:
             return []
         classes = structure.get('classes', [])
-        scope_hashes = self._build_scope_hashes(functions, classes, content)
+        from reveal.registry import get_analyzer
+        analyzer = get_analyzer(file_path, allow_fallback=False)
+        python = getattr(analyzer, 'language', None) == 'python'
+        scope_hashes = self._build_scope_hashes(functions, classes, content, python=python)
         return self._emit_duplicates(scope_hashes, file_path)
 
     def _build_scope_hashes(
-        self, functions: list, classes: list, content: str
+        self, functions: list, classes: list, content: str, *, python: bool = False
     ) -> Dict[str, Dict[str, list]]:
         """Hash each function body grouped by containing class scope."""
         from collections import defaultdict
@@ -77,7 +82,7 @@ class D001(BaseRule):
             func_body = extract_function_body(func, content)
             if not func_body or len(func_body.strip()) < 10:
                 continue
-            normalized = self._normalize(func_body)
+            normalized = _normalize_python(func_body) if python else self._normalize(func_body)
             if not normalized or is_trivial_hook_body(normalized):
                 continue
             func_hash = sha256(normalized.encode('utf-8')).hexdigest()[:16]
@@ -156,3 +161,120 @@ class D001(BaseRule):
         code = '\n'.join(lines)
 
         return code.strip()
+
+
+def _python_tokens(code: str) -> Optional[List[tokenize.TokenInfo]]:
+    """Keep interpolated strings opaque on both old and new tokenizer APIs."""
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(code).readline))
+    except (tokenize.TokenError, SyntaxError):
+        return None
+    if any(token.type == tokenize.ERRORTOKEN for token in tokens):
+        return None
+    result = []
+    depth = 0
+    first = None
+    for token in tokens:
+        name = tokenize.tok_name[token.type]
+        if name in ('FSTRING_START', 'TSTRING_START'):
+            if not depth:
+                first = token
+            depth += 1
+        elif name in ('FSTRING_END', 'TSTRING_END'):
+            depth -= 1
+            if not depth and first is not None:
+                text = _source_span(code, first.start, token.end)
+                result.append(tokenize.TokenInfo(tokenize.STRING, text, first.start, token.end, first.line))
+        elif not depth:
+            result.append(token)
+    return result if depth == 0 else None
+
+
+def _source_span(code: str, start: tuple, end: tuple) -> str:
+    lines = split_lines(code)
+    if start[0] == end[0]:
+        return lines[start[0] - 1][start[1]:end[1]]
+    return '\n'.join([lines[start[0] - 1][start[1]:],
+                       *lines[start[0]:end[0] - 1], lines[end[0] - 1][:end[1]]])
+
+
+def _is_docstring(tokens: List[tokenize.TokenInfo]) -> bool:
+    """A plain string expression, including parentheses/implicit concatenation."""
+    strings = [token for token in tokens if token.type == tokenize.STRING]
+    return bool(strings) and all(
+        (token.type == tokenize.STRING and token.string.lstrip('rRuU').startswith(('"', "'")))
+        or token.string in ('(', ')', ';') for token in tokens)
+
+
+def _docstring_spans(tokens: List[tokenize.TokenInfo]) -> list:
+    """Only a function/class suite's first statement can supply its docstring.
+
+    The input is an extracted function body. Control-flow suites do not acquire
+    docstrings; later standalone strings and assigned/returned strings are code.
+    Inline nested suites are retained conservatively.
+    """
+    spans = []
+    suites = [True]
+    next_suite = True  # initial indentation belongs to the extracted function
+    statement: List[tokenize.TokenInfo] = []
+    for token in tokens:
+        if token.type == tokenize.INDENT:
+            suites.append(next_suite)
+            next_suite = False
+        elif token.type == tokenize.DEDENT:
+            if len(suites) > 1:
+                suites.pop()
+        elif token.type in (tokenize.NEWLINE, tokenize.ENDMARKER):
+            if statement:
+                first = _first_statement(statement)
+                if suites[-1] and _is_docstring(first):
+                    spans.append((first[0].start, first[-1].end))
+                suites[-1] = False
+                names = [item.string for item in statement[:2]]
+                next_suite = (names[:1] in (['def'], ['class']) or names == ['async', 'def'])
+                statement = []
+        elif token.type not in (tokenize.COMMENT, tokenize.NL, tokenize.ENCODING):
+            statement.append(token)
+    return spans
+
+
+def _first_statement(tokens: List[tokenize.TokenInfo]) -> List[tokenize.TokenInfo]:
+    for index, token in enumerate(tokens):
+        if token.string == ';':
+            return tokens[:index + 1]
+    return tokens
+
+
+def _normalize_python(code: str) -> str:
+    """Normalize Python trivia without rewriting any literal's source bytes."""
+    tokens = _python_tokens(code)
+    if tokens is None:
+        return code  # unknown lexical source never goes through destructive regexes
+    docs = _docstring_spans(tokens)
+    offsets = [0]
+    for line in split_lines(code):
+        offsets.append(offsets[-1] + len(line) + 1)
+    def offset(position):
+        return offsets[position[0] - 1] + position[1]
+    edits = [(offset(start), offset(end), '') for start, end in docs]
+    prefix = '__D001_LITERAL_'
+    while prefix in code:
+        prefix += '_'
+    literals = {}
+    for token in tokens:
+        if any(start <= token.start and token.end <= end for start, end in docs):
+            continue
+        if token.type == tokenize.COMMENT:
+            edits.append((offset(token.start), offset(token.end), ''))
+        elif token.type == tokenize.STRING:
+            marker = f'{prefix}{len(literals)}__'
+            literals[marker] = token.string
+            edits.append((offset(token.start), offset(token.end), marker))
+    for start, end, replacement in sorted(edits, reverse=True):
+        code = code[:start] + replacement + code[end:]
+    code = re.sub(r'[ \t]+', ' ', code)
+    code = re.sub(r'\n\s*\n', '\n', code)
+    code = '\n'.join(line.strip() for line in split_lines(code)).strip()
+    for marker, literal in literals.items():
+        code = code.replace(marker, literal)
+    return code

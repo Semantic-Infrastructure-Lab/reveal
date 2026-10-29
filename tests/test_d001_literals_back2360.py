@@ -46,6 +46,7 @@ def _check(tmp_path, source, suffix='.py'):
     ('return "a\tb"', 'return "a b"'),
     (r'return "a\\#red"', r'return "a\\#blue"'),
     ('return r"prefix#red"', 'return r"prefix#blue"'),
+    ('return b"prefix#red"', 'return b"prefix#blue"'),
     ('return f"prefix#{value}"', 'return f"prefix#{value + 1}"'),
     ('return value // 2', 'return value // 3'),
     ('text = """red#value\n    keep  spacing"""\n    return text',
@@ -54,10 +55,12 @@ def _check(tmp_path, source, suffix='.py'):
      'return """blue#value\n    keep  spacing"""'),
     ('if value:\n        """red text"""\n    return value',
      'if value:\n        """blue text"""\n    return value'),
+    ('while value:\n        """red text"""\n        break\n    return value',
+     'while value:\n        """blue text"""\n        break\n    return value'),
     ('value += 1\n    """red text"""\n    return value',
      'value += 1\n    """blue text"""\n    return value'),
-], ids=['hash', 'https', 'block-marker', 'spaces', 'tab', 'escape', 'raw', 'fstring',
-        'floor-division', 'assigned-triple', 'returned-triple', 'if-string', 'later-string'])
+], ids=['hash', 'https', 'block-marker', 'spaces', 'tab', 'escape', 'raw', 'bytes', 'fstring',
+        'floor-division', 'assigned-triple', 'returned-triple', 'if-string', 'while-string', 'later-string'])
 def test_distinct_python_values_do_not_gate_as_duplicates(tmp_path, first, second):
     source = _pair('    ' + first, '    ' + second)
     tree = ast.parse(source)
@@ -74,10 +77,11 @@ def test_distinct_python_values_do_not_gate_as_duplicates(tmp_path, first, secon
      '# different comment\n    result   =   value + 1 # inline\n    return result'),
     ('"""First docs."""\n    return value + 1',
      '"""Second docs."""\n    return value + 1'),
+    ('"First docs."; return value + 1', 'return value + 1'),
     ('"First docs."\n    return value + 1', '"Second docs."\n    return value + 1'),
     ('("First "\n     "docs.")\n    return value + 1',
      '("Different docs.")\n    return value + 1'),
-], ids=['genuine', 'comments-format', 'triple-docstring', 'single-docstring', 'parenthesized-docstring'])
+], ids=['genuine', 'comments-format', 'triple-docstring', 'semicolon-docstring', 'single-docstring', 'parenthesized-docstring'])
 def test_real_duplicates_survive_comment_and_docstring_normalization(tmp_path, first, second):
     source = _pair('    ' + first, '    ' + second)
     ast.parse(source)
@@ -126,3 +130,23 @@ def test_uncertain_tokenization_retains_distinct_source(tmp_path, monkeypatch, f
 
     monkeypatch.setattr(tokenize, 'generate_tokens', uncertain)
     assert D001().check(str(path), structure, source) == []
+
+
+@pytest.mark.skipif(sys.version_info < (3, 14), reason='native template-string tokens require Python 3.14')
+def test_native_template_strings_are_opaque_values(tmp_path):
+    source = _pair('    return t"prefix#{value}"', '    return t"prefix#{value + 1}"')
+    ast.parse(source)
+    path = tmp_path / 'template.py'
+    path.write_text(source, encoding='utf-8')
+    structure = {'functions': [{'name': 'first', 'line': 1, 'line_end': 2},
+                               {'name': 'second', 'line': 4, 'line_end': 5}]}
+    assert D001().check(str(path), structure, source) == []
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize('suffix,prefix', [('.pyi', ''), ('', '#!/usr/bin/env python3\n')])
+def test_python_language_admission_uses_registry_routes(tmp_path, suffix, prefix):
+    source = prefix + _pair('    return "prefix#red"', '    return "prefix#blue"')
+    response, detections = _check(tmp_path, source, suffix)
+    assert detections == []
+    assert response.returncode == 0
