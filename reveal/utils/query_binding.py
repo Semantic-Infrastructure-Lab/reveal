@@ -2,7 +2,7 @@
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Union
+from typing import Any, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import quote, unquote
 
 from .query_parser import ParamSpec, QueryParams, ResourceSpec, parse_query_params, peek_query_items
@@ -89,16 +89,35 @@ def _validate_binding(spec: ParamSpec, raw: Any, transport: str) -> Any:
 
 
 def bind_declared_params(specs: Iterable[ParamSpec], source: Union[str, Mapping[str, Any]],
-                         *, transport: str) -> QueryParams:
+                         *, transport: str, overrides: Optional[Mapping[str, Any]] = None) -> QueryParams:
     """Validate supplied values without consuming them; conversion/decoding occurs once.
 
     CLI binding preserves original typed values. URI parsing retains legacy
     trimming/last-wins/presence rules and decodes only explicitly opted-in keys.
     Omitted controls remain omitted, so defaults do not become submitted flags.
+    Explicit typed overrides use canonical declaration names and apply only after
+    original-source validation. They never undergo URI decoding or count as reads.
     """
     declarations = tuple(specs)
     params = prepare_declared_params(declarations, source, transport)
-    return bind_prepared_params(declarations, params, transport=transport)
+    params = bind_prepared_params(declarations, params, transport=transport)
+    if overrides is not None:
+        if not isinstance(overrides, Mapping):
+            raise TypeError('Declared parameter overrides must be a mapping')
+        supplied = dict(peek_query_items(overrides))
+        names = {spec.name for spec in declarations}
+        unknown = [key for key in supplied if key not in names]
+        if unknown:
+            raise TypeError('Unsupported declared parameter override(s): ' +
+                            ', '.join(repr(key) for key in unknown))
+        from .query_parser import query_key_recorder
+        query_key_recorder(*supplied)
+        for spec in declarations:
+            if spec.name in supplied:
+                raw = supplied[spec.name]
+                value = spec.validate(None) if raw is None else _validate_binding(spec, raw, 'typed')
+                params.set_normalized(spec, value)
+    return params
 
 
 def bind_prepared_params(declarations: Iterable[ParamSpec], params: QueryParams, *,

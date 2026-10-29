@@ -109,3 +109,15 @@ def test_typed_source_and_override_queryparams_are_not_read_as_applied():
         assert analysis.read(params) == 'original'
         assert log.used == {'name'}
         assert top.read(params) == 0 and log.used == {'name', 'top'}
+
+
+def test_invalid_percent_uri_is_not_hidden_by_typed_override():
+    spec = ParamSpec('name', 'string', '', '', str, uri_codec='percent')
+    with pytest.raises(UnicodeDecodeError):
+        bind_declared_params([spec], 'name=%FF', transport='uri', overrides={'name': 'valid'})
+
+
+def test_empty_typed_list_is_a_supplied_value_and_none_uses_default():
+    spec = ParamSpec('names', 'string', '', ['default'], list, uri_codec='comma-percent')
+    assert spec.read(bind_declared_params([spec], 'names=old', transport='uri', overrides={'names': []})) == []
+    assert spec.read(bind_declared_params([spec], 'names=old', transport='uri', overrides={'names': None})) == ['default']
