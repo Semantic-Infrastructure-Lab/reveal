@@ -34,7 +34,7 @@ def test_actual_scan_omits_unmeasured_estimates(tmp_path, case, filename, source
     raw = surface._scan_surface(tmp_path)
     answer = surface.SurfaceAdapter(str(tmp_path)).get_structure()
     assert answer['type'] == 'surface_scan' and answer['contract_version'] == '1.1'
-    assert answer['source'] == str(tmp_path) and answer['total'] == total
+    assert answer['source'] == tmp_path.as_posix() and answer['total'] == total
     assert answer['scope']['total_code_files'] == answer['coverage']['total_code_files'] == 1
     assert answer['coverage']['analyzed_files'] == (0 if case == 'unsupported' else 1)
     assert answer['meta']['parse_mode'] == 'ast+tree_sitter'
@@ -90,6 +90,6 @@ def test_filter_and_source_only_keep_real_counts_and_known_limits(tmp_path):
     _absent(answer)
 
 
-def test_shared_builder_still_accepts_optional_measured_confidence():
+def test_shared_builder_still_accepts_optional_supplied_confidence():
     answer = ResultBuilder.create('probe', '.', contract_version='1.1', confidence=0.75)
     assert answer['meta']['confidence'] == 0.75
