@@ -141,7 +141,7 @@ def test_malformed_variable_identity_fails(tmp_path, monkeypatch, variable):
     assert response.returncode == 3 and data['error']
 
 
-def test_real_grammar_unavailability_is_required_loss(tmp_path, monkeypatch):
+def test_unavailable_python_analyzer_is_required_loss(tmp_path, monkeypatch):
     import reveal.registry
     (tmp_path / 'source.py').write_text(SOURCE, encoding='utf-8')
     monkeypatch.setattr(reveal.registry, 'get_analyzer', lambda path: None)
