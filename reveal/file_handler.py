@@ -238,10 +238,15 @@ def _note_nav_retirements() -> None:
     for token in invocation.argv if invocation is not None else ():
         if token == '--':
             break
-        key = 'flag:' + token.partition('=')[0]
-        entry = RETIREMENTS.get(key)
-        if entry is not None and entry.replacement in {'--inputs', '--outputs', '--callsites'}:
-            retirement_note(key)
+        option = token.partition('=')[0]
+        if not option.startswith('--'):
+            continue
+        # argparse has already rejected ambiguous prefixes. Its accepted unique
+        # abbreviations must obey the same retirement stage as the full spelling.
+        for key, entry in RETIREMENTS.items():
+            if (key.startswith('flag:') and key[5:].startswith(option)
+                    and entry.replacement in {'--inputs', '--outputs', '--callsites'}):
+                retirement_note(key)
 
 
 def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:

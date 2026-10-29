@@ -554,7 +554,10 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
         valid = sorted(_NAV_BOOLEAN_FLAGS | set(_NAV_VAR_NAME_FLAGS) | {'callsites', 'calls', 'around'})
         return _tool_failure(f"unknown nav flag '{flag}'. Valid flags: {valid}")
 
-    invocation = Invocation.parse(['reveal', path, element, '--' + flag, *([flag_value] if flag_value else [])])
+    option = '--' + flag
+    if flag_value and flag not in _NAV_BOOLEAN_FLAGS:
+        option += '=' + flag_value
+    invocation = Invocation.parse(['reveal', option, '--', path, element])
     with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
         try:
             retirement_note('flag:--' + flag)
