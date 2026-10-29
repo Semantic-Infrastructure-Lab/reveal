@@ -75,6 +75,7 @@ def test_windows_spelling_normalized_at_every_path_sink(source, tmp_path):
     source[2]['components'][0].update(component='pkg\\sub', top_bridge='pkg\\sub\\a.py', files=10)
     source[3]['cycles'][0][0] = 'pkg\\a.py'
     source[3]['cycle_paths'][0][0] = 'pkg\\a.py'
+    source[3]['cycle_paths'][0][-1] = 'pkg\\a.py'
     source[4]['files_failed'] = ['pkg\\broken.py']
     source[4]['extraction_diagnostics'] = {'pkg\\broken.py': {'parse': {'reason': 'exact cause'}}}
     result = project_map_facts(*source, path=tmp_path)
