@@ -60,12 +60,17 @@ def test_actual_reader_loss_and_restoration(tmp_path, monkeypatch, mode):
             raise PermissionError(13, 'DICT_READER_DENIED', str(source))
         return real_open(file, *args, **kwargs)
     monkeypatch.setattr(io, 'open', denied)
+    accessor = getattr(source, '_accessor', None)
+    if accessor is not None:
+        monkeypatch.setattr(accessor, 'open', denied)
     failed, data = answer(source, mode)
     assert events
     assert failed.returncode == 3
     assert 'confidence' not in data['meta'] and data['results'] == []
     assert 'DICT_READER_DENIED' in json.dumps(data['meta']['warnings'])
     monkeypatch.setattr(io, 'open', real_open)
+    if accessor is not None:
+        monkeypatch.setattr(accessor, 'open', real_open)
     restored, data = answer(source, mode)
     assert restored.returncode == 0 and data['results']
 
@@ -76,7 +81,7 @@ def test_source_warning_visible_once_and_empty_is_scoped(tmp_path, mode, output)
     (tmp_path / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
     result = run(tmp_path, mode, '--format', output)
     assert result.returncode == 3
-    assert (result.stdout + result.stderr).count('W-AST-DICT-SOURCE') == 1
+    assert (result.stdout + result.stderr).count('required Python dict source file(s) could not be analyzed') == 1
     if output == 'text':
         assert 'analyzed portion' in result.stdout
     else:
@@ -121,6 +126,10 @@ def test_mode_identity_before_construction(tmp_path, query, kind, qualified):
 @pytest.mark.parametrize('mode', MODES)
 @pytest.mark.parametrize('malformed', [
     {}, {'results': [], 'total_results': 0},
+    *[{'results': [], 'total_results': 0, 'analysis': proof} for proof in (
+        None, [], 'invalid',
+        dict(candidate_files=-1, analyzed_files=0, failed_files=0, discovery_failures=0),
+        dict(candidate_files='1', analyzed_files=1, failed_files=0, discovery_failures=0))],
     {'results': [], 'total_results': 0, 'analysis': dict(candidate_files=1, analyzed_files=0, failed_files=0, discovery_failures=0)},
     {'results': [], 'total_results': 0, 'analysis': dict(candidate_files=True, analyzed_files=1, failed_files=0, discovery_failures=0)},
 ])
@@ -145,3 +154,49 @@ def test_unadopted_type_and_ordinary_siblings(tmp_path):
     legacy = _run_reveal_direct(f'ast://{tmp_path}?reveal_type=absent', '--format', 'json')
     assert ordinary.returncode == 3
     assert legacy.returncode == 0 and json.loads(legacy.stdout)['type'] == 'ast_reveal_type'
+
+
+@pytest.mark.parametrize('mode', MODES)
+def test_invalid_request_and_preparation_failure_keep_mode_identity(tmp_path, mode, monkeypatch):
+    invalid = _run_reveal_direct(f'ast://{tmp_path}?show={mode}&limit=-1', '--format', 'json')
+    assert invalid.returncode == 2
+    assert json.loads(invalid.stdout)['type'] == 'ast_' + mode.replace('-', '_')
+    def failed(*args):
+        raise ValueError('DICT_PREPARATION_FAILED')
+    monkeypatch.setattr('reveal.utils.exclusions.dispatch_scope', failed)
+    response, data = answer(tmp_path, mode)
+    assert response.returncode == 3 and data['error'] == 'DICT_PREPARATION_FAILED'
+    assert data['type'] == 'ast_' + mode.replace('-', '_')
+
+
+@pytest.mark.parametrize('mode', MODES)
+def test_analysis_exception_and_output_failure_keep_their_meaning(tmp_path, mode, monkeypatch):
+    (tmp_path / 'healthy.py').write_text(SOURCE, encoding='utf-8')
+    original = AstAdapter.get_structure
+    def failed(self, **kwargs):
+        raise ValueError('DICT_ANALYSIS_FAILED')
+    monkeypatch.setattr(AstAdapter, 'get_structure', failed)
+    response, data = answer(tmp_path, mode)
+    assert response.returncode == 3 and data['error'] == 'DICT_ANALYSIS_FAILED'
+    assert data['type'] == 'ast_' + mode.replace('-', '_')
+    monkeypatch.setattr(AstAdapter, 'get_structure', original)
+    from reveal.adapters.ast.renderer import AstRenderer
+    def output_failed(*args, **kwargs):
+        raise RuntimeError('DICT_RENDER_FAILED')
+    monkeypatch.setattr(AstRenderer, 'render_structure', output_failed)
+    response = run(tmp_path, mode)
+    assert response.returncode == 3 and 'Requested output failed: DICT_RENDER_FAILED' in response.stderr
+
+
+@pytest.mark.parametrize('mode', MODES)
+def test_optional_error_and_foreign_language_are_advisory(tmp_path, mode, monkeypatch):
+    (tmp_path / 'foreign.js').write_text('function example() {}\n', encoding='utf-8')
+    original = AstAdapter.get_structure
+    def optional(self, **kwargs):
+        result = original(self, **kwargs)
+        result['meta']['errors'].append({'code': 'optional_detail', 'message': 'unavailable detail'})
+        return result
+    monkeypatch.setattr(AstAdapter, 'get_structure', optional)
+    response, data = answer(tmp_path, mode)
+    assert response.returncode == 0 and data['meta']['confidence'] == 1.0
+    assert data['meta']['errors'] and data['results'] == []

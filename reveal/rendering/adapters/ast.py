@@ -205,7 +205,7 @@ def _print_capability_warnings(data: Dict[str, Any], output_format: str = 'text'
                 print(f"  ⚠ {warning['code']}: {warning['message']}")
     directory_warnings = [warning for warning in warnings
                           if warning.get('type') == 'analysis_incomplete'
-                          and warning.get('unit') == 'directories']
+                          and warning.get('unit') in ('directories', 'files')]
     for line in meta_warning_lines({'meta': {'warnings': directory_warnings}}):
         print(line, file=sys.stderr if output_format == 'grep' else sys.stdout)
 

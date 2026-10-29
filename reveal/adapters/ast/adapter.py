@@ -44,6 +44,27 @@ DEFAULT_RESULT_CAP = 200
 suppress_treesitter_warnings()
 
 
+def _dict_source_counts_valid(proof):
+    keys = ('candidate_files', 'analyzed_files', 'failed_files', 'discovery_failures')
+    return (isinstance(proof, dict)
+            and all(type(proof.get(key)) is int and proof[key] >= 0 for key in keys)
+            and proof['candidate_files'] == proof['analyzed_files'] + proof['failed_files'])
+
+
+def _dict_answer_requirement_error(result, prior_facts=None):
+    """Require source-count proof even when a dedicated view has no observations."""
+    proof = result.get('analysis')
+    if not _dict_source_counts_valid(proof):
+        return 'AST dict answer missing consistent nonnegative source analysis counts'
+    total, observations = result.get('total_results'), result.get('results')
+    if type(total) is not int or total < 0 or not isinstance(observations, list):
+        return 'AST dict answer missing required observations and count'
+    count_matches = total >= len(observations) if prior_facts is not None else total == len(observations)
+    if not count_matches or any(not isinstance(row, dict) for row in observations):
+        return 'AST dict observation count does not match its payload'
+    return None
+
+
 def _capability_hint_warnings(feature: str, path: Path) -> List[WarningEntry]:
     """Collect advisory language-census evidence without changing Python analysis."""
     from ...capabilities import python_only_warning
@@ -240,25 +261,38 @@ class AstAdapter(ResourceAdapter):
     RESULT_TYPE = 'ast_query'
     DEFAULT_FAIL_ON = 'none'
 
-    @classmethod
-    def uri_execution_facts(cls, resource):
-        """Qualify ordinary filter queries; dedicated analyses retain legacy policy.
-
-        Read mode selection through the same extractors as construction, including
-        their existing spelling, duplicate-key and empty-value behavior.
-        """
+    @staticmethod
+    def uri_result_type(resource):
+        """Resolve mode identity before construction using the existing mode codec."""
         query = '&'.join(part.strip() for part in resource.partition('?')[2].split('&'))
         query, show = _extract_show_param(query)
         query, _ = _extract_builtins_param(query)
         _, variable = _extract_reveal_type_param(query)
-        if show in ('dict-heatmap', 'dict-schemas') or variable:
-            return None
-        return cls.execution_facts
+        if show in ('dict-heatmap', 'dict-schemas'):
+            return 'ast_' + show.replace('-', '_')
+        return 'ast_reveal_type' if variable else 'ast_query'
+
+    @classmethod
+    def uri_execution_facts(cls, resource):
+        """Qualify ordinary and dict queries; type evidence retains legacy policy."""
+        return None if cls.uri_result_type(resource) == 'ast_reveal_type' else cls.execution_facts
 
     @staticmethod
     def execution_facts(result):
         """Classify required ordinary-query loss from this owner's disclosures."""
         from ...utils.results import AnalysisCompleteness, result_execution_facts
+        if isinstance(result, dict) and result.get('type') in ('ast_dict_heatmap', 'ast_dict_schemas'):
+            if result.get('error') or result.get('applicable') is False:
+                return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
+            proof = result.get('analysis')
+            if not _dict_source_counts_valid(proof):
+                return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+            lost = proof.get('failed_files', 0) or proof.get('discovery_failures', 0)
+            state = AnalysisCompleteness.COMPLETE
+            if lost:
+                state = (AnalysisCompleteness.INCOMPLETE if proof.get('analyzed_files', 0)
+                         else AnalysisCompleteness.FAILED)
+            return result_execution_facts(result, completeness=state)
         if isinstance(result, dict):
             meta = result.get('meta', {})
             lost = any(entry.get('type') in ('analysis_failed', 'analysis_incomplete', 'parse_recovered')
@@ -275,6 +309,8 @@ class AstAdapter(ResourceAdapter):
         """A completed ordinary answer requires the uncapped counts and observations."""
         if result.get('error') or result.get('applicable') is False:
             return None
+        if expected_type in ('ast_dict_heatmap', 'ast_dict_schemas'):
+            return _dict_answer_requirement_error(result, prior_facts)
         counts = [result.get(key) for key in ('total_files', 'total_results', 'displayed_results')]
         if any(type(count) is not int or count < 0 for count in counts):
             return 'AST answer missing required nonnegative analysis counts'
@@ -486,10 +522,12 @@ class AstAdapter(ResourceAdapter):
     def _dict_analysis_result(self) -> Dict[str, Any]:
         """show=dict-heatmap / show=dict-schemas: Python untyped-dict analysis."""
         from ...analyzers._python_dict_usage import (
-            DICT_SOURCE_WARNING_CODE, collect_dict_analysis, collect_dict_schemas, has_python_files,
+            DICT_SOURCE_WARNING_CODE, DictAnalysisEvidence, collect_dict_analysis,
+            collect_dict_schemas, has_python_files,
         )
         failures: List[OSError] = []
-        items, typeddicts = collect_dict_analysis(self.path, on_error=failures.append)
+        evidence = DictAnalysisEvidence()
+        items, typeddicts = collect_dict_analysis(self.path, on_error=failures.append, evidence=evidence)
         if self.show_mode == 'dict-heatmap':
             results = items
         else:
@@ -506,8 +544,19 @@ class AstAdapter(ResourceAdapter):
                 'Python dict source discovery is incomplete; dict usages, TypedDicts, and '
                 'shared-schema observations may be missing; ' + source_warning['message'])
             warnings.append(source_warning)
+        if evidence.failed_files:
+            details = '; '.join(f'{entry.file} ({entry.stage}: {entry.cause})'
+                                for entry in evidence.diagnostics)
+            warnings.append({
+                'type': 'analysis_incomplete', 'code': DICT_SOURCE_WARNING_CODE,
+                'unit': 'files', 'count': evidence.failed_files,
+                'message': (f'{evidence.failed_files} required Python dict source file(s) could not be '
+                            f'analyzed; dict usages, TypedDicts, and shared-schema observations '
+                            f'may be missing. {details}'),
+            })
         meta = self.create_meta(parse_mode='python_ast',
-                                confidence=None if failures else 1.0, warnings=warnings, errors=[])
+                                confidence=None if failures or evidence.failed_files else 1.0,
+                                warnings=warnings, errors=[])
         result = ResultBuilder.create(
             result_type='ast_' + self.show_mode.replace('-', '_'),
             source=self.path,
@@ -517,6 +566,12 @@ class AstAdapter(ResourceAdapter):
                 'total_results': len(results),
                 'results': results,
                 'unsupported_language': unsupported_language,
+                'analysis': {
+                    'candidate_files': evidence.candidate_files,
+                    'analyzed_files': evidence.analyzed_files,
+                    'failed_files': evidence.failed_files,
+                    'discovery_failures': len(failures),
+                },
             },
         )
         result['meta'] = meta

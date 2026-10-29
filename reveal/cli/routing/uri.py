@@ -319,6 +319,12 @@ def _uri_execution_facts(adapter_class, resource, element, args):
     return select(resource) if select is not None and not excluded else None
 
 
+def _uri_result_type(adapter_class, resource):
+    """Ask the qualified operation owner for identity before construction."""
+    select = getattr(adapter_class, 'uri_result_type', None)
+    return select(resource) if select is not None else adapter_class.RESULT_TYPE
+
+
 def _preparation_answer(uri, element, args, exception):
     """Classify failures entering the dispatch scope, before adapter execution."""
     from ...adapters.base import get_adapter_class
@@ -330,7 +336,8 @@ def _preparation_answer(uri, element, args, exception):
     path = resource.partition('?')[0]
     cause = FailureCause.INVALID_REQUEST if '\x00' in path else FailureCause.ANALYSIS
     return _invalid_answer(adapter_class, scheme, path, _exception_message(exception), args, cause,
-                           default_fail_on=getattr(adapter_class, 'DEFAULT_FAIL_ON'))
+                           default_fail_on=getattr(adapter_class, 'DEFAULT_FAIL_ON'),
+                           result_type=_uri_result_type(adapter_class, resource))
 
 
 def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> Answer:
@@ -588,7 +595,7 @@ def resolve_adapter(adapter_class: type, renderer_class: type[Any], scheme: str,
     return _answer(lambda: _resolve(adapter_class, renderer_class, scheme, resource, element, args,
                                     facts_of=facts_of, default_fail_on=policy),
                    scheme, args, facts_of=facts_of, default_fail_on=policy,
-                   result_type=getattr(adapter_class, 'RESULT_TYPE') if facts_of is not None else None)
+                   result_type=_uri_result_type(adapter_class, resource) if facts_of is not None else None)
 
 
 def _check_mode(adapter: Any, args: 'Namespace') -> bool:
@@ -796,7 +803,8 @@ def _view_answer(adapter, renderer_class: type[Any], scheme: str,
     if supports_elements and (element or (resource and resource_is_element)):
         return _element_answer(adapter, renderer_class, element, resource, args, scheme)
     return _structure_answer(adapter, renderer_class, args, scheme, resource,
-                             facts_of=facts_of, default_fail_on=default_fail_on)
+                             facts_of=facts_of, default_fail_on=default_fail_on,
+                             expected_type=_uri_result_type(type(adapter), resource) if facts_of is not None else None)
 
 
 def _handle_outline_mode(result: dict, args: 'Namespace', text_field: Optional[str], label: Any) -> bool:
