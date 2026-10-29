@@ -14,6 +14,16 @@ from reveal.diff import architecture_diff as diff  # noqa: E402
 from reveal.mcp_server import _ToolFailure, reveal_query  # noqa: E402
 
 
+def _measured_empty_deltas():
+    return {
+        'fan_in': [], 'fan_out': [],
+        'circular_groups': {'introduced': [], 'resolved': []},
+        'component_coupling': [],
+        'complexity_centroid': {'base': 0.0, 'head': 0.0, 'change': 0.0, 'top_n': 20},
+        'entry_points': {'added': [], 'removed': []},
+    }
+
+
 def write(path, source):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(source, encoding='utf-8')
@@ -87,7 +97,7 @@ def test_head_resolution_loss_rejects_deltas_with_healthy_base_and_structures(tm
     root = tmp_path / 'affected'
     base = make_repo(root, survivors=survivors)
     clean = json.loads(invoke(root, base).stdout)
-    assert clean['analysis']['complete'] and clean['deltas'] == diff._empty_deltas(20)
+    assert clean['analysis']['complete'] and clean['deltas'] == _measured_empty_deltas()
     attempts = selective_loss(monkeypatch, root)
     if transport == 'mcp':
         answer = reveal_query(f'architecture://{root.as_posix()}?against={base}', provenance=True)
@@ -138,7 +148,7 @@ def test_clean_zero_and_unsupported_language_keep_complete_empty_deltas(tmp_path
     assert (before.returncode, before.stdout, before.stderr) == (after.returncode, after.stdout, after.stderr)
     assert attempts == []
     result = json.loads(after.stdout)
-    assert result['analysis']['complete'] and result['deltas'] == diff._empty_deltas(20)
+    assert result['analysis']['complete'] and result['deltas'] == _measured_empty_deltas()
     if kind == 'unsupported':
         assert result['analysis']['unsupported_extensions'] == {'base':{'.sh':1}, 'head':{'.sh':1}}
 
