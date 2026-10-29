@@ -25,7 +25,7 @@ def uri(root, query='type=env'):
 
 
 def names(answer):
-    return {entry['name'] for entry in answer['surfaces']['env']}
+    return {entry['name'] for entry in answer['surfaces'].get('env', [])}
 
 
 def test_api_source_only_matches_supported_uri_constructor_and_command(project):
@@ -181,3 +181,16 @@ def test_api_does_not_adopt_uri_resource_decoding(project):
     answer = api.query(uri(encoded), source_only=True)
     assert baseline['total'] == answer['total'] == 0
     assert baseline['source'] == answer['source'] == str(encoded)
+
+
+def test_typed_type_and_grouping_controls_match_supported_uri(project):
+    expected = api.query(uri(project, 'type=env&by=dir&depth=0'))
+    answer = api.query(uri(project, 'type=fs'), type='env', by='dir', depth=0)
+    assert names(answer) == {'PRODUCTION_VAR', 'TEST_VAR'}
+    assert answer == expected
+
+
+def test_explicit_none_type_restores_declared_default(project):
+    expected = api.query(uri(project, ''))
+    assert names(expected) == {'PRODUCTION_VAR', 'TEST_VAR'}
+    assert api.query(uri(project, 'type=fs'), type=None) == expected
