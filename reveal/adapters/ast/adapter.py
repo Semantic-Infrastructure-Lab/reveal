@@ -45,7 +45,7 @@ suppress_treesitter_warnings()
 
 
 def _source_counts_valid(proof, *, type_mode=False):
-    keys = ('candidate_files', 'analyzed_files', 'failed_files', 'discovery_failures')
+    keys: tuple[str, ...] = ('candidate_files', 'analyzed_files', 'failed_files', 'discovery_failures')
     if type_mode:
         keys += ('recovered_files', 'unsupported_files')
     return (isinstance(proof, dict)
@@ -68,6 +68,25 @@ def _dedicated_answer_requirement_error(result, prior_facts=None, *, type_mode=F
     if not count_matches or any(not isinstance(row, dict) for row in observations):
         return 'AST dedicated observation count does not match its payload'
     return None
+
+
+def _dedicated_execution_facts(result):
+    """Classify source-count proof independently of observations or presentation."""
+    from ...utils.results import AnalysisCompleteness, result_execution_facts
+    if result.get('error') or result.get('applicable') is False:
+        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
+    proof = result.get('analysis')
+    type_mode = result.get('type') == 'ast_reveal_type'
+    if not _source_counts_valid(proof, type_mode=type_mode):
+        return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+    proof = cast(Dict[str, int], proof)
+    lost = (proof['failed_files'] or proof['discovery_failures']
+            or (type_mode and proof['recovered_files']))
+    state = AnalysisCompleteness.COMPLETE
+    if lost:
+        state = (AnalysisCompleteness.INCOMPLETE if proof.get('analyzed_files', 0)
+                 else AnalysisCompleteness.FAILED)
+    return result_execution_facts(result, completeness=state)
 
 
 def _capability_hint_warnings(feature: str, path: Path) -> List[WarningEntry]:
@@ -287,20 +306,7 @@ class AstAdapter(ResourceAdapter):
         """Classify required source loss from each AST operation's evidence."""
         from ...utils.results import AnalysisCompleteness, result_execution_facts
         if isinstance(result, dict) and result.get('type') in ('ast_dict_heatmap', 'ast_dict_schemas', 'ast_reveal_type'):
-            if result.get('error') or result.get('applicable') is False:
-                return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
-            proof = result.get('analysis')
-            type_mode = result.get('type') == 'ast_reveal_type'
-            if not _source_counts_valid(proof, type_mode=type_mode):
-                return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
-            proof = cast(Dict[str, int], proof)
-            lost = (proof['failed_files'] or proof['discovery_failures']
-                    or (type_mode and proof['recovered_files']))
-            state = AnalysisCompleteness.COMPLETE
-            if lost:
-                state = (AnalysisCompleteness.INCOMPLETE if proof.get('analyzed_files', 0)
-                         else AnalysisCompleteness.FAILED)
-            return result_execution_facts(result, completeness=state)
+            return _dedicated_execution_facts(result)
         if isinstance(result, dict):
             meta = result.get('meta', {})
             lost = any(entry.get('type') in ('analysis_failed', 'analysis_incomplete', 'parse_recovered')
