@@ -45,9 +45,9 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, FrozenSet, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterable, Iterator, List, Literal, Optional, Set, Tuple
 
-from ..utils.path_utils import WalkPurpose, _walk_code_files
+from ..utils.path_utils import WalkPurpose, _walk_code_files, failure_of, to_posix
 from ..utils.pyparse import parse_python, statement_index
 
 _TypeAliasStmt = getattr(ast, 'TypeAlias', None)  # `type X = ...`, Python 3.12+
@@ -69,6 +69,40 @@ SCHEMA_MIN_CONSUMERS = 2
 
 
 @dataclass(frozen=True)
+class DictSourceFailure:
+    """One required source that could not contribute analysis facts."""
+    file: str
+    stage: Literal['read', 'parse']
+    cause: str
+
+
+@dataclass
+class DictAnalysisEvidence:
+    """Per-invocation source counts, independent of emitted usage records.
+
+    Callers supply a fresh record. Diagnostics retain the first five failures;
+    failed_files counts every failed source, including context-only modules.
+    """
+    candidate_files: int = 0
+    analyzed_files: int = 0
+    failed_files: int = 0
+    diagnostics: List[DictSourceFailure] = field(default_factory=list)
+
+    def record_failure(self, file_path: str, error: SyntaxError | OSError | ValueError) -> None:
+        self.failed_files += 1
+        if len(self.diagnostics) >= 5:
+            return
+        if isinstance(error, OSError):
+            stage: Literal['read', 'parse'] = 'read'
+            cause = failure_of(error).cause
+        else:
+            stage = 'parse'
+            detail = error.msg if isinstance(error, SyntaxError) else 'invalid Python source'
+            cause = f'{type(error).__name__}: {detail}'
+        self.diagnostics.append(DictSourceFailure(to_posix(file_path), stage, cause))
+
+
+@dataclass(frozen=True)
 class ScanContext:
     """Facts a single function can't see on its own, gathered at module level
     across whatever set of files the caller parsed."""
@@ -82,6 +116,7 @@ class ScanContext:
 
 def collect_dict_analysis(
     path: str, *, on_error: Optional[Callable[[OSError], None]] = None,
+    evidence: Optional[DictAnalysisEvidence] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """(usage records, TypedDicts) for every .py/.pyi under path.
 
@@ -89,8 +124,15 @@ def collect_dict_analysis(
     a different module (const.py, typing.py) from the ones reading them: every
     file is parsed first to build the context, then functions are scanned.
     """
-    trees = [(f, t) for f in iter_python_files(path, on_error=on_error)
-             for t in [parse_file(f)] if t is not None]
+    trees = []
+    for file_path in iter_python_files(path, on_error=on_error):
+        if evidence is not None:
+            evidence.candidate_files += 1
+        tree = parse_file(file_path) if evidence is None else parse_file(file_path, evidence=evidence)
+        if tree is not None:
+            trees.append((file_path, tree))
+            if evidence is not None:
+                evidence.analyzed_files += 1
     ctx = build_context(t for _, t in trees)
 
     usages: List[Dict[str, Any]] = []
@@ -137,10 +179,14 @@ def iter_python_files(
             yield str(file_path)
 
 
-def parse_file(file_path: str) -> Optional[ast.Module]:
+def parse_file(
+    file_path: str, *, evidence: Optional[DictAnalysisEvidence] = None,
+) -> Optional[ast.Module]:
     try:
         return parse_python(Path(file_path).read_text(encoding='utf-8', errors='replace'), file_path)
-    except (SyntaxError, OSError, ValueError):
+    except (SyntaxError, OSError, ValueError) as error:
+        if evidence is not None:
+            evidence.record_failure(file_path, error)
         return None
 
 

@@ -1,4 +1,5 @@
 """Required dict sources retain read/parse evidence before usage filtering."""
+import builtins
 import io
 from pathlib import Path
 
@@ -29,6 +30,9 @@ def test_real_source_loss_is_not_a_confident_empty_answer(tmp_path, monkeypatch,
         source.write_text(SOURCE + 'def broken(\n', encoding='utf-8')
     else:
         monkeypatch.setattr(io, 'open', reader)
+        monkeypatch.setattr(builtins, 'open', reader)
+        if hasattr(Path(), '_accessor'):  # Python 3.10 stores io.open at import time.
+            monkeypatch.setattr(Path()._accessor, 'open', reader)
     result = AstAdapter(str(source), 'show=dict-heatmap').get_structure()
     assert result['total_results'] == 0
     if loss == 'read':
@@ -67,6 +71,9 @@ def test_collector_context_only_loss_and_reader_restoration(tmp_path, monkeypatc
         context.write_text('Config = dict\nKEY = "a"\ndef broken(\n', encoding='utf-8')
     else:
         monkeypatch.setattr(io, 'open', reader)
+        monkeypatch.setattr(builtins, 'open', reader)
+        if hasattr(Path(), '_accessor'):  # Python 3.10 stores io.open at import time.
+            monkeypatch.setattr(Path()._accessor, 'open', reader)
     result, facts = _collect(tmp_path)
     assert result == ([], [])
     assert (facts.candidate_files, facts.analyzed_files, facts.failed_files) == (2, 1, 1)
@@ -77,6 +84,9 @@ def test_collector_context_only_loss_and_reader_restoration(tmp_path, monkeypatc
     if loss == 'read':
         assert denied
         monkeypatch.setattr(io, 'open', real_open)
+        monkeypatch.setattr(builtins, 'open', real_open)
+        if hasattr(Path(), '_accessor'):
+            monkeypatch.setattr(Path()._accessor, 'open', real_open)
     context.write_text('Config = dict\nKEY = "a"\n', encoding='utf-8')
     restored, facts = _collect(tmp_path)
     assert restored == healthy
@@ -112,3 +122,22 @@ def test_parser_native_optional_module_and_serialized_failure_path(monkeypatch):
     assert usage.parse_file('pkg\\broken.py') is None
     assert facts.failed_files == 1 and facts.diagnostics[0].file == 'pkg/broken.py'
     assert facts.diagnostics[0].stage == 'parse'
+
+
+def test_collector_one_walk_parse_context_and_no_parser_discovery_callback(tmp_path, monkeypatch):
+    (tmp_path / 'good.py').write_text(SOURCE, encoding='utf-8')
+    (tmp_path / 'bad.py').write_text('def broken(\n', encoding='utf-8')
+    counts = {'walk': 0, 'parse': 0, 'context': 0}
+    for name, key in [('iter_python_files', 'walk'), ('parse_file', 'parse'), ('build_context', 'context')]:
+        original = getattr(usage, name)
+
+        def counted(*args, _original=original, _key=key, **kwargs):
+            counts[_key] += 1
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(usage, name, counted)
+    errors = []
+    facts = usage.DictAnalysisEvidence()
+    usage.collect_dict_analysis(str(tmp_path), evidence=facts, on_error=errors.append)
+    assert counts == {'walk': 1, 'parse': 2, 'context': 1}
+    assert errors == [] and facts.failed_files == 1
