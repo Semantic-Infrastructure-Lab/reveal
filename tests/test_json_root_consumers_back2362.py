@@ -95,6 +95,7 @@ def test_legacy_query_navigation_and_missing_resource_exits_are_preserved(tmp_pa
 def test_actual_sdk_root_parse_read_refusal_privacy_and_repair(tmp_path, provenance):
     path = tmp_path / 'root.json'
     path.write_text('{"answer":42}', encoding='utf-8')
+    (tmp_path / 'output.json').write_text('{"answer":44}', encoding='utf-8')
     marker = tmp_path / 'deny-reader'
     reached = tmp_path / 'reader-reached'
     code = '''
@@ -111,6 +112,23 @@ def opened(file, *args, **kwargs):
     return original(file, *args, **kwargs)
 
 builtins.open = opened
+from reveal.adapters.json.renderer import JsonRenderer
+from reveal.utils import json_utils
+original_render = JsonRenderer.render_structure
+original_json = json_utils.print_json_result
+
+def render(result, *args, **kwargs):
+    if Path(result.get('file', result.get('source', ''))).name == 'output.json':
+        raise PermissionError(errno.EACCES, 'PUBLIC_JSON_OUTPUT_DENIED')
+    return original_render(result, *args, **kwargs)
+
+def json_render(result, *args, **kwargs):
+    if Path(result.get('file', result.get('source', ''))).name == 'output.json':
+        raise PermissionError(errno.EACCES, 'PUBLIC_JSON_OUTPUT_DENIED')
+    return original_json(result, *args, **kwargs)
+
+JsonRenderer.render_structure = staticmethod(render)
+json_utils.print_json_result = json_render
 mcp_server.main()
 '''.replace('MARKER', repr(str(marker))).replace('REACHED', repr(str(reached)))
 
@@ -141,6 +159,8 @@ mcp_server.main()
         assert not restored.is_error and '43' in _text(restored)
         if provenance:
             assert json.loads(_text(restored))['value'] == {'answer': 43}
+        output = await request(f'json://{(tmp_path / "output.json").as_posix()}')
+        assert output.is_error and 'PUBLIC_JSON_OUTPUT_DENIED' in _text(output)
         path.unlink()
         missing = await request()
         assert missing.is_error and _text(missing).strip()
