@@ -44,24 +44,29 @@ DEFAULT_RESULT_CAP = 200
 suppress_treesitter_warnings()
 
 
-def _dict_source_counts_valid(proof):
+def _source_counts_valid(proof, *, type_mode=False):
     keys = ('candidate_files', 'analyzed_files', 'failed_files', 'discovery_failures')
+    if type_mode:
+        keys += ('recovered_files', 'unsupported_files')
     return (isinstance(proof, dict)
             and all(type(proof.get(key)) is int and proof[key] >= 0 for key in keys)
-            and proof['candidate_files'] == proof['analyzed_files'] + proof['failed_files'])
+            and proof['candidate_files'] == proof['analyzed_files'] + proof['failed_files']
+            and (not type_mode or proof['recovered_files'] <= proof['analyzed_files']))
 
 
-def _dict_answer_requirement_error(result, prior_facts=None):
+def _dedicated_answer_requirement_error(result, prior_facts=None, *, type_mode=False):
     """Require source-count proof even when a dedicated view has no observations."""
     proof = result.get('analysis')
-    if not _dict_source_counts_valid(proof):
-        return 'AST dict answer missing consistent nonnegative source analysis counts'
+    if not _source_counts_valid(proof, type_mode=type_mode):
+        return 'AST dedicated answer missing consistent nonnegative source analysis counts'
+    if type_mode and (not isinstance(result.get('var_name'), str) or not result['var_name']):
+        return 'AST type answer missing required variable identity'
     total, observations = result.get('total_results'), result.get('results')
     if type(total) is not int or total < 0 or not isinstance(observations, list):
-        return 'AST dict answer missing required observations and count'
+        return 'AST dedicated answer missing required observations and count'
     count_matches = total >= len(observations) if prior_facts is not None else total == len(observations)
     if not count_matches or any(not isinstance(row, dict) for row in observations):
-        return 'AST dict observation count does not match its payload'
+        return 'AST dedicated observation count does not match its payload'
     return None
 
 
@@ -274,21 +279,23 @@ class AstAdapter(ResourceAdapter):
 
     @classmethod
     def uri_execution_facts(cls, resource):
-        """Qualify ordinary and dict queries; type evidence retains legacy policy."""
-        return None if cls.uri_result_type(resource) == 'ast_reveal_type' else cls.execution_facts
+        """Qualify AST query operations through their source-evidence owner."""
+        return cls.execution_facts
 
     @staticmethod
     def execution_facts(result):
-        """Classify required ordinary-query loss from this owner's disclosures."""
+        """Classify required source loss from each AST operation's evidence."""
         from ...utils.results import AnalysisCompleteness, result_execution_facts
-        if isinstance(result, dict) and result.get('type') in ('ast_dict_heatmap', 'ast_dict_schemas'):
+        if isinstance(result, dict) and result.get('type') in ('ast_dict_heatmap', 'ast_dict_schemas', 'ast_reveal_type'):
             if result.get('error') or result.get('applicable') is False:
                 return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
             proof = result.get('analysis')
-            if not _dict_source_counts_valid(proof):
+            type_mode = result.get('type') == 'ast_reveal_type'
+            if not _source_counts_valid(proof, type_mode=type_mode):
                 return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
             proof = cast(Dict[str, int], proof)
-            lost = proof.get('failed_files', 0) or proof.get('discovery_failures', 0)
+            lost = (proof['failed_files'] or proof['discovery_failures']
+                    or (type_mode and proof['recovered_files']))
             state = AnalysisCompleteness.COMPLETE
             if lost:
                 state = (AnalysisCompleteness.INCOMPLETE if proof.get('analyzed_files', 0)
@@ -307,11 +314,12 @@ class AstAdapter(ResourceAdapter):
 
     @staticmethod
     def answer_requirement_error(result, expected_type, prior_facts=None):
-        """A completed ordinary answer requires the uncapped counts and observations."""
+        """Completed answers require their operation's counts and observations."""
         if result.get('error') or result.get('applicable') is False:
             return None
-        if expected_type in ('ast_dict_heatmap', 'ast_dict_schemas'):
-            return _dict_answer_requirement_error(result, prior_facts)
+        if expected_type in ('ast_dict_heatmap', 'ast_dict_schemas', 'ast_reveal_type'):
+            return _dedicated_answer_requirement_error(
+                result, prior_facts, type_mode=expected_type == 'ast_reveal_type')
         counts = [result.get(key) for key in ('total_files', 'total_results', 'displayed_results')]
         if any(type(count) is not int or count < 0 for count in counts):
             return 'AST answer missing required nonnegative analysis counts'
@@ -580,9 +588,11 @@ class AstAdapter(ResourceAdapter):
 
     def _reveal_type_result(self) -> Dict[str, Any]:
         """reveal_type=<var>: type evidence for one variable."""
-        from .nav_reveal_type import TYPE_SOURCE_WARNING_CODE, collect_type_evidence
+        from .nav_reveal_type import TYPE_SOURCE_WARNING_CODE, TypeAnalysisEvidence, collect_type_evidence
         failures: List[OSError] = []
-        evidence = collect_type_evidence(self.path, self.reveal_type_var, on_error=failures.append)
+        source_evidence = TypeAnalysisEvidence()
+        evidence = collect_type_evidence(self.path, self.reveal_type_var, on_error=failures.append,
+                                         source_evidence=source_evidence)
         warnings = _capability_hint_warnings('reveal-type', Path(self.path))
         source_warning = _directory_event_warning(failures, Path(self.path))
         if source_warning:
@@ -591,8 +601,19 @@ class AstAdapter(ResourceAdapter):
                 'Python type-evidence source discovery is incomplete; occurrence, annotation, '
                 'and shape observations may be missing; ' + source_warning['message'])
             warnings.append(source_warning)
+        lost_files = source_evidence.failed_files + source_evidence.recovered_files
+        if lost_files:
+            details = '; '.join(f'{entry.file} ({entry.stage}: {entry.cause})'
+                                for entry in source_evidence.diagnostics)
+            warnings.append({
+                'type': 'analysis_incomplete', 'code': TYPE_SOURCE_WARNING_CODE,
+                'unit': 'files', 'count': lost_files,
+                'message': (f'{lost_files} required Python type-evidence source file(s) could not be '
+                            f'fully analyzed; occurrence, annotation, and shape observations may be '
+                            f'missing. Analysis is incomplete. {details}'),
+            })
         meta = self.create_meta(parse_mode='tree_sitter_full',
-                                confidence=None if failures else 1.0, warnings=warnings, errors=[])
+                                confidence=None if failures or lost_files else 1.0, warnings=warnings, errors=[])
         result = ResultBuilder.create(
             result_type='ast_reveal_type',
             source=self.path,
@@ -600,6 +621,14 @@ class AstAdapter(ResourceAdapter):
             data={
                 'path': self.path,
                 'var_name': self.reveal_type_var,
+                'analysis': {
+                    'candidate_files': source_evidence.candidate_files,
+                    'analyzed_files': source_evidence.analyzed_files,
+                    'failed_files': source_evidence.failed_files,
+                    'recovered_files': source_evidence.recovered_files,
+                    'unsupported_files': source_evidence.unsupported_files,
+                    'discovery_failures': len(failures),
+                },
                 'total_results': len(evidence),
                 'results': evidence,
             },

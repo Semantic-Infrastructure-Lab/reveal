@@ -178,3 +178,40 @@ def test_foreign_language_and_optional_error_stay_advisory(tmp_path, monkeypatch
     response, data = answer(source)
     assert response.returncode == 0 and data['meta']['confidence'] == 1.0
     assert data['meta']['errors'] and data['analysis']['unsupported_files'] == 1
+
+
+def test_analysis_exception_decline_and_preparation_identity(tmp_path, monkeypatch):
+    from reveal.errors import NotApplicableError
+    original = AstAdapter.get_structure
+    def fail(self, **kwargs):
+        raise ValueError('TYPE_ANALYSIS_FAILED')
+    monkeypatch.setattr(AstAdapter, 'get_structure', fail)
+    response, data = answer(tmp_path)
+    assert response.returncode == 3 and data['error'] == 'TYPE_ANALYSIS_FAILED'
+    assert data['type'] == 'ast_reveal_type'
+    def decline(self, **kwargs):
+        raise NotApplicableError('type evidence does not apply')
+    monkeypatch.setattr(AstAdapter, 'get_structure', decline)
+    response, data = answer(tmp_path)
+    assert response.returncode == 0 and data['applicable'] is False
+    assert data['type'] == 'ast_reveal_type'
+    monkeypatch.setattr(AstAdapter, 'get_structure', original)
+    def preparation(*args):
+        raise ValueError('TYPE_PREPARATION_FAILED')
+    monkeypatch.setattr('reveal.utils.exclusions.dispatch_scope', preparation)
+    response, data = answer(tmp_path)
+    assert response.returncode == 3 and data['error'] == 'TYPE_PREPARATION_FAILED'
+    assert data['type'] == 'ast_reveal_type'
+
+
+def test_successful_artifact_equals_json_and_recovered_absence_is_scoped(tmp_path):
+    source = tmp_path / 'source.py'
+    source.write_text(SOURCE + '\ndef broken(:\n', encoding='utf-8')
+    artifact = tmp_path / 'answer.json'
+    response = run(source, 'absent', '--also-json', str(artifact))
+    assert response.returncode == 3 and artifact.exists()
+    data = json.loads(artifact.read_text(encoding='utf-8'))
+    assert data['results'] == [] and data['analysis']['recovered_files'] == 1
+    assert 'analyzed portion' in response.stdout
+    direct, actual = answer(source, 'absent', '--also-json', str(artifact))
+    assert direct.returncode == 3 and actual == data

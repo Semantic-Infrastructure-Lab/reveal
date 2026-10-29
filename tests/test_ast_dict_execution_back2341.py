@@ -114,7 +114,7 @@ def test_healthy_zero_is_complete(tmp_path, mode, source):
     ('show=functions&show=dict-schemas', 'ast_dict_schemas', True),
     ('show=dict%2Dheatmap', 'ast_query', True),
     ('show=&reveal_type=', 'ast_query', True),
-    ('reveal_type=x', 'ast_reveal_type', False),
+    ('reveal_type=x', 'ast_reveal_type', True),
 ])
 def test_mode_identity_before_construction(tmp_path, query, kind, qualified):
     response = _run_reveal_direct(f'ast://{tmp_path / "absent"}?{query}', '--format', 'json')
@@ -148,12 +148,12 @@ def test_requested_artifact_failure_outranks_healthy_dict(tmp_path, mode):
     assert response.returncode == 3 and 'Error' in response.stderr
 
 
-def test_unadopted_type_and_ordinary_siblings(tmp_path):
+def test_type_and_ordinary_siblings(tmp_path):
     (tmp_path / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
     ordinary = _run_reveal_direct(f'ast://{tmp_path}', '--format', 'json')
-    legacy = _run_reveal_direct(f'ast://{tmp_path}?reveal_type=absent', '--format', 'json')
+    type_answer = _run_reveal_direct(f'ast://{tmp_path}?reveal_type=absent', '--format', 'json')
     assert ordinary.returncode == 3
-    assert legacy.returncode == 0 and json.loads(legacy.stdout)['type'] == 'ast_reveal_type'
+    assert type_answer.returncode == 3 and json.loads(type_answer.stdout)['type'] == 'ast_reveal_type'
 
 
 @pytest.mark.parametrize('mode', MODES)
