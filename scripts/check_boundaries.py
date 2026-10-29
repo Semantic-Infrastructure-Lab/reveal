@@ -350,7 +350,7 @@ class _Scanner(ast.NodeVisitor):
             if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) and method.name == 'get_structure':
                 args = method.args
                 positional = [*args.posonlyargs, *args.args]
-                if (len(positional) == 1 and positional[0].arg == 'self' and args.kwarg is not None
+                if (len(positional) == 1 and args.kwarg is not None
                         and args.vararg is None and not args.kwonlyargs):
                     self._add('bare-get-structure-kwargs', method)
         self.generic_visit(node)

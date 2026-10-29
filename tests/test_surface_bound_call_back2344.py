@@ -207,6 +207,8 @@ def test_bare_kwargs_inventory_ratchet_and_surface_mutation():
     changed[rule] = {**baseline[rule], 'reveal/adapters/surface.py': 1}
     regressions, _ = compare(baseline, changed)
     assert (rule, 'reveal/adapters/surface.py', 0, 1) in regressions
+    renamed = 'class Renamed:\n    def get_structure(receiver, **kwargs):\n        pass\n'
+    assert len(find_sites(renamed, 'reveal/adapters/example.py')[rule]) == 1
     standalone = 'def get_structure(self, **kwargs):\n    pass\n'
     explicit = 'class Named:\n    def get_structure(self, depth=None):\n        pass\n'
     assert not find_sites(standalone + explicit, 'reveal/adapters/example.py')[rule]
