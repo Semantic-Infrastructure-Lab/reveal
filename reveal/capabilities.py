@@ -1195,6 +1195,7 @@ def scope_dict_for_path(
     respect_gitignore: Optional[bool] = None,
     *,
     on_error: Optional[Callable[[OSError], None]] = None,
+    on_hidden: Optional[Callable[[Path, bool, str], None]] = None,
 ) -> Dict[str, Any]:
     """The BACK-884 ``scope`` block for *path*: a fresh census
     (``path_utils.census_for_path``) with per-language capability tier
@@ -1212,5 +1213,6 @@ def scope_dict_for_path(
     from .utils.path_utils import census_for_path
 
     census = census_for_path(path, exclude_patterns=exclude_patterns,
-                             respect_gitignore=respect_gitignore, on_error=on_error)
+                             respect_gitignore=respect_gitignore, on_error=on_error,
+                             on_hidden=on_hidden)
     return census.to_scope_dict(capability_tiers=capability_tiers_for(census.language_extensions))
