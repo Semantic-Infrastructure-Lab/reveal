@@ -175,8 +175,9 @@ def query(
         element_name: Optional element to extract from the resource.
         **kwargs: Declared typed query controls for constructor-bound structure
             adapters; otherwise forwarded to ``get_structure()`` or ``get_element()``.
-            Surface accepts type, source_only, by, depth and top. Explicit values
-            override validated URI controls; None selects the declared default.
+            Surface accepts type, source_only, by, depth and top; Contracts accepts
+            abstract_only, implementations and impls. Explicit values override
+            validated URI controls; None selects the declared default.
 
     Each call is one host request with the MCP server's evidence lifetime: an edit
     made between two calls is seen by the second, and an unchanged tree's indexes are
@@ -188,7 +189,7 @@ def query(
     Raises:
         ValueError: If the URI is malformed or the scheme is not supported.
         ImportError: If an optional dependency required by the adapter is missing.
-        TypeError: If a Surface structure query supplies an unsupported keyword.
+        TypeError: If a Surface or Contracts structure query supplies an unsupported keyword.
 
     Example::
 

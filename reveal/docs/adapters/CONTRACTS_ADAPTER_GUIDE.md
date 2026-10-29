@@ -47,6 +47,32 @@ an existing literal percent path takes precedence. Plus signs stay literal.
 Encode URI filename delimiters such as `?` as `%3F`; direct CLI paths accept
 the filename as an argument.
 
+### Python API controls
+
+`reveal.api.query` accepts the declared controls as typed keywords:
+
+```python
+from reveal import api
+
+report = api.query("contracts://./src", abstract_only=True, implementations=False, impls=0)
+```
+
+Explicit keywords override validated URI values, including `False` and zero.
+`None` selects the declared default; omission leaves the URI value intact. The URI
+validates first, so `?impls=-1` still rejects when a typed override supplies `impls=0`.
+Invalid typed values raise `ValueError` before scanning, and unsupported API keywords
+raise `TypeError`. Unknown URI keys keep their warning behavior. API resource strings
+keep their existing literal-path and `?` splitting behavior.
+
+`impls` keeps its existing metadata contract: results contain the validated
+`impls_cap`, and implementation arrays stay complete. A cap of one cuts text with a
+remainder notice; zero displays every implementer. `implementations=False` instead
+removes implementation observations from the analysis.
+
+Direct adapter calls bind declared controls in constructor `params=` and then call
+`get_structure()`. Method keywords such as `get_structure(abstract_only=True)` now
+raise `TypeError`; previously they were ignored.
+
 ## Per-Language Contract Shapes
 
 | Language | Contract form | Implementers |
