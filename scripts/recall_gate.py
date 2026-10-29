@@ -45,10 +45,10 @@ POPULATION_FIELDS = ('oracle', 'sha', 'targets', 'oracle_edges', 'coverage')
 # every static edge, function-level and tests included, TYPE_CHECKING excluded (BACK-2077).
 SCORED_RULE = {'lazy': 'include', 'tests': 'included', 'type_checking': 'excluded'}
 # The combinations the engine states but this gate cannot score everywhere (BACK-2062). &lazy=exclude and
-# &lazy=only are scored for the populations whose oracle labels function-level imports (python-ast, LAZY_MODES).
+# &lazy=only are scored for the populations whose oracle labels function-level imports (python-ast, typescript-compiler; LAZY_MODES).
 LAZY_MODES = ('exclude', 'only')
-_LAZY_DECLINED = ('scored for the python-ast populations only (the oracle labels function-level imports). Declined elsewhere: '
-                  'the TypeScript oracle emits no scope (BACK-2064), rust-use is a regex that cannot tell a fn-local use '
+_LAZY_DECLINED = ('scored for python-ast and typescript-compiler populations (the oracles label function-level imports). '
+                  'Declined elsewhere: rust-use is a regex that cannot tell a fn-local use '
                   '(BACK-2079); C, C++, Go and Java have no function-scope import')
 DECLINED = (
     {'combination': 'lazy=exclude', 'reason': _LAZY_DECLINED},

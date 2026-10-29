@@ -360,7 +360,7 @@ def test_the_report_names_each_combination_it_declines(tmp_path, monkeypatch):
     declined = {row['combination']: row['reason'] for row in report['declined']}
     assert set(declined) == {'lazy=exclude', 'lazy=only', 'tests=exclude'}
     assert all(declined.values())
-    assert 'python-ast' in declined['lazy=exclude']
+    assert 'python-ast' in declined['lazy=exclude'] and 'typescript-compiler' in declined['lazy=exclude']
     assert report['scored'] == {'lazy': 'include', 'tests': 'included', 'type_checking': 'excluded'}
 
 
@@ -531,7 +531,9 @@ def test_compiler_oracle_lost_edge_fails_the_existing_gate(typescript_corpus, mo
     monkeypatch.setattr(ProjectResolver, '_resolve_statement_edges', lossy)
     current = gate.measure(entry, root)
     assert current['recall'] == .8
-    assert gate.regressions({'ts': current}, {'ts': baseline}) == ['ts: recall dropped 100.000000% -> 80.000000%']
+    assert gate.regressions({'ts': current}, {'ts': baseline}) == [
+        'ts: recall dropped 100.000000% -> 80.000000%',
+        'ts: lazy=exclude recall dropped 100.000000% -> 80.000000%']
 
 
 def test_compiler_oracle_wrong_toolchain_and_zero_population_fail(typescript_corpus):
