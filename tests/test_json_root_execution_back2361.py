@@ -181,3 +181,14 @@ def test_resource_resolver_serializes_the_file_before_legacy_missing_diagnostic(
     monkeypatch.setattr(owner, 'parse_path', lambda resource: (
         PureWindowsPath(r'C:\project\missing.json'), ['key'], None))
     assert JsonAdapter.resource_path(r'C:\project\missing.json/key') == 'C:/project/missing.json'
+
+
+def test_legacy_navigation_constructor_error_reports_the_underlying_file(files):
+    request = uri(files / 'object.json') + '/items?limit=-1'
+    result = run(request, '--format', 'json')
+    answer = json.loads(result.stdout)
+    assert result.returncode == 1 and answer['type'] == 'json'
+    assert answer['source'] == request.removeprefix('json://')
+    assert answer['source_type'] == 'file'
+    assert answer['error'] == "limit must be a non-negative integer: '-1'"
+    assert answer['meta']['errors'][0]['code'] == 'adapter_error'
