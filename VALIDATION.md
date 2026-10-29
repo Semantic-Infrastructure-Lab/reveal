@@ -1694,11 +1694,11 @@ what each language does support today.
 
 ## Side-Effect / Boundary Classification Recall
 
-`--sideeffects`/`--boundary` answer a different DD question — "what does this
-function actually *do* to the outside world: touch a database, make a network
-call, read the filesystem or environment, log, sleep?" — and carry the same
-silent-false-negative risk: a function that quietly writes to a database but
-reads as pure is exactly the blast-radius surprise a DD reviewer must not miss.
+`--sideeffects`/`--boundary` report syntactic indicators of database, HTTP,
+filesystem, environment, logging and sleep behavior. They classify known call
+shapes and selected property accesses; they do not observe execution or infer
+every receiver's runtime type. No classified effect does not establish purity:
+project wrappers, ambiguous names and delegated behavior can remain unclassified.
 
 Unlike import recall, **no external tool can serve as an oracle** — there is no
 `go list` for "is this a side effect." So each loop's `build_oracle.py` writes
@@ -1738,8 +1738,19 @@ only calls `text.replace`); two new unlisted `file` hits (`fs.accessSync`,
 
 Cross-language false-positive sweeps in the same program fixed bare-verb
 subsequence over-fire (`dict.update()` misread as a db write) and unscoped
-receiver-name collisions (`conn`/`session`/`cache`/`requests`), so the recall
-gains did not come at the cost of precision.
+receiver-name collisions (`conn`/`session`/`cache`/`requests`). Those controls
+protect the sampled collision cases; they do not establish universal precision.
+
+**Python HTTP interpretation (BACK-2351):** the retained replay at `09458aab`
+has 4/29 HTTP function-category agreements, not four detected requests out of
+29 network calls. A source review of all 29 matching retained file hashes found
+that the 25 misses label project-specific `async_get_clientsession` factories,
+which the classifier deliberately excludes. The four hit functions contain five
+reported `requests.*` sites and one `aiohttp.ClientTimeout` constructor; that last
+category hit does not locate the function's ambiguous `session.get` request.
+Client acquisition, configuration and request intent are different evidence units.
+The original score stays unchanged; this is a scoped interpretation of retained
+observations, not a new accuracy measurement or a runtime-egress guarantee.
 
 ## Cross-File Call-Graph Recall
 
@@ -2195,17 +2206,17 @@ a cut list (rows shown differ from `total_callers`).
 
 The gate's main row scores the oracles' rule: every static edge, function-level imports and
 tests included, `TYPE_CHECKING` excluded. For the populations whose oracle labels function-level
-imports (the `python-ast` rows, celery and reveal) it also scores `&lazy=exclude` and
+imports (`python-ast` and `typescript-compiler`) it also scores `&lazy=exclude` and
 `&lazy=only` as rendered, under `lazy` in each row. An edge is function-level only when every
 import behind it is, so the two views split the all-edges edges exactly: celery 1,323 + 121 =
 1,444, reveal 3,760 + 1,226 = 4,986, all hit with 0 extra. Every oracle target is scored in
 each view, so an importer listed in the wrong view counts as extra. The gate records the
 `edge_rule` each answer prints and refuses an answer computed under another rule. The report's
 `declined` list names the combinations the gate cannot score everywhere, with the reason:
-`lazy=exclude` and `lazy=only` outside the Python rows (the TypeScript oracle emits no scope,
-BACK-2064; the Rust oracle is a regex that cannot tell a function-local `use`, BACK-2079; C, C++,
-Go and Java have no function-scope import) and `tests=exclude` (no engine parameter and no oracle
-test-path rule). The `python-reveal` population is reveal's own repository at public
+`lazy=exclude` and `lazy=only` outside the Python/compiler rows (the Rust oracle is a
+regex that cannot tell a function-local `use`, BACK-2079; C, C++, Go and Java have no
+function-scope import) and `tests=exclude` (no independent oracle test-path scoring).
+The `python-reveal` population is reveal's own repository at public
 `4d4116cc` (whole tree, tests included): 1,397 files, 544 targets, 4,986/4,986 edges, 0 extra.
 
 ```bash
@@ -2256,6 +2267,29 @@ oracle. A deterministic fixture's deliberately removed TSX edge drops recall fro
 invocations or runtime framework behavior. Historical snapshots remain separately
 qualified; `fetch_corpus.py --list-snapshots` reports preserved source exceptions
 without fetching or replacing them.
+
+**Compiler scope qualification, 2026-10-28 (BACK-2350, BACK-2352):** the independent
+TypeScript AST now labels lexical function ancestry. An importer-target pair is
+local-only when every contributing import is local; a module-level contributor
+keeps a mixed pair in `exclude`. Module-body dynamic imports and class initializers
+are module scope, while arrows, methods and immediately invoked function bodies
+are local. Bodyless function declarations also supply lexical ancestry; this rule
+does not claim when, or whether, code executes.
+
+On the same pinned populations with TypeScript 5.9.3 and Node 22.14.0:
+
+| Population | Default edges | `lazy=exclude` edges | `lazy=only` edges | Existing partial files |
+|---|---:|---:|---:|---:|
+| three.js | 3,042 | 3,042 | 0 | 0 |
+| VS Code base | 1,889 | 1,887 | 2 | 10 |
+| Excalidraw | 3,587 | 3,581 | 6 | 5 |
+
+Every expected edge was found, with zero extras. Default measurements and population/
+configuration digests stayed unchanged. The empty three.js `only` row has null recall
+and precision; it is not positive recall evidence. Existing parse-loss disclosures
+remain in every mode. Fixture mutations prove wrong-scope and omitted local-view edges
+fail mode scoring even when the default union remains unchanged. New baseline rows
+require explicit review; the gate rejects an unreviewed missing mode baseline.
 
 What you can reproduce today:
 
