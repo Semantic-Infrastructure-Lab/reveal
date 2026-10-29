@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, cast
 
+from ...errors import RequestValidationError
+
 
 def parse_path(path: str) -> Tuple[Path, List[str | int], Optional[Tuple[Optional[int], Optional[int]]]]:
     """Parse file path and JSON navigation path.
@@ -107,7 +109,7 @@ def load_json(file_path: Path) -> Any:
         raise FileNotFoundError(f"JSON file not found: {file_path}")
     if file_path.is_dir():
         # A bare `json://` resolved to '.' and failed with "[Errno 21] Is a directory".
-        raise ValueError(f"json:// needs a JSON file, not a directory ({file_path}): "
+        raise RequestValidationError(f"json:// needs a JSON file, not a directory ({file_path}): "
                          f"e.g. reveal json://package.json")
 
     try:

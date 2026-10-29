@@ -4,7 +4,8 @@ from typing import Dict, Any, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from ...utils.results import ResultBuilder, note_truncation, note_warning
+from ...utils.results import (AnalysisCompleteness, ResultBuilder, note_truncation, note_warning,
+                             result_execution_facts)
 from ...utils.path_utils import to_posix
 from ...utils.query_parser import note_query_parsed
 from ...utils.query import (
@@ -52,6 +53,28 @@ class JsonAdapter(ResourceAdapter):
     HELP_CLUSTER = 'Data & Config'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    RESOURCE_IS_PATH = True
+    RESULT_TYPE = 'json_value'
+    DEFAULT_FAIL_ON = 'none'
+
+    @staticmethod
+    def resource_path(resource: str) -> str:
+        """Only the file is a filesystem resource; JSON navigation is inside it."""
+        return str(parse_path(resource)[0])
+
+    @classmethod
+    def uri_execution_facts(cls, resource):
+        """Qualify only unqueried roots; selectors and other modes keep their policy."""
+        if '?' in resource:
+            return None
+        _, navigation, slice_spec = parse_path(resource)
+        return None if navigation or slice_spec is not None else cls.execution_facts
+
+    @staticmethod
+    def execution_facts(result):
+        """A root value requires one complete JSON read; empty and null are values."""
+        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
+
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
