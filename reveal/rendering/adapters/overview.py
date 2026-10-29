@@ -58,7 +58,7 @@ def _render_map(facts: dict) -> list[str]:
         lines.append(f"  {row['component']}  {row['files']} files; internal {row['internal']}, outgoing {row['outgoing']}, incoming {row['incoming']}; cohesion {cohesion}")
         if row['top_bridge']:
             lines.append(f"    Bridge: {row['top_bridge']}")
-        if row['cohesion'] is None:
+        if row['cohesion'] is None and not facts['rules'].get('cohesion_rule'):
             lines.append('    ' + row['cohesion_reason'])
     if facts['rules'].get('cohesion_rule'):
         lines.append('  ' + facts['rules']['cohesion_rule'])

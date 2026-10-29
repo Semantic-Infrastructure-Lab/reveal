@@ -230,7 +230,7 @@ def _bound_details(result: dict, top: int) -> None:
                           total=metadata[key + '_count'])
         diagnostics = metadata['extraction_diagnostics']
         metadata['extraction_diagnostics_count'] = len(diagnostics)
-        metadata['extraction_diagnostics'] = dict(list(diagnostics.items())[:limit])
+        metadata['extraction_diagnostics'] = dict(sorted(diagnostics.items())[:limit])
         note_truncation(result, 'map.metadata.extraction_diagnostics',
                         len(metadata['extraction_diagnostics']), len(diagnostics), 'auto_cap')
         _bound_nested_details(result, metadata['extraction_diagnostics'],
