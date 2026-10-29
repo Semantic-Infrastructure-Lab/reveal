@@ -211,6 +211,15 @@ def test_cycle_witness_fallback_need_not_close(source, tmp_path):
     assert result['cycles']['rows'][0]['path']['total'] == 8
 
 
+def test_cycle_prefix_does_not_depend_on_producer_group_order(source, tmp_path):
+    source[3]['cycles'].reverse()
+    source[3]['cycle_paths'].reverse()
+    result = project_map_facts(*source, path=tmp_path, top=1)
+    cycle = result['cycles']['rows'][0]
+    assert cycle['members']['rows'] == ['pkg/c0/a0.py']
+    assert cycle['path']['rows'] == ['pkg/c0/a0.py']
+
+
 @pytest.mark.parametrize('damage', ['loss', 'causes', 'count', 'witness', 'rule'])
 def test_malformed_source_cannot_become_clean_map(source, tmp_path, damage):
     if damage == 'loss':
