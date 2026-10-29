@@ -42,14 +42,22 @@ def _paths(rows: Any, label: str) -> list[str]:
     return rows
 
 
+def _validate_rule(answer: dict[str, Any]) -> None:
+    rule = answer.get('edge_rule')
+    if (not isinstance(rule, dict) or not isinstance(rule.get('text'), str)
+            or not rule['text'].strip() or rule.get('lazy') not in ('include', 'exclude', 'only')
+            or rule.get('tests') not in ('included', 'importers_not_counted')
+            or rule.get('scope') not in ('scanned_path', 'scan_root')):
+        raise ValueError('map facts require their complete counting rule')
+
+
 def _rows(answer: dict[str, Any], field: str, total: str | None = None) -> list[dict[str, Any]]:
     rows = answer[field]
     if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
         raise ValueError(f'{field} must contain records')
     if total is not None and _count(answer[total], total) != len(rows):
         raise ValueError(f'{field} must be complete before map projection')
-    if not isinstance(answer.get('edge_rule'), dict):
-        raise ValueError(f'{field} requires its counting rule')
+    _validate_rule(answer)
     return rows
 
 
@@ -62,6 +70,16 @@ def _page(rows: list[Any], top: int) -> BoundedRows:
 def _path(value: str, base: Path) -> str:
     # Normalize native spellings before lexical path operations, also on POSIX.
     return to_relative_display(to_posix(value), base)
+
+
+def _cycle(group: Any, witness: Any, base: Path, top: int) -> dict[str, BoundedRows]:
+    members = [_path(p, base) for p in _paths(group, 'cycle members')]
+    witness_paths = [_path(p, base) for p in _paths(witness, 'cycle witness')]
+    if len(set(members)) < 2:
+        raise ValueError('cycle group requires at least two distinct members')
+    if not witness_paths or not set(witness_paths).issubset(members):
+        raise ValueError('cycle witness requires nodes within its group')
+    return {'members': _page(members, top), 'path': _page(witness_paths, top)}
 
 
 def _relationship(row: dict[str, Any], base: Path, *, component: bool = False) -> dict[str, Any]:
@@ -85,7 +103,37 @@ def _relationship(row: dict[str, Any], base: Path, *, component: bool = False) -
     return result
 
 
+def _validate_measured_budget(value: dict[str, Any]) -> None:
+    limit = value['limit']
+    total, returned, exact = value['total'], value['returned'], value['exact']
+    _count(total, 'scan_budget.total')
+    _count(returned, 'scan_budget.returned')
+    if type(exact) is not bool or value['scope'] != 'scan':
+        raise ValueError('scan_budget measured accounting requires scan scope and boolean exactness')
+    if returned > total or (limit is not None and returned > limit):
+        raise ValueError('scan_budget returned count exceeds its total or limit')
+    if value['capped'] and (exact or total <= returned):
+        raise ValueError('scan_budget capped accounting requires an inexact larger total')
+
+
+def _validate_scan_budget(value: Any) -> None:
+    fields = {'scope', 'limit', 'total', 'returned', 'exact', 'capped'}
+    if not isinstance(value, dict) or not fields.issubset(value):
+        raise ValueError('scan_budget must retain its complete accounting record')
+    if value['scope'] not in ('scan', 'source_candidates') or type(value['capped']) is not bool:
+        raise ValueError('scan_budget requires its source scope and boolean capped state')
+    if value['limit'] is not None:
+        _count(value['limit'], 'scan_budget.limit')
+    if value['total'] is None and value['returned'] is None and value['exact'] is None:
+        if value['scope'] != 'source_candidates' or value['capped']:
+            raise ValueError('scan_budget unavailable accounting requires uncapped source_candidates')
+        return
+    _validate_measured_budget(value)
+
+
 def _metadata(metadata: dict[str, Any], base: Path) -> dict[str, Any]:
+    _count(metadata.get('scanned_files'), 'scanned_files')
+    _validate_scan_budget(metadata.get('scan_budget'))
     result = deepcopy(metadata)
     for field in ('files_failed', 'files_lost'):
         count = _count(metadata[field + '_count'], field + '_count')
@@ -113,12 +161,16 @@ def project_map_facts(fan_in: dict[str, Any], entrypoints: dict[str, Any],
                       metadata: dict[str, Any], *, path: Path, top: int = 5) -> MapFacts:
     """Project complete ImportView responses; zero shows no rows, preserving totals.
 
-    ImportView must have no ``top`` cap. Fan-in/components count all edges;
+    Responses must be complete; ImportView must have no ``top`` cap. The
+    entrypoints producer is uncapped and has no separate candidate total, so
+    completeness there is a caller precondition, not independently proved here.
+    Fan-in/components count all edges;
     entrypoints ignore test importers; cycles exclude local imports. Those rules
     come from each response, never from a new graph interpretation here. Cycles
     bound groups, members and witness-path nodes separately with the same top.
     Required metadata (including unabridged extraction causes) is not display-cut.
-    Invalid or pre-cut inputs raise rather than becoming an exact empty answer.
+    Null scan accounting stays unavailable, never proof of an exact empty scan.
+    Malformed or detectably cut inputs raise rather than becoming an exact empty answer.
     """
     _count(top, 'top')
     fans = _rows(fan_in, 'entries', 'total')
@@ -133,8 +185,7 @@ def project_map_facts(fan_in: dict[str, Any], entrypoints: dict[str, Any],
         raise ValueError('cycles and witness paths must be lists')
     if _count(circular['count'], 'cycle count') != len(groups) or len(groups) != len(witnesses):
         raise ValueError('cycle groups and witnesses must be complete')
-    if not isinstance(circular.get('edge_rule'), dict):
-        raise ValueError('cycles require their counting rule')
+    _validate_rule(circular)
     projected_fans = []
     for row in fans:
         _count(row['fan_in'], 'fan_in')
@@ -146,11 +197,7 @@ def project_map_facts(fan_in: dict[str, Any], entrypoints: dict[str, Any],
     active = active_entry_points(projected_entries)
     projected_components = [_relationship(row, path, component=True) for row in component_rows]
     projected_components.sort(key=lambda row: (-row['files'], row['component']))
-    cycles = []
-    for group, witness in zip(groups, witnesses):
-        members = [_path(p, path) for p in _paths(group, 'cycle members')]
-        witness_paths = [_path(p, path) for p in _paths(witness, 'cycle witness')]
-        cycles.append({'members': _page(members, top), 'path': _page(witness_paths, top)})
+    cycles = [_cycle(group, witness, path, top) for group, witness in zip(groups, witnesses)]
     rules = architecture_edge_rules(fan_in, entrypoints, components, circular)
     rules['component_order'] = 'covered file count descending, then component path ascending'
     if 'cohesion_rule' in components:
