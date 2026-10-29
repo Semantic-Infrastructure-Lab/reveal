@@ -1,5 +1,4 @@
 """Fresh command hints must vary only by the qualified temporary corpus root."""
-from pathlib import Path
 from urllib.parse import quote
 
 import pytest
@@ -9,7 +8,7 @@ from scripts.check_parse_counts import _normalize_result
 
 @pytest.mark.parametrize('form', ['path', 'uri', 'encoded_uri'])
 def test_command_corpus_prefix_normalizes_without_losing_query_or_flags(tmp_path, form):
-    first, second = tmp_path / 'first' / 'corpus', tmp_path / 'second' / 'corpus'
+    first, second = tmp_path / 'first space' / 'corpus', tmp_path / 'second space' / 'corpus'
 
     def answer(root):
         path = root.as_posix()
