@@ -245,7 +245,7 @@ def test_clean_and_intentional_scope_controls_stay_complete_or_existing_parse_pa
     assert not fault['attempts']
     assert (run.returncode, answer) == (clean_run.returncode, clean)
     assert not _directory_warnings(answer)
-    assert answer['meta']['confidence'] == 0.6 and answer['_meta']['confidence'] == 'medium'
+    assert 'confidence' not in answer['meta'] and 'confidence' not in answer['_meta']
     expected = AnalysisCompleteness.INCOMPLETE if case == 'parse-only' else AnalysisCompleteness.COMPLETE
     assert surface.SurfaceAdapter.execution_facts(answer).completeness is expected
     assert run.returncode == (3 if case == 'parse-only' else 0)

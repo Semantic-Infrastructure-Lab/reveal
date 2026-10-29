@@ -223,7 +223,7 @@ def test_reused_adapter_repairs_exactly_and_sibling_and_source_only_omission_sta
     assert surface.SurfaceAdapter(str(sibling), 'type=env').get_structure() == sibling_clean
     fault['denied'] = set()
     assert adapter.get_structure() == clean
-    assert clean['meta']['confidence'] == 0.6 and clean['_meta']['confidence'] == 'medium'
+    assert 'confidence' not in clean['meta'] and 'confidence' not in clean['_meta']
 
 
 def test_source_only_intentional_test_prune_preserves_broader_healthy_census(tmp_path, fault):
