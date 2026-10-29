@@ -174,3 +174,7 @@ def test_requested_output_failure_and_primary_json_noop_stay(files):
     assert 'alpha' in failed.stdout
     primary = run(uri(files / 'good.json'), '--format', 'json', '--output', 'json=' + files.as_posix())
     assert primary.returncode == 0 and json.loads(primary.stdout)['type'] == 'json_value'
+
+
+def test_resource_resolver_serializes_the_file_before_legacy_missing_diagnostic():
+    assert JsonAdapter.resource_path(r'C:\project\missing.json/key') == 'C:/project/missing.json'
