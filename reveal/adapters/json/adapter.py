@@ -60,7 +60,7 @@ class JsonAdapter(ResourceAdapter):
     @staticmethod
     def resource_path(resource: str) -> str:
         """Only the file is a filesystem resource; JSON navigation is inside it."""
-        return str(parse_path(resource)[0])
+        return to_posix(parse_path(resource)[0])
 
     @classmethod
     def uri_execution_facts(cls, resource):
