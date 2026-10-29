@@ -175,7 +175,13 @@ def test_element_check_and_stdin_batch_keep_legacy_policy(tmp_path):
     uri = f'json://{path.as_posix()}'
     assert api.query(uri, element_name='answer') == {'name': 'answer', 'value': 42, 'type': 'int'}
     checked = run(uri, '--check', '--format', 'json')
-    assert checked.returncode == 0 and 'has no effect' in checked.stderr
+    assert checked.returncode == 0, checked.stderr
+    warnings = [w for w in json.loads(checked.stdout)['meta']['warnings'] if w['type'] == 'unused_flag']
+    assert [(w['code'], w['fields']) for w in warnings] == [('unused_flag', ['--check'])]
+    assert 'has no effect' not in checked.stderr
+    checked_text = run(uri, '--check')
+    assert checked_text.returncode == 0
+    assert checked_text.stderr.count('--check has no effect') == 1
     path.write_text('{INVALID', encoding='utf-8')
     for tail in [('answer',), ('--check',)]:
         failed = run(uri, *tail, '--format', 'json')

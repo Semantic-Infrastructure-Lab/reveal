@@ -119,9 +119,17 @@ class TestLimitLive:
         assert proc.returncode == 0, proc.stderr
         assert _lists(proc.stdout)['file_hotspots'] == 4
 
-    def test_imports_still_warns(self, tree):
-        proc = run_reveal(f'imports://{tree}', '--limit', '2', '--format', 'json')
-        assert "Unknown query param 'limit'" in proc.stderr
+    @pytest.mark.parametrize('output_format', ['text', 'json'])
+    def test_imports_still_warns(self, tree, output_format):
+        proc = run_reveal(f'imports://{tree}', '--limit', '2', '--format', output_format)
+        assert proc.returncode == 0, proc.stderr
+        if output_format == 'json':
+            warnings = [w for w in json.loads(proc.stdout)['meta']['warnings']
+                        if w['type'] == 'unknown_query_param']
+            assert [(w['code'], w['fields']) for w in warnings] == [('unknown_query_param', ['limit'])]
+            assert "Unknown query param 'limit'" not in proc.stderr
+        else:
+            assert proc.stderr.count("Unknown query param 'limit'") == 1
 
     def test_calls_target_mode_says_top_is_ignored(self, imported):
         proc = run_reveal(f'calls://{imported}?target=helper', '--limit', '1', '--format', 'json')

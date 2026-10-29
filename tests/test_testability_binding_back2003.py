@@ -275,4 +275,10 @@ def test_verbose_override_keeps_explicit_top_unused_in_ledger(project, observed,
                    '--verbose', '--format', output_format)
     assert response.returncode == 0, (response.stdout, response.stderr)
     assert observed['builds'][0]['top'] > 1
-    assert 'top' in response.stderr and 'not' in response.stderr, response.stderr
+    if output_format == 'json':
+        warnings = [w for w in json.loads(response.stdout)['meta']['warnings']
+                    if w['type'] == 'unused_flag']
+        assert [(w['code'], w['fields']) for w in warnings] == [('unused_flag', ['--top'])]
+        assert '--top' not in response.stderr
+    else:
+        assert response.stderr.count('--top has no effect') == 1

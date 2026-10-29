@@ -70,7 +70,7 @@ def test_calls_without_a_query_exits_nonzero(proj, fmt):
 @pytest.mark.parametrize('fmt', FORMATS)
 def test_json_missing_key_exits_nonzero(proj, fmt):
     r = _run_reveal_direct('json://data.json/nokey', '--format', fmt)
-    assert r.returncode == 1
+    assert r.returncode == 2  # BACK-2367: an invalid key selection is invalid_request.
     assert 'Key not found' in r.stdout + r.stderr
 
 
@@ -134,7 +134,7 @@ def test_the_error_is_reported_once_and_first(proj, uri, scheme):
     """The router prints the error line before rendering; renderers add only detail.
     Before, claude/codex/help/calls renderers each printed their own 'Error:' line."""
     r = _run_reveal_direct(uri)
-    assert r.returncode == (2 if scheme == 'calls' else 1)  # calls is a declared noun: usage is 2 (BACK-2066)
+    assert r.returncode == (2 if scheme in ('calls', 'json') else 1)
     assert r.stderr.startswith(f'Error ({scheme}://): '), r.stderr
     assert (r.stdout + r.stderr).count('Error') == 1, r.stdout + r.stderr
 

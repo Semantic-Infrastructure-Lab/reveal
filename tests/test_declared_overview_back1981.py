@@ -268,7 +268,12 @@ def test_uri_budget_controls_disclose_no_sliceable_overview_list(project, flag):
     a, b = json.loads(base.stdout), json.loads(result.stdout)
     assert a['complex_functions'] == b['complex_functions']
     assert a['stats']['hotspots'] == b['stats']['hotspots']
-    assert flag in result.stderr and ('no effect' in result.stderr or 'no list to slice' in result.stderr)
+    if flag == '--max-items':
+        assert any(warning['type'] == 'unused_flag' and flag in warning.get('fields', [])
+                   and 'no effect' in warning['message'] for warning in b['meta']['warnings'])
+        assert flag not in result.stderr
+    else:
+        assert flag in result.stderr and ('no effect' in result.stderr or 'no list to slice' in result.stderr)
 
 
 @pytest.mark.parametrize('transport', ['cli', 'uri'])
@@ -301,8 +306,11 @@ def test_typed_binder_declaration_defaults_and_roles():
 def test_generated_cli_budget_is_disclosed_without_slicing(project):
     result = run('overview', 'proj', '--no-git', '--max-items', '1', '--format', 'json')
     assert result.returncode == 0, result.stderr
-    assert len(json.loads(result.stdout)['complex_functions']) == 5
-    assert '--max-items' in result.stderr and 'no effect' in result.stderr
+    answer = json.loads(result.stdout)
+    assert len(answer['complex_functions']) == 5
+    assert any(warning['type'] == 'unused_flag' and '--max-items' in warning.get('fields', [])
+               and 'no effect' in warning['message'] for warning in answer['meta']['warnings'])
+    assert '--max-items' not in result.stderr
 
 
 def test_absent_resource_defaults_match_and_parser_missing_value_is_usage(project, monkeypatch):

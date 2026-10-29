@@ -543,12 +543,13 @@ def diff_snapshots(base: Dict[str, Any], head: Dict[str, Any], top_n: int) -> Di
 
 
 def _empty_deltas(top_n: int) -> Dict[str, Any]:
+    """Zero change proved by tree identity, without measured snapshot values."""
     return {
         'fan_in': [],
         'fan_out': [],
         'circular_groups': {'introduced': [], 'resolved': []},
         'component_coupling': [],
-        'complexity_centroid': {'base': 0.0, 'head': 0.0, 'change': 0.0, 'top_n': top_n},
+        'complexity_centroid': {'base': None, 'head': None, 'change': 0.0, 'top_n': top_n},
         'entry_points': {'added': [], 'removed': []},
     }
 

@@ -20,6 +20,16 @@ from reveal.utils.gitignore import gitignore_scope  # noqa: E402
 pytestmark = pytest.mark.component
 
 
+def _measured_empty_deltas():
+    return {
+        'fan_in': [], 'fan_out': [],
+        'circular_groups': {'introduced': [], 'resolved': []},
+        'component_coupling': [],
+        'complexity_centroid': {'base': 0.0, 'head': 0.0, 'change': 0.0, 'top_n': 20},
+        'entry_points': {'added': [], 'removed': []},
+    }
+
+
 @pytest.fixture
 def tree(tmp_path):
     repo = pygit2.init_repository(str(tmp_path))
@@ -47,7 +57,7 @@ def test_dirty_but_equivalent_tree_has_no_false_scope_deltas(tree, relation, pat
               'descendant': src/'nested', 'disjoint': src.parent/'other'}[relation]
     with exclusion_scope(active, [pattern]):
         result = diff.run_architecture_diff(src, ref)
-    assert result['deltas'] == diff._empty_deltas(20)
+    assert result['deltas'] == _measured_empty_deltas()
 
 
 @pytest.mark.parametrize('component', ['imports', 'complexity'])
@@ -170,7 +180,7 @@ def test_live_ignore_policy_is_symmetric_for_subdirectory(tree, policy, monkeypa
     else:
         monkeypatch.setenv('REVEAL_IGNORE', 'src/b.py')
     result = diff.run_architecture_diff(src, ref)
-    assert result['deltas'] == diff._empty_deltas(20)
+    assert result['deltas'] == _measured_empty_deltas()
 
 
 def test_tracked_base_and_ignored_untracked_head_remain_distinct(tree):
@@ -178,6 +188,7 @@ def test_tracked_base_and_ignored_untracked_head_remain_distinct(tree):
     (src.parent/'.gitignore').write_text('src/b.py\nsrc/untracked.py\n', encoding='utf-8')
     (src/'untracked.py').write_text('import a\n', encoding='utf-8')
     result = diff.run_architecture_diff(src, ref)
+    assert result['analysis']['basis'] == 'identical_tree'
     assert result['deltas'] == diff._empty_deltas(20)
 
 
@@ -231,7 +242,7 @@ def test_actually_empty_excluded_scope_is_complete_with_supplied_zero_confidence
     assert result['analysis']['complete'] and not result.get('error')
     assert result['analysis']['confidence'] == {'base': 0.0, 'head': 0.0}
     assert result['meta']['confidence'] == 0.0
-    assert result['deltas'] == diff._empty_deltas(20)
+    assert result['deltas'] == _measured_empty_deltas()
 
 
 def test_diagnostic_normalization_keeps_distinct_path_with_same_prefix(tmp_path):
