@@ -97,6 +97,17 @@ if (config.tsconfig) {
 }
 const cache = ts.createModuleResolutionCache(scan, f => f, options);
 const edges = new Map();
+const moduleEdges = new Map();
+// Lexical function scope, independent of whether an import executes dynamically.
+const functionLocal = node => {
+  for (let current = node.parent; current; current = current.parent) {
+    if (ts.isFunctionDeclaration(current) || ts.isFunctionExpression(current) ||
+        ts.isArrowFunction(current) || ts.isMethodDeclaration(current) ||
+        ts.isConstructorDeclaration(current) || ts.isGetAccessorDeclaration(current) ||
+        ts.isSetAccessorDeclaration(current)) return true;
+  }
+  return false;
+};
 let files = 0, directives = 0, unresolved = 0, excluded = 0, declarations = 0;
 const population = [];
 for (const raw of input.importers) {
@@ -109,18 +120,18 @@ for (const raw of input.importers) {
   const specifiers = [];
   ts.forEachChild(source, function visit(node) {
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteralLike(node.moduleSpecifier)) {
-      specifiers.push(node.moduleSpecifier.text);
+      specifiers.push({specifier: node.moduleSpecifier.text, local: functionLocal(node)});
     } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteralLike(node.argument.literal)) {
-      specifiers.push(node.argument.literal.text);
+      specifiers.push({specifier: node.argument.literal.text, local: functionLocal(node)});
     } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && node.moduleReference.expression && ts.isStringLiteralLike(node.moduleReference.expression)) {
-      specifiers.push(node.moduleReference.expression.text);
+      specifiers.push({specifier: node.moduleReference.expression.text, local: functionLocal(node)});
     } else if (ts.isCallExpression(node) && node.arguments.length && ts.isStringLiteralLike(node.arguments[0]) &&
                (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) {
-      specifiers.push(node.arguments[0].text);
+      specifiers.push({specifier: node.arguments[0].text, local: functionLocal(node)});
     }
     ts.forEachChild(node, visit);
   });
-  for (const specifier of specifiers) {
+  for (const {specifier, local} of specifiers) {
     directives++;
     const resolved = ts.resolveModuleName(specifier, file, options, ts.sys, cache).resolvedModule;
     if (!resolved) { unresolved++; continue; }
@@ -130,11 +141,18 @@ for (const raw of input.importers) {
     const key = relative(target);
     if (!edges.has(key)) edges.set(key, new Set());
     edges.get(key).add(relative(file));
+    if (!local) {
+      if (!moduleEdges.has(key)) moduleEdges.set(key, new Set());
+      moduleEdges.get(key).add(relative(file));
+    }
   }
 }
 const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const output = Object.fromEntries([...edges].sort(([a], [b]) => a.localeCompare(b)).map(([target, importers]) => [target, [...importers].sort()]));
-process.stdout.write(JSON.stringify({ edges: output, coverage: {
+const lazyOnly = Object.fromEntries(Object.entries(output)
+  .map(([target, importers]) => [target, importers.filter(file => !moduleEdges.get(target)?.has(file))])
+  .filter(([, importers]) => importers.length));
+process.stdout.write(JSON.stringify({ edges: output, lazy_only: lazyOnly, coverage: {
   files, directives, unresolved_directives: unresolved, excluded_targets: excluded,
   declaration_files_skipped: declarations, population_digest: digest(population.sort()),
   config_digest: digest([...configReads].sort(([a], [b]) => a.localeCompare(b))),

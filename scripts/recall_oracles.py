@@ -381,7 +381,7 @@ C_SUFFIXES = frozenset({'.c', '.h'})
 CPP_SUFFIXES = frozenset({'.cpp', '.cc', '.cxx', '.h', '.hpp', '.hh', '.hxx'})
 
 
-def build_typescript_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+def _typescript_scoped_edges(scope: Scope) -> tuple[Edges, Edges, Coverage]:
     """The compiler parses/resolves the explicit population; Reveal is never imported."""
     if not shutil.which('node'):
         raise RuntimeError('TypeScript oracle prerequisite unavailable: Node is required')
@@ -394,7 +394,17 @@ def build_typescript_oracle(scope: Scope) -> tuple[Edges, Coverage]:
     if result.returncode:
         raise RuntimeError(f'TypeScript compiler oracle failed: {result.stderr.strip()}')
     output = json.loads(result.stdout)
-    return output['edges'], output['coverage']
+    return output['edges'], output['lazy_only'], output['coverage']
+
+
+def build_typescript_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+    edges, _, coverage = _typescript_scoped_edges(scope)
+    return edges, coverage
+
+
+def typescript_lazy_only_edges(scope: Scope) -> Edges:
+    _, lazy_only, _ = _typescript_scoped_edges(scope)
+    return lazy_only
 
 def build_python_calls_oracle(scope: Scope) -> tuple[Edges, Coverage]:
     """Python AST source calls, deduplicated by file/function and bare callee.
@@ -508,6 +518,6 @@ ORACLES: dict[str, Oracle] = {
     'gcc-cpp': Oracle(CPP_SUFFIXES, _gcc_oracle('c++')),
     'python-ast': Oracle(frozenset({'.py'}), build_python_oracle, python_lazy_only_edges),
     'rust-use': Oracle(frozenset({'.rs'}), build_rust_oracle),
-    'typescript-compiler': Oracle(frozenset({'.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'}), build_typescript_oracle),
+    'typescript-compiler': Oracle(frozenset({'.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'}), build_typescript_oracle, typescript_lazy_only_edges),
     'java-jls': Oracle(frozenset({'.java'}), build_java_oracle),
 }
