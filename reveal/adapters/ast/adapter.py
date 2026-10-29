@@ -553,7 +553,7 @@ class AstAdapter(ResourceAdapter):
                 'unit': 'files', 'count': evidence.failed_files,
                 'message': (f'{evidence.failed_files} required Python dict source file(s) could not be '
                             f'analyzed; dict usages, TypedDicts, and shared-schema observations '
-                            f'may be missing. {details}'),
+                            f'may be missing. Analysis is incomplete. {details}'),
             })
         meta = self.create_meta(parse_mode='python_ast',
                                 confidence=None if failures or evidence.failed_files else 1.0,
