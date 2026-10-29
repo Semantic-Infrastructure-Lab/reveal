@@ -73,6 +73,9 @@ def test_the_pressure_view_is_the_testability_report(repo, extra):
     assert new_doc['type'] == old_doc['type'] == 'testability_report'
     assert new_doc['summary']['total_patch_uses'] == 3  # the fixture really has patch pressure
     assert _answer(old_doc) == _answer(new_doc)
+    if extra.startswith('&tests='):
+        assert not [w for w in new_doc.get('meta', {}).get('warnings', [])
+                    if w['type'] == 'unused_query_param' and 'tests' in w['fields']]
 
 
 def test_testability_prints_its_replacement_once_and_the_new_spelling_prints_none(repo):
@@ -92,12 +95,19 @@ def test_the_default_view_still_scans_a_test_root(repo):
     assert doc['type'] == 'patches_scan' and doc['total_uses'] == 3
 
 
-def test_pressure_only_parameters_are_not_silently_ignored_by_the_default_view(repo):
+@pytest.mark.parametrize('output_format', ['text', 'json'])
+def test_pressure_only_parameters_are_not_silently_ignored_by_the_default_view(repo, output_format):
     """tests= means nothing to the patches scan (its path is the root); the answer says so."""
-    done = run(f'patches://{repo}/t?tests={repo}/t', '--format', 'json')
+    done = run(f'patches://{repo}/t?tests={repo}/t', '--format', output_format)
     assert done.returncode == 0, done.stderr
-    assert json.loads(done.stdout)['type'] == 'patches_scan'
-    assert "query param 'tests' has no effect on this patches:// query" in done.stderr
+    if output_format == 'json':
+        answer = json.loads(done.stdout)
+        assert answer['type'] == 'patches_scan'
+        warnings = [w for w in answer['meta']['warnings'] if w['type'] == 'unused_query_param']
+        assert [(w['code'], w['fields']) for w in warnings] == [('unused_query_param', ['tests'])]
+        assert 'has no effect' not in done.stderr
+    else:
+        assert done.stderr.count("query param 'tests' has no effect on this patches:// query") == 1
 
 
 def test_an_unknown_view_is_rejected(repo):
