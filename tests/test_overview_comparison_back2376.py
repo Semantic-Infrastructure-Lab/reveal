@@ -123,3 +123,19 @@ def test_existing_valid_comparison_proof_stays_complete(project, basis, transpor
             side: {'imports': 'complete', 'complexity': 'complete'} for side in ('base', 'head')}
         assert answer['deltas']['complexity_centroid'] == {
             'base': 13.0, 'head': 13.0, 'change': 0.0, 'top_n': 20}
+
+
+@pytest.mark.parametrize('side', ['base', 'head'])
+@pytest.mark.parametrize('transport', ['cli', 'uri'])
+def test_existing_required_snapshot_loss_stays_incomplete(tmp_path, side, transport):
+    root = make_repository(tmp_path / 'loss', content='def broken(\n' if side == 'base' else None)
+    (root / 'app.py').write_text(source(13) if side == 'base' else 'def broken(\n', encoding='utf-8')
+    response = invoke(root, noun='architecture', transport=transport)
+    assert response.returncode == 3, (response.stdout, response.stderr)
+    answer = json.loads(response.stdout)
+    assert answer['analysis']['basis'] == 'snapshots'
+    assert answer['analysis']['complete'] is False
+    assert answer['deltas'] is None
+    assert answer['analysis']['snapshots'][side]['complexity'] != 'complete'
+    assert not any(error.get('code') == 'invalid_adapter_answer'
+                   for error in answer.get('meta', {}).get('errors', []))

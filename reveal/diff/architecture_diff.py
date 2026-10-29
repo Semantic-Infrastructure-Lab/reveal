@@ -556,11 +556,28 @@ def _empty_deltas(top_n: int) -> Dict[str, Any]:
 
 # ── Entry point ──────────────────────────────────────────────────────────────
 
+def _comparison_snapshot_proof(analysis) -> bool:
+    snapshots = analysis.get('snapshots')
+    if analysis.get('basis') == 'identical_tree':
+        return analysis['complete'] is True and snapshots == {}
+    if (analysis.get('basis') != 'snapshots' or not isinstance(snapshots, dict)
+            or set(snapshots) != {'base', 'head'}):
+        return False
+    states: List[str] = []
+    for components in snapshots.values():
+        if not isinstance(components, dict) or set(components) != {'imports', 'complexity'}:
+            return False
+        states.extend(components.values())
+    return (all(state in ('complete', 'incomplete', 'failed') for state in states)
+            and analysis['complete'] is all(state == 'complete' for state in states))
+
+
 def comparison_answer_requirement_error(result, prior_facts=None) -> Optional[str]:
     """Require comparison proof, allowing an attributed rejection before analysis."""
     from ..utils.results import AnalysisCompleteness, FailureCause
     analysis = result.get('analysis')
-    if isinstance(analysis, dict) and isinstance(analysis.get('complete'), bool):
+    if (isinstance(analysis, dict) and isinstance(analysis.get('complete'), bool)
+            and _comparison_snapshot_proof(analysis)):
         return None
     errors = result.get('meta', {}).get('errors', [])
     invalid_only = bool(errors) and all(error.get('code') == 'invalid_request' for error in errors)
