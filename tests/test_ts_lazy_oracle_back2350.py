@@ -34,12 +34,14 @@ RICH = {
     'src/equals.ts': 'import target = require("./target");\n',
     'src/type_only.ts': 'import type { Thing } from "./target"; export type Alias = Thing;\n',
     'src/type_import.ts': 'export type Alias = import("./target").Thing;\n',
+    'src/ambient.ts': 'declare function ambient(): import("./target").Thing;\n',
+    'src/signature.ts': 'interface Contract { method(): import("./target").Thing; }\n',
     'src/function_type.ts': 'export type Factory = () => import("./target").Thing;\n',
     'src/local_type.ts': 'export function local() { type Alias = import("./target").Thing; }\n',
     'src/namespace.ts': 'namespace N { export const value = require("./target"); }\n',
     'src/decl.d.ts': 'import { value } from "./target";\n',
 }
-LAZY = ['src/accessors.ts', 'src/arrow.tsx', 'src/local.ts', 'src/local_type.ts',
+LAZY = ['src/accessors.ts', 'src/ambient.ts', 'src/arrow.tsx', 'src/local.ts', 'src/local_type.ts',
         'src/method.ts', 'src/nested.ts', 'src/require.js']
 
 
