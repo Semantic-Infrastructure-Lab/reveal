@@ -141,6 +141,7 @@ provenance only attaches to dict results — so the response shape differs from
 a plain-text query; only set it when the caller actually needs the manifest.
 Unknown or unused query inputs are retained in `meta.warnings` in the JSON answer,
 with the input names in `fields`. Text queries retain their warning notes.
+See the [ignored-input contract](../development/OUTPUT_CONTRACT.md#ignored-inputs).
 
 ### `reveal_pack(path, budget, since, content, focus, architecture)`
 

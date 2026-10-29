@@ -338,6 +338,27 @@ Adapters MAY include additional fields beyond the contract. These fields:
 }
 ```
 
+### Ignored inputs
+
+For a URI/declared dispatch using the shared JSON writer, ignored query inputs and
+flags are included in `meta.warnings` before serialization. The parser owns unknown
+keys; the flag ledger owns inputs that were accepted but not used by this operation.
+Each entry has a `type` and `code` (`unknown_query_param`, `unused_query_param`, or
+`unused_flag`), a human-readable `message`, and `fields`: the query keys or flag
+spellings concerned. Existing warnings remain in the answer.
+
+These are informational diagnostics and do not make a usable answer fail. An
+operation rejected before it could run does not gain an unused-input warning;
+parser warnings already authored during preparation remain visible. The JSON
+writer does not change execution facts or failure classification. Text dispatches
+keep their stderr notes, including recovery hints; equivalent typed commands and
+URI queries carry the same structured unused-input facts. JSON file artifacts
+beside a text answer also retain these diagnostics.
+
+MCP provenance queries receive the warnings inside the JSON document instead of
+an appended stderr suffix. Unrelated stderr retains its existing behavior; this
+does not convert arbitrary printed diagnostics into structured warnings.
+
 ### Retired spellings (`retired_spelling`)
 
 A spelling the surface program has retired (a flag, subcommand, URI scheme, query parameter
