@@ -368,14 +368,14 @@ def _check_uri(scheme: str, uri: str, args: Namespace) -> HealthResult:
     import subprocess
 
     _URI_FLAGS: dict[str, list[str]] = {
-        'ssl': ['--check', '--advanced'],
-        'mysql': ['--check', '--advanced'],
-        'domain': ['--check'],
+        'ssl': ['--check', '--advanced', '--only-failures'],
+        'mysql': ['--check', '--advanced', '--only-failures'],
+        'domain': ['--check', '--only-failures'],
         'metrics': [],
         'stats': [],
     }
     flags = _URI_FLAGS.get(scheme, [])
-    cmd, env = _reveal_child(uri, *flags, '--only-failures', '--format=json')
+    cmd, env = _reveal_child(uri, *flags, '--format=json')
 
     # Hard outer ceiling independent of what any individual adapter promises
     # internally -- this is the one health-check path reachable straight from
