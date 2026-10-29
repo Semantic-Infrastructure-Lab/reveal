@@ -220,6 +220,17 @@ def test_cycle_prefix_does_not_depend_on_producer_group_order(source, tmp_path):
     assert cycle['path']['rows'] == ['pkg/c0/a0.py']
 
 
+def test_active_predicate_keeps_producer_path_scope_before_display(source, tmp_path):
+    root = tmp_path / 'tests' / 'project'
+    for row in source[1]['entries']:
+        row['file'] = (root / row['file']).as_posix()
+        row['is_test'] = True
+    result = project_map_facts(*source, path=root)
+    assert result['entrypoints']['total'] == 0
+    assert result['entry_point_filter']['fan_in_zero'] == 11
+    assert result['entry_point_filter']['active'] == 0
+
+
 @pytest.mark.parametrize('damage', ['loss', 'causes', 'count', 'witness', 'rule'])
 def test_malformed_source_cannot_become_clean_map(source, tmp_path, damage):
     if damage == 'loss':
