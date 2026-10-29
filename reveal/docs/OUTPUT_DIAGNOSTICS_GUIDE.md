@@ -59,7 +59,7 @@ log write itself fails. For a slow `check` specifically, follow up with
 not a diff of two runs.
 
 **Known gap**: none of the above currently breaks down time *inside* a
-composite command (`overview`/`architecture`/`hotspots`/`deps` sequentially
+composite command (`architecture`/`hotspots`/`deps` sequentially
 call several sub-adapters) — `--perf` gives the total for the whole call,
 not a per-sub-adapter split, the way `check --profile-rules` does for
 `check`'s rules. Tracked as `BACK-1025`.

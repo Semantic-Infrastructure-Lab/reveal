@@ -66,15 +66,15 @@ class ClassifyAdapter(ResourceAdapter):
                 {'uri': 'classify://src', 'description': 'Provenance for every analyzable file under src/'},
             ],
             'features': [
-                'One row per file — not a ranked/capped subset like overview://, hotspots://, pack://',
+                'One row per file — not a ranked/capped subset like hotspots:// and pack://',
                 'Path-only signals (test/vendor-dir/minified) plus two cheap content signals for in-tree vendoring (BACK-1238): a minifier-preserved license banner in the first few lines, and locale-file fan-out (many same-extension siblings named after language codes)',
                 'summary.by_provenance gives a first-party-vs-noise fraction for the whole target',
                 "summary.excluded/excluded_by_extension (BACK-1241) discloses files skipped for having no registered analyzer at all (.erb/.vue/.scss confirmed common) -- summary.total is the analyzed population, not every file on disk",
             ],
             'notes': [
                 "Content-based generated-file detection (checks.py's _is_generated_file) is not folded in.",
-                'Content reads are bounded to the first few lines of files not already classified by path alone — overview:///hotspots:///pack:// remain path-only.',
-                'Inclusion rule (BACK-1241): a file is in the counted population iff registry.get_analyzer() recognizes its extension -- the same rule overview:///hotspots:///pack:// use for their own totals, which is why those numbers agree with classify:// by construction, not because either is a full-disk count. Template/markup formats without a registered analyzer (.erb, .vue, .scss, .css) are invisible to all of them; check summary.excluded_by_extension before treating summary.total as "the codebase".',
+                'Content reads are bounded to the first few lines of files not already classified by path alone — hotspots:///pack:// remain path-only.',
+                'Inclusion rule (BACK-1241): a file is in the counted population iff registry.get_analyzer() recognizes its extension -- the same rule hotspots:///pack:// use for their own totals, which is why those numbers agree with classify:// by construction, not because either is a full-disk count. Template/markup formats without a registered analyzer (.erb, .vue, .scss, .css) are invisible to all of them; check summary.excluded_by_extension before treating summary.total as "the codebase".',
             ],
             'see_also': [
                 'reveal metrics://<dir>?view=provenance - the replacement (the same answer)',

@@ -16,7 +16,12 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
+### Behavior changes
+
+- Ordinary `overview` becomes a compact project map in text and JSON: recognized code-file/language counts, bounded components, import relationships, entrypoint candidates and cycles, with coverage and drill-down commands. Quality, complexity and history move to their existing queries; `no_git` and test-ranking controls reject with guidance. Top zero shows totals without graph rows, and `no_imports` explicitly requests only scope (BACK-2374, BACK-2375).
+
 ### Changed
+
 
 - JSON query answers carry ignored flags and query parameters in `meta.warnings` instead of separate stderr notes. MCP `reveal_query(..., provenance=True)` no longer appends those warnings after JSON, so otherwise valid answers remain parseable; text warning notes and exit behavior stay the same (BACK-1998).
 - Element navigation uses `--inputs` (formerly `--deps`), `--outputs` (formerly `--mutations`/`--writes`) and `--callsites` (formerly `--calls`); MCP `reveal_nav` accepts the same names. Existing spellings still work with a replacement note, JSON `meta.flag` uses the new name, and findings/ranges keep their existing meaning: outputs are read-after-write hazards, not all writes (BACK-2363).
@@ -31,6 +36,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 - Corpus graph-invariant reports use format version 2 and separate resolved facts from counted in-root edges. Imports resolving outside a pinned scan root remain disclosed and no longer cause a false importer-consistency failure (BACK-2340).
 
 ### Fixed
+
+- Proved-identical architecture comparisons report unmeasured centroid base/head values as null, retaining proved zero change. Health no longer forwards an unsupported filter to metrics/stats and mislabels clean answers incomplete. Renderer self-validation stays independent of surrounding JSON/provenance options and preserves the real invocation's diagnostics (BACK-2373, BACK-2379, BACK-2381).
 
 - Python D001 no longer calls different string values identical after stripping `#`, URLs, comment markers or internal whitespace, and keeps floor division intact. Genuine duplicates still match after actual comments and docstrings are removed; other languages and rule scope/defaults are unchanged (BACK-2360, BACK-2362).
 - Adapter warnings must include a nonempty string `type`. Python result builders now raise `ValueError` for malformed warnings; declared commands report an invalid adapter answer instead of treating one as valid. Warning `code` stays optional, and error diagnostics keep their separate contract (BACK-2324).
