@@ -37,9 +37,12 @@ def test_current_noun_and_uri_controls_use_existing_named_paths():
     ('reveal dev new-adapter demo', 'writes generated'),
     ('reveal scaffold adapter demo', 'writes generated'),
     ('reveal offline', 'download'),
+    ('reveal patches src --view pressure --tests tests missing', 'names missing'),
+    ('reveal calls src --callees missing.py:main', 'names missing.py'),
 ])
 def test_unavailable_or_mutating_examples_stay_disclosed(command, reason):
-    assert reason in recipes._named_fixture_skip(shlex.split(command))
+    observed = recipes._named_fixture_skip(shlex.split(command))
+    assert observed is not None and reason in observed
 
 
 @pytest.mark.parametrize('documented', [pytest.param(p, id=p.id) for p in _current_nouns()])
@@ -78,3 +81,14 @@ def test_current_nouns_analyze_real_calls_and_test_scope(named_harness):
     assert patches['summary']['total_boundary_profiles'] > 0
     # The existing named test has no patches; this is coverage, not fabricated pressure.
     assert patches['summary']['total_patch_uses'] == 0
+
+
+@pytest.mark.parametrize('command', [
+    'reveal patches src --view pressure --tests tests integration_tests --top 20',
+    'reveal patches tests --target package.* --group target --limit 5',
+    'reveal calls src --callees src/app.py:main --depth 2',
+    'reveal calls src --callees Foo::run',
+    'reveal calls src --callers validate_item --depth 2',
+])
+def test_secondary_path_checks_preserve_scalar_and_qualified_name_controls(command):
+    assert recipes._named_fixture_skip(shlex.split(command)) is None
