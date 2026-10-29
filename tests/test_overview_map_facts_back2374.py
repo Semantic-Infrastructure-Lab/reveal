@@ -33,7 +33,8 @@ def source():
                 'files_lost_count': 0, 'files_lost': [],
                 'extraction_diagnostics': {'pkg/broken.py': {'parse': {'reason': 'exact cause'}}},
                 'unsupported_extensions': {'.lua': 2}, 'autoload_regime': {'framework': 'fixture'},
-                'scan_budget': {'total': 100, 'returned': 32, 'exact': True, 'capped': True}}
+                'scan_budget': {'scope': 'scan', 'limit': 34, 'total': 35, 'returned': 34,
+                                'exact': False, 'capped': True}}
     return ({'entries': fans, 'total': len(fans), 'edge_rule': rule},
             {'entries': entries, 'total_scanned': 32, 'edge_rule': rule},
             {'components': components, 'total': len(components), 'edge_rule': rule,
@@ -133,6 +134,54 @@ def test_zero_fan_in_rows_are_not_ranked_as_relationships(source, tmp_path):
     assert result['fan_in']['total'] == 7
     assert result['fan_in']['returned'] == 7
     assert result['fan_in']['omitted'] == 0
+
+
+@pytest.mark.parametrize('value', [None, -1, True, '32'])
+def test_invalid_scanned_file_proof_rejected(source, tmp_path, value):
+    source[4]['scanned_files'] = value
+    with pytest.raises(ValueError, match='scanned_files'):
+        project_map_facts(*source, path=tmp_path)
+
+
+@pytest.mark.parametrize('field', ['scanned_files', 'scan_budget'])
+def test_missing_scan_proof_rejected(source, tmp_path, field):
+    source[4].pop(field)
+    with pytest.raises(ValueError, match=field):
+        project_map_facts(*source, path=tmp_path)
+
+
+@pytest.mark.parametrize('patch', [
+    {'scope': None}, {'scope': ''}, {'limit': -1}, {'limit': True},
+    {'total': -1}, {'total': True}, {'returned': '34'}, {'returned': -1},
+    {'returned': 36}, {'limit': 33}, {'exact': True}, {'exact': None},
+    {'capped': 'true'}, {'total': None}, {'returned': None},
+    {'total': 34}, {'total': None, 'returned': None, 'exact': None},
+])
+def test_malformed_budget_proof_rejected(source, tmp_path, patch):
+    source[4]['scan_budget'].update(patch)
+    with pytest.raises(ValueError, match='scan_budget'):
+        project_map_facts(*source, path=tmp_path)
+
+
+@pytest.mark.parametrize('field', ['scope', 'limit', 'total', 'returned', 'exact', 'capped'])
+def test_missing_budget_proof_field_rejected(source, tmp_path, field):
+    source[4]['scan_budget'].pop(field)
+    with pytest.raises(ValueError, match='scan_budget'):
+        project_map_facts(*source, path=tmp_path)
+
+
+def test_unavailable_accounting_stays_unavailable(source, tmp_path):
+    source[4]['scan_budget'] = {'scope': 'source_candidates', 'limit': None,
+                              'total': None, 'returned': None, 'exact': None, 'capped': False}
+    result = project_map_facts(*source, path=tmp_path)
+    assert result['metadata']['scan_budget'] == source[4]['scan_budget']
+
+
+def test_uncapped_traversal_lower_bound_remains_inexact(source, tmp_path):
+    source[4]['scan_budget'] = {'scope': 'scan', 'limit': 20000, 'total': 34,
+                              'returned': 34, 'exact': False, 'capped': False}
+    result = project_map_facts(*source, path=tmp_path)
+    assert result['metadata']['scan_budget'] == source[4]['scan_budget']
 
 
 @pytest.mark.parametrize('damage', ['loss', 'causes', 'count', 'witness', 'rule'])
