@@ -23,13 +23,14 @@ def _run(tree, monkeypatch, query):
     result = _run_reveal_direct(f'metrics://.?{query}', '--format', 'json')
     assert result.returncode == 0, result.stderr
     names = sorted(f['file'].replace('\\', '/').rsplit('/', 1)[-1] for f in json.loads(result.stdout)['files'])
-    return names, result.stderr
+    return names, result.stderr, json.loads(result.stdout).get('meta', {}).get('warnings', [])
 
 
 def test_range_filter_is_applied_without_an_ignored_warning(tree, monkeypatch):
-    names, stderr = _run(tree, monkeypatch, 'lines=1..5')
+    names, stderr, warnings = _run(tree, monkeypatch, 'lines=1..5')
     assert names == ['small.py']
     assert 'Unknown query param' not in stderr
+    assert not [w for w in warnings if w['type'] == 'unknown_query_param']
 
 
 def test_range_matches_the_bound_pair(tree, monkeypatch):
@@ -38,18 +39,27 @@ def test_range_matches_the_bound_pair(tree, monkeypatch):
 
 def test_equality_filter_applied_beside_an_operator_does_not_warn(tree, monkeypatch):
     # `lines=1` alone is not a filter (no operator in the query), but next to one it is parsed and applied.
-    names, stderr = _run(tree, monkeypatch, 'lines=1&functions>=0')
+    names, stderr, warnings = _run(tree, monkeypatch, 'lines=1&functions>=0')
     assert names == ['small.py']
     assert 'Unknown query param' not in stderr
+    assert not [w for w in warnings if w['type'] == 'unknown_query_param']
 
 
 def test_a_key_nothing_reads_still_warns(tree, monkeypatch):
     # Negative controls: no filter is parsed, so the key really is ignored and says so.
-    names, stderr = _run(tree, monkeypatch, 'lines=1')
+    names, stderr, warnings = _run(tree, monkeypatch, 'lines=1')
     assert names == ['big.py', 'small.py']
-    assert "Unknown query param 'lines'" in stderr
-    _, stderr = _run(tree, monkeypatch, 'bogus=1')
-    assert "Unknown query param 'bogus'" in stderr
+    assert [(w['type'], w['code'], w['fields']) for w in warnings] == [
+        ('unknown_query_param', 'unknown_query_param', ['lines'])]
+    assert "Unknown query param 'lines'" not in stderr
+    _, stderr, warnings = _run(tree, monkeypatch, 'bogus=1')
+    assert [(w['type'], w['code'], w['fields']) for w in warnings] == [
+        ('unknown_query_param', 'unknown_query_param', ['bogus'])]
+    assert "Unknown query param 'bogus'" not in stderr
+    for key in ('lines', 'bogus'):
+        text = _run_reveal_direct(f'metrics://.?{key}=1')
+        assert text.returncode == 0, text.stderr
+        assert text.stderr.count(f"Unknown query param '{key}'") == 1
 
 
 def test_direct_adapter_construction_agrees(tree, capsys):
