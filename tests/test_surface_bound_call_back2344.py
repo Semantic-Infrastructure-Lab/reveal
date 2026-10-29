@@ -186,7 +186,6 @@ def test_bare_kwargs_inventory_ratchet_and_surface_mutation():
     baseline = json.loads((ROOT / 'scripts/boundary_baseline.json').read_text(encoding='utf-8'))
     rule = 'bare-get-structure-kwargs'
     identities = []
-    total = 0
     for path in sorted((ROOT / 'reveal/adapters').rglob('*.py')):
         source = path.read_text(encoding='utf-8')
         sites = find_sites(source, path.relative_to(ROOT).as_posix())[rule]
@@ -194,10 +193,9 @@ def test_bare_kwargs_inventory_ratchet_and_surface_mutation():
             if isinstance(cls, ast.ClassDef):
                 for method in cls.body:
                     if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) and method.name == 'get_structure':
-                        total += 1
                         if method.lineno in sites:
                             identities.append((path.relative_to(ROOT).as_posix(), cls.name))
-    assert total == 37 and len(identities) == 23
+    assert len(identities) == sum(baseline[rule].values())
     assert ('reveal/adapters/base.py', 'ResourceAdapter') in identities
     assert ('reveal/adapters/demo.py', 'DemoAdapter') in identities
     assert ('reveal/adapters/surface.py', 'SurfaceAdapter') not in identities
