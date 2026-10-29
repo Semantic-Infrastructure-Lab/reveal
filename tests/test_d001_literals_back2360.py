@@ -10,6 +10,8 @@ import tokenize
 
 import pytest
 
+from conftest import _run_reveal_in
+
 from reveal.analyzers.python import PythonAnalyzer
 from reveal.rules.duplicates.D001 import D001
 
@@ -21,16 +23,25 @@ def _pair(first, second):
     return f'def first(value):\n{first}\n\ndef second(value):\n{second}\n'
 
 
-def _check(tmp_path, source, suffix='.py'):
+@pytest.fixture(autouse=True)
+def _cli_environment(monkeypatch):
+    for name, value in {'PYTHONPATH': str(ROOT), 'REVEAL_DISK_CACHE': '0',
+                        'REVEAL_MAX_WORKERS': '1', 'REVEAL_NO_UPDATE_CHECK': '1'}.items():
+        monkeypatch.setenv(name, value)
+
+
+def _check(tmp_path, source, suffix='.py', *, fresh_process=False):
     path = tmp_path / ('sample' + suffix)
     path.write_text(source, encoding='utf-8')
-    env = {**os.environ, 'PYTHONPATH': str(ROOT), 'REVEAL_DISK_CACHE': '0',
-           'REVEAL_MAX_WORKERS': '1', 'REVEAL_NO_UPDATE_CHECK': '1'}
-    response = subprocess.run(
-        [sys.executable, '-m', 'reveal', 'check', str(path), '--select', 'D001',
-         '--no-gitignore', '--format', 'json'],
-        cwd=ROOT, env=env, capture_output=True, text=True, encoding='utf-8', timeout=60,
-    )
+    args = ['check', str(path), '--select', 'D001', '--no-gitignore', '--format', 'json']
+    if fresh_process:
+        response = subprocess.run(
+            [sys.executable, '-m', 'reveal', *args],
+            cwd=ROOT, env=os.environ.copy(), capture_output=True, text=True,
+            encoding='utf-8', timeout=60,
+        )
+    else:
+        response = _run_reveal_in(ROOT, *args)
     answer = json.loads(response.stdout)
     assert answer['coverage']['failed'] == answer['coverage']['unavailable'] == 0
     assert answer['scan_disclosures'] == []
@@ -150,3 +161,29 @@ def test_python_language_admission_uses_registry_routes(tmp_path, suffix, prefix
     response, detections = _check(tmp_path, source, suffix)
     assert detections == []
     assert response.returncode == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize('first,second,expected_exit', [
+    ('return "prefix#red"', 'return "prefix#blue"', 0),
+    ('return value * 2 + 3', 'return value * 2 + 3', 1),
+], ids=['hash-no-findings', 'genuine-findings'])
+def test_fresh_process_preserves_complete_cli_answer(tmp_path, first, second, expected_exit):
+    source = _pair('    ' + first, '    ' + second)
+    in_process, _ = _check(tmp_path, source)
+    fresh, _ = _check(tmp_path, source, fresh_process=True)
+    answer = json.loads(fresh.stdout)
+    assert answer == json.loads(in_process.stdout)
+    assert fresh.returncode == in_process.returncode == expected_exit
+    assert fresh.stderr == in_process.stderr == ''
+    if expected_exit == 0:
+        assert answer['detections'] == []
+    else:
+        (finding,) = answer['detections']
+        assert Path(finding['file_path']) == tmp_path / 'sample.py'
+        assert {key: value for key, value in finding.items() if key != 'file_path'} == {
+            'line': 4, 'rule_code': 'D001', 'column': 1,
+            'message': "Duplicate function detected: 'second' identical to 'first' (line 1)",
+            'suggestion': 'Refactor to share implementation with first',
+            'context': '24 chars, hash 7cde631dbca7b67d', 'severity': 'medium', 'category': 'D',
+        }
