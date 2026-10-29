@@ -301,7 +301,43 @@
       "scan_file_cap": 5000
     },
     "partial_files": 0,
-    "differences": []
+    "differences": [],
+    "lazy": {
+      "exclude": {
+        "targets": 746,
+        "oracle_edges": 3042,
+        "hit_edges": 3042,
+        "extra_edges": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "partial_files": 0,
+        "edge_rule": {
+          "lazy": "exclude",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": []
+        },
+        "differences": []
+      },
+      "only": {
+        "targets": 0,
+        "oracle_edges": 0,
+        "hit_edges": 0,
+        "extra_edges": 0,
+        "recall": null,
+        "precision": null,
+        "partial_files": 0,
+        "edge_rule": {
+          "lazy": "only",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": []
+        },
+        "differences": []
+      }
+    }
   },
   "typescript": {
     "oracle": "typescript-compiler",
@@ -326,7 +362,43 @@
       "scan_file_cap": 20000
     },
     "partial_files": 10,
-    "differences": []
+    "differences": [],
+    "lazy": {
+      "exclude": {
+        "targets": 263,
+        "oracle_edges": 1887,
+        "hit_edges": 1887,
+        "extra_edges": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "partial_files": 10,
+        "edge_rule": {
+          "lazy": "exclude",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": []
+        },
+        "differences": []
+      },
+      "only": {
+        "targets": 2,
+        "oracle_edges": 2,
+        "hit_edges": 2,
+        "extra_edges": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "partial_files": 10,
+        "edge_rule": {
+          "lazy": "only",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": []
+        },
+        "differences": []
+      }
+    }
   },
   "tsx": {
     "oracle": "typescript-compiler",
@@ -351,7 +423,43 @@
       "scan_file_cap": 5000
     },
     "partial_files": 5,
-    "differences": []
+    "differences": [],
+    "lazy": {
+      "exclude": {
+        "targets": 502,
+        "oracle_edges": 3581,
+        "hit_edges": 3581,
+        "extra_edges": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "partial_files": 5,
+        "edge_rule": {
+          "lazy": "exclude",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": []
+        },
+        "differences": []
+      },
+      "only": {
+        "targets": 5,
+        "oracle_edges": 6,
+        "hit_edges": 6,
+        "extra_edges": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "partial_files": 5,
+        "edge_rule": {
+          "lazy": "only",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": []
+        },
+        "differences": []
+      }
+    }
   },
   "go-client_golang": {
     "oracle": "go-toolchain",
