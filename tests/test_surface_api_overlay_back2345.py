@@ -148,7 +148,7 @@ def test_api_raw_resource_spelling_and_literal_constructor_path_remain(project):
     (literal / 'app.py').write_text('import os\nx=os.getenv("LITERAL_VAR")\n', encoding='utf-8')
     answer = api.query(uri(literal), source_only=True)
     assert names(answer) == {'LITERAL_VAR'}
-    assert answer['source'] == str(literal)
+    assert answer['source'] == literal.as_posix()
     # Typed construction never serializes a literal question mark into a query.
     adapter = SurfaceAdapter(str(project) + '?literal%26+', params={'type': 'env'})
     assert adapter.path == str(project) + '?literal%26+'
@@ -180,7 +180,7 @@ def test_api_does_not_adopt_uri_resource_decoding(project):
     baseline = api.query(uri(encoded))
     answer = api.query(uri(encoded), source_only=True)
     assert baseline['total'] == answer['total'] == 0
-    assert baseline['source'] == answer['source'] == str(encoded)
+    assert baseline['source'] == answer['source'] == encoded.as_posix()
 
 
 def test_typed_type_and_grouping_controls_match_supported_uri(project):
