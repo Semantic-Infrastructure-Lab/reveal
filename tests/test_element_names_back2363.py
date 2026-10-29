@@ -108,6 +108,22 @@ def test_callsites_equals_range_and_retired_equals_spelling(source):
     assert old.stderr.count('--calls is deprecated; use --callsites.') == 1
 
 
+@pytest.mark.parametrize('abbreviation,old', [('mutation', 'mutations'), ('writ', 'writes')])
+def test_abbreviated_retired_flags_cannot_bypass_notes_or_cut(source, abbreviation, old, monkeypatch):
+    from reveal.cli.invocation import RETIREMENTS, Retirement
+
+    key = 'flag:--' + old
+    entry = RETIREMENTS[key]
+    response = run(source, 'extract', '--' + abbreviation, '--format', 'json')
+    assert response.returncode == 0 and response.stderr.count(entry.text) == 1
+    without_note(json.loads(response.stdout), old)
+    monkeypatch.setitem(RETIREMENTS, key, Retirement(entry.old, entry.replacement, 'error'))
+    rejected = run(source, 'extract', '--' + abbreviation)
+    assert rejected.returncode == 2 and rejected.stdout == ''
+    assert entry.text in rejected.stderr
+    assert run(source, 'extract', '--outputs').returncode == 0
+
+
 @pytest.mark.parametrize('old', list(NAMES))
 def test_alias_text_notes_once_repeats_per_invocation_and_cut_stage_is_two(source, old, monkeypatch):
     from reveal.cli.invocation import RETIREMENTS, Retirement
@@ -161,6 +177,9 @@ def test_actual_sdk_nav_names_alias_notes_and_request_isolation(source, tmp_path
         assert not ranged.is_error and 'transform' in _text(ranged) and 'len(' not in _text(ranged)
         assert not (await session.call_tool('reveal_nav', {
             'path': source, 'element': ':2-2', 'flag': 'outputs'})).is_error
+        literal = await session.call_tool('reveal_nav', {
+            'path': source, 'element': 'extract', 'flag': 'varflow', 'flag_value': '--writes'})
+        assert not literal.is_error and 'deprecated' not in _text(literal)
 
     _run(tmp_path, scenario)
 
