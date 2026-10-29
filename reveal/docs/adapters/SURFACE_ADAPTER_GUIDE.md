@@ -129,6 +129,35 @@ decoded alternative exist, the literal path wins. URI `?` still separates the qu
 encode a question mark in a filename. See the linked execution contract for encoding
 and requested-output failure details.
 
+### Python API controls
+
+`reveal.api.query` accepts Surface's declared controls as typed keywords:
+
+```python
+from reveal import api
+
+report = api.query("surface://./src?type=env", source_only=True)
+```
+
+Explicit keywords override valid URI values, including `False`, zero and empty
+strings. `None` selects the declared default; an omitted keyword leaves the URI
+value intact. The URI is validated first, so `depth=-1` still rejects when a typed
+override supplies `depth=0`. Invalid typed values raise `ValueError` before scanning,
+and unsupported API keywords raise `TypeError`. Unknown URI keys retain their warning
+behavior. `top=0` leaves raw API and JSON analysis complete; it limits text entries.
+
+Direct adapter calls bind controls during construction:
+
+```python
+from reveal.adapters.surface import SurfaceAdapter
+
+report = SurfaceAdapter("./src", params={"type": "env", "source_only": True}).get_structure()
+```
+
+`get_structure(source_only=True)` now raises `TypeError`; it previously ignored the
+keyword. API resource strings retain their existing literal-path and `?` query
+splitting behavior; the CLI URI path codec described above is unchanged.
+
 ## Language Coverage
 
 Python, TypeScript/JavaScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust,

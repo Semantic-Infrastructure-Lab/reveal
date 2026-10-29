@@ -103,19 +103,15 @@ class SQLiteAdapter(ResourceAdapter):
 
 ## Adapter Lifecycle
 
-Every adapter follows this progression:
+Adapter queries select construction, analyze, then render or extract an element:
 
 ```
-__init__(resource)          — parse URI, set internal state
+from_uri(scheme, resource, element) / declared or bound API construction
+      ▼
+__init__(resource, query) or __init__(resource, params=bound_controls)
       │
       ▼
-from_uri(scheme, resource, element)   — class method; tries 5 constructor conventions
-      │                               — order depends on whether resource is present
-      ▼
-get_structure(**kwargs)     — overview: tables, functions, cert chains, etc.
-      │
-      ▼
-get_element(name, **kwargs) — drill down: specific table, function, cert, etc.
+get_structure() / get_structure(**kwargs) / get_element(name, **kwargs)
 ```
 
 The base class `ResourceAdapter` (`reveal/adapters/base.py`) enforces:
@@ -127,32 +123,31 @@ The base class `ResourceAdapter` (`reveal/adapters/base.py`) enforces:
 
 ### Constructor Conventions
 
-`from_uri()` tries five strategies, stopping at the first that succeeds. The order differs based on whether a resource string is present:
+Builtins declare `LEGACY_INIT = False` and use the canonical factory in
+`reveal/adapters/factory.py`: resource/query arguments construct once and constructor
+errors propagate unchanged. Already-bound `params=` keeps literal question-mark paths
+out of URI serialization. Custom `from_uri` implementations may own specialized
+resource formats.
 
-**With resource** (e.g., `ssl://example.com`):
-1. **Query-parsing**: `Adapter(path, query_params)` — for adapters that split path and query (e.g., `ast://`, `markdown://`)
-2. **Resource-arg**: `Adapter(resource)` — positional resource string (e.g., `help://`, `reveal://`)
-3. **Keyword-arg**: `Adapter(resource=resource)` — named argument fallback
-4. **No-arg**: `Adapter()` — tried last when resource is present
-5. **Full URI**: `Adapter(f'{scheme}://{resource}')` — raw URI string (e.g., `mysql://`)
+The deprecated five-strategy chain remains for unadopted legacy plugins. With a
+resource it tries query-parsing, resource-argument, keyword `base_path`/query,
+no-argument, then full-URI construction; without a resource, no-argument construction
+comes first. This compatibility chain does not select builtin construction.
 
-**Without resource** (e.g., `env://`, `python://`):
-1. **No-arg**: `Adapter()` — tried first
-2–5. Same remaining strategies in order
+### Constructor-bound structure calls
 
-If `TypeError` originates inside the constructor body (not a call-site mismatch), it is propagated immediately — this catches real bugs rather than silently falling through to the next strategy.
+Surface explicitly declares class-local `BOUND_QUERY_CALL = True`. Its real
+`get_structure(self)` receives already-bound controls, and the shared structure
+boundary bypasses signature-name keyword forwarding. API structure queries bind
+typed keyword overrides through existing `ParamSpec` declarations before canonical
+construction. Other adapter methods and check/element dispatch retain their contracts.
 
-Override `from_uri()` in a subclass for a single deterministic initialization path — recommended for adapters with complex constructors (`mysql://`, `xlsx://`).
-
-**Which strategy each adapter uses** (reference):
-
-| Strategy | Example adapters |
-|----------|-----------------|
-| No-arg | `env://`, `python://` |
-| Query-parsing | `ast://`, `markdown://`, `json://` |
-| Resource-arg | `help://`, `reveal://`, `stats://` |
-| Full URI | `mysql://` |
-| `from_uri()` override | `sqlite://`, `xlsx://`, `claude://` |
+Adoption is class-local: a subclass declares it explicitly, so an inherited flag
+does not bypass a plugin's custom `from_uri`. The developer protocol and normalization
+rules live in the [output contract](reveal/docs/development/OUTPUT_CONTRACT.md).
+The existing boundary ratchet tracks remaining bare class-body
+`get_structure(**kwargs)` methods; removing one signature sink still requires semantic
+input/transport qualification at that owner.
 
 ---
 

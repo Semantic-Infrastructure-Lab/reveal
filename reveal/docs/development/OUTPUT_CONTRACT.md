@@ -671,6 +671,22 @@ consuming or converting values; the common runner carries that expected identity
 through validation and error construction. `validate_request(params, args)` checks
 operation-specific applicability before analysis.
 
+Constructor-bound structure calls explicitly declare class-local
+`BOUND_QUERY_CALL = True`. Surface is the initial adopter. Its real
+`get_structure(self)` takes no query keywords; canonical construction owns declared
+controls, and the structure boundary bypasses signature-name forwarding for that
+class. Subclasses declare adoption themselves, preserving unadopted custom plugin
+`from_uri` behavior. Check and element dispatch retain their existing contracts.
+
+For adopted `api.query` structure calls, the shared binder validates the original URI
+query before applying explicit typed keyword overrides by canonical declaration name.
+Unknown API keys raise `TypeError`; False, zero and empty values participate, and
+None follows the declaration's default policy. Typed values validate once without
+URI serialization or decoding. Fresh bound parameters preserve normalization and
+non-consuming validation; actual reads establish use. Raw analysis leaves presentation
+controls such as top unconsumed. Existing API resource splitting/decoding and host-request
+scope remain unchanged. Other adapters retain method-keyword forwarding until qualified.
+
 For qualified direct URI operations without declared parameter binding, an optional
 adapter-owned `uri_result_type(resource)` resolves identity from the original resource
 before construction, including validation and preparation failures. The fallback is
