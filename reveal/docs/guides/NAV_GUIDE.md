@@ -17,6 +17,12 @@ For the full reference with output samples, see [`AGENT_HELP.md`](../AGENT_HELP.
 
 ## At a Glance
 
+`--inputs`, `--outputs` and `--callsites` are the current names in both the CLI
+and MCP `reveal_nav` (`inputs`, `outputs`, `callsites`). The retired spellings
+`--deps`, `--mutations`/`--writes` and `--calls` still run and report their
+replacements until the cut. JSON `meta.flag` uses the current name; an old spelling
+adds a `retired_spelling` diagnostic in `meta.warnings`.
+
 | Flag | Question it answers |
 |------|---------------------|
 | `--outline` | What's the shape of this function? |
@@ -26,12 +32,12 @@ For the full reference with output samples, see [`AGENT_HELP.md`](../AGENT_HELP.
 | `--catchmap` | What try/except structure exists? |
 | `--exits` | Where can this range exit (return/raise/break/die)? |
 | `--flowto` | Can control reach the end of this range? |
-| `--calls` | What does this call? (sub-element scope) |
+| `--callsites` | What does this call? (sub-element scope) |
 | `--varflow VAR` | Where is VAR read, written, or tested? |
 | `--varflow VAR --cross-calls` | Same, but follows VAR across function call boundaries |
 | `--narrow VAR` | How does VAR's type narrow through control-flow branches? |
-| `--deps` | Candidate inputs (undefined reads; review bindings) |
-| `--mutations` (alias `--writes`) | What does this range write that's read later? |
+| `--inputs` | Candidate inputs (undefined reads; review bindings) |
+| `--outputs` | What does this range write that's read later? |
 | `--sideeffects` | What DB/HTTP/FS/log/sleep calls fire here? |
 | `--loopmap` | What loops exist, and how are they nested? |
 | `--fanout` | Which loops make DB/HTTP/FS/log calls inside them? (N+1 / per-item fan-out review) |
@@ -67,8 +73,8 @@ reveal app.py :123 --around
 Planning to extract a block of lines into a new function?
 
 ```bash
-reveal file.py :120-340 --deps        # → candidate parameters; review bindings
-reveal file.py :120-340 --mutations   # → candidate return values
+reveal file.py :120-340 --inputs        # → candidate parameters; review bindings
+reveal file.py :120-340 --outputs   # → candidate return values
 reveal file.py :120-340 --exits       # → spot unexpected early exits
 reveal file.py :120-340 --boundary    # → inputs + environment + classified effects
 ```
@@ -107,9 +113,9 @@ See [`MCP_SETUP.md`](MCP_SETUP.md) for setup and the full tool list.
 
 ---
 
-## Disambiguation: `--calls` vs `calls://`
+## Disambiguation: `--callsites` vs `calls://`
 
-- `--calls` is **sub-element scope**: list call sites within a line range of one file.
+- `--callsites` is **sub-element scope**: list call sites within a line range of one file.
 - `calls://` is **project scope**: cross-file call graph (who calls / what does it call across the project).
 
 Different scope, different question.
@@ -119,7 +125,7 @@ Different scope, different question.
 ## Known Limitations
 
 - `--returns` reports static syntactic gates; enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. Check source before making reachability claims.
-- `--deps` respects supported closure/with/except/catch/comprehension/range binders and preserves free captures and default-expression reads. Registered Python builtins remain visible as BUILTIN/JSON `kind: builtin`, separate from `--boundary` INPUTS. Explicit lexical shadows stay candidate inputs. Dynamic names and unsupported binding shapes still require source review.
+- `--inputs` respects supported closure/with/except/catch/comprehension/range binders and preserves free captures and default-expression reads. Registered Python builtins remain visible as BUILTIN/JSON `kind: builtin`, separate from `--boundary` INPUTS. Explicit lexical shadows stay candidate inputs. Dynamic names and unsupported binding shapes still require source review.
 - `--statewrites` detects Python/JS module-bound container writes and explicit Python/PHP `global` assignments; explicit Python `nonlocal` writes are separate. PHP also recognizes `$GLOBALS`. Local/parameter containers stay local. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, dynamic names, and imported-object resolution remain outside coverage. An empty result does not establish that shared state is untouched.
 - `--boundary` includes assignment writes in EFFECTS (JSON `via: assignment`). Under `--transitive`, call effects follow callees but assignment writes remain entry-function only; text and JSON warnings disclose this limit. Inputs/builtins/environment also remain entry-function scoped.
 
@@ -127,7 +133,7 @@ Different scope, different question.
 - PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but classified as READ rather than WRITE.
 - Variable tracking is name-based; same-named variables in different scopes within a flat file may merge.
 - `--scope` and `--around` take a single `:LINE`. A range (`:100-110`) exits 2 with an error naming the line it would have used; to print a range, drop `--around` (`reveal app.py :100-110`).
-- Named-argument labels (`json` in Python `f(json=x)`, C# / Dart / Swift `f(json: x)`, Kotlin / Scala `f(json = x)`) are not reads: `--deps`, `--boundary` and `--varflow` report only the value `x`.
+- Named-argument labels (`json` in Python `f(json=x)`, C# / Dart / Swift `f(json: x)`, Kotlin / Scala `f(json = x)`) are not reads: `--inputs`, `--boundary` and `--varflow` report only the value `x`.
 
 ---
 

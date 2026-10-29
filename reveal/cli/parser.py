@@ -530,7 +530,7 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
                              '(e.g., reveal file.py process_batch --fanout  or  reveal file.php :100-500 --fanout --format=json)')
     parser.add_argument('--statewrites', action='store_true',
                         help='Show detected shared-state writes (module globals may be missed): field writes (self.x=, $obj->x=, this.x=) plus '
-                             'cache/db/file/env/session writes — a mutation surface --mutations (local vars) and '
+                             'cache/db/file/env/session writes — a mutation surface --outputs (local vars) and '
                              '--sideeffects (calls only) both miss '
                              '(e.g., reveal file.py process_order --statewrites  or  reveal file.php :1-800 --statewrites)')
     parser.add_argument('--varflow', type=str, metavar='VAR',
@@ -546,17 +546,15 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--narrow', type=str, metavar='VAR',
                         help='Show how a variable\'s type narrows through control-flow branches, '
                              'starting from its annotation (e.g., reveal file.py myfunc --narrow x)')
-    parser.add_argument('--calls', nargs='?', const='FULL', type=str, metavar='START-END',
-                        help='Show call sites in a line range (e.g., reveal file.py myfunc --calls 89-120  or  reveal file.php :477-531 --calls)')
-    parser.add_argument('--deps', action='store_true',
+    parser.add_argument('--callsites', '--calls', dest='calls', nargs='?', const='FULL', type=str, metavar='START-END',
+                        help='Show call sites in a line range (e.g., reveal file.py myfunc --callsites 89-120). '
+                             '--calls is deprecated; use --callsites.')
+    parser.add_argument('--inputs', '--deps', dest='deps', action='store_true',
                         help='Show candidate inputs to a line range (may include builtins/local bindings; review before extracting params) '
-                             '(e.g., reveal file.php :1136-1463 --deps  or  reveal file.py myfunc --deps)')
-    parser.add_argument('--mutations', action='store_true',
+                             '(e.g., reveal file.py myfunc --inputs). --deps is deprecated; use --inputs.')
+    parser.add_argument('--outputs', '--mutations', '--writes', dest='mutations', action='store_true',
                         help='Show read-after-write hazards: variables written in a range and read after (potential return values). '
-                             'Alias: --writes. '
-                             '(e.g., reveal file.php :1136-1463 --mutations  or  reveal file.py myfunc --mutations)')
-    parser.add_argument('--writes', action='store_true',
-                        help='Alias for --mutations: show read-after-write hazards in a function or range')
+                             '(e.g., reveal file.py :20-30 --outputs). --mutations and --writes are deprecated; use --outputs.')
     parser.add_argument('--returns', action='store_true',
                         help='Show exit sites with syntactic gate chains (static approximation; verify branch and exception paths in source) '
                              '(e.g., reveal file.php processOrder --returns  or  reveal file.py myfunc --returns)')

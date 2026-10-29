@@ -228,6 +228,10 @@ class Retirement:
 # The two older BACK-1906 notes, then Phase 2b's call-graph spellings (BACK-2066). A param:
 # row covers the URI parameter and the same parameter typed as a declared subcommand's flag.
 RETIREMENTS: Dict[str, Retirement] = {
+    'flag:--deps': Retirement('--deps', '--inputs'),
+    'flag:--mutations': Retirement('--mutations', '--outputs'),
+    'flag:--writes': Retirement('--writes', '--outputs'),
+    'flag:--calls': Retirement('--calls', '--callsites'),
     'flag:--search': Retirement('--search', '--name PATTERN (regex)'),
     # One row for the file route's --check and its --lint alias.
     'flag:--check': Retirement('file --check/--lint', 'reveal check <path>'),

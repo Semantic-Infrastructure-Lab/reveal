@@ -124,9 +124,11 @@ above lands.
 | How honest is the test suite? | `reveal patches DIR --view pressure` | `testability` |
 | Find elements by name | `--name PATTERN` | `--search` |
 
-The element flags are next: about 22 become about 12, and no flag will share a name with a
-command (`--deps` becomes `--inputs`, `--sideeffects` becomes `--effects`, `--returns`
-becomes `--exits`, and so on).
+Element flag consolidation has started: `--deps` is deprecated in favor of
+`--inputs`, `--mutations`/`--writes` are replaced by `--outputs`, and `--calls`
+by `--callsites`. The remaining flow, effects and variable-view merges still need
+their language/mode qualification; the target is about 12 flags with no name shared
+with a command.
 
 ### How a name retires
 

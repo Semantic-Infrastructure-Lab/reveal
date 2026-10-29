@@ -208,11 +208,11 @@ reveal app.py process_batch --ifmap
 reveal app.py process_batch --catchmap
 reveal app.py process_batch --flowto
 reveal app.py process_batch --varflow result
-reveal app.py process_batch --mutations --range 20-80
+reveal app.py process_batch --outputs --range 20-80
 reveal app.py :123 --scope
 reveal app.py process_batch --boundary       # inputs read + outputs/effects in one view
 reveal app.py process_batch --sideeffects    # DB / HTTP / FS / logging calls, classified
-reveal app.py process_batch --deps           # what this range depends on
+reveal app.py process_batch --inputs           # what this range depends on
 ```
 
 The same flags work on flat procedural PHP — useful for legacy WordPress/CodeIgniter triage:
@@ -220,7 +220,7 @@ The same flags work on flat procedural PHP — useful for legacy WordPress/CodeI
 ```bash
 reveal legacy_handler.php :120-340 --boundary       # what does this slice consume and emit?
 reveal legacy_handler.php :120-340 --sideeffects    # which DB / curl / session calls fire?
-reveal legacy_handler.php :120-340 --mutations      # which session/cache/global state changes?
+reveal legacy_handler.php :120-340 --outputs      # which session/cache/global state changes?
 ```
 
 Why it is good for this:
@@ -231,7 +231,7 @@ Why it is good for this:
 - `--flowto` gives a reachability verdict for a range
 - `--boundary` summarises inputs and effects in one view — handy before refactor or extraction
 - `--sideeffects` classifies DB / HTTP / FS / logging calls so you can audit risk without reading every line
-- `--varflow`, `--deps`, and `--mutations` help with extraction and debugging
+- `--varflow`, `--inputs`, and `--outputs` help with extraction and debugging
 
 Use Reveal for this when:
 

@@ -176,6 +176,10 @@ def test_a_retirement_row_validates_itself():
 # Every production row and one command line that spells it. A row without a case fails the
 # last test, so a later phase cannot add a spelling it never exercised.
 PRODUCTION_CASES = {
+    'flag:--deps': lambda f: [f, 'auth_gate', '--deps'],
+    'flag:--mutations': lambda f: [f, 'auth_gate', '--mutations'],
+    'flag:--writes': lambda f: [f, 'auth_gate', '--writes'],
+    'flag:--calls': lambda f: [f, 'auth_gate', '--calls'],
     'flag:--search': lambda f: [f, '--search', 'auth'],
     'flag:--check': lambda f: [f, '--check', '--select', 'B001'],
     # Phase 3 slice 5a (BACK-2089): --output json=PATH is the sink, --also-json its retired spelling.

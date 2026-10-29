@@ -383,8 +383,8 @@ reveal src/processor.py process_batch --flowto
 
 # Variable and dependency analysis for a sub-range
 reveal src/processor.py process_batch --varflow result
-reveal src/processor.py process_batch --deps --range 20-80
-reveal src/processor.py process_batch --mutations --range 20-80
+reveal src/processor.py process_batch --inputs --range 20-80
+reveal src/processor.py process_batch --outputs --range 20-80
 
 # Scope lookup from a line number
 reveal src/processor.py :123 --scope
@@ -538,7 +538,7 @@ reveal src/processor.py :5 --scope
 reveal src/processor.py process_batch --varflow results
 
 # What does a specific branch call?
-reveal src/processor.py process_batch --calls 7-12
+reveal src/processor.py process_batch --callsites 7-12
 ```
 
 Workflow for a complex function:
@@ -547,7 +547,7 @@ Workflow for a complex function:
 reveal src/processor.py process_batch --outline
 
 # 2. Zoom in — what calls happen in lines 7-12?
-reveal src/processor.py process_batch --calls 7-12
+reveal src/processor.py process_batch --callsites 7-12
 
 # 3. Trace a variable through the whole function
 reveal src/processor.py process_batch --varflow result
@@ -1754,7 +1754,7 @@ reveal file.py function_name             # Extract specific code
 reveal file.py function_name --outline   # Control-flow skeleton (function-level)
 reveal file.py function_name --varflow x # Trace variable x reads/writes
 reveal file.py :42 --scope              # Ancestor scope for line 42
-reveal file.py function_name --calls 1-50  # Calls in a line range
+reveal file.py function_name --callsites 1-50  # Calls in a line range
 reveal file.py --format=json             # Structured output
 ```
 

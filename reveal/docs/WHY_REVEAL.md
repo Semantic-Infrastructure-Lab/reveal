@@ -82,8 +82,8 @@ reveal flat_legacy.php :120-340 --sideeffects
 # → L130  db   mysql_query("..."), L142  http  curl_exec(...), L150  log  error_log("...")
 
 # Refactor pre-flight: what would become parameters / return values?
-reveal app.py process_batch --deps        # → parameters
-reveal app.py process_batch --mutations   # → return values
+reveal app.py process_batch --inputs        # → parameters
+reveal app.py process_batch --outputs   # → return values
 
 # Each return path + the condition chain that leads to it
 reveal app.py process_order --returns

@@ -405,7 +405,7 @@ def render_mutations(
     if not mutations:
         return (
             f'No read-after-write hazards in L{from_line}→L{to_line}.\n'
-            f'  (--mutations / --writes: variables written here and read after — potential return values)\n'
+            f'  (--outputs: variables written here and read after — potential return values)\n'
             f'  To see all writes to a specific variable: reveal <file> <func> --varflow <var>'
         )
     lines: List[str] = []

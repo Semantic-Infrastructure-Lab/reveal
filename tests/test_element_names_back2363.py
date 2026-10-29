@@ -82,6 +82,32 @@ def test_outputs_are_range_hazards_and_callsites_keep_optional_range(source):
     assert len(result['findings']) == 1 and result['findings'][0]['line'] == 3
 
 
+def test_provenance_records_actual_spelling_and_json_retirement_is_parseable(source):
+    import shlex
+
+    current_args = [source, 'extract', '--inputs', '--provenance', '--format', 'json']
+    old_args = [source, 'extract', '--deps', '--provenance', '--format', 'json']
+    current = run(*current_args)
+    old = run(*old_args)
+    assert current.returncode == old.returncode == 0
+    canonical, legacy = json.loads(current.stdout), json.loads(old.stdout)
+    assert canonical['execution']['command'] == shlex.join(['reveal', *current_args])
+    assert legacy['execution']['command'] == shlex.join(['reveal', *old_args])
+    legacy = without_note(legacy, 'deps')
+    legacy['execution']['command'] = canonical['execution']['command']
+    assert legacy == canonical
+
+
+def test_callsites_equals_range_and_retired_equals_spelling(source):
+    current = run(source, 'extract', '--callsites=3-3', '--format', 'json')
+    old = run(source, 'extract', '--calls=3-3', '--format', 'json')
+    assert current.returncode == old.returncode == 0
+    answer = json.loads(current.stdout)
+    assert (answer['meta']['from_line'], answer['meta']['to_line']) == (3, 3)
+    assert without_note(json.loads(old.stdout), 'calls') == answer
+    assert old.stderr.count('--calls is deprecated; use --callsites.') == 1
+
+
 @pytest.mark.parametrize('old', list(NAMES))
 def test_alias_text_notes_once_repeats_per_invocation_and_cut_stage_is_two(source, old, monkeypatch):
     from reveal.cli.invocation import RETIREMENTS, Retirement
@@ -137,3 +163,23 @@ def test_actual_sdk_nav_names_alias_notes_and_request_isolation(source, tmp_path
             'path': source, 'element': ':2-2', 'flag': 'outputs'})).is_error
 
     _run(tmp_path, scenario)
+
+
+def test_actual_sdk_cut_stage_is_an_authored_error(source, tmp_path):
+    pytest.importorskip('mcp')
+    from test_mcp_expected_errors_back1992 import _run, _text
+    code = '''
+from reveal import mcp_server
+from reveal.cli.invocation import RETIREMENTS, Retirement
+row = RETIREMENTS['flag:--deps']
+RETIREMENTS['flag:--deps'] = Retirement(row.old, row.replacement, 'error')
+mcp_server.main()
+'''
+
+    async def scenario(session):
+        old = await session.call_tool('reveal_nav', {'path': source, 'element': 'extract', 'flag': 'deps'})
+        assert old.is_error and '--deps is deprecated; use --inputs.' in _text(old)
+        current = await session.call_tool('reveal_nav', {'path': source, 'element': 'extract', 'flag': 'inputs'})
+        assert not current.is_error and 'deprecated' not in _text(current)
+
+    _run(tmp_path, scenario, code)

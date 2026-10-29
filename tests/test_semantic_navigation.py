@@ -454,7 +454,7 @@ class TestNavJsonOutput(unittest.TestCase):
 
     def test_deps_json_envelope(self):
         result = self._run('collect_deps', {'deps': True})
-        self._assert_envelope(result, 'deps')
+        self._assert_envelope(result, 'inputs')
 
     def test_deps_findings_have_kind_var_line(self):
         result = self._run('collect_deps', {'deps': True})
@@ -466,7 +466,7 @@ class TestNavJsonOutput(unittest.TestCase):
 
     def test_mutations_json_envelope(self):
         result = self._run('collect_mutations', {'mutations': True})
-        self._assert_envelope(result, 'mutations')
+        self._assert_envelope(result, 'outputs')
 
     def test_mutations_findings_have_kind(self):
         result = self._run('collect_mutations', {'mutations': True})
@@ -538,7 +538,7 @@ class TestNavJsonOutput(unittest.TestCase):
 
     def test_calls_json_envelope(self):
         result = self._run('collect_deps', {'calls': 'FULL'})
-        self._assert_envelope(result, 'calls')
+        self._assert_envelope(result, 'callsites')
 
     def test_varflow_json_envelope(self):
         result = self._run('collect_deps', {'varflow': 'deps'})

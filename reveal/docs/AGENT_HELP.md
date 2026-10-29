@@ -812,20 +812,20 @@ reveal app.py process_request --narrow response
 ```
 Parses `Optional[X]`, `Union[X,Y,None]`, `X|Y` annotations and classifies `isinstance`, `not isinstance`, `is None`, `is not None` guards. Shows the type at each branch. Useful before editing code that handles nullable types.
 
-> **PHP support**: All nav flags including `--varflow`, `--deps`, `--mutations`, `--sideeffects`, `--returns`, and `--boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
+> **PHP support**: All nav flags including `--varflow`, `--inputs`, `--outputs`, `--sideeffects`, `--returns`, and `--boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
 
-**`--calls` → call sites in a line range**
+**`--callsites` → call sites in a line range**
 ```bash
-reveal app.py process_batch --calls 7-12          # scoped to lines 7-12
-reveal flat_file.php :477-531 --calls             # flat file, whole element range
-reveal app.py process_batch --calls               # all calls in the function
+reveal app.py process_batch --callsites 7-12          # scoped to lines 7-12
+reveal flat_file.php :477-531 --callsites             # flat file, whole element range
+reveal app.py process_batch --callsites               # all calls in the function
 
 # Output:
 # L9:  retry(item)
 # L10:  results.append(value)
 # L12:  log_error(e)
 ```
-> **Disambiguation**: `--calls` (this flag) lists call sites *within a line range* — it's a sub-element analysis tool. `calls://` (the URI adapter) is a project-level call graph — use `reveal 'calls://file.py?callers=myfunc'` to find which functions *across the project* call `myfunc`. Different scope, different question.
+> **Disambiguation**: `--callsites` (this flag) lists call sites *within a line range* — it's a sub-element analysis tool. `calls://` (the URI adapter) is a project-level call graph — use `reveal 'calls://file.py?callers=myfunc'` to find which functions *across the project* call `myfunc`. Different scope, different question.
 
 **`--around N` → verbatim context centered on a line**
 ```bash
@@ -885,12 +885,12 @@ reveal flat_file.php :2928-3663 --flowto
 ```
 Verdict: `✓ CLEAR` (no exits), `~ CONDITIONAL` (only loop breaks/continues), `⚠ BLOCKED` (hard return/raise).
 
-**`--deps` → candidate inputs to a range**
+**`--inputs` → candidate inputs to a range**
 
 Undefined reads are candidate inputs, not a complete extraction contract. Recognized binders include closure parameters, with/except/catch targets, comprehension targets, and range-loop variables. Closures, comprehensions, and catch bodies retain lexical ownership so their bindings do not hide genuine outer reads. Defaults remain outer reads. Other variable tracking remains name-based; same-named loop or flat-file bindings may merge. Python builtins from the registered vocabulary remain visible as `BUILTIN` (JSON `kind: builtin`); explicit lexical shadows remain candidate inputs. Other languages use only their registered builtin vocabulary. Review source for dynamic names, aliases, and unsupported binding shapes.
 ```bash
-reveal flat_file.php :1136-1463 --deps
-reveal app.py process_batch --deps --range 20-80
+reveal flat_file.php :1136-1463 --inputs
+reveal app.py process_batch --inputs --range 20-80
 
 # Output:
 # PARAM  size_bytes                    first read L1136  (never written in range)
@@ -898,18 +898,18 @@ reveal app.py process_batch --deps --range 20-80
 ```
 Shows which variables the range depends on — what would become function parameters if you extracted this block.
 
-**`--mutations` → variables written in range and read after**
+**`--outputs` → variables written in range and read after**
 ```bash
-reveal flat_file.php :1136-1463 --mutations
-reveal app.py process_batch --mutations --range 20-80
+reveal flat_file.php :1136-1463 --outputs
+reveal app.py process_batch --outputs --range 20-80
 
 # Output:
 # RETURN chunk_upload_success          written L1455, next read L1466
 # RETURN is_rate_limit_error           written L1386, next read L1466
 ```
-Suggests variables the caller may need back — what would become return values if you extracted this block. Together with `--deps`, this supplies candidates to review before extraction; it is not a complete refactoring contract.
+Suggests variables the caller may need back — what would become return values if you extracted this block. Together with `--inputs`, this supplies candidates to review before extraction; it is not a complete refactoring contract.
 
-> `--writes` is an alias for `--mutations` — use whichever reads more naturally. Empty-result message says "No read-after-write hazards" with a `--varflow` hint.
+> `--outputs` reports values written in the selected range and read afterwards. Selecting a whole function can correctly return no hazards; this is not an inventory of every write. The empty-result message includes a `--varflow` hint.
 
 **`--sideeffects` → classified side-effect calls (db/http/cache/log/file/sleep/hard_stop)**
 ```bash
@@ -975,7 +975,7 @@ reveal file.php :1-800 --statewrites
 # L193     field    self.ref
 # L196     field    self.subpath
 ```
-`--mutations` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented (plus an env property channel) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. Module-bound container writes such as `STATE[k] = v` and explicit Python/PHP `global` assignments are classified as `global`; explicit Python `nonlocal` mutations and rebindings are `nonlocal`. Python/JS module bindings use lexical declarations, including JS function-hoisted `var` and block-local `let`/`const`; ordinary local containers and parameters stay local. PHP requires an explicit `global` declaration or `$GLOBALS`. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, imported-object resolution, and dynamic names remain outside this analysis. DB column/table extraction is not provided; an empty result does not establish the absence of shared-state writes. Works on PHP, Python, and JS/TS.
+`--outputs` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented (plus an env property channel) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. Module-bound container writes such as `STATE[k] = v` and explicit Python/PHP `global` assignments are classified as `global`; explicit Python `nonlocal` mutations and rebindings are `nonlocal`. Python/JS module bindings use lexical declarations, including JS function-hoisted `var` and block-local `let`/`const`; ordinary local containers and parameters stay local. PHP requires an explicit `global` declaration or `$GLOBALS`. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, imported-object resolution, and dynamic names remain outside this analysis. DB column/table extraction is not provided; an empty result does not establish the absence of shared-state writes. Works on PHP, Python, and JS/TS.
 
 **`--keys VAR` → dynamic key/property access surface**
 ```bash
@@ -1024,25 +1024,25 @@ reveal flat_file.php handleRequest --boundary
 #   db   L5       mysql_query("SELECT * FROM items WHERE user=" . $...)
 #   log  L6       error_log("Fetched page " . $page)
 ```
-Composes `--deps`, `--sideeffects`, and assignment writes from `--statewrites` into a single boundary-contract report: what the code receives (INPUTS), what environment state it reads (ENVIRONMENT — PHP superglobals `$_GET`, `$_POST`, `$_SESSION`, etc.), and what it does to the world (EFFECTS). Unshadowed registered builtins appear separately in BUILTINS, omitted when empty; JSON uses findings with `kind: builtin`. Assignment effects include `via: assignment` and render their target without call parentheses. The ENVIRONMENT section is omitted when empty (Python files rarely have superglobals). The highest-value single-flag summary for understanding an unfamiliar code range.
+Composes `--inputs`, `--sideeffects`, and assignment writes from `--statewrites` into a single boundary-contract report: what the code receives (INPUTS), what environment state it reads (ENVIRONMENT — PHP superglobals `$_GET`, `$_POST`, `$_SESSION`, etc.), and what it does to the world (EFFECTS). Unshadowed registered builtins appear separately in BUILTINS, omitted when empty; JSON uses findings with `kind: builtin`. Assignment effects include `via: assignment` and render their target without call parentheses. The ENVIRONMENT section is omitted when empty (Python files rarely have superglobals). The highest-value single-flag summary for understanding an unfamiliar code range.
 
 **Most flags work on flat/procedural files:**
 ```bash
 # Flat PHP file — no named function required
 reveal legacy_controller.php :878-2130 --ifmap
 reveal legacy_controller.php :657-2200 --exits
-reveal legacy_controller.php :1136-1463 --deps
+reveal legacy_controller.php :1136-1463 --inputs
 reveal legacy_controller.php :477-531 --sideeffects
 reveal legacy_controller.php :120-340 --returns
 reveal legacy_controller.php :477-531 --boundary
 ```
-All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE` (a range exits 2). All variable-tracking flags (`--varflow`, `--deps`, `--mutations`) now work on PHP as well as Python.
+All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE` (a range exits 2). All variable-tracking flags (`--varflow`, `--inputs`, `--outputs`) now work on PHP as well as Python.
 
 **Combining with `--range` to narrow scope:**
 ```bash
 reveal app.py process_batch --outline --range 7-12   # outline of just lines 7-12
 reveal app.py process_batch --varflow value --range 7-12  # trace 'value' in lines 7-12
-reveal app.py process_batch --deps --range 7-12      # deps of a sub-range
+reveal app.py process_batch --inputs --range 7-12      # deps of a sub-range
 ```
 
 **Class.method syntax works with all nav flags:**
@@ -1058,7 +1058,7 @@ reveal app.py MyClass.process --exits
 reveal app.py process_batch --outline
 
 # 2. Identify the suspicious branch (say lines 7-12)
-reveal app.py process_batch --calls 7-12      # what does it call?
+reveal app.py process_batch --callsites 7-12      # what does it call?
 reveal app.py process_batch --varflow value   # how does 'value' flow through?
 reveal app.py :9 --around                    # see ±20 lines around line 9
 
@@ -1069,8 +1069,8 @@ reveal app.py process_batch --range 7-12      # full source of that branch only
 **Workflow — refactoring pre-flight (extract function):**
 ```bash
 # Planning to extract lines 1136-1463 into a function?
-reveal flat_file.php :1136-1463 --deps        # → candidate parameters; check bindings
-reveal flat_file.php :1136-1463 --mutations   # → candidate return values
+reveal flat_file.php :1136-1463 --inputs        # → candidate parameters; check bindings
+reveal flat_file.php :1136-1463 --outputs   # → candidate return values
 reveal flat_file.php :1136-1463 --exits       # → check for unexpected early exits
 ```
 
@@ -4419,14 +4419,14 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 | Trace var in flat file | `reveal file.php :1-2000 --varflow errormsg` |
 | Trace var across calls | `reveal file.py func_name --varflow result --cross-calls` |
 | Type-narrowing path | `reveal file.py func_name --narrow response` |
-| Calls in a range | `reveal file.py func_name --calls 89-120` |
-| Calls in flat file range | `reveal file.php :477-531 --calls` |
+| Calls in a range | `reveal file.py func_name --callsites 89-120` |
+| Calls in flat file range | `reveal file.php :477-531 --callsites` |
 | Branching skeleton | `reveal file.py func_name --ifmap` |
 | Exception skeleton | `reveal file.py func_name --catchmap` |
 | Exit nodes in range | `reveal file.php :657-2200 --exits` |
 | Reachability verdict | `reveal file.php :2928-3663 --flowto` |
-| Refactor deps | `reveal file.php :1136-1463 --deps` |
-| Refactor mutations | `reveal file.php :1136-1463 --mutations` |
+| Refactor deps | `reveal file.php :1136-1463 --inputs` |
+| Refactor mutations | `reveal file.php :1136-1463 --outputs` |
 | Extract by name | `reveal file.py func_name` |
 | Extract class method | `reveal file.py Class.method` |
 | Extract at line | `reveal file.py 73` or `reveal file.py :73` |

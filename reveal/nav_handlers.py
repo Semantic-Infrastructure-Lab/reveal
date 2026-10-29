@@ -62,12 +62,12 @@ def _nav_json(flag: str, path: str, element: str, from_line: int, to_line: int,
               findings, extra_meta: Optional[dict] = None,
               warnings: Optional[List[str]] = None) -> None:
     """Serialize nav findings as a JSON envelope and print to stdout."""
-    import json  # noqa: I006
+    from .utils.json_utils import print_json_result  # noqa: I006
     meta = {'flag': flag, 'file': str(path), 'element': element,
             'from_line': from_line, 'to_line': to_line}
     if extra_meta:
         meta.update(extra_meta)
-    print(json.dumps({'meta': meta, 'findings': findings, 'warnings': warnings or []}, indent=2))
+    print_json_result({'meta': meta, 'findings': findings, 'warnings': warnings or []})
 
 
 def _varflow_trust_warning(analyzer) -> Optional[str]:
@@ -185,7 +185,7 @@ def _nav_calls(ctx: _NavCtx) -> None:
     calls = range_calls(ctx.func_node, from_line, to_line, ctx.get_text,
                         implicit_nodes=_implicit_nodes(ctx), include_jsx=True)
     if ctx.as_json:
-        _nav_json('calls', ctx.analyzer.path, ctx.element, from_line, to_line, calls)
+        _nav_json('callsites', ctx.analyzer.path, ctx.element, from_line, to_line, calls)
     else:
         print(render_range_calls(calls, from_line, to_line))
 
@@ -230,7 +230,7 @@ def _nav_deps(ctx: _NavCtx) -> None:
              'first_write_line': d['first_write_line']}
             for d in deps
         ]
-        _nav_json('deps', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
+        _nav_json('inputs', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
     else:
         print(render_deps(deps, from_line, to_line))
 
@@ -245,7 +245,7 @@ def _nav_mutations(ctx: _NavCtx) -> None:
              'next_read_line': m['next_read_line']}
             for m in mutations
         ]
-        _nav_json('mutations', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
+        _nav_json('outputs', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
     else:
         print(render_mutations(mutations, from_line, to_line))
 
@@ -434,8 +434,8 @@ _NAV_DISPATCH: List[tuple] = [
     ((),                           lambda a: getattr(a, 'calls', None) is not None,                          _nav_calls),
     (('ifmap', 'catchmap'),       lambda a: getattr(a, 'ifmap', False) or getattr(a, 'catchmap', False),    _nav_branchmap),
     (('exits', 'flowto'),         lambda a: getattr(a, 'exits', False) or getattr(a, 'flowto', False),      _nav_exits),
-    (('deps',),                   lambda a: getattr(a, 'deps', False),                                       _nav_deps),
-    (('mutations', 'writes'),     lambda a: getattr(a, 'mutations', False) or getattr(a, 'writes', False),  _nav_mutations),
+    (('inputs', 'deps'),          lambda a: getattr(a, 'deps', False) or getattr(a, 'inputs', False),       _nav_deps),
+    (('outputs', 'mutations', 'writes'), lambda a: getattr(a, 'mutations', False) or getattr(a, 'writes', False) or getattr(a, 'outputs', False), _nav_mutations),
     (('sideeffects',),            lambda a: getattr(a, 'sideeffects', False),                                _nav_sideeffects),
     (('loopmap',),                lambda a: getattr(a, 'loopmap', False),                                    _nav_loopmap),
     (('fanout',),                 lambda a: getattr(a, 'fanout', False),                                     _nav_fanout),

@@ -230,6 +230,20 @@ def _resolve_func_node(analyzer, element: str):
     return func_node, func_start, func_end
 
 
+def _note_nav_retirements() -> None:
+    """Read old spellings from the invocation before aliases lose their identity."""
+    from .cli.invocation import RETIREMENTS, current_invocation, retirement_note
+
+    invocation = current_invocation()
+    for token in invocation.argv if invocation is not None else ():
+        if token == '--':
+            break
+        key = 'flag:' + token.partition('=')[0]
+        entry = RETIREMENTS.get(key)
+        if entry is not None and entry.replacement in {'--inputs', '--outputs', '--callsites'}:
+            retirement_note(key)
+
+
 def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
     """Route to a nav handler based on the active flag.
 
@@ -237,6 +251,7 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
     message if the file type is not tree-sitter analysable.
     """
     from .treesitter import TreeSitterAnalyzer  # noqa: I006
+    _note_nav_retirements()
 
     # A markdown section has no control flow; its outline is its headings.
     from .display.element import _is_markdown, extract_element  # noqa: I006
@@ -409,7 +424,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         # producing a different (lower-level) output and breaking existing behaviour.
         _FLAT_FLAGS = (
             'varflow', 'narrow', 'calls', 'ifmap', 'catchmap', 'exits', 'flowto',
-            'deps', 'mutations', 'writes', 'sideeffects', 'loopmap', 'fanout',
+            'inputs', 'outputs', 'deps', 'mutations', 'writes', 'sideeffects', 'loopmap', 'fanout',
             'statewrites', 'keys', 'returns', 'boundary',
         )
         for flag in _FLAT_FLAGS:

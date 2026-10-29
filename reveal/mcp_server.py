@@ -112,8 +112,9 @@ mcp = MCPServer(
         "3. reveal_element(file, fn) — read one function's implementation (~100-600 tokens)\n"
         "4. reveal_nav(file, fn, flag) — deep-dive analysis without reading source:\n"
         "   boundary    — INPUTS + ENVIRONMENT + EFFECTS in one report\n"
-        "   deps        — variables flowing into the function\n"
-        "   mutations   — variables the function writes and the caller will read\n"
+        "   inputs      — candidate undefined reads, with builtins distinguished\n"
+        "   outputs     — variables written in a range and read later\n"
+        "   callsites   — call sites within the selected element or range\n"
         "   sideeffects — db/http/cache/log/file/sleep/hard_stop calls\n"
         "   returns     — exit paths with gate conditions\n"
         "   varflow     — trace one variable's reads and writes\n"
@@ -513,7 +514,8 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
     Use after reveal_structure + reveal_element to analyse the internals of
     a specific function without reading its full source. Highest-value flags:
     boundary (inputs+environment+effects), sideeffects (db/http/cache/log/file
-    calls), deps (inputs), mutations (outputs), varflow (trace one variable).
+    calls), inputs (candidate reads), outputs (read-after-write hazards),
+    callsites (calls within the element), varflow (trace one variable).
 
     Full flag catalog + examples: reveal_query('help://nav')
 
@@ -525,12 +527,13 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
                      the full list. Boolean flags need no flag_value; value
                      flags (varflow, keys, narrow) require one.
         flag_value:  Required for varflow, keys, and narrow (variable name). Optional for
-                     calls (range string) and around (integer context lines).
+                     callsites (range string) and around (integer context lines).
 
     Example:
         reveal_nav('app.py', 'process_order', 'boundary')
     """
     from .file_handler import handle_file  # noqa: I006
+    from .cli.invocation import Invocation, RetiredSpellingError, invocation_scope, retirement_note
 
     if flag in _NAV_BOOLEAN_FLAGS:
         args = _default_args(**{flag: True})
@@ -539,7 +542,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
             example = _NAV_VAR_NAME_FLAGS[flag]
             return _tool_failure(f"{flag} requires flag_value (variable name, e.g. '{example}')")
         args = _default_args(**{flag: flag_value})
-    elif flag == 'calls':
+    elif flag in ('callsites', 'calls'):
         args = _default_args(calls=flag_value or 'FULL')
     elif flag == 'around':
         try:
@@ -548,10 +551,16 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
             return _tool_failure(f"around requires an integer flag_value, got '{flag_value}'")
         args = _default_args(around=n)
     else:
-        valid = sorted(_NAV_BOOLEAN_FLAGS | set(_NAV_VAR_NAME_FLAGS) | {'calls', 'around'})
+        valid = sorted(_NAV_BOOLEAN_FLAGS | set(_NAV_VAR_NAME_FLAGS) | {'callsites', 'calls', 'around'})
         return _tool_failure(f"unknown nav flag '{flag}'. Valid flags: {valid}")
 
-    return _run_and_capture(handle_file, path, element, False, 'text', args)
+    invocation = Invocation.parse(['reveal', path, element, '--' + flag, *([flag_value] if flag_value else [])])
+    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
+        try:
+            retirement_note('flag:--' + flag)
+        except RetiredSpellingError as exc:
+            return _tool_failure(str(exc))
+        return _with_retirement_notes(_run_and_capture(handle_file, path, element, False, 'text', args))
 
 
 @mcp_tool(annotations=_OPEN_WORLD_READONLY, title='Reveal: URI Query')

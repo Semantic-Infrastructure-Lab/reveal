@@ -47,8 +47,9 @@ reveal 'calls://src/?rank=callers&top=20'  # most architecturally coupled functi
 ```bash
 reveal app.py process_batch --boundary       # inputs read, outputs/effects produced
 reveal app.py process_batch --sideeffects    # DB / HTTP / FS / logging calls, classified
-reveal app.py process_batch --deps           # what this range depends on (params, externals)
-reveal app.py process_batch --mutations      # values written here, where they're next read
+reveal app.py process_batch --inputs         # candidate inputs; builtins marked separately
+reveal app.py process_batch --outputs        # read-after-write hazards; use --range for a block
+reveal app.py process_batch --callsites      # calls within the selected function
 reveal app.py :123 --around                  # nearby context from a line number / stack trace
 reveal app.py process_batch --ifmap          # control-flow skeleton (branches + early exits)
 reveal legacy.php :120-340 --boundary        # same flags work on flat PHP, not just OO
