@@ -57,6 +57,19 @@ def test_real_parse_loss_survivors_and_repair_through_stdio(tmp_path, provenance
                 'uri': f'ast://{tmp_path.as_posix()}?{query_string}', 'provenance': provenance})
             assert not empty.is_error
             assert 'incomplete' not in _text(empty).lower()
+        healthy.unlink()
+        (tmp_path / 'healthy.lua').write_text('local value = 1\n', encoding='utf-8')
+        for mode in MODES:
+            advisory = await query(mode)
+            assert not advisory.is_error
+            assert 'incomplete' not in _text(advisory).lower()
+
+        for mode in MODES:
+            for uri in (f'ast://{tmp_path.as_posix()}/missing?show={mode}',
+                        f'ast://{tmp_path.as_posix()}?show={mode}&name~=['):
+                invalid = await session.call_tool('reveal_query', {
+                    'uri': uri, 'provenance': provenance})
+                assert invalid.is_error and _text(invalid).strip()
 
     _run(tmp_path, scenario)
 
@@ -80,6 +93,9 @@ def opened(file, *args, **kwargs):
             raise PermissionError('DICT_READER_DENIED')
     return original(file, *args, **kwargs)
 io.open = opened
+accessor = getattr(Path(), '_accessor', None)
+if accessor is not None:
+    accessor.open = opened
 mcp_server.main()
 '''
 
@@ -89,6 +105,14 @@ mcp_server.main()
                 'uri': f'ast://{tmp_path.as_posix()}?show={mode}', 'provenance': provenance})
             assert (tmp_path / 'reader-denied').exists()
             assert failed.is_error, _text(failed)
+        healthy = tmp_path / 'healthy.py'
+        healthy.write_text('VALUE = 1\n', encoding='utf-8')
+        for mode in MODES:
+            partial = await session.call_tool('reveal_query', {
+                'uri': f'ast://{tmp_path.as_posix()}?show={mode}', 'provenance': provenance})
+            assert not partial.is_error and 'incomplete' in _text(partial).lower()
+            if provenance:
+                assert json.loads(_text(partial))['results'] == []
         marker.unlink()
         for mode in MODES:
             restored = await session.call_tool('reveal_query', {
