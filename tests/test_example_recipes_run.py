@@ -9,7 +9,7 @@ and fails when one
 - exits nonzero, beyond its command's own findings exit (``review`` 1 = warnings),
 - prints a warning or error on stderr (the flag ledger's "has no effect" note, an error), or
   carries a ``meta.warnings`` entry saying the query named something the adapter doesn't
-  have (``unknown_filter_key``, ``unknown_sort_field``, ...), or
+  have or consume (``unknown_filter_key``, ``unknown_sort_field``, ``unused_flag``, ...), or
 - answers with a result ``type`` other than the recipe's ``output_type``.
 
 Placeholders (``<repo>``, ``src``, ``/path/to/app.db``) are mapped onto the fixture. Recipes
@@ -89,7 +89,7 @@ ENVIRONMENT_NOISE = ('not yet downloaded',
                      'fan-in and graph-relevance signals were not computed (pass --architecture')
 # meta.warnings that mean the query itself drifted. The standing disclosures (W-CALLS-1
 # "dynamic dispatch is not resolved", complexity_is_unweighted) are true of every run.
-DRIFT_WARNING = re.compile(r'^unknown_')
+DRIFT_WARNING = re.compile(r'^(?:unknown_|unused_flag$|unused_query_param$)')
 
 KNOWN_VIOLATIONS: dict = {}
 
@@ -456,10 +456,26 @@ def test_guide_field_examples_are_enumerated_and_mostly_run():
 
 def test_the_recipe_gate_bites(harness):
     """Positive control: each check sees the drift it is for, so a clean run is not a check
-    that can't fail -- a flag the adapter ignores (stderr), a key it doesn't have
-    (meta.warnings), and a type the recipe would misname."""
-    _, _, err, _ = harness.run_subcommand('ast://proj', '--expiring-within', '30', '--format', 'json')
-    assert any(PROBLEM_LINE.search(line) for line in err.splitlines()), err
+    that can't fail -- an ignored flag/key in JSON warnings, text stderr, and a
+    type the recipe would misname."""
+    _, out, err, _ = harness.run_subcommand('ast://proj', '--expiring-within', '30', '--format', 'json')
+    warnings = [w for w in json.loads(out)['meta']['warnings'] if w['type'] == 'unused_flag']
+    assert [(w['code'], w['fields']) for w in warnings] == [('unused_flag', ['--expiring-within'])]
+    assert '--expiring-within' not in err
+    with pytest.raises(AssertionError, match='meta.warnings'):
+        _assert_runs_as_written(harness, 'reveal ast://proj --expiring-within 30', 'ast_query')
+    _, out, err, _ = harness.run_subcommand('imports://proj?top=1', '--format', 'json')
+    warnings = [w for w in json.loads(out)['meta']['warnings'] if w['type'] == 'unused_query_param']
+    assert [(w['code'], w['fields']) for w in warnings] == [('unused_query_param', ['top'])]
+    assert 'has no effect' not in err
+    with pytest.raises(AssertionError, match='meta.warnings'):
+        _assert_runs_as_written(harness, "reveal 'imports://proj?top=1'", None)
+    with pytest.raises(AssertionError, match='meta.warnings'):
+        _assert_runs_as_written(harness, "reveal 'ast://proj?no_such_key=1'", 'ast_query')
+    with pytest.raises(AssertionError, match='text stderr'):
+        _assert_text_as_written(harness, 'reveal ast://proj --expiring-within 30')
+    with pytest.raises(AssertionError, match='the recipe says'):
+        _assert_runs_as_written(harness, 'reveal ast://proj', 'contracts')
     _, out, _, _ = harness.run_subcommand('ast://proj?no_such_key=1', '--format', 'json')
     payload = json.loads(out)
     assert [w['type'] for w in payload['meta']['warnings']] == ['unknown_filter_key']
