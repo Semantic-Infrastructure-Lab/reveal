@@ -116,7 +116,8 @@ def _validate_measured_budget(value: dict[str, Any]) -> None:
         raise ValueError('scan_budget capped accounting requires an inexact larger total')
 
 
-def _validate_scan_budget(value: Any) -> None:
+def validate_scan_budget(value: Any) -> None:
+    """Require the existing ImportView scan-accounting record, including honest unknowns."""
     fields = {'scope', 'limit', 'total', 'returned', 'exact', 'capped'}
     if not isinstance(value, dict) or not fields.issubset(value):
         raise ValueError('scan_budget must retain its complete accounting record')
@@ -133,7 +134,7 @@ def _validate_scan_budget(value: Any) -> None:
 
 def _metadata(metadata: dict[str, Any], base: Path) -> dict[str, Any]:
     _count(metadata.get('scanned_files'), 'scanned_files')
-    _validate_scan_budget(metadata.get('scan_budget'))
+    validate_scan_budget(metadata.get('scan_budget'))
     result = deepcopy(metadata)
     for field in ('files_failed', 'files_lost'):
         count = _count(metadata[field + '_count'], field + '_count')
