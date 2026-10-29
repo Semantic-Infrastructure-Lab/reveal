@@ -164,11 +164,13 @@ def test_unavailable_analyzer_and_missing_tree_feature_controls(tmp_path, monkey
     assert str(path) not in facts.diagnostics[0].cause
 
 
-def test_nonpython_single_file_preserves_observations_outside_required_counts(tmp_path):
-    path = tmp_path / 'source.js'
-    path.write_text('target = 1;\n', encoding='utf-8')
+@pytest.mark.parametrize('suffix,source,count', [('.js', 'target = 1;\n', 0),
+                                              ('.txt', '#!/usr/bin/env python\n' + SOURCE, 1)])
+def test_nonpython_single_file_preserves_observations_outside_required_counts(tmp_path, suffix, source, count):
+    path = tmp_path / ('source' + suffix)
+    path.write_text(source, encoding='utf-8')
     original = nav.collect_type_evidence(str(path), 'target')
-    assert len(original) == 1
+    assert len(original) == count
     rows, facts = _collect(path)
     assert rows == original
     assert facts.unsupported_files == 1
@@ -190,3 +192,44 @@ def test_diagnostic_cap_totals_and_observation_path_serialization(tmp_path, monk
     rows = []
     nav._scan_file('pkg\\source.py', 'target', rows, source_evidence=facts)
     assert rows[0]['file'] == facts.diagnostics[0].file == 'pkg/source.py'
+
+
+def test_nonpython_unavailable_analyzer_stays_advisory(tmp_path, monkeypatch):
+    import reveal.registry as registry
+    path = tmp_path / 'source.data'
+    path.write_text('content\n', encoding='utf-8')
+    monkeypatch.setattr(registry, 'get_analyzer', lambda path: None)
+    rows, facts = _collect(path)
+    assert rows == [] and facts.unsupported_files == 1
+    assert facts.candidate_files == facts.failed_files == 0 and facts.diagnostics == []
+
+
+def test_one_source_walk_and_one_tree_property_read(tmp_path, monkeypatch):
+    import reveal.registry as registry
+    path = tmp_path / 'source.py'
+    path.write_text(SOURCE, encoding='utf-8')
+    analyzer = PythonAnalyzer(str(path))
+    tree = analyzer.tree
+    counts = {'walk': 0, 'tree': 0}
+    walk = nav._walk_code_files
+
+    def files(*args, **kwargs):
+        counts['walk'] += 1
+        return walk(*args, **kwargs)
+
+    class SingleTree:
+        _get_node_text = analyzer._get_node_text
+
+        def __init__(self, path):
+            pass
+
+        @property
+        def tree(self):
+            counts['tree'] += 1
+            return tree
+
+    monkeypatch.setattr(nav, '_walk_code_files', files)
+    monkeypatch.setattr(registry, 'get_analyzer', lambda path: SingleTree)
+    rows, facts = _collect(tmp_path)
+    assert len(rows) == 1 and facts.analyzed_files == 1
+    assert counts == {'walk': 1, 'tree': 1}

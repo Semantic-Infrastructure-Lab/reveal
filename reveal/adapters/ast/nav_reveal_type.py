@@ -18,33 +18,73 @@ Returns a list of evidence dicts:
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from ...core import suppress_treesitter_warnings  # noqa: F401 — called at scan time
 from ...core import node_children as _children
 from ...core import tree_root
-from ...core.treesitter_compat import _zero_arg
-from ...utils.path_utils import _walk_code_files
+from ...core.treesitter_compat import _zero_arg, tree_has_recovery_artifacts
+from ...utils.path_utils import _walk_code_files, failure_of, to_posix
 
 TYPE_SOURCE_WARNING_CODE = 'W-AST-TYPE-SOURCE'
+
+
+@dataclass(frozen=True)
+class TypeSourceDiagnostic:
+    """A required Python source omission or recovered-parse uncertainty."""
+    file: str
+    stage: Literal['read', 'analyzer', 'parse', 'recovery']
+    cause: str
+
+
+@dataclass
+class TypeAnalysisEvidence:
+    """Fresh per-invocation source facts, independent of selected-variable rows.
+
+    Only .py/.pyi contribute required counts. Other single files retain their
+    existing scan behavior and count separately as unsupported mode scope.
+    """
+    candidate_files: int = 0
+    analyzed_files: int = 0
+    failed_files: int = 0
+    recovered_files: int = 0
+    unsupported_files: int = 0
+    diagnostics: List[TypeSourceDiagnostic] = field(default_factory=list)
+
+    def record(self, file_path: str, stage: Literal['read', 'analyzer', 'parse', 'recovery'],
+               cause: str) -> None:
+        if stage == 'recovery':
+            self.recovered_files += 1
+        else:
+            self.failed_files += 1
+        if len(self.diagnostics) < 5:
+            self.diagnostics.append(TypeSourceDiagnostic(to_posix(file_path), stage, cause))
 
 
 # ─────────────────────────── public entry point ──────────────────────────────
 
 def collect_type_evidence(
     path: str, var_name: str, *, on_error: Optional[Callable[[OSError], None]] = None,
+    source_evidence: Optional[TypeAnalysisEvidence] = None,
 ) -> List[Dict[str, Any]]:
     """Collect all type evidence for var_name at path (file or directory)."""
     path_obj = Path(path)
     evidence: List[Dict[str, Any]] = []
 
     if path_obj.is_file():
-        _scan_file(str(path_obj), var_name, evidence)
+        if source_evidence is None:
+            _scan_file(str(path_obj), var_name, evidence)
+        else:
+            _scan_file(str(path_obj), var_name, evidence, source_evidence=source_evidence)
     elif path_obj.is_dir():
         for fp in _walk_code_files(path_obj, on_error=on_error):  # the shared walker (BACK-1577)
             if _is_python_file(str(fp)):
-                _scan_file(str(fp), var_name, evidence)
+                if source_evidence is None:
+                    _scan_file(str(fp), var_name, evidence)
+                else:
+                    _scan_file(str(fp), var_name, evidence, source_evidence=source_evidence)
 
     return evidence
 
@@ -55,21 +95,41 @@ def _is_python_file(path: str) -> bool:
     return path.endswith('.py') or path.endswith('.pyi')
 
 
-def _scan_file(file_path: str, var_name: str, evidence: List[Dict[str, Any]]) -> None:
+def _scan_file(
+    file_path: str, var_name: str, evidence: List[Dict[str, Any]], *,
+    source_evidence: Optional[TypeAnalysisEvidence] = None,
+) -> None:
     from ...registry import get_analyzer
     suppress_treesitter_warnings()
+    required = source_evidence if _is_python_file(file_path) else None
+    if required is not None:
+        required.candidate_files += 1
+    elif source_evidence is not None:
+        source_evidence.unsupported_files += 1
     try:
         analyzer_class = get_analyzer(file_path)
         if not analyzer_class:
+            if required is not None:
+                required.record(file_path, 'analyzer', 'Python source analyzer is unavailable')
             return
         analyzer = analyzer_class(file_path)
-        if not hasattr(analyzer, 'tree') or not analyzer.tree:
+        tree = getattr(analyzer, 'tree', None)
+        if tree is None:
+            if required is not None:
+                required.record(file_path, 'parse', 'Source parser produced no usable tree')
             return
-        get_text: Callable = analyzer._get_node_text
-        root = tree_root(analyzer.tree)
-        _walk(root, var_name, get_text, file_path, evidence, func_stack=[])
-    except OSError:  # an unreadable file contributes no evidence; a walker bug propagates
-        pass
+    except OSError as error:  # source acquisition failed; tree-walker errors propagate
+        if required is not None:
+            required.record(file_path, 'read', failure_of(error).cause)
+        return
+    if required is not None:
+        required.analyzed_files += 1
+        if tree_has_recovery_artifacts(tree):
+            required.record(file_path, 'recovery',
+                            'Syntax tree contains recovery artifacts; observations may be incomplete or wrong')
+    get_text: Callable = analyzer._get_node_text
+    root = tree_root(tree)
+    _walk(root, var_name, get_text, file_path, evidence, func_stack=[])
 
 
 # ─────────────────────────── tree walker ─────────────────────────────────────
@@ -144,7 +204,7 @@ def _check_parameters(
         if ctype == 'identifier':
             if get_text(child) == var_name:
                 evidence.append({
-                    'file': file_path,
+                    'file': to_posix(file_path),
                     'function': func_name,
                     'func_line': func_line,
                     'line': _zero_arg(child, 'start_position').row + 1,
@@ -157,7 +217,7 @@ def _check_parameters(
             if ident and ident[0] == var_name:
                 annotation = _extract_annotation(child, get_text)
                 evidence.append({
-                    'file': file_path,
+                    'file': to_posix(file_path),
                     'function': func_name,
                     'func_line': func_line,
                     'line': _zero_arg(child, 'start_position').row + 1,
@@ -169,7 +229,7 @@ def _check_parameters(
             ident = child.child_by_field_name('name')
             if ident and get_text(ident) == var_name:
                 evidence.append({
-                    'file': file_path,
+                    'file': to_posix(file_path),
                     'function': func_name,
                     'func_line': func_line,
                     'line': _zero_arg(child, 'start_position').row + 1,
@@ -250,7 +310,7 @@ def _add_assign(
 
     shape = _infer_shape(value_node, get_text) if value_node else ''
     evidence.append({
-        'file': file_path,
+        'file': to_posix(file_path),
         'function': func_stack[-1] if func_stack else '',
         'func_line': 0,
         'line': _zero_arg(node, 'start_position').row + 1,
@@ -283,7 +343,7 @@ def _check_for(
         shape = f'item from {iterable_shape}' if iterable_shape else 'loop variable'
 
     evidence.append({
-        'file': file_path,
+        'file': to_posix(file_path),
         'function': func_stack[-1] if func_stack else '',
         'func_line': 0,
         'line': _zero_arg(node, 'start_position').row + 1,
