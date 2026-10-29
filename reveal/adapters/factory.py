@@ -149,7 +149,7 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
         query = None
     if overrides is not None:
         from ..utils.query_binding import bind_declared_params
-        bound = bind_declared_params(adapter_class.PARAM_SPECS, query or '', transport='uri',
+        bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
                                      overrides=overrides)
         return adapter_class(path, params=bound)
     return adapter_class(path, query)

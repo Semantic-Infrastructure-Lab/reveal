@@ -221,7 +221,9 @@ def query(
     with host_request(), gitignore_scope(respect_gitignore):
         from .adapters.factory import _canonical_init, uses_bound_query_call
         if not element_name and uses_bound_query_call(adapter_class):
-            return _canonical_init(adapter_class, resource, overrides=kwargs).get_structure()
+            bound_result: Dict[str, Any] = _canonical_init(
+                adapter_class, resource, overrides=kwargs).get_structure()
+            return bound_result
         if isinstance(adapter_class, type) and hasattr(adapter_class, "from_uri"):
             adapter = adapter_class.from_uri(scheme, resource, element_name)
         else:
