@@ -7,6 +7,8 @@ import os
 import sys
 from datetime import datetime, date
 
+from .query_parser import attach_input_warnings
+
 
 class DateTimeEncoder(json.JSONEncoder):
     """JSON encoder that handles datetime and date objects."""
@@ -200,5 +202,4 @@ def print_json_result(result, file=None) -> None:
     When provenance is enabled (see set_provenance_enabled), attaches an
     'execution' block to dict results that don't already carry one.
     """
-    from ..cli.routing.ledger import attach_input_warnings
     print(safe_json_dumps(attach_provenance(attach_retirements(attach_input_warnings(result)))), file=file or sys.stdout)

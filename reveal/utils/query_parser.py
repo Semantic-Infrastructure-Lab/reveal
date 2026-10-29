@@ -28,6 +28,8 @@ class QueryKeyLog:
     used: Set[str]  # read by the adapter (for a filter parser: parsed)
     warnings: List[dict] = field(default_factory=list)
     warnings_to_stderr: bool = True
+    unused_warnings: Optional[Callable[[dict], List[dict]]] = None
+    structured_emitted: bool = False
 
 
 _KEY_LOG: ContextVar[Optional[QueryKeyLog]] = ContextVar('reveal_query_key_log', default=None)
@@ -40,14 +42,44 @@ def query_key(part: str) -> str:
 
 
 @contextmanager
-def collect_query_keys(*, warnings_to_stderr: bool = True) -> Iterator[QueryKeyLog]:
+def collect_query_keys(*, warnings_to_stderr: bool = True,
+                       unused_warnings: Optional[Callable[[dict], List[dict]]] = None) -> Iterator[QueryKeyLog]:
     """Log the keys query parsers see and the adapter uses until the block exits."""
-    log = QueryKeyLog(seen=set(), used=set(), warnings_to_stderr=warnings_to_stderr)
+    log = QueryKeyLog(seen=set(), used=set(), warnings_to_stderr=warnings_to_stderr,
+                      unused_warnings=unused_warnings)
     token = _KEY_LOG.set(log)
     try:
         yield log
     finally:
         _KEY_LOG.reset(token)
+
+
+def attach_input_warnings(result):
+    """Attach current dispatch diagnostics before the shared JSON writer emits the answer.
+
+    The ledger supplies unused-input facts; parsers supply unknown-input facts.
+    Keeping this in the query layer lets the writer use those producers without
+    importing routing, and reuses the existing nested/request-local query scope.
+    """
+    log = _KEY_LOG.get()
+    if log is None or not isinstance(result, dict):
+        return result
+    entries = list(log.warnings)
+    # The dispatch owner decides whether this answer completed far enough
+    # to judge unused input; parsing diagnostics remain independent of that policy.
+    if log.unused_warnings is not None:
+        entries.extend(log.unused_warnings(result))
+    if not entries:
+        return result
+    meta = dict(result['meta']) if isinstance(result.get('meta'), dict) else {}
+    warnings = list(meta['warnings']) if isinstance(meta.get('warnings'), list) else []
+    for entry in entries:
+        if entry not in warnings:
+            warnings.append(entry)
+    meta['warnings'] = warnings
+    if not log.warnings_to_stderr:
+        log.structured_emitted = True
+    return {**result, 'meta': meta}
 
 
 def note_query_parsed(query: str) -> None:

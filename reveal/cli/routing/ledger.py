@@ -38,12 +38,12 @@ from __future__ import annotations
 import sys
 from argparse import ArgumentParser, Namespace
 from contextlib import contextmanager
-from contextvars import ContextVar
 from typing import Any, Dict, Iterator, List, Optional, Set, TextIO
 from urllib.parse import unquote_plus
 
 from ...utils.exclusions import exclusions_consulted
-from ...utils.query_parser import collect_query_keys, query_key
+from ...utils.results import outcome_of
+from ...utils.query_parser import QueryKeyLog, collect_query_keys, query_key
 
 _LEDGER_ATTR = '_reveal_flag_ledger'
 _NOT_FLAGS = frozenset({'path', 'element'})
@@ -51,7 +51,6 @@ _NOT_FLAGS = frozenset({'path', 'element'})
 _BARE_PATH_FLAGS = ('depth', 'ext', 'type', 'fast')
 # The adapter parsed the key and no code on this query's path read it (git://FILE --limit).
 _NOT_HERE = 'the adapter accepts it, but not for this view.'
-_ACTIVE_LEDGER: ContextVar[Optional['FlagLedger']] = ContextVar('reveal_flag_ledger', default=None)
 
 
 
@@ -98,7 +97,7 @@ class FlagLedger:
         self.complete = False
         self.scheme = subcommand or ''
         self.json_primary = getattr(args, 'format', 'text') == 'json'
-        self.structured_emitted = False
+        self._query_log: Optional[QueryKeyLog] = None
         self.query_warnings: List[dict] = []
 
     def track(self, args: Namespace) -> TrackedArgs:
@@ -116,21 +115,19 @@ class FlagLedger:
         query = resource.partition('?')[2]
         self.query_keys = [query_key(p) for p in query.split('&') if query_key(p)]
         self.scheme = scheme or self.scheme
-        self.structured_emitted = False
         typed = _query_values(query)
         for dest, value in self.set_flags.items():
             if dest not in self.delegated and str(value) in typed.get(dest, []):
                 self.delegated[dest] = dest
-        with collect_query_keys(warnings_to_stderr=not self.json_primary) as log:
+        with collect_query_keys(warnings_to_stderr=not self.json_primary, unused_warnings=self._answer_warnings) as log:
             # Live sets let the JSON writer see facts after analysis/postprocessing,
             # before dispatch unwinds. The final snapshot still supports text reports.
             self.seen_keys, self.used_keys = log.seen, log.used
             self.query_warnings = log.warnings
-            token = _ACTIVE_LEDGER.set(self)
+            self._query_log = log
             try:
                 yield
             finally:
-                _ACTIVE_LEDGER.reset(token)
                 self.seen_keys, self.used_keys = set(log.seen), set(log.used)
                 if exclusions_consulted():  # a walk applied the --exclude scope
                     self.used.add('exclude')
@@ -149,7 +146,7 @@ class FlagLedger:
         return seen
 
     def report(self, scheme: str = '', stream: Optional[TextIO] = None) -> None:
-        if self.structured_emitted:
+        if self._query_log is not None and self._query_log.structured_emitted:
             return
         out = stream if stream is not None else sys.stderr
         # JSON paths that bypass the shared writer must still disclose the
@@ -159,6 +156,11 @@ class FlagLedger:
                 print(warning['message'], file=out)
         for warning in self._notes(scheme):
             print(warning['message'], file=out)
+
+    def _answer_warnings(self, result: dict) -> List[dict]:
+        # Error exits never reported unused input: the operation did not get
+        # a chance to apply it. Preserve that policy at this accounting owner.
+        return self.warnings() if outcome_of(result) != 'failed' else []
 
     def warnings(self, scheme: str = '') -> List[dict]:
         """Structured unused-input facts, from the same accounting as the text report."""
@@ -225,29 +227,6 @@ class FlagLedger:
 
 def _input_warning(kind: str, fields: List[str], message: str) -> dict:
     return {'type': kind, 'code': kind, 'fields': fields, 'message': message}
-
-
-def attach_input_warnings(result):
-    """Attach current dispatch facts before the existing JSON writer emits the answer."""
-    ledger = _ACTIVE_LEDGER.get()
-    if ledger is None or not isinstance(result, dict):
-        return result
-    from ...utils.results import outcome_of
-    # Match the ledger's existing error-exit policy: an operation rejected
-    # before it could run did not get a chance to consume its input. Parser
-    # warnings already authored during preparation remain visible.
-    entries = ledger.query_warnings + (ledger.warnings() if outcome_of(result) != 'failed' else [])
-    if not entries:
-        return result
-    meta = dict(result['meta']) if isinstance(result.get('meta'), dict) else {}
-    warnings = list(meta['warnings']) if isinstance(meta.get('warnings'), list) else []
-    for entry in entries:
-        if entry not in warnings:
-            warnings.append(entry)
-    meta['warnings'] = warnings
-    if ledger.json_primary:
-        ledger.structured_emitted = True
-    return {**result, 'meta': meta}
 
 
 def _query_values(query: str) -> Dict[str, List[str]]:
