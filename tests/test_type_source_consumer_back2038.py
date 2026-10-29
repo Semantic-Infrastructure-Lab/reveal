@@ -142,7 +142,7 @@ def test_actual_source_loss_public_outputs_qualify_display_and_preserve_data_cha
     else:
         flags += ['--format', 'json', '--fields', 'results,total_results', '--max-items', '0']
     response = run(f'ast://{root}?reveal_type=target', *flags)
-    assert fault['events'] and response.returncode == 0
+    assert fault['events'] and response.returncode == 3
     assert fault['censuses'] == [{'python': 2}] and fault['trees'] == 1
     if view == 'grep':
         assert len(response.stdout.strip().splitlines()) == 1

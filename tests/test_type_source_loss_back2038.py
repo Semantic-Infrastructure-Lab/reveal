@@ -127,7 +127,7 @@ def test_text_empty_and_nonempty_footer_qualify_only_displayed_source_portion(tm
     hidden = _project(tmp_path / 'project', visible)
     fault['denied'] = {hidden}
     response = run(f'ast://{hidden.parent.as_posix()}?reveal_type=cfg')
-    assert response.returncode == 0 and fault['events']
+    assert response.returncode == 3 and fault['events']
     output = response.stdout + response.stderr
     assert 'displayed' in output.lower() and 'analyzed portion' in output.lower()
     assert 'occurrence(s) found' not in output and 'no occurrences found' not in output
@@ -143,7 +143,7 @@ def test_positive_uncapped_native_evidence_cut_zero_keeps_honest_text_and_sideca
     artifact = tmp_path / 'answer.json'
     response = run(uri, '--max-items', '0', '--also-json', artifact)
     saved = json.loads(artifact.read_text(encoding='utf-8'))
-    assert response.returncode == 0 and saved['total_results'] == 1 and saved['results'] == []
+    assert response.returncode == 3 and saved['total_results'] == 1 and saved['results'] == []
     output = response.stdout + response.stderr
     assert 'displayed' in output.lower() and 'analyzed portion' in output.lower()
     assert 'no occurrences found' not in output and '0 occurrence(s) found' not in output
@@ -155,7 +155,7 @@ def test_grep_preserves_only_native_rows_on_stdout_and_one_source_warning_on_std
     hidden = _project(tmp_path / 'project', visible)
     fault['denied'] = {hidden}
     response = run(f'ast://{hidden.parent.as_posix()}?reveal_type=cfg', '--format', 'grep')
-    assert response.returncode == 0 and fault['events']
+    assert response.returncode == 3 and fault['events']
     expected = f'{hidden.parent / "visible.py"}:1:cfg\n' if visible else ''
     assert response.stdout == expected
     assert response.stderr.count('identified directory enumeration(s) failed') == 1
@@ -176,14 +176,14 @@ def test_json_projection_provenance_and_same_adapter_persistent_repair_sibling(t
     response = run(f'ast://{hidden.parent.as_posix()}?reveal_type=cfg', '--format', 'json',
                    '--fields', 'total_results', '--provenance')
     data = json.loads(response.stdout)
-    assert response.returncode == 0 and data['total_results'] == 1
+    assert response.returncode == 3 and data['total_results'] == 1
     assert data['execution']['command'].startswith('reveal ast://')
     _warning(data)
     fault['denied'] = set()
     assert owner.get_structure() == baseline and sibling_owner.get_structure() == unaffected
 
 
-def test_decorated_mcp_keeps_ordinary_legacy_success_and_source_attribution(tmp_path, fault):
+def test_decorated_mcp_keeps_useful_partial_and_source_attribution(tmp_path, fault):
     pytest.importorskip('mcp')
     from reveal.mcp_server import _ToolFailure, reveal_query
     hidden = _project(tmp_path / 'project', False)

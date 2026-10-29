@@ -122,17 +122,19 @@ def test_requested_artifact_failure_still_outranks_complete_analysis(root):
 
 
 @pytest.mark.parametrize('query,qualified', [
-    ('show=dict-heatmap', True), ('show=dict-schemas', True), ('reveal_type=x', False),
+    ('show=dict-heatmap', True), ('show=dict-schemas', True), ('reveal_type=x', True),
     ('show=dict-heatmap&show=functions', True), ('show=functions&show=dict-heatmap', True),
-    ('reveal_type=x&reveal_type=', True), ('reveal_type=&reveal_type=x', False),
+    ('reveal_type=x&reveal_type=', True), ('reveal_type=&reveal_type=x', True),
     ('show=&reveal_type=', True), ('show&reveal_type', True),
     ('show=dict%2Dheatmap', True), ('reveal_type%3Dx', True),
     (' show=dict-heatmap ', True), ('show=dict-schemas&reveal_type=x', True),
 ])
 def test_mode_selector_matches_actual_constructor_semantics(root, query, qualified):
     adapter = AstAdapter(str(root), query)
-    legacy_type = bool(adapter.reveal_type_var) and adapter.show_mode not in ('dict-heatmap', 'dict-schemas')
-    assert legacy_type is not qualified
+    expected_type = ('ast_' + adapter.show_mode.replace('-', '_')
+                     if adapter.show_mode in ('dict-heatmap', 'dict-schemas')
+                     else 'ast_reveal_type' if adapter.reveal_type_var else 'ast_query')
+    assert AstAdapter.uri_result_type(f'{root}?{query}') == expected_type
     assert (AstAdapter.uri_execution_facts(f'{root}?{query}') is not None) is qualified
 
 
