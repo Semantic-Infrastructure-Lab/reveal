@@ -287,6 +287,7 @@ class AstAdapter(ResourceAdapter):
             proof = result.get('analysis')
             if not _dict_source_counts_valid(proof):
                 return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+            proof = cast(Dict[str, int], proof)
             lost = proof.get('failed_files', 0) or proof.get('discovery_failures', 0)
             state = AnalysisCompleteness.COMPLETE
             if lost:
