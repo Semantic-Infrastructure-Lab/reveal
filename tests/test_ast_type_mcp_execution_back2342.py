@@ -45,6 +45,13 @@ def test_real_recovered_tree_absence_and_repair_through_stdio(tmp_path, provenan
             sibling = await session.call_tool('reveal_query', {
                 'uri': f'ast://{tmp_path.as_posix()}?{control}', 'provenance': provenance})
             assert not sibling.is_error and 'incomplete' not in _text(sibling).lower()
+        foreign = tmp_path / 'foreign.js'
+        foreign.write_text('function foreign(target) { return target; }\n', encoding='utf-8')
+        advisory = await session.call_tool('reveal_query', {
+            'uri': f'ast://{foreign.as_posix()}?reveal_type=target', 'provenance': provenance})
+        assert not advisory.is_error and 'incomplete' not in _text(advisory).lower()
+        if provenance:
+            assert json.loads(_text(advisory))['meta']['confidence'] == 1.0
         for uri in (f'ast://{tmp_path.as_posix()}/missing?reveal_type=target',
                     f'ast://{tmp_path.as_posix()}?reveal_type=target&name~=['):
             invalid = await session.call_tool('reveal_query', {'uri': uri, 'provenance': provenance})

@@ -46,9 +46,9 @@ def fault(monkeypatch):
         finally:
             state['stage'] = previous
 
-    def scan(file, var, evidence):
+    def scan(file, var, evidence, **kwargs):
         before = len(evidence)
-        real_scan(file, var, evidence)
+        real_scan(file, var, evidence, **kwargs)
         state['scans'].append((file, copy.deepcopy(evidence[before:])))
 
     def tree(*args, **kwargs):
