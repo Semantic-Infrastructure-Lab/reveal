@@ -672,8 +672,8 @@ through validation and error construction. `validate_request(params, args)` chec
 operation-specific applicability before analysis.
 
 Constructor-bound structure calls explicitly declare class-local
-`BOUND_QUERY_CALL = True`. Surface is the initial adopter; Contracts also adopts
-this protocol. Each actual
+`BOUND_QUERY_CALL = True`. Surface is the initial adopter; Contracts and Trace also
+adopt this protocol. Each actual
 `get_structure(self)` takes no query keywords; canonical construction owns declared
 controls, and the structure boundary bypasses signature-name forwarding for that
 class. Subclasses declare adoption themselves, preserving unadopted custom plugin
@@ -681,6 +681,9 @@ class. Subclasses declare adoption themselves, preserving unadopted custom plugi
 
 For adopted `api.query` structure calls, the shared binder validates the original URI
 query before applying explicit typed keyword overrides by canonical declaration name.
+This includes required URI selectors: Trace still requires a valid URI `from` before
+an override can replace it. API overrides use `from` (via dictionary expansion), while
+plain constructor `params=` retains its CLI destination name `root`.
 Unknown API keys raise `TypeError`; False, zero and empty values participate, and
 None follows the declaration's default policy. Typed values validate once without
 URI serialization or decoding. Fresh bound parameters preserve normalization and

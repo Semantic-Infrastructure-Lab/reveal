@@ -136,7 +136,7 @@ comes first. This compatibility chain does not select builtin construction.
 
 ### Constructor-bound structure calls
 
-Surface and Contracts explicitly declare class-local `BOUND_QUERY_CALL = True`.
+Surface, Contracts and Trace explicitly declare class-local `BOUND_QUERY_CALL = True`.
 Their real `get_structure(self)` methods receive already-bound controls, and the shared structure
 boundary bypasses signature-name keyword forwarding. API structure queries bind
 typed keyword overrides through existing `ParamSpec` declarations before canonical

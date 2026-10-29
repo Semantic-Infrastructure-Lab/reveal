@@ -37,6 +37,29 @@ the same text becomes an exit-2 error.
   or a required output failure. Only `--fail-on none` is supported. The MCP tool keeps its
   historical nonerror answer for a proven absent entry point.
 
+### Python API compatibility
+
+While Trace remains available, `api.query` applies declared typed `from` and `depth`
+overrides. For example:
+
+```python
+from reveal import api
+
+report = api.query("trace://src?from=main&depth=1", **{"from": "other", "depth": 3})
+```
+
+The original URI validates first: a missing or invalid required `from` still rejects
+before overrides. Explicit values replace valid URI controls; omission keeps them.
+`depth=None` selects default 2, and zero clamps to 1. Invalid typed values raise
+`ValueError`; unsupported API keywords, including `root` and `from_`, raise `TypeError`.
+Typed selectors remain literal rather than being URI-encoded or decoded again.
+
+Direct adapter calls bind controls in constructor `params=` and then call
+`get_structure()`. Plain constructor mappings keep the CLI destination name:
+`TraceAdapter(path, params={"root": "main", "depth": 3})`. Method keywords now raise
+`TypeError`; previously they were ignored. The retirement and execution policies
+above remain in effect.
+
 ## See Also
 
 - `reveal help://schemas/trace` - the retired result type's JSON schema
