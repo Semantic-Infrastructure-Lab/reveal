@@ -122,17 +122,17 @@ def test_requested_artifact_failure_still_outranks_complete_analysis(root):
 
 
 @pytest.mark.parametrize('query,qualified', [
-    ('show=dict-heatmap', False), ('show=dict-schemas', False), ('reveal_type=x', False),
-    ('show=dict-heatmap&show=functions', True), ('show=functions&show=dict-heatmap', False),
+    ('show=dict-heatmap', True), ('show=dict-schemas', True), ('reveal_type=x', False),
+    ('show=dict-heatmap&show=functions', True), ('show=functions&show=dict-heatmap', True),
     ('reveal_type=x&reveal_type=', True), ('reveal_type=&reveal_type=x', False),
     ('show=&reveal_type=', True), ('show&reveal_type', True),
     ('show=dict%2Dheatmap', True), ('reveal_type%3Dx', True),
-    (' show=dict-heatmap ', False),
+    (' show=dict-heatmap ', True), ('show=dict-schemas&reveal_type=x', True),
 ])
 def test_mode_selector_matches_actual_constructor_semantics(root, query, qualified):
     adapter = AstAdapter(str(root), query)
-    dedicated = adapter.show_mode in ('dict-heatmap', 'dict-schemas') or bool(adapter.reveal_type_var)
-    assert dedicated is not qualified
+    legacy_type = bool(adapter.reveal_type_var) and adapter.show_mode not in ('dict-heatmap', 'dict-schemas')
+    assert legacy_type is not qualified
     assert (AstAdapter.uri_execution_facts(f'{root}?{query}') is not None) is qualified
 
 
@@ -258,3 +258,15 @@ def test_missing_path_diagnostic_serializes_backslash_spelling():
     assert result.returncode == 2
     answer = json.loads(result.stdout)
     assert answer['error'] == 'Path not found: missing_back2338/absent.py'
+
+
+@pytest.mark.parametrize('mode', ['dict-heatmap', 'dict-schemas'])
+@pytest.mark.parametrize('failure', ['missing', 'validation'])
+def test_dict_preconstruction_failure_retains_operation_identity(root, mode, failure):
+    path = root / 'absent' if failure == 'missing' else root
+    query = f'show={mode}' + ('&name~=[' if failure == 'validation' else '')
+    response = run(path, query, '--format', 'json')
+    assert response.returncode == 2
+    answer = json.loads(response.stdout)
+    assert answer['type'] == 'ast_' + mode.replace('-', '_')
+    assert answer['error']

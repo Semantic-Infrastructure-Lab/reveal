@@ -138,7 +138,7 @@ def test_root_unknown_source_loss_is_not_repaired_by_healthy_hint_population(tmp
     assert warning['count'] == 0 and warning['unknown_directory_events'] == 1
     assert 'confidence' not in result['meta']
     text = run(f'ast://{tmp_path.as_posix()}?show={mode}')
-    assert text.returncode == 0 and 'analyzed portion' in text.stdout
+    assert text.returncode == 3 and 'analyzed portion' in text.stdout
 
 
 def test_derived_zero_schema_qualifies_analysis_with_healthy_surviving_usage(tmp_path, fault):
@@ -147,7 +147,7 @@ def test_derived_zero_schema_qualifies_analysis_with_healthy_surviving_usage(tmp
     heatmap = AstAdapter(str(tmp_path), 'show=dict-heatmap').get_structure()
     assert heatmap['total_results'] == 1 and heatmap['results'][0]['function'] == 'visible'
     response = run(f'ast://{tmp_path.as_posix()}?show=dict-schemas')
-    assert response.returncode == 0 and 'analyzed portion' in response.stdout
+    assert response.returncode == 3 and 'analyzed portion' in response.stdout
     assert 'incomplete' in response.stdout
     assert (response.stdout + response.stderr).count('identified directory enumeration(s) failed') == 1
 
@@ -160,7 +160,7 @@ def test_source_empty_precedes_unsupported_language_claim(tmp_path, fault, mode)
     assert result['total_results'] == 0 and result['unsupported_language']
     assert fault['events'] and fault['hints'] == [{'lua': 1}]
     response = run(f'ast://{tmp_path.as_posix()}?show={mode}')
-    assert response.returncode == 0 and 'analyzed portion' in response.stdout
+    assert response.returncode == 3 and 'analyzed portion' in response.stdout
     assert 'no .py/.pyi files found' not in response.stdout
 
 
@@ -170,7 +170,7 @@ def test_both_population_warnings_survive_cuts_artifact_and_grep_stdio(tmp_path,
     fault.update(stages={'source', 'hint'}, denied=set(children), unknown=True)
     uri = f'ast://{root.as_posix()}?show=dict-heatmap'
     response = run(uri, '--format', 'json', '--fields', 'results', '--max-items', '0', '--provenance')
-    assert response.returncode == 0
+    assert response.returncode == 3
     result = json.loads(response.stdout)
     assert result['results'] == []
     warnings = _warnings(result)
@@ -179,10 +179,10 @@ def test_both_population_warnings_survive_cuts_artifact_and_grep_stdio(tmp_path,
     assert 'confidence' not in result['meta']
     artifact = tmp_path / 'answer.json'
     text = run(uri, '--also-json', str(artifact))
-    assert text.returncode == 0 and len(_warnings(json.loads(artifact.read_text(encoding='utf-8')))) == 2
+    assert text.returncode == 3 and len(_warnings(json.loads(artifact.read_text(encoding='utf-8')))) == 2
     assert (text.stdout + text.stderr).count('identified directory enumeration(s) failed') == 2
     grep = run(uri, '--format', 'grep')
-    assert grep.returncode == 0 and 'visible' in grep.stdout
+    assert grep.returncode == 3 and 'visible' in grep.stdout
     assert 'directory' not in grep.stdout and 'PermissionError' not in grep.stdout
     assert grep.stderr.count('identified directory enumeration(s) failed') == 2
 
@@ -213,7 +213,7 @@ def test_positive_uncapped_observations_hidden_by_cap_are_display_absence_only(t
     assert uncapped['results'] and fault['parsed'][-1] == ('visible.py', True)
     artifact = tmp_path / 'capped.json'
     response = run(f'ast://{root.as_posix()}?show={mode}', '--max-items', '0', '--also-json', str(artifact))
-    assert response.returncode == 0 and artifact.exists()
+    assert response.returncode == 3 and artifact.exists()
     saved = json.loads(artifact.read_text(encoding='utf-8'))
     assert saved['results'] == [] and saved['total_results'] == uncapped['total_results']
     assert 'displayed' in response.stdout and 'analyzed portion' in response.stdout

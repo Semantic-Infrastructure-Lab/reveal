@@ -124,11 +124,11 @@ def test_empty_text_scopes_absence_and_grep_keeps_stdout_clean(tmp_path, fault, 
     fault['denied'] = set(children)
     uri = f'ast://{tmp_path.as_posix()}?show={mode}'
     text = run(uri)
-    assert text.returncode == 0
+    assert text.returncode == 3
     assert 'analyzed portion' in text.stdout and 'incomplete' in text.stdout
     assert (text.stdout + text.stderr).count('identified directory enumeration(s) failed') == 1
     grep = run(uri, '--format', 'grep')
-    assert grep.returncode == 0 and grep.stdout == ''
+    assert grep.returncode == 3 and grep.stdout == ''
     assert grep.stderr.count('identified directory enumeration(s) failed') == 1
 
 
@@ -138,14 +138,14 @@ def test_source_facts_survive_json_projection_provenance_and_text_artifact(tmp_p
     fault['denied'] = set(children)
     uri = f'ast://{root.as_posix()}?show=dict-heatmap'
     response = run(uri, '--format', 'json', '--fields', 'total_results', '--max-items', '0', '--provenance')
-    assert response.returncode == 0
+    assert response.returncode == 3
     data = json.loads(response.stdout)
     assert data['total_results'] == 1
     _warning(data)
     assert data['execution']['command'].startswith('reveal ast://')
     artifact = tmp_path / 'answer.json'
     text = run(uri, '--also-json', str(artifact))
-    assert text.returncode == 0 and artifact.exists()
+    assert text.returncode == 3 and artifact.exists()
     saved = json.loads(artifact.read_text(encoding='utf-8'))
     assert saved['total_results'] == 1
     _warning(saved)
@@ -212,8 +212,11 @@ def test_parse_only_fallback_does_not_become_directory_loss(tmp_path):
     _write(tmp_path / 'broken.py', 'def broken(\n')
     assert usage.parse_file(str(tmp_path / 'broken.py')) is None
     result = AstAdapter(str(tmp_path), 'show=dict-heatmap').get_structure()
-    assert result['total_results'] == 0 and result['meta']['confidence'] == 1.0
-    assert result['meta']['warnings'] == []
+    assert result['total_results'] == 0 and 'confidence' not in result['meta']
+    assert result['analysis'] == {'candidate_files': 1, 'analyzed_files': 0,
+                                  'failed_files': 1, 'discovery_failures': 0}
+    assert result['meta']['warnings']
+    assert all(entry.get('unit') != 'directories' for entry in result['meta']['warnings'])
 
 
 def test_explicit_exclusion_noise_single_file_sibling_and_regular_ast_stay_exact(tmp_path, fault):
