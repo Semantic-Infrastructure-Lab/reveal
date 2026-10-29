@@ -61,6 +61,28 @@ def _relative(scope: Scope, path: Path) -> str:
     return path.relative_to(scope.root).as_posix()
 
 
+def test_importers(scope: Scope) -> set[str]:
+    """Independent corpus labels: every importer under a reviewed test/fixture directory.
+
+    These are corpus-root-relative directories declared in the manifest from the
+    corpus's own test layout, never Reveal's filename/path classifier. Absence of
+    the declaration means unqualified, not a population with no tests.
+    """
+    directories = scope.config['test_importer_dirs']
+    if not isinstance(directories, list) or not directories:
+        raise RuntimeError('test_importer_dirs must be a nonempty list of corpus-relative directories')
+    for directory in directories:
+        if (not isinstance(directory, str) or not directory or Path(directory).is_absolute()
+                or '..' in Path(directory).parts or not (scope.root / directory).is_dir()
+                or not (scope.root / directory).resolve().is_relative_to(scope.root)):
+            raise RuntimeError(f'Invalid test_importer_dirs directory: {directory!r}')
+    labels = {_relative(scope, path) for path in scope.importers
+              if any(path.is_relative_to(scope.root / directory) for directory in directories)}
+    if not labels:
+        raise RuntimeError('Declared test importer population is empty; measurement unavailable')
+    return labels
+
+
 def _finish(scope: Scope, edges: dict[Path, set[Path]]) -> Edges:
     return {_relative(scope, t): sorted(_relative(scope, i) for i in importers)
             for t, importers in sorted(edges.items()) if importers}

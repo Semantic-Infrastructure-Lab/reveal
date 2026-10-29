@@ -182,6 +182,7 @@ def test_import_corpus(tmp_path):
         'pkg/use.py': 'import pkg.shared\nimport tests.helper\n',
         'tests/__init__.py': '',
         'tests/helper.py': 'import pkg.shared\nimport pkg.test_only_target\n',
+        'empty_suite/__init__.py': '',
     }, {'oracle': 'python-ast', 'importer_dirs': ['.'], 'test_importer_dirs': ['tests']})
 
 
@@ -191,7 +192,7 @@ def test_test_exclusion_scores_importers_not_targets_and_detects_ignored_paramet
     row = baseline['tests']['exclude']
     assert row['oracle_edges'] == row['hit_edges'] == 2
     assert row['recall'] == row['precision'] == 1
-    assert row['edge_rule']['tests'] == 'excluded'
+    assert row['edge_rule']['tests'] == 'importers_not_counted'
     assert row['test_population'] == {'directories': ['tests'], 'files': 2, 'edges': 2}
     # A target under tests/ remains valid: exclusion selects importers, not targets.
     assert row['targets'] == 2
@@ -239,14 +240,42 @@ def test_test_exclusion_requires_reviewed_nonvacuous_population(test_import_corp
     assert gate.regressions({'py': measured}, {'py': without}) == [
         'py: tests=exclude baseline missing; review required']
     assert gate.regressions({'py': without}, {'py': measured}) == ['py: tests=exclude measurement missing']
+    changed = json.loads(json.dumps(measured))
+    changed['tests']['exclude']['test_population']['directories'] = ['another-reviewed-layout']
+    assert any('test_population' in failure for failure in gate.regressions({'py': changed}, {'py': measured}))
+    changed = json.loads(json.dumps(measured))
+    changed['tests']['exclude']['partial_files'] += 1
+    assert any('tests=exclude: partial_files rose' in failure
+               for failure in gate.regressions({'py': changed}, {'py': measured}))
     for directories in ([], ['missing'], ['../escape'], ['/absolute'], ['pkg/shared.py']):
         entry['recall']['test_importer_dirs'] = directories
         with pytest.raises(RuntimeError, match='test_importer_dirs'):
             gate.measure(entry, root)
+    entry['recall']['test_importer_dirs'] = ['empty_suite']
+    with pytest.raises(RuntimeError, match='test population has zero oracle edges'):
+        gate.measure(entry, root)
     entry['recall']['test_importer_dirs'] = ['tests']
     entry['recall']['importer_dirs'] = ['pkg']
     with pytest.raises(RuntimeError, match='test.*population|test.*edges'):
         gate.measure(entry, root)
+
+
+def test_test_exclusion_discloses_unrecognized_corpus_test_helpers(tmp_path):
+    root, entry = _repo(tmp_path, {
+        'pyproject.toml': '[project]\nname = "pkg"\n',
+        'pkg/__init__.py': '',
+        'pkg/target.py': '',
+        'pkg/use.py': 'import pkg.target\n',
+        't/unit/test_target.py': 'import pkg.target\n',
+        't/unit/helper.py': 'import pkg.target\n',
+    }, {'oracle': 'python-ast', 'importer_dirs': ['.'], 'test_importer_dirs': ['t/unit']})
+    measured = gate.measure(entry, root)
+    assert measured['recall'] == measured['precision'] == 1
+    row = measured['tests']['exclude']
+    assert row['test_population']['edges'] == 2
+    assert row['oracle_edges'] == row['hit_edges'] == row['extra_edges'] == 1
+    assert row['recall'] == 1 and row['precision'] == 0.5
+    assert row['differences'] == [{'target': 'pkg/target.py', 'missed': [], 'extra': ['t/unit/helper.py']}]
 
 
 def test_python_file_the_oracle_cannot_parse_is_a_failure_not_a_smaller_truth(tmp_path):
@@ -435,9 +464,11 @@ def test_the_report_names_each_combination_it_declines(tmp_path, monkeypatch):
     gate.main(['--corpus-root', str(tmp_path), '--output', str(output), '--baseline', str(tmp_path / 'none')])
     report = json.loads(output.read_text(encoding='utf-8'))
     declined = {row['combination']: row['reason'] for row in report['declined']}
-    assert set(declined) == {'lazy=exclude', 'lazy=only', 'tests=exclude'}
+    assert set(declined) == {'lazy=exclude', 'lazy=only', 'tests=exclude', 'tests=exclude with lazy=exclude/only'}
     assert all(declined.values())
     assert 'python-ast' in declined['lazy=exclude'] and 'typescript-compiler' in declined['lazy=exclude']
+    assert 'test_importer_dirs' in declined['tests=exclude']
+    assert 'no engine parameter' not in declined['tests=exclude']
     assert report['scored'] == {'lazy': 'include', 'tests': 'included', 'type_checking': 'excluded'}
 
 

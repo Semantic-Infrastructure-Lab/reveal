@@ -30,7 +30,7 @@ from typing import Any
 
 import yaml
 
-from recall_oracles import ORACLES, Scope, tracked_files, build_python_calls_oracle
+from recall_oracles import ORACLES, Scope, tracked_files, test_importers, build_python_calls_oracle
 from reveal.main import main as reveal_main
 from reveal.utils.request_cache import reset_request_caches
 from reveal import __version__
@@ -53,7 +53,9 @@ _LAZY_DECLINED = ('scored for python-ast and typescript-compiler populations (th
 DECLINED = (
     {'combination': 'lazy=exclude', 'reason': _LAZY_DECLINED},
     {'combination': 'lazy=only', 'reason': 'as lazy=exclude'},
-    {'combination': 'tests=exclude', 'reason': "no engine parameter: every answer's edge_rule.tests is 'included'"},
+    {'combination': 'tests=exclude', 'reason': 'scored at lazy=include for populations with reviewed '
+     'test_importer_dirs; declined elsewhere without independent corpus test labels'},
+    {'combination': 'tests=exclude with lazy=exclude/only', 'reason': 'cross-product not qualified'},
 )
 
 
@@ -98,18 +100,21 @@ def _cli_json(uri: str, label: str, *, incomplete_ok: bool = False) -> dict[str,
     return result
 
 
-def _importers_request(target: Path, scan: Path, cap: int | None, lazy: str = 'include') -> dict[str, Any]:
+def _importers_request(target: Path, scan: Path, cap: int | None, lazy: str = 'include',
+                       tests: str = 'include') -> dict[str, Any]:
     """One ``imports://<target>?importers`` request at the scan root; a capped scan raises like any
     other failed answer. ``cap`` is the corpus's own ``scan_file_cap``, else the engine's default."""
     query = f'importers&root={urllib.parse.quote(scan.as_posix(), safe="/:")}' + (f'&max_files={cap}' if cap else '')
     if lazy != 'include':
         query += f'&lazy={lazy}'
+    if tests != 'include':
+        query += f'&tests={tests}'
     with _engine_uncached():
         result = _cli_json(f'imports://{target.as_posix()}?{query}', target.name, incomplete_ok=True)
     if (result.get('metadata', {}).get('scan_budget') or {}).get('capped'):
         raise RuntimeError('Reveal scan was capped; measurement unavailable')
     rule = result.get('edge_rule') or {}
-    scored = {**SCORED_RULE, 'lazy': lazy}
+    scored = {**SCORED_RULE, 'lazy': lazy, 'tests': 'importers_not_counted' if tests == 'exclude' else 'included'}
     applied = {key: rule.get(key) for key in scored}
     if applied != scored:
         shown = ', '.join(f'{key}={value!r}' for key, value in applied.items() if value != scored[key])
@@ -148,14 +153,15 @@ def rendered_dependents(scan: Path, target: Path, cap: int | None) -> dict[str, 
             'partial_files': _partial_files(result), 'edge_rule': _edge_rule(result)}
 
 
-def rendered_reverse_graph(scan: Path, cap: int | None, lazy: str = 'include') -> dict[str, Any]:
+def rendered_reverse_graph(scan: Path, cap: int | None, lazy: str = 'include',
+                           tests: str = 'include') -> dict[str, Any]:
     """Every module's importers from ONE ``imports://<scan dir>?importers`` request (the importer summary).
 
     ``imports://<file>?importers`` rebuilds the full import graph per request (4837 files, 10-28 s each
     on the Java corpus), so a per-target gate would take hours; the directory summary lists every
     module with at least one importer, sorted, in a single answer.
     """
-    result = _importers_request(scan, scan, cap, lazy)
+    result = _importers_request(scan, scan, cap, lazy, tests)
     entries = result['entries']
     if len(entries) != result['total']:
         raise RuntimeError(f'imports:// summary truncated: {len(entries)} of {result["total"]} modules shown')
@@ -213,6 +219,10 @@ def measure(entry: dict, root: Path) -> dict[str, Any]:
               'differences': differences}
     if oracle.lazy_only is not None and graph is not None:
         result['lazy'] = _measure_lazy(oracle, Scope(root, scan, importers, config), edges, root, scan, cap, population)
+    if 'test_importer_dirs' in config:
+        if graph is None:
+            raise RuntimeError('Test exclusion scoring requires the directory importer view')
+        result['tests'] = {'exclude': _measure_tests(Scope(root, scan, importers, config), edges, cap, population)}
     return result
 
 
@@ -256,6 +266,29 @@ def _measure_lazy(oracle, scope: Scope, edges: dict[str, list[str]], root: Path,
                        'partial_files': graph['partial_files'], 'edge_rule': graph['edge_rule'],
                        'differences': differences}
     return modes
+
+
+def _measure_tests(scope: Scope, edges: dict[str, list[str]], cap: int | None,
+                   population: set[Path]) -> dict[str, Any]:
+    """Remove independently labelled test importers, retaining every target for extra-edge controls."""
+    labels = test_importers(scope)
+    truth = {target: sorted(set(importers) - labels) for target, importers in edges.items()}
+    removed = sum(len(set(importers) & labels) for importers in edges.values())
+    if not removed:
+        raise RuntimeError('Declared test population has zero oracle edges; exclusion control is vacuous')
+    graph = rendered_reverse_graph(scope.scan, cap, tests='exclude')
+    hit, expected, extra, differences = _score(
+        truth, lambda target: graph['by_target'].get(scope.root / target, set()), scope.root, population)
+    if expected and not hit:
+        raise RuntimeError('tests=exclude: reveal found zero oracle edges; positive control failed')
+    return {'targets': sum(bool(importers) for importers in truth.values()),
+            'oracle_edges': expected, 'hit_edges': hit, 'extra_edges': extra,
+            'recall': hit / expected if expected else None,
+            'precision': hit / (hit + extra) if hit + extra else None,
+            'partial_files': graph['partial_files'], 'edge_rule': graph['edge_rule'],
+            'test_population': {'directories': scope.config['test_importer_dirs'],
+                                'files': len(labels), 'edges': removed},
+            'differences': differences}
 
 
 def rendered_callers(scan: Path, target: str) -> list[dict[str, Any]]:
@@ -329,27 +362,30 @@ def regressions(current: dict, baseline: dict, notes: list[str] | None = None) -
             if measured[field] + 1e-12 < reference[field]:
                 failures.append(f'{key}: {field} dropped {reference[field]:.6%} -> {measured[field]:.6%}')
         _compare_partial_files(key, measured, reference, failures, notes)
-        _compare_lazy(key, measured.get('lazy') or {}, reference.get('lazy') or {}, failures)
+        for dimension in ('lazy', 'tests'):
+            _compare_modes(key, dimension, measured.get(dimension) or {}, reference.get(dimension) or {}, failures, notes)
     return failures
 
 
-def _compare_lazy(key: str, measured: dict, reference: dict, failures: list[str]) -> None:
-    """The same checks as the all-edges row, per ``&lazy`` mode; a new or vanished mode needs a baseline review."""
+def _compare_modes(key: str, dimension: str, measured: dict, reference: dict, failures: list[str],
+                   notes: list[str] | None = None) -> None:
+    """The all-edges checks per parameter view; a new or vanished view requires review."""
     for mode in sorted(measured.keys() - reference.keys()):
-        failures.append(f'{key}: lazy={mode} baseline missing; review required')
+        failures.append(f'{key}: {dimension}={mode} baseline missing; review required')
     for mode, ref in reference.items():
         row = measured.get(mode)
         if not row:
-            failures.append(f'{key}: lazy={mode} measurement missing')
+            failures.append(f'{key}: {dimension}={mode} measurement missing')
             continue
-        for field in ('targets', 'oracle_edges'):
+        for field in ('targets', 'oracle_edges', 'test_population'):
             if row.get(field) != ref.get(field):
-                failures.append(f'{key}: lazy={mode} oracle population changed ({field}); baseline review required')
+                failures.append(f'{key}: {dimension}={mode} oracle population changed ({field}); baseline review required')
         if row.get('extra_edges') != ref.get('extra_edges') or extra_identities(row) != extra_identities(ref):
-            failures.append(f'{key}: lazy={mode} extra-edge population changed; baseline review required')
+            failures.append(f'{key}: {dimension}={mode} extra-edge population changed; baseline review required')
         for field in ('recall', 'precision'):
             if None not in (row[field], ref[field]) and row[field] + 1e-12 < ref[field]:
-                failures.append(f'{key}: lazy={mode} {field} dropped {ref[field]:.6%} -> {row[field]:.6%}')
+                failures.append(f'{key}: {dimension}={mode} {field} dropped {ref[field]:.6%} -> {row[field]:.6%}')
+        _compare_partial_files(f'{key}: {dimension}={mode}', row, ref, failures, notes)
 
 
 def _compare_partial_files(key: str, measured: dict, reference: dict, failures: list[str],

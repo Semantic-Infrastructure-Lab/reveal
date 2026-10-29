@@ -2215,7 +2215,29 @@ each view, so an importer listed in the wrong view counts as extra. The gate rec
 `declined` list names the combinations the gate cannot score everywhere, with the reason:
 `lazy=exclude` and `lazy=only` outside the Python/compiler rows (the Rust oracle is a
 regex that cannot tell a function-local `use`, BACK-2079; C, C++, Go and Java have no
-function-scope import) and `tests=exclude` (no independent oracle test-path scoring).
+function-scope import). `tests=exclude` is scored at `lazy=include` only for populations
+with independently reviewed `test_importer_dirs` in the corpus manifest. Other populations
+and the tests/lazy cross-product remain explicitly declined.
+
+The test-exclusion pilot uses Celery's own `t/unit`, `t/integration` and `t/smoke`
+suite/fixture directories (231 tracked Python files); `t/benchmarks` is retained.
+These labels come from the corpus layout, not Reveal's test-path classifier.
+Of the default 1,444 oracle edges, 756 originate in those test directories.
+With `tests=exclude`, all **688 retained edges are found**, with **34 extra edges**
+from test helpers that Reveal's conventional filename/directory heuristic does not recognize:
+**100% recall, 95.29% precision**. Examples include `t/integration/tasks.py` and
+`t/unit/tasks/unit_tasks.py`. This is a measured limitation (BACK-2371), not an exact
+test-exclusion claim. The baseline records every extra edge's identity; exchanging
+one extra for another requires review even when the count stays equal.
+
+The `tests.exclude` row records the declared directories, labelled file/edge counts,
+actual answer rule and parse-loss count. Exclusion filters **importers**, not target
+files: production imports of a target under a test directory remain in scope.
+Every original oracle target is scored, including targets with no remaining truth,
+so erroneously retained test edges still count as extras. With zero expected edges,
+recall is unavailable (`null`), never fabricated as 100%. Fixture controls prove
+ignored exclusion and incorrect production classification fail, while default rows
+stay unchanged. This single Python population establishes no multilingual parity.
 The `python-reveal` population is reveal's own repository at public
 `4d4116cc` (whole tree, tests included): 1,397 files, 544 targets, 4,986/4,986 edges, 0 extra.
 

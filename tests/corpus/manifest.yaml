@@ -195,6 +195,9 @@ corpora:
     recall:
       oracle: python-ast
       importer_dirs: [.]
+      # Independent labels from Celery's test suites and their fixtures (not t/benchmarks).
+      # CONTRIBUTING.rst documents t/unit and t/integration; t/smoke holds smoke tests.
+      test_importer_dirs: [t/unit, t/integration, t/smoke]
     call_recall:
       scan_root: celery/utils
       importer_dirs: [celery/utils]

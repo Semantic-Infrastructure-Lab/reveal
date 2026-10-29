@@ -94,6 +94,153 @@
         },
         "differences": []
       }
+    },
+    "tests": {
+      "exclude": {
+        "targets": 115,
+        "oracle_edges": 688,
+        "hit_edges": 688,
+        "extra_edges": 34,
+        "recall": 1.0,
+        "precision": 0.9529085872576177,
+        "partial_files": 0,
+        "edge_rule": {
+          "lazy": "include",
+          "tests": "importers_not_counted",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": []
+        },
+        "test_population": {
+          "directories": [
+            "t/unit",
+            "t/integration",
+            "t/smoke"
+          ],
+          "files": 231,
+          "edges": 756
+        },
+        "differences": [
+          {
+            "target": "celery/__init__.py",
+            "missed": [],
+            "extra": [
+              "t/integration/tasks.py",
+              "t/smoke/tasks.py",
+              "t/smoke/workers/alias.py",
+              "t/smoke/workers/alt.py",
+              "t/smoke/workers/dev.py",
+              "t/smoke/workers/latest.py",
+              "t/smoke/workers/other.py",
+              "t/unit/bin/proj/__init__.py",
+              "t/unit/bin/proj/app.py",
+              "t/unit/bin/proj/app2.py",
+              "t/unit/bin/proj/app_with_custom_cmds.py",
+              "t/unit/bin/proj/daemon.py",
+              "t/unit/bin/proj/pyramid_celery_app.py",
+              "t/unit/contrib/proj/foo.py",
+              "t/unit/contrib/proj/xyzzy.py",
+              "t/unit/tasks/unit_tasks.py"
+            ]
+          },
+          {
+            "target": "celery/app/control.py",
+            "missed": [],
+            "extra": [
+              "t/smoke/operations/worker_kill.py"
+            ]
+          },
+          {
+            "target": "celery/backends/base.py",
+            "missed": [],
+            "extra": [
+              "t/integration/tasks.py"
+            ]
+          },
+          {
+            "target": "celery/beat.py",
+            "missed": [],
+            "extra": [
+              "t/unit/bin/proj/scheduler.py"
+            ]
+          },
+          {
+            "target": "celery/canvas.py",
+            "missed": [],
+            "extra": [
+              "t/integration/tasks.py",
+              "t/smoke/operations/task_termination.py",
+              "t/smoke/tasks.py"
+            ]
+          },
+          {
+            "target": "celery/exceptions.py",
+            "missed": [],
+            "extra": [
+              "t/integration/tasks.py"
+            ]
+          },
+          {
+            "target": "celery/result.py",
+            "missed": [],
+            "extra": [
+              "t/smoke/operations/task_termination.py"
+            ]
+          },
+          {
+            "target": "celery/signals.py",
+            "missed": [],
+            "extra": [
+              "t/smoke/signals.py"
+            ]
+          },
+          {
+            "target": "celery/utils/__init__.py",
+            "missed": [],
+            "extra": [
+              "t/smoke/tasks.py"
+            ]
+          },
+          {
+            "target": "celery/utils/log.py",
+            "missed": [],
+            "extra": [
+              "t/integration/tasks.py",
+              "t/smoke/tasks.py"
+            ]
+          },
+          {
+            "target": "celery/worker/control.py",
+            "missed": [],
+            "extra": [
+              "t/integration/tasks.py",
+              "t/unit/bin/proj/app_with_custom_cmds.py"
+            ]
+          },
+          {
+            "target": "t/integration/tasks.py",
+            "missed": [],
+            "extra": [
+              "t/smoke/tasks.py"
+            ]
+          },
+          {
+            "target": "t/smoke/tasks.py",
+            "missed": [],
+            "extra": [
+              "t/smoke/operations/task_termination.py"
+            ]
+          },
+          {
+            "target": "t/smoke/workers/dev.py",
+            "missed": [],
+            "extra": [
+              "t/smoke/workers/alt.py",
+              "t/smoke/workers/other.py"
+            ]
+          }
+        ]
+      }
     }
   },
   "rust-ripgrep": {
