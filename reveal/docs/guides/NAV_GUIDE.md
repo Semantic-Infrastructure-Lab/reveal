@@ -126,8 +126,12 @@ Text names this scope, and JSON includes `meta.exit_scope.mode`, its selection `
 and counting `rule`. Unqualified resolved scopes remain inventories with an explicit
 scope warning. Ruby dynamic block binding, Kotlin inline/label semantics and other
 unqualified execution edges retain potential sites with `ownership_unresolved`
-diagnostics. Each diagnostic identifies actual recorded sites by kind, text, line and
-parser-source byte span; it does not count unseen findings. Empty ambiguous blocks do
+diagnostics. Python generator bodies, filters and later iterables likewise retain
+potential sites with a deferred-execution warning; the leftmost iterable is evaluated
+when the generator is formed, and eager list comprehensions keep their existing scope.
+Each diagnostic identifies actual recorded sites by kind, text, line and
+parser-source byte span (zero-based, half-open offsets in parser input, not a promise
+about on-disk offsets after newline normalization); it does not count unseen findings. Empty ambiguous blocks do
 not create unknown-site claims. Review these sites before attributing them to one function.
 
 Dart's existing resolver supplies a function body separately from its signature and

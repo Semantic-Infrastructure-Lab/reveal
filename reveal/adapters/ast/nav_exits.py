@@ -13,7 +13,7 @@ from .node_taxonomy import (
     CATCH_NODES, ELIF_NODES, ELSE_NODES, EXCEPT_NODES, GATE_NODES, IF_NODES,
     exit_label, is_rust_try_operator, zig_catch_parts, MEMBER_CONTAINER_NODES,
 )
-from ...core import node_children as _children
+from ...core import node_children as _children, node_prev_sibling as _prev_sibling
 from ...core.treesitter_compat import _zero_arg
 from reveal.utils.lines import split_lines
 from reveal.reveal_types import WarningEntry
@@ -290,6 +290,33 @@ def _js_deferred_field(node: Any, child: Any) -> bool:
         _zero_arg(c, 'kind') == 'static' for c in _children(node))
 
 
+def _generator_deferred_edge(node: Any, child: Any) -> bool:
+    """Only a generator's leftmost iterable is evaluated during its formation."""
+    if _zero_arg(node, 'kind') != 'generator_expression':
+        return False
+    if _zero_arg(child, 'kind') != 'for_in_clause':
+        return True
+    previous = _prev_sibling(child)
+    while previous is not None:
+        if _zero_arg(previous, 'kind') == 'for_in_clause':
+            return True
+        previous = _prev_sibling(previous)
+    return False
+
+
+def _language_exit_uncertainty(language: str, node: Any, child: Any) -> Optional[str]:
+    kind = _zero_arg(child, 'kind')
+    if language == 'python' and _generator_deferred_edge(node, child):
+        return 'Python generator body, filter or later iterable execution is deferred until iteration'
+    if language == 'ruby' and kind in {'block', 'do_block'}:
+        return 'Ruby block return ownership depends on callable binding'
+    if language == 'kotlin' and kind == 'lambda_literal':
+        return 'Kotlin lambda return ownership depends on inline and label semantics'
+    if language == 'scala' and kind == 'lambda_expression':
+        return 'Scala nonlocal-return language-version support is not qualified'
+    return None
+
+
 class ExitOwnershipSite(TypedDict):
     line: int
     kind: str
@@ -375,16 +402,10 @@ class ExitOwnership:
         if self.mode == 'source_scope':
             return None
         kind = _zero_arg(child, 'kind')
-        cause = None
-        if self.language == 'ruby' and kind in {'block', 'do_block'}:
-            cause = 'Ruby block return ownership depends on callable binding'
-        elif self.language == 'kotlin' and kind == 'lambda_literal':
-            cause = 'Kotlin lambda return ownership depends on inline and label semantics'
-        elif self.language == 'scala' and kind == 'lambda_expression':
-            cause = 'Scala nonlocal-return language-version support is not qualified'
-        elif kind in _EXIT_CLASS_KINDS and self.language not in _EXIT_CLASS_EVALUATION_KNOWN:
+        cause = _language_exit_uncertainty(self.language, node, child)
+        if cause is None and kind in _EXIT_CLASS_KINDS and self.language not in _EXIT_CLASS_EVALUATION_KNOWN:
             cause = 'Local aggregate initializer execution ownership is not qualified'
-        elif (self.selected(node) and not _body_edge(node, child)
+        elif (cause is None and self.selected(node) and not _body_edge(node, child)
               and self.language not in _EXIT_ENTRY_EVALUATION_KNOWN):
             cause = 'Invocation-associated header execution ownership is not qualified'
         if cause is None:
@@ -405,7 +426,7 @@ class ExitOwnership:
 
     def scope_metadata(self) -> ExitScope:
         data: ExitScope = {'mode': self.mode, 'language': self.language, 'reason': self.reason,
-                'rule': ('Invocation-associated source expressions; separately owned nested bodies excluded'
+                'rule': ('Candidate execution-region sites; verified nested bodies excluded; unresolved sites retained with diagnostics'
                          if self.mode == 'selected_callable' else
                          'Source-scope inventory may include sites from multiple callable owners')}
         if self.unresolved_sites:
