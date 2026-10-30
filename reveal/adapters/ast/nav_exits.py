@@ -367,7 +367,10 @@ class ExitOwnership:
     reason: str = field(init=False)
 
     def __post_init__(self) -> None:
-        self.mode = 'selected_callable' if _exit_callable(self.scope_node, self.language) else 'source_scope'
+        qualified = _exit_callable(self.scope_node, self.language)
+        if self.language == 'dart' and _zero_arg(self.scope_node, 'kind') == 'function_signature':
+            qualified = False  # A resolved signature alone has no invocation body.
+        self.mode = 'selected_callable' if qualified else 'source_scope'
         if self.mode == 'selected_callable':
             self.reason = 'verified_callable_syntax'
         elif _zero_arg(self.scope_node, 'parent') is None:
@@ -456,7 +459,8 @@ class ExitOwnership:
             warnings.append({'type': 'ownership_scope_limited',
                              'message': 'Callable ownership is not qualified for this resolved scope; '
                                         'the result is a source-scope inventory and can cross callable owners.'})
-        if self.mode == 'selected_callable' and self.language == 'dart':
+        if (self.mode == 'selected_callable' and self.language == 'dart'
+                and _zero_arg(self.scope_node, 'kind') == 'function_body'):
             warnings.append({'type': 'ownership_scope_limited',
                              'message': 'Dart navigation resolved a function body; signature and constructor '
                                         'initializer context is not available here. Use a source-region '
