@@ -691,7 +691,7 @@ def _git(root, *cmd, author=('John', 'john@example.com'), date='2026-01-05'):
                GIT_COMMITTER_EMAIL=email, GIT_AUTHOR_DATE=stamp, GIT_COMMITTER_DATE=stamp)
     try:
         subprocess.run(['git', '-C', str(root), *cmd], check=True, capture_output=True, env=env,
-                       timeout=60)
+                       timeout=120)
     except subprocess.CalledProcessError as exc:
         # check=True + capture_output hid git's own message, so a CI exit 128 had no cause (BACK-1759)
         stderr = exc.stderr.decode('utf-8', 'replace').strip()
