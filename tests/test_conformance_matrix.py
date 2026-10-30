@@ -221,13 +221,13 @@ def test_bases_reflects_real_inheritance(lang):
 
 # ──────────────────────── reveal architecture (fan-in/out) ─────────────────────
 #
-# BACK-487/488: the high-level DD command `reveal architecture` depends on
+# BACK-487/488: the retired architecture spelling shares Overview's map of
 # file-level import→file edges. Before, only Python/JS/TS/Go/Rust produced a
 # real fan-in/fan-out graph; Java/PHP/Ruby got listing-but-no-edges and
 # Swift/Kotlin got nothing at all, so `architecture` returned a bare directory
 # listing (no entry points, no core abstractions) for half the matrix. These
-# tiny 2-file projects pin that every graph-backed language resolves a
-# same-project edge into the architecture brief.
+# tiny 2-file projects pin that every graph-backed language still resolves a
+# same-project edge into canonical map fan-in and active-entrypoint rows.
 
 # (importer_rel, importer_src, imported_rel, imported_src)
 _EDGE_PROJECTS = {
@@ -266,23 +266,25 @@ EDGE_LANGUAGES = sorted(_EDGE_PROJECTS)
 
 @pytest.mark.parametrize("edge_lang", EDGE_LANGUAGES)
 def test_architecture_resolves_same_project_edge(edge_lang, tmp_path):
-    """`reveal architecture` must surface a resolved intra-project dependency as
-    a fan-out entry point AND a fan-in core abstraction, for every graph-backed
-    language (BACK-487/488)."""
+    """The alias must preserve importer fan-out and target fan-in across languages."""
     importer_rel, importer_src, imported_rel, imported_src = _EDGE_PROJECTS[edge_lang]
     for rel, src in ((importer_rel, importer_src), (imported_rel, imported_src)):
         p = tmp_path / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(src, encoding="utf-8")
 
-    out = _run("architecture", str(tmp_path), "--format", "json")
-    facts = json.loads(out)["facts"]
+    response = _run_reveal_direct("architecture", str(tmp_path), "--format", "json")
+    assert response.returncode == 0, (response.stdout, response.stderr)
+    out = response.stdout
+    answer = json.loads(out)
+    assert answer["type"] == "overview" and answer["map_status"] == "complete"
+    facts = answer["map"]
 
     importer_name = Path(importer_rel).name
     imported_name = Path(imported_rel).name
 
-    entry_points = {Path(e["file"]).name: e for e in facts["entry_points"]}
-    core = {Path(e["file"]).name: e for e in facts["core_abstractions"]}
+    entry_points = {Path(e["file"]).name: e for e in facts["entrypoints"]["rows"]}
+    core = {Path(e["file"]).name: e for e in facts["fan_in"]["rows"]}
 
     assert importer_name in entry_points, (
         f"{edge_lang}: importer {importer_name} not an entry point — edge unresolved\n{out}"
