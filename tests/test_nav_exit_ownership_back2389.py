@@ -236,3 +236,16 @@ def test_generator_deferred_regions_are_not_confident_outer_execution(tmp_path, 
     assert all('generator' in s['cause'].lower() for s in sites)
     warnings = answer['meta'].get('warnings', [])
     assert bool([w for w in warnings if w['type'] == 'ownership_unresolved']) == bool(uncertain)
+
+
+@pytest.mark.parametrize('expression,uncertain', [
+    ('async { return 1; }', ['return 1;']),
+    ('{ return 1; }', []),
+])
+def test_rust_async_block_candidates_do_not_claim_enclosing_execution(tmp_path, expression, uncertain):
+    source = 'fn outer()->i32 {\n let pending = ' + expression + ';\n return 2;\n}'
+    answer = _answer(tmp_path, 'rust', source)
+    assert [r['text'] for r in answer['findings']] == ['return 1;', 'return 2;']
+    sites = answer['meta']['exit_scope'].get('unresolved_sites', [])
+    assert [s['text'] for s in sites] == uncertain
+    assert all('async' in s['cause'].lower() for s in sites)
