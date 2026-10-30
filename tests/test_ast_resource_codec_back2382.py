@@ -106,11 +106,13 @@ def test_projection_failure_and_mode_identity_survive_encoding(tmp_path):
 
 def test_api_kwargs_and_raw_query_codec_are_unchanged(tmp_path):
     path = source(tmp_path / 'space name.py')
-    encoded = uri(path) + '?limit=1'
-    assert query(encoded, limit=0) == query(encoded)
+    literal = 'ast://' + path.as_posix()
+    expected = query(literal + '?limit=1')
+    assert expected['total_results'] == 1
+    assert query(literal + '?limit=1', limit=0) == expected
     with pytest.raises(ValueError, match='limit'):
-        query(uri(path) + '?limit=bad', limit=0)
-    assert query(uri(path) + '?name=alpha%26beta')['results'] == []
+        query(literal + '?limit=bad', limit=0)
+    assert query(literal + '?name=alpha%26beta')['results'] == []
 
 
 def test_resource_schema_declares_existing_path_first():
