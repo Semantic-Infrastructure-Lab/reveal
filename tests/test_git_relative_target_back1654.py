@@ -37,12 +37,13 @@ def test_history_of_target_from_parent_cwd(parent, monkeypatch, spelling, target
     assert [c['message'] for c in commits] == ['init']
 
 
-def test_overview_composes_git_from_parent_cwd(parent, monkeypatch):
+def test_overview_counts_target_from_parent_cwd(parent, monkeypatch):
     monkeypatch.chdir(parent)
     result = OverviewAdapter('repo/src').get_structure()
     errors = [e for e in (result.get('meta') or {}).get('errors', []) if e.get('code') == 'E_COMPOSE']
     assert errors == []
-    assert [c['message'] for c in result['git_log']] == ['init']
+    assert result['scope']['total_code_files'] == 1
+    assert 'git_log' not in result
 
 
 def test_target_outside_any_repo_is_not_applicable(parent, monkeypatch):
@@ -52,12 +53,12 @@ def test_target_outside_any_repo_is_not_applicable(parent, monkeypatch):
     assert 'norepo/x' in str(exc.value)
 
 
-def test_overview_outside_any_repo_skips_optional_git(parent, monkeypatch):
+def test_overview_outside_any_repo_needs_no_git(parent, monkeypatch):
     monkeypatch.chdir(parent)
     result = OverviewAdapter('norepo/x').get_structure()
-    messages = [e['message'] for e in result['meta']['errors'] if e.get('code') == 'E_COMPOSE']
+    messages = [e['message'] for e in result.get('meta', {}).get('errors', []) if e.get('code') == 'E_COMPOSE']
     assert messages == []
-    assert result['git_log'] == []
+    assert 'git_log' not in result and result['scope']['total_code_files'] == 1
 
 
 def test_cwd_inside_repo_still_works(parent, monkeypatch):
