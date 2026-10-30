@@ -58,7 +58,6 @@
   "reveal/conventions.py": 1,
   "reveal/nav_handlers.py": 2,
   "reveal/registry.py": 3,
-  "reveal/rendering/adapters/architecture.py": 1,
   "reveal/rendering/adapters/hotspots.py": 1,
   "reveal/rendering/adapters/pack.py": 1,
   "reveal/rules/__init__.py": 1,
