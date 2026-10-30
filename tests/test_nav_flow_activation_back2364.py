@@ -205,3 +205,32 @@ def test_flow_and_exits_reject_unsupported_formats(tmp_path, flag, fmt):
     assert result.returncode == 2
     assert result.stdout == ''
     assert 'supported: text, json' in result.stderr
+
+
+@pytest.mark.parametrize('flag', ['flow', 'exits'])
+def test_registered_navigation_text_contract_overrides_cli_format_environment(tmp_path, monkeypatch, flag):
+    pytest.importorskip('mcp')
+    from test_mcp_expected_errors_back1992 import _run, _text
+    monkeypatch.setenv('REVEAL_FORMAT', 'json')
+    path = tmp_path / 'work.py'
+    path.write_text('def work():\n return 1\n', encoding='utf-8')
+
+    async def scenario(session):
+        result = await session.call_tool('reveal_nav', {
+            'path': str(path), 'element': 'work', 'flag': flag})
+        assert not result.is_error
+        assert not _text(result).lstrip().startswith('{')
+        assert ('Navigation depth' if flag == 'flow' else 'Exit sites (static)') in _text(result)
+        sibling = await session.call_tool('reveal_nav', {
+            'path': str(path), 'element': 'work', 'flag': 'callsites'})
+        assert not sibling.is_error
+        assert not _text(sibling).lstrip().startswith('{')
+
+    _run(tmp_path, scenario)
+
+
+def test_cli_keeps_its_format_environment(monkeypatch):
+    monkeypatch.setenv('REVEAL_FORMAT', 'json')
+    result = _run_reveal_direct(_sample_path('python'), 'process_order', '--flow')
+    assert result.returncode == 0
+    assert json.loads(result.stdout)['meta']['flag'] == 'flow'
