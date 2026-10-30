@@ -64,7 +64,7 @@ class TestEndToEnd:
     def test_overview_exclude(self, tree, form):
         proc = run_reveal(*[a.format(t=tree) for a in form], '--exclude', 'a,b.py')
         assert proc.returncode == 0, proc.stderr
-        assert 'Codebase  2 files' in proc.stdout
+        assert 'Code scope  2 recognized code files' in proc.stdout
 
     def test_pack_exclude(self, tree):
         with_it = run_reveal(f'pack://{tree}')
