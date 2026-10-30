@@ -104,6 +104,15 @@ def test_ambiguous_flow_prefix_stays_an_argparse_error(source):
     assert 'ambiguous' in result.stderr
 
 
+def test_inline_file_line_binding_receives_runtime_contextual_correction(source):
+    result = _run_reveal_direct(str(source) + ':2', '--outline', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    answer = json.loads(result.stdout)
+    assert answer['meta']['flag'] == 'flow'
+    assert [w['field'] for w in answer['meta']['warnings'] if w['type'] == 'retired_spelling'] == [
+        'target:nav.outline']
+
+
 def test_registered_mcp_contextual_error_names_replacement(source, tmp_path):
     pytest.importorskip('mcp')
     from test_mcp_expected_errors_back1992 import _run, _text
