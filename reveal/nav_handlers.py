@@ -19,6 +19,7 @@ from reveal.utils.lines import split_lines
 
 if TYPE_CHECKING:
     from .adapters.ast.nav_outline import OutlineDepth
+    from .adapters.ast.nav_exits import ExitOwnership
 
 
 # Branch keywords for --ifmap and --catchmap filtering
@@ -233,16 +234,35 @@ def _nav_branchmap(ctx: _NavCtx) -> None:
                            lambda: render_branchmap(filtered, from_line, to_line))
 
 
+def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
+                          findings: list, ownership: ExitOwnership, render: Callable[[], str]) -> None:
+    from .utils.results import note_warning
+    from .utils.warning_render import render_meta_warnings
+
+    result = {'meta': {'exit_scope': ownership.scope_metadata()}}
+    for warning in ownership.warnings():
+        note_warning(result, dict(warning))
+    if ctx.as_json:
+        _nav_json(flag, ctx.analyzer.path, ctx.element, from_line, to_line,
+                  findings, extra_meta=result['meta'])
+    else:
+        label = ('selected callable execution regions' if ownership.mode == 'selected_callable'
+                 else 'source inventory; may include multiple callable owners')
+        print(f'Exit scope: {label}')
+        print(render())
+        render_meta_warnings(result)
+
+
 def _nav_exits(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_exits, render_exits  # noqa: I006
+    from .adapters.ast.nav_exits import ExitOwnership
     is_flowto = getattr(ctx.args, 'flowto', False)
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    exits = collect_exits(ctx.func_node, from_line, to_line, ctx.get_text)
-    if ctx.as_json:
-        _nav_json('flowto' if is_flowto else 'exits',
-                  ctx.analyzer.path, ctx.element, from_line, to_line, exits)
-    else:
-        print(render_exits(exits, from_line, to_line, verdict=is_flowto))
+    ownership = ExitOwnership(getattr(ctx.analyzer, 'language', ''), ctx.func_node)
+    exits = collect_exits(ctx.func_node, from_line, to_line, ctx.get_text, ownership=ownership)
+    _emit_exit_navigation(ctx, 'flowto' if is_flowto else 'exits', from_line, to_line,
+                          exits, ownership,
+                          lambda: render_exits(exits, from_line, to_line, verdict=is_flowto))
 
 
 def _nav_deps(ctx: _NavCtx) -> None:
@@ -374,12 +394,12 @@ def _nav_keys(ctx: _NavCtx) -> None:
 
 def _nav_returns(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_gate_chains, render_gate_chains  # noqa: I006
+    from .adapters.ast.nav_exits import ExitOwnership
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    chains = collect_gate_chains(ctx.func_node, from_line, to_line, ctx.get_text)
-    if ctx.as_json:
-        _nav_json('returns', ctx.analyzer.path, ctx.element, from_line, to_line, chains)
-    else:
-        print(render_gate_chains(chains, from_line, to_line))
+    ownership = ExitOwnership(getattr(ctx.analyzer, 'language', ''), ctx.func_node)
+    chains = collect_gate_chains(ctx.func_node, from_line, to_line, ctx.get_text, ownership=ownership)
+    _emit_exit_navigation(ctx, 'returns', from_line, to_line, chains, ownership,
+                          lambda: render_gate_chains(chains, from_line, to_line))
 
 
 def _boundary_effect_finding(effect: Dict[str, Any], transitive: bool) -> Dict[str, Any]:

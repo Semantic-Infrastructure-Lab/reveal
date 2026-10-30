@@ -1,4 +1,4 @@
-"""Selected callable-body exits versus source-scope inventory (BACK-2389).
+"""Selected callable exits versus source-scope inventory (BACK-2389).
 
 Hand-written source/expected sites; grammar acceptance is not compiler validation.
 """
@@ -179,3 +179,41 @@ def test_nested_cpp_capture_is_formation_but_parameter_and_body_are_deferred(tmp
     assert [(r['line'], r['text']) for r in answer['findings']] == [
         (2, 'exit(1)'), (5, 'return 4;'),
     ]
+
+
+@pytest.mark.parametrize('element,lines', [(':6', [6]), (':2', [3, 5, 6]), (':1-6', [3, 5, 6])])
+def test_scope_metadata_follows_resolved_node_for_source_ranges(tmp_path, element, lines):
+    source = 'def outer(a):\n def inner():\n  return 1\n if a:\n  return 2\n return 3\n'
+    answer = _answer(tmp_path, 'python', source, element=element)
+    assert [r['line'] for r in answer['findings']] == lines
+    assert answer['meta']['exit_scope']['mode'] == 'source_scope'
+    assert answer['meta']['exit_scope']['reason'] == 'source_root_inventory'
+
+
+def test_named_aggregate_metadata_names_source_inventory(tmp_path):
+    answer = _answer(tmp_path, 'python', 'class C:\n def first(self):\n  return 1\n', element='C')
+    assert answer['meta']['exit_scope']['mode'] == 'source_scope'
+    assert answer['meta']['exit_scope']['reason'] == 'aggregate_scope_inventory'
+
+
+def test_owned_gate_chains_keep_outer_declaration_condition(tmp_path):
+    source = ('def outer(a):\n if a:\n  def inner(x=exit(1)):\n   return 2\n'
+              ' return 3\n')
+    answer = _answer(tmp_path, 'python', source)
+    assert [(r['text'], r['gates']) for r in answer['findings']] == [
+        ('exit(1)', [{'line': 2, 'text': 'a'}]), ('return 3', []),
+    ]
+
+
+def test_nested_js_field_initializers_distinguish_formation_and_instance_execution(tmp_path):
+    source = ('function outer(){\n class C {\n [exit(1)] = exit(2);\n'
+              ' static x = exit(3);\n }\n return 4;\n}')
+    answer = _answer(tmp_path, 'javascript', source)
+    assert [r['text'] for r in answer['findings']] == ['exit(1)', 'exit(3)', 'return 4;']
+
+
+def test_nested_swift_capture_is_formation_but_its_body_is_deferred(tmp_path):
+    source = ('func outer() -> Int {\n let f = { [x = exit(1)] () -> Int in\n'
+              ' return 2\n }\n return 3\n}')
+    answer = _answer(tmp_path, 'swift', source)
+    assert [r['text'] for r in answer['findings']] == ['exit(1)', 'return 3']

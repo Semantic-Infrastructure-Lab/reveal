@@ -105,6 +105,36 @@ reveal legacy_handler.php :120-340 --varflow $userId  # where does $userId flow?
 
 ---
 
+## Exit Scope and Ownership
+
+`--exits`, `--returns` and the legacy `--flowto` share one execution-ownership rule.
+When the resolved target is a qualified callable, separately owned nested function,
+method and lambda bodies are excluded. Expressions evaluated while forming a nested
+declaration remain where qualified: Python decorators/defaults, JavaScript computed
+method names, and C++/Swift capture initializers can belong to the enclosing execution.
+For the selected callable, invocation-time parameter defaults are retained where
+qualified; its own Python declaration-time defaults and JavaScript computed method name
+are outside that execution scope. These are static sites, not a reachability proof.
+
+A source range or named class/aggregate is instead a source-scope inventory that may
+contain sites from multiple callable owners. Existing element resolution decides the
+scope; adding a colon does not itself establish callable ownership. Implicit-tail
+inference still uses the resolved scope, so a literal region is not interchangeable
+with named-callable analysis.
+
+Text names this scope, and JSON includes `meta.exit_scope.mode`, its selection `reason`
+and counting `rule`. Unqualified resolved scopes remain inventories with an explicit
+scope warning. Ruby dynamic block binding, Kotlin inline/label semantics and other
+unqualified execution edges retain potential sites with `ownership_unresolved`
+diagnostics. Each diagnostic identifies actual recorded sites by kind, text, line and
+parser-source byte span; it does not count unseen findings. Empty ambiguous blocks do
+not create unknown-site claims. Review these sites before attributing them to one function.
+
+Dart's existing resolver supplies a function body separately from its signature and
+constructor initializer context. Named Dart results disclose that limitation; use a
+source-region inventory to inspect syntax outside the resolved body. These ownership
+rules do not establish compiler validity, call binding or complete language recall.
+
 ## MCP Equivalent
 
 Primary nav operations are exposed via the MCP server's `reveal_nav` tool:
