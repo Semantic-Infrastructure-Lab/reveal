@@ -151,7 +151,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
 EPILOG_ORDER = ('overview', 'imports', 'deps', 'hotspots', 'metrics', 'contracts', 'surface',
                 'patches', 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
-                'scaffold', 'offline')
+                'scaffold', 'offline', 'architecture')
 
 
 # What each exit code means for a command on the D6 outcome policy (the exit-code contract). The one
