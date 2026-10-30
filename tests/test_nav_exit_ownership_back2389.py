@@ -217,3 +217,20 @@ def test_nested_swift_capture_is_formation_but_its_body_is_deferred(tmp_path):
               ' return 2\n }\n return 3\n}')
     answer = _answer(tmp_path, 'swift', source)
     assert [r['text'] for r in answer['findings']] == ['exit(1)', 'return 3']
+
+
+@pytest.mark.parametrize('expression,uncertain', [
+    ('(exit(x) for x in [1, 2])', ['exit(x)']),
+    ('[exit(x) for x in [1, 2]]', []),
+    ('(x for x in exit(1))', []),
+    ('(x for x in [1] for y in exit(2) if exit(3))', ['exit(2)', 'exit(3)']),
+])
+def test_generator_deferred_regions_are_not_confident_outer_execution(tmp_path, expression, uncertain):
+    source = 'def outer():\n g = ' + expression + '\n return g\n'
+    answer = _answer(tmp_path, 'python', source)
+    assert answer['meta']['exit_scope']['mode'] == 'selected_callable'
+    sites = answer['meta']['exit_scope'].get('unresolved_sites', [])
+    assert [s['text'] for s in sites] == uncertain
+    assert all('generator' in s['cause'].lower() for s in sites)
+    warnings = answer['meta'].get('warnings', [])
+    assert bool([w for w in warnings if w['type'] == 'ownership_unresolved']) == bool(uncertain)
