@@ -334,7 +334,8 @@ def _preparation_answer(uri, element, args, exception):
     if _uri_execution_facts(adapter_class, resource, element, args) is None:
         return None
     path = resource.partition('?')[0]
-    cause = FailureCause.INVALID_REQUEST if '\x00' in path else FailureCause.ANALYSIS
+    cause = (FailureCause.INVALID_REQUEST
+             if isinstance(exception, RequestValidationError) or '\x00' in path else FailureCause.ANALYSIS)
     return _invalid_answer(adapter_class, scheme, path, _exception_message(exception), args, cause,
                            default_fail_on=getattr(adapter_class, 'DEFAULT_FAIL_ON'),
                            result_type=_uri_result_type(adapter_class, resource))
@@ -349,9 +350,15 @@ def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> An
     a spelling past the cut release.
     """
     _note_retired_spellings(uri)
-    with _dispatch(uri, None, args, consumed) as (adapter_class, scheme, resource, args):
-        return resolve_adapter(adapter_class, _renderer_class_of(scheme), scheme, resource,
-                               None, args)
+    with ExitStack() as dispatch:
+        try:
+            adapter_class, scheme, resource, args = dispatch.enter_context(_dispatch(uri, None, args, consumed))
+        except (OSError, ValueError) as exc:
+            answer = _preparation_answer(uri, None, args, exc)
+            if answer is None:
+                raise
+            return answer
+        return resolve_adapter(adapter_class, _renderer_class_of(scheme), scheme, resource, None, args)
 
 
 def _validate_display_limit(renderer_class: Optional[type], resource: str) -> None:
@@ -429,9 +436,8 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
 
     # --sort/--limit/--since/--until/... become query fragments here (flag_specs.FLAG_SPECS);
     # a value already in the URI wins over the flag.
-    resource = _inject_exclude_flag(resource, scheme, args)
-    resource = inject_query_flags(resource, scheme, args)
-    # Look up adapter from registry
+    # Resolve the adapter before preparing its filesystem scope. Resource codecs
+    # bind paths without serializing decoded '?' characters back into the URI.
     from ...adapters.base import get_adapter_class, list_supported_schemes
     # Import adapters package to trigger all registrations (single source of truth)
     from ... import adapters as _adapters  # noqa: F401
@@ -441,6 +447,8 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
         schemes = ', '.join(f"{s}://" for s in list_supported_schemes())
         raise UriUsageError(f"Unsupported URI scheme: {scheme}://",
                             f"Supported schemes: {schemes}")
+    resource = _inject_exclude_flag(resource, scheme, args, adapter_class=adapter_class)
+    resource = inject_query_flags(resource, scheme, args)
     from ...adapters.base import get_renderer_class
     _validate_display_limit(get_renderer_class(scheme), resource)
 
@@ -476,7 +484,8 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
             ledger.report(scheme)
 
 
-def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
+def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace', *,
+                         adapter_class: Optional[type] = None) -> str:
     """Inject --exclude into the URI query string for the URI-scheme adapters
     that actually consume ?exclude= (BACK-1187/BACK-1192): only overview://
     and stats:// read it (BACK-1042). Every other scheme accepted the CLI
@@ -509,7 +518,15 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     # sqlite://, ssl://, ...) never walk, so they keep the advisory.
     # BACK-1266: the scope also carries REVEAL_IGNORE / config 'ignore:'.
     from ...utils.exclusions import dispatch_scope, set_active_exclusions
-    walk_root, combined_values = dispatch_scope(resource.partition('?')[0], exclude_values)
+    scope_path = resource.partition('?')[0]
+    if adapter_class is not None:
+        from ...utils.query_binding import bind_resource_path
+        from .declared import _scope_path
+        spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
+        if spec is not None:
+            scope_path = bind_resource_path(spec, scope_path, transport='uri')
+        scope_path = _scope_path(adapter_class, scope_path)
+    walk_root, combined_values = dispatch_scope(scope_path, exclude_values)
 
     if not combined_values:
         return resource
@@ -533,6 +550,11 @@ def _reject_missing_path(adapter_class: type, scheme: str, resource: str, *, cla
     if getattr(adapter_class, 'RESOURCE_IS_PATH', False) is not True:
         return
     path = resource.partition('?')[0]
+    spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
+    if spec is not None:
+        from ...utils.query_binding import bind_resource_path
+        path = _call_adapter(lambda: bind_resource_path(spec, path, transport='uri'),
+                             scheme, resource, adapter_class, classify_validation=classify_validation)
     resolve = getattr(adapter_class, 'resource_path', None)  # BACK-1499: calls:// path:name
     if resolve is not None:
         path = resolve(path)

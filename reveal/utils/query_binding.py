@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import quote, unquote
 
+from ..errors import RequestValidationError
 from .query_parser import ParamSpec, QueryParams, ResourceSpec, parse_query_params, peek_query_items
 
 
@@ -157,7 +158,7 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
 
 def _resource_exists(path: str) -> bool:
     if '\x00' in path:
-        raise ValueError('Resource path must not contain NUL')
+        raise RequestValidationError('Resource path must not contain NUL')
     try:
         Path(path).expanduser().stat()
     except (FileNotFoundError, NotADirectoryError):
@@ -180,14 +181,17 @@ def bind_resource_path(spec: ResourceSpec, path: str, *, transport: str) -> str:
     default = spec.cli_default if transport == 'typed' else spec.uri_default
     value = str(path if path else default or '')
     if not value and spec.required:
-        raise ValueError(f'{spec.name} is required')
+        raise RequestValidationError(f'{spec.name} is required')
     if '\x00' in value:
-        raise ValueError('Resource path must not contain NUL')
+        raise RequestValidationError('Resource path must not contain NUL')
     if transport == 'typed' or spec.uri_codec == 'raw':
         return value
     if spec.uri_codec != 'existing-path-first':
         raise ValueError(f'Unknown resource URI codec {spec.uri_codec!r}')
     if _resource_exists(value):
         return value
-    decoded = unquote(value, encoding='utf-8', errors='strict')
+    try:
+        decoded = unquote(value, encoding='utf-8', errors='strict')
+    except UnicodeDecodeError as exc:
+        raise RequestValidationError('Resource path contains invalid UTF-8 percent encoding') from exc
     return decoded if _resource_exists(decoded) else value

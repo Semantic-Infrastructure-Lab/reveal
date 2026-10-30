@@ -160,7 +160,7 @@ def test_normalized_metadata_invalidates_on_mutation_and_other_spec(binding):
 
 def test_resource_rejects_invalid_utf8_nul_and_preserves_malformed_percent(binding, tmp_path):
     declaration = query.ResourceSpec(uri_codec='existing-path-first')
-    with pytest.raises(UnicodeDecodeError):
+    with pytest.raises(ValueError, match='UTF-8'):
         binding.bind_resource_path(declaration, str(tmp_path / '%FF'), transport='uri')
     with pytest.raises(ValueError, match='NUL'):
         binding.bind_resource_path(declaration, str(tmp_path / '%00'), transport='uri')

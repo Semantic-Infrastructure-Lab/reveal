@@ -50,7 +50,7 @@ def test_bad_original_query_is_not_rescued_by_typed_override(tmp_path):
         query(uri, top=0)
 
 
-def test_legacy_factory_and_already_bound_typed_paths_keep_their_spelling(tmp_path):
+def test_declared_factory_binds_uri_but_raw_and_typed_resources_stay_literal(tmp_path):
     class Recorder:
         RESOURCE_SPEC = OverviewAdapter.RESOURCE_SPEC
         PARAM_SPECS = OverviewAdapter.PARAM_SPECS
@@ -62,7 +62,11 @@ def test_legacy_factory_and_already_bound_typed_paths_keep_their_spelling(tmp_pa
     path = tmp_path / 'space name.py'
     path.write_text('VALUE=1\n', encoding='utf-8')
     encoded = quote(path.as_posix(), safe='/:')
-    assert _canonical_init(Recorder, encoded).resource == encoded
+    assert _canonical_init(Recorder, encoded).resource == str(path)
+    from reveal.utils.query_parser import ResourceSpec
+    class RawRecorder(Recorder):
+        RESOURCE_SPEC = ResourceSpec()
+    assert _canonical_init(RawRecorder, encoded).resource == encoded
     literal = str(tmp_path / 'question?name.py')
     bound = _canonical_init(Recorder, literal, params={'top': 0})
     assert bound.resource == literal and bound.params == {'top': 0}
