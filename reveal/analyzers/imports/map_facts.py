@@ -190,6 +190,7 @@ def project_map_facts(fan_in: dict[str, Any], entrypoints: dict[str, Any],
     Malformed or detectably cut inputs raise rather than becoming an exact empty answer.
     """
     _count(top, 'top')
+    display_base = path.parent if path.is_file() else path
     fans = _rows(fan_in, 'entries', 'total')
     entries = _rows(entrypoints, 'entries')
     _count(entrypoints['total_scanned'], 'total_scanned')
@@ -206,16 +207,16 @@ def project_map_facts(fan_in: dict[str, Any], entrypoints: dict[str, Any],
     projected_fans = []
     for row in fans:
         _count(row['fan_in'], 'fan_in')
-        projected = _relationship(row, path)
+        projected = _relationship(row, display_base)
         if row['fan_in'] > 0:
             projected_fans.append(projected)
-    active, predicate = _entrypoint_rows(entries, path)
-    projected_components = [_relationship(row, path, component=True) for row in component_rows]
+    active, predicate = _entrypoint_rows(entries, display_base)
+    projected_components = [_relationship(row, display_base, component=True) for row in component_rows]
     projected_components.sort(key=lambda row: (-row['files'], row['component']))
     paired = sorted(zip(groups, witnesses),
-                    key=lambda pair: tuple(sorted(_path(member, path)
+                    key=lambda pair: tuple(sorted(_path(member, display_base)
                                                   for member in _paths(pair[0], 'cycle members'))))
-    cycles = [_cycle(group, witness, path, top) for group, witness in paired]
+    cycles = [_cycle(group, witness, display_base, top) for group, witness in paired]
     rules = architecture_edge_rules(fan_in, entrypoints, components, circular)
     rules['component_order'] = 'covered file count descending, then component path ascending'
     if 'cohesion_rule' in components:
@@ -223,4 +224,4 @@ def project_map_facts(fan_in: dict[str, Any], entrypoints: dict[str, Any],
     return {'fan_in': _page(projected_fans, top), 'entrypoints': _page(active, top),
             'components': _page(projected_components, top), 'cycles': _page(cycles, top),
             'rules': deepcopy(rules), 'entry_point_filter': predicate,
-            'metadata': _metadata(metadata, path)}
+            'metadata': _metadata(metadata, display_base)}
