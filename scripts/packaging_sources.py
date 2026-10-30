@@ -28,4 +28,5 @@ def stage_sources(project_root: Path, dest: Path, commit: bool = True) -> None:
     git = ['git', '-c', 'user.name=stage', '-c', 'user.email=stage@localhost',
            '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=']
     for args in (['init', '-q'], ['add', '-A'], ['commit', '-q', '--no-verify', '-m', 'stage']):
-        subprocess.run(git + args, cwd=dest, check=True, capture_output=True, timeout=30)
+        # Indexing the full source tree can exceed 30s on hosted Windows runners.
+        subprocess.run(git + args, cwd=dest, check=True, capture_output=True, timeout=120)
