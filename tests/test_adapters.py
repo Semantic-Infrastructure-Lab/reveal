@@ -495,17 +495,15 @@ class TestHelpAdapter(unittest.TestCase):
             self.assertEqual(result['type'], 'query_recipes', f'examples/{task} wrong type')
             self.assertGreater(len(result.get('recipes', [])), 0, f'examples/{task} has no recipes')
 
-    def test_due_diligence_step_6_has_derived_signal_caveat(self):
-        """BACK-1197 item 3: step 5 ('sideeffects') already carries an
-        intra-procedural-only caveat; step 6 carries the matching 'zero callers
-        != dead code' caveat. BACK-2195: step 6 no longer teaches ?uncalled (D8),
-        it points at ?callers=NAME and keeps the caveat."""
-        adapter = HelpAdapter()
-        result = adapter.get_element('examples/due-diligence')
-        step6 = next(r for r in result['recipes'] if r['goal'].startswith('6.'))
-        self.assertNotIn('uncalled', step6['query'])
-        self.assertIn('?callers=NAME', step6['description'])
-        self.assertIn('not proof of dead code', step6['description'])
+    def test_due_diligence_unused_recipe_has_derived_signal_caveat(self):
+        """The unused-code question keeps the static-call caveat after recipe reordering."""
+        result = HelpAdapter().get_element('examples/due-diligence')
+        recipes = [r for r in result['recipes'] if '--select D,I' in r['query']]
+        self.assertEqual(len(recipes), 1)
+        recipe = recipes[0]
+        self.assertNotIn('uncalled', recipe['query'])
+        self.assertIn('?callers=NAME', recipe['description'])
+        self.assertIn('not proof of dead code', recipe['description'])
 
     def test_examples_rendered(self):
         """Rendered help://examples/quality shows recipes."""

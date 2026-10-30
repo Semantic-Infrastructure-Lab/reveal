@@ -75,7 +75,7 @@ def _rows(guide):
 def test_what_it_is_and_is_not_section_exists(guide):
     text = _section(guide, 'What surface:// is and is not')
     assert 'boundary' in text.lower()
-    for neighbour in ('architecture://', 'imports://', 'calls://'):
+    for neighbour in ('overview://', 'imports://', 'calls://'):
         assert neighbour in text, f'should point to {neighbour} for what surface:// does not answer'
 
 
