@@ -35,16 +35,21 @@ def equal_answers(left, right):
         assert right['execution']['command'].startswith('reveal architecture://')
         del left['execution']['command']
         del right['execution']['command']
+    for answer in (left, right):
+        meta = answer.get('meta', {})
+        if 'warnings' in meta:
+            meta['warnings'] = [warning for warning in meta['warnings']
+                                if warning.get('code') != 'retired_spelling']
     assert left == right
 
 
 @pytest.mark.parametrize('cli,query,identity', [
-    ([], '', 'architecture'),
-    (['--top', '0'], '?top=0', 'architecture'),
-    (['--top', '2', '--no-imports'], '?top=2&no_imports=true', 'architecture'),
-    (['--against', 'HEAD'], '?against=HEAD', 'architecture_diff'),
-    (['--against', 'HEAD', '--top', '0'], '?against=HEAD&top=0', 'architecture_diff'),
-    (['--against', 'base+%26=é'], '?against=base%2B%2526%3D%C3%A9', 'architecture_diff'),
+    ([], '', 'overview'),
+    (['--top', '0'], '?top=0', 'overview'),
+    (['--top', '2', '--no-imports'], '?top=2&no_imports=true', 'overview'),
+    (['--against', 'HEAD'], '?against=HEAD', 'overview_diff'),
+    (['--against', 'HEAD', '--top', '0'], '?against=HEAD&top=0', 'overview_diff'),
+    (['--against', 'base+%26=é'], '?against=base%2B%2526%3D%C3%A9', 'overview_diff'),
 ])
 @pytest.mark.parametrize('provenance', [False, True])
 def test_exact_json_parity(project, cli, query, identity, provenance):
@@ -92,7 +97,7 @@ def test_invalid_diff_keeps_resolved_identity(project, query, cli):
         result = run(*args, '--format', 'json')
         assert result.returncode == 2, result.stderr
         answer = json.loads(result.stdout)
-        assert answer['type'] == 'architecture_diff'
+        assert answer['type'] == 'overview_diff'
         assert answer['error']
 
 
@@ -105,14 +110,14 @@ def test_diff_request_rejection_before_analysis(project, spelling, kind):
         argv.append('--verbose')
     result = run(*argv, '--format', 'json')
     assert result.returncode == 2
-    assert json.loads(result.stdout)['type'] == 'architecture_diff'
+    assert json.loads(result.stdout)['type'] == 'overview_diff'
 
 
 @pytest.mark.parametrize('mode', ['ordinary', 'diff'])
 @pytest.mark.parametrize('kind', ['raised', 'wrong', 'empty', 'bare', 'postwrong', 'postempty'])
 def test_required_answer_and_projection_failures(project, monkeypatch, mode, kind):
     from reveal.utils.results import ResultBuilder
-    identity = 'architecture_diff' if mode == 'diff' else 'architecture'
+    identity = 'overview_diff' if mode == 'diff' else 'overview'
     if kind.startswith('post'):
         monkeypatch.setattr(ArchitectureAdapter, 'post_process', staticmethod(
             lambda result, args: {} if kind == 'postempty' else
@@ -135,9 +140,9 @@ def test_required_answer_and_projection_failures(project, monkeypatch, mode, kin
 @pytest.mark.parametrize('kind', ['scope', 'imports', 'parse'])
 def test_ordinary_missing_evidence_survives_projection(project, monkeypatch, kind):
     if kind == 'scope':
-        def fail(*args):
+        def fail(*args, **kwargs):
             raise OSError('scope unavailable')
-        monkeypatch.setattr('reveal.adapters.architecture.scope_dict_for_path', fail)
+        monkeypatch.setattr('reveal.adapters.overview.scope_dict_for_path', fail)
     elif kind == 'imports':
         from reveal.analyzers.imports import service
         build = service.analyze
@@ -147,9 +152,9 @@ def test_ordinary_missing_evidence_survives_projection(project, monkeypatch, kin
             return built
         monkeypatch.setattr(service, 'analyze', lost)
     else:
-        (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
+        (project / 'broken.py').write_text('from missing import (\n', encoding='utf-8')
     for argv in (['architecture', 'proj'], ['architecture://proj']):
-        result = run(*argv, '--format', 'json', '--fields', 'facts')
+        result = run(*argv, '--format', 'json', '--fields', 'map')
         assert result.returncode == 3, result.stderr
 
 
@@ -184,7 +189,7 @@ def test_invalid_request_text_and_artifact_failure(project, mode):
     assert 'artifact failed' in result.stderr
     result = run('architecture', 'proj', *cli, '--format', 'json', '--also-json', str(project))
     assert result.returncode == 0  # primary JSON keeps the existing mirror no-op
-    assert json.loads(result.stdout)['type'].startswith('architecture')
+    assert json.loads(result.stdout)['type'].startswith('overview')
 
 
 @pytest.mark.parametrize('kind', ['operational', 'dependency', 'corrupt'])
@@ -199,7 +204,7 @@ def test_git_operational_failures_are_required_analysis(project, monkeypatch, ki
     for argv in (['architecture', 'proj', '--against', 'HEAD'], ['architecture://proj?against=HEAD']):
         result = run(*argv, '--format', 'json')
         assert result.returncode == 3
-        assert json.loads(result.stdout)['type'] == 'architecture_diff'
+        assert json.loads(result.stdout)['type'] == 'overview_diff'
 
 
 @pytest.mark.parametrize('flag', ['--verbose'])
@@ -226,18 +231,19 @@ def test_diff_actual_scope_and_fast_proof(project, flags):
             assert left['analysis']['basis'] == 'identical_tree'
 
 
-def test_all_keeps_existing_transport_boundary_and_analysis(project, monkeypatch):
-    seen = []
-    monkeypatch.setattr('reveal.adapters.architecture._run_combined_analysis',
-                        lambda adapter, path, limit: (seen.append(limit) or [], {}))
+def test_all_keeps_explicit_cli_boundary_and_expands_uri_map(project):
     rejected = run('architecture', 'proj', '--all')
     assert rejected.returncode == 2 and not rejected.stdout
     assert 'unrecognized arguments: --all' in rejected.stderr
+    for number in range(6):
+        folder = project / f'component{number}'
+        folder.mkdir()
+        (folder / 'value.py').write_text('VALUE=1\n', encoding='utf-8')
     ordinary = run('architecture://proj', '--format', 'json')
-    expanded_text = run('architecture://proj', '--all', '--format', 'json')
-    assert ordinary.returncode == expanded_text.returncode == 0
-    assert json.loads(ordinary.stdout) == json.loads(expanded_text.stdout)
-    assert seen == [20, 20]
+    expanded = run('architecture://proj', '--all', '--format', 'json')
+    assert ordinary.returncode == expanded.returncode == 0
+    assert json.loads(ordinary.stdout)['map']['components']['returned'] == 5
+    assert json.loads(expanded.stdout)['map']['components']['returned'] == 7
 
 
 @pytest.mark.parametrize('mode', ['ordinary', 'diff'])
@@ -259,7 +265,7 @@ def test_closed_pipe_preserves_independent_failures(project, mode, incomplete, a
     import os
     import subprocess
     if incomplete:
-        (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
+        (project / 'broken.py').write_text('from missing import (\n', encoding='utf-8')
     argv = [sys.executable, '-m', 'reveal', 'architecture', 'proj']
     if mode == 'diff':
         argv.extend(['--against', 'HEAD'])
@@ -277,25 +283,25 @@ def test_closed_pipe_preserves_independent_failures(project, mode, incomplete, a
 @pytest.mark.parametrize('incomplete', [False, True])
 def test_postprocess_cannot_drop_required_comparison_proof(project, monkeypatch, incomplete):
     if incomplete:
-        (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
+        (project / 'broken.py').write_text('from missing import (\n', encoding='utf-8')
     def project_answer(result, args):
         return {key: value for key, value in result.items() if key != 'analysis'}
     monkeypatch.setattr(ArchitectureAdapter, 'post_process', staticmethod(project_answer), raising=False)
     result = run('architecture://proj?against=HEAD', '--format', 'json')
     assert result.returncode == 3, result.stderr
-    assert json.loads(result.stdout)['type'] == 'architecture_diff'
+    assert json.loads(result.stdout)['type'] == 'overview_diff'
 
 
 @pytest.mark.parametrize('incomplete', [False, True])
 def test_fields_projection_retains_preanalysis_facts(project, incomplete):
     if incomplete:
-        (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
+        (project / 'broken.py').write_text('from missing import (\n', encoding='utf-8')
     result = run('architecture://proj?against=HEAD', '--format', 'json', '--fields', 'deltas')
     assert result.returncode == (3 if incomplete else 0), result.stderr
 
 
 @pytest.mark.parametrize('name,identity', [
-    ('architecture', 'architecture'), ('architecture', 'architecture_diff'), ('surface', 'surface_scan'),
+    ('architecture', 'overview'), ('architecture', 'overview_diff'), ('surface', 'surface_scan'),
 ])
 @pytest.mark.parametrize('phase', ['analysis', 'postprocess'])
 @pytest.mark.parametrize('field', ['errors', 'warnings'])
@@ -305,14 +311,14 @@ def test_malformed_trust_frame_is_canonical_failure(project, monkeypatch, name, 
     from reveal.utils.results import ResultBuilder
     owner = ArchitectureAdapter if name == 'architecture' else SurfaceAdapter
     result = ResultBuilder.create(identity, 'proj',
-                                  data={'analysis': {'complete': True}} if identity == 'architecture_diff' else {})
+                                  data={'analysis': {'complete': True}} if identity == 'overview_diff' else {})
     # Simulate a malformed plugin answer after construction, not a builder rejection.
     result['meta'] = {field: bad}
     if phase == 'analysis':
         monkeypatch.setattr(owner, 'get_structure', lambda self, **kwargs: result)
     else:
         monkeypatch.setattr(owner, 'post_process', staticmethod(lambda before, args: result), raising=False)
-    query = '?against=HEAD' if identity == 'architecture_diff' else ''
+    query = '?against=HEAD' if identity == 'overview_diff' else ''
     answer = run(name + '://proj' + query, '--format', 'json')
     assert answer.returncode == 3, answer.stderr
     payload = json.loads(answer.stdout)
@@ -396,7 +402,7 @@ def test_unknown_string_warning_is_valid_but_absent_type_is_failure(project, mon
 
 
 @pytest.mark.parametrize('name,identity', [
-    ('architecture', 'architecture'), ('architecture', 'architecture_diff'), ('surface', 'surface_scan'),
+    ('architecture', 'overview'), ('architecture', 'overview_diff'), ('surface', 'surface_scan'),
 ])
 @pytest.mark.parametrize('transport', ['cli', 'uri'])
 def test_inaccessible_resource_is_canonical_analysis_failure(project, monkeypatch, name, identity, transport):
@@ -407,7 +413,7 @@ def test_inaccessible_resource_is_canonical_analysis_failure(project, monkeypatc
             raise PermissionError('injected resource access failure')
         return stat(self, *args, **kwargs)
     monkeypatch.setattr(Path, 'stat', inaccessible)
-    diff = identity == 'architecture_diff'
+    diff = identity == 'overview_diff'
     argv = [name, 'proj', *(['--against', 'HEAD'] if diff else [])] if transport == 'cli' else [
         name + '://proj' + ('?against=HEAD' if diff else '')]
     result = run(*argv, '--format', 'json')

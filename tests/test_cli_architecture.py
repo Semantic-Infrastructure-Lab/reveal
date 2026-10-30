@@ -1,46 +1,30 @@
-"""Tests for reveal architecture subcommand."""
+"""Architecture spelling: declared controls and retained shared/engine regressions.
 
+The old severity, recommendations and ordinary AST dashboard are retired. Canonical
+map behavior is qualified by test_architecture_alias_back2377 and overview controls.
+"""
 import json
-import sys
 import unittest
 from argparse import Namespace
+from functools import partial
 from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from contextlib import redirect_stdout
 
 import pytest
-
-from functools import partial
 from reveal.cli.routing.declared import create_declared_parser, run_declared_command
-from reveal.adapters.architecture import (
-    ArchitectureAdapter,
-    _build_next_commands,
-    _compute_risks,
-    _relpath,
-    _run_combined_analysis,
-    _run_complex_functions,
-    _run_imports_analysis,
-    _run_scope,
-)
-from reveal.utils.path_utils import is_test_path
-from reveal.rendering.adapters.architecture import (
-    _render_brief, _render_components, _render_core_abstractions,
-    _render_entry_points, _render_next_commands, _render_risks,
-)
+from reveal.adapters.architecture import ArchitectureAdapter
+from reveal.utils.path_utils import is_test_path, to_relative_display
+
 create_architecture_parser = partial(create_declared_parser, 'architecture')
 run_architecture = partial(run_declared_command, 'architecture')
-
-# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
 pytestmark = pytest.mark.component
-
 try:
     import pygit2
     PYGIT2_AVAILABLE = True
 except ImportError:
     PYGIT2_AVAILABLE = False
 
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _args(**kwargs):
     defaults = vars(create_architecture_parser().parse_args([]))
@@ -50,42 +34,10 @@ def _args(**kwargs):
 
 def _capture(fn, *args, **kwargs):
     buf = StringIO()
-    with patch('sys.stdout', buf):
-        body = fn(*args, **kwargs)
-        if isinstance(body, list) and body:
-            print("\n".join(body))
+    with redirect_stdout(buf):
+        fn(*args, **kwargs)
     return buf.getvalue()
 
-
-_BASE = Path('/project/src')
-
-_IMPORTS_DATA = {
-    'entry_points': [
-        {'file': '/project/src/main.py', 'fan_in': 0, 'fan_out': 8},
-        {'file': '/project/src/cli.py', 'fan_in': 0, 'fan_out': 3},
-    ],
-    'core_abstractions': [
-        {'file': '/project/src/registry.py', 'fan_in': 20, 'fan_out': 2},
-        {'file': '/project/src/base.py', 'fan_in': 15, 'fan_out': 1},
-        {'file': '/project/src/utils.py', 'fan_in': 9, 'fan_out': 5},
-    ],
-    'components': [
-        {'component': '/project/src/adapters', 'cohesion': 0.75, 'files': 10},
-        {'component': '/project/src/rules', 'cohesion': 0.60, 'files': 5},
-    ],
-    'circular_groups': [
-        ['/project/src/a.py', '/project/src/b.py'],
-        ['/project/src/x.py', '/project/src/y.py', '/project/src/z.py'],
-    ],
-}
-
-_COMPLEX_FNS = [
-    {'name': 'big_fn', 'complexity': 45, 'file': '/project/src/main.py', 'line': 10},
-    {'name': 'medium_fn', 'complexity': 12, 'file': '/project/src/cli.py', 'line': 5},
-]
-
-
-# ── Parser tests ───────────────────────────────────────────────────────────────
 
 class TestCreateArchitectureParser(unittest.TestCase):
 
@@ -157,19 +109,19 @@ class TestIsTestFile(unittest.TestCase):
 class TestRelpath(unittest.TestCase):
 
     def test_inside_base(self):
-        result = _relpath('/project/src/main.py', Path('/project/src'))
+        result = to_relative_display('/project/src/main.py', Path('/project/src'))
         self.assertEqual(result, 'main.py')
 
     def test_outside_base(self):
-        result = _relpath('/other/lib.py', Path('/project/src'))
+        result = to_relative_display('/other/lib.py', Path('/project/src'))
         self.assertEqual(result, '/other/lib.py')
 
     def test_no_base(self):
-        result = _relpath('/project/src/main.py', None)
+        result = to_relative_display('/project/src/main.py', None)
         self.assertEqual(result, '/project/src/main.py')
 
     def test_subdirectory(self):
-        result = _relpath('/project/src/adapters/base.py', Path('/project/src'))
+        result = to_relative_display('/project/src/adapters/base.py', Path('/project/src'))
         self.assertEqual(result, 'adapters/base.py')
 
     def test_relative_base_absolute_file_still_relativizes(self):
@@ -186,630 +138,11 @@ class TestRelpath(unittest.TestCase):
             old_cwd = os.getcwd()
             os.chdir(tmp)
             try:
-                result = _relpath(abs_file, Path("."))
+                result = to_relative_display(abs_file, Path("."))
             finally:
                 os.chdir(old_cwd)
         self.assertEqual(result, "sub/mod.py")
 
-
-# ── _compute_risks ─────────────────────────────────────────────────────────────
-
-class TestComputeRisks(unittest.TestCase):
-
-    def test_circular_risk_high(self):
-        imports_data = {
-            'circular_groups': [[f'/p/file{i}.py' for i in range(15)]],
-            'entry_points': [],
-            'core_abstractions': [],
-        }
-        risks = _compute_risks(imports_data, [], Path('/p'))
-        self.assertEqual(len(risks), 1)
-        self.assertEqual(risks[0]['type'], 'circular')
-        self.assertEqual(risks[0]['severity'], 'high')
-        self.assertEqual(risks[0]['file_count'], 15)
-
-    def test_circular_risk_medium(self):
-        imports_data = {
-            'circular_groups': [['/p/a.py', '/p/b.py']],  # 2-file group → medium
-            'entry_points': [],
-            'core_abstractions': [],
-        }
-        risks = _compute_risks(imports_data, [], Path('/p'))
-        self.assertEqual(risks[0]['severity'], 'medium')
-
-    def test_circular_risk_csharp_downgraded(self):
-        """BACK-1005: bidirectional refs between C# files are idiomatic EF-style
-        domain modeling, not the Python/JS accidental-coupling pattern -- same
-        file count gets a lower severity than the Python/JS case."""
-        imports_data = {
-            'circular_groups': [[f'/p/Entity{i}.cs' for i in range(15)]],
-            'entry_points': [],
-            'core_abstractions': [],
-        }
-        risks = _compute_risks(imports_data, [], Path('/p'))
-        self.assertEqual(risks[0]['severity'], 'medium')
-        self.assertIn('idiomatic', risks[0]['description'])
-
-    def test_circular_risk_csharp_small_group_low(self):
-        imports_data = {
-            'circular_groups': [['/p/Parent.cs', '/p/Child.cs']],
-            'entry_points': [],
-            'core_abstractions': [],
-        }
-        risks = _compute_risks(imports_data, [], Path('/p'))
-        self.assertEqual(risks[0]['severity'], 'low')
-
-    def test_high_complexity_entry_point(self):
-        imports_data = {
-            'circular_groups': [],
-            'entry_points': [{'file': '/p/main.py', 'fan_in': 0, 'fan_out': 5}],
-            'core_abstractions': [],
-        }
-        complex_fns = [{'name': 'f', 'complexity': 30, 'file': '/p/main.py'}]
-        risks = _compute_risks(imports_data, complex_fns, Path('/p'))
-        self.assertEqual(len(risks), 1)
-        self.assertEqual(risks[0]['type'], 'high_complexity_entry')
-        self.assertEqual(risks[0]['complexity'], 30)
-
-    def test_below_complexity_threshold_no_risk(self):
-        imports_data = {
-            'circular_groups': [],
-            'entry_points': [{'file': '/p/main.py', 'fan_in': 0, 'fan_out': 5}],
-            'core_abstractions': [],
-        }
-        complex_fns = [{'name': 'f', 'complexity': 15, 'file': '/p/main.py'}]
-        risks = _compute_risks(imports_data, complex_fns, Path('/p'))
-        self.assertEqual(len(risks), 0)
-
-    def test_load_bearing_risk(self):
-        imports_data = {
-            'circular_groups': [],
-            'entry_points': [],
-            'core_abstractions': [
-                {'file': '/p/registry.py', 'fan_in': 25, 'fan_out': 2},
-            ],
-        }
-        risks = _compute_risks(imports_data, [], Path('/p'))
-        self.assertEqual(len(risks), 1)
-        self.assertEqual(risks[0]['type'], 'load_bearing')
-        self.assertEqual(risks[0]['fan_in'], 25)
-
-    def test_below_fan_in_threshold_no_load_bearing(self):
-        imports_data = {
-            'circular_groups': [],
-            'entry_points': [],
-            'core_abstractions': [
-                {'file': '/p/utils.py', 'fan_in': 3, 'fan_out': 1},
-            ],
-        }
-        risks = _compute_risks(imports_data, [], Path('/p'))
-        self.assertEqual(len(risks), 0)
-
-    def test_load_bearing_capped_at_five(self):
-        imports_data = {
-            'circular_groups': [],
-            'entry_points': [],
-            'core_abstractions': [
-                {'file': f'/p/file{i}.py', 'fan_in': 20 - i, 'fan_out': 1}
-                for i in range(10)
-            ],
-        }
-        risks = _compute_risks(imports_data, [], Path('/p'))
-        self.assertLessEqual(len(risks), 5)
-
-    def test_empty_imports(self):
-        risks = _compute_risks({}, [], Path('/p'))
-        self.assertEqual(risks, [])
-
-    def test_combined_risks(self):
-        risks = _compute_risks(_IMPORTS_DATA, _COMPLEX_FNS, _BASE)
-        types = [r['type'] for r in risks]
-        self.assertIn('circular', types)
-        self.assertIn('high_complexity_entry', types)
-        self.assertIn('load_bearing', types)
-
-
-# ── _build_next_commands ───────────────────────────────────────────────────────
-
-class TestBuildNextCommands(unittest.TestCase):
-
-    def test_circular_surfaces_imports_command(self):
-        risks = [{'type': 'circular', 'severity': 'high', 'representative': '/p/a.py'}]
-        cmds = _build_next_commands(Path('/p'), risks, {})
-        self.assertTrue(any('imports://' in c for c in cmds))
-
-    def test_next_commands_use_relative_paths(self):
-        risks = [
-            {'type': 'circular', 'severity': 'high', 'representative': '/p/a.py'},
-            {'type': 'high_complexity_entry', 'file': '/p/main.py', 'complexity': 45, 'fan_out': 8},
-        ]
-        cmds = _build_next_commands(Path('/p'), risks, {})
-        for cmd in cmds:
-            self.assertNotIn('/home/', cmd, f"absolute path found in: {cmd}")
-
-    def test_cx_entry_surfaces_boundary(self):
-        risks = [
-            {'type': 'high_complexity_entry', 'severity': 'medium',
-             'file': '/p/main.py', 'complexity': 45, 'fan_out': 8},
-        ]
-        cmds = _build_next_commands(Path('/p'), risks, {})
-        self.assertTrue(any('--boundary' in c for c in cmds))
-        self.assertTrue(any('main.py' in c for c in cmds))
-
-    def test_worst_cx_entry_chosen(self):
-        risks = [
-            {'type': 'high_complexity_entry', 'file': '/p/a.py', 'complexity': 20, 'fan_out': 3},
-            {'type': 'high_complexity_entry', 'file': '/p/b.py', 'complexity': 50, 'fan_out': 5},
-        ]
-        cmds = _build_next_commands(Path('/p'), risks, {})
-        boundary_cmds = [c for c in cmds if '--boundary' in c]
-        self.assertEqual(len(boundary_cmds), 1)
-        self.assertIn('b.py', boundary_cmds[0])
-
-    def test_core_abstractions_surfaces_ast_query(self):
-        risks = []
-        imports_data = {'core_abstractions': [{'file': '/p/base.py', 'fan_in': 10}]}
-        cmds = _build_next_commands(Path('/p'), risks, imports_data)
-        self.assertTrue(any('ast://' in c and 'complexity>20' in c for c in cmds))
-
-    def test_load_bearing_surfaces_reveal_file(self):
-        risks = [
-            {'type': 'load_bearing', 'file': '/p/registry.py', 'fan_in': 20},
-        ]
-        cmds = _build_next_commands(Path('/p'), risks, {})
-        self.assertTrue(any('registry.py' in c for c in cmds))
-
-    def test_fallback_when_no_risks(self):
-        cmds = _build_next_commands(Path('/p'), [], {})
-        self.assertGreater(len(cmds), 0)
-
-    def test_highest_fan_in_load_bearing_chosen(self):
-        risks = [
-            {'type': 'load_bearing', 'file': '/p/a.py', 'fan_in': 10},
-            {'type': 'load_bearing', 'file': '/p/b.py', 'fan_in': 30},
-        ]
-        cmds = _build_next_commands(Path('/p'), risks, {})
-        reveal_cmds = [c for c in cmds if '--boundary' not in c and 'imports://' not in c and 'ast://' not in c]
-        self.assertTrue(any('b.py' in c for c in reveal_cmds))
-
-
-# ── Render functions ───────────────────────────────────────────────────────────
-
-class TestRenderEntryPoints(unittest.TestCase):
-
-    def test_renders_entry_points(self):
-        eps = [{'file': '/p/main.py', 'fan_in': 0, 'fan_out': 8}]
-        out = _capture(_render_entry_points, eps, 5, Path('/p'))
-        self.assertIn('main.py', out)
-        self.assertIn('fan-out', out)
-        self.assertIn('8', out)
-
-    def test_empty_produces_no_output(self):
-        out = _capture(_render_entry_points, [], 5, Path('/p'))
-        self.assertEqual(out, '')
-
-    def test_respects_top(self):
-        eps = [{'file': f'/p/file{i}.py', 'fan_in': 0, 'fan_out': i} for i in range(10)]
-        out = _capture(_render_entry_points, eps, 3, Path('/p'))
-        self.assertEqual(out.count('fan-out'), 3)
-
-
-class TestRenderCoreAbstractions(unittest.TestCase):
-
-    def test_renders_abstractions(self):
-        core = [{'file': '/p/registry.py', 'fan_in': 20, 'fan_out': 2}]
-        out = _capture(_render_core_abstractions, core, 5, Path('/p'))
-        self.assertIn('registry.py', out)
-        self.assertIn('fan-in', out)
-        self.assertIn('20', out)
-
-    def test_filters_init_py(self):
-        core = [
-            {'file': '/p/__init__.py', 'fan_in': 15, 'fan_out': 0},
-            {'file': '/p/base.py', 'fan_in': 10, 'fan_out': 1},
-        ]
-        out = _capture(_render_core_abstractions, core, 5, Path('/p'))
-        self.assertNotIn('__init__.py', out)
-        self.assertIn('base.py', out)
-
-    def test_empty_produces_no_output(self):
-        out = _capture(_render_core_abstractions, [], 5, Path('/p'))
-        self.assertEqual(out, '')
-
-
-class TestRenderComponents(unittest.TestCase):
-
-    def test_renders_components(self):
-        comps = [{'component': '/p/adapters', 'cohesion': 0.75, 'files': 10}]
-        out = _capture(_render_components, comps, 5, Path('/p'))
-        self.assertIn('adapters', out)
-        self.assertIn('0.75', out)
-        self.assertIn('10 files', out)
-
-    def test_renders_cohesion_bar(self):
-        comps = [{'component': '/p/core', 'cohesion': 1.0, 'files': 3}]
-        out = _capture(_render_components, comps, 5, Path('/p'))
-        self.assertIn('██████████', out)
-
-    def test_empty_produces_no_output(self):
-        out = _capture(_render_components, [], 5, Path('/p'))
-        self.assertEqual(out, '')
-
-
-class TestRenderRisks(unittest.TestCase):
-
-    def test_renders_risks(self):
-        risks = [{'description': '41-file circular group', 'detail': 'a.py + 40 more'}]
-        out = _capture(_render_risks, risks)
-        self.assertIn('41-file circular group', out)
-        self.assertIn('a.py + 40 more', out)
-        self.assertIn('⚠', out)
-
-    def test_shows_count(self):
-        risks = [
-            {'description': 'risk one', 'detail': ''},
-            {'description': 'risk two', 'detail': ''},
-        ]
-        out = _capture(_render_risks, risks)
-        self.assertIn('2 found', out)
-
-    def test_empty_produces_no_output(self):
-        out = _capture(_render_risks, [])
-        self.assertEqual(out, '')
-
-    def test_no_detail_no_parens(self):
-        risks = [{'description': 'something risky', 'detail': ''}]
-        out = _capture(_render_risks, risks)
-        self.assertNotIn('()', out)
-
-
-class TestRenderNextCommands(unittest.TestCase):
-
-    def test_renders_commands(self):
-        cmds = ["reveal 'imports://src?circular'", "reveal src/main.py --boundary"]
-        out = _capture(_render_next_commands, cmds)
-        self.assertIn('imports://', out)
-        self.assertIn('--boundary', out)
-
-    def test_empty_produces_no_output(self):
-        out = _capture(_render_next_commands, [])
-        self.assertEqual(out, '')
-
-
-# ── run_architecture ───────────────────────────────────────────────────────────
-
-class TestRunArchitecture(unittest.TestCase):
-
-    def test_invalid_path_exits(self):
-        args = _args(path='/nonexistent/path/that/does/not/exist')
-        with self.assertRaises(SystemExit):
-            run_architecture(args)
-
-    def test_no_imports_skips_analysis(self):
-        args = _args(path='.', no_imports=True)
-        with patch('reveal.adapters.architecture._run_complex_functions', return_value=[]):
-            with patch('reveal.adapters.architecture._run_imports_analysis') as mock_imports:
-                with patch('reveal.rendering.adapters.architecture._render_brief', return_value=[]):
-                    run_architecture(args)
-        mock_imports.assert_not_called()
-
-    def test_json_output(self):
-        args = _args(path='.', format='json')
-        mock_complex = [{'name': 'f', 'complexity': 25, 'file': '/tmp/a.py'}]
-        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=(mock_complex, _IMPORTS_DATA)):
-            out = _capture(run_architecture, args)
-
-        data = json.loads(out)
-        self.assertIn('path', data)
-        self.assertIn('facts', data)
-        self.assertIn('risks', data)
-        self.assertIn('next_commands', data)
-        self.assertIn('scope', data)
-
-    def test_scope_key_is_a_census_of_the_real_tree(self):
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            Path(tmp, 'a.py').write_text('x = 1\n')
-            args = _args(path=tmp, format='json')
-            with patch('reveal.adapters.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
-                out = _capture(run_architecture, args)
-            data = json.loads(out)
-        self.assertEqual(data['scope']['total_code_files'], 1)
-        self.assertEqual(data['scope']['languages'][0]['language'], 'Python')
-
-    def test_json_facts_structure(self):
-        args = _args(path='.', format='json')
-        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
-            out = _capture(run_architecture, args)
-
-        facts = json.loads(out)['facts']
-        self.assertIn('entry_points', facts)
-        self.assertIn('core_abstractions', facts)
-        self.assertIn('components', facts)
-        self.assertIn('circular_groups', facts)
-
-    def test_text_output_renders(self):
-        args = _args(path='.')
-        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
-            out = _capture(run_architecture, args)
-
-        self.assertIn('Architecture Brief', out)
-
-    def test_text_output_sections(self):
-        args = _args(path='.')
-        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
-            out = _capture(run_architecture, args)
-
-        self.assertIn('Entry Points', out)
-        self.assertIn('Core Abstractions', out)
-        self.assertIn('Components', out)
-        self.assertIn('Risks', out)
-        self.assertIn('Next Commands', out)
-
-    def test_dynamic_imports_note_shown(self):
-        args = _args(path='.')
-        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
-            out = _capture(run_architecture, args)
-        self.assertIn('static imports only', out)
-
-    def test_dynamic_imports_note_hidden_when_no_imports(self):
-        args = _args(path='.', no_imports=True)
-        with patch('reveal.adapters.architecture._run_complex_functions', return_value=[]):
-            out = _capture(run_architecture, args)
-        self.assertNotIn('static imports only', out)
-
-
-# ── _run_complex_functions ─────────────────────────────────────────────────────
-
-class TestRunComplexFunctions(unittest.TestCase):
-
-    def test_returns_list_on_failure(self):
-        adapter = ArchitectureAdapter('/p')
-        with patch('reveal.adapters.ast.AstAdapter', side_effect=Exception('fail')):
-            result = _run_complex_functions(adapter, Path('/p'), 5)
-        self.assertEqual(result, [])
-        meta = adapter.composed_meta()
-        self.assertIsNotNone(meta)
-        self.assertEqual(len(meta['errors']), 1)
-
-
-# ── _run_combined_analysis ─────────────────────────────────────────────────────
-
-class TestRunCombinedAnalysis(unittest.TestCase):
-    """BACK-489: the merged single-walk path used by run_architecture unless
-    --no-imports is passed."""
-
-    def test_falls_back_to_standalone_complexity_on_imports_failure(self):
-        """If the shared walk (ImportsAdapter._build_graph) never runs, complexity
-        analysis must still fall back to its own independent walk rather than
-        silently losing data because of an unrelated imports failure."""
-        adapter = ArchitectureAdapter('/p')
-        with patch('reveal.adapters.architecture.ImportView', side_effect=Exception('fail')):
-            with patch(
-                'reveal.adapters.architecture._run_complex_functions',
-                return_value=_COMPLEX_FNS,
-            ) as mock_fallback:
-                complex_fns, imports_data = _run_combined_analysis(adapter, Path('/p'), 5)
-
-        mock_fallback.assert_called_once_with(adapter, Path('/p'), 5)
-        self.assertEqual(complex_fns, _COMPLEX_FNS)
-        self.assertEqual(imports_data, {})
-        meta = adapter.composed_meta()
-        self.assertIsNotNone(meta)
-        self.assertEqual(len(meta['errors']), 1)
-
-    def test_merges_imports_and_complexity_from_one_walk(self):
-        mock_adapter = MagicMock()
-
-        fake_structures = [
-            {'file': '/p/a.py', 'functions': [{'name': 'f', 'complexity': 25}]},
-        ]
-
-        # The public build carries the optional structures from its one per-file pass.
-        from reveal.analyzers.imports.service import ImportBuild, ImportFileSet
-        from reveal.analyzers.imports.types import ImportAnalysis
-        built = ImportBuild(ImportAnalysis(), ImportFileSet((), {}), fake_structures)
-
-        mock_adapter.fan_in.return_value = {'entries': []}
-        mock_adapter.entrypoints.return_value = {'entries': []}
-        mock_adapter.components.return_value = {'components': []}
-        mock_adapter.circular.return_value = {'cycles': [], 'count': 0}
-
-        adapter = ArchitectureAdapter('/p')
-        with patch('reveal.adapters.architecture.ImportView', return_value=mock_adapter), \
-                patch('reveal.adapters.architecture.import_analysis.analyze', return_value=built):
-            with patch('reveal.adapters.ast.AstAdapter') as mock_ast_adapter_cls:
-                mock_ast_adapter_cls.return_value.get_structure.return_value = {
-                    'results': [{'name': 'f', 'complexity': 25, 'file': '/p/a.py'}]
-                }
-                complex_fns, imports_data = _run_combined_analysis(adapter, Path('/p'), 5)
-
-        # The structures collected during the shared walk must be the ones handed
-        # to AstAdapter.get_structure — i.e. it must NOT re-walk the directory.
-        _, kwargs = mock_ast_adapter_cls.return_value.get_structure.call_args
-        self.assertEqual(kwargs.get('structures'), fake_structures)
-        self.assertEqual(complex_fns, [{'name': 'f', 'complexity': 25, 'file': '/p/a.py'}])
-        self.assertIn('entry_points', imports_data)
-
-
-# ── _run_scope ──────────────────────────────────────────────────────────────
-
-class TestRunScope(unittest.TestCase):
-    """BACK-1016: a crashed scope census must show up in composed_meta(),
-    not just render as a silent, fully-trusted empty 'scope': {}."""
-
-    def test_returns_empty_dict_on_failure(self):
-        adapter = ArchitectureAdapter('/p')
-        with patch('reveal.adapters.architecture.scope_dict_for_path', side_effect=Exception('fail')):
-            result = _run_scope(adapter, Path('/p'))
-        self.assertEqual(result, {})
-
-    def test_failure_records_composed_error(self):
-        adapter = ArchitectureAdapter('/p')
-        with patch('reveal.adapters.architecture.scope_dict_for_path', side_effect=Exception('fail')):
-            _run_scope(adapter, Path('/p'))
-        meta = adapter.composed_meta()
-        self.assertIsNotNone(meta)
-        self.assertTrue(meta.get('errors'))
-
-    def test_success_returns_scope_dict_untouched(self):
-        adapter = ArchitectureAdapter('/p')
-        with patch('reveal.adapters.architecture.scope_dict_for_path', return_value={'python': {}}):
-            result = _run_scope(adapter, Path('/p'))
-        self.assertEqual(result, {'python': {}})
-        self.assertIsNone(adapter.composed_meta())
-
-
-# ── _run_imports_analysis ──────────────────────────────────────────────────────
-
-class TestRunImportsAnalysis(unittest.TestCase):
-
-    def test_returns_empty_on_failure(self):
-        with patch('reveal.adapters.architecture.ImportView', side_effect=Exception('fail')):
-            result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
-        self.assertEqual(result, {})
-
-    def test_filters_init_from_entry_points(self):
-        mock_adapter = MagicMock()
-        mock_adapter.fan_in.return_value = {'entries': []}
-        mock_adapter.entrypoints.return_value = {'entries': [
-            {'file': '/p/__init__.py', 'fan_in': 0, 'fan_out': 3},
-            {'file': '/p/main.py', 'fan_in': 0, 'fan_out': 5},
-        ]}
-        mock_adapter.components.return_value = {'components': []}
-        mock_adapter.circular.return_value = {'cycles': [], 'count': 0}
-
-        with patch('reveal.adapters.architecture.ImportView', return_value=mock_adapter):
-            result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
-
-        ep_files = [e['file'] for e in result.get('entry_points', [])]
-        self.assertNotIn('/p/__init__.py', ep_files)
-        self.assertIn('/p/main.py', ep_files)
-
-    def test_filters_test_files_from_entry_points(self):
-        mock_adapter = MagicMock()
-        mock_adapter.fan_in.return_value = {'entries': []}
-        mock_adapter.entrypoints.return_value = {'entries': [
-            {'file': '/p/tests/test_main.py', 'fan_in': 0, 'fan_out': 2},
-            {'file': '/p/main.py', 'fan_in': 0, 'fan_out': 5},
-        ]}
-        mock_adapter.components.return_value = {'components': []}
-        mock_adapter.circular.return_value = {'cycles': [], 'count': 0}
-
-        with patch('reveal.adapters.architecture.ImportView', return_value=mock_adapter):
-            result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
-
-        ep_files = [e['file'] for e in result.get('entry_points', [])]
-        self.assertNotIn('/p/tests/test_main.py', ep_files)
-
-    def test_propagates_unsupported_extensions(self):
-        """BACK-518 part 2: the coverage signal ImportsAdapter already computes
-        must reach the caller, not just live unread in adapter.get_metadata()."""
-        mock_adapter = MagicMock()
-        mock_adapter.fan_in.return_value = {'entries': []}
-        mock_adapter.entrypoints.return_value = {'entries': []}
-        mock_adapter.components.return_value = {'components': []}
-        mock_adapter.circular.return_value = {'cycles': [], 'count': 0}
-        mock_adapter.get_metadata.return_value = {'unsupported_extensions': {'.hs': 3}}
-
-        with patch('reveal.adapters.architecture.ImportView', return_value=mock_adapter):
-            result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
-
-        self.assertEqual(result['unsupported_extensions'], {'.hs': 3})
-
-
-# ── Coverage warning (BACK-518 part 2) ──────────────────────────────────────────
-
-class TestCoverageWarning(unittest.TestCase):
-    """An unsupported-dominant-language repo must disclose it in run_architecture's
-    text and JSON output, not render a blank/misleading brief (see surface/contracts'
-    part-1 fix in path_utils.assess_language_coverage / imports.coverage_warning_line)."""
-
-    _EMPTY_IMPORTS = {
-        'entry_points': [], 'core_abstractions': [], 'components': [],
-        'circular_groups': [], 'unsupported_extensions': {'.hs': 3},
-    }
-
-    def test_text_shows_warning_even_with_no_facts(self):
-        args = _args(path='.')
-        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=([], self._EMPTY_IMPORTS)):
-            out = _capture(run_architecture, args)
-        self.assertIn('not analyzed', out)
-        self.assertIn('.hs', out)
-
-    def test_json_includes_unsupported_extensions(self):
-        args = _args(path='.', format='json')
-        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=([], self._EMPTY_IMPORTS)):
-            out = _capture(run_architecture, args)
-        data = json.loads(out)
-        self.assertEqual(data['unsupported_extensions'], {'.hs': 3})
-
-    def test_no_warning_when_fully_supported(self):
-        args = _args(path='.')
-        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
-            out = _capture(run_architecture, args)
-        self.assertNotIn('not analyzed', out)
-
-
-# ── JSON path-leak regression (BACK-1212, BACK-1194 follow-up) ─────────────────
-
-class TestJsonFormatDoesNotLeakAbsolutePaths(unittest.TestCase):
-    """get_structure()'s `report` dict never routed `facts.*`/`risks[]`/
-    `next_commands` through relativization -- only the text renderer did
-    (_render_entry_points/etc's own `_relpath` calls). `--format json` leaked
-    absolute host paths (analyst's filesystem layout/username) whenever the
-    scan root was absolute, which it always is via `Path(args.path).resolve()`
-    in run_architecture. `_IMPORTS_DATA`/`_COMPLEX_FNS` above are fixed under
-    a synthetic `/project/src` unrelated to the real scan root, so relative_to()
-    silently fails and falls through unchanged either way -- this class instead
-    anchors fixture paths under a REAL tmp dir so relativization can actually
-    resolve, the only way to distinguish "fixed" from "still leaking"."""
-
-    def test_json_output_does_not_leak_scan_root(self):
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            root = str(Path(tmp).resolve())
-            imports_data = {
-                'entry_points': [{'file': f'{root}/main.py', 'fan_in': 0, 'fan_out': 8}],
-                'core_abstractions': [{'file': f'{root}/base.py', 'fan_in': 15, 'fan_out': 1}],
-                'components': [{
-                    'component': f'{root}/adapters', 'cohesion': 0.75, 'files': 10,
-                    'top_bridge': f'{root}/adapters/main.py',
-                }],
-                'circular_groups': [[f'{root}/a.py', f'{root}/b.py']],
-            }
-            complex_fns = [{'name': 'big_fn', 'complexity': 45, 'file': f'{root}/main.py', 'line': 10}]
-            args = _args(path=tmp, format='json')
-            with patch('reveal.adapters.architecture._run_combined_analysis', return_value=(complex_fns, imports_data)):
-                out = _capture(run_architecture, args)
-            data = json.loads(out)
-
-        # 'path'/'source' are the queried root itself -- expected, not a leak
-        # (BACK-1194 precedent). Everything else must be relative.
-        for entry in data['facts']['entry_points'] + data['facts']['core_abstractions']:
-            self.assertFalse(entry['file'].startswith(root), entry['file'])
-        for component in data['facts']['components']:
-            self.assertFalse(component['component'].startswith(root), component['component'])
-            if component.get('top_bridge'):
-                self.assertFalse(component['top_bridge'].startswith(root), component['top_bridge'])
-        for group in data['facts']['circular_groups']:
-            for fp in group:
-                self.assertFalse(fp.startswith(root), fp)
-        for risk in data['risks']:
-            if risk.get('file'):
-                self.assertFalse(risk['file'].startswith(root), risk['file'])
-            if risk.get('representative'):
-                self.assertFalse(risk['representative'].startswith(root), risk['representative'])
-        # Suggested commands name paths as the user named the target, so they run from
-        # the cwd (BACK-1366): this target was named absolutely, so a per-file command
-        # is too -- a bare 'main.py' didn't run from anywhere but the target.
-        file_cmds = [cmd for cmd in data['next_commands'] if '://' not in cmd]
-        self.assertTrue(file_cmds, data['next_commands'])
-        for cmd in file_cmds:
-            self.assertIn(f'{Path(tmp).as_posix()}/', cmd, cmd)
-
-
-# ── --against integration (BACK-441) ────────────────────────────────────────
 
 def _commit_all(repo, message, parents=None):
     signature = pygit2.Signature("Test User", "test@example.com")
@@ -885,7 +218,7 @@ class TestArchitectureDiffIntegration(unittest.TestCase):
             args = _args(path=str(fixture['src_path']), against=fixture['commit_no_cycle'], format='json')
             out = _capture(run_architecture, args)
             report = json.loads(out)
-            self.assertEqual(report['type'], 'architecture_diff')
+            self.assertEqual(report['type'], 'overview_diff')
             self.assertIn('deltas', report)
         finally:
             fixture['cleanup']()

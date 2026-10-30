@@ -19,18 +19,21 @@ def test_omitted_line():
     assert omitted_line(10, 5, '    ').startswith('    ... and 5 more')
 
 
-def test_architecture_core_abstractions_entry_points_and_components(capsys):
-    core = [{'file': f'/p/m{i}.py', 'fan_in': 9 - i % 3} for i in range(12)]
-    body = '\n'.join(architecture._render_core_abstractions(core, 5, BASE))
-    assert '... and 7 more' in body
-    body = '\n'.join(architecture._render_core_abstractions(core, 12, BASE))
-    assert 'more' not in body
-    eps = [{'file': f'/p/e{i}.py', 'fan_out': 2} for i in range(8)]
-    body = '\n'.join(architecture._render_entry_points(eps, 3, BASE))
-    assert '... and 5 more' in body
-    comps = [{'component': f'/p/c{i}', 'cohesion': 0.5, 'files': 3} for i in range(6)]
-    body = '\n'.join(architecture._render_components(comps, 4, BASE))
-    assert '... and 2 more' in body
+def test_architecture_alias_discloses_canonical_graph_bounds(tmp_path, capsys):
+    from reveal.adapters.architecture import ArchitectureAdapter
+    for index in range(6):
+        folder = tmp_path / f'part{index}'
+        folder.mkdir()
+        (folder / 'entry.py').write_text('from .leaf import VALUE\n', encoding='utf-8')
+        (folder / 'leaf.py').write_text('VALUE=1\n', encoding='utf-8')
+    result = ArchitectureAdapter(str(tmp_path), 'top=2').get_structure()
+    body = architecture.ArchitectureRenderer.render_structure(result)
+    assert body.count('Most imported files  (showing 2 of 6 observed)') == 1
+    assert body.count('Active entrypoint candidates  (showing 2 of 6 observed)') == 1
+    assert body.count('Major components  (showing 2 of 6 observed)') == 1
+    full = ArchitectureAdapter(str(tmp_path), 'top=20').get_structure()
+    assert 'showing 6 of 6 observed' in architecture.ArchitectureRenderer.render_structure(full)
+    assert not _out(capsys)
 
 
 def test_deps_top_importers(capsys):

@@ -287,17 +287,13 @@ def _all_path_scoped(seen, path):
     assert all(root == path.resolve() and focus is None for root, focus in seen), seen
 
 
-def test_architecture_imports_analysis_passes_scope_path(fx, builds):
-    from reveal.adapters.architecture import ArchitectureAdapter, _run_imports_analysis
-    data = _run_imports_analysis(ArchitectureAdapter(str(fx / 'pkg')), fx / 'pkg')
+@pytest.mark.parametrize('query', ['', 'top=0'])
+def test_architecture_alias_passes_scope_path_once(fx, builds, query):
+    from reveal.adapters.architecture import ArchitectureAdapter
+    result = ArchitectureAdapter(str(fx / 'pkg'), query).get_structure()
     _all_path_scoped(builds, fx / 'pkg')
-    assert data
-
-
-def test_architecture_combined_analysis_passes_scope_path(fx, builds):
-    from reveal.adapters.architecture import ArchitectureAdapter, _run_combined_analysis
-    _run_combined_analysis(ArchitectureAdapter(str(fx / 'pkg')), fx / 'pkg', 10)
-    _all_path_scoped(builds, fx / 'pkg')
+    assert len(builds) == 1
+    assert result['type'] == 'overview' and result['map_status'] == 'complete'
 
 
 def test_overview_imports_analysis_passes_scope_path(fx, builds):

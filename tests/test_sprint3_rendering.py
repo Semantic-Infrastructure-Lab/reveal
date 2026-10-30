@@ -3,26 +3,31 @@ from argparse import Namespace
 from functools import partial
 import json
 import pytest
-from reveal.rendering.adapters.architecture import ArchitectureRenderer, _render_entry_points
+from reveal.rendering.adapters.architecture import ArchitectureRenderer
+from reveal.adapters.architecture import ArchitectureAdapter
 from reveal.rendering.adapters.hotspots import HotspotsRenderer
-from reveal.rendering.base import emit_rendered
+from reveal.rendering.base import BaseRenderer, emit_rendered
 from reveal.cli.routing.subcommand import emit_subcommand_result
 from reveal.cli.routing.uri import resolve_uri
 
 pytestmark = pytest.mark.component
 
 
-def architecture_result():
-    return {'path': 'src', 'facts': {'entry_points': [{'file': f'f{i}.py', 'fan_out': i} for i in range(6)]},
-            'risks': [], 'next_commands': [], 'meta': {'errors': [{'message': 'partial architecture scan'}]}}
+def architecture_result(tmp_path):
+    (tmp_path / 'value.py').write_text('VALUE=1\n', encoding='utf-8')
+    result = ArchitectureAdapter(str(tmp_path)).get_structure()
+    result.setdefault('meta', {}).setdefault('errors', []).append({'message': 'partial architecture scan'})
+    return result
 
 
-@pytest.mark.parametrize('renderer,result', [
-    (ArchitectureRenderer, architecture_result()),
-    (HotspotsRenderer, {'path': 'src', 'file_hotspots': [], 'function_hotspots': [],
-                        'meta': {'errors': [{'message': 'partial hotspots scan'}]}}),
-])
-def test_pure_bodies_and_single_diagnostic_owner(renderer, result, capsys):
+@pytest.mark.parametrize('name', ['architecture', 'hotspots'])
+def test_pure_bodies_and_single_diagnostic_owner(name, tmp_path, capsys):
+    if name == 'architecture':
+        renderer, result = ArchitectureRenderer, architecture_result(tmp_path)
+    else:
+        renderer = HotspotsRenderer
+        result = {'path': 'src', 'file_hotspots': [], 'function_hotspots': [],
+                  'meta': {'errors': [{'message': 'partial hotspots scan'}]}}
     body = renderer.render_structure(result)
     assert isinstance(body, str) and not capsys.readouterr().out
     emit_rendered(renderer.render_structure, result)
@@ -37,34 +42,49 @@ def test_pure_bodies_and_single_diagnostic_owner(renderer, result, capsys):
         assert output.count(error['message']) == 1
 
 
-@pytest.mark.parametrize('name,renderer', [('architecture', ArchitectureRenderer), ('hotspots', HotspotsRenderer)])
-def test_real_failed_result_and_distinct_details(name, renderer, tmp_path, capsys):
-    from reveal.cli.routing.uri import _emit_result
-    answer = resolve_uri(f'{name}://{tmp_path / "missing"}', Namespace(format='json'))
+@pytest.mark.parametrize('name', ['architecture', 'hotspots'])
+def test_real_failed_result_and_distinct_details(name, tmp_path, capsys):
+    answer = resolve_uri(f'{name}://{tmp_path / "missing"}', Namespace(format='text'))
     assert answer.result.get('error')
-    answer.result.update(message='retained detail', next_steps=['check the path'])
     with pytest.raises(SystemExit) as exc:
-        _emit_result(answer.result, Namespace(format='text', also_json=None), name, renderer.render_structure)
+        answer.emit()
     output = capsys.readouterr()
     assert exc.value.code == 1 and not output.out
+    assert output.err.count(answer.result['error']) == 1
+
+    # Router failures use a preselected generic renderer. Exercise additional
+    # failure detail at the shared renderer seam that owns this contract.
+    from reveal.cli.routing.uri import _emit_result
+    answer.result.update(message='retained detail', next_steps=['check the path'])
+    with pytest.raises(SystemExit) as exc:
+        _emit_result(answer.result, Namespace(format='text', also_json=None),
+                     name, BaseRenderer.render_structure)
+    output = capsys.readouterr()
+    assert exc.value.code == 1 and not output.out
+    assert output.err.count(answer.result['error']) == 1
     assert output.err.count('retained detail') == 1
     assert output.err.count('check the path') == 1
 
 
-def test_architecture_zero_cap_discloses_every_omitted_row():
-    from pathlib import Path
-    rows = architecture_result()['facts']['entry_points']
-    text = '\n'.join(_render_entry_points(rows, 0, Path('src')))
-    assert '... and 6 more' in text and 'fan-out' not in text
+def test_architecture_zero_cap_discloses_every_omitted_row(tmp_path):
+    (tmp_path / 'helper.py').write_text('VALUE=1\n', encoding='utf-8')
+    for index in range(6):
+        (tmp_path / f'entry{index}.py').write_text('from helper import VALUE\n', encoding='utf-8')
+    result = ArchitectureAdapter(str(tmp_path), 'top=0').get_structure()
+    assert result['map']['entrypoints'] == {'rows': [], 'total': 6, 'returned': 0, 'omitted': 6}
+    text = ArchitectureRenderer.render_structure(result)
+    assert 'Active entrypoint candidates  (showing 0 of 6 observed)' in text
+    assert '  entry0.py  fan-out' not in text
 
 
-def test_recorded_framework_warning_is_not_rediscovered(monkeypatch):
-    result = architecture_result()
-    result['risks'] = [{'type': 'autoload_regime', 'description': 'framework', 'detail': 'recorded framework warning'}]
+def test_recorded_framework_warning_is_not_rediscovered(tmp_path, monkeypatch):
+    result = architecture_result(tmp_path)
+    result['map']['metadata']['autoload_regime'] = {'framework': 'Recorded framework', 'evidence': 'recorded marker'}
     def unexpected(*args):
         pytest.fail('renderer rediscovered filesystem state')
-    monkeypatch.setattr('reveal.adapters.imports.detect_autoload_regime', unexpected)
-    assert 'recorded framework warning' in ArchitectureRenderer.render_structure(result)
+    monkeypatch.setattr('reveal.analyzers.imports.views.detect_autoload_regime', unexpected)
+    text = ArchitectureRenderer.render_structure(result)
+    assert 'Recorded framework' in text and 'recorded marker' in text
 
 
 def test_stats_exclusions_survive_hotspots_composition(tmp_path, capsys):
