@@ -139,3 +139,21 @@ def test_unqualified_resolved_scope_retains_inventory_with_visible_reason():
     assert evidence.reason == 'unqualified_resolved_scope'
     assert [r['text'] for r in rows] == ['return a;']
     assert evidence.warnings()[0]['type'] == 'ownership_scope_limited'
+
+
+@pytest.mark.parametrize('collector', [collect_exits, collect_gate_chains])
+def test_reusing_record_resets_selection_and_preserves_previous_snapshots(collector):
+    source = 'def outer\n lambda { exit(1); exit(2) }\n return 3\nend'
+    tree, node, text = _scope('ruby', source, 'method')
+    evidence = ExitOwnership('ruby', node)
+    collector(node, 1, 99, text, ownership=evidence)
+    metadata = evidence.scope_metadata()
+    warnings = evidence.warnings()
+    assert len(metadata['unresolved_sites']) == 2
+    assert len(warnings[0]['sites']) == 2
+    selected = collector(node, 3, 3, text, ownership=evidence)
+    assert [r['text'] for r in selected] == ['return 3']
+    assert evidence.unresolved_sites == []
+    assert evidence.warnings() == []
+    assert len(metadata['unresolved_sites']) == 2
+    assert len(warnings[0]['sites']) == 2
