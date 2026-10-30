@@ -99,10 +99,10 @@ def test_dart_branch_polarity_condition_context_and_ranges(tmp_path, source, exp
     assert collect_gate_chains(fresh_root, 1, 999, fresh_text) == findings
     path = tmp_path / 'control.dart'
     path.write_text(source, encoding='utf-8')
-    for flag, expected_findings in [('--returns', findings), ('--exits', exits)]:
+    for flag in ('--returns', '--exits'):
         result = _run_reveal_direct(path, flag, '--format', 'json')
         assert result.returncode == 0, result.stderr
-        assert json.loads(result.stdout)['findings'] == expected_findings
+        assert json.loads(result.stdout)['findings'] == findings
 
 
 @pytest.mark.parametrize('language,source,expected', [

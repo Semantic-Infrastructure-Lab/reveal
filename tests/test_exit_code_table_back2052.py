@@ -27,12 +27,13 @@ def _help(command):
 def test_retirement_inventory_matches_the_shipped_migrations():
     """Keep the inventory explicit; each migration is exercised in its owning tests.
 
-    BACK-2377 adds architecture aliases alongside the earlier noun migrations.
+    BACK-2377 adds architecture aliases; BACK-2364 adds contextual navigation corrections.
     """
-    assert sorted(RETIREMENTS) == ['flag:--also-json', 'flag:--calls', 'flag:--check', 'flag:--deps',
-                                   'flag:--mutations', 'flag:--search', 'flag:--writes', 'param:ast.callee_of', 'param:ast.calls',
+    assert sorted(RETIREMENTS) == ['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
+                                   'flag:--flowto', 'flag:--ifmap', 'flag:--loopmap', 'flag:--mutations',
+                                   'flag:--returns', 'flag:--search', 'flag:--writes', 'param:ast.callee_of', 'param:ast.calls',
                                    'param:calls.external', 'param:calls.modules', 'param:calls.root', 'param:calls.target', 'param:calls.uncalled', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:review', 'subcommand:testability',
-                                   'subcommand:trace', 'target:health.code', 'value:ast.show=calls']
+                                   'subcommand:trace', 'target:health.code', 'target:nav.outline', 'value:ast.show=calls']
 
 
 def test_table_covers_the_four_codes_and_commands_only_reword_them():

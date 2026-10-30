@@ -254,7 +254,7 @@ def test_rust_async_block_candidates_do_not_claim_enclosing_execution(tmp_path, 
 
 
 def test_dart_resolved_body_is_not_unqualified_header_execution(tmp_path):
-    answer = _answer(tmp_path, 'dart', 'int outer(){\n return 1;\n}')
+    answer = _answer(tmp_path, 'dart', 'int outer(){\n return 1;\n}', flag='--exits')
     assert answer['meta']['exit_scope']['mode'] == 'selected_callable'
     assert answer['meta']['exit_scope'].get('unresolved_sites', []) == []
     warnings = answer['meta'].get('warnings', [])

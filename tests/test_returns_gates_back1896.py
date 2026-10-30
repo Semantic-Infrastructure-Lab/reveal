@@ -33,7 +33,7 @@ def test_branch_polarity_json_and_repeated_calls(language):
     cold = collect_gate_chains(root, 1, 999, text)
     assert [f['gates'] for f in cold] == expected['gates']
     assert [f['line'] for f in cold] == expected['lines']
-    # Sibling --exits keeps the same exits, without gate annotations.
+    # The direct raw collector retains the same exits without gate annotations.
     assert [{k: v for k, v in f.items() if k != 'gates'} for f in cold] == collect_exits(root, 1, 999, text)
     assert collect_gate_chains(root, 1, 999, text) == cold
     fresh_tree, fresh_root, fresh_text = _collect(language, source)
@@ -89,7 +89,9 @@ def test_sibling_exits_and_positive_branch_controls(language):
     assert findings[-1]['gates'] == []
     result = _run_reveal_direct(path, '--exits', '--format', 'json')
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout)['findings'] == collect_exits(root, 1, 999, text)
+    answer = json.loads(result.stdout)['findings']
+    assert answer == findings
+    assert [{k: v for k, v in f.items() if k != 'gates'} for f in answer] == collect_exits(root, 1, 999, text)
     assert [f['line'] for f in collect_exits(root, 1, 999, text)] == expected['lines']
 
 

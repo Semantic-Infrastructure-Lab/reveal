@@ -14,6 +14,7 @@ When adding a new guide under reveal/docs/, either:
 import re
 import unittest
 from pathlib import Path
+from unittest.mock import mock_open, patch
 
 from reveal.adapters.help import HelpAdapter, VALID_HELP_CATEGORIES, _read_help_frontmatter, _EXAMPLE_RECIPES
 
@@ -165,9 +166,12 @@ class TestHelpRegistry(unittest.TestCase):
     def test_progressive_disclosure_small_guide_passthrough(self):
         """Small guides (<=200 lines) are returned in full without truncation."""
         adapter = HelpAdapter()
-        result = adapter.get_element('nav')
+        short_guide = '# Short guide\n\n## Usage\n\nThe complete last paragraph.\n'
+        with patch('builtins.open', mock_open(read_data=short_guide)):
+            result = adapter.get_element('nav')
         self.assertIsNotNone(result)
         content = result['content']
+        self.assertEqual(content, short_guide)
         self.assertNotIn('Full guide:', content,
                          'Short guides must not have a truncation footer')
 

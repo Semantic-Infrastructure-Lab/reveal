@@ -83,10 +83,10 @@ def test_handler_branch_context_and_sibling_exits(tmp_path, language, source, ex
     assert collect_gate_chains(fresh_root, 1, 999, fresh_text) == findings
     path = tmp_path / f'control.{language}'
     path.write_text(source, encoding='utf-8')
-    for flag, expected_output in [('--returns', findings), ('--exits', exits)]:
+    for flag in ('--returns', '--exits'):
         result = _run_reveal_direct(path, flag, '--format', 'json')
         assert result.returncode == 0, result.stderr
-        assert json.loads(result.stdout)['findings'] == expected_output
+        assert json.loads(result.stdout)['findings'] == findings
 
 
 def test_zig_loop_taxonomy_fanout_and_ordinary_binary_control():
