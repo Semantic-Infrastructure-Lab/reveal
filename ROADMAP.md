@@ -87,8 +87,8 @@ Two problems shape the current work.
    BACK-2064, BACK-2061), measure through the public request path (BACK-2062), and keep the
    oracle-free graph invariants green in every language (BACK-1096).
 3. **One quality family.** `metrics` absorbs `hotspots` (BACK-2069, BACK-2149); repeatable
-   `--output FORMAT[=PATH]` sinks replace `--also-json` (BACK-2089); `overview` absorbs
-   `architecture` (BACK-2070); commands share their parses instead of repeating them
+   `--output FORMAT[=PATH]` sinks replace `--also-json` (BACK-2089); commands share
+   their requested parses instead of repeating them
    (BACK-1889, BACK-1890, BACK-1885).
 4. **The rest of the result contract.** Typed outcomes at the remaining adapter and analyzer
    boundaries (BACK-1059, BACK-1857), one rendering layer (BACK-916), one scan-budget policy
@@ -116,13 +116,17 @@ above lands.
 
 | Question | Use | Replaces |
 |---|---|---|
-| Where do I start? | `reveal overview DIR` | `architecture` (being absorbed) |
+| Where do I start? | `reveal overview DIR` | retired `architecture` alias |
 | Who calls this, what does it call? | `reveal calls DIR --callers F` / `--callees F --depth N [--detail]` | `trace`, `trace://`, `?root=`, `?target=` |
 | Who imports this, what does it import? | `reveal imports DIR --importers [FILE]`, `--external`, `--circular`, `--unused` | `depends://`, `deps`, `calls ?modules` |
 | Per-file size, complexity, churn, provenance | `reveal metrics DIR`, `?view=provenance` | `stats://`, `classify://`, file `hotspots` (being absorbed) |
 | Rule findings, including only what a diff changed | `reveal check PATH`, `--changed RANGE` | `--check`, `review`, `health` on code |
 | How honest is the test suite? | `reveal patches DIR --view pressure` | `testability` |
 | Find elements by name | `--name PATTERN` | `--search` |
+
+`overview` provides a compact project map in text and JSON; `overview --against REF`
+compares a tracked ref with the live working tree. Follow its drill-down commands
+for detailed quality, complexity, import relationships and history.
 
 Element flag consolidation has started: `--deps` is deprecated in favor of
 `--inputs`, `--mutations`/`--writes` are replaced by `--outputs`, and `--calls`
