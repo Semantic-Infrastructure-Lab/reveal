@@ -95,7 +95,7 @@ def test_direct_method_rejects_constructor_alias_remains_supported(project):
     assert adapter.get_structure()['depth'] == 1
 
 
-def test_typed_percent_selector_is_literal_and_api_resource_codec_unchanged(project):
+def test_typed_percent_selector_is_literal_and_resource_codec_applies(project):
     path = project / 'literal%20+name.py'
     path.write_text('def literal_entry():\n    return 1\n', encoding='utf-8')
     entry = path.name + ':literal_entry'
@@ -106,8 +106,8 @@ def test_typed_percent_selector_is_literal_and_api_resource_codec_unchanged(proj
     (decoded / 'app.py').write_text(SOURCE, encoding='utf-8')
     encoded = project / 'literal%20space'
     answer = api.query(uri(encoded), depth=1)
-    assert answer['source'] == encoded.as_posix()
-    assert not answer['frames'][0]['resolved']
+    assert answer['source'] == decoded.as_posix()
+    assert answer['frames'][0]['resolved']
 
 
 def test_constructs_once_inside_host_request_and_preserves_carrier(project, monkeypatch):

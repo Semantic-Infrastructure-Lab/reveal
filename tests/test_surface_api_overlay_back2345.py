@@ -172,15 +172,15 @@ def test_overlay_constructs_once(project, monkeypatch):
     assert names(answer) == {'PRODUCTION_VAR'}
 
 
-def test_api_does_not_adopt_uri_resource_decoding(project):
+def test_api_applies_declared_uri_resource_decoding(project):
     decoded = project / 'literal space'
     decoded.mkdir()
     (decoded / 'app.py').write_text('import os\nx=os.getenv("DECODED_VAR")\n', encoding='utf-8')
     encoded = project / 'literal%20space'
     baseline = api.query(uri(encoded))
     answer = api.query(uri(encoded), source_only=True)
-    assert baseline['total'] == answer['total'] == 0
-    assert baseline['source'] == answer['source'] == encoded.as_posix()
+    assert baseline['total'] == answer['total'] == 1
+    assert baseline['source'] == answer['source'] == decoded.as_posix()
 
 
 def test_typed_type_and_grouping_controls_match_supported_uri(project):
