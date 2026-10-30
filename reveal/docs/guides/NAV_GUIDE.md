@@ -126,7 +126,7 @@ Text names this scope, and JSON includes `meta.exit_scope.mode`, its selection `
 and counting `rule`. Unqualified resolved scopes remain inventories with an explicit
 scope warning. Ruby dynamic block binding, Kotlin inline/label semantics and other
 unqualified execution edges retain potential sites with `ownership_unresolved`
-diagnostics. Python generator bodies, filters and later iterables likewise retain
+diagnostics. Python generator bodies, assignment targets, filters and later iterables likewise retain
 potential sites with a deferred-execution warning, as do Rust async-block sites; the leftmost iterable is evaluated
 when the generator is formed, and eager list comprehensions keep their existing scope.
 Each diagnostic identifies actual recorded sites by kind, text, line and

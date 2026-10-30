@@ -275,7 +275,8 @@ def _field_is(node: Any, child: Any, name: str) -> bool:
 
 
 def _body_edge(node: Any, child: Any) -> bool:
-    return _field_is(node, child, 'body') or _zero_arg(child, 'kind') in _EXIT_BODY_CHILDREN
+    return (_field_is(node, child, 'body') or _zero_arg(child, 'kind') in _EXIT_BODY_CHILDREN
+            or (_zero_arg(node, 'kind') == 'function_body' and _zero_arg(child, 'kind') == 'block'))
 
 
 def _parameter_edge(node: Any, child: Any) -> bool:
@@ -290,24 +291,31 @@ def _js_deferred_field(node: Any, child: Any) -> bool:
         _zero_arg(c, 'kind') == 'static' for c in _children(node))
 
 
-def _generator_deferred_edge(node: Any, child: Any) -> bool:
-    """Only a generator's leftmost iterable is evaluated during its formation."""
-    if _zero_arg(node, 'kind') != 'generator_expression':
-        return False
-    if _zero_arg(child, 'kind') != 'for_in_clause':
-        return True
-    previous = _prev_sibling(child)
+def _first_generator_clause(node: Any) -> bool:
+    previous = _prev_sibling(node)
     while previous is not None:
         if _zero_arg(previous, 'kind') == 'for_in_clause':
-            return True
+            return False
         previous = _prev_sibling(previous)
+    return True
+
+
+def _generator_deferred_edge(node: Any, child: Any) -> bool:
+    """Only a generator's leftmost iterable operand is evaluated at formation."""
+    kind = _zero_arg(node, 'kind')
+    if kind == 'generator_expression':
+        return _zero_arg(child, 'kind') != 'for_in_clause' or not _first_generator_clause(child)
+    if kind == 'for_in_clause':
+        parent = _zero_arg(node, 'parent')
+        if parent is not None and _zero_arg(parent, 'kind') == 'generator_expression':
+            return not (_first_generator_clause(node) and _field_is(node, child, 'right'))
     return False
 
 
 def _language_exit_uncertainty(language: str, node: Any, child: Any) -> Optional[str]:
     kind = _zero_arg(child, 'kind')
     if language == 'python' and _generator_deferred_edge(node, child):
-        return 'Python generator body, filter or later iterable execution is deferred until iteration'
+        return 'Python generator region execution is deferred until iteration'
     if language == 'rust' and kind == 'async_block':
         return 'Rust async block execution is deferred until the future is polled'
     if language == 'ruby' and kind in {'block', 'do_block'}:
