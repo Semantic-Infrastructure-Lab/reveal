@@ -556,6 +556,69 @@ def _empty_deltas(top_n: int) -> Dict[str, Any]:
 
 # ── Entry point ──────────────────────────────────────────────────────────────
 
+def _comparison_snapshot_proof(analysis) -> bool:
+    snapshots = analysis.get('snapshots')
+    if analysis.get('basis') == 'identical_tree':
+        return analysis['complete'] is True and snapshots == {}
+    if (analysis.get('basis') != 'snapshots' or not isinstance(snapshots, dict)
+            or set(snapshots) != {'base', 'head'}):
+        return False
+    states: List[str] = []
+    for components in snapshots.values():
+        if not isinstance(components, dict) or set(components) != {'imports', 'complexity'}:
+            return False
+        states.extend(components.values())
+    return (all(state in ('complete', 'incomplete', 'failed') for state in states)
+            and analysis['complete'] is all(state == 'complete' for state in states))
+
+
+def comparison_answer_requirement_error(result, prior_facts=None) -> Optional[str]:
+    """Require comparison proof, allowing an attributed rejection before analysis."""
+    from ..utils.results import AnalysisCompleteness, FailureCause
+    analysis = result.get('analysis')
+    if (isinstance(analysis, dict) and isinstance(analysis.get('complete'), bool)
+            and _comparison_snapshot_proof(analysis)):
+        return None
+    errors = result.get('meta', {}).get('errors', [])
+    invalid_only = bool(errors) and all(error.get('code') == 'invalid_request' for error in errors)
+    before_analysis = prior_facts is None or (
+        prior_facts.completeness is AnalysisCompleteness.NOT_STARTED
+        and prior_facts.failures == frozenset({FailureCause.INVALID_REQUEST}))
+    if invalid_only and 'analysis' not in result and before_analysis:
+        return None
+    return 'Architecture comparison missing required completeness evidence'
+
+
+def _comparison_completeness(result, meta, invalid_only):
+    from ..utils.results import AnalysisCompleteness
+    errors = meta.get('errors', [])
+    missing = {'analysis_failed', 'parse_recovered', 'partial_parse', 'worker_lost', 'analysis_incomplete'}
+    missing_inputs = any(w.get('type') in missing for w in meta.get('warnings', []))
+    if any(error.get('code') == 'E_ARCHITECTURE_ANALYSIS' for error in errors):
+        return AnalysisCompleteness.FAILED
+    if invalid_only and 'analysis' not in result and not missing_inputs:
+        return AnalysisCompleteness.NOT_STARTED
+    analysis = result.get('analysis') if isinstance(result, dict) else None
+    complete = isinstance(analysis, dict) and analysis.get('complete') is True
+    incomplete = (bool(errors) and not invalid_only) or missing_inputs or not complete
+    return AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
+
+
+def comparison_execution_facts(result):
+    """Classify required comparison evidence independently of its public result type."""
+    from ..utils.results import (ExecutionFacts, FailureCause, failure_execution_facts,
+                                 result_execution_facts)
+    meta = result.get('meta', {}) if isinstance(result, dict) else {}
+    errors = meta.get('errors', [])
+    invalid_only = bool(errors) and all(error.get('code') == 'invalid_request' for error in errors)
+    state = _comparison_completeness(result, meta, invalid_only)
+    cause = FailureCause.INVALID_REQUEST if invalid_only else FailureCause.ANALYSIS
+    facts = result_execution_facts(result, completeness=state, failure_cause=cause)
+    if invalid_only and not facts.failures:
+        return ExecutionFacts(state, failures=failure_execution_facts(cause).failures)
+    return facts
+
+
 def run_architecture_diff(
     path: Path,
     base_ref: str,
@@ -674,6 +737,8 @@ def render_diff_brief(report: Dict[str, Any]) -> None:
 
 
 __all__ = [
+    'comparison_answer_requirement_error',
+    'comparison_execution_facts',
     'StructureCache',
     'materialize_ref',
     'diff_snapshots',
