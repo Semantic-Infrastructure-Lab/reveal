@@ -126,6 +126,10 @@ def _import_warnings(built, target: Path, limit: Optional[int]) -> list[WarningE
 
 def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, scope_usable: bool) -> tuple[Optional[MapFacts], str]:
     """Validate full owner evidence before any map or diagnostic presentation cuts."""
+    from ..config import RevealConfig
+    from ..utils.path_utils import TestLayout
+    layout = TestLayout.for_path(path.resolve(), fallback_root=path.resolve())
+    layout = RevealConfig.get(layout.anchor).apply_test_layout(layout)
     try:
         target = path.resolve()
         with exclusion_scope(target if target.is_dir() else target.parent, adapter.exclude_patterns), \
@@ -135,7 +139,7 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, s
         warnings = _import_warnings(built, target, scope.cap)
         adapter.fold_meta({'warnings': warnings})
         view = ImportView(built.analysis, target, resolution.ScanRoot(target, 'path'),
-                          scope.cap)
+                          scope.cap, test_layout=layout)
         with import_analysis.composed_rules('overview://'):
             fan_in, entries = view.fan_in(), view.entrypoints()
             components, circular = view.components(), view.circular()

@@ -686,15 +686,19 @@ def run_architecture_diff(
 
     base_commit = _resolve_commit(repo, base_ref)
 
+    from ..config import RevealConfig
+    test_layout = TestLayout.for_path(path, fallback_root=path)
+    test_layout = RevealConfig.get(test_layout.anchor).apply_test_layout(test_layout)
+    policy = {'test_scope': test_layout.as_dict(path)} if test_layout.declaration is not None else {}
+
     if _fast_exit_possible(repo, base_commit, subpath):
         return _comparison_report(path, base_ref, head_ref, _empty_deltas(top_n),
-                                  {'complete': True, 'basis': 'identical_tree', 'snapshots': {}}, [],
+                                  {'complete': True, 'basis': 'identical_tree', 'snapshots': {}, **policy}, [],
                                   spelling=spelling)
 
     from ..utils.exclusions import remapped_exclusion_scope
     from ..utils.gitignore import gitignore_scope
     cache = StructureCache()
-    test_layout = TestLayout.for_path(path, fallback_root=path)
     with materialize_ref(repo, base_ref, subpath, cache=cache) as base_root:
         with remapped_exclusion_scope(path, base_root), gitignore_scope(False):
             base_layout = test_layout.relocate(observed_root=base_root, logical_root=path)
@@ -706,7 +710,7 @@ def run_architecture_diff(
     head_snapshot = _normalize_snapshot(head_raw, top_n)
     states = {'base': base_raw['completeness'], 'head': head_raw['completeness']}
     complete = all(state == 'complete' for components in states.values() for state in components.values())
-    analysis = {'complete': complete, 'basis': 'snapshots', 'snapshots': states,
+    analysis = {'complete': complete, 'basis': 'snapshots', 'snapshots': states, **policy,
                 'unsupported_extensions': {'base': base_raw['unsupported_extensions'],
                                            'head': head_raw['unsupported_extensions']}}
     confidences = {side: (raw.get('meta') or {}).get('confidence')

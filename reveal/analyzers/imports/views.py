@@ -129,7 +129,8 @@ class ImportView:
             scan = self.scan
             layout = TestLayout.for_path(target, fallback_root=scan.root if scan else target,
                                          root_override=scan.override_used if scan else None)
-            object.__setattr__(self, 'test_layout', layout)
+            from ...config import RevealConfig
+            object.__setattr__(self, 'test_layout', RevealConfig.get(layout.anchor).apply_test_layout(layout))
 
     def is_test(self, path: Path) -> bool:
         assert self.test_layout is not None
@@ -196,10 +197,22 @@ class ImportView:
             tests_counted=tests_counted and not self._tests_excluded(),
             resolved_at=self._resolved_at(cycles), counted=self._edges(default))
         assert self.test_layout is not None
-        rule['test_scope'] = self.test_layout.as_dict(self._base_dir())
+        rule['test_scope'] = self.test_scope()
         basis = rule['test_scope']
         rule['text'] += f" Test paths: {basis['basis']}; anchor {basis['anchor']}."
         return rule
+
+    def test_scope(self) -> Dict[str, Any]:
+        """Current immutable policy and observed scanned-source counts, before row cuts."""
+        assert self.test_layout is not None
+        result = self.test_layout.as_dict(self._base_dir())
+        if self.test_layout.declaration is not None:
+            files = self.analysis.scanned_files
+            result['observed'] = {'scanned_files': len(files),
+                                  'test_support_matches': sum(self.is_test(path) for path in files),
+                                  'population': 'analysis.scanned_files',
+                                  'bounded_by': self.cap}
+        return result
 
     def _row_files(self, graph: ImportGraph) -> set:
         """The files an answer has rows for: every scanned file and every edge target (which may

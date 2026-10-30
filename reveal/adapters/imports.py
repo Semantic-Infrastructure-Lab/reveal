@@ -1688,6 +1688,8 @@ class ImportsAdapter(ResourceAdapter):
         self._scan = scan = _scan_root_of(self._query_params, target_path)
         self._test_layout = TestLayout.for_path(target_path, fallback_root=scan.root,
                                                 root_override=scan.override_used)
+        from ..config import RevealConfig
+        self._test_layout = RevealConfig.get(self._test_layout.anchor).apply_test_layout(self._test_layout)
         self._scan_budget = ScanBudget(_MAX_FILES.read(self._query_params))
         supported = self._parse_extensions if self._parse_extensions is not None else frozenset(get_all_extensions())
         code = frozenset() if self._parse_extensions is not None else get_code_extensions()
@@ -1849,7 +1851,7 @@ class ImportsAdapter(ResourceAdapter):
             top_importers=[{'file': row['file'], 'imports': row['count']} for row in table['top_importers']],
         )
         assert view.test_layout is not None
-        response['metadata']['test_scope'] = view.test_layout.as_dict(view._base_dir())
+        response['metadata']['test_scope'] = view.test_scope()
         return response
 
     def _format_unused(self) -> Dict[str, Any]:
