@@ -47,6 +47,7 @@ except ImportError:
 from .cli.defaults import _default_args
 from .cli.global_flags import apply_global_flags
 from .utils.path_utils import failure_of
+from .errors import NavRequestValidationError
 
 # All reveal-mcp tools are read-only (no writes, no side effects) and
 # idempotent (same args -> same result, modulo underlying files changing).
@@ -202,7 +203,8 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     err = err_buf.getvalue().strip()
 
     if captured_exception is not None:
-        return _tool_failure(str(captured_exception), public=isinstance(captured_exception, OSError),
+        return _tool_failure(str(captured_exception),
+                             public=isinstance(captured_exception, (OSError, NavRequestValidationError)),
                              exception=captured_exception)
     if out.strip():
         if capture_stderr and err:

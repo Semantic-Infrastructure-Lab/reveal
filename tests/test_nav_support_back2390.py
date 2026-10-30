@@ -162,3 +162,30 @@ def test_navigation_validation_retains_typed_request_origin():
     assert isinstance(error, RequestValidationError)
     assert isinstance(error, ValueError)
     assert str(error) == 'unsupported navigation'
+
+
+@pytest.mark.parametrize('error_type', ('exit', 'value', 'request'))
+def test_capture_does_not_reclassify_legacy_failure_origins(error_type):
+    from reveal.errors import RequestValidationError
+    from reveal.mcp_server import _run_and_capture, _ToolFailure
+
+    def failed():
+        if error_type == 'exit':
+            raise SystemExit(2)
+        if error_type == 'request':
+            raise RequestValidationError('unrelated request diagnostic')
+        raise ValueError('private parser detail')
+
+    result = _run_and_capture(failed)
+    if error_type == 'exit':
+        assert type(result) is str
+        assert 'exited with code 2' in result
+    else:
+        assert isinstance(result, _ToolFailure)
+        assert result.public is False
+
+
+def test_directory_depth_zero_is_not_structural_nav_validation(tmp_path, python_file):
+    result = _run_reveal_direct(tmp_path, '--depth', '0')
+    assert result.returncode == 0, result.stderr
+    assert 'positive integer' not in result.stderr

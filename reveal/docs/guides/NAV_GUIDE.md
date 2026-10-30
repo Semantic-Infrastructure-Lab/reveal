@@ -54,6 +54,18 @@ regions overlapping the selected range unexpanded, text and `meta.warnings` disc
 that boundary. Other analyses, such as fanout effect collection, may inspect those regions. This does not claim a count of omitted records or matching loops/branches;
 increase `--depth` to expand those structures. Range filtering alone is not a depth cut.
 
+For these code-element structural views, an explicit `--depth` must be a positive
+integer; zero and negative values are rejected instead of becoming a default or an
+empty answer. This does not change file, directory or Markdown depth controls.
+
+Code-analysis navigation flags reject languages explicitly classified as structure-only
+(for example, SQL), rather than reporting no findings as though analysis completed.
+Use `reveal FILE` for their supported structure view. Line navigation with `--scope`
+or `--around` remains available where the analyzer supports it. These unsupported-analysis
+and structural-depth requests exit 2 with a diagnostic on stderr, including under
+`--format json`; they do not print an empty findings answer. Registered MCP navigation
+reports the rejection as an error. A supported analysis with no findings still succeeds.
+
 ---
 
 ## The Highest-Value Flags

@@ -118,6 +118,7 @@ from .cli import (
     handle_file,
 )
 from .utils.path_utils import failure_of
+from .errors import NavRequestValidationError
 
 
 def _warn_if_subcommand_shadows_path(name: str) -> None:
@@ -250,9 +251,10 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     try:
         with invocation_scope(invocation):
             _dispatch_and_run(invocation)
-    except RetiredSpellingError as exc:
-        # The cut release: a retired spelling is an error with the text its note had (D5).
-        print(f'error: {exc.entry.text}', file=sys.stderr)  # boundary-ok: print -- the retirement error line
+    except (RetiredSpellingError, NavRequestValidationError) as exc:
+        # Each owner supplies an explicit invalid-request origin and public diagnostic.
+        message = exc.entry.text if isinstance(exc, RetiredSpellingError) else str(exc)
+        print(f'error: {message}', file=sys.stderr)  # boundary-ok: print -- the invalid-invocation error line
         exit_code = 2
         raise SystemExit(2) from None
     except SystemExit as e:

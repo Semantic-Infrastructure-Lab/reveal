@@ -265,6 +265,10 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
                         depth=getattr(args, 'depth', None))
         return
 
+    handler = next((handler for _, check, handler in _NAV_DISPATCH if check(args)), None)
+    if not (getattr(args, 'scope', False) or getattr(args, 'around', None) is not None):
+        _validate_nav_request(analyzer, handler, args)
+
     if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
         print(
             'Error: nav flags require tree-sitter analysis.\n'
@@ -296,10 +300,25 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         get_text=analyzer._get_node_text,
     )
 
-    for _, check, handler in _NAV_DISPATCH:
-        if check(args):
-            handler(ctx)
-            return
+    if handler is not None:
+        handler(ctx)
+
+
+def _validate_nav_request(analyzer, handler, args) -> None:
+    """Reject only declared unsupported analysis and invalid structural depth."""
+    from .capabilities import CONFORMANCE_STRUCTURE_ONLY, get_capability
+    from .errors import NavRequestValidationError
+
+    capability = get_capability(analyzer)
+    if capability is not None and capability.conformance_level == CONFORMANCE_STRUCTURE_ONLY:
+        raise NavRequestValidationError(
+            f'Code navigation analysis is unavailable for {capability.language} (structure-only). '
+            f'Use `reveal {analyzer.path}` to inspect file structure.'
+        )
+    if handler in (_nav_outline, _nav_branchmap, _nav_loopmap, _nav_fanout):
+        depth = getattr(args, 'depth', None)
+        if depth is not None and (type(depth) is not int or depth < 1):
+            raise NavRequestValidationError('--depth must be a positive integer for structural navigation.')
 
 
 def _resolve_element(analyzer, element: str):
