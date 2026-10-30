@@ -151,7 +151,7 @@ def test_nearest_yaml_toml_precedence_and_list_merge_are_unchanged(project):
     RevealConfig.get(project)
     nested = RevealConfig.get(child)
     assert nested.get_rule_config('C901', 'threshold') == 20
-    assert nested.ignore_patterns == ['vendor', 'build']
+    assert nested.ignore_patterns() == ['vendor', 'build']
     assert [source.path.name for source in nested.sources] == [
         '.reveal.yaml', 'pyproject.toml', '.reveal.yaml',
     ]
