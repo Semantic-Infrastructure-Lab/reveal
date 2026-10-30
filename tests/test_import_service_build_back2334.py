@@ -105,6 +105,8 @@ def test_service_scoped_family_and_cap_preserve_build_inputs(tree):
 
 def test_discovery_build_and_extraction_counts_keep_existing_reuse_and_edit_guards(tree, monkeypatch):
     from reveal.analyzers.imports import extraction
+    # Count request-memo reuse independently of the separate disk-cache layer.
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
     counts = {'discover': 0, 'build': 0, 'extract': 0}
 
     def counted(original, key):
