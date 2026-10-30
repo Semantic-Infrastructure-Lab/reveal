@@ -2355,6 +2355,6 @@ class TestRespectsRevealYamlIgnore:
         from reveal.adapters.architecture import ArchitectureAdapter
         root = self._tree(tmp_path)
         result = ArchitectureAdapter(str(root)).get_structure()
-        components = result['facts']['components']
+        components = result['map']['components']['rows']
         assert not any(c.get('component', '').startswith('vendor') for c in components), (
             f'ignore:-excluded vendor/ still appeared in architecture:// Components: {components}')

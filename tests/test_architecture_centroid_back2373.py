@@ -94,7 +94,7 @@ def test_invalid_ref_still_exits_two(tmp_path, transport):
     response = _invoke(tmp_path, transport, ref='missing-centroid-ref')
     result = json.loads(response.stdout)
     assert response.returncode == 2
-    assert result['type'] == 'architecture_diff'
+    assert result['type'] == 'overview_diff'
     assert result['error']
 
 

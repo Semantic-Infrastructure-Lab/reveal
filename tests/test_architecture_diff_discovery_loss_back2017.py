@@ -212,7 +212,7 @@ def test_failed_comparison_survives_text_json_provenance_projections_and_artifac
     # separately announces that no comparison can be delivered.
     assert (output.stdout + output.stderr).count('missing file population is unknown') == 1
     saved = json.loads(artifact.read_text(encoding='utf-8'))
-    assert saved['type'] == 'architecture_diff'
+    assert saved['type'] == 'overview_diff'
     assert not saved['analysis']['complete']
     machine = invoke(root, base, 'uri', '--provenance', *extra)
     assert machine.returncode == 3

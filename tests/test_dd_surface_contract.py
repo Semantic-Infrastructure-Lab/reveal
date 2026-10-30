@@ -101,13 +101,13 @@ def test_overview_maps_the_fixture_before_deeper_assessment():
 # Step 2 — Map what the system is / touches
 # --------------------------------------------------------------------------- #
 
-def test_architecture_emits_facts_shape():
+def test_architecture_alias_emits_canonical_map_shape():
     d = _json("architecture", "architecture", REPO_STR, "--format", "json")
-    _assert_keys(d, ("path", "facts"), "architecture")
+    _assert_keys(d, ("path", "map"), "architecture alias")
     _assert_keys(
-        d["facts"],
-        ("entry_points", "core_abstractions", "components"),
-        "architecture.facts",
+        d["map"],
+        ("entrypoints", "fan_in", "components"),
+        "overview.map",
     )
 
 
