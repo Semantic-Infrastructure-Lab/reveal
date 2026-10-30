@@ -307,3 +307,29 @@ def test_request_boundary_is_independent_of_producer_metadata(test_import_corpus
     monkeypatch.setattr(gate, '_cli_json', lambda *args, **kwargs: broken)
     with pytest.raises(RuntimeError, match='test_scope|policy'):
         gate._importers_request(root, root, None, policy=policy)
+
+
+def test_cli_records_separate_configured_candidate_without_rebaselining(nonstandard_corpus, tmp_path, monkeypatch):
+    import json
+
+    root, entry, path, _ = nonstandard_corpus
+    ordinary = gate.measure(entry, root)
+    baseline_path = tmp_path / 'baseline.json'
+    baseline_bytes = json.dumps({'corpus': ordinary}).encode('utf-8')
+    baseline_path.write_bytes(baseline_bytes)
+    manifest = tmp_path / 'manifest.yaml'
+    manifest.write_text(json.dumps({'corpora': [{'id': 'corpus', 'language': 'python', **entry}]}), encoding='utf-8')
+    monkeypatch.setattr(gate, 'MANIFEST', manifest)
+    output = tmp_path / 'report.json'
+    code = gate.main(['--corpus-root', str(root.parent), '--output', str(output),
+                      '--baseline', str(baseline_path), '--corpus', 'corpus',
+                      '--test-policy', f'corpus={path}'])
+    assert code == 1  # A new configured row requires review; ordinary baseline is never rewritten.
+    report = json.loads(output.read_text(encoding='utf-8'))
+    measured = report['measurements']['corpus']
+    assert measured['tests'] == ordinary['tests']
+    assert measured['lazy'] == ordinary['lazy']
+    assert measured['configured_tests']['exclude']['extra_edges'] == 0
+    assert report['failures'] == ['corpus: configured_tests=exclude baseline missing; review required']
+    assert baseline_path.read_bytes() == baseline_bytes
+    assert report['implementation']['head']
