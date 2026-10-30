@@ -14,8 +14,8 @@ holds its controls. A new ``RETIREMENTS`` row is covered the day it lands: the p
 not know fails ``test_every_row_has_a_pattern``. Each row also has a positive control: a spelling built
 from the row must be found, so a pattern that silently matches nothing cannot pass.
 
-Spellings that are due to retire but have no row yet (``architecture``, ``hotspots``) join the ratchet
-when their rows land (BACK-2070, BACK-2149).
+Spellings that are due to retire but have no row yet (``hotspots``) join the ratchet
+when their rows land (BACK-2149).
 """
 import pytest
 

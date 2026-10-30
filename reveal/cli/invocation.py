@@ -78,8 +78,8 @@ _SUBCOMMANDS_GUIDE = 'guides/SUBCOMMANDS_GUIDE.md'
 # runners render only these formats (measured: grep/typed output matched text byte for byte).
 COMMANDS: Dict[str, CommandSpec] = {
     'architecture': _declared('architecture',
-                     'reveal architecture [path]',
-                     'Architectural brief: entry points, core abstractions, risks'),
+                     'reveal architecture [path] [--against REF]',
+                     'Deprecated alias for overview; use reveal overview [path] [--against REF]'),
     'calls':        _declared('calls',
                      'reveal calls --callers FUNC',
                      'Call graph: callers, callees (--depth N, --detail), --rank callers, --modules'),
@@ -149,7 +149,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
-EPILOG_ORDER = ('overview', 'architecture', 'imports', 'deps', 'hotspots', 'metrics', 'contracts', 'surface',
+EPILOG_ORDER = ('overview', 'imports', 'deps', 'hotspots', 'metrics', 'contracts', 'surface',
                 'patches', 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline')
 
@@ -228,6 +228,9 @@ class Retirement:
 # The two older BACK-1906 notes, then Phase 2b's call-graph spellings (BACK-2066). A param:
 # row covers the URI parameter and the same parameter typed as a declared subcommand's flag.
 RETIREMENTS: Dict[str, Retirement] = {
+    # D9: one compact map and comparison owner; pack --architecture is a separate live control.
+    'subcommand:architecture': Retirement('reveal architecture', 'reveal overview <path> [--against REF]'),
+    'scheme:architecture': Retirement('architecture://', 'overview://<path>[?against=REF]'),
     'flag:--deps': Retirement('--deps', '--inputs'),
     'flag:--mutations': Retirement('--mutations', '--outputs'),
     'flag:--writes': Retirement('--writes', '--outputs'),
