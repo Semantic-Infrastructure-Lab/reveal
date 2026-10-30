@@ -3,7 +3,6 @@
 import pytest
 
 from reveal.adapters.architecture import ArchitectureAdapter
-from reveal.adapters.ast import AstAdapter
 from reveal.adapters.base import ResourceAdapter
 from reveal.utils.results import ResultBuilder
 
@@ -13,23 +12,28 @@ class Parent(ResourceAdapter):
         return {}
 
 
-def test_exception_before_architecture_finalization_does_not_contaminate_reuse(tmp_path, monkeypatch):
-    from reveal.adapters import architecture
+def test_exception_before_alias_finalization_does_not_contaminate_reuse(tmp_path, monkeypatch):
+    from reveal.adapters import overview
+    from reveal.analyzers.imports import service
 
     (tmp_path / 'module.py').write_text('def healthy():\n    return 1\n', encoding='utf-8')
-    adapter = ArchitectureAdapter(str(tmp_path), 'no_imports=true')
+    adapter = ArchitectureAdapter(str(tmp_path))
 
-    def fail_risks(*args):
-        raise ValueError('risk construction failed')
+    def fail_finalization(result, top):
+        assert any(error['code'] == 'E_COMPOSE' for error in result['meta']['errors'])
+        raise ValueError('map finalization failed')
+
+    def fail_analysis(*args, **kwargs):
+        raise OSError('required child failed')
 
     with monkeypatch.context() as patch:
-        patch.setattr(AstAdapter, 'get_structure', lambda *a, **kw: ResultBuilder.create_error(
-            'ast_query', str(tmp_path), 'required child failed'))
-        patch.setattr(architecture, '_compute_risks', fail_risks)
-        with pytest.raises(ValueError, match='risk construction failed'):
+        patch.setattr(service, 'analyze', fail_analysis)
+        patch.setattr(overview, '_bound_details', fail_finalization)
+        with pytest.raises(ValueError, match='map finalization failed'):
             adapter.get_structure()
+    assert adapter.composed_meta() is None
     reused = adapter.get_structure()
-    fresh = ArchitectureAdapter(str(tmp_path), 'no_imports=true').get_structure()
+    fresh = ArchitectureAdapter(str(tmp_path)).get_structure()
     assert reused == fresh
 
 
