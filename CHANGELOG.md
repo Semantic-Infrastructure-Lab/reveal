@@ -41,6 +41,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Comparison snapshots disclose capped import discovery as incomplete and withhold deltas instead of presenting a complete comparison (BACK-2386).
+
 - Bound Python API queries apply opted-in URI resource decoding, including encoded spaces and Unicode, before opening the target; existing literal percent paths keep precedence (BACK-2385).
 - Compact overview normalizes a single-file target relative to its parent directory, matching directory map paths across CLI, URI and Python API (BACK-2384).
 

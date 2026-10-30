@@ -4,3 +4,5 @@
 # Clear this list in the first commit after each release: it only names work since the last tag.
 BACK-2321 CI default-install smoke and shared packaging test support.
 BACK-2204 Maintainer push-gate evidence validation and private measurement recording.
+
+BACK-2383 # Internal consumer qualification and catalog consistency for compact overview.
