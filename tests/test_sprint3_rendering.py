@@ -67,13 +67,12 @@ def test_recorded_framework_warning_is_not_rediscovered(monkeypatch):
     assert 'recorded framework warning' in ArchitectureRenderer.render_structure(result)
 
 
-def test_stats_exclusions_survive_both_compositions(tmp_path, capsys):
+def test_stats_exclusions_survive_hotspots_composition(tmp_path, capsys):
     from reveal.adapters.stats import StatsAdapter
     from reveal.adapters.hotspots import HotspotsAdapter
-    from reveal.adapters.overview import OverviewAdapter
     (tmp_path / 'demo.py').write_text('value = 1\n', encoding='utf-8')
     (tmp_path / 'component.vue').write_text('<template/>', encoding='utf-8')
-    for adapter in [StatsAdapter(str(tmp_path)), HotspotsAdapter(str(tmp_path)), OverviewAdapter(str(tmp_path))]:
+    for adapter in [StatsAdapter(str(tmp_path)), HotspotsAdapter(str(tmp_path))]:
         result = adapter.get_structure()
         warnings = (result.get('meta') or {}).get('warnings', [])
         matching = [w for w in warnings if w.get('type') == 'unsupported_extensions']

@@ -214,7 +214,7 @@ def test_ast_outline_and_overview_keep_required_warning(tree, monkeypatch):
     deny(monkeypatch, child)
     result = AstAdapter(str(root), 'name=hidden').get_structure()
     assert traversal_warning(result)
-    facts = OverviewAdapter.execution_facts({'meta': result['meta']})
+    facts = OverviewAdapter.execution_facts(OverviewAdapter(str(root)).get_structure())
     assert facts.completeness.value == 'incomplete'
 
 

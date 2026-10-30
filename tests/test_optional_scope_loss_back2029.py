@@ -27,7 +27,7 @@ def project(root, *, empty=False):
 
 
 def query(kind):
-    return 'top=0' + ('&no_git=true' if kind == 'overview' else '')
+    return 'top=0'
 
 
 def owner(kind, root):
@@ -86,7 +86,7 @@ def optional_failure(kind, result):
     assert OWNERS[kind][1].execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
 
 
-@pytest.mark.parametrize('kind', OWNERS)
+@pytest.mark.parametrize('kind', ['architecture'])
 @pytest.mark.parametrize('empty', [False, True])
 @pytest.mark.parametrize('lost', ['root', 'child'])
 def test_actual_scope_loss_matches_optional_boundary_even_empty_and_top_zero(tmp_path, monkeypatch, kind, empty, lost):
@@ -103,7 +103,7 @@ def test_actual_scope_loss_matches_optional_boundary_even_empty_and_top_zero(tmp
     assert 'missing file population is unknown' in warning['message']
 
 
-@pytest.mark.parametrize('kind', OWNERS)
+@pytest.mark.parametrize('kind', ['architecture'])
 @pytest.mark.parametrize('empty', [False, True])
 def test_existing_nonwalk_scope_exception_is_unchanged_policy_control(tmp_path, monkeypatch, kind, empty):
     root = tmp_path / 'affected'; project(root, empty=empty)
@@ -114,7 +114,7 @@ def test_existing_nonwalk_scope_exception_is_unchanged_policy_control(tmp_path, 
     assert directory_warnings(result) == []
 
 
-@pytest.mark.parametrize('kind', OWNERS)
+@pytest.mark.parametrize('kind', ['architecture'])
 def test_unknown_events_survive_without_named_population_and_one_child_error(tmp_path, monkeypatch, kind):
     root = tmp_path / 'affected'; project(root)
     children = {root / f'part{n}' for n in range(7)}
@@ -128,7 +128,7 @@ def test_unknown_events_survive_without_named_population_and_one_child_error(tmp
     assert warning['count'] == 0 and warning['unknown_directory_events'] == 7
 
 
-@pytest.mark.parametrize('kind', OWNERS)
+@pytest.mark.parametrize('kind', ['architecture'])
 @pytest.mark.parametrize('view', ['text', 'projection', 'artifact'])
 def test_public_views_retain_optional_failure_and_attributed_disclosure(tmp_path, monkeypatch, kind, view):
     root = tmp_path / 'affected'; project(root)
@@ -153,7 +153,7 @@ def test_public_views_retain_optional_failure_and_attributed_disclosure(tmp_path
         assert 'missing file population is unknown' in response.stdout + response.stderr
 
 
-@pytest.mark.parametrize('kind', OWNERS)
+@pytest.mark.parametrize('kind', ['architecture'])
 def test_reused_owner_and_decorated_host_repair_without_manual_clears(tmp_path, monkeypatch, kind):
     root = tmp_path / 'affected'; project(root)
     sibling = tmp_path / 'sibling'; project(sibling)
@@ -175,7 +175,7 @@ def test_reused_owner_and_decorated_host_repair_without_manual_clears(tmp_path, 
     assert not directory_warnings(repaired)
 
 
-@pytest.mark.parametrize('kind', OWNERS)
+@pytest.mark.parametrize('kind', ['architecture'])
 def test_real_required_source_failure_remains_failed_with_optional_loss(tmp_path, monkeypatch, kind):
     root = tmp_path / 'affected'; project(root)
     state = fault(monkeypatch, kind, {root}, combined=True)
@@ -195,3 +195,29 @@ def test_overview_explicit_exclusion_does_not_become_failed_scope(tmp_path, monk
         result = owner('overview', root).get_structure()
     assert state['events'] == [] and result == clean
     assert result['scope']['total_code_files'] == 1
+
+
+def test_required_overview_census_exception_is_failed_and_repairs(tmp_path, monkeypatch):
+    root = tmp_path / 'affected'
+    project(root)
+    adapter = owner('overview', root)
+    baseline = adapter.get_structure()
+    state = fault(monkeypatch, 'overview', set(), exception=True)
+    failed = adapter.get_structure()
+    assert failed['scope'] == {} and failed['map_status'] == 'failed'
+    assert adapter.execution_facts(failed).completeness is AnalysisCompleteness.FAILED
+    assert any('scope_dict_for_path' in error['message'] for error in failed['meta']['errors'])
+    state['enabled'] = False
+    assert adapter.get_structure() == baseline
+
+
+def test_required_overview_census_loss_retains_surviving_count(tmp_path, monkeypatch):
+    root = tmp_path / 'affected'
+    child = project(root)
+    state = fault(monkeypatch, 'overview', {child})
+    result = owner('overview', root).get_structure()
+    assert state['events'] and result['scope']['total_code_files'] == 1
+    assert result['scope']['complete'] is False
+    assert overview.OverviewAdapter.execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
+    warning, = directory_warnings(result)
+    assert warning['count'] == 1 and warning['directories'] == ['included_child']

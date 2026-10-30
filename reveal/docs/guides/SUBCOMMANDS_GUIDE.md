@@ -655,56 +655,33 @@ reveal hotspots . --files-only     # Only file-level view
 
 ---
 
-## reveal overview — Codebase Dashboard
+## reveal overview — Compact Project Map
 
-One-glance dashboard synthesising stats, language breakdown, quality pulse, top
-hotspots, complex functions, architecture overview (entry points, core
-abstractions, component cohesion, circular count), and recent git activity into
-a single view. Its architecture section states the rule it counted by (`Rule:` lines in text, `edge_rule` in
-JSON under `architecture`): every static import edge except `TYPE_CHECKING` ones, function-level imports
-included; circulars use the load-time view. `overview` takes no `&lazy`; `imports://<dir>?rank=fan-in&lazy=exclude`
-is the load-time view.
-
-### Usage
-
-```
-reveal overview [PATH] [--top N] [--no-git] [--no-imports] [--all] [--fail-on none]
-```
-
-### CLI Flags
-
-| Flag | Description |
-|------|-------------|
-| `--top N` | Items to show per section (default: 5) |
-| `--no-git` | Skip the recent git activity section |
-| `--no-imports` | Skip the Architecture section (import graph analysis) |
-| `--all`, `--verbose` | Expand analysis and text rankings, overriding explicit top |
-| `--fail-on none` | Default and only policy; required failures still exit 3 |
-| `--format json` | Machine-readable output |
-
-### Examples
+Orient with recognized code-file/language counts, major components, static import
+relationships, entrypoint candidates and cycle evidence. Text and JSON contain
+the same bounded map, with counting rules, coverage and drill-down commands.
 
 ```bash
-reveal overview                      # Current directory
-reveal overview ./src                # Specific directory
-reveal overview . --top 10           # 10 items per section
-reveal overview . --no-git           # Skip git history
-reveal overview . --format json      # Machine-readable output
+reveal overview [PATH] [--top N] [--no-imports] [--all] [--fail-on none]
+reveal overview ./src --format json
+reveal overview . --top 0
 ```
 
-Direct `overview` and `overview://` return the same `overview` answer. Completed
-work exits 0; invalid resources/parameters exit 2; required child analysis or
-requested output failure exits 3. There is no adverse-findings gate. Whole-valued
-top spellings such as `3.0` and `3e0` normalize; negative values, fractions and
-booleans reject. With neither expansion flag, top0 retains all Stats hotspots but
-zero complex-function/Git entries. URI query exclusions preserve their existing
-Stats/scope/Imports scope; global `--exclude` also filters AST complex functions.
+Top defaults to five and bounds graph sections and nested cycle details. Zero
+shows known observed totals without graph rows; all/verbose expand map rows.
+No-imports produces an explicitly labelled scope-only map. Exclude and gitignore
+controls apply to the census and graph; hidden entries are not a measured count
+of every skipped file. No-git and tests were dashboard controls and now reject
+with a correction toward their assessment owners.
 
-### See Also
+Completed work exits 0, invalid resources/parameters exit 2, and required analysis
+or requested output failure exits 3. There is no adverse-findings gate. Validated execution outcomes
+survive field selection and presentation cuts; explicit fields may omit unselected
+payload sections. Ordinary overview does
+not collect metrics, quality rules, exhaustive complexity rankings or Git history.
 
-- `reveal hotspots` — Deep dive into complexity hotspots
-- `reveal imports --external` — Third-party and stdlib packages (`--circular`, `--unused`)
-- `reveal overview --help` — Full flag reference
+See the [overview guide](../adapters/OVERVIEW_ADAPTER_GUIDE.md) for record shapes,
+limits and drill-down examples.
 
 ---
 
@@ -768,7 +745,7 @@ as entry points. High entry point counts often indicate dynamic loading patterns
 
 ### See Also
 
-- `reveal overview` — Full codebase health dashboard (stats, quality, git)
+- `reveal overview` — Compact project map with coverage and drill-downs
 - `reveal imports --external` — Third-party and stdlib packages (`--circular`, `--unused` for the rest of dependency health)
 - `reveal architecture --help` — Full flag reference
 
@@ -877,7 +854,7 @@ host request, even if access recovered before the earlier request finished.
 Healthy inventories retain their existing validation and reuse. This handling
 covers directory enumeration, not the separate importer-file read or
 `__init__.py` fallback-read failure channels. M102 is a cross-file rule, so it is not part
-of the quality scores and rankings of `stats://`, `overview` and `hotspots`, which count
+of the quality scores and rankings of `stats://` and `hotspots`, which count
 file-local rules only ([what the issue count counts](../adapters/METRICS_ADAPTER_GUIDE.md#what-the-issue-count-counts)).
 
 ### Usage

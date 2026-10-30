@@ -63,15 +63,12 @@
       "args": [
         "overview",
         "{corpus}",
-        "--no-git",
         "--format",
         "json"
       ],
       "exit_code": 0,
       "type": "overview",
-      "allowed_warning_types": [
-        "complexity_is_unweighted"
-      ]
+      "allowed_warning_types": []
     },
     "hotspots": {
       "args": [

@@ -14,11 +14,13 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from typing import Any
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -247,10 +249,19 @@ def _validate_analysis_state(node: Any, allowed_warnings: list[str]) -> None:
             _validate_analysis_state(child, allowed_warnings)
 
 
+def _normalize_command(value: str, corpus: Path) -> str:
+    prefixes = {str(corpus), corpus.as_posix(), quote(corpus.as_posix(), safe='/.:')}
+    for prefix in sorted(prefixes, key=len, reverse=True):
+        value = re.sub(re.escape(prefix) + r'''(?=$|[/\\?'"\s])''', '<corpus>', value)
+    return value
+
+
 def _normalize_result(value: Any, corpus: Path | None) -> Any:
     """Only invocation-root prefixes vary; retain all fields and list ordering."""
     if isinstance(value, dict):
-        return {key: _normalize_result(child, corpus) for key, child in value.items()}
+        return {key: (_normalize_command(child, corpus)
+                      if key == 'command' and isinstance(child, str) and corpus is not None
+                      else _normalize_result(child, corpus)) for key, child in value.items()}
     if isinstance(value, list):
         return [_normalize_result(child, corpus) for child in value]
     if isinstance(value, str) and corpus is not None:
@@ -281,6 +292,24 @@ def validate_command_output(status: int, stdout: str, spec: dict, target_count: 
             'result': _normalize_result(result, corpus)}
 
 
+def _overview_outcome(result: dict, target_count: int) -> dict:
+    """Qualify the compact map's census and source coverage, without Metrics."""
+    scope = result.get('scope', {})
+    _require_values(scope, {'total_code_files': target_count})
+    _require_values(result, {'map_status': 'complete'})
+    if scope.get('complete') is not True:
+        raise ValueError('overview census is incomplete')
+    metadata = (result.get('map') or {}).get('metadata', {})
+    _require_values(metadata, {'scanned_files': target_count, 'files_failed_count': 0,
+                               'files_lost_count': 0, 'unsupported_extensions': {}})
+    budget = metadata.get('scan_budget', {})
+    _require_values(budget, {'scope': 'scan', 'total': target_count, 'returned': target_count})
+    if budget.get('exact') is not True or budget.get('capped') is not False:
+        raise ValueError('overview scan accounting is incomplete')
+    return {'total_code_files': target_count, 'scanned_files': target_count,
+            'map_status': 'complete'}
+
+
 def _outcome_summary(result: dict, target_count: int) -> dict:
     kind = result['type']
     summary = result.get('summary', {})
@@ -290,8 +319,8 @@ def _outcome_summary(result: dict, target_count: int) -> dict:
         return {key: summary.get(key) for key in ('files_checked', 'total_issues', 'files_errored',
                                                  'files_degraded', 'exit_code', 'scan_disclosures')}
     if kind == 'overview':
-        summary = result.get('stats', {}).get('summary', {})
-    if kind in ('overview', 'hotspots', 'hotspots_scan'):
+        return _overview_outcome(result, target_count)
+    if kind in ('hotspots', 'hotspots_scan'):
         _require_values(summary, {'total_files': target_count, 'excluded': 0})
         return {'total_files': target_count, 'excluded': 0}
     _require_values(result.get('scope', {}), {'total_code_files': target_count})

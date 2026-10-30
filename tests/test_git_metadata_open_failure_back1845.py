@@ -18,7 +18,7 @@ import pytest
 pygit2 = pytest.importorskip('pygit2')
 
 from reveal.adapters.git import GitAdapter  # noqa: E402
-from reveal.adapters.overview import OverviewAdapter, _resolve_git_root  # noqa: E402
+from reveal.adapters.overview import OverviewAdapter  # noqa: E402
 from reveal.errors import NotApplicableError  # noqa: E402
 
 LIBGIT2_REFUSAL = "repository path '/srv/repo/.git/' is not owned by current user"
@@ -51,20 +51,8 @@ def test_metadata_discloses_ownership_refusal(repo):
     assert 'safe.directory' in str(exc.value)
 
 
-def test_overview_resolver_discloses_ownership_refusal(repo):
-    with patch.object(pygit2, 'Repository', _refuse):
-        with pytest.raises(ValueError) as exc:
-            _resolve_git_root(repo)
-    assert 'not owned by current user' in str(exc.value)
 
 
-def test_overview_warns_on_ownership_refusal(repo):
-    with patch('reveal.adapters.overview._run_git_log', return_value=list(COMMITS)), \
-            patch.object(pygit2, 'Repository', _refuse):
-        result = OverviewAdapter(str(repo), 'no_imports=true').get_structure()
-    messages = ' '.join(e['message'] for e in _errors(result))
-    assert 'not owned by current user' in messages
-    assert result['meta']['confidence'] < 1.0
 
 
 # Negative controls: unchanged behavior.
@@ -74,16 +62,8 @@ def test_non_repository_is_still_not_applicable():
         with patch.object(pygit2, 'discover_repository', return_value=None):
             with pytest.raises(NotApplicableError):
                 GitAdapter(path=tmp).get_metadata()
-            assert _resolve_git_root(Path(tmp)) is None
 
 
-def test_non_repository_overview_has_no_warning():
-    with tempfile.TemporaryDirectory() as tmp, \
-            patch('reveal.adapters.overview._run_git_log', return_value=list(COMMITS)), \
-            patch.object(pygit2, 'discover_repository', return_value=None):
-        result = OverviewAdapter(tmp, 'no_imports=true').get_structure()
-    assert _errors(result) == []
-    assert result['git_foreign_root'] is None
 
 
 def test_real_repository_metadata_unchanged(repo):
@@ -91,3 +71,10 @@ def test_real_repository_metadata_unchanged(repo):
     assert set(meta) == {'type', 'path', 'adapter'}
     assert meta['type'] == 'git_repository' and meta['adapter'] == 'git'
     assert Path(meta['path']).resolve() == repo.resolve()
+
+
+def test_overview_does_not_request_git_metadata(repo):
+    with patch.object(GitAdapter, 'get_metadata', side_effect=AssertionError('Git metadata was requested')):
+        result = OverviewAdapter(str(repo), 'no_imports=true').get_structure()
+    assert not _errors(result)
+    assert 'git_log' not in result and result['map_status'] == 'not_requested'

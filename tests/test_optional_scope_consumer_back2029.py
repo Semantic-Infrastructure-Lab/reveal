@@ -13,8 +13,7 @@ from reveal.utils.path_utils import to_posix
 from reveal.utils.results import AnalysisCompleteness
 
 pytestmark = pytest.mark.component
-OWNERS = [('architecture', architecture, architecture.ArchitectureAdapter, 'top=0'),
-          ('overview', overview, overview.OverviewAdapter, 'no_git=true&top=0')]
+OWNERS = [('architecture', architecture, architecture.ArchitectureAdapter, 'top=0')]
 
 
 def _write(path, source):
@@ -167,3 +166,26 @@ def test_scope_default_three_positional_contract_and_explicit_policy_omission(tm
         excluded = scope_dict_for_path(tmp_path, [], True)
     assert excluded['total_code_files'] == 1
     assert set(excluded) == set(default)
+
+
+@pytest.mark.parametrize('positive,unknown', [(True, False), (False, True)])
+def test_required_overview_census_retains_partial_counts_and_all_events(tmp_path, monkeypatch, positive, unknown):
+    root = tmp_path / 'affected'
+    children = _project(root, positive)
+    state = _fault(monkeypatch, overview)
+    adapter = overview.OverviewAdapter(str(root), 'top=0')
+    clean = adapter.get_structure()
+    state.update(denied=set(children), unknown=unknown)
+    partial = adapter.get_structure()
+    assert len(state['events']) == 7
+    assert partial['scope']['complete'] is False
+    assert partial['scope']['total_code_files'] == (2 if positive else 0)
+    assert not partial.get('meta', {}).get('errors')
+    assert adapter.execution_facts(partial).completeness is AnalysisCompleteness.INCOMPLETE
+    warning, = _directories(partial)
+    assert warning['count'] == (0 if unknown else 7)
+    assert warning.get('unknown_directory_events', 0) == (7 if unknown else 0)
+    projected = run(f'overview://{root.as_posix()}?top=0', '--format', 'json', '--fields', 'path')
+    assert projected.returncode == 3 and _directories(json.loads(projected.stdout))
+    state['denied'] = set()
+    assert adapter.get_structure() == clean

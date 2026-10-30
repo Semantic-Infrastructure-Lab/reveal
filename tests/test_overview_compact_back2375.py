@@ -264,6 +264,10 @@ def test_capped_scan_remains_incomplete_at_top_zero_and_fields(project, monkeypa
     assert budget == {'scope': 'scan', 'limit': 2, 'total': 3, 'returned': 2, 'exact': False, 'capped': True}
     assert body['map_status'] == 'incomplete'
     assert all(body['map'][name]['rows'] == [] for name in ('fan_in', 'entrypoints', 'components', 'cycles'))
+    expanded, visible = answer(project, query='top=20')
+    assert expanded.returncode == 3
+    node_paths = {row['file'] for name in ('fan_in', 'entrypoints') for row in visible['map'][name]['rows']}
+    assert len(node_paths) == 4 > visible['map']['metadata']['scanned_files'] == 2
     projected = run('overview', project, '--format', 'json', '--fields', 'path')
     assert projected.returncode == 3
     selected = json.loads(projected.stdout)

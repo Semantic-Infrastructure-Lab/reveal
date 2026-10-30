@@ -47,20 +47,6 @@ def wide_tree(tmp_path):
     return tmp_path
 
 
-def test_overview_text_discloses_truncation_the_json_reports(wide_tree):
-    """The section rendered N rows with no indicator while meta.warnings said
-    'showing 5 of 97'."""
-    as_json = json.loads(_run(wide_tree, 'overview://.', '--format', 'json').stdout)
-    warned = [
-        w for w in as_json.get('meta', {}).get('warnings', [])
-        if w.get('type') == 'truncated'
-    ]
-    if not warned:
-        pytest.skip('fixture did not trigger truncation')
-
-    text = _text(wide_tree, 'overview://.')
-    assert 'Caveats' in text
-    assert warned[0]['message'] in text
 
 
 def test_ast_text_discloses_the_unfiltered_ranking_warning(tmp_path):
@@ -227,3 +213,14 @@ class TestEntrypointsTestFanIn:
         meta = json.loads(out.stdout).get('metadata', {})
         types = {w.get('type') for w in meta.get('warnings', [])}
         assert 'test_files_in_entrypoints' in types, meta
+
+
+def test_overview_text_discloses_its_bounded_components(wide_tree):
+    for n in range(8):
+        directory = wide_tree / f'component{n}'
+        directory.mkdir()
+        (directory / 'a.py').write_text('VALUE=1\n', encoding='utf-8')
+    body = json.loads(_run(wide_tree, 'overview://.', '--format', 'json').stdout)
+    page = body['map']['components']
+    assert page == {**page, 'total': 9, 'returned': 5, 'omitted': 4}
+    assert 'showing 5 of 9 observed' in _text(wide_tree, 'overview://.')

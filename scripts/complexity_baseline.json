@@ -138,7 +138,6 @@
   "reveal/mcp_server.py::reveal_check": 17,
   "reveal/rendering/adapters/contracts.py::_render_report": 17,
   "reveal/rendering/adapters/markdown_query.py::_render_result_row": 20,
-  "reveal/rendering/adapters/overview.py::_render_architecture": 18,
   "reveal/rendering/adapters/pack.py::_format_pack_file_groups": 16,
   "reveal/rendering/adapters/surface.py::_entry": 16,
   "reveal/rules/bugs/B003.py::B003._check_csharp": 16,

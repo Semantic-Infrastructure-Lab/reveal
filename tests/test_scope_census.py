@@ -246,3 +246,14 @@ class TestScopeDictForPath:
         d = scope_dict_for_path(tmp_path)
         assert d['total_code_files'] == 0
         assert d['languages'] == []
+
+    def test_hidden_callback_forwards_entry_units_without_changing_counts(self, tmp_path):
+        from reveal.utils.path_utils import HiddenTally
+        (tmp_path / 'kept.py').write_text('VALUE=1\n', encoding='utf-8')
+        excluded = tmp_path / 'excluded'
+        excluded.mkdir()
+        (excluded / 'hidden.py').write_text('VALUE=2\n', encoding='utf-8')
+        hidden = HiddenTally()
+        scope = scope_dict_for_path(tmp_path, ['excluded'], True, on_hidden=hidden)
+        assert scope['total_code_files'] == 1
+        assert dict(hidden) == {'exclude': 1}  # One excluded directory entry, not its subtree.
