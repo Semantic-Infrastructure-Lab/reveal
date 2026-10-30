@@ -684,6 +684,14 @@ still recognizes unnamed helpers. This fallback cannot establish project scope
 invariance across narrower scans. The counting rule reports the effective basis in
 text and JSON `edge_rule.test_scope`; package tables use `metadata.test_scope`.
 Entrypoint `is_test` labels retain that basis after paths are shortened for display.
+Project-local `test_layout.additional_paths` adds literal files and component-bounded
+subtrees to conventions. The same selected policy governs importer exclusions,
+external packages, entrypoint labels and non-test fan-in before projection.
+Configured `test_scope` includes normalized selectors, declaration provenance,
+effective policy identity and observed scanned-source counts. Missing optional
+selectors are valid; a non-match is not proof of a production role. See
+[project test and support paths](../guides/CONFIGURATION_GUIDE.md#project-test-and-support-paths)
+for selection, validation and the supported-consumer matrix.
 
 ### Query Flags
 
@@ -701,7 +709,7 @@ Use `?flag` syntax for operations:
 | `external` | Package table: unresolved (third-party or unresolved-local) and stdlib packages by use, the languages importing each, import statements per file (`external_packages`; the deps dashboard's table, now JSON) | `imports://src?external` |
 | `importers` | Who imports what: on a file (or `=FILE`, relative to the path) each importer with its import line, scope and cascade stage (`via`); on a directory every module under it with its sorted importers | `imports://src/utils.py?importers` |
 | `scope=root\|path` | `root` (default): resolve at the project root, rows under the path; `path`: the path itself is the scan root | `imports://src?rank=fan-in&scope=path` |
-| `tests=include\|exclude` | Count importers under a test path (`path_utils.is_test_path`), or not | `imports://src?importers&tests=exclude` |
+| `tests=include\|exclude` | Count importers selected by the scoped conventional/configured test-support policy, or exclude them | `imports://src?importers&tests=exclude` |
 | `root=DIR` | Pin the scan root (must contain the path; not a filesystem/home/system root; a refused value is a warning) | `imports://src/app.py?importers&root=.` |
 | `lazy=include\|exclude\|only` | Function-level (lazy) import edges: include them, exclude them (load-time edges only) or show only them. Default: `?circular` excludes, every other view includes | `imports://src?rank=fan-in&lazy=exclude` |
 | `format=text\|json\|dot` | Output override for `?importers` on a directory: `dot` draws one importer -> module edge per listed importer as Graphviz | `imports://src?importers&format=dot` |

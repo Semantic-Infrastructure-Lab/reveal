@@ -922,3 +922,51 @@ Legacy path still read, with a migration warning:
 - `reveal help://` - List all help topics
 - `reveal check --help` - CLI usage
 
+
+## Project test and support paths
+
+Declare nonstandard test/support files or directory subtrees at the selected project
+boundary. Conventional test names remain recognized:
+
+```yaml
+test_layout:
+  additional_paths:
+    - t/unit
+    - t/integration
+    - t/smoke
+    - crates/searcher/src/testutil.rs
+```
+
+Each literal path selects itself and component-bounded descendants: `t/unit` does
+not select `t/unitized` or `src/t/unit`. Separators and ordinary `.` components
+normalize; duplicate paths collapse and effective selectors sort. Empty strings,
+NUL, absolute/drive/UNC paths and every `..` component reject. Glob, home and
+environment syntax has literal meaning; no expansion or runner execution occurs.
+Explicit `.` selects the whole project scope and is prominently disclosed.
+Missing optional paths are valid; observed counts cover scanned sources only.
+A non-match does not prove production role, deployment or runtime reachability.
+
+Only declarations at the selected anchor or in the selected `REVEAL_CONFIG` file
+are eligible. Custom-file paths refer to the selected project. Custom selection
+keeps its existing custom-only behavior. Existing local YAML/TOML precedence is
+preserved; the highest present eligible list replaces lower lists, so `[]` clears
+additional selectors. User/system and unrelated ancestor/descendant declarations
+are ignored for this policy. `--no-config` uses conventions alone. Malformed
+selected declarations are invalid requests (exit 2); a required configuration
+source that cannot be loaded is an operational failure (exit 3).
+
+| Operation | Configured additional paths |
+|-----------|-----------------------------|
+| Imports graph/external views and entrypoint labels | Supported; test exclusion removes importer edges and retains incoming edges to selected helper targets. Include preserves graph/scanned populations. |
+| Overview map and Git architecture comparisons | Supported; one request policy governs both comparison sides, including identical-tree proofs. |
+| Metrics hotspots with `tests=exclude`, Surface `source_only=true` | Decline nonempty configured selectors with exit 2 pending adoption. Other queries retain their existing behavior. |
+| Patches/default testability selection | Decline nonempty configured selectors with exit 2. Explicit trusted `tests=` in the pressure/testability report remains supported. |
+| Other role labels, M102, Calls test symbols | Existing conventional or language-specific basis; no configured-policy adoption is implied. |
+
+`reveal reveal://config` describes the current directory's selected anchor,
+effective policy and declarations actually read, including ignored sources. It
+is not proof of the selection for another target or an explicit root pin. Import
+JSON retains normalized selectors, declaration provenance/input digest, effective
+policy identity and scan-bounded observed counts in `test_scope`. New API/MCP
+requests see configuration edits; retained views remain immutable. Direct library
+users can start a new `host_request` or reset configuration request caches.

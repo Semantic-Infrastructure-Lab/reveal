@@ -457,14 +457,7 @@ class RevealConfig:
         Sources are already in low-to-high precedence order. A root-local empty
         list replaces lower additions independently of global list merging.
         """
-        if self._selected_custom_config and not any(source.layer == 'custom' for source in self.sources):
-            why = next((why for path, why in self.load_failures if path == self._selected_custom_config),
-                       'FileNotFoundError: selected configuration file was not found')
-            raise TestLayoutConfigError(f'Required test_layout configuration could not be loaded: {why}')
-        for path, why in self.load_failures:
-            source = Path(path)
-            if source.parent == layout.anchor or self._selected_custom_config == path:
-                raise TestLayoutConfigError(f'Required test_layout configuration could not be loaded: {why}')
+        self._require_test_layout_sources(layout)
         selected = self._test_layout_source(layout)
         if selected is None:
             return layout
@@ -480,6 +473,17 @@ class RevealConfig:
         digest = hashlib.sha256((selected.test_layout_json or '').encode('utf-8')).hexdigest()
         return replace(layout, additional_paths=paths,
                        declaration=(selected.layer, to_posix(selected.path), digest))
+
+    def _require_test_layout_sources(self, layout: TestLayout) -> None:
+        """A failed eligible read cannot establish that the policy was absent."""
+        if self._selected_custom_config and not any(source.layer == 'custom' for source in self.sources):
+            why = next((why for path, why in self.load_failures if path == self._selected_custom_config),
+                       'FileNotFoundError: selected configuration file was not found')
+            raise TestLayoutConfigError(f'Required test_layout configuration could not be loaded: {why}')
+        for path, why in self.load_failures:
+            source = Path(path)
+            if (source.parent == layout.anchor and source.name in ('.reveal.yaml', 'pyproject.toml')) or self._selected_custom_config == path:
+                raise TestLayoutConfigError(f'Required test_layout configuration could not be loaded: {why}')
 
     def _test_layout_source(self, layout: TestLayout) -> Optional[ConfigSource]:
         """Select from captured layers, also shared by configuration inspection."""

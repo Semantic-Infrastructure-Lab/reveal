@@ -112,6 +112,7 @@ def test_configured_importer_exclusion_entrypoint_and_external_agree(tmp_path):
 
     root = project(tmp_path)
     files = {
+        'broken.py': 'def broken(\n',
         'pkg/__init__.py': '', 'pkg/core.py': 'VALUE=1\n',
         'pkg/app.py': 'from src.helper import VALUE\nimport requests\n',
         'src/__init__.py': '', 'src/helper.py': 'VALUE=1\n',
@@ -130,6 +131,7 @@ def test_configured_importer_exclusion_entrypoint_and_external_agree(tmp_path):
     assert adapter.analysis.graph is graph
     assert adapter.analysis.scanned_files == scanned
     assert include['metadata'] == exclude['metadata']
+    assert include['metadata']['extraction_diagnostics']
     core = next(row for row in exclude['entries'] if row['file'] == 'pkg/core.py')
     assert core['importers'] == ['t/unitized/app.py']
     assert next(row for row in exclude['entries'] if row['file'] == 'src/helper.py')['importers'] == ['pkg/app.py']
@@ -234,3 +236,40 @@ def test_failed_custom_source_stays_required_after_environment_changes(tmp_path,
     monkeypatch.setenv('REVEAL_CONFIG', str(tmp_path / 'another.yaml'))
     with pytest.raises(ConfigFailure, match='ParserError'):
         config.apply_test_layout(Layout.for_path(root))
+
+
+def test_live_policy_relocates_once_for_both_git_sides_and_fast_proof(tmp_path, monkeypatch):
+    pygit2 = pytest.importorskip('pygit2')
+    from reveal.diff import architecture_diff as diff
+    root = project(tmp_path, 'test_layout:\n  additional_paths: []\n')
+    (root / 'helpers').mkdir()
+    (root / 'helpers' / 'worker.py').write_text('import core\n', encoding='utf-8')
+    (root / 'helpers' / 'core.py').write_text('VALUE=1\n', encoding='utf-8')
+    repo = pygit2.init_repository(str(root))
+    repo.index.add_all()
+    repo.index.write()
+    author = pygit2.Signature('fixture', 'fixture@example.invalid')
+    revision = str(repo.create_commit('HEAD', author, author, 'fixture', repo.index.write_tree(), []))
+    (root / '.reveal.yaml').write_text('test_layout:\n  additional_paths: [helpers]\n', encoding='utf-8')
+    (root / 'helpers' / 'worker.py').write_text('import core\n# live change\n', encoding='utf-8')
+    seen = []
+    snapshot = diff._snapshot
+
+    def observed(path, top, *, test_layout):
+        seen.append(test_layout.as_dict(path))
+        return snapshot(path, top, test_layout=test_layout)
+
+    monkeypatch.setattr(diff, '_snapshot', observed)
+    result = diff.run_architecture_diff(root / 'helpers', revision)
+    assert result['deltas']['entry_points'] == {'added': [], 'removed': []}
+    assert len(seen) == 2
+    assert seen[0]['effective_policy'] == seen[1]['effective_policy']
+    assert seen[0]['declaration'] == seen[1]['declaration']
+    assert seen[0]['effective_policy']['anchor'] == '..'
+    assert result['analysis']['test_scope']['additional_paths'] == ['helpers']
+    seen.clear()
+    (root / 'helpers' / 'worker.py').write_text('import core\n', encoding='utf-8')
+    result = diff.run_architecture_diff(root / 'helpers', revision)
+    assert result['analysis']['basis'] == 'identical_tree'
+    assert result['analysis']['test_scope']['additional_paths'] == ['helpers']
+    assert seen == []

@@ -58,6 +58,12 @@ Entrypoints use the shared static predicate: fan-in zero ignoring test importers
 positive fan-out, excluding test files and Python package initializers. The predicate uses producer
 paths before shortening them for display. These
 are candidates for investigation; static imports do not establish runtime entry.
+Project-local `test_layout.additional_paths` also selects helper files/subtrees for
+entrypoint labels and non-test fan-in. The map uses the same immutable policy as
+Imports, before display cuts. Git comparisons select one live request policy for
+both sides, relocate it into the materialized subtree and retain its basis even
+when identical trees avoid analysis. See the
+[configuration contract](../guides/CONFIGURATION_GUIDE.md#project-test-and-support-paths).
 `entry_point_filter` reports the raw candidate population and active subset.
 
 Counting rules accompany the facts. Fan-in and components count static imports
