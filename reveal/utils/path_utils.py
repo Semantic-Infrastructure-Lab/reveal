@@ -185,6 +185,9 @@ class TestLayout:
     declaration: Optional[Tuple[str, str, str]] = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.additional_paths, tuple):
+            raise ValueError('test_layout.additional_paths context must be an immutable tuple')
+        object.__setattr__(self, 'additional_paths', self.normalize_additional_paths(list(self.additional_paths)))
         for path in (self.anchor, self.observed_root, self.logical_root):
             if path is not None and (not path.is_absolute() or '..' in path.parts):
                 raise ValueError('test layout roots must be normalized absolute paths')
@@ -208,7 +211,7 @@ class TestLayout:
             path = '/'.join(part for part in spelling.split('/') if part and part != '.') or '.'
             if path not in normalized:
                 normalized.append(path)
-        return tuple(normalized)
+        return tuple(sorted(normalized))
 
     @classmethod
     def for_path(cls, path: Path, *, fallback_root: Optional[Path] = None,
@@ -271,7 +274,7 @@ class TestLayout:
                                             'anchor': result['anchor'],
                                             'include_anchor_name': self.include_anchor_name,
                                             'anchor_name': self.anchor.name if self.include_anchor_name else None,
-                                            'additional_paths': list(self.additional_paths)})
+                                            'additional_paths': sorted(self.additional_paths)})
             result['basis'] = basis + ('; conventional names plus declared additional paths'
                                        if '.' not in self.additional_paths else '; WHOLE SCOPE selected by explicit .')
         return result
