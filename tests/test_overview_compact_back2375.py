@@ -211,6 +211,19 @@ def test_all_excluded_is_disclosed_scope_empty(project):
     assert len([w for w in body['meta']['warnings'] if w['type'] == 'scope_hidden']) == 1
 
 
+def test_distinct_owner_warnings_are_not_coalesced_by_category(project, monkeypatch):
+    from reveal.adapters import overview
+    original = overview.integrity_warnings
+    def additional(analysis, base):
+        return [*original(analysis, base), {'type': 'scope_hidden', 'count': 2, 'unit': 'entries',
+            'hidden': {'exclude': 2}, 'causes': ['exclude'], 'message': 'Distinct owner hidden evidence'}]
+    monkeypatch.setattr(overview, 'integrity_warnings', additional)
+    result, body = answer(project, '--exclude', '*.py')
+    assert result.returncode == 0
+    warnings = [w for w in body['meta']['warnings'] if w['type'] == 'scope_hidden']
+    assert len(warnings) == 2 and {w['count'] for w in warnings} == {2, 24}
+
+
 def denied_child(monkeypatch, child):
     original = os.scandir
     def denied(path):
@@ -285,6 +298,7 @@ def test_loss_details_bounded_after_full_proof(project, monkeypatch, lost):
     cuts = {w['field']: w for w in body['meta']['warnings'] if w['type'] == 'truncated'}
     assert cuts['map.metadata.extraction_diagnostics']['total'] == 53
     assert cuts['map.metadata.files_failed']['total'] == 53
+    assert all('?limit' not in cut['message'] for cut in cuts.values())
     assert all(len(w.get('files', [])) <= 5 for w in body['meta']['warnings'])
     artifact = project / 'answer.json'
     rendered = run('overview', project, '--top', '0', '--output', f'json={artifact}', '--fields', 'path')
@@ -298,6 +312,28 @@ def test_malformed_required_producer_is_failed_with_scope_survivors(project, mon
     result, body = answer(project)
     assert result.returncode == 3 and body['map_status'] == 'failed'
     assert body['scope']['total_code_files'] == 24
+    assert OverviewAdapter.execution_facts(body).completeness is AnalysisCompleteness.FAILED
+
+
+@pytest.mark.parametrize('top', [0, 5])
+@pytest.mark.parametrize('inactive', [False, True])
+@pytest.mark.parametrize('field', ['is_test', 'test_only_importers'])
+@pytest.mark.parametrize('transport', ['cli', 'api'])
+def test_all_raw_entrypoint_fields_are_required_in_each_transport(project, monkeypatch, top, inactive, field, transport):
+    write(project, 'inactive.py', 'VALUE=1\n')
+    original = ImportView.entrypoints
+    def malformed(self):
+        data = original(self)
+        row = next(row for row in data['entries'] if (row['fan_out'] == 0) == inactive)
+        row.pop(field)
+        return data
+    monkeypatch.setattr(ImportView, 'entrypoints', malformed)
+    if transport == 'cli':
+        result, body = answer(project, query=f'top={top}')
+        assert result.returncode == 3
+    else:
+        body = api.query(f'overview://{project.as_posix()}', top=top)
+    assert body['map_status'] == 'failed'
     assert OverviewAdapter.execution_facts(body).completeness is AnalysisCompleteness.FAILED
 
 
