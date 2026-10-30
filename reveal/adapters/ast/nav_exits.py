@@ -939,12 +939,14 @@ def render_gate_chains(
 ) -> str:
     """Render collect_gate_chains output."""
     if not chains:
-        return f'No return/exit paths in L{from_line}→L{to_line}'
-    lines: List[str] = []
+        return 'Exit sites (static)\nNo exits recorded in this selection.'
+    counts: Dict[str, int] = {}
+    for item in chains:
+        counts[item['kind']] = counts.get(item['kind'], 0) + 1
+    lines: List[str] = ['Exit sites (static)', ', '.join(f'{kind}: {count}' for kind, count in counts.items())]
     for item in chains:
         gates = item['gates']
-        gate_label = '  [unconditional]' if not gates else ''
-        lines.append(f'{item["kind"]:<10}L{item["line"]}:  {item["text"]}{gate_label}')
+        lines.append(f'{item["kind"]:<10}L{item["line"]}:  {item["text"]}')
         for g in gates:
             lines.append(f'          gate: {g["text"]} (L{g["line"]})')
         lines.append('')

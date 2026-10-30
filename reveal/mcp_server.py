@@ -537,7 +537,14 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
     from .file_handler import handle_file  # noqa: I006
     from .cli.invocation import Invocation, RetiredSpellingError, invocation_scope, retirement_note
 
-    if flag in _NAV_BOOLEAN_FLAGS:
+    if flag == 'flow':
+        from .nav_handlers import parse_flow_selectors
+        try:
+            selectors = parse_flow_selectors(flag_value) if flag_value else ()
+        except ValueError as exc:
+            return _tool_failure(str(exc))
+        args = _default_args(flow=selectors)
+    elif flag in _NAV_BOOLEAN_FLAGS:
         args = _default_args(**{flag: True})
     elif flag in _NAV_VAR_NAME_FLAGS:
         if not flag_value:
@@ -553,7 +560,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
             return _tool_failure(f"around requires an integer flag_value, got '{flag_value}'")
         args = _default_args(around=n)
     else:
-        valid = sorted(_NAV_BOOLEAN_FLAGS | set(_NAV_VAR_NAME_FLAGS) | {'callsites', 'calls', 'around'})
+        valid = sorted(_NAV_BOOLEAN_FLAGS | set(_NAV_VAR_NAME_FLAGS) | {'callsites', 'calls', 'around', 'flow'})
         return _tool_failure(f"unknown nav flag '{flag}'. Valid flags: {valid}")
 
     option = '--' + flag

@@ -65,7 +65,9 @@ def test_flow_uses_qualified_positive_depth(tmp_path, depth):
 def test_file_only_flow_uses_literal_source_scope_and_preserves_file_outline(tmp_path):
     path = tmp_path / 'script.py'
     path.write_text('if ready:\n    launch()\n', encoding='utf-8')
-    answer = _json(path, '', '--flow')
+    result = _run_reveal_direct(path, '--flow', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    answer = json.loads(result.stdout)
     assert [(r['keyword'], r['line_start']) for r in answer['findings']] == [('IF', 1)]
     assert answer['meta']['flag'] == 'flow'
     outline = _run_reveal_direct(path, '--outline', '--format', 'json')
@@ -78,7 +80,8 @@ def test_exits_preserve_source_kinds_and_expected_gate_lines(language):
     answer = _json(path, element, '--exits')
     expected = EXPECTED[language] if language != 'tsx' else {
         'exits': [{'kind': 'RETURN', 'line': 16}, {'kind': 'RETURN', 'line': 18}],
-        'returns': [{'line': 16, 'gate_lines': [15]}, {'line': 18, 'gate_lines': []}],
+        # L16 is in TRY (no branch gate); L18 is inside CATCH at L17.
+        'returns': [{'line': 16, 'gate_lines': []}, {'line': 18, 'gate_lines': [17]}],
     }
     assert [{'kind': row['kind'], 'line': row['line']} for row in answer['findings']] == expected['exits']
     assert [{'line': row['line'], 'gate_lines': [gate['line'] for gate in row['gates']]}
@@ -102,6 +105,52 @@ def test_exits_full_gates_summary_and_empty_selection(tmp_path):
     assert 'unconditional' not in text
     empty = _run_reveal_direct(path, 'work', '--exits', '--range', '1-1')
     assert 'No exits recorded in this selection.' in empty.stdout
+
+
+def test_nested_sibling_and_exception_gates_are_full_source_facts(tmp_path):
+    path = tmp_path / 'nested.py'
+    path.write_text('def work(a, b):\n if a:\n  if b:\n   return 1\n'
+                    '  else:\n   return 2\n else:\n  try:\n   return 3\n'
+                    '  except ValueError:\n   return 4\n return 5\n', encoding='utf-8')
+    rows = _json(path, 'work', '--exits')['findings']
+    a, b = {'line': 2, 'text': 'a'}, {'line': 3, 'text': 'b'}
+    not_a, not_b = {'line': 2, 'text': 'not (a)'}, {'line': 3, 'text': 'not (b)'}
+    assert rows == [
+        {'kind': 'RETURN', 'line': 4, 'text': 'return 1', 'gates': [a, b]},
+        {'kind': 'RETURN', 'line': 6, 'text': 'return 2', 'gates': [a, not_b]},
+        {'kind': 'RETURN', 'line': 9, 'text': 'return 3', 'gates': [not_a]},
+        {'kind': 'RETURN', 'line': 11, 'text': 'return 4',
+         'gates': [not_a, {'line': 10, 'text': 'on exception'}]},
+        {'kind': 'RETURN', 'line': 12, 'text': 'return 5', 'gates': []},
+    ]
+
+
+def test_root_inventory_and_one_line_range_retain_recorded_gates(tmp_path):
+    path = tmp_path / 'region.py'
+    path.write_text('def first(a):\n if a:\n  return 1\n return 2\n'
+                    'def second():\n return 3\n', encoding='utf-8')
+    first = {'kind': 'RETURN', 'line': 3, 'text': 'return 1', 'gates': [{'line': 2, 'text': 'a'}]}
+    result = _run_reveal_direct(path, '--exits', '--format', 'json')
+    answer = json.loads(result.stdout)
+    assert answer['findings'] == [first,
+        {'kind': 'RETURN', 'line': 4, 'text': 'return 2', 'gates': []},
+        {'kind': 'RETURN', 'line': 6, 'text': 'return 3', 'gates': []}]
+    assert answer['meta']['exit_scope']['mode'] == 'source_scope'
+    selected = _json(path, 'first', '--exits', '--range', '3-3')
+    literal = _json(path, ':3-3', '--exits')
+    assert selected['findings'] == literal['findings'] == [first]
+    assert selected['meta']['exit_scope']['mode'] == 'selected_callable'
+    assert literal['meta']['exit_scope']['mode'] == 'source_scope'
+
+
+def test_empty_flow_projection_retains_actual_depth_cut(tmp_path):
+    path = tmp_path / 'depth.py'
+    path.write_text('def work(a):\n try:\n  if a:\n   return 1\n'
+                    ' except ValueError:\n  return 2\n', encoding='utf-8')
+    answer = _json(path, 'work', '--flow=if', '--depth', '1')
+    assert answer['findings'] == []
+    assert answer['meta']['depth_limited'] is True
+    assert [warning['type'] for warning in answer['meta']['warnings']] == ['depth_limited']
 
 
 def test_registered_mcp_flow_values_and_invalid_selector(tmp_path):

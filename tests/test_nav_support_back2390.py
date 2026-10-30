@@ -136,7 +136,7 @@ def test_registered_mcp_marks_unsupported_analysis_as_error(tmp_path, python_fil
             'path': str(python_file), 'element': 'work', 'flag': 'returns',
         })
         assert not empty.is_error
-        assert 'No return/exit paths' in _text(empty)
+        assert 'No exits recorded in this selection.' in _text(empty)
 
     _run(tmp_path, scenario)
 

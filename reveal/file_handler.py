@@ -84,6 +84,7 @@ from .nav_handlers import (  # noqa: F401
     _nav_json,
     _NavCtx,
     _nav_outline,
+    _nav_flow,
     _nav_varflow,
     _nav_narrow,
     _nav_calls,
@@ -315,7 +316,7 @@ def _validate_nav_request(analyzer, handler, args) -> None:
             f'Code navigation analysis is unavailable for {capability.language} (structure-only). '
             f'Use `reveal {analyzer.path}` to inspect file structure.'
         )
-    if handler in (_nav_outline, _nav_branchmap, _nav_loopmap, _nav_fanout):
+    if handler in (_nav_outline, _nav_flow, _nav_branchmap, _nav_loopmap, _nav_fanout):
         depth = getattr(args, 'depth', None)
         if depth is not None and (type(depth) is not int or depth < 1):
             raise NavRequestValidationError('--depth must be a positive integer for structural navigation.')
@@ -451,6 +452,9 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
             'inputs', 'outputs', 'deps', 'mutations', 'writes', 'sideeffects', 'loopmap', 'fanout',
             'statewrites', 'keys', 'returns', 'boundary',
         )
+        if getattr(args, 'flow', None) is not None:
+            total = len(split_lines(analyzer.content))
+            element = f':1-{total}'
         for flag in _FLAT_FLAGS:
             if getattr(args, flag, None):
                 total = len(split_lines(analyzer.content))

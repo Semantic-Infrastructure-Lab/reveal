@@ -27,6 +27,14 @@ _IF_KEYWORDS: frozenset = frozenset({'IF', 'ELIF', 'ELSE', 'UNLESS', 'SWITCH', '
 _CATCH_KEYWORDS: frozenset = frozenset({'TRY', 'CATCH', 'EXCEPT', 'FINALLY'})
 
 
+def parse_flow_selectors(value: str) -> tuple[str, ...]:
+    """Validate an explicit flow value before acquisition; bare flow uses ()."""
+    parts = tuple(part.strip() for part in value.split(','))
+    if any(part not in {'if', 'loop', 'try'} for part in parts):
+        raise ValueError('flow selectors must be nonempty comma-separated if, loop or try values')
+    return tuple(dict.fromkeys(parts))
+
+
 def _resolve_range(args, func_start: int, func_end: int):
     """Return (from_line, to_line) for a nav flag, respecting --range if present.
 
@@ -121,6 +129,8 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
     }
     result = {'meta': {'depth': ctx.depth, 'depth_limited': limited,
                        'structure_scope': structure_scope}}
+    if flag == 'flow':
+        result['meta']['flow_selectors'] = list(ctx.args.flow)
     if limited:
         note_warning(result, {
             'type': 'depth_limited', 'field': 'findings', 'cause': 'max_depth',
@@ -146,6 +156,25 @@ def _nav_outline(ctx: _NavCtx) -> None:
     if getattr(ctx.args, 'range', None):
         items = [i for i in items if from_line <= i['line_start'] <= to_line]
     _emit_depth_navigation(ctx, 'outline', from_line, to_line, items, evidence,
+                           lambda: render_outline(ctx.element, ctx.func_start, ctx.func_end,
+                                                  items, depth=ctx.depth))
+
+
+def _nav_flow(ctx: _NavCtx) -> None:
+    from .adapters.ast.nav import OutlineDepth, element_outline, render_outline
+    from .adapters.ast.nav_loops import LOOP_KEYWORDS
+
+    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    evidence = OutlineDepth()
+    items = element_outline(ctx.func_node, ctx.get_text, max_depth=ctx.depth,
+                            depth_evidence=evidence)
+    projections = {'if': _IF_KEYWORDS, 'loop': LOOP_KEYWORDS, 'try': _CATCH_KEYWORDS}
+    selectors = ctx.args.flow
+    keywords = frozenset().union(*(projections[name] for name in selectors))
+    items = [item for item in items
+             if from_line <= item['line_start'] <= to_line
+             and (not selectors or item['keyword'] in keywords)]
+    _emit_depth_navigation(ctx, 'flow', from_line, to_line, items, evidence,
                            lambda: render_outline(ctx.element, ctx.func_start, ctx.func_end,
                                                   items, depth=ctx.depth))
 
@@ -261,15 +290,14 @@ def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
 
 
 def _nav_exits(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import collect_exits, render_exits  # noqa: I006
+    from .adapters.ast.nav import collect_gate_chains, render_gate_chains  # noqa: I006
     from .adapters.ast.nav_exits import ExitOwnership
-    is_flowto = getattr(ctx.args, 'flowto', False)
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
     ownership = ExitOwnership(getattr(ctx.analyzer, 'language', ''), ctx.func_node)
-    exits = collect_exits(ctx.func_node, from_line, to_line, ctx.get_text, ownership=ownership)
-    _emit_exit_navigation(ctx, 'flowto' if is_flowto else 'exits', from_line, to_line,
+    exits = collect_gate_chains(ctx.func_node, from_line, to_line, ctx.get_text, ownership=ownership)
+    _emit_exit_navigation(ctx, 'exits', from_line, to_line,
                           exits, ownership,
-                          lambda: render_exits(exits, from_line, to_line, verdict=is_flowto))
+                          lambda: render_gate_chains(exits, from_line, to_line))
 
 
 def _nav_deps(ctx: _NavCtx) -> None:
@@ -400,13 +428,7 @@ def _nav_keys(ctx: _NavCtx) -> None:
 
 
 def _nav_returns(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import collect_gate_chains, render_gate_chains  # noqa: I006
-    from .adapters.ast.nav_exits import ExitOwnership
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    ownership = ExitOwnership(getattr(ctx.analyzer, 'language', ''), ctx.func_node)
-    chains = collect_gate_chains(ctx.func_node, from_line, to_line, ctx.get_text, ownership=ownership)
-    _emit_exit_navigation(ctx, 'returns', from_line, to_line, chains, ownership,
-                          lambda: render_gate_chains(chains, from_line, to_line))
+    _nav_exits(ctx)
 
 
 def _boundary_effect_finding(effect: Dict[str, Any], transitive: bool) -> Dict[str, Any]:
@@ -483,6 +505,7 @@ def _nav_boundary(ctx: _NavCtx) -> None:
 _NAV_DISPATCH: List[tuple] = [
     # (bool_flags, check, handler)
     (('outline',),                lambda a: getattr(a, 'outline', False),                                  _nav_outline),
+    ((),                         lambda a: getattr(a, 'flow', None) is not None,                          _nav_flow),
     ((),                           lambda a: getattr(a, 'varflow', None),                                    _nav_varflow),
     ((),                           lambda a: getattr(a, 'narrow', None),                                     _nav_narrow),
     ((),                           lambda a: getattr(a, 'calls', None) is not None,                          _nav_calls),

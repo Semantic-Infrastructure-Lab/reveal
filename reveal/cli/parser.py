@@ -500,6 +500,12 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
     second positional argument. Start with --outline or --boundary; add
     --format json for machine-readable output.
     """
+    from ..nav_handlers import parse_flow_selectors
+
+    parser.add_argument('--flow', nargs='?', const=(), type=parse_flow_selectors, metavar='SELECTORS',
+                        help='Recognized code skeleton; optional if,loop,try union in source order. '
+                             'Use target-first bare flow or equals-form selectors: '
+                             'reveal file.py work --flow; reveal file.py work --flow=if,loop')
     parser.add_argument('--outline', action='store_true',
                         help='Two modes: without element → file-level hierarchical outline '
                              '(classes with methods, nested structures); '
