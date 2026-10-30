@@ -119,11 +119,9 @@ def test_information_and_ranking_cuts_are_not_missing_evidence(tree):
 
 
 def test_complexity_helper_failure_is_canonical_and_visible(tree):
-    from reveal.adapters import architecture
-
     repo, src, ref = tree
     _dirty(src)
-    with patch.object(architecture, '_run_complex_functions', side_effect=OSError('injected helper I/O failure')):
+    with patch.object(diff, '_run_complex_functions', side_effect=OSError('injected helper I/O failure')):
         result = diff.run_architecture_diff(src, ref)
     assert result['error'] and result['deltas'] is None
     assert result['analysis']['snapshots']['base']['complexity'] == 'failed'
