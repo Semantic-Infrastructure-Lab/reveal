@@ -34,7 +34,7 @@ def bind(root):
 def test_literal_paths_select_files_and_component_bounded_subtrees(tmp_path):
     root = project(tmp_path, 'test_layout:\n  additional_paths: [./t/unit, "t\\\\unit", src/helper.rs, "literal*", "$HOME", "~"]\n')
     layout = bind(root)
-    assert layout.additional_paths == ('t/unit', 'src/helper.rs', 'literal*', '$HOME', '~')
+    assert layout.additional_paths == tuple(sorted(('t/unit', 'src/helper.rs', 'literal*', '$HOME', '~')))
     for name in ('t/unit/worker.py', 'src/helper.rs', 'literal*/a.py', '$HOME/a.py', '~/a.py', 'tests/helper.py'):
         assert layout.is_test(root / name), name
     for name in ('t/unitized/a.py', 'src/t/unit/a.py', 'src/helper.rsx', 'literalZZ/a.py', 'src/lib.rs'):
@@ -66,7 +66,7 @@ def test_ignored_ancestor_and_descendant_declarations_cannot_change_anchor_polic
     a = RevealConfig.get(root).apply_test_layout(Layout.for_path(root))
     b = RevealConfig.get(child).apply_test_layout(Layout.for_path(child))
     assert a.identity == b.identity
-    assert b.additional_paths == ('t/unit', 'src/helper.rs')
+    assert b.additional_paths == ('src/helper.rs', 't/unit')
 
 
 def test_policy_graph_identity_retains_production_edges_to_helper_targets(tmp_path):
@@ -172,7 +172,42 @@ def test_config_inspection_discloses_actual_cwd_policy_and_ignored_sources(tmp_p
     monkeypatch.chdir(root)
     result = get_config()
     assert result['metadata']['test_layout_anchor'] == root.as_posix()
-    assert result['test_layout']['effective']['additional_paths'] == ['t/unit', 'src/helper.rs']
+    assert result['test_layout']['effective']['additional_paths'] == ['src/helper.rs', 't/unit']
     assert result['test_layout']['declarations'][0]['status'] == 'ignored'
     assert result['test_layout']['declarations'][-1]['status'] == 'selected'
     assert result['test_layout']['inspection_scope'] == 'current_directory'
+
+
+def test_equivalent_selectors_reuse_graph_view_but_current_provenance_is_fresh(tmp_path):
+    from reveal.analyzers.imports.views import ImportView
+    from reveal.analyzers.imports.types import ImportAnalysis
+    root = project(tmp_path, 'test_layout:\n  additional_paths: [t/unit, ./src/helper.rs, t/unit]\n')
+    old = bind(root)
+    graph = ImportGraph()
+    graph.add_dependency(root / 't/unit/worker.py', root / 'src/lib.rs')
+    graph.add_dependency(root / 'src/app.py', root / 'src/lib.rs')
+    analysis = ImportAnalysis(graph=graph, scanned_files={root / 't/unit/worker.py', root / 'src/app.py'})
+    old_view = ImportView(analysis, root, None, 100, tests='exclude', test_layout=old)
+    old_metadata = old_view.test_scope()
+    (root / '.reveal.yaml').write_text('test_layout:\n  additional_paths: [src/helper.rs, t/unit]\n', encoding='utf-8')
+    RevealConfig.reset_request_cache()
+    current = bind(root)
+    assert old.identity == current.identity
+    assert old.declaration != current.declaration
+    assert graph.without_test_importers(old) is graph.without_test_importers(current)
+    new_view = ImportView(analysis, root, None, 100, tests='exclude', test_layout=current)
+    assert new_view.test_scope()['effective_policy'] == old_metadata['effective_policy']
+    assert new_view.test_scope()['declaration'] != old_metadata['declaration']
+    assert old_view.test_scope() == old_metadata
+    (root / '.reveal.yaml').write_text('test_layout:\n  additional_paths: []\n', encoding='utf-8')
+    RevealConfig.reset_request_cache()
+    changed = bind(root)
+    assert graph.without_test_importers(changed) is not graph.without_test_importers(old)
+    assert old_view._edges('include').dependencies == {root / 'src/app.py': {root / 'src/lib.rs'}}
+
+
+def test_direct_context_normalizes_immutable_tuple_and_rejects_mutable_list(tmp_path):
+    layout = Layout(tmp_path.resolve(), 'project', additional_paths=('t/unit', './src/helper.rs', 't\\unit'))
+    assert layout.additional_paths == ('src/helper.rs', 't/unit')
+    with pytest.raises(ValueError, match='immutable tuple'):
+        Layout(tmp_path.resolve(), 'project', additional_paths=['t/unit'])
