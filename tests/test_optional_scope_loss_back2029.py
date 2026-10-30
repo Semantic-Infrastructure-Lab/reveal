@@ -1,4 +1,4 @@
-"""Optional scope enumeration loss uses the existing composed-error boundary."""
+"""Canonical maps retain required census loss and isolate composed diagnostics."""
 import json
 import os
 from pathlib import Path
@@ -12,7 +12,7 @@ from reveal.utils.exclusions import exclusion_scope
 from reveal.utils.results import AnalysisCompleteness
 
 pytestmark = pytest.mark.component
-OWNERS = {'architecture': (architecture, architecture.ArchitectureAdapter),
+OWNERS = {'architecture': (overview, architecture.ArchitectureAdapter),
           'overview': (overview, overview.OverviewAdapter)}
 
 
@@ -66,56 +66,59 @@ def fault(monkeypatch, kind, paths, *, unknown=False, combined=False, exception=
     return state
 
 
-def domain(result):
-    return {k: v for k, v in result.items() if k not in {'scope', 'meta'}}
-
-
 def directory_warnings(result):
     return [w for w in result.get('meta', {}).get('warnings', [])
             if w.get('type') == 'analysis_incomplete' and w.get('unit') == 'directories']
 
 
-def optional_failure(kind, result):
+def required_exception(kind, result):
     assert result['scope'] == {}
     meta = result['meta']
     errors = [e for e in meta['errors'] if e.get('code') == 'E_COMPOSE']
     assert len(errors) == 1
     assert 'scope_dict_for_path' in errors[0]['message']
     assert meta['confidence'] == 0.0
-    assert not any(e.get('code') in {'E_ARCHITECTURE_ANALYSIS', 'E_OVERVIEW_ANALYSIS'} for e in meta['errors'])
+    assert result['map_status'] == 'failed'
+    assert OWNERS[kind][1].execution_facts(result).completeness is AnalysisCompleteness.FAILED
+
+
+def partial_census(kind, result):
+    assert result['scope']['complete'] is False
+    assert not result.get('meta', {}).get('errors')
     assert OWNERS[kind][1].execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
 
 
-@pytest.mark.parametrize('kind', ['architecture'])
+@pytest.mark.parametrize('kind', OWNERS)
 @pytest.mark.parametrize('empty', [False, True])
 @pytest.mark.parametrize('lost', ['root', 'child'])
-def test_actual_scope_loss_matches_optional_boundary_even_empty_and_top_zero(tmp_path, monkeypatch, kind, empty, lost):
+def test_actual_required_scope_loss_retains_counts_even_empty_and_top_zero(tmp_path, monkeypatch, kind, empty, lost):
     root = tmp_path / 'affected'; child = project(root, empty=empty)
     clean = owner(kind, root).get_structure()
     state = fault(monkeypatch, kind, {root if lost == 'root' else child})
     result = owner(kind, root).get_structure()
     assert state['events'] and all(stage == 'scope' for stage, _ in state['events'])
     assert state['calls'] == 1
-    assert domain(result) == domain(clean)
-    optional_failure(kind, result)
+    assert result['map'] == clean['map']
+    assert result['scope']['total_code_files'] == (0 if empty or lost == 'root' else 1)
+    partial_census(kind, result)
     warning, = directory_warnings(result)
     assert warning['count'] == 1 and 'PermissionError' in warning['message']
     assert 'missing file population is unknown' in warning['message']
 
 
-@pytest.mark.parametrize('kind', ['architecture'])
+@pytest.mark.parametrize('kind', OWNERS)
 @pytest.mark.parametrize('empty', [False, True])
-def test_existing_nonwalk_scope_exception_is_unchanged_policy_control(tmp_path, monkeypatch, kind, empty):
+def test_required_nonwalk_scope_exception_is_failed(tmp_path, monkeypatch, kind, empty):
     root = tmp_path / 'affected'; project(root, empty=empty)
     state = fault(monkeypatch, kind, set(), exception=True)
     result = owner(kind, root).get_structure()
     assert not state['events']
-    optional_failure(kind, result)
+    required_exception(kind, result)
     assert directory_warnings(result) == []
 
 
-@pytest.mark.parametrize('kind', ['architecture'])
-def test_unknown_events_survive_without_named_population_and_one_child_error(tmp_path, monkeypatch, kind):
+@pytest.mark.parametrize('kind', OWNERS)
+def test_unknown_events_survive_without_invented_named_population(tmp_path, monkeypatch, kind):
     root = tmp_path / 'affected'; project(root)
     children = {root / f'part{n}' for n in range(7)}
     for child in children:
@@ -123,14 +126,14 @@ def test_unknown_events_survive_without_named_population_and_one_child_error(tmp
     state = fault(monkeypatch, kind, children, unknown=True)
     result = owner(kind, root).get_structure()
     assert len(state['events']) == 7
-    optional_failure(kind, result)
+    partial_census(kind, result)
     warning, = directory_warnings(result)
     assert warning['count'] == 0 and warning['unknown_directory_events'] == 7
 
 
-@pytest.mark.parametrize('kind', ['architecture'])
+@pytest.mark.parametrize('kind', OWNERS)
 @pytest.mark.parametrize('view', ['text', 'projection', 'artifact'])
-def test_public_views_retain_optional_failure_and_attributed_disclosure(tmp_path, monkeypatch, kind, view):
+def test_public_views_retain_required_census_loss_and_attributed_disclosure(tmp_path, monkeypatch, kind, view):
     root = tmp_path / 'affected'; project(root)
     state = fault(monkeypatch, kind, {root})
     artifact = tmp_path / 'answer.json'
@@ -146,14 +149,14 @@ def test_public_views_retain_optional_failure_and_attributed_disclosure(tmp_path
     assert response.returncode == 3
     if view in {'projection', 'artifact'}:
         result = json.loads(response.stdout if view == 'projection' else artifact.read_text(encoding='utf-8'))
-        optional_failure(kind, result)
+        partial_census(kind, result)
         assert len(directory_warnings(result)) == 1
         assert result['execution']
     else:
         assert 'missing file population is unknown' in response.stdout + response.stderr
 
 
-@pytest.mark.parametrize('kind', ['architecture'])
+@pytest.mark.parametrize('kind', OWNERS)
 def test_reused_owner_and_decorated_host_repair_without_manual_clears(tmp_path, monkeypatch, kind):
     root = tmp_path / 'affected'; project(root)
     sibling = tmp_path / 'sibling'; project(sibling)
@@ -163,10 +166,10 @@ def test_reused_owner_and_decorated_host_repair_without_manual_clears(tmp_path, 
     state = fault(monkeypatch, kind, {root})
     result = adapter.get_structure()
     assert state['events']
-    optional_failure(kind, result)
+    partial_census(kind, result)
     wire = reveal_query(uri(kind, root), provenance=True)
     assert isinstance(wire, str)
-    optional_failure(kind, json.loads(wire))
+    partial_census(kind, json.loads(wire))
     assert owner(kind, sibling).get_structure() == sibling_clean
     state['enabled'] = False
     assert adapter.get_structure() == baseline
@@ -175,16 +178,16 @@ def test_reused_owner_and_decorated_host_repair_without_manual_clears(tmp_path, 
     assert not directory_warnings(repaired)
 
 
-@pytest.mark.parametrize('kind', ['architecture'])
-def test_real_required_source_failure_remains_failed_with_optional_loss(tmp_path, monkeypatch, kind):
+@pytest.mark.parametrize('kind', OWNERS)
+def test_real_required_source_failure_remains_failed_with_census_loss(tmp_path, monkeypatch, kind):
     root = tmp_path / 'affected'; project(root)
     state = fault(monkeypatch, kind, {root}, combined=True)
     result = owner(kind, root).get_structure()
     assert {stage for stage, _ in state['events']} == {'analysis', 'scope'}
     assert OWNERS[kind][1].execution_facts(result).completeness is AnalysisCompleteness.FAILED
-    assert any(e.get('code') == ('E_ARCHITECTURE_ANALYSIS' if kind == 'architecture' else 'E_OVERVIEW_ANALYSIS')
+    assert any(e.get('code') == 'E_OVERVIEW_ANALYSIS'
                for e in result['meta']['errors'])
-    assert result['scope'] == {}
+    assert result['scope']['complete'] is False
 
 
 def test_overview_explicit_exclusion_does_not_become_failed_scope(tmp_path, monkeypatch):

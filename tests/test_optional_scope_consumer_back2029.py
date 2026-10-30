@@ -1,4 +1,4 @@
-"""Optional scope enumeration loss must follow its existing exception contract."""
+"""Canonical and alias maps preserve required census evidence through consumer cuts."""
 import json
 import os
 from pathlib import Path
@@ -13,7 +13,8 @@ from reveal.utils.path_utils import to_posix
 from reveal.utils.results import AnalysisCompleteness
 
 pytestmark = pytest.mark.component
-OWNERS = [('architecture', architecture, architecture.ArchitectureAdapter, 'top=0')]
+OWNERS = [('architecture', overview, architecture.ArchitectureAdapter, 'top=0'),
+          ('overview', overview, overview.OverviewAdapter, 'top=0')]
 
 
 def _write(path, source):
@@ -62,12 +63,8 @@ def _fault(monkeypatch, module):
     return state
 
 
-def _body(result):
-    return {key: value for key, value in result.items() if key not in ('scope', 'meta')}
-
-
 def _compose(result):
-    return [error for error in result['meta']['errors'] if error.get('code') == 'E_COMPOSE']
+    return [error for error in result.get('meta', {}).get('errors', []) if error.get('code') == 'E_COMPOSE']
 
 
 def _directories(result):
@@ -76,7 +73,7 @@ def _directories(result):
 
 @pytest.mark.parametrize('name,module,adapter_class,query', OWNERS)
 @pytest.mark.parametrize('positive,unknown', [(True, False), (False, True)])
-def test_multiple_actual_scope_events_match_existing_optional_exception_and_survive_cuts(
+def test_multiple_required_scope_events_and_exception_survive_cuts(
         tmp_path, monkeypatch, name, module, adapter_class, query, positive, unknown):
     root = tmp_path / 'affected'
     children = _project(root, positive)
@@ -86,21 +83,21 @@ def test_multiple_actual_scope_events_match_existing_optional_exception_and_surv
     adapter = adapter_class(str(root), query)
     clean = adapter.get_structure()
     sibling_clean = adapter_class(str(sibling), query).get_structure()
-    # Existing optional-child failure supplies the policy comparator, including empty input.
+    # A complete census exception fails; partial enumeration retains measured counts.
     state['exception'] = RuntimeError('independent ordinary optional scope exception')
     prior = adapter.get_structure()
     assert prior['scope'] == {} and prior['meta']['confidence'] == 0.0
     assert len(_compose(prior)) == 1
-    assert adapter_class.execution_facts(prior).completeness is AnalysisCompleteness.INCOMPLETE
+    assert adapter_class.execution_facts(prior).completeness is AnalysisCompleteness.FAILED
     assert not _directories(prior)
     state.update(exception=None, denied=set(children), unknown=unknown)
     start, calls = len(state['events']), state['calls']
     result = adapter.get_structure()
     assert len(state['events']) - start == 7 and state['calls'] == calls + 1
-    assert _body(result) == _body(clean) == _body(prior)
-    assert result['scope'] == {}  # Do not turn a failed optional section into false census zero.
-    assert result['meta']['confidence'] == 0.0
-    assert len(_compose(result)) == 1
+    assert result['map'] == clean['map'] == prior['map']
+    assert result['scope']['complete'] is False
+    assert result['scope']['total_code_files'] == (2 if positive else 0)
+    assert not _compose(result)
     assert adapter_class.execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
     assert not any(error.get('code') in ('E_ARCHITECTURE_ANALYSIS', 'E_OVERVIEW_ANALYSIS')
                    for error in result['meta']['errors'])
@@ -114,14 +111,13 @@ def test_multiple_actual_scope_events_match_existing_optional_exception_and_surv
     assert 'missing file population is unknown' in warning['message']
     # Reusing the owner must neither accumulate composed child errors nor lose new evidence.
     again = adapter.get_structure()
-    assert again == result and len(_compose(again)) == 1
+    assert again == result and not _compose(again)
     assert adapter_class(str(sibling), query).get_structure() == sibling_clean
     uri = f'{name}://{root.as_posix()}?{query}'
     projected = run(uri, '--format', 'json', '--fields', 'path', '--provenance')
     assert projected.returncode == 3
     data = json.loads(projected.stdout)
-    # architecture writes its path with '/' on every OS (BACK-2302); overview still echoes the spelling given.
-    assert to_posix(data['path']) == to_posix(root) and len(_compose(data)) == 1
+    assert to_posix(data['path']) == to_posix(root) and not _compose(data)
     assert len(_directories(data)) == 1
     assert data['execution']['command'].startswith(f'reveal {name}://')
     artifact = tmp_path / 'answer.json'
@@ -129,7 +125,8 @@ def test_multiple_actual_scope_events_match_existing_optional_exception_and_surv
     assert text.returncode == 3
     assert (text.stdout + text.stderr).count('identified directory enumeration(s) failed') == 1
     saved = json.loads(artifact.read_text(encoding='utf-8'))
-    assert saved['scope'] == {} and saved['meta']['confidence'] == 0.0
+    assert saved['scope']['complete'] is False
+    assert saved['scope']['total_code_files'] == (2 if positive else 0)
     assert adapter_class.execution_facts(saved).completeness is AnalysisCompleteness.INCOMPLETE
     state['denied'] = set()
     assert adapter.get_structure() == clean
@@ -137,7 +134,7 @@ def test_multiple_actual_scope_events_match_existing_optional_exception_and_surv
 
 
 @pytest.mark.parametrize('name,module,adapter_class,query', OWNERS)
-def test_nonwalk_oserror_retains_old_optional_policy_without_directory_claim(
+def test_required_nonwalk_oserror_fails_without_directory_claim(
         tmp_path, monkeypatch, name, module, adapter_class, query):
     _project(tmp_path / 'empty', False)
     root = tmp_path / 'empty'
@@ -149,7 +146,7 @@ def test_nonwalk_oserror_retains_old_optional_policy_without_directory_claim(
     assert not state['events'] and result['scope'] == {}
     assert result['meta']['confidence'] == 0.0 and len(_compose(result)) == 1
     assert not _directories(result)
-    assert adapter.execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
+    assert adapter.execution_facts(result).completeness is AnalysisCompleteness.FAILED
     assert not any(error.get('code') in ('E_ARCHITECTURE_ANALYSIS', 'E_OVERVIEW_ANALYSIS')
                    for error in result['meta']['errors'])
     state['exception'] = None
