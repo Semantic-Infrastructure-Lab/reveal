@@ -115,7 +115,12 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
     from .utils.warning_render import render_meta_warnings
 
     limited = evidence.overlaps(from_line, to_line)
-    result = {'meta': {'depth': ctx.depth, 'depth_limited': limited}}
+    structure_scope = {
+        'rule': 'Recognized structural nodes; exit expressions may be omitted.',
+        'exit_sites': 'Inspect --exits for candidate exit sites.',
+    }
+    result = {'meta': {'depth': ctx.depth, 'depth_limited': limited,
+                       'structure_scope': structure_scope}}
     if limited:
         note_warning(result, {
             'type': 'depth_limited', 'field': 'findings', 'cause': 'max_depth',
@@ -127,6 +132,7 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
                   findings, extra_meta=result['meta'])
     else:
         print(f'Navigation depth {ctx.depth}')
+        print(f'Skeleton scope: {structure_scope["rule"]} {structure_scope["exit_sites"]}')
         print(render())
         render_meta_warnings(result)
 
@@ -249,6 +255,7 @@ def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
         label = ('selected callable execution regions' if ownership.mode == 'selected_callable'
                  else 'source inventory; may include multiple callable owners')
         print(f'Exit scope: {label}')
+        print(ownership.scope_metadata()['implicit_tail_rule'])
         print(render())
         render_meta_warnings(result)
 

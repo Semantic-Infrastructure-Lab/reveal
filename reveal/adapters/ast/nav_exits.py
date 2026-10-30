@@ -348,6 +348,7 @@ class ExitScope(_ExitScopeRequired, total=False):
     unresolved_sites: List[ExitOwnershipSite]
     reason: str
     site_byte_basis: str
+    implicit_tail_rule: str
 
 
 class ExitOwnershipWarning(WarningEntry, total=False):
@@ -441,7 +442,9 @@ class ExitOwnership:
         data: ExitScope = {'mode': self.mode, 'language': self.language, 'reason': self.reason,
                 'rule': ('Candidate execution-region sites; verified nested bodies excluded; unresolved sites retained with diagnostics'
                          if self.mode == 'selected_callable' else
-                         'Source-scope inventory may include sites from multiple callable owners')}
+                         'Source-scope inventory may include sites from multiple callable owners'),
+                'implicit_tail_rule': 'Implicit tail returns are inferred only for the resolved scope, '
+                                      'not for nested callable scopes.'}
         if self.unresolved_sites:
             data['unresolved_sites'] = [site.copy() for site in self.unresolved_sites]
             data['site_byte_basis'] = 'parser_source'

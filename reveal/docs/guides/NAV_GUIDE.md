@@ -46,6 +46,12 @@ adds a `retired_spelling` diagnostic in `meta.warnings`.
 | `--returns` | Exit sites with enclosing syntactic conditions (not a reachability proof) |
 | `--boundary` | One-shot contract: inputs + builtins + environment + effects |
 
+Structural navigation lists recognized nodes, not every exit expression. Inspect
+`--exits` for candidate exit sites. Implicit tail returns are inferred only for the
+resolved scope, not for nested callable scopes in a literal source region. Named
+callables and source regions therefore need not record the same implicit tails.
+These limits appear in text and JSON alongside the selected scope.
+
 For code-element `--outline`, `--ifmap`, `--catchmap`, `--loopmap` and `--fanout`,
 `--depth` limits logical nesting (default 3). A TRY and its CATCH/EXCEPT/FINALLY
 alternatives remain peers, including at the depth boundary. Text names the requested
