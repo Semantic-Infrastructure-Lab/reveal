@@ -22,4 +22,14 @@ import views, metrics, AST complexity, checks and history are separate queries.
 Comparisons retain required per-side evidence and unavailable deltas when a
 snapshot is incomplete.
 
+Controls follow the canonical guide: `top` bounds ordinary map rows, while
+`all` and `verbose` expand them. `no_imports` requests a scope-only map.
+`exclude` supplies comma-separated scope globs; `respect_gitignore` defaults
+to true, and false includes ignored candidates subject to other exclusions.
+`against` selects comparison and rejects explicit `no_imports`, `all` or
+`verbose` controls, even false values. The removed dashboard controls `no_git`
+and `tests` reject with guidance toward Git and metrics/AST queries; they do
+not select another map mode or alter graph test policy. See the
+[overview controls](OVERVIEW_ADAPTER_GUIDE.md#controls) for the full contract.
+
 `pack --architecture` remains a separate context-selection capability.

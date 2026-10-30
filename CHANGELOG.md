@@ -18,6 +18,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- `architecture` and `architecture://` are retired aliases for overview, with a replaced-by note and canonical `overview`/`overview_diff` answers. The former risks and next-commands brief is removed; use the compact map, targeted drill-downs and `overview --against REF`. `pack --architecture` keeps its separate context-selection behavior (BACK-2377).
 - Ordinary `overview` becomes a compact project map in text and JSON: recognized code-file/language counts, bounded components, import relationships, entrypoint candidates and cycles, with coverage and drill-down commands. Quality, complexity and history move to their existing queries; `no_git` and test-ranking controls reject with guidance. Top zero shows totals without graph rows, and `no_imports` explicitly requests only scope (BACK-2374, BACK-2375).
 
 ### Added
