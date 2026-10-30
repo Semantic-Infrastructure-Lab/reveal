@@ -76,6 +76,52 @@ def _engine_uncached():
             os.environ['REVEAL_DISK_CACHE'] = before
 
 
+def _read_test_policy(path: Path) -> dict[str, Any]:
+    """Read the gate's bounded external input, independently of engine classification."""
+    raw = path.read_bytes()
+    try:
+        config = yaml.safe_load(raw.decode('utf-8'))
+    except (UnicodeError, yaml.YAMLError) as exc:
+        raise ValueError('test policy must be valid UTF-8 YAML') from exc
+    if not isinstance(config, dict) or set(config) != {'test_layout'}:
+        raise ValueError('test policy must contain only test_layout')
+    declaration = config['test_layout']
+    if not isinstance(declaration, dict) or set(declaration) != {'additional_paths'}:
+        raise ValueError('test policy must declare only additional_paths')
+    paths = declaration['additional_paths']
+    if not isinstance(paths, list):
+        raise ValueError('test policy additional_paths must be a list')
+    normalized = set()
+    for selector in paths:
+        if not isinstance(selector, str) or not selector or '\0' in selector:
+            raise ValueError('test policy selectors must be nonempty strings without NUL')
+        spelling = selector.replace('\\', '/')
+        parts = spelling.split('/')
+        if spelling.startswith('/') or re.match(r'^[A-Za-z]:', spelling) or '..' in parts:
+            raise ValueError('test policy selectors must be project-relative without parent traversal')
+        normalized.add('/'.join(part for part in parts if part not in ('', '.')) or '.')
+    return {'path': path.resolve().as_posix(), 'file_sha256': hashlib.sha256(raw).hexdigest(),
+            'input_digest': hashlib.sha256(json.dumps(declaration, sort_keys=True,
+                                                     separators=(',', ':')).encode('utf-8')).hexdigest(),
+            'additional_paths': sorted(normalized)}
+
+
+@contextlib.contextmanager
+def _test_policy_config(path: Path):
+    """Select exactly one recorded custom config and restore request state even on failure."""
+    before = os.environ.get('REVEAL_CONFIG')
+    os.environ['REVEAL_CONFIG'] = path.as_posix()
+    try:
+        reset_request_caches()
+        yield
+    finally:
+        if before is None:
+            os.environ.pop('REVEAL_CONFIG', None)
+        else:
+            os.environ['REVEAL_CONFIG'] = before
+        reset_request_caches()
+
+
 def _cli_json(uri: str, label: str, *, incomplete_ok: bool = False) -> dict[str, Any]:
     """One request through ``reveal.main.main`` with the argv a user would type, read back as JSON.
 
