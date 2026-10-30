@@ -3,7 +3,7 @@ import copy
 
 import pytest
 
-from test_recall_gate import gate, test_import_corpus  # noqa: F401
+from test_recall_gate import gate, test_import_corpus, _repo  # noqa: F401
 
 
 pytestmark = pytest.mark.component
@@ -168,15 +168,59 @@ def test_configured_comparison_fails_missing_or_changed_policy_even_with_healthy
     policy = gate._read_test_policy(path)
     configured = copy.deepcopy(ordinary['tests']['exclude'])
     configured['edge_rule']['test_scope'] = _configured_scope(policy)
+    configured['policy_input'] = policy
     baseline = {**ordinary, 'configured_tests': {'exclude': configured}}
     assert gate.regressions({'py': baseline}, {'py': baseline}) == []
-    for damage in ('missing', 'digest', 'selectors'):
+    for damage in ('missing', 'digest', 'selectors', 'input'):
         broken = copy.deepcopy(baseline)
         if damage == 'missing':
             del broken['configured_tests']
+        elif damage == 'input':
+            del broken['configured_tests']['exclude']['policy_input']
         elif damage == 'digest':
             broken['configured_tests']['exclude']['edge_rule']['test_scope']['declaration']['input_digest'] = '0' * 64
         else:
             broken['configured_tests']['exclude']['edge_rule']['test_scope']['effective_policy']['additional_paths'] = []
         assert gate.regressions({'py': broken}, {'py': baseline})
         assert broken['hit_edges'] == ordinary['hit_edges']
+
+
+def test_lexical_policy_is_comparison_identity_with_legacy_baseline_disclosure(test_import_corpus):
+    root, entry = test_import_corpus
+    baseline = gate.measure(entry, root)
+    changed = copy.deepcopy(baseline)
+    changed['edge_rule']['test_scope']['anchor'] = '..'
+    assert any('policy identity' in failure
+               for failure in gate.regressions({'py': changed}, {'py': baseline}))
+    legacy = copy.deepcopy(baseline)
+    for row in (legacy, *legacy['lazy'].values(), legacy['tests']['exclude']):
+        del row['edge_rule']['test_scope']
+    notes = []
+    assert gate.regressions({'py': baseline}, {'py': legacy}, notes) == []
+    assert any('test_scope not compared' in note for note in notes)
+
+
+def test_public_configured_row_removes_only_reviewed_importers(tmp_path):
+    root, entry = _repo(tmp_path / 'corpus', {
+        'pyproject.toml': '[project]\nname = "pkg"\n',
+        'pkg/__init__.py': '', 'pkg/a.py': '', 'pkg/only_helpers.py': '',
+        'pkg/use.py': 'import pkg.a\nimport t.unit.helper\n',
+        't/__init__.py': '', 't/unit/__init__.py': '',
+        't/unit/helper.py': 'import pkg.a\nimport pkg.only_helpers\n',
+        't/unitized/__init__.py': '', 't/unitized/prod.py': 'import pkg.a\n',
+    }, {'oracle': 'python-ast', 'importer_dirs': ['.'], 'test_importer_dirs': ['t/unit']})
+    path = tmp_path / 'policy.yaml'
+    path.write_text('test_layout: {additional_paths: [t/unit]}\n', encoding='utf-8')
+    policy = gate._read_test_policy(path)
+    measured = gate.measure(entry, root, policy=policy)
+    assert measured['hit_edges'] == measured['oracle_edges'] == 5
+    assert measured['extra_edges'] == 0
+    assert measured['tests']['exclude']['hit_edges'] == 3
+    assert measured['tests']['exclude']['extra_edges'] == 2
+    configured = measured['configured_tests']['exclude']
+    assert configured['hit_edges'] == configured['oracle_edges'] == 3
+    assert configured['extra_edges'] == 0
+    assert configured['targets'] == 2
+    assert configured['policy_input'] == policy
+    assert measured['lazy']['only']['oracle_edges'] == 0
+    assert measured['lazy']['only']['recall'] is None
