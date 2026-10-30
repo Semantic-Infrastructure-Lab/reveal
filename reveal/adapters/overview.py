@@ -565,7 +565,9 @@ class OverviewAdapter(ResourceAdapter):
                     {'type': 'overview_diff', 'description': 'Architecture comparison with basis and per-side snapshot proof'}],
                 'example_queries': [{'uri': 'overview://src', 'description': 'Compact project map', 'output_type': 'overview'},
                     {'uri': 'overview://.?against=HEAD', 'description': 'Compare the live working tree with HEAD',
-                     'output_type': 'overview_diff'}]}
+                     'output_type': 'overview_diff'}],
+                'notes': ['Ordinary overview is a bounded static import map, not a quality assessment.',
+                          'Comparison uses the live working tree and retains required snapshot losses.']}
 
     def get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> RevealResult:
         with self.composition_run():

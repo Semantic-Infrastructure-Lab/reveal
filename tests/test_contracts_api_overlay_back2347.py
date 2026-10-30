@@ -113,7 +113,7 @@ def test_bound_carrier_and_existing_impls_read_accounting_remain(project):
         assert list(peek_query_items(adapter.query_params)) == before
 
 
-def test_unknown_uri_and_raw_api_resource_policy_remain(project, capsys):
+def test_unknown_uri_and_declared_api_resource_codec(project, capsys):
     assert api.query(uri(project, 'nonsense=true'))['total_contracts'] > 0
     assert "Unknown query param 'nonsense'" in capsys.readouterr().err
     decoded = project / 'literal space'
@@ -121,7 +121,7 @@ def test_unknown_uri_and_raw_api_resource_policy_remain(project, capsys):
     (decoded / 'contract.py').write_text(SOURCE, encoding='utf-8')
     encoded = project / 'literal%20space'
     answer = api.query(uri(encoded), abstract_only=True)
-    assert answer['total_contracts'] == 0 and answer['source'] == encoded.as_posix()
+    assert answer['total_contracts'] > 0 and answer['source'] == decoded.as_posix()
     adapter = ContractsAdapter(str(project) + '?literal%26+', params={'impls': 0})
     assert adapter.path == str(project) + '?literal%26+'
 
