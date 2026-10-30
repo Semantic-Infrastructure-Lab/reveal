@@ -325,14 +325,18 @@ def _uri_result_type(adapter_class, resource):
     return select(resource) if select is not None else adapter_class.RESULT_TYPE
 
 
-def _preparation_answer(uri, element, args, exception):
+def _preparation_answer(uri, element, args, exception) -> Optional[Answer]:
     """Classify failures entering the dispatch scope, before adapter execution."""
     from ...adapters.base import get_adapter_class
     from .declared import _invalid_answer
     scheme, _, resource = uri.partition('://')
     adapter_class = get_adapter_class(scheme)
     if _uri_execution_facts(adapter_class, resource, element, args) is None:
-        return None
+        if getattr(adapter_class, 'RESOURCE_SPEC', None) is None:
+            return None
+        # These modes keep the existing legacy failed-answer boundary.
+        return _answer(lambda: _fail(scheme, resource, _exception_message(exception),
+                                    adapter_class=adapter_class, exception=exception), scheme, args)
     path = resource.partition('?')[0]
     cause = (FailureCause.INVALID_REQUEST
              if isinstance(exception, RequestValidationError) or '\x00' in path else FailureCause.ANALYSIS)
@@ -358,7 +362,8 @@ def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> An
             if answer is None:
                 raise
             return answer
-        return resolve_adapter(adapter_class, _renderer_class_of(scheme), scheme, resource, None, args)
+        answer = resolve_adapter(adapter_class, _renderer_class_of(scheme), scheme, resource, None, args)
+    return answer
 
 
 def _validate_display_limit(renderer_class: Optional[type], resource: str) -> None:
@@ -447,27 +452,27 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
         schemes = ', '.join(f"{s}://" for s in list_supported_schemes())
         raise UriUsageError(f"Unsupported URI scheme: {scheme}://",
                             f"Supported schemes: {schemes}")
-    resource = _inject_exclude_flag(resource, scheme, args, adapter_class=adapter_class)
-    resource = inject_query_flags(resource, scheme, args)
-    from ...adapters.base import get_renderer_class
-    _validate_display_limit(get_renderer_class(scheme), resource)
-
-    # BACK-1385: sort=/limit=/offset= typed on an adapter that cannot receive them would be glued
-    # onto its resource ("Element '?limit=2' not found"). Strip them with the same warning every
-    # other adapter gives an unsupported param, and run the query.
-    resource, stripped_keys = strip_result_control_keys(resource, adapter_class)
-
-    # Dispatch to scheme-specific handler. BACK-1257: the --exclude walk scope
-    # _inject_exclude_flag published is process-global, so it must not outlive
-    # this dispatch -- under the MCP server (one long-lived process, many
-    # requests over different trees) a leaked scope would silently filter an
-    # unrelated later query.
-    # BACK-1386: ?respect_gitignore= (typed, or injected from --no-gitignore)
-    # applies to every walker for this dispatch.
     from ...utils.exclusions import clear_active_exclusions
     from ...utils.gitignore import gitignore_scope, split_respect_gitignore
-    resource, respect_gitignore = split_respect_gitignore(resource)
     try:
+        resource = _inject_exclude_flag(resource, scheme, args, adapter_class=adapter_class)
+        resource = inject_query_flags(resource, scheme, args)
+        from ...adapters.base import get_renderer_class
+        _validate_display_limit(get_renderer_class(scheme), resource)
+
+        # BACK-1385: sort=/limit=/offset= typed on an adapter that cannot receive them would be glued
+        # onto its resource ("Element '?limit=2' not found"). Strip them with the same warning every
+        # other adapter gives an unsupported param, and run the query.
+        resource, stripped_keys = strip_result_control_keys(resource, adapter_class)
+
+        # Dispatch to scheme-specific handler. BACK-1257: the --exclude walk scope
+        # _inject_exclude_flag published is process-global, so it must not outlive
+        # this dispatch -- under the MCP server (one long-lived process, many
+        # requests over different trees) a leaked scope would silently filter an
+        # unrelated later query.
+        # BACK-1386: ?respect_gitignore= (typed, or injected from --no-gitignore)
+        # applies to every walker for this dispatch.
+        resource, respect_gitignore = split_respect_gitignore(resource)
         accounting = ledger.dispatching(resource, scheme) if ledger is not None else nullcontext()
         with gitignore_scope(respect_gitignore), accounting:
             if stripped_keys:
@@ -526,7 +531,7 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace', *,
         if spec is not None:
             scope_path = bind_resource_path(spec, scope_path, transport='uri')
         scope_path = _scope_path(adapter_class, scope_path)
-    walk_root, combined_values = dispatch_scope(scope_path, exclude_values)
+    walk_root, combined_values = dispatch_scope(os.path.expanduser(scope_path), exclude_values)
 
     if not combined_values:
         return resource
@@ -558,6 +563,7 @@ def _reject_missing_path(adapter_class: type, scheme: str, resource: str, *, cla
     resolve = getattr(adapter_class, 'resource_path', None)  # BACK-1499: calls:// path:name
     if resolve is not None:
         path = resolve(path)
+    path = os.path.expanduser(path)
     if classify_validation and path:
         from pathlib import Path
         try:
