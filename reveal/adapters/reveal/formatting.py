@@ -203,6 +203,14 @@ def format_config_output(structure: Dict[str, Any]) -> str:
     lines.extend(format_sources_section(structure['sources']))
     lines.extend(format_active_config_section(structure['active_config']))
 
+    policy = structure.get('test_layout', {})
+    if policy:
+        effective = policy['effective']
+        lines.extend(['## Test/support policy (current directory)',
+                      f"  • {effective['basis']}; anchor {effective['anchor']}",
+                      f"  • Additional paths: {', '.join(effective.get('additional_paths', [])) or '(none)'}",
+                      '  • This inspection does not select policy for another target or explicit root.', ''])
+
     # Precedence order
     lines.append("## Configuration Precedence\n")
     for order in structure['precedence_order']:

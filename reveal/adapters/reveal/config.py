@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from ...utils.path_utils import to_posix
+from ...utils.path_utils import TestLayout, to_posix
 
 
 def get_config(reveal_root: Optional[Path] = None) -> Dict[str, Any]:
@@ -24,6 +24,9 @@ def get_config(reveal_root: Optional[Path] = None) -> Dict[str, Any]:
 
     # Get current config instance
     config = RevealConfig.get()
+
+    layout = TestLayout.for_path(Path.cwd(), fallback_root=Path.cwd())
+    test_layout = config.inspect_test_layout(layout)
 
     env_vars = config_env_vars()
     # Set REVEAL_* variables the config loader does not read (cache, workers, a misspelling):
@@ -45,6 +48,7 @@ def get_config(reveal_root: Optional[Path] = None) -> Dict[str, Any]:
     custom_config = os.getenv(CUSTOM_CONFIG_ENV)
 
     return {
+        'test_layout': test_layout,
         'active_config': {
             'rules': config._config.get('rules', {}),
             'ignore': config._config.get('ignore', []),
@@ -66,6 +70,7 @@ def get_config(reveal_root: Optional[Path] = None) -> Dict[str, Any]:
         },
         'metadata': {
             'project_root': to_posix(config.project_root),
+            'test_layout_anchor': to_posix(layout.anchor),
             'working_directory': to_posix(Path.cwd()),
             'no_config_mode': os.getenv(NO_CONFIG_ENV) == '1',
             'env_vars_count': len(env_vars),

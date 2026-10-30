@@ -456,16 +456,7 @@ class RevealConfig:
         Sources are already in low-to-high precedence order. A root-local empty
         list replaces lower additions independently of global list merging.
         """
-        selected = None
-        for source in self.sources:
-            if source.layer != 'custom' and not (source.layer == 'project' and source.path.parent == layout.anchor):
-                continue
-            if source.test_layout_error is not None:
-                selected = source
-            elif source.test_layout_json is not None:
-                block = json.loads(source.test_layout_json)
-                if not isinstance(block, dict) or block:
-                    selected = source
+        selected = self._test_layout_source(layout)
         if selected is None:
             return layout
         if selected.test_layout_error:
@@ -480,6 +471,36 @@ class RevealConfig:
         digest = hashlib.sha256((selected.test_layout_json or '').encode('utf-8')).hexdigest()
         return replace(layout, additional_paths=paths,
                        declaration=(selected.layer, to_posix(selected.path), digest))
+
+    def _test_layout_source(self, layout: TestLayout) -> Optional[ConfigSource]:
+        """Select from captured layers, also shared by configuration inspection."""
+        selected = None
+        for source in self.sources:
+            if source.layer != 'custom' and not (source.layer == 'project' and source.path.parent == layout.anchor):
+                continue
+            if source.test_layout_error is not None:
+                selected = source
+            elif source.test_layout_json is not None:
+                block = json.loads(source.test_layout_json)
+                if not isinstance(block, dict) or block:
+                    selected = source
+        return selected
+
+    def inspect_test_layout(self, layout: TestLayout) -> Dict[str, Any]:
+        """Describe only declarations actually read by this config instance."""
+        effective = self.apply_test_layout(layout)
+        selected = self._test_layout_source(layout)
+        declarations = []
+        for source in self.sources:
+            if source.test_layout_json is None and source.test_layout_error is None:
+                continue
+            eligible = source.layer == 'custom' or (source.layer == 'project' and source.path.parent == layout.anchor)
+            declarations.append({'layer': source.layer, 'path': to_posix(source.path),
+                                 'status': 'selected' if source is selected else ('eligible' if eligible else 'ignored'),
+                                 'value': json.loads(source.test_layout_json) if source.test_layout_json is not None else None,
+                                 'invalid_capture': source.test_layout_error})
+        return {'inspection_scope': 'current_directory', 'effective': effective.as_dict(Path.cwd()),
+                'declarations': declarations}
 
     def _parse_overrides(self) -> List[Override]:
         """Parse override sections into Override objects."""
