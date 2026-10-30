@@ -41,6 +41,9 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Bound Python API queries apply opted-in URI resource decoding, including encoded spaces and Unicode, before opening the target; existing literal percent paths keep precedence (BACK-2385).
+- Compact overview normalizes a single-file target relative to its parent directory, matching directory map paths across CLI, URI and Python API (BACK-2384).
+
 - Proved-identical architecture comparisons report unmeasured centroid base/head values as null with proved zero change. Comparisons reject missing or contradictory basis and per-side snapshot evidence instead of accepting a bare complete flag (BACK-2373, BACK-2376).
 - Health no longer forwards an unsupported filter to metrics/stats and mislabels clean answers incomplete; real parse loss still makes the result incomplete (BACK-2379).
 - Renderer self-validation stays independent of surrounding JSON/provenance options and preserves the real invocation's diagnostics (BACK-2381).
