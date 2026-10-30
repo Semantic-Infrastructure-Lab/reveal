@@ -254,6 +254,8 @@ _EXIT_PARAMETER_CHILDREN = frozenset({'parameters', 'formal_parameters', 'parame
                                     'parameter', 'default_value', 'lambda_function_type'})
 _EXIT_DECLARATOR_CHILDREN = frozenset({'function_declarator', 'lambda_declarator',
                                      'constructor_initializer', 'field_initializer_list', 'FnProto'})
+_EXIT_CLASS_EVALUATION_KNOWN = frozenset({'python', 'ruby'}) | _JS_EXIT_LANGUAGES
+_EXIT_ENTRY_EVALUATION_KNOWN = frozenset({'python', 'ruby', 'kotlin', 'scala'}) | _JS_EXIT_LANGUAGES
 _EXIT_CLASS_KINDS = frozenset({'class_declaration', 'class_definition', 'class_specifier',
                               'struct_specifier', 'struct_declaration', 'object_declaration'})
 
@@ -261,7 +263,8 @@ _EXIT_CLASS_KINDS = frozenset({'class_declaration', 'class_definition', 'class_s
 def _exit_callable(node: Any, language: str) -> bool:
     kind = _zero_arg(node, 'kind')
     if language == 'zig':
-        return kind == 'Decl' and any(_zero_arg(c, 'kind') == 'FnProto' for c in _children(node))
+        parts = {_zero_arg(c, 'kind') for c in _children(node)} if kind == 'Decl' else set()
+        return {'FnProto', 'Block'} <= parts
     key = 'js' if language in _JS_EXIT_LANGUAGES else language
     return _zero_arg(node, 'is_named') and kind in _EXIT_CALLABLE_KINDS.get(key, ())
 
@@ -337,6 +340,10 @@ class ExitOwnership:
         else:
             self.reason = 'unqualified_resolved_scope'
 
+    def reset(self) -> None:
+        """Start one collection; previously returned metadata remains a snapshot."""
+        self.unresolved_sites.clear()
+
     def selected(self, node: Any) -> bool:
         return (_zero_arg(node, 'kind') == _zero_arg(self.scope_node, 'kind')
                 and _same_span(node, self.scope_node))
@@ -375,10 +382,10 @@ class ExitOwnership:
             cause = 'Kotlin lambda return ownership depends on inline and label semantics'
         elif self.language == 'scala' and kind == 'lambda_expression':
             cause = 'Scala nonlocal-return language-version support is not qualified'
-        elif kind in _EXIT_CLASS_KINDS and self.language not in {'python', 'ruby'} | _JS_EXIT_LANGUAGES:
+        elif kind in _EXIT_CLASS_KINDS and self.language not in _EXIT_CLASS_EVALUATION_KNOWN:
             cause = 'Local aggregate initializer execution ownership is not qualified'
         elif (self.selected(node) and not _body_edge(node, child)
-              and self.language not in {'python', 'ruby', 'kotlin', 'scala'} | _JS_EXIT_LANGUAGES):
+              and self.language not in _EXIT_ENTRY_EVALUATION_KNOWN):
             cause = 'Invocation-associated header execution ownership is not qualified'
         if cause is None:
             return inherited
@@ -402,7 +409,7 @@ class ExitOwnership:
                          if self.mode == 'selected_callable' else
                          'Source-scope inventory may include sites from multiple callable owners')}
         if self.unresolved_sites:
-            data['unresolved_sites'] = self.unresolved_sites
+            data['unresolved_sites'] = [site.copy() for site in self.unresolved_sites]
             data['site_byte_basis'] = 'parser_source'
         return data
 
@@ -413,7 +420,7 @@ class ExitOwnership:
             warnings.append({'type': 'ownership_unresolved',
                              'message': f'Execution ownership is unresolved for recorded sites at {sites}; '
                                         'review their source regions before attributing them to this callable.',
-                             'sites': self.unresolved_sites})
+                             'sites': [site.copy() for site in self.unresolved_sites]})
         if self.reason == 'unqualified_resolved_scope':
             warnings.append({'type': 'ownership_scope_limited',
                              'message': 'Callable ownership is not qualified for this resolved scope; '
@@ -452,6 +459,8 @@ def collect_exits(
         line -- 1-indexed line number
         text -- first line of the node's source text (truncated to 80 chars)
     """
+    if ownership is not None:
+        ownership.reset()
     if call_node_types is None:
         from ...treesitter import CALL_NODE_TYPES  # noqa: PLC0415
         call_node_types = CALL_NODE_TYPES
@@ -849,6 +858,8 @@ def collect_gate_chains(
         text  -- source text of the exit statement
         gates -- list of {line, text} dicts, innermost-last
     """
+    if ownership is not None:
+        ownership.reset()
     if call_node_types is None:
         from ...treesitter import CALL_NODE_TYPES  # noqa: PLC0415
         call_node_types = CALL_NODE_TYPES
