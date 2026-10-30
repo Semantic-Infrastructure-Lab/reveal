@@ -24,7 +24,7 @@ from ..utils.path_utils import (HiddenTally, as_spelled, failure_of, hidden_entr
                                traversal_failed_warning)
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
-                                  nonnegative_display_limit, param_schema, split_exclude_param)
+                                  nonempty_scalar, nonnegative_display_limit, param_schema, split_exclude_param)
 from ..utils.query_parser import peek_query_items
 from ..utils.results import ResultBuilder, note_truncation
 
@@ -172,6 +172,23 @@ def _obsolete_git(value: Any) -> bool:
 
 def _obsolete_tests(value: Any) -> str:
     raise ParamValueError('overview no longer ranks complexity or hotspots; omit tests and use metrics:// or ast:// with type=function')
+
+
+_AGAINST = ParamSpec('against', 'string', 'Compare the live working tree against a Git ref',
+                     None, nonempty_scalar, role='operation', uri_codec='percent',
+                     cli=CliBinding(('--against',), metavar='REF'))
+
+
+def _validate_comparison_controls(params, *, all_requested=False, verbose_requested=False) -> None:
+    supplied = dict(peek_query_items(params))
+    if supplied.get('against') is None:
+        return
+    if 'no_git' in supplied:
+        _obsolete_git(supplied['no_git'])
+    if 'tests' in supplied:
+        _obsolete_tests(supplied['tests'])
+    if supplied.keys() & {'no_imports', 'all', 'verbose'} or all_requested or verbose_requested:
+        raise ValueError('overview comparison does not support no_imports, all or verbose')
 
 
 def _next_steps(path: str, exclude_patterns: List[str], respect_gitignore: bool) -> List[dict]:
@@ -409,9 +426,9 @@ class OverviewAdapter(ResourceAdapter):
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     PARAM_SPECS = (
-        ParamSpec('top', 'integer', 'Rows per map section, cycle members and witness nodes',
+        ParamSpec('top', 'integer', 'Rows per map section; comparison centroid population is max(top,1)*4',
                   5, _overview_top, minimum=0, role='analysis', examples=('top=10',),
-                  zero_policy='No graph rows; retain observed totals and diagnostic details',
+                  zero_policy='Ordinary: no graph rows, retain totals and diagnostics; comparison: population 4',
                   cli=CliBinding(('--top',), metavar='N')),
         ParamSpec('no_git', 'boolean', 'Removed: use Git queries for history',
                   False, _obsolete_git, role='analysis', cli=CliBinding(('--no-git',), action='store_true')),
@@ -425,6 +442,7 @@ class OverviewAdapter(ResourceAdapter):
                   False, boolean_value, role='presentation'),
         ParamSpec('verbose', 'boolean', 'Expand map evidence; diagnostic details remain capped at 50',
                   False, boolean_value, role='presentation'),
+        _AGAINST,
     )
 
     def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
@@ -436,7 +454,20 @@ class OverviewAdapter(ResourceAdapter):
         self.exclude_patterns = split_exclude_param(self.query_params.get('exclude'))
         self.respect_gitignore = respect_gitignore_param(self.query_params)
 
+    @staticmethod
+    def result_type_for(params):
+        return 'overview_diff' if dict(peek_query_items(params)).get('against') is not None else 'overview'
+
+    @staticmethod
+    def validate_request(params, args):
+        flags = vars(args)  # Validation must not count inspected controls as applied.
+        _validate_comparison_controls(params, all_requested=flags.get('all', False),
+                                       verbose_requested=flags.get('verbose', False))
+
     def answer_requirement_error(self, result, expected_type, prior_facts=None):
+        if expected_type == 'overview_diff':
+            from ..diff.architecture_diff import comparison_answer_requirement_error
+            return comparison_answer_requirement_error(result, prior_facts)
         if result.get('error'):
             return None
         if (prior_facts is None and result.get('map_status') == 'failed'
@@ -469,6 +500,9 @@ class OverviewAdapter(ResourceAdapter):
 
     @staticmethod
     def execution_facts(result):
+        if result.get('type') == 'overview_diff':
+            from ..diff.architecture_diff import comparison_execution_facts
+            return comparison_execution_facts(result)
         from ..utils.results import AnalysisCompleteness, result_execution_facts
         status = result.get('map_status')
         scope = result.get('scope') or {}
@@ -483,26 +517,43 @@ class OverviewAdapter(ResourceAdapter):
             state = AnalysisCompleteness.COMPLETE
         return result_execution_facts(result, completeness=state)
 
+    def _comparison(self, path: Path, against: str, top: int) -> RevealResult:
+        from ..diff.architecture_diff import _open_repo, _resolve_commit, run_architecture_diff
+        from ..utils.results import FailureCause
+        try:
+            repo = _open_repo(path.resolve())
+            _resolve_commit(repo, against)
+        except ValueError as exc:
+            return ResultBuilder.create(
+                'overview_diff', as_spelled(path, path), contract_version=CONTRACT_VERSION,
+                errors=[{'code': FailureCause.INVALID_REQUEST.value, 'message': str(exc)}],
+                error=str(exc))
+        report = run_architecture_diff(path, against, head_ref='working tree', top_n=max(top, 1) * 4)
+        return cast(RevealResult, {**report, 'type': 'overview_diff'})
+
     @staticmethod
     def get_help() -> Dict[str, Any]:
         return {'name': 'overview', 'description': 'Compact project map: recognized-code scope, components and static import relationships.',
-                'syntax': 'overview://<path>[?top=5&no_imports=true]',
+                'syntax': 'overview://<path>[?top=5&no_imports=true|against=REF]',
                 'examples': [{'uri': 'overview://src', 'description': 'Compact project map'},
                              {'uri': 'overview://.?top=10', 'description': 'Expand map evidence'},
-                             {'uri': 'overview://.?no_imports=true', 'description': 'Scope census only'}],
+                             {'uri': 'overview://.?no_imports=true', 'description': 'Scope census only'},
+                             {'uri': 'overview://.?against=HEAD', 'description': 'Compare HEAD with the live working tree'}],
                 'features': ['Recognized-code language counts', 'Bounded fan-in, active entrypoint candidates, components and cycles',
                              'Coverage, losses, counting rules and drill-down commands'],
                 'notes': ['Static imports are not runtime execution evidence or risk judgments.',
                           'top=0 shows no graph rows; diagnostic details retain a minimum of five and maximum of fifty.',
                           'Graph totals describe the observed graph; scan accounting and losses qualify its coverage.',
                           'Data, markup and unknown extensions are not counted by the code census.',
-                          'no_git and tests are obsolete; use Git, metrics and AST queries for those questions.'],
+                          'no_git and tests are obsolete; use Git, metrics and AST queries for those questions.',
+                          'against selects overview_diff before map collection; comparison rejects no_imports, all and verbose.',
+                          'Comparison centroid population is max(top, 1)*4; identical trees have unmeasured null centroids and proved zero change.'],
                 'output_formats': ['text', 'json']}
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         return {'adapter': 'overview', 'description': 'Compact project map',
-                'uri_syntax': 'overview://<path>?top=5&no_imports=true',
+                'uri_syntax': 'overview://<path>?top=5&no_imports=true|against=REF',
                 'resource': OverviewAdapter.RESOURCE_SPEC.schema(),
                 'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
                 'query_params': {**param_schema(OverviewAdapter.PARAM_SPECS),
@@ -511,16 +562,22 @@ class OverviewAdapter(ResourceAdapter):
                 'elements': {}, 'supports_batch': False, 'supports_advanced': False,
                 'output_types': [{'type': 'overview', 'description': 'Bounded project scope and import map',
                     'schema': {'type': 'object', 'properties': {'map': {'type': ['object', 'null']},
-                               'map_status': {'type': 'string'}, 'scope': {'type': 'object'}}}}],
-                'example_queries': [{'uri': 'overview://src', 'description': 'Compact project map', 'output_type': 'overview'}]}
+                               'map_status': {'type': 'string'}, 'scope': {'type': 'object'}}}},
+                    {'type': 'overview_diff', 'description': 'Architecture comparison with basis and per-side snapshot proof'}],
+                'example_queries': [{'uri': 'overview://src', 'description': 'Compact project map', 'output_type': 'overview'},
+                    {'uri': 'overview://.?against=HEAD', 'description': 'Compare the live working tree with HEAD',
+                     'output_type': 'overview_diff'}]}
 
     def get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> RevealResult:
         with self.composition_run():
+            _validate_comparison_controls(self.query_params, all_requested=all, verbose_requested=verbose)
             path = Path(self.path)
             # Direct API calls do not pass through the CLI's existing resource stat.
             # A missing/inaccessible target must not become a successful empty walk.
             path.stat()
             top = self.PARAM_SPECS[0].read(self.query_params)
+            if self.result_type_for(self.query_params) == 'overview_diff':
+                return self._comparison(path, _AGAINST.read(self.query_params), top)
             no_imports = self.PARAM_SPECS[2].read(self.query_params)
             all_requested = self.PARAM_SPECS[4].read(self.query_params)
             verbose_requested = self.PARAM_SPECS[5].read(self.query_params)

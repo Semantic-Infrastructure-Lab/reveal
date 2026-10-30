@@ -124,7 +124,7 @@ class ArchitectureRenderer(BaseRenderer):
         return cls.render_structure(result) or ''
 
 
-def architecture_diff_text(report: Dict[str, Any]) -> str:
+def architecture_diff_text(report: Dict[str, Any], *, title: str = 'Architecture Diff') -> str:
     """Compact human-readable rendering of an architecture_diff report.
 
     JSON is the primary contract (design doc: "JSON-first, no verdict") —
@@ -138,7 +138,7 @@ def architecture_diff_text(report: Dict[str, Any]) -> str:
                          if state != 'complete')
         return '\n'.join(lines) + '\n'
     deltas = report['deltas']
-    lines.append(f"Architecture Diff: {report['path']}")
+    lines.append(f"{title}: {report['path']}")
     lines.append(f"  {report['base_ref']} -> {report['head_ref']}\n")
     if report['analysis'].get('basis') == 'identical_tree':
         # Proved equal by tree id, so neither side was analyzed: no measured-looking zeros (BACK-2282).

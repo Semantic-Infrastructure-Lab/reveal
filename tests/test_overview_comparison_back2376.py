@@ -221,11 +221,18 @@ def test_overview_required_snapshot_loss_survives_projection(tmp_path, side, tra
 
 @pytest.mark.parametrize('transport', ['cli', 'uri'])
 @pytest.mark.parametrize('kind', ['ref', 'resource', 'nonrepo'])
-def test_overview_invalid_comparison_is_canonical_usage(project, transport, kind):
+@pytest.mark.parametrize('format', ['text', 'json'])
+def test_overview_invalid_comparison_is_canonical_usage(project, transport, kind, format):
     root = project / 'missing' if kind == 'resource' else project.parent if kind == 'nonrepo' else project
-    answer = canonical(invoke(root, transport=transport, ref='missing-ref' if kind == 'ref' else 'HEAD'), 2)
-    assert answer['error']
-    assert all(error['code'] == 'invalid_request' for error in answer['meta']['errors'])
+    response = invoke(root, transport=transport, ref='missing-ref' if kind == 'ref' else 'HEAD', format=format)
+    if format == 'json':
+        answer = canonical(response, 2)
+        assert answer['error']
+        assert all(error['code'] == 'invalid_request' for error in answer['meta']['errors'])
+    else:
+        assert response.returncode == 2, (response.stdout, response.stderr)
+        assert response.stderr.count('Error (overview://):') == 1
+        assert 'Requested output failed' not in response.stderr
 
 
 @pytest.mark.parametrize('query', ['against', 'against=', 'against=%FF', 'against=HEAD&top=-1'])
@@ -336,16 +343,21 @@ def test_overview_comparison_uses_required_proof_guard(project, monkeypatch, bas
 def test_comparison_artifact_fields_and_output_failure_keep_outcomes(project, tmp_path, transport):
     (project / 'app.py').write_text(source(23), encoding='utf-8')
     artifact = tmp_path / 'comparison.json'
-    answer = canonical(invoke(project, transport=transport, flags=['--output', f'json={artifact}']))
+    text = invoke(project, transport=transport, format='text', flags=['--output', f'json={artifact}'])
+    assert text.returncode == 0, (text.stdout, text.stderr)
+    answer = canonical(invoke(project, transport=transport))
     assert json.loads(artifact.read_text(encoding='utf-8')) == answer
+    noop = tmp_path / 'primary-json-noop.json'
+    canonical(invoke(project, transport=transport, flags=['--output', f'json={noop}']))
+    assert not noop.exists()
     selected = canonical(invoke(project, transport=transport, flags=['--fields', 'deltas']))
     assert selected['deltas'] == answer['deltas']
     assert 'analysis' not in selected  # explicit payload selection retains the independently captured outcome
-    failed = canonical(invoke(project, transport=transport, flags=['--output', f'json={tmp_path}']), 3)
+    failed = canonical(invoke(project, transport=transport, flags=['--output', f'text={tmp_path}']), 3)
     assert failed['meta']['output_errors']
 
 
-@pytest.mark.parametrize('flags', [('--head', '1'), ('--max-items', '1'), ('--exclude', 'app.py')])
+@pytest.mark.parametrize('flags', [('--max-items', '1'), ('--exclude', 'app.py')])
 def test_comparison_controls_preserve_population_and_symmetric_policy(project, flags):
     (project / 'app.py').write_text(source(23), encoding='utf-8')
     left = canonical(invoke(project, flags=flags))
@@ -355,6 +367,16 @@ def test_comparison_controls_preserve_population_and_symmetric_policy(project, f
     assert centroid['top_n'] == 20
     assert centroid['base'] == (0.0 if '--exclude' in flags else 13.0)
     assert centroid['head'] == (0.0 if '--exclude' in flags else 23.0)
+
+
+def test_comparison_head_preserves_existing_transport_boundary(project):
+    rejected = invoke(project, flags=['--head', '1'])
+    assert rejected.returncode == 2 and 'unrecognized arguments: --head' in rejected.stderr
+    original = canonical(invoke(project, transport='uri'))
+    response = invoke(project, transport='uri', flags=['--head', '1'])
+    selected = canonical(response)
+    assert selected['analysis'] == original['analysis'] and selected['deltas'] == original['deltas']
+    assert '--head' in response.stderr + json.dumps(selected.get('meta', {}))
 
 
 def test_comparison_gitignore_policy_selects_live_ignored_files(project):
