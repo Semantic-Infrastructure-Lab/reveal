@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import hashlib
 import importlib.metadata
 import io
@@ -119,13 +120,22 @@ def _importers_request(target: Path, scan: Path, cap: int | None, lazy: str = 'i
     if applied != scored:
         shown = ', '.join(f'{key}={value!r}' for key, value in applied.items() if value != scored[key])
         raise RuntimeError(f'imports:// answered under rule {shown}; the gate scores {scored}')
+    _edge_rule(result)  # Reject lost policy evidence before accepting any scores.
     return result
 
 
 def _edge_rule(result: dict[str, Any]) -> dict[str, Any]:
-    """The rule an answer was computed under, as its edge_rule states it (recorded, not compared)."""
+    """Retain the engine's rule and require its existing lexical test-scope evidence."""
     rule = result['edge_rule']
-    return {key: rule.get(key) for key in (*SCORED_RULE, 'scope', 'unclassified_languages')}
+    scope = rule.get('test_scope')
+    if (not isinstance(scope, dict)
+            or any(not isinstance(scope.get(key), str) or not scope[key]
+                   for key in ('anchor', 'source', 'basis'))
+            or scope.get('rule') != 'is_test_path'
+            or not isinstance(scope.get('include_anchor_name'), bool)):
+        raise RuntimeError('imports:// carries missing or malformed test_scope; measurement unavailable')
+    return {**{key: rule.get(key) for key in (*SCORED_RULE, 'scope', 'unclassified_languages')},
+            'test_scope': copy.deepcopy(scope)}
 
 
 def _partial_files(result: dict[str, Any]) -> int:
