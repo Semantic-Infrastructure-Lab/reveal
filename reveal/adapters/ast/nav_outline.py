@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
 from ...core import node_prev_sibling as _prev_sibling
@@ -112,14 +113,34 @@ def _block_loop_keyword(node: Any, get_text: Callable) -> Optional[str]:
 # Feature 1: element_outline
 # ---------------------------------------------------------------------------
 
+@dataclass
+class OutlineDepth:
+    """Request-local evidence of recognized subtrees not inspected beyond a depth limit.
+
+    Spans are source bounds, not a count of findings in any selector projection.
+    """
+    pruned_spans: List[Tuple[int, int]] = field(default_factory=list)
+
+    def record(self, node: Any, start_node: Any = None) -> None:
+        start = node if start_node is None else start_node
+        self.pruned_spans.append((_zero_arg(start, 'start_position').row + 1,
+                                  _zero_arg(node, 'end_position').row + 1))
+
+    def overlaps(self, from_line: int, to_line: int) -> bool:
+        return any(start <= to_line and end >= from_line for start, end in self.pruned_spans)
+
+
 def element_outline(
     func_node: Any,
     get_text: Callable,
     max_depth: int = 3,
+    *,
+    depth_evidence: Optional[OutlineDepth] = None,
 ) -> List[Dict[str, Any]]:
-    """Return a flat list of outline items for a function's control-flow skeleton."""
+    """Return the skeleton within logical depth; optionally record uninspected subtrees."""
     items: List[Dict[str, Any]] = []
-    _collect_outline(func_node, depth=1, items=items, get_text=get_text, max_depth=max_depth)
+    _collect_outline(func_node, depth=1, items=items, get_text=get_text,
+                     max_depth=max_depth, depth_evidence=depth_evidence)
     return items
 
 
@@ -129,36 +150,11 @@ def _collect_outline(
     items: List[Dict[str, Any]],
     get_text: Callable,
     max_depth: int,
+    depth_evidence: Optional[OutlineDepth] = None,
 ) -> None:
-    """Walk node's children, appending scope/exit items at the given depth."""
+    """Walk transparent children at one logical depth."""
     for child in _children(node):
-        ctype = _zero_arg(child, 'kind')
-        if not _zero_arg(child, 'is_named'):
-            continue
-        if _collect_zig_catch(child, depth, items, get_text, max_depth):
-            continue
-        if ctype in FUNCTION_TYPES:
-            items.append(_make_item(child, depth, get_text))
-            if depth < max_depth:
-                _collect_scope_interior(child, depth, items, get_text, max_depth)
-            continue
-        if ctype in ALTERNATIVE_NODES:
-            items.append(_make_item(child, depth, get_text))
-            if depth < max_depth:
-                _collect_outline(child, depth + 1, items, get_text, max_depth)
-        elif opens_scope(child, ctype):
-            items.append(_make_item(child, depth, get_text))
-            if depth < max_depth:
-                _collect_scope_interior(child, depth, items, get_text, max_depth)
-        elif (block_kw := _block_loop_keyword(child, get_text)) is not None:
-            items.append(_make_item(child, depth, get_text, keyword=block_kw))
-            if depth < max_depth:
-                _collect_scope_interior(child, depth, items, get_text, max_depth)
-        elif (exit_kw := exit_label(child, ctype)) is not None:
-            items.append(_make_item(child, depth, get_text, is_exit=True, keyword=exit_kw))
-        else:
-            if depth <= max_depth:
-                _collect_outline(child, depth, items, get_text, max_depth)
+        _collect_outline_child(child, depth, depth, items, get_text, max_depth, depth_evidence)
 
 
 def _collect_scope_interior(
@@ -167,40 +163,56 @@ def _collect_scope_interior(
     items: List[Dict[str, Any]],
     get_text: Callable,
     max_depth: int,
+    depth_evidence: Optional[OutlineDepth] = None,
 ) -> None:
-    """Process the interior of a scope node."""
+    """Handlers/alternatives stay at their scope's depth; its body is one level deeper."""
     for child in _children(scope_node):
-        ctype = _zero_arg(child, 'kind')
-        if not _zero_arg(child, 'is_named'):
-            continue
-        if _collect_zig_catch(child, scope_depth + 1, items, get_text, max_depth):
-            continue
-        if ctype in FUNCTION_TYPES:
-            items.append(_make_item(child, scope_depth + 1, get_text))
-            if scope_depth + 1 < max_depth:
-                _collect_scope_interior(child, scope_depth + 1, items, get_text, max_depth)
-            continue
-        if ctype in ALTERNATIVE_NODES:
-            items.append(_make_item(child, scope_depth, get_text))
-            if scope_depth < max_depth:
-                _collect_outline(child, scope_depth + 1, items, get_text, max_depth)
-        elif opens_scope(child, ctype):
-            items.append(_make_item(child, scope_depth + 1, get_text))
-            if scope_depth + 1 < max_depth:
-                _collect_scope_interior(child, scope_depth + 1, items, get_text, max_depth)
-        elif (block_kw := _block_loop_keyword(child, get_text)) is not None:
-            items.append(_make_item(child, scope_depth + 1, get_text, keyword=block_kw))
-            if scope_depth + 1 < max_depth:
-                _collect_scope_interior(child, scope_depth + 1, items, get_text, max_depth)
-        elif (exit_kw := exit_label(child, ctype)) is not None:
-            items.append(_make_item(child, scope_depth + 1, get_text, is_exit=True, keyword=exit_kw))
-        else:
-            if scope_depth < max_depth:
-                _collect_outline(child, scope_depth + 1, items, get_text, max_depth)
+        _collect_outline_child(child, scope_depth + 1, scope_depth, items, get_text,
+                               max_depth, depth_evidence)
+
+
+def _outline_role(node: Any, get_text: Callable) -> Tuple[Optional[str], Optional[str]]:
+    kind = _zero_arg(node, 'kind')
+    if kind in ALTERNATIVE_NODES:
+        return 'alternative', None
+    if kind in FUNCTION_TYPES or opens_scope(node, kind):
+        return 'scope', None
+    if (keyword := _block_loop_keyword(node, get_text)) is not None:
+        return 'scope', keyword
+    if (keyword := exit_label(node, kind)) is not None:
+        return 'exit', keyword
+    return None, None
+
+
+def _collect_outline_child(
+    node: Any, depth: int, alternative_depth: int, items: List[Dict[str, Any]],
+    get_text: Callable, max_depth: int, depth_evidence: Optional[OutlineDepth],
+) -> None:
+    if not _zero_arg(node, 'is_named'):
+        return
+    if _collect_zig_catch(node, depth, items, get_text, max_depth, depth_evidence):
+        return
+    role, keyword = _outline_role(node, get_text)
+    if role is None:
+        _collect_outline(node, depth, items, get_text, max_depth, depth_evidence)
+        return
+    logical_depth = alternative_depth if role == 'alternative' else depth
+    if logical_depth > max_depth:
+        if depth_evidence is not None:
+            depth_evidence.record(node)
+        return
+    items.append(_make_item(node, logical_depth, get_text, is_exit=role == 'exit', keyword=keyword))
+    # Inspect the boundary once, even at max_depth: a scope's own handlers can
+    # be peers, while recognized deeper subtrees stop here without a second walk.
+    if role == 'alternative':
+        _collect_outline(node, logical_depth + 1, items, get_text, max_depth, depth_evidence)
+    elif role == 'scope':
+        _collect_scope_interior(node, logical_depth, items, get_text, max_depth, depth_evidence)
 
 
 def _collect_zig_catch(
     node: Any, depth: int, items: List[Dict[str, Any]], get_text: Callable, max_depth: int,
+    depth_evidence: Optional[OutlineDepth] = None,
 ) -> bool:
     """Keep the normal operand outside the catch scope in the existing walk."""
     catch = zig_catch_parts(node)
@@ -209,10 +221,13 @@ def _collect_zig_catch(
     header, handler = catch
     for child in _children(node):
         if _zero_arg(child, 'end_byte') <= _zero_arg(header, 'start_byte'):
-            _collect_outline(child, depth, items, get_text, max_depth)
+            _collect_outline(child, depth, items, get_text, max_depth, depth_evidence)
+    if depth > max_depth:
+        if depth_evidence is not None:
+            depth_evidence.record(node, header)
+        return True
     items.append(_make_item(node, depth, get_text))
-    if depth < max_depth:
-        _collect_outline(handler, depth + 1, items, get_text, max_depth)
+    _collect_outline(handler, depth + 1, items, get_text, max_depth, depth_evidence)
     return True
 
 

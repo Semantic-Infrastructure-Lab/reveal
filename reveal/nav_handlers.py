@@ -12,10 +12,13 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from .core import tree_root
 from reveal.utils.lines import split_lines
+
+if TYPE_CHECKING:
+    from .adapters.ast.nav_outline import OutlineDepth
 
 
 # Branch keywords for --ifmap and --catchmap filtering
@@ -104,16 +107,40 @@ class _NavCtx:
     get_text: Callable
 
 
+def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
+                           findings: list, evidence: OutlineDepth, render: Callable[[], str]) -> None:
+    """Expose the structural budget and regions not expanded by it."""
+    from .utils.results import note_warning
+    from .utils.warning_render import render_meta_warnings
+
+    limited = evidence.overlaps(from_line, to_line)
+    result = {'meta': {'depth': ctx.depth, 'depth_limited': limited}}
+    if limited:
+        note_warning(result, {
+            'type': 'depth_limited', 'field': 'findings', 'cause': 'max_depth',
+            'message': f'Control-structure expansion limited by depth {ctx.depth}; deeper structural '
+                       'regions overlapping this selection were not expanded. Increase --depth to expand them.',
+        })
+    if ctx.as_json:
+        _nav_json(flag, ctx.analyzer.path, ctx.element, from_line, to_line,
+                  findings, extra_meta=result['meta'])
+    else:
+        print(f'Navigation depth {ctx.depth}')
+        print(render())
+        render_meta_warnings(result)
+
+
 def _nav_outline(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import element_outline, render_outline  # noqa: I006
+    from .adapters.ast.nav import OutlineDepth, element_outline, render_outline  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    items = element_outline(ctx.func_node, ctx.get_text, max_depth=ctx.depth)
+    evidence = OutlineDepth()
+    items = element_outline(ctx.func_node, ctx.get_text, max_depth=ctx.depth,
+                            depth_evidence=evidence)
     if getattr(ctx.args, 'range', None):
         items = [i for i in items if from_line <= i['line_start'] <= to_line]
-    if ctx.as_json:
-        _nav_json('outline', ctx.analyzer.path, ctx.element, from_line, to_line, items)
-    else:
-        print(render_outline(ctx.element, ctx.func_start, ctx.func_end, items, depth=ctx.depth))
+    _emit_depth_navigation(ctx, 'outline', from_line, to_line, items, evidence,
+                           lambda: render_outline(ctx.element, ctx.func_start, ctx.func_end,
+                                                  items, depth=ctx.depth))
 
 
 def _nav_varflow(ctx: _NavCtx) -> None:
@@ -191,19 +218,19 @@ def _nav_calls(ctx: _NavCtx) -> None:
 
 
 def _nav_branchmap(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import element_outline, render_branchmap  # noqa: I006
+    from .adapters.ast.nav import OutlineDepth, element_outline, render_branchmap  # noqa: I006
     flag = 'ifmap' if getattr(ctx.args, 'ifmap', False) else 'catchmap'
     keywords = _IF_KEYWORDS if flag == 'ifmap' else _CATCH_KEYWORDS
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    items = element_outline(ctx.func_node, ctx.get_text, max_depth=ctx.depth)
+    evidence = OutlineDepth()
+    items = element_outline(ctx.func_node, ctx.get_text, max_depth=ctx.depth,
+                            depth_evidence=evidence)
     filtered = [
         i for i in items
         if i['keyword'] in keywords and from_line <= i['line_start'] <= to_line
     ]
-    if ctx.as_json:
-        _nav_json(flag, ctx.analyzer.path, ctx.element, from_line, to_line, filtered)
-    else:
-        print(render_branchmap(filtered, from_line, to_line))
+    _emit_depth_navigation(ctx, flag, from_line, to_line, filtered, evidence,
+                           lambda: render_branchmap(filtered, from_line, to_line))
 
 
 def _nav_exits(ctx: _NavCtx) -> None:
@@ -298,26 +325,26 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
 
 
 def _nav_loopmap(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import collect_loops, render_loopmap  # noqa: I006
+    from .adapters.ast.nav import OutlineDepth, collect_loops, render_loopmap  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    loops = collect_loops(ctx.func_node, from_line, to_line, ctx.get_text, max_depth=ctx.depth)
-    if ctx.as_json:
-        _nav_json('loopmap', ctx.analyzer.path, ctx.element, from_line, to_line, loops)
-    else:
-        print(render_loopmap(loops, from_line, to_line))
+    evidence = OutlineDepth()
+    loops = collect_loops(ctx.func_node, from_line, to_line, ctx.get_text,
+                          max_depth=ctx.depth, depth_evidence=evidence)
+    _emit_depth_navigation(ctx, 'loopmap', from_line, to_line, loops, evidence,
+                           lambda: render_loopmap(loops, from_line, to_line))
 
 
 def _nav_fanout(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import collect_fanout, render_fanout  # noqa: I006
+    from .adapters.ast.nav import OutlineDepth, collect_fanout, render_fanout  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    evidence = OutlineDepth()
     loops = collect_fanout(
         ctx.func_node, from_line, to_line, ctx.get_text,
         language=getattr(ctx.analyzer, 'language', None), max_depth=ctx.depth,
+        depth_evidence=evidence,
     )
-    if ctx.as_json:
-        _nav_json('fanout', ctx.analyzer.path, ctx.element, from_line, to_line, loops)
-    else:
-        print(render_fanout(loops, from_line, to_line))
+    _emit_depth_navigation(ctx, 'fanout', from_line, to_line, loops, evidence,
+                           lambda: render_fanout(loops, from_line, to_line))
 
 
 def _nav_statewrites(ctx: _NavCtx) -> None:

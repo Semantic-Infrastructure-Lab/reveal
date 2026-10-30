@@ -165,11 +165,9 @@ if version('tree-sitter-language-pack') == '1.8.1':
 
 
 def _expected(language, depth=3, bounds=None, keywords=None):
-    # At depth1, stopping at TRY also hides its same-depth CATCH siblings.
-    # Zig's three catch operators are top-level expressions, not TRY children.
+    # Depth limits logical nesting, keeping same-depth alternatives visible.
     return [dict(zip(FIELDS, row)) for row in ROWS[language]
             if row[5] <= depth
-            and not (depth == 1 and language != 'zig' and row[1] in {'CATCH', 'EXCEPT'})
             and (bounds is None or bounds[0] <= row[3] <= bounds[1])
             and (keywords is None or row[1] in keywords)]
 
