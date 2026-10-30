@@ -1360,176 +1360,158 @@
     },
     "overview": {
       "command_outcome": {
-        "excluded": 0,
+        "map_status": "complete",
         "result": {
-          "architecture": {
-            "circular_count": 0,
-            "components": [
-              {
-                "cohesion": 0.0,
-                "component": ".",
-                "files": 3,
-                "incoming": 0,
-                "internal": 0,
-                "outgoing": 0,
-                "provenance": null,
-                "top_bridge": null
-              }
-            ],
-            "edge_rule": {
-              "lazy": "include",
-              "lazy_default": true,
-              "scope": "scanned_path",
-              "tests": "included",
-              "text": "Rule: fan-in and fan-out count static imports between files under the scanned path, tests included; TYPE_CHECKING imports excluded; function-level (lazy) imports included (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only.",
-              "type_checking": "excluded",
-              "unclassified_edges": 0,
-              "unclassified_languages": []
+          "contract_version": "1.1",
+          "diagnostic_budget": {
+            "limit": 5,
+            "maximum": 50,
+            "minimum": 5,
+            "rule": "Diagnostic details use max(top, 5), capped at 50; graph expansion has a separate budget."
+          },
+          "map": {
+            "components": {
+              "omitted": 0,
+              "returned": 1,
+              "rows": [
+                {
+                  "cohesion": 0.0,
+                  "component": ".",
+                  "files": 3,
+                  "incoming": 0,
+                  "internal": 0,
+                  "outgoing": 0,
+                  "top_bridge": null
+                }
+              ],
+              "total": 1
             },
-            "edge_rule_sections": {
-              "cycles": {
-                "lazy": "exclude",
-                "lazy_default": true,
-                "scope": "scanned_path",
-                "tests": "included",
-                "text": "Rule: cycles use static imports between files under the scanned path, tests included; TYPE_CHECKING imports excluded; function-level (lazy) imports excluded (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only.",
-                "type_checking": "excluded",
-                "unclassified_edges": 0,
-                "unclassified_languages": []
-              },
-              "entry_points": {
-                "lazy": "include",
-                "lazy_default": true,
-                "scope": "scanned_path",
-                "tests": "importers_not_counted",
-                "text": "Rule: fan-in counts static imports between files under the scanned path, importers under a test path not counted; TYPE_CHECKING imports excluded; function-level (lazy) imports included (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only.",
-                "type_checking": "excluded",
-                "unclassified_edges": 0,
-                "unclassified_languages": []
-              }
+            "cycles": {
+              "omitted": 0,
+              "returned": 0,
+              "rows": [],
+              "total": 0
             },
             "entry_point_filter": {
               "active": 0,
               "fan_in_zero": 3,
+              "path_basis": "producer paths before target-relative display",
               "rule": "fan_out > 0, not a test file, not __init__.py"
             },
-            "entrypoints": [
-              {
-                "fan_out": 0,
-                "file": "config.py",
-                "is_test": false,
-                "provenance": null,
-                "test_only_importers": 0
-              },
-              {
-                "fan_out": 0,
-                "file": "first.ts",
-                "is_test": false,
-                "provenance": null,
-                "test_only_importers": 0
-              },
-              {
-                "fan_out": 0,
-                "file": "second.ts",
-                "is_test": false,
-                "provenance": null,
-                "test_only_importers": 0
-              }
-            ],
-            "fan_in": [
-              {
-                "fan_in": 0,
-                "fan_out": 0,
-                "file": "config.py",
-                "provenance": null
-              },
-              {
-                "fan_in": 0,
-                "fan_out": 0,
-                "file": "first.ts",
-                "provenance": null
-              },
-              {
-                "fan_in": 0,
-                "fan_out": 0,
-                "file": "second.ts",
-                "provenance": null
-              }
-            ],
+            "entrypoints": {
+              "omitted": 0,
+              "returned": 0,
+              "rows": [],
+              "total": 0
+            },
+            "fan_in": {
+              "omitted": 0,
+              "returned": 0,
+              "rows": [],
+              "total": 0
+            },
             "metadata": {
+              "analyzer": "imports",
+              "autoload_regime": null,
+              "cycles_lazy": "exclude",
               "extraction_diagnostics": {},
+              "extraction_diagnostics_count": 0,
               "files_failed": [],
               "files_failed_count": 0,
               "files_lost": [],
-              "files_lost_count": 0
+              "files_lost_count": 0,
+              "has_cycles": false,
+              "scan_budget": {
+                "capped": false,
+                "exact": true,
+                "limit": 20000,
+                "returned": 3,
+                "scope": "scan",
+                "total": 3
+              },
+              "scanned_files": 3,
+              "total_files": 1,
+              "total_imports": 1,
+              "unsupported_extensions": {},
+              "unused_not_checked_extensions": {}
             },
-            "unsupported_extensions": {}
-          },
-          "complex_functions": [],
-          "complex_test_scope": {
-            "functions_excluded": 0,
-            "rule": "is_test_path",
-            "tests": "exclude"
-          },
-          "contract_version": "1.1",
-          "git_foreign_root": null,
-          "git_log": [],
-          "meta": {
-            "confidence": 1.0,
-            "errors": [],
-            "issue_count": {
-              "field": "local_check_issues",
-              "rule": "file-local rules only",
-              "rule_count": 36,
-              "rule_set_id": "74a40781",
-              "rules": [
-                "B001",
-                "B002",
-                "B003",
-                "B004",
-                "B006",
-                "B007",
-                "C901",
-                "C902",
-                "C905",
-                "D001",
-                "E501",
-                "F001",
-                "F002",
-                "F003",
-                "F004",
-                "F005",
-                "I001",
-                "I005",
-                "I006",
-                "M101",
-                "M104",
-                "M501",
-                "N001",
-                "N004",
-                "N005",
-                "N006",
-                "N011",
-                "N012",
-                "R913",
-                "S001",
-                "S701",
-                "T004",
-                "T005",
-                "U501",
-                "V016",
-                "V023"
-              ]
-            },
-            "warnings": [
-              {
-                "message": "complexity is McCabe cyclomatic complexity (a count of decision points), not weighted by nesting depth -- ~40 flat, sequential branches at the same level score identically to one branch nested 40 levels deep. Two functions with the same score can have very different actual structure.",
-                "type": "complexity_is_unweighted"
+            "rules": {
+              "component_order": "covered file count descending, then component path ascending",
+              "edge_rule": {
+                "lazy": "include",
+                "lazy_default": true,
+                "scope": "scanned_path",
+                "tests": "included",
+                "text": "Rule: fan-in and fan-out count static imports between files under the scanned path, tests included; TYPE_CHECKING imports excluded; function-level (lazy) imports included (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only.",
+                "type_checking": "excluded",
+                "unclassified_edges": 0,
+                "unclassified_languages": []
+              },
+              "edge_rule_sections": {
+                "cycles": {
+                  "lazy": "exclude",
+                  "lazy_default": true,
+                  "scope": "scanned_path",
+                  "tests": "included",
+                  "text": "Rule: cycles use static imports between files under the scanned path, tests included; TYPE_CHECKING imports excluded; function-level (lazy) imports excluded (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only.",
+                  "type_checking": "excluded",
+                  "unclassified_edges": 0,
+                  "unclassified_languages": []
+                },
+                "entry_points": {
+                  "lazy": "include",
+                  "lazy_default": true,
+                  "scope": "scanned_path",
+                  "tests": "importers_not_counted",
+                  "text": "Rule: fan-in counts static imports between files under the scanned path, importers under a test path not counted; TYPE_CHECKING imports excluded; function-level (lazy) imports included (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only.",
+                  "type_checking": "excluded",
+                  "unclassified_edges": 0,
+                  "unclassified_languages": []
+                }
               }
-            ]
+            }
           },
+          "map_status": "complete",
+          "next_steps": [
+            {
+              "command": "reveal 'imports://<corpus>?rank=fan-in&scope=path'",
+              "question": "Full observed fan-in ranking (subject to scan coverage)"
+            },
+            {
+              "command": "reveal 'imports://<corpus>?components&scope=path'",
+              "question": "All observed component relationships"
+            },
+            {
+              "command": "reveal 'imports://<corpus>?entrypoints&scope=path'",
+              "question": "All observed entrypoint candidates; apply the stated active predicate"
+            },
+            {
+              "command": "reveal 'imports://<corpus>?circular&scope=path'",
+              "question": "Full observed cycle groups and witness paths (subject to scan coverage)"
+            },
+            {
+              "command": "reveal metrics://<corpus>",
+              "question": "Detailed file measurements"
+            },
+            {
+              "command": "reveal 'ast://<corpus>?type=function&sort=-complexity'",
+              "question": "Function complexity ranking"
+            },
+            {
+              "command": "reveal check <corpus>",
+              "question": "Concrete rule findings"
+            }
+          ],
           "path": "<corpus>",
+          "reading_note": "Static import relationships and entrypoint candidates describe the observed graph, not runtime execution or a risk assessment.",
           "scope": {
+            "complete": true,
+            "counting_rule": "Recognized code files retained by the configured scope; data, markup and unknown extensions are not counted.",
+            "hidden": {
+              "by_cause": {},
+              "unit": "entries"
+            },
+            "language_count": 2,
             "languages": [
               {
                 "capability_tier": "tier1-verified",
@@ -1542,209 +1524,27 @@
                 "language": "Python"
               }
             ],
-            "skipped_dirs": 0,
-            "skipped_gitignore": 0,
-            "skipped_no_analyzer": 0,
             "total_code_files": 3
           },
           "source": "<corpus>",
           "source_type": "directory",
-          "stats": {
-            "contract_version": "1.1",
-            "files": [
-              {
-                "complexity": {
-                  "average": 2.0,
-                  "max": 2,
-                  "min": 2
-                },
-                "elements": {
-                  "classes": 0,
-                  "functions": 1,
-                  "imports": 0
-                },
-                "file": "second.ts",
-                "issues": {
-                  "deep_nesting": [],
-                  "long_functions": []
-                },
-                "language": "TypeScript",
-                "lines": {
-                  "code": 3,
-                  "comments": 0,
-                  "empty": 0,
-                  "total": 3
-                },
-                "quality": {
-                  "avg_function_length": 3.0,
-                  "deep_nesting": 0,
-                  "local_check_issues": 0,
-                  "long_functions": 0,
-                  "score": 100.0
-                }
-              },
-              {
-                "complexity": {
-                  "average": 1.0,
-                  "max": 1,
-                  "min": 1
-                },
-                "elements": {
-                  "classes": 0,
-                  "functions": 1,
-                  "imports": 1
-                },
-                "file": "config.py",
-                "issues": {
-                  "deep_nesting": [],
-                  "long_functions": []
-                },
-                "language": "Python",
-                "lines": {
-                  "code": 5,
-                  "comments": 0,
-                  "empty": 2,
-                  "total": 7
-                },
-                "quality": {
-                  "avg_function_length": 3.0,
-                  "deep_nesting": 0,
-                  "local_check_issues": 0,
-                  "long_functions": 0,
-                  "score": 100.0
-                }
-              },
-              {
-                "complexity": {
-                  "average": 2.0,
-                  "max": 2,
-                  "min": 2
-                },
-                "elements": {
-                  "classes": 0,
-                  "functions": 1,
-                  "imports": 0
-                },
-                "file": "first.ts",
-                "issues": {
-                  "deep_nesting": [],
-                  "long_functions": []
-                },
-                "language": "TypeScript",
-                "lines": {
-                  "code": 3,
-                  "comments": 0,
-                  "empty": 0,
-                  "total": 3
-                },
-                "quality": {
-                  "avg_function_length": 3.0,
-                  "deep_nesting": 0,
-                  "local_check_issues": 0,
-                  "long_functions": 0,
-                  "score": 100.0
-                }
-              }
-            ],
-            "hotspots": [],
-            "meta": {
-              "issue_count": {
-                "field": "local_check_issues",
-                "rule": "file-local rules only",
-                "rule_count": 36,
-                "rule_set_id": "74a40781",
-                "rules": [
-                  "B001",
-                  "B002",
-                  "B003",
-                  "B004",
-                  "B006",
-                  "B007",
-                  "C901",
-                  "C902",
-                  "C905",
-                  "D001",
-                  "E501",
-                  "F001",
-                  "F002",
-                  "F003",
-                  "F004",
-                  "F005",
-                  "I001",
-                  "I005",
-                  "I006",
-                  "M101",
-                  "M104",
-                  "M501",
-                  "N001",
-                  "N004",
-                  "N005",
-                  "N006",
-                  "N011",
-                  "N012",
-                  "R913",
-                  "S001",
-                  "S701",
-                  "T004",
-                  "T005",
-                  "U501",
-                  "V016",
-                  "V023"
-                ]
-              }
-            },
-            "source": "<corpus>",
-            "source_type": "directory",
-            "summary": {
-              "avg_complexity": 1.67,
-              "avg_quality_score": 100.0,
-              "excluded": 0,
-              "excluded_by_extension": {},
-              "total_classes": 0,
-              "total_code_lines": 11,
-              "total_files": 3,
-              "total_functions": 3,
-              "total_lines": 13
-            },
-            "test_scope": {
-              "files_excluded": 0,
-              "rule": "is_test_path",
-              "tests": "exclude"
-            },
-            "type": "stats_summary"
-          },
           "type": "overview"
         },
-        "total_files": 3,
-        "warnings": [
-          {
-            "message": "complexity is McCabe cyclomatic complexity (a count of decision points), not weighted by nesting depth -- ~40 flat, sequential branches at the same level score identically to one branch nested 40 levels deep. Two functions with the same score can have very different actual structure.",
-            "type": "complexity_is_unweighted"
-          }
-        ]
+        "scanned_files": 3,
+        "total_code_files": 3,
+        "warnings": []
       },
       "counts": {
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:python\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 2,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:python\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 2,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 2
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1
       },
       "coverage": [
         "config.py",
@@ -1752,7 +1552,7 @@
         "second.ts"
       ],
       "parser_versions": {
-        "python.ast": "3.12.15",
+        "python.ast": "3.12.16",
         "tree-sitter": "0.25.2",
         "tree-sitter-language-pack": "1.22.1"
       },
@@ -1767,11 +1567,11 @@
       },
       "stderr": "",
       "totals": {
-        "artifact": 4,
-        "attempt": 4,
+        "artifact": 2,
+        "attempt": 2,
         "failure": 0,
-        "outcome": 8,
-        "request": 8
+        "outcome": 3,
+        "request": 3
       }
     },
     "surface": {
@@ -1936,13 +1736,10 @@
         "type": "hotspots_scan"
       },
       "overview": {
-        "allowed_warning_types": [
-          "complexity_is_unweighted"
-        ],
+        "allowed_warning_types": [],
         "args": [
           "overview",
           "{corpus}",
-          "--no-git",
           "--format",
           "json"
         ],

@@ -48,6 +48,9 @@ proves nothing about the adapter's normal output. Invariants:
    ``?sort=date&limit=1`` listed the newest commit, sorted after the walk stopped), and a
    disclosed ``total`` is the uncapped length, or at most it when ``exact`` is false
    (xlsx said ``total_matches: 3`` where 684 matched) (BACK-1547).
+   A bounded ``rows`` record can disclose its cut intrinsically when strict integer
+   ``total``/``returned``/``omitted`` counts match the rows and the actual full probe.
+   Raw lists still require the existing ``note_truncation`` disclosure.
 8. ``failure``: a query that fails on a missing resource reads the same whether the adapter
    returned the error or raised it: the error once, on stderr, in text; a JSON envelope
    with the Output Contract fields and the current ``contract_version``; ``--also-json``
@@ -865,13 +868,62 @@ def _names(path):
     return {path[-1], '.'.join(path)}
 
 
+def _intrinsic_row_bounds(cut, whole, path):
+    """A bounded rows record discloses its own cut against the actual full probe."""
+    if not path or path[-1] != 'rows':
+        return False
+    for key in path[:-1]:
+        if not isinstance(cut, dict) or not isinstance(whole, dict):
+            return False
+        cut, whole = cut.get(key), whole.get(key)
+    if not isinstance(cut, dict) or not isinstance(whole, dict):
+        return False
+    rows, uncut = cut.get('rows'), whole.get('rows')
+    if not isinstance(rows, list) or not isinstance(uncut, list):
+        return False
+    counts = [cut.get(key) for key in ('total', 'returned', 'omitted')]
+    if any(type(count) is not int or count < 0 for count in counts):
+        return False
+    total, returned, omitted = counts
+    return omitted > 0 and returned == len(rows) and total == returned + omitted == len(uncut)
+
+
+def test_intrinsic_row_bounds_accept_only_measured_cut_population():
+    whole = {'map': {'rows': ['a', 'b', 'c']}}
+    cut = {'map': {'rows': ['a'], 'total': 3, 'returned': 1, 'omitted': 2}}
+    assert _intrinsic_row_bounds(cut, whole, ('map', 'rows'))
+    assert not _intrinsic_row_bounds({'rows': ['a']}, {'rows': ['a', 'b']}, ('rows',))
+    assert not _intrinsic_row_bounds({'files': ['a']}, {'files': ['a', 'b']}, ('files',))
+
+
+@pytest.mark.parametrize('field', ['total', 'returned', 'omitted'])
+@pytest.mark.parametrize('value', [None, True, -1, '1'])
+def test_intrinsic_row_bounds_reject_missing_or_invalid_counts(field, value):
+    whole = {'rows': ['a', 'b', 'c']}
+    cut = {'rows': ['a'], 'total': 3, 'returned': 1, 'omitted': 2}
+    if value is None:
+        cut.pop(field)
+    else:
+        cut[field] = value
+    assert not _intrinsic_row_bounds(cut, whole, ('rows',))
+
+
+@pytest.mark.parametrize('patch', [{'rows': []}, {'rows': None}, {'returned': 2}, {'omitted': 0},
+                                  {'total': 4, 'omitted': 3}, {'total': 2, 'omitted': 1}])
+def test_intrinsic_row_bounds_reject_wrong_lengths_or_dishonest_totals(patch):
+    whole = {'rows': ['a', 'b', 'c']}
+    cut = {'rows': ['a'], 'total': 3, 'returned': 1, 'omitted': 2, **patch}
+    assert not _intrinsic_row_bounds(cut, whole, ('rows',))
+
+
 @pytest.mark.parametrize('scheme', _cases('own_cap', sorted(
     s for s in FIXTURE_URIS if _cap_knobs(s))))
 def test_an_adapters_own_cap_is_disclosed(harness, scheme):
     hidden = {}
-    for run, (shortened, cut, _) in _knob_cuts(harness, scheme).items():
+    for run, (shortened, cut, whole) in _knob_cuts(harness, scheme).items():
         disclosed = {entry.get('field') for entry in truncations_of(cut)}
-        missed = ['.'.join(path) for path in shortened if not _names(path) & disclosed]
+        missed = ['.'.join(path) for path in shortened
+                  if not _names(path) & disclosed and not _intrinsic_row_bounds(cut, whole, path)]
         if missed:
             hidden[run] = missed
     assert not hidden, (

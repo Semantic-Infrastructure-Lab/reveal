@@ -97,18 +97,18 @@ def test_mixed_directory_rule_is_a_strict_majority_of_files(tmp_path):
 
 
 def test_overview_text_says_n_a_once_with_the_reason(go_tree):
-    out = run('overview', str(go_tree), '--no-git').stdout
-    section = out.split('Components', 1)[1].split('Issue count', 1)[0]
+    out = run('overview', str(go_tree)).stdout
+    section = out.split('Major components', 1)[1].split('Cycle groups', 1)[0]
     assert '0.00' not in section
     assert section.count('n/a') >= 2  # one per declined row
     assert section.count('same-package') == 1  # the reason once, not per row
 
 
 def test_overview_json_carries_null_cohesion_and_the_rule(go_tree):
-    data = json.loads(run('overview', str(go_tree), '--no-git', '--format', 'json').stdout)
-    arch = data['architecture']
-    assert all(c['cohesion'] is None for c in arch['components'])
-    assert arch['cohesion_rule']
+    data = json.loads(run('overview', str(go_tree), '--format', 'json').stdout)
+    arch = data['map']
+    assert all(c['cohesion'] is None for c in arch['components']['rows'])
+    assert arch['rules']['cohesion_rule']
 
 
 def test_imports_components_text_shows_n_a_not_zero_percent(go_tree):
@@ -124,8 +124,8 @@ def test_architecture_brief_declines_too(go_tree):
     assert 'n/a' in section
 
 
-def test_python_overview_components_text_is_unchanged(py_tree):
-    out = run('overview', str(py_tree), '--no-git').stdout
-    assert 'Components  (2 directories, by cohesion)' in out
-    assert 'pkg                                         0.50  █████░░░░░  2 files' in out
+def test_python_overview_preserves_component_numbers(py_tree):
+    out = run('overview', str(py_tree)).stdout
+    assert 'Major components  (showing 2 of 2 observed)' in out
+    assert 'pkg  2 files; internal 1, outgoing 1, incoming 1; cohesion 0.5' in out
     assert 'n/a' not in out

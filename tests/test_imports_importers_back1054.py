@@ -302,7 +302,7 @@ def test_architecture_combined_analysis_passes_scope_path(fx, builds):
 
 def test_overview_imports_analysis_passes_scope_path(fx, builds):
     from reveal.adapters.overview import OverviewAdapter, _run_imports_analysis
-    _run_imports_analysis(OverviewAdapter(str(fx / 'pkg')), fx / 'pkg')
+    _run_imports_analysis(OverviewAdapter(str(fx / 'pkg')), fx / 'pkg', 5, scope_usable=True)
     _all_path_scoped(builds, fx / 'pkg')
 
 

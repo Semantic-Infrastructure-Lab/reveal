@@ -9,7 +9,6 @@ import pytest
 from conftest import _run_reveal_direct as run
 from reveal.adapters.ast import AstAdapter
 from reveal.adapters.hotspots import HotspotsAdapter
-from reveal.adapters.overview import OverviewAdapter
 from reveal.adapters.stats import StatsAdapter
 
 
@@ -81,12 +80,10 @@ def test_stats_actual_discovery_loss_survives_zero_and_filtered_rows(tmp_path, m
     assert adapter.get_structure() == clean
 
 
-@pytest.mark.parametrize('owner', ['hotspots', 'overview'])
 @pytest.mark.parametrize('survivor', [True, False])
-def test_required_owner_facts_retain_stats_loss_with_clean_ast(tmp_path, monkeypatch, owner, survivor):
+def test_required_owner_facts_retain_stats_loss_with_clean_ast(tmp_path, monkeypatch, survivor):
     child = tree(tmp_path, survivor=survivor)
-    adapter = (HotspotsAdapter(str(tmp_path), 'files_only=true') if owner == 'hotspots'
-               else OverviewAdapter(str(tmp_path), 'no_git=true&no_imports=true'))
+    adapter = HotspotsAdapter(str(tmp_path), 'files_only=true')
     clean_ast = AstAdapter(str(tmp_path), 'complexity>9').get_structure()
     with monkeypatch.context() as context:
         deny_stats(context, {child})
@@ -120,17 +117,12 @@ def test_hotspots_actual_cli_has_required_stats_loss_before_projection(tmp_path,
         assert payload['execution']['command'] == ' '.join(['reveal', *argv, *flags])
 
 
-@pytest.mark.parametrize('owner', ['hotspots', 'overview'])
 @pytest.mark.parametrize('form', ['command', 'uri'])
 @pytest.mark.parametrize('survivor', [True, False])
-def test_actual_text_and_json_artifact_preserve_stats_diagnostic(tmp_path, monkeypatch, owner, form, survivor):
+def test_actual_text_and_json_artifact_preserve_stats_diagnostic(tmp_path, monkeypatch, form, survivor):
     child = tree(tmp_path, survivor=survivor)
-    if owner == 'hotspots':
-        argv = (['hotspots', str(tmp_path), '--files-only'] if form == 'command'
-                else [f'hotspots://{tmp_path}?files_only=true'])
-    else:
-        argv = (['overview', str(tmp_path), '--no-git', '--no-imports'] if form == 'command'
-                else [f'overview://{tmp_path}?no_git=true&no_imports=true'])
+    argv = (['hotspots', str(tmp_path), '--files-only'] if form == 'command'
+            else [f'hotspots://{tmp_path}?files_only=true'])
     artifact = tmp_path / 'answer.json'
     deny_stats(monkeypatch, {child})
     result = run(*argv, '--also-json', str(artifact))

@@ -38,7 +38,7 @@ def test_architecture_uses_real_service_artifact(tree, no_uri_adapter):
 def test_overview_uses_real_service_artifact(tree, no_uri_adapter):
     answer = OverviewAdapter(str(tree)).get_structure()
     assert any(Path(row['file']).name == 'bb.py' and row['fan_in'] == 1
-               for row in answer['architecture']['fan_in'])
+               for row in answer['map']['fan_in']['rows'])
     assert not any('ImportsAdapter' in e['message'] for e in answer.get('meta', {}).get('errors', []))
 
 

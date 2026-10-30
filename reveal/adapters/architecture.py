@@ -499,10 +499,6 @@ def _architecture_completeness(result, meta, invalid_only):
     if invalid_only and 'analysis' not in result and not missing_inputs:
         return AnalysisCompleteness.NOT_STARTED
     incomplete = (bool(meta.get('errors')) and not invalid_only) or missing_inputs
-    if isinstance(result, dict) and result.get('type') == 'architecture_diff':
-        analysis = result.get('analysis')
-        complete = isinstance(analysis, dict) and analysis.get('complete') is True
-        incomplete = incomplete or not complete
     return AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
 
 
@@ -552,20 +548,10 @@ class ArchitectureAdapter(ResourceAdapter):
 
     @staticmethod
     def answer_requirement_error(result, expected_type, prior_facts=None):
-        from ..utils.results import AnalysisCompleteness, FailureCause
         if expected_type != 'architecture_diff':
             return None
-        analysis = result.get('analysis')
-        if isinstance(analysis, dict) and isinstance(analysis.get('complete'), bool):
-            return None
-        errors = result.get('meta', {}).get('errors', [])
-        invalid_only = bool(errors) and all(error.get('code') == 'invalid_request' for error in errors)
-        before_analysis = prior_facts is None or (
-            prior_facts.completeness is AnalysisCompleteness.NOT_STARTED
-            and prior_facts.failures == frozenset({FailureCause.INVALID_REQUEST}))
-        if invalid_only and 'analysis' not in result and before_analysis:
-            return None
-        return 'Architecture comparison missing required completeness evidence'
+        from ..diff.architecture_diff import comparison_answer_requirement_error
+        return comparison_answer_requirement_error(result, prior_facts)
 
     @staticmethod
     def validate_request(params, args):
@@ -576,6 +562,9 @@ class ArchitectureAdapter(ResourceAdapter):
 
     @staticmethod
     def execution_facts(result):
+        if isinstance(result, dict) and result.get('type') == 'architecture_diff':
+            from ..diff.architecture_diff import comparison_execution_facts
+            return comparison_execution_facts(result)
         from ..utils.results import (ExecutionFacts, FailureCause, failure_execution_facts,
                                      result_execution_facts)
         meta = result.get('meta', {}) if isinstance(result, dict) else {}

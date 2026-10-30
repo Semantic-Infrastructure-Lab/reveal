@@ -238,7 +238,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 
 | Subcommand | One-liner | Discover details |
 |------------|-----------|------------------|
-| `reveal overview [path]` | One-glance dashboard: languages, quality, hotspots, recent git | `reveal overview --help` |
+| `reveal overview [path]` | Compact project map: scope, components, import relationships | `reveal overview --help` |
 | `reveal architecture [path]` | Architectural brief: entry points, core abstractions, risks | `reveal architecture --help` |
 | `reveal imports [path]` | Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations | `reveal imports --help` |
 | `reveal deps [path]` | Retired: use reveal imports <path> --external, --circular or --unused (one graph build); dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
@@ -259,7 +259,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal offline` | Pre-download tree-sitter grammars for offline/air-gapped use | `reveal offline --help` |
 
 **Rule of thumb:**
-- Exploring an unfamiliar codebase → `reveal overview` first, then `reveal architecture`.
+- Exploring an unfamiliar codebase → `reveal overview` first, then its targeted imports, metrics or check drill-downs.
 - Pre-merge review → `reveal check --changed main..HEAD` (rules on the changed files), plus the `diff://` adapter for structure.
 - Building LLM context with a token budget → `reveal pack`.
 - Tracing what a function actually does (calls + side-effects) → `reveal calls <path> --callees <func> --depth 2 --detail`.
@@ -1563,20 +1563,26 @@ reveal hotspots . --format json | jq '.function_hotspots[] | select(.has_test_hi
 
 ---
 
-### Task: "Get a one-glance codebase dashboard"
+### Task: "Orient in a codebase"
 
-**Pattern:**
 ```bash
-reveal overview .                  # Full dashboard: stats, languages, quality, hotspots, git
+reveal overview .                  # Compact map: scope, components, imports
 reveal overview ./src              # Scope to a subdirectory
-reveal overview . --top 10         # 10 items per section
-reveal overview . --no-git         # Skip git history (useful in CI or non-git dirs)
-reveal overview . --format json    # Machine-readable output
+reveal overview . --top 10         # Expand graph rows and nested cycle details
+reveal overview . --top 0          # Totals without graph rows
+reveal overview . --no-imports     # Explicit scope-only map
+reveal overview . --format json    # The same bounded map for tools
 ```
 
-**Output sections:** codebase stats (files, lines, functions, classes) · language breakdown · quality pulse (avg score, hotspot count) · top hotspots with `→ reveal <file>` hints (test files left out and counted; `--tests include` ranks them) · top complex functions · architecture (entry points, core abstractions, component cohesion bars, `n/a` for directories mostly in Go, Java, Kotlin, C#, Scala or Swift, circular count) · recent git commits with age labels. Skip architecture with `--no-imports`. The architecture section states its counting rule (`Rule:` lines, `edge_rule` in JSON): all static import edges except `TYPE_CHECKING` ones, function-level imports included; circulars use the load-time view.
+The map shows recognized code-file/language counts, components ranked by covered
+files, positive fan-in relationships, active static entrypoint candidates and
+cycle evidence. Counting rules, hidden-entry units, unsupported inputs, losses
+and cuts explain its coverage. Use targeted commands for full import views,
+metrics, function complexity, checks or history. It does not run those assessments.
 
-**Use case:** Fast orientation for an unfamiliar codebase. Combined entry point before deciding which area to investigate with `reveal hotspots`, `reveal imports`, or `ast://`.
+For due diligence, orient first, gather the relevant deeper evidence, then make
+a judgment. A bounded static map does not establish runtime behavior or safety.
+See the [overview guide](adapters/OVERVIEW_ADAPTER_GUIDE.md).
 
 ---
 
@@ -4304,7 +4310,7 @@ Measure the command on your own target; runtime and output size depend on the re
   this tree, timed in one real pass (not a diff of two runs). Use this once
   `--perf` has told you `check` is the slow step and you need to know why.
 - Neither currently breaks down time *inside* a composite command like
-  `overview`/`architecture`/`hotspots`/`deps` (which sequentially call
+  `architecture`/`hotspots`/`deps` (which sequentially call
   several sub-adapters internally) — `--perf` gives you the total for the
   whole call, not a per-sub-adapter split. If you need that level of detail
   today, bisect manually with `--select`/scoped sub-calls.

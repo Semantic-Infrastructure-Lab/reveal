@@ -25,7 +25,7 @@ class Severity(Enum):
 class RuleScope(str, Enum):
     """What a rule reads to decide on one file (BACK-1884).
 
-    The issue count that ``stats://``, ``overview`` and ``hotspots`` print counts the ``FILE``
+    The issue count that ``stats://`` and ``hotspots`` print counts the ``FILE``
     rules only, so one file gets one count whatever else is in the tree: a rule that reads other
     files answers differently when a scan cap, a sibling file or the project root changes.
     A ``str`` enum, so a plugin rule may write ``scope = "file"``.

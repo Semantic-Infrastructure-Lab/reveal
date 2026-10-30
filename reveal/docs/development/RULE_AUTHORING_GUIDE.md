@@ -112,7 +112,7 @@ loosely-typed rule:
 ## `scope`: what the rule reads
 
 `scope` says what a rule reads to answer for one file, and it decides whether the rule is in
-the issue count that `stats://`, `overview` and `hotspots` print (`local_check_issues`: file-local
+the issue count that `stats://` and `hotspots` print (`local_check_issues`: file-local
 rules only, so a file's count does not change with a scan cap, a sibling file or the project root).
 
 | `scope` | The rule reads | In the issue count |

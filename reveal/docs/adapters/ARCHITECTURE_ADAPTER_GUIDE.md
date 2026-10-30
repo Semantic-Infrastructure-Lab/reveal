@@ -112,7 +112,8 @@ untracked head files.
 
 Diff JSON records in `analysis` whether it analyzed both snapshots or proved the
 trees identical; for identical trees `analysis.basis` is `identical_tree` and the
-deltas are empty (text says `No architectural change: the working tree under <path> is
+deltas show no change, with unmeasured centroid `base`/`head` values `null`, proved
+`change: 0.0`, and the selected `top_n` population (text says `No architectural change: the working tree under <path> is
 identical to <ref>, so neither snapshot was analyzed.`). The header and JSON `path` name
 the target as you typed it. Snapshot comparisons disclose imports and complexity completeness
 for each side. If either required component fails or has missing

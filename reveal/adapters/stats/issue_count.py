@@ -1,6 +1,6 @@
-"""The issue count that stats://, overview and hotspots print (BACK-1884).
+"""The issue count that stats:// and hotspots print (BACK-1884).
 
-One definition for all three: the count is the findings of the file-local rules only
+One shared definition: the count is the findings of the file-local rules only
 (``RuleScope.FILE``). A rule that reads other files, a project-wide index or the network
 answers differently when a scan cap, a sibling file or the project root changes, so it would
 give one file two counts; those rules run under ``reveal check``. The result says so:
