@@ -10,7 +10,7 @@ from typing import Any, TypedDict
 
 from .service import architecture_edge_rules
 from ...utils.entry_points import is_active_entry_point, entry_point_filter
-from ...utils.path_utils import is_test_path, to_posix, to_relative_display
+from ...utils.path_utils import TestLayout, is_test_path, to_posix, to_relative_display
 
 
 class BoundedRows(TypedDict):
@@ -157,12 +157,13 @@ def _metadata(metadata: dict[str, Any], base: Path) -> dict[str, Any]:
     return result
 
 
-def _entrypoint_rows(entries: list[dict[str, Any]], path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    # Normalize separators without dropping producer path context: an ancestor
-    # named tests governs this existing predicate even when display is relative.
+def _entrypoint_rows(entries: list[dict[str, Any]], path: Path,
+                     test_layout: TestLayout | None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    # Validate producer facts in their source coordinates before projecting paths.
     source_entries = [{**row, 'file': to_posix(row['file'])} for row in entries]
+    classifier = test_layout.is_test if test_layout is not None else is_test_path
     for row in source_entries:
-        if type(row.get('is_test')) is not bool or row['is_test'] != is_test_path(row['file']):
+        if type(row.get('is_test')) is not bool or row['is_test'] != classifier(row['file']):
             raise ValueError('entrypoint is_test must retain the producer path classification')
         _count(row.get('test_only_importers'), 'entrypoint test_only_importers')
     projected_entries = [_relationship(row, path) for row in entries]
@@ -175,7 +176,8 @@ def _entrypoint_rows(entries: list[dict[str, Any]], path: Path) -> tuple[list[di
 
 def project_map_facts(fan_in: dict[str, Any], entrypoints: dict[str, Any],
                       components: dict[str, Any], circular: dict[str, Any],
-                      metadata: dict[str, Any], *, path: Path, top: int = 5) -> MapFacts:
+                      metadata: dict[str, Any], *, path: Path, top: int = 5,
+                      test_layout: TestLayout | None = None) -> MapFacts:
     """Project complete ImportView responses; zero shows no rows, preserving totals.
 
     Responses must be complete; ImportView must have no ``top`` cap. The
@@ -210,7 +212,7 @@ def project_map_facts(fan_in: dict[str, Any], entrypoints: dict[str, Any],
         projected = _relationship(row, display_base)
         if row['fan_in'] > 0:
             projected_fans.append(projected)
-    active, predicate = _entrypoint_rows(entries, display_base)
+    active, predicate = _entrypoint_rows(entries, display_base, test_layout)
     projected_components = [_relationship(row, display_base, component=True) for row in component_rows]
     projected_components.sort(key=lambda row: (-row['files'], row['component']))
     paired = sorted(zip(groups, witnesses),

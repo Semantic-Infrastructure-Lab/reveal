@@ -140,7 +140,8 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, s
             fan_in, entries = view.fan_in(), view.entrypoints()
             components, circular = view.components(), view.circular()
         metadata = view.get_metadata()
-        facts = project_map_facts(fan_in, entries, components, circular, metadata, path=target, top=top)
+        facts = project_map_facts(fan_in, entries, components, circular, metadata,
+                                  path=target, top=top, test_layout=view.test_layout)
         _validate_rules(facts['rules'])
         budget = metadata['scan_budget']
         directory_loss = any(w['type'] == 'analysis_incomplete' for w in warnings)

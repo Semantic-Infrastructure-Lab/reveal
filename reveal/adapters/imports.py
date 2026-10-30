@@ -51,7 +51,7 @@ from ..analyzers.imports.extraction import (
 )
 from ..analyzers.imports import resolution
 from ..registry import get_code_extensions
-from ..utils.path_utils import hidden_entries_warning, is_test_path, to_posix, to_relative_display
+from ..utils.path_utils import hidden_entries_warning, to_posix, to_relative_display
 from ..utils.query_control import ScanBudget
 from ..utils.results import ResultBuilder, note_truncation
 from ..utils.warning_render import meta_warning_lines
@@ -173,8 +173,10 @@ _SCOPE = ParamSpec(
 )
 _TESTS = ParamSpec(
     'tests', 'string',
-    'Importers under a test path (path_utils.is_test_path: a tests/ or test/ directory, '
-    'test_*.py, *_test.go, *.spec.ts, ...): include them (default) or exclude them from every count',
+    'Importers under a project-relative test path (tests/ or test/ directories, '
+    'test_*.py, *_test.go, *.spec.ts, ...): include them (default) or exclude them from every count. '
+    'Checkout ancestors and the selected project name are ignored; a disclosed markerless '
+    'scan-root fallback retains its own directory name',
     'include', _choice_value,
     examples=('imports://src?rank=fan-in&tests=exclude',), choices=('include', 'exclude'),
 )
@@ -1829,10 +1831,10 @@ class ImportsAdapter(ResourceAdapter):
         excluded = view._tests_excluded()
         files = {str(path): [self._format_import(stmt) for stmt in imports]
                  for path, imports in self.analysis.graph.files.items()
-                 if view._in_scope(path) and not (excluded and is_test_path(path))}
+                 if view._in_scope(path) and not (excluded and view.is_test(path))}
         table = package_table(files, view._base_dir())
         languages = table['external_package_languages']
-        return self._build_response(
+        response = self._build_response(
             'external_packages',
             total_imports=table['total_imports'], total_files=table['total_files'],
             internal_imports=table['relative_count'],
@@ -1841,6 +1843,9 @@ class ImportsAdapter(ResourceAdapter):
             stdlib_packages=[{'package': name, 'uses': uses} for name, uses in table['stdlib_packages']],
             top_importers=[{'file': row['file'], 'imports': row['count']} for row in table['top_importers']],
         )
+        assert view.test_layout is not None
+        response['metadata']['test_scope'] = view.test_layout.as_dict(view._base_dir())
+        return response
 
     def _format_unused(self) -> Dict[str, Any]:
         """Format unused imports."""

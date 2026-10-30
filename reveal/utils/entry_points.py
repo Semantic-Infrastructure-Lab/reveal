@@ -14,10 +14,16 @@ ACTIVE_ENTRY_POINT_RULE = 'fan_out > 0, not a test file, not __init__.py'
 
 def is_active_entry_point(entry: Dict[str, Any]) -> bool:
     """True for a fan-in-0 row that is an active entry point (see the module docstring)."""
+    if 'is_test' in entry:
+        is_test = entry['is_test']
+        if type(is_test) is not bool:
+            raise ValueError('entrypoint is_test must be a boolean')
+    else:
+        is_test = is_test_path(entry['file'])
     return (
         entry.get('fan_out', 0) > 0
-        and not is_test_path(entry['file'])
-        and Path(entry['file']).name != '__init__.py'
+        and not is_test
+        and Path(str(entry['file']).replace('\\', '/')).name != '__init__.py'
     )
 
 

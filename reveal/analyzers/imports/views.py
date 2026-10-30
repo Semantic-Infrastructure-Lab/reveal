@@ -8,7 +8,7 @@ from . import resolution, service
 from .base import extension_detects_unused
 from .types import ImportAnalysis, ImportGraph, LAZY_INCLUDE, LAZY_EXCLUDE
 from ...conventions import conventions_for_path, same_package_families
-from ...utils.path_utils import is_test_path, to_posix, to_relative_display
+from ...utils.path_utils import TestLayout, to_posix, to_relative_display
 
 _AUTOLOAD_REGIMES: Tuple[Tuple[str, str, str], ...] = (
     # (manifest filename, content substring to require (empty = presence-only), framework label)
@@ -121,6 +121,19 @@ class ImportView:
     tests: str = 'include'
     scope: str = 'path'
     top: Optional[int] = None
+    test_layout: Optional[TestLayout] = None
+
+    def __post_init__(self) -> None:
+        if self.test_layout is None:
+            target = self.target or Path('.').resolve()
+            scan = self.scan
+            layout = TestLayout.for_path(target, fallback_root=scan.root if scan else target,
+                                         root_override=scan.override_used if scan else None)
+            object.__setattr__(self, 'test_layout', layout)
+
+    def is_test(self, path: Path) -> bool:
+        assert self.test_layout is not None
+        return self.test_layout.is_test(path)
 
     def _lazy_mode(self, default: str) -> Tuple[str, bool]:
         return (default, True) if self.lazy is None else (self.lazy, False)
@@ -144,7 +157,8 @@ class ImportView:
         view = self._graph().edge_view(self._lazy_mode(default)[0])
         if self.scan is not None:
             view = view.within_root(self.scan.root)
-        return view.without_test_importers() if self._tests_excluded() else view
+        assert self.test_layout is not None
+        return view.without_test_importers(self.test_layout) if self._tests_excluded() else view
 
     def outside_root_edge_count(self) -> int:
         """The edges the answer left out because their target is outside the scan root (BACK-2251)."""
@@ -176,11 +190,14 @@ class ImportView:
                    cycles: bool = False) -> Dict[str, Any]:
         """The rule (JSON and text) of an answer counted on ``self._edges(default)``."""
         lazy, lazy_default = self._lazy_mode(default)
-        return service.edge_rule(
+        rule = service.edge_rule(
             self._graph(), lazy, lazy_default=lazy_default, subject=subject,
             scope='scan_root' if self._scope_is_root() else 'scanned_path',
             tests_counted=tests_counted and not self._tests_excluded(),
             resolved_at=self._resolved_at(cycles), counted=self._edges(default))
+        assert self.test_layout is not None
+        rule['test_scope'] = self.test_layout.as_dict(self._base_dir())
+        return rule
 
     def _row_files(self, graph: ImportGraph) -> set:
         """The files an answer has rows for: every scanned file and every edge target (which may
@@ -313,7 +330,7 @@ class ImportView:
         def _non_test_fan_in(f) -> int:
             return sum(
                 1 for importer in graph.reverse_deps.get(f, set())
-                if not is_test_path(importer)
+                if not self.is_test(importer)
             )
 
         all_files = self._row_files(graph)
@@ -326,7 +343,7 @@ class ImportView:
                     # Kept visible rather than filtered out: a test file with
                     # no importers genuinely has fan-in 0, and dropping it
                     # silently would trade one wrong answer for another.
-                    'is_test': is_test_path(f),
+                    'is_test': self.is_test(f),
                     'test_only_importers': len(
                         graph.reverse_deps.get(f, set())
                     ),

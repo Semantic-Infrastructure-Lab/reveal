@@ -169,6 +169,77 @@ def in_test_scope(path: Path, root: Path) -> bool:
         return is_test_path(path)
 
 
+@dataclass(frozen=True)
+class TestLayout:
+    """Lexical test classification within one selected project or disclosed fallback.
+
+    Snapshot relocation changes only the observed spelling used for classification;
+    it never resolves aliases or changes filesystem/import identities.
+    """
+    anchor: Path
+    source: str
+    include_anchor_name: bool = False
+    observed_root: Optional[Path] = None
+    logical_root: Optional[Path] = None
+
+    def __post_init__(self) -> None:
+        if not self.anchor.is_absolute():
+            raise ValueError('test layout anchor must be absolute')
+        if (self.observed_root is None) != (self.logical_root is None):
+            raise ValueError('test layout relocation requires observed and logical roots')
+        if self.logical_root is not None:
+            self.logical_root.relative_to(self.anchor)
+        if self.observed_root is not None and not self.observed_root.is_absolute():
+            raise ValueError('test layout observed root must be absolute')
+
+    @classmethod
+    def for_path(cls, path: Path, *, fallback_root: Optional[Path] = None,
+                 root_override: Optional[Path] = None) -> 'TestLayout':
+        """Use existing project discovery, or retain a markerless suite root's name.
+
+        ``root_override`` must already have passed its request owner's validation.
+        Project discovery runs once per context, never for each classified source.
+        """
+        root = resolve_project_root(path, root_override=root_override)
+        if root is not None:
+            return cls(root, 'explicit_root' if root_override is not None else 'project')
+        fallback = fallback_root or path
+        if not fallback.is_dir():
+            fallback = fallback.parent
+        return cls(fallback, 'scan_root_fallback', include_anchor_name=True)
+
+    @property
+    def identity(self) -> tuple:
+        """Effective view identity; descriptive provenance does not split equal policies."""
+        return ('lexical-v1', self.anchor, self.include_anchor_name,
+                self.observed_root, self.logical_root)
+
+    def is_test(self, path: Union[str, PurePath]) -> bool:
+        candidate = Path(to_posix(path))
+        try:
+            if self.observed_root is not None and self.logical_root is not None:
+                candidate = self.logical_root / candidate.relative_to(self.observed_root)
+            relative = candidate.relative_to(self.anchor)
+        except ValueError as exc:
+            raise ValueError('source is outside its test layout context') from exc
+        if self.include_anchor_name:
+            relative = Path(self.anchor.name) / relative
+        return is_test_path(relative)
+
+    def relocate(self, *, observed_root: Path, logical_root: Path) -> 'TestLayout':
+        return TestLayout(self.anchor, self.source, self.include_anchor_name,
+                          observed_root, logical_root)
+
+    def as_dict(self, base: Path) -> Dict[str, Any]:
+        if self.observed_root is not None and self.logical_root is not None:
+            base = self.logical_root / base.relative_to(self.observed_root)
+        basis = ('scan-root name and relative paths; project boundary unknown'
+                 if self.include_anchor_name else 'paths relative to the selected project')
+        return {'anchor': to_relative_display(self.anchor, base), 'source': self.source,
+                'include_anchor_name': self.include_anchor_name, 'rule': 'is_test_path',
+                'basis': basis}
+
+
 def is_test_file_name(path: Union[str, PurePath]) -> bool:
     """The file-name half of :func:`is_test_path` (no directory check): generic
     ``test_``/``_test``/``Test`` naming plus the file's own language convention.

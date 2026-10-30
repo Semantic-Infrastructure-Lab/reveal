@@ -66,7 +66,8 @@ def test_external_packages_use_the_same_project_scope(tmp_path):
     root = _write(tmp_path / 'tests' / 'repo')
     result = _cli(root, 'external&tests=exclude')
     assert {row['package'] for row in result['external_packages']} == {'requests'}
-    assert result['total_files'] == 4
+    # The package table counts import-bearing sources (app/probe), not every scanned file.
+    assert result['total_files'] == 2
 
 
 def test_display_relative_test_labels_govern_the_active_filter(tmp_path):

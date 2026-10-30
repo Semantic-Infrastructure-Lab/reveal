@@ -60,6 +60,7 @@ from ..defaults import (
 from ..reveal_types import ErrorEntry, RevealMeta, WarningEntry
 from ..adapters.base import ResourceAdapter
 from ..utils.entry_points import active_entry_points
+from ..utils.path_utils import TestLayout
 
 logger = logging.getLogger(__name__)
 
@@ -323,7 +324,7 @@ def _run_complex_functions(adapter: 'ResourceAdapter', path: Path, limit: int, *
     _capture_ast_observations(data, observations)
     return cast(List[Dict[str, Any]], data.get('results', data.get('elements', [])))
 
-def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
+def _snapshot(root: Path, top_n: int, *, test_layout: Optional[TestLayout] = None) -> Dict[str, Any]:
     """Run the import-graph + complexity analysis against `root` exactly once,
     returning the raw (absolute-path-keyed) facts needed for diffing.
 
@@ -351,7 +352,8 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
 
     try:
         built = import_analysis.analyze(import_analysis.path_scope(root))
-        adapter = ImportView(built.analysis, root, ScanRoot(root, 'path'), import_analysis.DEFAULT_FILE_CAP)
+        adapter = ImportView(built.analysis, root, ScanRoot(root, 'path'), import_analysis.DEFAULT_FILE_CAP,
+                             test_layout=test_layout)
         with import_analysis.composed_rules('architecture://'):  # BACK-2087
             fan_in_data = adapter.fan_in()
             circular_data = adapter.circular()
@@ -692,13 +694,15 @@ def run_architecture_diff(
     from ..utils.exclusions import remapped_exclusion_scope
     from ..utils.gitignore import gitignore_scope
     cache = StructureCache()
+    test_layout = TestLayout.for_path(path, fallback_root=path)
     with materialize_ref(repo, base_ref, subpath, cache=cache) as base_root:
         with remapped_exclusion_scope(path, base_root), gitignore_scope(False):
-            base_raw = _snapshot(base_root, top_n)
+            base_layout = test_layout.relocate(observed_root=base_root, logical_root=path)
+            base_raw = _snapshot(base_root, top_n, test_layout=base_layout)
         base_snapshot = _normalize_snapshot(base_raw, top_n)
         base_meta = _snapshot_meta(base_raw, 'base')
 
-    head_raw = _snapshot(path, top_n)
+    head_raw = _snapshot(path, top_n, test_layout=test_layout)
     head_snapshot = _normalize_snapshot(head_raw, top_n)
     states = {'base': base_raw['completeness'], 'head': head_raw['completeness']}
     complete = all(state == 'complete' for components in states.values() for state in components.values())
