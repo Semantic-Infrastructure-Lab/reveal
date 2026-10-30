@@ -194,3 +194,22 @@ def test_ownership_filters_the_existing_walk_without_revisiting_subtrees(monkeyp
     assert [r['text'] for r in rows] == ['exit(1)', 'return 3']
     assert max(reads.values()) == 1
     assert 'return 2' not in seen_exits
+
+
+@pytest.mark.parametrize('source,kind,mode,reason,limited', [
+    ('int outer(){return 1;}', 'function_body', 'selected_callable', 'verified_callable_syntax', True),
+    ('var f = (){return 1;};', 'function_expression', 'selected_callable', 'verified_callable_syntax', False),
+    ('int outer(){return 1;}', 'function_signature', 'source_scope', 'unqualified_resolved_scope', True),
+])
+def test_dart_scope_limit_matches_the_actual_resolved_node(source, kind, mode, reason, limited):
+    rows, evidence = _owned('dart', source, kind)
+    assert evidence.mode == mode
+    assert evidence.reason == reason
+    warnings = evidence.warnings()
+    assert bool([w for w in warnings if w['type'] == 'ownership_scope_limited']) is limited
+    if kind == 'function_body':
+        assert evidence.unresolved_sites == []
+        assert 'signature' in warnings[0]['message']
+    if kind == 'function_signature':
+        assert rows == []
+        assert 'not qualified' in warnings[0]['message']
