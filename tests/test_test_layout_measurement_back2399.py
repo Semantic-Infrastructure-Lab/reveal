@@ -52,3 +52,48 @@ def test_gate_retained_scope_is_not_an_alias():
     assert recorded['test_scope'] == scope
     original['edge_rule']['test_scope']['anchor'] = 'changed'
     assert recorded['test_scope']['anchor'] == '.'
+
+
+def test_external_policy_input_is_bounded_and_independent(tmp_path):
+    policy = tmp_path / 'policy.yaml'
+    policy.write_text('test_layout:\n  additional_paths: [t/./unit, "t\\\\unit", missing.py]\n', encoding='utf-8')
+    selected = gate._read_test_policy(policy)
+    assert selected['additional_paths'] == ['missing.py', 't/unit']
+    assert selected['path'] == policy.resolve().as_posix()
+    assert len(selected['file_sha256']) == len(selected['input_digest']) == 64
+    assert 'raw' not in selected
+
+
+@pytest.mark.parametrize('contents', [
+    'test_layout: {additional_paths: []}\nignore: [pkg]\n',
+    'test_layout: {additional_paths: [../escape]}\n',
+    'test_layout: {additional_paths: [/absolute]}\n',
+    'test_layout: {additional_paths: ["C:/drive"]}\n',
+    'test_layout: {additional_paths: [true]}\n',
+    'test_layout: {additional_paths: [], other: true}\n',
+    'test_layout: {}\n',
+])
+def test_external_policy_rejects_unrecorded_or_unsafe_inputs(tmp_path, contents):
+    policy = tmp_path / 'policy.yaml'
+    policy.write_text(contents, encoding='utf-8')
+    with pytest.raises(ValueError, match='policy'):
+        gate._read_test_policy(policy)
+
+
+@pytest.mark.parametrize('ambient', [None, 'prior.yaml'])
+def test_explicit_policy_context_restores_environment_and_caches(tmp_path, monkeypatch, ambient):
+    import os
+
+    if ambient is None:
+        monkeypatch.delenv('REVEAL_CONFIG', raising=False)
+    else:
+        monkeypatch.setenv('REVEAL_CONFIG', ambient)
+    resets = []
+    monkeypatch.setattr(gate, 'reset_request_caches', lambda: resets.append(True))
+    policy = tmp_path / 'policy.yaml'
+    with pytest.raises(RuntimeError, match='injected'):
+        with gate._test_policy_config(policy):
+            assert os.environ['REVEAL_CONFIG'] == policy.as_posix()
+            raise RuntimeError('injected')
+    assert os.environ.get('REVEAL_CONFIG') == ambient
+    assert resets == [True, True]
