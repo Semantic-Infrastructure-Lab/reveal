@@ -16,9 +16,8 @@ directly.
 
 Deliberately small and self-contained: touches no other reveal module's
 internals: import analysis and domain projections use their public owners;
-complexity reuses ``architecture.py``'s existing helpers. Delete this file, the ``--against`` flag
-in ``architecture.py``, and this module's export in ``diff/__init__.py`` to
-fully remove the feature.
+complexity composes the existing AST query. Both public comparison spellings
+reuse this engine and its snapshot evidence.
 
 Divergences from the design doc's stated ideal, and why (see also the
 module's own docstrings below):
@@ -59,6 +58,7 @@ from ..defaults import (
 )
 
 from ..reveal_types import ErrorEntry, RevealMeta, WarningEntry
+from ..adapters.base import ResourceAdapter
 from ..utils.entry_points import active_entry_points
 
 logger = logging.getLogger(__name__)
@@ -283,7 +283,45 @@ def _fast_exit_possible(repo, base_commit, subpath: str) -> bool:
     return True
 
 
-# ── Snapshot extraction (reuses architecture.py + imports.py unmodified) ───
+# ── Snapshot extraction (reuses the existing imports and AST owners) ──────
+
+def _ast_row_valid(row: Any) -> bool:
+    return (isinstance(row, dict)
+            and all(isinstance(row.get(key), str) and bool(row[key]) for key in ('file', 'name'))
+            and type(row.get('complexity')) is int and row['complexity'] >= 0)
+
+
+def _ast_counts_valid(data: Dict[str, Any], rows: list) -> bool:
+    return (all(type(data.get(key)) is int and data[key] >= 0
+                for key in ('total_files', 'total_results', 'displayed_results'))
+            and data['displayed_results'] == len(rows)
+            and data['total_results'] >= data['displayed_results'])
+
+
+def _capture_ast_observations(data: Any, observations: Optional[Dict[str, bool]]) -> None:
+    if observations is None:
+        return
+    rows = data.get('results', data.get('elements')) if isinstance(data, dict) else None
+    valid = (isinstance(data, dict) and not data.get('error') and isinstance(rows, list)
+             and all(_ast_row_valid(row) for row in rows) and _ast_counts_valid(data, rows))
+    if not valid:
+        observations['failed'] = True
+    elif data['total_results'] > 0:
+        # The existing domain-filtered count precedes the limit, including zero.
+        # At limit=0 the producer is authoritative for the hidden identities.
+        observations['usable'] = True
+
+
+def _run_complex_functions(adapter: 'ResourceAdapter', path: Path, limit: int, *,
+                           observations: Optional[Dict[str, bool]] = None) -> List[Dict[str, Any]]:
+    if observations is None:
+        observations = getattr(adapter, '_architecture_observations', None)
+    from reveal.adapters.ast import AstAdapter
+    data = adapter.compose(AstAdapter, str(path), default={},
+                            query=f'complexity>9&sort=-complexity&limit={limit}',
+                            cut_as=('complex_functions', 'raise ?top=N'))
+    _capture_ast_observations(data, observations)
+    return cast(List[Dict[str, Any]], data.get('results', data.get('elements', [])))
 
 def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     """Run the import-graph + complexity analysis against `root` exactly once,
@@ -293,11 +331,10 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     would result from also going through architecture.py's
     _run_imports_analysis() (which discards the raw per-file fan-in/out list
     building only the fan_in>0/fan_out>0 filtered views the base architecture
-    report needs). Complexity still comes straight from architecture.py's
-    _run_complex_functions(), unmodified.
+    report needs). Complexity uses the same AST composition query and cut.
+    The existing adapter shells own metadata only; neither shell runs analysis.
     """
-    from reveal.adapters.architecture import _run_complex_functions
-    from reveal.adapters.architecture import ArchitectureAdapter
+    from reveal.adapters.ast import AstAdapter
     from reveal.analyzers.imports.views import ImportView
     from reveal.analyzers.imports.diagnostics import integrity_warnings
     from reveal.analyzers.imports.resolution import ScanRoot
@@ -309,7 +346,7 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     entry_points: List[str] = []
     unsupported_extensions: Dict[str, int] = {}
     edge_rules: Dict[str, Any] = {}
-    owner = ArchitectureAdapter(str(root))
+    owner = AstAdapter(str(root))
     imports_state = 'complete'
 
     try:
@@ -337,7 +374,7 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
         owner.record_composed_error('ImportsAdapter', root, exc)
         imports_state = 'failed'
 
-    complexity_owner = ArchitectureAdapter(str(root))
+    complexity_owner = AstAdapter(str(root))
     try:
         complex_fns = _run_complex_functions(complexity_owner, root, top_n * 4)
     except Exception as exc:  # boundary-ok: broad-except -- the existing child helper postprocesses arbitrary analyzer output outside compose; retain any failure at this required component boundary
@@ -732,7 +769,7 @@ def _comparison_report(path: Path, base_ref: str, head_ref: str, deltas: Optiona
 
 def render_diff_brief(report: Dict[str, Any]) -> None:
     """Compatibility printer; the rendering owner returns the shared text body."""
-    from ..rendering.adapters.architecture import architecture_diff_text
+    from ..rendering.diff import architecture_diff_text
     print(architecture_diff_text(report), end='')
 
 

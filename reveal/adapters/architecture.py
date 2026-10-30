@@ -12,6 +12,7 @@ from reveal.capabilities import scope_dict_for_path
 from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealMeta, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..diff.architecture_diff import _capture_ast_observations, _run_complex_functions
 from ..analyzers.imports import service as import_analysis, resolution
 from ..analyzers.imports.diagnostics import integrity_warnings
 from ..analyzers.imports.views import ImportView
@@ -38,33 +39,6 @@ _FAN_IN_RISK_THRESHOLD = 8        # fan-in count that makes a file load-bearing
 # reviewer unfamiliar with C#/EF conventions: 42-105-file EF-entity clusters
 # in Jellyfin (C#) were flagged severity:high, same as a real Python/JS cycle.
 _CIRCULAR_TOLERANT_LANGUAGES = frozenset({'csharp', 'java', 'kotlin', 'swift'})
-
-
-def _ast_row_valid(row: Any) -> bool:
-    return (isinstance(row, dict)
-            and all(isinstance(row.get(key), str) and bool(row[key]) for key in ('file', 'name'))
-            and type(row.get('complexity')) is int and row['complexity'] >= 0)
-
-
-def _ast_counts_valid(data: Dict[str, Any], rows: list) -> bool:
-    return (all(type(data.get(key)) is int and data[key] >= 0
-                for key in ('total_files', 'total_results', 'displayed_results'))
-            and data['displayed_results'] == len(rows)
-            and data['total_results'] >= data['displayed_results'])
-
-
-def _capture_ast_observations(data: Any, observations: Optional[Dict[str, bool]]) -> None:
-    if observations is None:
-        return
-    rows = data.get('results', data.get('elements')) if isinstance(data, dict) else None
-    valid = (isinstance(data, dict) and not data.get('error') and isinstance(rows, list)
-             and all(_ast_row_valid(row) for row in rows) and _ast_counts_valid(data, rows))
-    if not valid:
-        observations['failed'] = True
-    elif data['total_results'] > 0:
-        # The existing domain-filtered count precedes the limit, including zero.
-        # At limit=0 the producer is authoritative for the hidden identities.
-        observations['usable'] = True
 
 
 def _relationship_rows_valid(rows: Any, path_key: str, counts: tuple) -> bool:
@@ -102,18 +76,6 @@ def _directory_loss_error(meta, observations) -> Optional[ErrorEntry]:
         return {'code': 'E_ARCHITECTURE_ANALYSIS',
                 'message': 'Required directory discovery failed; required analysis failed or no architectural observations survived'}
     return None
-
-
-def _run_complex_functions(adapter: 'ArchitectureAdapter', path: Path, limit: int, *,
-                           observations: Optional[Dict[str, bool]] = None) -> List[Dict[str, Any]]:
-    if observations is None:
-        observations = getattr(adapter, '_architecture_observations', None)
-    from reveal.adapters.ast import AstAdapter
-    data = adapter.compose(AstAdapter, str(path), default={},
-                            query=f'complexity>9&sort=-complexity&limit={limit}',
-                            cut_as=('complex_functions', 'raise ?top=N'))
-    _capture_ast_observations(data, observations)
-    return data.get('results', data.get('elements', []))
 
 
 def _with_scope_warning(meta: Optional[RevealMeta], failures: List[OSError],

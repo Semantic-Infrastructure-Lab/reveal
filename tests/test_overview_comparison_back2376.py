@@ -396,3 +396,45 @@ def test_overview_schema_declares_comparison_without_a_second_mode():
     assert schema['query_params']['against']['uri_codec'] == 'percent'
     assert {'overview', 'overview_diff'} <= {output['type'] for output in schema['output_types']}
     assert 'section' not in schema['query_params']
+
+
+def test_snapshot_ast_shell_never_analyzes(project, monkeypatch):
+    from reveal.adapters.ast import AstAdapter
+    from reveal.analyzers.imports import service
+    def forbidden(*args, **kwargs):
+        raise AssertionError('composition shell started analysis')
+    monkeypatch.setattr(service, 'analyze', forbidden)
+    monkeypatch.setattr(AstAdapter, 'get_structure', forbidden)
+    AstAdapter(str(project))
+
+
+@pytest.mark.parametrize('top,limit', [(0, 16), (5, 80)])
+def test_comparison_builds_once_per_side_without_retired_adapter(project, monkeypatch, top, limit):
+    from reveal.adapters.ast import AstAdapter
+    from reveal.adapters.imports import ImportsAdapter
+    from reveal.analyzers.imports import service
+    calls, queries = [], []
+    analyze, extract, initialize = service.analyze, AstAdapter.get_structure, AstAdapter.__init__
+    def counted_analysis(scope, **kwargs):
+        calls.append('imports')
+        return analyze(scope, **kwargs)
+    def counted_ast(self, **kwargs):
+        calls.append('ast')
+        return extract(self, **kwargs)
+    def ast_init(self, resource, query=None):
+        if query:
+            queries.append(query)
+        initialize(self, resource, query)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('comparison reached retired adapter or duplicate import scan')
+    monkeypatch.setattr(service, 'analyze', counted_analysis)
+    monkeypatch.setattr(AstAdapter, 'get_structure', counted_ast)
+    monkeypatch.setattr(AstAdapter, '__init__', ast_init)
+    monkeypatch.setattr(ImportsAdapter, 'get_structure', forbidden)
+    monkeypatch.setattr(ImportsAdapter, '__init__', forbidden)
+    monkeypatch.setattr(ArchitectureAdapter, '__init__', forbidden)
+    (project / 'app.py').write_text(source(23), encoding='utf-8')
+    answer = canonical(invoke(project, top=top))
+    assert calls.count('imports') == calls.count('ast') == 2
+    assert queries == [f'complexity>9&sort=-complexity&limit={limit}'] * 2
+    assert answer['deltas']['complexity_centroid']['change'] == 10.0

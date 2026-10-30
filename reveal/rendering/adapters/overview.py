@@ -107,7 +107,7 @@ class OverviewRenderer(BaseRenderer):
             return None
         if result.get('type') == 'overview_diff':
             if 'analysis' in result:
-                from .architecture import architecture_diff_text
+                from ..diff import architecture_diff_text
                 return architecture_diff_text(result, title='Overview Diff')
             return super().render_structure(result, format)
         return overview_text(result, top)
