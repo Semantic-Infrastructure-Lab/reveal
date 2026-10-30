@@ -1,9 +1,10 @@
 """Real contract records establish declared API overlay compatibility."""
 import json
+from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, _assert_same_answer_source_spelling
 from reveal import api
 from reveal.adapters.contracts import ContractsAdapter
 from reveal.utils.query_parser import collect_query_keys, peek_query_items
@@ -29,7 +30,7 @@ def test_abstract_only_api_matches_working_uri_constructor_command(project):
     constructor = ContractsAdapter(str(project), params={'abstract_only': True}).get_structure()
     command = _run_reveal_direct('contracts', str(project), '--abstract-only', '--format', 'json')
     assert command.returncode == 0
-    assert expected == constructor == json.loads(command.stdout)
+    _assert_same_answer_source_spelling(expected, constructor, json.loads(command.stdout))
     assert expected['dataclasses'] == [] and expected['abcs'][0]['name'] == 'Contract'
     assert api.query(uri(project), abstract_only=True) == expected
 
@@ -121,7 +122,7 @@ def test_unknown_uri_and_declared_api_resource_codec(project, capsys):
     (decoded / 'contract.py').write_text(SOURCE, encoding='utf-8')
     encoded = project / 'literal%20space'
     answer = api.query(uri(encoded), abstract_only=True)
-    assert answer['total_contracts'] > 0 and answer['source'] == decoded.as_posix()
+    assert answer['total_contracts'] > 0 and Path(answer['source']) == decoded
     adapter = ContractsAdapter(str(project) + '?literal%26+', params={'impls': 0})
     assert adapter.path == str(project) + '?literal%26+'
 

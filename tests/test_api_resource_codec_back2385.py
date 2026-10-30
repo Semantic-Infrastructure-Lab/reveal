@@ -1,10 +1,12 @@
 """Bound API URI resources use the declared codec without serializing bound paths."""
 import json
+import sys
+from pathlib import Path
 from urllib.parse import quote
 
 import pytest
 
-from conftest import _run_reveal_direct as run
+from conftest import _run_reveal_direct as run, _assert_same_answer_source_spelling
 from reveal.api import query
 from reveal.adapters.factory import _canonical_init
 from reveal.adapters.overview import OverviewAdapter
@@ -18,11 +20,16 @@ def test_encoded_directory_has_the_same_api_and_cli_answer(tmp_path, scheme):
     uri = f'{scheme}://{quote(root.as_posix(), safe="/:")}'
     command = run(uri, '--format', 'json')
     assert command.returncode == 0, command.stderr
-    assert query(uri) == json.loads(command.stdout)
+    _assert_same_answer_source_spelling(query(uri), json.loads(command.stdout))
 
 
-def test_encoded_question_filename_is_bound_once_and_typed_top_still_applies(tmp_path):
-    path = tmp_path / 'module? & %.py'
+@pytest.mark.parametrize('filename', [
+    'module & %.py',
+    pytest.param('module? & %.py', marks=pytest.mark.skipif(
+        sys.platform == 'win32', reason="Windows cannot represent '?' in filenames")),
+])
+def test_encoded_filename_is_bound_once_and_typed_top_still_applies(tmp_path, filename):
+    path = tmp_path / filename
     path.write_text('VALUE=1\n', encoding='utf-8')
     uri = f'overview://{quote(path.as_posix(), safe="/:")}'
     answer = query(uri + '?top=1', top=0)
@@ -62,7 +69,7 @@ def test_declared_factory_binds_uri_but_raw_and_typed_resources_stay_literal(tmp
     path = tmp_path / 'space name.py'
     path.write_text('VALUE=1\n', encoding='utf-8')
     encoded = quote(path.as_posix(), safe='/:')
-    assert _canonical_init(Recorder, encoded).resource == str(path)
+    assert Path(_canonical_init(Recorder, encoded).resource) == path
     from reveal.utils.query_parser import ResourceSpec
     class RawRecorder(Recorder):
         RESOURCE_SPEC = ResourceSpec()
@@ -70,3 +77,20 @@ def test_declared_factory_binds_uri_but_raw_and_typed_resources_stay_literal(tmp
     literal = str(tmp_path / 'question?name.py')
     bound = _canonical_init(Recorder, literal, params={'top': 0})
     assert bound.resource == literal and bound.params == {'top': 0}
+
+
+@pytest.mark.parametrize('mutation', ['source', 'count', 'diagnostic'])
+def test_source_spelling_comparison_preserves_every_other_fact(mutation):
+    left = {'source': r'C:\project\app.py', 'total': 2,
+            'meta': {'warnings': [{'message': 'keep diagnostic'}]}}
+    right = {'source': 'C:/project/app.py', 'total': 2,
+             'meta': {'warnings': [{'message': 'keep diagnostic'}]}}
+    _assert_same_answer_source_spelling(left, right)
+    if mutation == 'source':
+        right['source'] = 'C:/different/app.py'
+    elif mutation == 'count':
+        right['total'] = 1
+    else:
+        right['meta']['warnings'] = []
+    with pytest.raises(AssertionError):
+        _assert_same_answer_source_spelling(left, right)

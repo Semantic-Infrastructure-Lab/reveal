@@ -52,6 +52,15 @@ def _run_reveal_direct(*args):
     return _Result(rc, buf_out.getvalue(), buf_err.getvalue())
 
 
+def _assert_same_answer_source_spelling(*answers):
+    """Compare every field; normalize only the source path's separator spelling."""
+    from reveal.utils.path_utils import to_posix
+    first, *rest = answers
+    expected = {**first, 'source': to_posix(first['source'])}
+    for answer in rest:
+        assert {**answer, 'source': to_posix(answer['source'])} == expected
+
+
 def _run_reveal_in(cwd, *args, stdin=None):
     """_run_reveal_direct from *cwd*, with *stdin* (a str) as sys.stdin: the in-process form of
     ``subprocess.run([sys.executable, '-m', 'reveal', *args], cwd=cwd, input=stdin)``, for tests

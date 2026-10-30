@@ -1,5 +1,6 @@
 """Surface reports observations and limitations without unmeasured confidence."""
 import copy
+from pathlib import Path
 
 import pytest
 
@@ -34,7 +35,7 @@ def test_actual_scan_omits_unmeasured_estimates(tmp_path, case, filename, source
     raw = surface._scan_surface(tmp_path)
     answer = surface.SurfaceAdapter(str(tmp_path)).get_structure()
     assert answer['type'] == 'surface_scan' and answer['contract_version'] == '1.1'
-    assert answer['source'] == tmp_path.as_posix() and answer['total'] == total
+    assert Path(answer['source']) == tmp_path and answer['total'] == total
     assert answer['scope']['total_code_files'] == answer['coverage']['total_code_files'] == 1
     assert answer['coverage']['analyzed_files'] == (0 if case == 'unsupported' else 1)
     assert answer['meta']['parse_mode'] == 'ast+tree_sitter'

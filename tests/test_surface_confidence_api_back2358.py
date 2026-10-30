@@ -6,7 +6,7 @@ from pathlib import PurePosixPath, PureWindowsPath
 
 import pytest
 
-from conftest import _run_reveal_direct as run
+from conftest import _run_reveal_direct as run, _assert_same_answer_source_spelling
 from reveal import api
 from reveal.adapters.surface import SurfaceAdapter
 from reveal.utils.results import AnalysisCompleteness
@@ -91,7 +91,8 @@ def test_cli_json_text_and_artifact_preserve_requested_rows(tmp_path, spelling):
     response = run(*args, '--format', 'json', '--no-gitignore')
     assert response.returncode == 0
     result = json.loads(response.stdout)
-    assert result == api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env')
+    _assert_same_answer_source_spelling(
+        result, api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env'))
     assert result['total'] == 2
     _absent(result)
     artifact = tmp_path / 'answer.json'

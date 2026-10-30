@@ -1,9 +1,10 @@
 """Real Surface answers establish typed API overlay admission and precedence."""
 import json
+from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, _assert_same_answer_source_spelling
 from reveal import api
 from reveal.adapters.surface import SurfaceAdapter
 from reveal.utils.query_parser import collect_query_keys, peek_query_items
@@ -33,7 +34,7 @@ def test_api_source_only_matches_supported_uri_constructor_and_command(project):
     constructor = SurfaceAdapter(str(project), params={'type': 'env', 'source_only': True}).get_structure()
     command = _run_reveal_direct('surface', str(project), '--type', 'env', '--source-only', '--format', 'json')
     assert command.returncode == 0
-    assert expected == constructor == json.loads(command.stdout)
+    _assert_same_answer_source_spelling(expected, constructor, json.loads(command.stdout))
     actual = api.query(uri(project), source_only=True)
     assert names(actual) == {'PRODUCTION_VAR'}
     assert actual == expected
@@ -148,7 +149,7 @@ def test_api_raw_resource_spelling_and_literal_constructor_path_remain(project):
     (literal / 'app.py').write_text('import os\nx=os.getenv("LITERAL_VAR")\n', encoding='utf-8')
     answer = api.query(uri(literal), source_only=True)
     assert names(answer) == {'LITERAL_VAR'}
-    assert answer['source'] == literal.as_posix()
+    assert Path(answer['source']) == literal
     # Typed construction never serializes a literal question mark into a query.
     adapter = SurfaceAdapter(str(project) + '?literal%26+', params={'type': 'env'})
     assert adapter.path == str(project) + '?literal%26+'
@@ -180,7 +181,7 @@ def test_api_applies_declared_uri_resource_decoding(project):
     baseline = api.query(uri(encoded))
     answer = api.query(uri(encoded), source_only=True)
     assert baseline['total'] == answer['total'] == 1
-    assert baseline['source'] == answer['source'] == decoded.as_posix()
+    assert Path(baseline['source']) == Path(answer['source']) == decoded
 
 
 def test_typed_type_and_grouping_controls_match_supported_uri(project):

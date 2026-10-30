@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, _assert_same_answer_source_spelling
 from reveal import api
 from reveal.adapters.contracts import ContractsAdapter, ContractsRenderer
 from reveal.adapters.factory import uses_bound_query_call
@@ -97,7 +97,7 @@ def test_working_constructor_and_uri_siblings(project):
                  ('contracts', str(project), '--abstract-only', '--no-implementations', '--impls', '0')]:
         response = _run_reveal_direct(*argv, '--format', 'json')
         assert response.returncode == 0
-        assert json.loads(response.stdout) == native
+        _assert_same_answer_source_spelling(json.loads(response.stdout), native)
 
 
 def test_single_construction_and_reused_adapter_params_are_not_mutated(project, monkeypatch):
