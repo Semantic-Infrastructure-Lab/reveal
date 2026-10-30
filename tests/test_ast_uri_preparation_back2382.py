@@ -5,6 +5,7 @@ import subprocess
 import sys
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from pathlib import Path
 from urllib.parse import quote
 
 import pytest
@@ -116,5 +117,5 @@ def test_encoded_home_uses_expanded_path_for_preflight_and_exclusions(tmp_path, 
                    '--exclude', 'omit.py', '--format', 'json')
     assert response.returncode == 0, response.stderr
     answer = json.loads(response.stdout)
-    assert answer['path'] == project.as_posix()
+    assert Path(answer['path']) == project
     assert {row['name'] for row in answer['results']} == {'keep'}

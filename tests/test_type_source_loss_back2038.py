@@ -156,7 +156,7 @@ def test_grep_preserves_only_native_rows_on_stdout_and_one_source_warning_on_std
     fault['denied'] = {hidden}
     response = run(f'ast://{hidden.parent.as_posix()}?reveal_type=cfg', '--format', 'grep')
     assert response.returncode == 3 and fault['events']
-    expected = f'{hidden.parent / "visible.py"}:1:cfg\n' if visible else ''
+    expected = f'{(hidden.parent / "visible.py").as_posix()}:1:cfg\n' if visible else ''
     assert response.stdout == expected
     assert response.stderr.count('identified directory enumeration(s) failed') == 1
     assert 'type' in response.stderr.lower()
