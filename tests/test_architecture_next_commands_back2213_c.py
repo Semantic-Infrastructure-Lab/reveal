@@ -1,49 +1,31 @@
-"""architecture://: a relative subdirectory target is not doubled in next_commands.
+"""Canonical navigation preserves the target once for retired architecture requests."""
+import shlex
+from urllib.parse import quote
 
-The engine hands back cwd-relative files for a relative target
-(`sub/pkg/core.py` for target `sub`); relativizing them as if they were
-target-relative kept `sub/pkg/core.py`, and the next command spelled it under
-the target again: `reveal sub/sub/pkg/core.py`.
-"""
-
-from pathlib import Path
-
-from reveal.adapters.architecture import (
-    _build_next_commands, _relativize_architecture_paths, _relativize_risks,
-)
+from conftest import _run_reveal_direct as run
+from reveal.adapters.architecture import ArchitectureAdapter
 
 
-def test_relative_target_risk_files_are_target_relative(tmp_path, monkeypatch):
+def test_relative_target_navigation_does_not_double_the_target(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    risks = [{'type': 'load_bearing', 'file': 'sub/pkg/core.py', 'fan_in': 9},
-             {'type': 'high_complexity_entry', 'file': 'sub/cli.py', 'complexity': 30}]
-    _relativize_risks(risks, Path('sub'))
-    assert [r['file'] for r in risks] == ['pkg/core.py', 'cli.py']
-    cmds = _build_next_commands(Path('sub'), risks, {})
-    assert 'reveal sub/pkg/core.py' in cmds
-    assert 'reveal sub/cli.py --boundary' in cmds
+    root = tmp_path / 'sub'
+    root.mkdir()
+    (root / 'a.py').write_text('import b\n', encoding='utf-8')
+    (root / 'b.py').write_text('VALUE=1\n', encoding='utf-8')
+    report = ArchitectureAdapter('sub').get_structure()
+    assert report['map']['fan_in']['rows'] == [{'file': 'b.py', 'fan_in': 1, 'fan_out': 0}]
+    assert report['map']['components']['rows'][0]['component'] == '.'
+    for step in report['next_steps']:
+        assert 'sub/sub' not in step['command']
+        tokens = shlex.split(step['command'])
+        assert run(*tokens[1:], '--format', 'json').returncode in (0, 1)
 
 
-def test_absolute_target_unchanged(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    target = tmp_path / 'sub'
-    risks = [{'type': 'load_bearing', 'file': str(target / 'pkg' / 'core.py'), 'fan_in': 9}]
-    _relativize_risks(risks, target)
-    assert risks[0]['file'] == 'pkg/core.py'
-    report = {'facts': {'components': [{'component': '.', 'top_bridge': 'pkg/core.py'}]}}
-    _relativize_architecture_paths(report, target)
-    assert report['facts']['components'][0] == {'component': '.', 'top_bridge': 'pkg/core.py'}
-
-
-def test_relative_target_facts_are_target_relative(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    report = {'facts': {'entry_points': [{'file': 'sub/cli.py'}],
-                        'core_abstractions': [{'file': 'sub/pkg/core.py'}],
-                        'components': [{'component': 'sub/pkg', 'top_bridge': 'sub/pkg/core.py'}],
-                        'circular_groups': [['sub/a.py', 'sub/b.py']]}}
-    _relativize_architecture_paths(report, Path('sub'))
-    facts = report['facts']
-    assert facts['entry_points'][0]['file'] == 'cli.py'
-    assert facts['core_abstractions'][0]['file'] == 'pkg/core.py'
-    assert facts['components'][0] == {'component': 'pkg', 'top_bridge': 'pkg/core.py'}
-    assert facts['circular_groups'] == [['a.py', 'b.py']]
+def test_absolute_target_navigation_remains_executable(tmp_path):
+    (tmp_path / 'a.py').write_text('VALUE=1\n', encoding='utf-8')
+    report = ArchitectureAdapter(str(tmp_path)).get_structure()
+    assert report['path'] == tmp_path.as_posix()
+    assert report['map']['components']['rows'][0]['component'] == '.'
+    command = report['next_steps'][0]['command']
+    assert 'imports://' + quote(tmp_path.as_posix(), safe='/.:') in shlex.split(command)[1]
+    assert run(*shlex.split(command)[1:], '--format', 'json').returncode == 0

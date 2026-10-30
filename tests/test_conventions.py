@@ -326,12 +326,13 @@ class TestEntryPointAndReexportFiles:
         mk.write_text('all:\n\techo hi\n')
         assert _compute_priority(mk, mk.relative_to(tmp_path), None) >= 10.0
 
-    def test_reexport_barrels_excluded_from_core_abstractions(self):
-        from reveal.adapters.architecture import _is_reexport_file
+    def test_reexport_barrels_are_identified_by_language_conventions(self):
+        from reveal.conventions import conventions_for_path
+        from pathlib import Path
         for f in ('pkg/__init__.py', 'src/index.ts', 'src/net/mod.rs', 'pkg/doc.go'):
-            assert _is_reexport_file(f), f
+            assert Path(f).name in conventions_for_path(Path(f).name).reexport_files, f
         for f in ('pkg/core.py', 'src/lib.rs', 'src/main.ts'):
-            assert not _is_reexport_file(f), f
+            assert Path(f).name not in conventions_for_path(Path(f).name).reexport_files, f
 
 
 class TestConstructorsOverridesAndFrameworkHooks:
