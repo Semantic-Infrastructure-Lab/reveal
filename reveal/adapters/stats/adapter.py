@@ -747,9 +747,6 @@ class MetricsAdapter(ResourceAdapter):
         if self.query_params.get('tests') is None:
             return file_stats
         mode = _TESTS.read(self.query_params)
-        if mode == 'exclude':
-            from ...config import RevealConfig
-            RevealConfig.require_conventional_test_layout(self.path, 'stats hotspots tests=exclude')
         kept = file_stats if mode == 'include' else [
             f for f in file_stats if not in_test_scope(self.path / f['file'], self.path)]
         result['test_scope'] = {'rule': 'is_test_path', 'tests': mode, 'files_excluded': len(file_stats) - len(kept)}
@@ -797,6 +794,10 @@ class MetricsAdapter(ResourceAdapter):
             self._merge_query_params(hotspots, code_only, min_lines, max_lines,
                                     min_complexity, max_complexity, min_functions,
                                     summary_only)
+
+        if hotspots and self.query_params.get('tests') is not None and _TESTS.read(self.query_params) == 'exclude':
+            from ...config import RevealConfig
+            RevealConfig.require_conventional_test_layout(self.path, 'stats hotspots tests=exclude')
 
         # Handle single file analysis
         if self.path.is_file():

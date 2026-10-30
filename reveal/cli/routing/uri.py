@@ -55,12 +55,14 @@ class _Answered(Exception):
     into the query's Answer, so a query that stops early is answered like one that ends."""
 
     def __init__(self, result: RevealResult, detail: Optional[Callable[[], None]] = None,
-                 exception: Optional[Exception] = None, execution_facts: Optional[ExecutionFacts] = None):
+                 exception: Optional[Exception] = None, execution_facts: Optional[ExecutionFacts] = None,
+                 test_layout_failure: bool = False):
         super().__init__(result.get('error') or result.get('reason'))
         self.result = result
         self.detail = detail
         self.exception = exception
         self.execution_facts = execution_facts
+        self.test_layout_failure = test_layout_failure
 
 
 class UriUsageError(Exception):
@@ -100,6 +102,7 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
         invalid = isinstance(e, TestLayoutValidationError) or (classify_validation and isinstance(e, RequestValidationError))
         code = 'invalid_request' if invalid else 'adapter_error'
         _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class,
+              test_layout_failure=isinstance(e, (TestLayoutValidationError, TestLayoutConfigError)),
               exception=None if code == 'invalid_request' else e, code=code,
               failure_cause=(FailureCause.INVALID_REQUEST if invalid else
                              FailureCause.ANALYSIS if isinstance(e, TestLayoutConfigError) else None))
@@ -146,7 +149,7 @@ def _fail(scheme: str, resource: str, message: str, *,
           adapter_class: Any = None, code: str = 'adapter_error',
           detail: Optional[Callable[[], None]] = None,
           exception: Optional[Exception] = None, failure_cause: Optional[FailureCause] = None,
-          **fields: Any) -> NoReturn:
+          test_layout_failure: bool = False, **fields: Any) -> NoReturn:
     """End the query with an error result; its selected policy decides the exit.
 
     ``meta.errors`` carries the error once more with a code (``adapter_error`` for a raise,
@@ -156,7 +159,7 @@ def _fail(scheme: str, resource: str, message: str, *,
     result = _router_result(scheme, resource, adapter_class,
                             errors=[{'code': code, 'message': message}], error=message, **fields)
     facts = failure_execution_facts(failure_cause) if failure_cause is not None else None
-    raise _Answered(result, detail, exception, facts)
+    raise _Answered(result, detail, exception, facts, test_layout_failure=test_layout_failure)
 
 
 def _decline(scheme: str, resource: str, reason: str, adapter_class: Any = None) -> NoReturn:
@@ -178,6 +181,7 @@ def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
     except _Answered as e:
         result, detail, exception = e.result, e.detail, e.exception  # `e` is unbound once the handler ends
         facts = e.execution_facts
+        test_layout_failure = e.test_layout_failure
     if result_type is not None:
         result['type'] = result_type
     if source_path is not None:
@@ -185,7 +189,7 @@ def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
         result['source_type'] = ('directory' if os.path.isdir(source_path) else
                                  'file' if os.path.isfile(source_path) else 'unknown')
     facts = facts or (facts_of(result) if facts_of is not None else None)
-    if facts is not None and facts_of is None and default_fail_on is None:
+    if test_layout_failure and default_fail_on is None:
         default_fail_on = 'none'  # explicit policy failure on a legacy operation has no findings policy
     answer = Answer(result, 'router',
                     lambda *, announce_error=True: _emit_result(
