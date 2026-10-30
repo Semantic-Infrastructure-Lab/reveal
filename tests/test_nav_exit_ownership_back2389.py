@@ -226,9 +226,11 @@ def test_nested_swift_capture_is_formation_but_its_body_is_deferred(tmp_path):
     ('(x for x in [1] for y in exit(2) if exit(3))', ['exit(2)', 'exit(3)']),
     ('((y for y in exit(1)) for x in [1])', ['exit(1)']),
     ('(x for x in (exit(y) for y in [1]))', ['exit(y)']),
+    ('(1 for target[exit(1)] in [0])', ['exit(1)']),
 ])
 def test_generator_deferred_regions_are_not_confident_outer_execution(tmp_path, expression, uncertain):
     source = 'def outer():\n g = ' + expression + '\n return g\n'
+    compile(source, '<generator fixture>', 'exec')
     answer = _answer(tmp_path, 'python', source)
     assert answer['meta']['exit_scope']['mode'] == 'selected_callable'
     sites = answer['meta']['exit_scope'].get('unresolved_sites', [])
@@ -249,3 +251,12 @@ def test_rust_async_block_candidates_do_not_claim_enclosing_execution(tmp_path, 
     sites = answer['meta']['exit_scope'].get('unresolved_sites', [])
     assert [s['text'] for s in sites] == uncertain
     assert all('async' in s['cause'].lower() for s in sites)
+
+
+def test_dart_resolved_body_is_not_unqualified_header_execution(tmp_path):
+    answer = _answer(tmp_path, 'dart', 'int outer(){\n return 1;\n}')
+    assert answer['meta']['exit_scope']['mode'] == 'selected_callable'
+    assert answer['meta']['exit_scope'].get('unresolved_sites', []) == []
+    warnings = answer['meta'].get('warnings', [])
+    assert [w['type'] for w in warnings] == ['ownership_scope_limited']
+    assert 'signature' in warnings[0]['message']
