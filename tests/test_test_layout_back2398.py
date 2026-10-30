@@ -211,3 +211,26 @@ def test_direct_context_normalizes_immutable_tuple_and_rejects_mutable_list(tmp_
     assert layout.additional_paths == ('src/helper.rs', 't/unit')
     with pytest.raises(ValueError, match='immutable tuple'):
         Layout(tmp_path.resolve(), 'project', additional_paths=['t/unit'])
+
+
+def test_missing_custom_source_is_required_and_selection_survives_env_change(tmp_path, monkeypatch):
+    from reveal.errors import TestLayoutConfigError as ConfigFailure
+    root = project(tmp_path)
+    missing = tmp_path / 'missing.yaml'
+    monkeypatch.setenv('REVEAL_CONFIG', str(missing))
+    config = RevealConfig.get(root)
+    monkeypatch.delenv('REVEAL_CONFIG')
+    with pytest.raises(ConfigFailure, match='FileNotFoundError'):
+        config.apply_test_layout(Layout.for_path(root))
+
+
+def test_failed_custom_source_stays_required_after_environment_changes(tmp_path, monkeypatch):
+    from reveal.errors import TestLayoutConfigError as ConfigFailure
+    root = project(tmp_path)
+    custom = tmp_path / 'bad.yaml'
+    custom.write_text('test_layout: [\n', encoding='utf-8')
+    monkeypatch.setenv('REVEAL_CONFIG', str(custom))
+    config = RevealConfig.get(root)
+    monkeypatch.setenv('REVEAL_CONFIG', str(tmp_path / 'another.yaml'))
+    with pytest.raises(ConfigFailure, match='ParserError'):
+        config.apply_test_layout(Layout.for_path(root))
