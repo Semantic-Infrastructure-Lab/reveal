@@ -105,6 +105,11 @@ def test_encoded_home_uses_expanded_path_for_preflight_and_exclusions(tmp_path, 
     project.mkdir(parents=True)
     for name in ('keep', 'omit'):
         (project / (name + '.py')).write_text(f'def {name}():\n    return 1\n', encoding='utf-8')
+    from test_output_contract_compliance import _grammar_cache_root
+    grammar_cache = _grammar_cache_root()
+    if grammar_cache is not None:
+        monkeypatch.setenv('TREE_SITTER_LANGUAGE_PACK_CACHE_DIR', grammar_cache)
+    monkeypatch.setenv('REVEAL_NO_UPDATE_CHECK', '1')
     monkeypatch.setenv('HOME', str(home))
     monkeypatch.setenv('USERPROFILE', str(home))
     response = run('ast://' + leading_home + '/project%20space',
