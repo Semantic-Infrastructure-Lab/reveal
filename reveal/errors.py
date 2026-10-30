@@ -27,6 +27,14 @@ class NavRequestValidationError(RequestValidationError):
     """
 
 
+class TestLayoutValidationError(RequestValidationError):
+    """A selected test/support declaration or unsupported adoption is invalid."""
+
+
+class TestLayoutConfigError(RuntimeError):
+    """A required test/support configuration source could not be loaded."""
+
+
 class RevealError(Exception):
     """Base error class for Reveal with actionable suggestions.
 

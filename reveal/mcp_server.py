@@ -47,7 +47,7 @@ except ImportError:
 from .cli.defaults import _default_args
 from .cli.global_flags import apply_global_flags
 from .utils.path_utils import failure_of
-from .errors import NavRequestValidationError
+from .errors import NavRequestValidationError, TestLayoutValidationError, TestLayoutConfigError
 
 # All reveal-mcp tools are read-only (no writes, no side effects) and
 # idempotent (same args -> same result, modulo underlying files changing).
@@ -206,7 +206,7 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     if captured_exception is not None:
         from .cli.invocation import RetiredSpellingError
         return _tool_failure(str(captured_exception),
-                             public=isinstance(captured_exception, (OSError, NavRequestValidationError,
+                             public=isinstance(captured_exception, (OSError, NavRequestValidationError, TestLayoutValidationError, TestLayoutConfigError,
                                                                    RetiredSpellingError)),
                              exception=captured_exception)
     if out.strip():
@@ -279,7 +279,7 @@ def _declared_failure(answer) -> str | None:
         return None
     if answer.exception is not None:
         exc = answer.exception
-        return _tool_failure(str(exc), public=isinstance(exc, OSError), exception=exc)
+        return _tool_failure(str(exc), public=isinstance(exc, (OSError, TestLayoutConfigError)), exception=exc)
     if answer.public_diagnostic is not None:
         return _tool_failure(answer.public_diagnostic)
     return _tool_failure(answer.private_diagnostic or 'Required analysis or output failed', public=False)
