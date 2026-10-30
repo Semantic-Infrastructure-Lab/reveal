@@ -367,8 +367,15 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
         metadata = adapter.get_metadata()
         unsupported_extensions = metadata.get('unsupported_extensions', {})
         owner.fold_meta({'warnings': integrity_warnings(built.analysis, root)})
+        capped = built.files.capped or bool((metadata.get('scan_budget') or {}).get('capped'))
+        if capped:
+            owner.fold_meta({'warnings': [{
+                'type': 'scan_capped',
+                'message': ('Import discovery reached its source-file limit; required snapshot evidence '
+                            'is incomplete. Narrow the comparison target.'),
+            }]})
         if (adapter.analysis.files_failed or adapter.analysis.files_lost
-                or bool(getattr(adapter.analysis.graph, 'traversal_failures', ()))):
+                or capped or bool(getattr(adapter.analysis.graph, 'traversal_failures', ()))):
             imports_state = 'incomplete'
     except Exception as exc:  # boundary-ok: broad-except -- whole-tree import analysis runs arbitrary analyzers; retain the attributed failure and reject comparison rather than treating empty facts as evidence
         owner.record_composed_error('ImportsAdapter', root, exc)
