@@ -4,7 +4,7 @@ No systematic cross-language test existed for the user-facing commands built
 on top of the primitives BACK-422/431 already cover (`overview`, `architecture`,
 `deps`, `review`, `pack`, `surface`, `contracts`, `testability`, `trace`).
 Real-corpus dogfood already found bugs here by accident (silent partial
-`surface` output in mixed-language directories; `overview` complexity metrics
+`surface` output in mixed-language directories; `overview` scope metadata
 inheriting a broken import graph) — this formalizes that into a repeatable
 suite. `pack` has its own deep suite (BACK-435, test_pack_validation.py); it
 is only smoke-checked here for completeness of the composite list.
@@ -14,7 +14,7 @@ non-fatal 1; JSON valid where supported (progress/status text must go to
 stderr, not interleave with stdout JSON); output includes source
 language/count metadata; unsupported languages are explicit, not silent
 partials; composite results agree with primitive commands on the same
-fixture (`overview` complexity vs `ast://`, `trace` vs `calls://`, `deps` vs
+fixture (`overview` map vs `imports://`, `trace` vs `calls://`, `deps` vs
 `imports://`/`depends://`).
 
 Fixtures: tests/fixtures/conformance/<lang>/ (the same 9-language Tier 1 set
@@ -99,7 +99,9 @@ def lang_dir(request, fixtures_dir) -> Path:
 
 def test_overview_non_crash_and_json(lang_dir):
     d = _json("overview", str(lang_dir), desc=f"{lang_dir.name} overview")
-    assert d["stats"]["summary"]["total_files"] >= 1
+    assert d["scope"]["total_code_files"] >= 1
+    assert d["map_status"] == "complete"
+    assert d["map"]["metadata"]["scanned_files"] + sum(d["map"]["metadata"]["unsupported_extensions"].values()) >= 1
 
 
 def test_architecture_non_crash_and_json(lang_dir):
@@ -168,13 +170,12 @@ def test_trace_agrees_with_calls_uri(lang_dir):
 
 def test_overview_mixed_dir_covers_every_language(fixtures_dir):
     d = _json("overview", str(fixtures_dir), desc="mixed overview")
-    files = d["stats"]["files"]
-    seen_exts = {Path(f["file"]).suffix.lstrip(".") for f in files}
-    expected_exts = {
-        "py", "c", "cpp", "cs", "go", "java", "js", "rs", "ts",
-    }
-    missing = expected_exts - seen_exts
-    assert not missing, f"overview silently dropped extensions: {missing}"
+    seen = {row['language'] for row in d['scope']['languages']}
+    expected = {'Python', 'C', 'C++', 'C#', 'Go', 'Java', 'JavaScript', 'Rust', 'TypeScript'}
+    assert expected <= seen, f"overview silently dropped languages: {expected - seen}"
+    assert sum(row['files'] for row in d['scope']['languages']) == d['scope']['total_code_files']
+    assert d['scope']['complete'] is True
+
 
 
 def test_deps_mixed_dir_covers_every_language(fixtures_dir):

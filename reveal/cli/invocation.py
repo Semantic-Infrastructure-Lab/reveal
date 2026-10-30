@@ -117,7 +117,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Pre-download tree-sitter grammars for offline/air-gapped use'),
     'overview':     _declared('overview',
                      'reveal overview [path]',
-                     'One-glance dashboard: languages, quality, hotspots, recent git'),
+                     'Compact project map: scope, components, import relationships'),
     'pack':         _declared('pack',
                      'reveal pack <path>',
                      'Token-budgeted context snapshot for LLM consumption',

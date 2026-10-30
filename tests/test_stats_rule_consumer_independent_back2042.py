@@ -141,12 +141,12 @@ def test_two_root_owner_loss_changes_no_measured_row_in_any_view(tmp_path, actua
 @pytest.mark.parametrize('view', ['json', 'text', 'projected', 'artifact'])
 def test_declared_composites_exit_zero_after_a_real_owner_loss(tmp_path, actual, scheme, view):
     checked, hidden = project(tmp_path)
-    query = 'files_only=true' if scheme == 'hotspots' else 'no_git=true&no_imports=true'
+    query = 'files_only=true' if scheme == 'hotspots' else 'no_imports=true'
     uri = f'{scheme}://{tmp_path}?{query}'
     artifact = tmp_path.parent / (tmp_path.name + '.json')
     flags = ['--format', 'text' if view in {'text', 'artifact'} else 'json']
     if view == 'projected':
-        flags += ['--fields', 'summary' if scheme == 'hotspots' else 'stats']
+        flags += ['--fields', 'summary' if scheme == 'hotspots' else 'scope']
         if scheme == 'hotspots':
             flags += ['--max-items', '0']
     if view == 'artifact':
@@ -158,7 +158,8 @@ def test_declared_composites_exit_zero_after_a_real_owner_loss(tmp_path, actual,
     actual.update(enabled=True, denied={hidden})
     lost = run(uri, *flags)
     nothing_ran_for_the_owner(actual)
-    assert len([row for path, row in actual['measured'] if path.suffix == '.py']) == 6
+    measured = [row for path, row in actual['measured'] if path.suffix == '.py']
+    assert len(measured) == (6 if scheme == 'hotspots' else 0)
     assert lost.returncode == 0, (lost.returncode, lost.stdout, lost.stderr)
     assert lost.stdout == clean.stdout, 'the owner loss changed the printed answer'
     if view == 'artifact':

@@ -3,16 +3,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..base import BaseRenderer, capped_section
-from ...analyzers.imports.service import edge_rule_lines
+from ..diff import (  # re-export existing formatter helpers for ordinary architecture consumers
+    _coupling_lines, _diff_entry_point_lines, _render_edge_rule, _signed, architecture_diff_text,
+)
 from ...utils.entry_points import entry_point_rule_line
 from ...utils.results import outcome_of
 from ...utils.warning_render import meta_warning_lines
-
-
-def _render_edge_rule(report: Dict[str, Any]) -> List[str]:
-    """The counting rule of the report's numbers: one block, none when no edge was counted."""
-    rule = edge_rule_lines(report)
-    return ['\n'.join(rule) + '\n'] if rule else []
 
 
 def _render_entry_points(entry_points: List[Dict], top: int, base_path: Path,
@@ -122,83 +118,3 @@ class ArchitectureRenderer(BaseRenderer):
     @classmethod
     def _render_text(cls, result: Dict[str, Any]) -> str:
         return cls.render_structure(result) or ''
-
-
-def architecture_diff_text(report: Dict[str, Any]) -> str:
-    """Compact human-readable rendering of an architecture_diff report.
-
-    JSON is the primary contract (design doc: "JSON-first, no verdict") —
-    this is a convenience summary for terminal use, not a demand.
-    """
-    lines = meta_warning_lines(report)
-    if report.get('error'):
-        lines.append('Architecture comparison unavailable: required snapshot evidence is incomplete')
-        for side, components in report['analysis']['snapshots'].items():
-            lines.extend(f'  {side} {component}: {state}' for component, state in components.items()
-                         if state != 'complete')
-        return '\n'.join(lines) + '\n'
-    deltas = report['deltas']
-    lines.append(f"Architecture Diff: {report['path']}")
-    lines.append(f"  {report['base_ref']} -> {report['head_ref']}\n")
-    if report['analysis'].get('basis') == 'identical_tree':
-        # Proved equal by tree id, so neither side was analyzed: no measured-looking zeros (BACK-2282).
-        lines.append(f"No architectural change: the working tree under {report['path']} "
-                     f"is identical to {report['base_ref']}, so neither snapshot was analyzed.")
-        return '\n'.join(lines) + '\n'
-    lines += _render_edge_rule(report)
-
-    fan_in = deltas['fan_in']
-    if fan_in:
-        lines.append(f"Fan-in changes ({len(fan_in)})")
-        for e in fan_in:
-            lines.append(f"  {e['file']:<54}  {e['base']} -> {e['head']}  ({_signed(e['change'])})")
-        lines.append('')
-
-    fan_out = deltas['fan_out']
-    if fan_out:
-        lines.append(f"Fan-out changes ({len(fan_out)})")
-        for e in fan_out:
-            lines.append(f"  {e['file']:<54}  {e['base']} -> {e['head']}  ({_signed(e['change'])})")
-        lines.append('')
-
-    cg = deltas['circular_groups']
-    if cg['introduced'] or cg['resolved']:
-        lines.append("Circular groups")
-        for group in cg['introduced']:
-            lines.append(f"  + introduced: {', '.join(group)}")
-        for group in cg['resolved']:
-            lines.append(f"  - resolved:   {', '.join(group)}")
-        lines.append('')
-
-    lines += _coupling_lines(deltas['component_coupling'])
-
-    centroid = deltas['complexity_centroid']
-    lines.append(f"Complexity centroid (top {centroid['top_n']}): {centroid['base']} -> {centroid['head']}  ({_signed(centroid['change'])})")
-
-    lines.extend(_diff_entry_point_lines(deltas['entry_points']))
-    return '\n'.join(lines) + '\n'
-
-
-def _coupling_lines(coupling: List[Dict[str, Any]]) -> List[str]:
-    """Component cohesion changes; a side whose cohesion is declined reads n/a (BACK-1428)."""
-    if not coupling:
-        return []
-    lines = [f"Component coupling changes ({len(coupling)})"]
-    for c in coupling:
-        base = 'n/a' if c.get('declined_on') == 'base' else c['base_cohesion']
-        head = 'n/a' if c.get('declined_on') == 'head' else c['head_cohesion']
-        lines.append(f"  {c['component']:<44}  {base} -> {head}  ({_signed(c['change'])})")
-    return [*lines, '']
-
-
-def _diff_entry_point_lines(eps: Dict[str, List[str]]) -> List[str]:
-    if not (eps['added'] or eps['removed']):
-        return []
-    return ['\nEntry points', *(f'  + {file}' for file in eps['added']),
-            *(f'  - {file}' for file in eps['removed'])]
-
-
-def _signed(value: Optional[float]) -> str:
-    if value is None:
-        return 'n/a'
-    return f'+{value}' if value > 0 else str(value)

@@ -1419,7 +1419,7 @@ def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace', adapte
     if getattr(renderer_class, 'ACCEPTS_TOP', False) is True and (
             peek(args, 'all', False) or peek(args, 'verbose', False)):
         mark(args, 'all', 'verbose')
-        from ...adapters.overview import UNLIMITED_TOP
+        from ...defaults import UNLIMITED_TOP
         return {'top': UNLIMITED_TOP}
     declarations = getattr(type(adapter), 'PARAM_SPECS', ())
     if isinstance(declarations, tuple):

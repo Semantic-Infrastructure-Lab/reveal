@@ -19,7 +19,7 @@ reveal pack src/ --since main --budget 8000 # PR context snapshot for AI agents
 pip install reveal-cli
 ```
 
-Git history (`git://` and churn ranking in `hotspots`) needs the `git` extra: `pip install "reveal-cli[git]"`. Without it those parts are left out and a warning says so.
+Git history and comparisons (`git://`, `overview --against`, and churn ranking in `hotspots`) needs the `git` extra: `pip install "reveal-cli[git]"`. Without it those parts are left out and a warning says so.
 
 **Windows on a managed/locked-down machine?** If Application Control Policy blocks the pip-generated `reveal.exe` launcher, run `python -m reveal` instead — it uses the same install, just skips the blocked wrapper.
 
@@ -157,6 +157,7 @@ reveal pack src/ --budget 8000 # token-budgeted snapshot for LLM context
 reveal pack src/ --architecture # pack + entry points + core abstractions brief
 reveal metrics src/ --hotspots # worst files by complexity and size
 reveal overview .              # compact project map: scope, components, imports
+reveal overview . --against HEAD  # compare the live working tree with a ref
 reveal imports . --external    # third-party and stdlib packages (--circular, --unused)
 reveal calls src/ --callees main --depth 2 --detail  # what main calls, level by level, with side effects
 reveal contracts src/          # ABC/Protocol/TypedDict/Pydantic inventory

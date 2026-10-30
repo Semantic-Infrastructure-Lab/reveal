@@ -680,8 +680,13 @@ survive field selection and presentation cuts; explicit fields may omit unselect
 payload sections. Ordinary overview does
 not collect metrics, quality rules, exhaustive complexity rankings or Git history.
 
+`reveal overview PATH --against REF` selects `overview_diff`, comparing the tracked
+base with the live working tree. It preserves explicit snapshot completeness and
+uses the existing architecture diff engine. Comparison top controls the centroid
+population (`max(top,1)*4`); omit ordinary-only no_imports/all/verbose controls.
+
 See the [overview guide](../adapters/OVERVIEW_ADAPTER_GUIDE.md) for record shapes,
-limits and drill-down examples.
+limits, comparison controls and drill-down examples.
 
 ---
 

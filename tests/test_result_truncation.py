@@ -1,6 +1,6 @@
 """Truncation as an outcome (BACK-1059): one marker for a cut list, one place it is printed.
 
-``reveal.utils.results.note_truncation`` is the one way a result says a list was cut: a
+Raw lists disclose cuts through ``reveal.utils.results.note_truncation``: a
 ``meta.warnings`` entry ``{'type': 'truncated', 'field', 'shown', 'total', 'cause',
 'message'}``. ``outcome_of`` reads it as ``truncated``, which exits 0.
 ``cli/routing/uri._emit_result`` prints it after the render: on stdout for text, on
@@ -10,6 +10,8 @@ Before, truncation was spelled six ways, and text renderers that didn't know a g
 spelling showed a cut list as complete. ``ast://DIR --max-items 3`` printed "Results: 45"
 above 3 results, and its JSON ``displayed_results`` said 45. ``stats://DIR?limit=2`` and
 ``markdown://DIR?limit=2`` rendered 2 entries with nothing saying there were more.
+Overview's bounded map pages instead carry intrinsic rows/total/returned/omitted
+records; text presents those same bounds without duplicating raw-list cut notes.
 """
 
 import json
@@ -227,16 +229,31 @@ def test_an_uncut_answer_says_nothing(proj, argv):
     assert outcome_of(payload) == 'ok'
 
 
-def test_a_composite_names_its_own_list(proj):
-    """overview:// shows ast://'s cut results as its complex_functions, cut by ?top."""
-    branches = ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(12))
-    for name in ('a', 'b'):
-        (proj / f'cx_{name}.py').write_text(f'def {name}(x):\n{branches}    return -1\n',
-                                            encoding='utf-8')
-    r = _run_reveal_direct('overview://.?top=1&no_git=true')
-    assert r.returncode == 0, r.stderr
-    assert '⚠ Truncated complex_functions: showing 1 of 2 — raise ?top=N' in r.stdout
-    assert 'Truncated results' not in r.stdout
+def _two_cycle_groups(proj):
+    """Four importable files in two independent SCCs, beside the three fixture modules."""
+    for package in ('first', 'second'):
+        directory = proj / package
+        directory.mkdir()
+        (directory / 'a.py').write_text('from .b import value\nvalue = 1\n', encoding='utf-8')
+        (directory / 'b.py').write_text('from .a import value\nvalue = 1\n', encoding='utf-8')
+
+
+def test_overview_nested_cut_is_intrinsic_without_duplicate_raw_list_notes(proj):
+    _two_cycle_groups(proj)
+    r = _run_reveal_direct('overview://.?top=1')
+    encoded = _run_reveal_direct('overview://.?top=1', '--format', 'json')
+    assert r.returncode == encoded.returncode == 0, (r.stderr, encoded.stderr)
+    payload = json.loads(encoded.stdout)
+    cycles = payload['map']['cycles']
+    assert (cycles['total'], cycles['returned'], cycles['omitted']) == (2, 1, 1)
+    [cycle] = cycles['rows']
+    assert cycle['members'] == {'rows': ['first/a.py'], 'total': 2, 'returned': 1, 'omitted': 1}
+    assert cycle['path'] == {'rows': ['first/a.py'], 'total': 3, 'returned': 1, 'omitted': 2}
+    assert r.stdout.count('Cycle groups  (showing 1 of 2 observed)') == 1
+    assert r.stdout.count('showing 1 of 2 members') == 1
+    assert r.stdout.count('showing 1 of 3 nodes') == 1
+    assert truncations_of(payload) == []
+    assert 'Truncated' not in r.stdout + r.stderr + encoded.stderr
 
 
 # -- the subcommand forms (BACK-1544) -----------------------------------------------------
@@ -249,14 +266,16 @@ def _two_complex_functions(proj, branches=12):
 
 
 def test_the_subcommand_says_what_its_uri_form_says(proj):
-    """``reveal overview`` printed its cut line until slice 2 left cut lists to the URI
-    router, which subcommands never reach; it then printed nothing (BACK-1544)."""
-    _two_complex_functions(proj)
-    r = _run_reveal_direct('overview', '.', '--top', '1', '--no-git')
-    assert r.returncode == 0, r.stderr
-    assert r.stdout.count('⚠ Truncated complex_functions: showing 1 of 2 — raise ?top=N') == 1
-    uri = _run_reveal_direct('overview://.?top=1&no_git=true')
-    assert uri.stdout.splitlines()[-1] == r.stdout.splitlines()[-1]
+    """Both spellings print the same bounded map and expose the same JSON counts."""
+    _two_cycle_groups(proj)
+    command = ['overview', '.', '--top', '1']
+    uri = ['overview://.?top=1']
+    r, u = _run_reveal_direct(*command), _run_reveal_direct(*uri)
+    assert r.returncode == u.returncode == 0, (r.stderr, u.stderr)
+    assert r.stdout == u.stdout
+    assert r.stdout.count('Most imported files  (showing 1 of 4 observed)') == 1
+    assert json.loads(_run_reveal_direct(*command, '--format', 'json').stdout) == json.loads(
+        _run_reveal_direct(*uri, '--format', 'json').stdout)
 
 
 def test_a_subcommand_cut_is_printed_before_its_findings_exit(proj):
@@ -273,11 +292,18 @@ def test_a_subcommand_cut_is_printed_before_its_findings_exit(proj):
 
 
 def test_an_uncut_subcommand_says_nothing(proj):
-    """Negative control for the two tests above."""
-    _two_complex_functions(proj)
-    r = _run_reveal_direct('overview', '.', '--no-git')
+    """Negative control: an uncut map retains zero omissions and no raw-list note."""
+    _two_cycle_groups(proj)
+    r = _run_reveal_direct('overview', '.', '--top', '20')
     assert r.returncode == 0, r.stderr
     assert 'Truncated' not in r.stdout + r.stderr
+    payload = json.loads(_run_reveal_direct('overview', '.', '--top', '20', '--format', 'json').stdout)
+    assert truncations_of(payload) == []
+    for page in payload['map'].values():
+        if isinstance(page, dict) and 'rows' in page:
+            assert page['omitted'] == 0 and page['returned'] == page['total'] == len(page['rows'])
+    for cycle in payload['map']['cycles']['rows']:
+        assert cycle['members']['omitted'] == cycle['path']['omitted'] == 0
 
 
 # -- an adapter's own cap (BACK-1543) -------------------------------------------------------
@@ -295,8 +321,6 @@ OWN_CAPS = [
     (['stats://.?hotspots=true&top=1'], 'hotspots'),
     (['hotspots://.?top=1'], 'file_hotspots'),
     (['hotspots', '.', '--top', '1'], 'file_hotspots'),
-    (['overview://.?top=1&no_git=true&no_imports=true'], 'hotspots'),
-    (['overview', '.', '--top', '1', '--no-git', '--no-imports'], 'hotspots'),
 ]
 
 
@@ -323,18 +347,48 @@ def test_top_zero_lists_every_hotspot(proj, argv):
     assert truncations_of(payload) == []
 
 
-def test_all_reaches_the_overview_uri_forms_data(proj):
-    """--all lifted overview://'s render cap only: the data kept ?top's default 5, so
-    'overview://X --all' printed 'showing 5 of 387' complex functions (BACK-1543)."""
-    branches = ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(12))
-    for i in range(6):
-        (proj / f'cx_{i}.py').write_text(f'def c{i}(x):\n{branches}    return -1\n',
-                                         encoding='utf-8')
-    capped = _run_reveal_direct('overview://.?no_git=true&no_imports=true')
-    assert '⚠ Truncated complex_functions: showing 5 of 6' in capped.stdout
-    r = _run_reveal_direct('overview://.?no_git=true&no_imports=true', '--all')
+@pytest.mark.parametrize('spelling', ['uri', 'cli'])
+@pytest.mark.parametrize('top', [0, 1])
+def test_overview_pages_keep_observed_totals_at_zero_and_one(proj, spelling, top):
+    _two_cycle_groups(proj)
+    argv = ['overview://.?top=' + str(top)] if spelling == 'uri' else ['overview', '.', '--top', str(top)]
+    r = _run_reveal_direct(*argv, '--format', 'json')
     assert r.returncode == 0, r.stderr
-    assert 'Truncated' not in r.stdout + r.stderr
+    payload = json.loads(r.stdout)
+    assert payload['scope']['total_code_files'] == 7
+    for name, total in {'fan_in': 4, 'entrypoints': 0, 'components': 3, 'cycles': 2}.items():
+        page = payload['map'][name]
+        shown = min(top, total)
+        assert (page['total'], page['returned'], page['omitted']) == (total, shown, total - shown)
+        assert len(page['rows']) == shown
+    assert truncations_of(payload) == []
+    assert not {'stats', 'hotspots', 'complex_functions', 'git_log'} & payload.keys()
+
+
+@pytest.mark.parametrize('spelling', ['uri', 'cli'])
+@pytest.mark.parametrize('flag', ['--all', '--verbose'])
+def test_expansion_reaches_nested_overview_data(proj, spelling, flag):
+    _two_cycle_groups(proj)
+    argv = ['overview://.?top=0'] if spelling == 'uri' else ['overview', '.', '--top', '0']
+    r = _run_reveal_direct(*argv, flag, '--format', 'json')
+    assert r.returncode == 0, r.stderr
+    payload = json.loads(r.stdout)
+    for name, total in {'fan_in': 4, 'entrypoints': 0, 'components': 3, 'cycles': 2}.items():
+        assert payload['map'][name]['returned'] == total
+        assert payload['map'][name]['omitted'] == 0
+    for cycle in payload['map']['cycles']['rows']:
+        assert cycle['members']['returned'] == cycle['members']['total'] == 2
+        assert cycle['path']['returned'] == cycle['path']['total'] == 3
+    assert truncations_of(payload) == []
+
+
+def test_scope_only_overview_does_not_manufacture_graph_cut_records(proj):
+    r = _run_reveal_direct('overview://.?top=0&no_imports=true', '--format', 'json')
+    assert r.returncode == 0, r.stderr
+    payload = json.loads(r.stdout)
+    assert payload['map_status'] == 'not_requested' and payload['map'] is None
+    assert payload['scope']['total_code_files'] == 3
+    assert truncations_of(payload) == []
 
 
 class _Args:

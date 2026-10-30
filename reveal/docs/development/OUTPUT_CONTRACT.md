@@ -429,6 +429,8 @@ apply after this legacy outcome handling:
   observed population. Text states those bounds too. Each bounded cycle member/witness
   list has its own record. Source scan limits and input loss still require their separate
   coverage evidence: an exact observed total is not proof of an exhaustive project scan.
+  Prefix ordering applies recursively to these pages: selected cycle rows keep their
+  identities while their member and witness pages may have independently smaller bounds.
   Diagnostic details and router cuts of raw arrays continue to use `note_truncation`.
 - **A cap cuts the answer; it doesn't bound what is read.** Build the whole answer, order it,
   then keep the first N. Stop reading early only when the reading order is the answer's order,
@@ -612,6 +614,15 @@ both census and graph. Hidden counts use entries, not an invented skipped-file p
 Validated execution facts survive postprocessing and `--fields`; an explicit field selection
 may omit unselected payload sections while failure metadata, exits and MCP error state
 remain honest. Human-primary artifacts use the same bounded map.
+
+Overview with `against` selects `overview_diff` before ordinary map collection and
+uses the existing comparison engine and comparison evidence qualification. Its live
+head is labelled `working tree`. Top controls centroid population (`max(top,1)*4`);
+ordinary-only no_imports/all/verbose controls reject. Invalid pre-analysis requests
+keep canonical diff identity and exit 2; missing required snapshot proof or output
+failure exits 3. Both operation identities retain validated execution facts before
+explicit payload selection. Comparison snapshots and materialization use the existing
+tracked-base/live-head exclusion and gitignore policies.
 
 Directory enumeration failures collected by Stats, AST, trace, patch scanning and testability
 are disclosed as `analysis_incomplete`. Its `count` with `unit: directories` counts

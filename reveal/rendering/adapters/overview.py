@@ -105,6 +105,11 @@ class OverviewRenderer(BaseRenderer):
         if format in ('typed', 'grep'):
             print(f'Error: --format {format} is not implemented for overview. Use --format json or --format text instead.', file=sys.stderr)
             return None
+        if result.get('type') == 'overview_diff':
+            if 'analysis' in result:
+                from ..diff import architecture_diff_text
+                return architecture_diff_text(result, title='Overview Diff')
+            return super().render_structure(result, format)
         return overview_text(result, top)
 
     @classmethod

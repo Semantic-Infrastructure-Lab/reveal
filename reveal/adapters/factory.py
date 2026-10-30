@@ -126,8 +126,9 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
     calls the constructor once — no try-chain, no guessing, and any error
     raised inside __init__ propagates to the caller unmodified. Optional typed
     overrides bind after validating the URI query and reach the constructor as
-    params, without serializing values or decoding resource paths. Already-bound
-    params and overrides are mutually exclusive.
+    params, with URI resource paths using the adapter's declared codec. Legacy
+    construction and already-bound typed paths keep their original spelling.
+    Already-bound params and overrides are mutually exclusive.
 
     An empty resource defaults to adapter_class.CANONICAL_EMPTY_RESOURCE
     (see adapters/base.py) — '.' for path-based adapters (bare ast:// means
@@ -148,9 +149,12 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
         path = resource or empty_default
         query = None
     if overrides is not None:
-        from ..utils.query_binding import bind_declared_params
+        from ..utils.query_binding import bind_declared_params, bind_resource_path
+        from ..utils.query_parser import ResourceSpec
         bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
                                      overrides=overrides)
+        spec = getattr(adapter_class, 'RESOURCE_SPEC', ResourceSpec(uri_default=empty_default))
+        path = bind_resource_path(spec, path, transport='uri')
         return adapter_class(path, params=bound)
     return adapter_class(path, query)
 
