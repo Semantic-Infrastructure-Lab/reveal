@@ -135,7 +135,7 @@ def test_literal_source_region_keeps_multiple_callable_inventory(tmp_path, flag)
     assert [r['line'] for r in answer['findings']] == [3, 5, 6]
 
 
-def test_resolved_line_reference_is_a_callable_not_a_literal_region(tmp_path):
+def test_single_line_region_preserves_its_narrow_selection(tmp_path):
     source = 'def outer(a):\n def inner():\n  return 1\n if a:\n  return 2\n return 3\n'
     answer = _answer(tmp_path, 'python', source, element=':6')
     assert [r['line'] for r in answer['findings']] == [6]
@@ -145,3 +145,37 @@ def test_named_class_is_source_inventory_not_one_callable(tmp_path):
     source = 'class C:\n def first(self):\n  return 1\n def second(self):\n  return 2\n'
     answer = _answer(tmp_path, 'python', source, element='C')
     assert [r['line'] for r in answer['findings']] == [3, 5]
+
+
+def test_own_python_declaration_defaults_are_not_function_execution(tmp_path):
+    source = 'def outer(a=exit(1)):\n return a\n'
+    answer = _answer(tmp_path, 'python', source)
+    assert [(r['line'], r['text']) for r in answer['findings']] == [(2, 'return a')]
+
+
+@pytest.mark.parametrize('language', ['javascript', 'typescript', 'tsx'])
+def test_own_invocation_defaults_and_nested_deferred_defaults_differ(tmp_path, language):
+    source = ('function outer(a=exit(1)){\n const inner=(b=exit(2))=>exit(3);\n'
+              ' return a;\n}')
+    answer = _answer(tmp_path, language, source)
+    assert [(r['line'], r['text']) for r in answer['findings']] == [
+        (1, 'exit(1)'), (3, 'return a;'),
+    ]
+
+
+def test_nested_js_computed_name_is_formation_but_its_parameters_are_deferred(tmp_path):
+    source = ('function outer(){\n class C {\n [exit(1)](a=exit(2)){return 3;}\n }\n'
+              ' return 4;\n}')
+    answer = _answer(tmp_path, 'javascript', source)
+    assert [(r['line'], r['text']) for r in answer['findings']] == [
+        (3, 'exit(1)'), (5, 'return 4;'),
+    ]
+
+
+def test_nested_cpp_capture_is_formation_but_parameter_and_body_are_deferred(tmp_path):
+    source = ('int outer(){\n auto f=[x=(exit(1),0)](int a=(exit(2),0)){\n'
+              ' return 3;\n };\n return 4;\n}')
+    answer = _answer(tmp_path, 'cpp', source)
+    assert [(r['line'], r['text']) for r in answer['findings']] == [
+        (2, 'exit(1)'), (5, 'return 4;'),
+    ]
