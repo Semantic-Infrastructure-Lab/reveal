@@ -9,7 +9,7 @@ import os
 import re
 import tempfile
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from itertools import islice
 from pathlib import Path, PurePath
 from typing import (
@@ -181,6 +181,8 @@ class TestLayout:
     include_anchor_name: bool = False
     observed_root: Optional[Path] = None
     logical_root: Optional[Path] = None
+    additional_paths: Tuple[str, ...] = ()
+    declaration: Optional[Tuple[str, str, str]] = None
 
     def __post_init__(self) -> None:
         for path in (self.anchor, self.observed_root, self.logical_root):
@@ -190,6 +192,23 @@ class TestLayout:
             raise ValueError('test layout relocation requires observed and logical roots')
         if self.logical_root is not None:
             self.logical_root.relative_to(self.anchor)
+
+    @staticmethod
+    def normalize_additional_paths(value: Any) -> Tuple[str, ...]:
+        """Literal component selectors, never filesystem probes or expansions."""
+        if not isinstance(value, list):
+            raise ValueError('test_layout.additional_paths must be a list of relative paths')
+        normalized = []
+        for item in value:
+            if not isinstance(item, str) or not item or '\x00' in item:
+                raise ValueError('test_layout.additional_paths entries must be nonempty strings without NUL')
+            spelling = item.replace('\\', '/')
+            if spelling.startswith('/') or re.match(r'^[A-Za-z]:', spelling) or '..' in spelling.split('/'):
+                raise ValueError('test_layout.additional_paths entries must be relative paths without parent traversal')
+            path = '/'.join(part for part in spelling.split('/') if part and part != '.') or '.'
+            if path not in normalized:
+                normalized.append(path)
+        return tuple(normalized)
 
     @classmethod
     def for_path(cls, path: Path, *, fallback_root: Optional[Path] = None,
@@ -210,8 +229,8 @@ class TestLayout:
     @property
     def identity(self) -> tuple:
         """Effective view identity; descriptive provenance does not split equal policies."""
-        return ('lexical-v1', self.anchor, self.include_anchor_name,
-                self.observed_root, self.logical_root)
+        return ('project-test-layout-v1', self.anchor, self.include_anchor_name,
+                self.additional_paths, self.observed_root, self.logical_root)
 
     def is_test(self, path: Union[str, PurePath]) -> bool:
         candidate = Path(to_posix(path))
@@ -223,22 +242,39 @@ class TestLayout:
             relative = candidate.relative_to(self.anchor)
         except ValueError as exc:
             raise ValueError('source is outside its test layout context') from exc
+        if self.matches_additional(relative):
+            return True
         if self.include_anchor_name:
             relative = Path(self.anchor.name) / relative
         return is_test_path(relative)
 
+    def matches_additional(self, relative: Path) -> bool:
+        return any(selector == '.' or relative.parts[:len(Path(selector).parts)] == Path(selector).parts
+                   for selector in self.additional_paths)
+
     def relocate(self, *, observed_root: Path, logical_root: Path) -> 'TestLayout':
-        return TestLayout(self.anchor, self.source, self.include_anchor_name,
-                          observed_root, logical_root)
+        return replace(self, observed_root=observed_root, logical_root=logical_root)
 
     def as_dict(self, base: Path) -> Dict[str, Any]:
         if self.observed_root is not None and self.logical_root is not None:
             base = self.logical_root / base.relative_to(self.observed_root)
         basis = ('scan-root name and relative paths; project boundary unknown'
                  if self.include_anchor_name else 'paths relative to the selected project')
-        return {'anchor': to_posix(os.path.relpath(self.anchor, base)), 'source': self.source,
-                'include_anchor_name': self.include_anchor_name, 'rule': 'is_test_path',
-                'basis': basis}
+        result = {'anchor': to_posix(os.path.relpath(self.anchor, base)), 'source': self.source,
+                  'include_anchor_name': self.include_anchor_name, 'rule': 'is_test_path', 'basis': basis}
+        if self.declaration is not None or self.additional_paths:
+            layer, path, digest = self.declaration or ('internal', '', '')
+            result.update(classifier_version='project-test-layout-v1',
+                          additional_paths=list(self.additional_paths), whole_scope='.' in self.additional_paths,
+                          declaration={'layer': layer, 'path': path, 'input_digest': digest},
+                          effective_policy={'classifier_version': 'project-test-layout-v1',
+                                            'anchor': result['anchor'],
+                                            'include_anchor_name': self.include_anchor_name,
+                                            'anchor_name': self.anchor.name if self.include_anchor_name else None,
+                                            'additional_paths': list(self.additional_paths)})
+            result['basis'] = basis + ('; conventional names plus declared additional paths'
+                                       if '.' not in self.additional_paths else '; WHOLE SCOPE selected by explicit .')
+        return result
 
 
 def is_test_file_name(path: Union[str, PurePath]) -> bool:

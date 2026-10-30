@@ -22,10 +22,12 @@ import logging
 import json
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import functools
+import hashlib
 
-from .utils.path_utils import resolve_project_root, reveal_yaml_is_root, failure_of
+from .utils.path_utils import TestLayout, resolve_project_root, reveal_yaml_is_root, failure_of, to_posix
+from .errors import RequestValidationError
 
 try:
     import yaml
@@ -117,6 +119,43 @@ class ConfigSource:
     layer: str
     path: Path
     root: bool = False
+    test_layout_json: Optional[str] = None
+    test_layout_error: Optional[str] = None
+
+
+def _capture_test_layout(config: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    """Freeze only this declaration while its layer is already in memory.
+
+    JSON rejects YAML-only values and cycles; non-string mapping keys must also
+    be rejected rather than coerced by JSON into selector field names.
+    """
+    if 'test_layout' not in config:
+        return None, None
+    value = config['test_layout']
+    try:
+        encoded = json.dumps(value, sort_keys=True, separators=(',', ':'),
+                             ensure_ascii=True, allow_nan=False)
+        _validate_declaration_keys(value)
+    except (TypeError, ValueError) as exc:
+        return None, f'test_layout must contain JSON-compatible values and string keys ({type(exc).__name__})'
+    return encoded, None
+
+
+def _validate_declaration_keys(value: Any) -> None:
+    """Called after JSON serialization has already rejected cycles and YAML types."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if not isinstance(key, str):
+                raise ValueError('non-string key')
+            _validate_declaration_keys(child)
+    elif isinstance(value, list):
+        for child in value:
+            _validate_declaration_keys(child)
+
+
+def _config_source(layer: str, path: Path, config: Dict[str, Any]) -> ConfigSource:
+    raw, error = _capture_test_layout(config)
+    return ConfigSource(layer, path, bool(config.get('root')), raw, error)
 
 
 _ResolveKey = Union[Path, Tuple[str, Path]]  # absolute path, or (cwd, relative path)
@@ -235,6 +274,11 @@ CONFIG_SCHEMA = {
                     }
                 }
             }
+        },
+        "test_layout": {
+            "type": "object",
+            "properties": {"additional_paths": {"type": "array", "items": {"type": "string", "minLength": 1}}},
+            "additionalProperties": False,
         },
         "imports": {"type": "object"},
         "adapters": {"type": "object"},
@@ -405,6 +449,37 @@ class RevealConfig:
         # The files that were read into this config, lowest precedence first (BACK-2275).
         self.sources: List[ConfigSource] = []
         self._overrides = self._parse_overrides()
+
+    def apply_test_layout(self, layout: TestLayout) -> TestLayout:
+        """Bind the highest present declaration eligible for the selected anchor.
+
+        Sources are already in low-to-high precedence order. A root-local empty
+        list replaces lower additions independently of global list merging.
+        """
+        selected = None
+        for source in self.sources:
+            if source.layer != 'custom' and not (source.layer == 'project' and source.path.parent == layout.anchor):
+                continue
+            if source.test_layout_error is not None:
+                selected = source
+            elif source.test_layout_json is not None:
+                block = json.loads(source.test_layout_json)
+                if not isinstance(block, dict) or block:
+                    selected = source
+        if selected is None:
+            return layout
+        if selected.test_layout_error:
+            raise RequestValidationError(selected.test_layout_error)
+        block = json.loads(selected.test_layout_json or 'null')
+        if not isinstance(block, dict) or set(block) != {'additional_paths'}:
+            raise RequestValidationError('test_layout must be a mapping with additional_paths')
+        try:
+            paths = TestLayout.normalize_additional_paths(block['additional_paths'])
+        except ValueError as exc:
+            raise RequestValidationError(str(exc)) from exc
+        digest = hashlib.sha256((selected.test_layout_json or '').encode('utf-8')).hexdigest()
+        return replace(layout, additional_paths=paths,
+                       declaration=(selected.layer, to_posix(selected.path), digest))
 
     def _parse_overrides(self) -> List[Override]:
         """Parse override sections into Override objects."""
@@ -592,7 +667,7 @@ class RevealConfig:
         and add it to *configs* when it sets anything. Returns ``_load_file_outcome``'s pair."""
         config, why = cls._load_file_outcome(path, failures)
         if config is not None:
-            read.append(ConfigSource(layer, path, bool(config.get('root'))))
+            read.append(_config_source(layer, path, config))
         if config:
             configs.append(config)
         return config, why
@@ -634,7 +709,7 @@ class RevealConfig:
             if config_file.exists():
                 config, _why = cls._load_file_outcome(config_file, failures)
                 if config is not None and sources is not None:
-                    sources.append(ConfigSource('project', config_file, bool(config.get('root'))))
+                    sources.append(_config_source('project', config_file, config))
                 if config:
                     configs.append(config)
                 if config and config.get('root'):
@@ -643,7 +718,7 @@ class RevealConfig:
             pyproject = current / 'pyproject.toml'
             pyproject_config = cls._try_load_pyproject_reveal(pyproject, failures)
             if isinstance(pyproject_config, dict) and sources is not None:
-                sources.append(ConfigSource('project', pyproject, bool(pyproject_config.get('root'))))
+                sources.append(_config_source('project', pyproject, pyproject_config))
             if pyproject_config:
                 configs.append(pyproject_config)
             if pyproject_config and pyproject_config.get('root'):
