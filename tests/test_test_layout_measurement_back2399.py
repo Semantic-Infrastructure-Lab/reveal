@@ -333,3 +333,57 @@ def test_cli_records_separate_configured_candidate_without_rebaselining(nonstand
     assert report['failures'] == ['corpus: configured_tests=exclude baseline missing; review required']
     assert baseline_path.read_bytes() == baseline_bytes
     assert report['implementation']['head']
+
+
+def test_public_configured_policy_sorts_deduplicates_and_keeps_missing_selectors(nonstandard_corpus):
+    root, entry, path, _ = nonstandard_corpus
+    path.write_text('test_layout: {additional_paths: [t/unit, missing.py, t/./unit]}\n', encoding='utf-8')
+    policy = gate._read_test_policy(path)
+    assert policy['additional_paths'] == ['missing.py', 't/unit']
+    row = gate.measure(entry, root, policy=policy)['configured_tests']['exclude']
+    scope = row['edge_rule']['test_scope']
+    assert scope['additional_paths'] == ['missing.py', 't/unit']
+    assert row['oracle_edges'] == row['hit_edges'] == 3
+    assert row['extra_edges'] == 0
+
+
+@pytest.mark.parametrize('damage', ['files_failed_count', 'files_lost_count'])
+def test_configured_policy_does_not_mask_missing_loss_diagnostics(nonstandard_corpus, monkeypatch, damage):
+    root, _, path, policy = nonstandard_corpus
+    with gate._test_policy_config(path):
+        healthy = gate._importers_request(root, root, None, tests='exclude', policy=policy)
+    broken = copy.deepcopy(healthy)
+    del broken['metadata'][damage]
+    monkeypatch.setattr(gate, '_cli_json', lambda *args, **kwargs: broken)
+    with pytest.raises(RuntimeError, match='files_failed_count/files_lost_count'):
+        gate.rendered_reverse_graph(root, None, tests='exclude', policy=policy)
+
+
+def test_conventional_rows_accept_valid_empty_declaration(nonstandard_corpus):
+    root, entry, path, _ = nonstandard_corpus
+    path.write_text('test_layout: {additional_paths: []}\n', encoding='utf-8')
+    with gate._test_policy_config(path):
+        measured = gate.measure(entry, root)
+    assert measured['hit_edges'] == 5
+    assert measured['tests']['exclude']['extra_edges'] == 2
+    assert measured['edge_rule']['test_scope']['additional_paths'] == []
+
+
+@pytest.mark.parametrize('damage', ['version', 'declaration', 'boolean'])
+def test_conventional_rows_reject_unknown_empty_policy_evidence(nonstandard_corpus, monkeypatch, damage):
+    root, _, path, _ = nonstandard_corpus
+    path.write_text('test_layout: {additional_paths: []}\n', encoding='utf-8')
+    with gate._test_policy_config(path):
+        healthy = gate._importers_request(root, root, None)
+    broken = copy.deepcopy(healthy)
+    scope = broken['edge_rule']['test_scope']
+    if damage == 'version':
+        scope['classifier_version'] = 'unrecognized'
+        scope['effective_policy']['classifier_version'] = 'unrecognized'
+    elif damage == 'boolean':
+        scope['effective_policy']['include_anchor_name'] = 0
+    else:
+        del scope['declaration']
+    monkeypatch.setattr(gate, '_cli_json', lambda *args, **kwargs: broken)
+    with pytest.raises(RuntimeError, match='policy'):
+        gate._importers_request(root, root, None)
