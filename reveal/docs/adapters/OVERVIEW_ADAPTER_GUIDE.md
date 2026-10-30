@@ -129,7 +129,8 @@ map presentation, where top zero shows no graph rows.
 `analysis` states completeness, basis and per-side imports/complexity evidence.
 An `identical_tree` proof has no measured snapshots: centroid base/head values
 are null, with proved change zero. Analyzed snapshots may legitimately measure
-zero. Missing required snapshot evidence gives unavailable deltas and exit 3;
+zero. Missing required snapshot evidence, including capped import discovery, gives
+unavailable deltas and exit 3;
 invalid refs/resources give exit 2. Existing exclusions and gitignore policy
 remain symmetric across the base and live head.
 
@@ -138,6 +139,13 @@ gate remain supported. Omit ordinary-only no_imports, all and verbose controls
 in comparisons, even if explicitly false; no_git/tests remain obsolete.
 Explicit field selection may omit payload sections while validated execution
 facts and failure diagnostics still determine exits and MCP error state.
+
+## Retired Architecture Spelling
+
+`architecture` and `architecture://` are retired aliases. Until the cut they emit
+a replaced-by note and return the same canonical `overview` or `overview_diff`
+answer. The old risks and next-commands report is removed. `pack --architecture`
+retains its separate context-selection behavior.
 
 ## See Also
 

@@ -26,7 +26,7 @@ SDK), or acts on the machine (a file write, a launched process).
 
 - *Internal structure.* Modules, classes and functions that never touch a boundary do not appear.
   For structure use `reveal <file>`; for who calls whom use `calls://`.
-- *Layers or dependency direction.* "Which layer may import which" is `architecture://`, and the
+- *Layers or dependency direction.* Configured import-layer violations are checked by `imports://PATH?violations`, and the
   full import graph is `imports://`. `surface://` only lists the imports that are boundary clients
   (the `network`, `db` and `sdk` buckets) and, with `--by dir`, which directory owns them.
 - *Data flow or behavior.* An entry says a boundary exists at that site, not what flows through it

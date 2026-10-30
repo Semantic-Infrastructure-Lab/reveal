@@ -458,7 +458,7 @@ JavaScript, TypeScript and TSX record import scope (positionally: an import, `im
 `require()` in a function, method, arrow or function expression is function-level; a class field
 initializer or static block is module level). Other languages' edges count as load-time under
 every value, and the rule names those languages and the number of edges. An unknown value is an error.
-`architecture://`, `overview://` and `pack` print the same rule for the numbers they take from this
+`overview://` and `pack` print the same rule for the numbers they take from this
 graph; none of them accepts `&lazy`.
 
 ```bash
@@ -702,8 +702,8 @@ Use `?flag` syntax for operations:
 through the shared resolution cascade (also behind `?importers`: direct, PHP `define()` constants, namespaces,
 members, Swift modules, Ruby Zeitwerk naming). Rows are the requested path's files; importers come from
 anywhere under the root, so `imports://pkg?rank=fan-in` counts `tests/` and `scripts/` importers of
-`pkg/core.py`. `&scope=path` resolves at the path itself (what `architecture://`, `overview://`, `pack` and
-the architecture diff use). `edge_rule` adds `root` (relative to the path), `root_source`, `scope_param`,
+`pkg/core.py`. `&scope=path` resolves at the path itself (what `overview://`, `pack` and
+the overview comparison use). `edge_rule` adds `root` (relative to the path), `root_source`, `scope_param`,
 `tests_param`, `via` (counted edges by stage) and `ungated_languages`/`ungated_edges` (languages no recall
 oracle measures). Swift module and Zeitwerk convention edges count as importers but never close a cycle.
 

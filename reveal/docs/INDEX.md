@@ -41,7 +41,7 @@ They live in the `adapters/` directory.
 
 | File | Description |
 |------|-------------|
-| [ARCHITECTURE_ADAPTER_GUIDE.md](adapters/ARCHITECTURE_ADAPTER_GUIDE.md) | Entry points, core abstractions, risks |
+| [ARCHITECTURE_ADAPTER_GUIDE.md](adapters/ARCHITECTURE_ADAPTER_GUIDE.md) | Retired alias: use overview for the compact map and Git-ref comparison |
 | [AST_ADAPTER_GUIDE.md](adapters/AST_ADAPTER_GUIDE.md) | Code analysis with complexity and size filtering |
 | [AUTOSSL_ADAPTER_GUIDE.md](adapters/AUTOSSL_ADAPTER_GUIDE.md) | cPanel AutoSSL run logs: per-domain TLS outcomes, DCV failures |
 | [CALLS_ADAPTER_GUIDE.md](adapters/CALLS_ADAPTER_GUIDE.md) | Cross-file call graph: callers, callees, coupling |
@@ -59,7 +59,7 @@ They live in the `adapters/` directory.
 | [LETSENCRYPT_ADAPTER_GUIDE.md](adapters/LETSENCRYPT_ADAPTER_GUIDE.md) | Let's Encrypt certificate inventory: orphan and duplicate detection |
 | [METRICS_ADAPTER_GUIDE.md](adapters/METRICS_ADAPTER_GUIDE.md) | Codebase metrics, file hotspots and provenance (replaces `stats://` and `classify://`) |
 | [MYSQL_ADAPTER_GUIDE.md](adapters/MYSQL_ADAPTER_GUIDE.md) | MySQL introspection and schema analysis |
-| [OVERVIEW_ADAPTER_GUIDE.md](adapters/OVERVIEW_ADAPTER_GUIDE.md) | Compact project map: scope, components, import relationships |
+| [OVERVIEW_ADAPTER_GUIDE.md](adapters/OVERVIEW_ADAPTER_GUIDE.md) | Compact project map and Git-ref comparison: scope, components, import relationships |
 | [PATCHES_ADAPTER_GUIDE.md](adapters/PATCHES_ADAPTER_GUIDE.md) | Test patch pressure: repeated mocks, private patches |
 | [PYTHON_ADAPTER_GUIDE.md](adapters/PYTHON_ADAPTER_GUIDE.md) | Python runtime introspection |
 | [REVEAL_ADAPTER_GUIDE.md](adapters/REVEAL_ADAPTER_GUIDE.md) | Reveal introspection (analyzers, adapters, config); reference implementation |
@@ -69,6 +69,7 @@ They live in the `adapters/` directory.
 | [XLSX_ADAPTER_GUIDE.md](adapters/XLSX_ADAPTER_GUIDE.md) | Excel file analysis and data extraction |
 
 **Pointer stubs** (kept because rule V024 requires a guide file for every registered adapter):
+[ARCHITECTURE](adapters/ARCHITECTURE_ADAPTER_GUIDE.md) is retired into `overview://`;
 [CLASSIFY](adapters/CLASSIFY_ADAPTER_GUIDE.md) and [STATS](adapters/STATS_ADAPTER_GUIDE.md) are retired into `metrics://`;
 [TRACE](adapters/TRACE_ADAPTER_GUIDE.md) into `calls://?callees=&depth=&detail`;
 [DEPS](adapters/DEPS_ADAPTER_GUIDE.md) and [DEPENDS](adapters/DEPENDS_ADAPTER_GUIDE.md) into `imports://` (`?external`, `?circular`, `?unused`, `?importers`);
