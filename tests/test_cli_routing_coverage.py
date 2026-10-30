@@ -89,7 +89,7 @@ class TestBuildCheckKwargs:
 class TestHandleUriSortDesc:
     def test_desc_flag_prepends_dash(self):
         """Cover line 51: --desc prepends - to sort_field."""
-        mock_adapter_cls = MagicMock()
+        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
 
@@ -107,7 +107,7 @@ class TestHandleUriSortDesc:
 
     def test_uri_sort_takes_precedence_over_flag(self):
         """BACK-161: --sort is not injected when URI already has sort= param."""
-        mock_adapter_cls = MagicMock()
+        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
 
@@ -134,7 +134,7 @@ class TestHandleUriExclude:
 
     def test_exclude_injected_for_overview_scheme(self):
         """Legacy overview dispatch (API/batch) retains query injection."""
-        mock_adapter_cls = MagicMock()
+        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
@@ -146,7 +146,7 @@ class TestHandleUriExclude:
         assert 'exclude=skip_me%2A' in resource_arg or 'exclude=skip_me*' in resource_arg
 
     def test_exclude_joins_multiple_patterns_with_comma(self):
-        mock_adapter_cls = MagicMock()
+        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
@@ -159,7 +159,7 @@ class TestHandleUriExclude:
         assert 'exclude=a*,b*' in resource_arg or 'exclude=a%2A%2Cb%2A' in resource_arg
 
     def test_uri_exclude_takes_precedence_over_flag(self):
-        mock_adapter_cls = MagicMock()
+        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
@@ -172,7 +172,7 @@ class TestHandleUriExclude:
         assert 'flag_pattern' not in resource_arg
 
     def test_exclude_warns_on_non_supporting_scheme(self, capsys):
-        mock_adapter_cls = MagicMock()
+        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
@@ -187,7 +187,7 @@ class TestHandleUriExclude:
         assert '--exclude has no effect on ast://' in captured.err
 
     def test_no_exclude_flag_no_injection_no_warning(self, capsys):
-        mock_adapter_cls = MagicMock()
+        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
@@ -340,7 +340,7 @@ class TestHandleUriStructuralFlagsWarning:
         assert '--ext' in err
 
     def test_no_since_until_flags_no_injection_no_warning(self, capsys):
-        mock_adapter_cls = MagicMock()
+        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
@@ -1549,7 +1549,7 @@ class TestHandleUriMarkdownFlags:
         from unittest.mock import patch, MagicMock as MM
         from reveal.cli.routing.uri import handle_uri
         args = self._make_args(links=True)
-        mock_adapter_cls = MM()
+        mock_adapter_cls = MM(RESOURCE_SPEC=None, resource_path=None)
         mock_adapter_cls.return_value.get_structure.return_value = {'contract_version': '1.0', 'type': 'markdown_query', 'source': '.', 'source_type': 'directory', 'results': []}
         mock_renderer_cls = MM()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
@@ -1563,7 +1563,7 @@ class TestHandleUriMarkdownFlags:
         from unittest.mock import patch, MagicMock as MM
         from reveal.cli.routing.uri import handle_uri
         args = self._make_args(frontmatter=True)
-        mock_adapter_cls = MM()
+        mock_adapter_cls = MM(RESOURCE_SPEC=None, resource_path=None)
         mock_adapter_cls.return_value.get_structure.return_value = {'contract_version': '1.0', 'type': 'markdown_query', 'source': '.', 'source_type': 'directory', 'results': []}
         mock_renderer_cls = MM()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)

@@ -63,7 +63,7 @@ mcp_server.main()
             invalid = await session.call_tool('reveal_query', {
                 'uri': f'ast://{tmp_path}\x00invalid', 'provenance': provenance})
             assert invalid.is_error
-            assert 'null' in _text(invalid).lower()
+            assert 'nul' in _text(invalid).lower()  # Explicit NUL validation or the legacy null-byte wording.
             failed = await session.call_tool('reveal_query', {
                 'uri': f'ast://{tmp_path}', 'provenance': provenance})
             assert failed.is_error
