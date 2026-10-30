@@ -77,8 +77,8 @@ def test_architecture_json_counts_fan_in_zero_and_active_and_states_the_rule(pro
 
 
 def test_overview_json_counts_fan_in_zero_and_active_and_states_the_rule(project):
-    arch = _json(f'overview://{project}?no_git=true')['architecture']
-    assert arch['entry_point_filter'] == EXPECTED
+    arch = _json(f'overview://{project}')['map']
+    assert arch['entry_point_filter'] == {**EXPECTED, 'path_basis': 'producer paths before target-relative display'}
 
 
 def test_architecture_text_states_both_numbers_and_the_rule(project):
@@ -88,9 +88,9 @@ def test_architecture_text_states_both_numbers_and_the_rule(project):
 
 
 def test_overview_text_states_both_numbers_and_the_rule(project):
-    text = _run(f'overview://{project}?no_git=true')
-    assert 'Entry points  (4 fan-in=0, 1 active)' in text
-    assert f'active = {RULE}' in text
+    text = _run(f'overview://{project}?')
+    assert '4 raw candidates; 1 active' in text
+    assert RULE in text
 
 
 def test_no_imports_architecture_claims_no_entry_point_counts(project):
