@@ -567,6 +567,8 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
         valid = sorted(_NAV_BOOLEAN_FLAGS | set(_NAV_VAR_NAME_FLAGS) | {'callsites', 'calls', 'around', 'flow'})
         return _tool_failure(f"unknown nav flag '{flag}'. Valid flags: {valid}")
 
+    # This tool promises text; REVEAL_FORMAT controls CLI defaults only.
+    args.format = 'text'
     option = '--' + flag
     if flag_value and flag not in _NAV_BOOLEAN_FLAGS:
         option += '=' + flag_value

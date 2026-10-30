@@ -82,8 +82,16 @@ def test_retirement_teaching_context_distinguishes_code_and_markdown():
     'reveal app.py --format json work --outline',
     'reveal --outline "source folder/app.py" "MyClass.work" --format=json',
 ])
-def test_teaching_uses_actual_global_option_and_positional_identity(command):
+def test_teaching_uses_actual_global_option_and_positional_identity(command, source):
     from scripts.check_retired_names import scan
+    if command == 'reveal app.py --format json work --outline':
+        runtime = _run_reveal_direct(source, '--format', 'json', 'work', '--outline')
+        if runtime.returncode == 2:
+            # Older argparse rejects interleaved optional positionals. The static
+            # check deliberately declines examples this interpreter cannot parse.
+            assert 'unrecognized arguments' in runtime.stderr
+            assert scan(command) == []
+            return
     assert [key for _, key, _ in scan(command)] == ['target:nav.outline']
 
 

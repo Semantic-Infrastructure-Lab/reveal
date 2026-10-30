@@ -207,7 +207,7 @@ def test_flow_and_exits_reject_unsupported_formats(tmp_path, flag, fmt):
     assert 'supported: text, json' in result.stderr
 
 
-@pytest.mark.parametrize('flag', ['flow', 'exits'])
+@pytest.mark.parametrize('flag', ['flow', 'exits', 'returns', 'outline'])
 def test_registered_navigation_text_contract_overrides_cli_format_environment(tmp_path, monkeypatch, flag):
     pytest.importorskip('mcp')
     from test_mcp_expected_errors_back1992 import _run, _text
@@ -220,7 +220,7 @@ def test_registered_navigation_text_contract_overrides_cli_format_environment(tm
             'path': str(path), 'element': 'work', 'flag': flag})
         assert not result.is_error
         assert not _text(result).lstrip().startswith('{')
-        assert ('Navigation depth' if flag == 'flow' else 'Exit sites (static)') in _text(result)
+        assert ('Navigation depth' if flag in {'flow', 'outline'} else 'Exit sites (static)') in _text(result)
         sibling = await session.call_tool('reveal_nav', {
             'path': str(path), 'element': 'work', 'flag': 'callsites'})
         assert not sibling.is_error
