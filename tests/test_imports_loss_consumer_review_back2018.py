@@ -133,7 +133,7 @@ def test_relative_import_with_empty_module_is_a_real_uncapped_deps_observation(t
     assert DepsAdapter.execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
 
 
-def test_actual_top_zero_keeps_authoritative_ast_domain_count_proof(tmp_path, monkeypatch):
+def test_actual_top_zero_keeps_required_census_proof(tmp_path, monkeypatch):
     root = tmp_path / 'affected'
     tree(root, 'ast')
     fail_child(monkeypatch, root)
@@ -141,7 +141,8 @@ def test_actual_top_zero_keeps_authoritative_ast_domain_count_proof(tmp_path, mo
     result = json.loads(response.stdout)
     assert response.returncode == 3
     assert ArchitectureAdapter.execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
-    assert not result.get('error')
+    assert result['scope']['total_code_files'] == 1
+    assert result['map']['components']['rows'] == []
 
 
 @pytest.mark.parametrize('name', OWNERS)

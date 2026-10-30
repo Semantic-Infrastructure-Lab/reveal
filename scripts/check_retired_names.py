@@ -11,8 +11,7 @@ when a teaching surface names a retired spelling outside a sentence that says it
 
 A new ``RETIREMENTS`` row is covered the day it lands: the patterns are derived from the key's kind
 (``subcommand:``, ``scheme:``, ``param:``, ``value:``, ``flag:``, ``target:``). Spellings that are due
-to retire but have no row yet (``architecture``, ``hotspots``) join when their rows land (BACK-2070,
-BACK-2149). tests/test_retired_names_ratchet_back2196.py holds the positive controls.
+to retire but have no row yet (``hotspots``) join when their rows land (BACK-2149). tests/test_retired_names_ratchet_back2196.py holds the positive controls.
 
 Run:
     python scripts/check_retired_names.py        # exits 1 and names each line that teaches one

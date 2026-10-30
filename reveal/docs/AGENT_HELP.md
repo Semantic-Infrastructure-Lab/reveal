@@ -239,7 +239,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | Subcommand | One-liner | Discover details |
 |------------|-----------|------------------|
 | `reveal overview [path]` | Compact project map: scope, components, import relationships | `reveal overview --help` |
-| `reveal architecture [path]` | Architectural brief: entry points, core abstractions, risks | `reveal architecture --help` |
+| `reveal architecture [path] [--against REF]` | Deprecated alias for overview; use reveal overview [path] [--against REF] | `reveal architecture --help` |
 | `reveal imports [path]` | Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations | `reveal imports --help` |
 | `reveal deps [path]` | Retired: use reveal imports <path> --external, --circular or --unused (one graph build); dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
 | `reveal hotspots [path]` | High-complexity files and functions that need attention | `reveal hotspots --help` |
@@ -1588,30 +1588,32 @@ incomplete comparisons exit 3. See the [overview guide](adapters/OVERVIEW_ADAPTE
 
 ---
 
-### Task: "Get an architectural brief before editing a module"
+### Task: "Compare architecture with a Git ref"
 
-**Pattern:**
 ```bash
-reveal architecture src/           # Entry points, core abstractions, risks, next commands
-reveal architecture src/auth/      # Target a specific subdirectory
-reveal architecture . --format json  # Machine-readable: {facts, risks[], next_commands[]}
-reveal architecture src/ --no-imports  # Skip import analysis (faster, no graph)
-reveal architecture src/ --against main  # Diff against a git ref
+reveal overview src/ --against HEAD
+reveal overview src/ --against v1.2.0 --format json
+reveal 'overview://src?against=HEAD&top=5' --format json
 ```
 
-**Output sections:** entry points (fan-in=0, by fan-out) · core abstractions (most imported) · component cohesion bars (`n/a` for directories mostly in Go, Java, Kotlin, C#, Scala or Swift, whose files share a package without importing) · risks (circular groups, high-complexity entry points, load-bearing files) · next commands (dynamically generated from findings). Every count states its rule (`Rule:` lines, `edge_rule` and `edge_rule_sections` in JSON): all static import edges except `TYPE_CHECKING` ones, function-level imports included (entry points ignore importers under a test path); cycles use the load-time view.
+The tracked base is materialized read-only; the live working tree is the head,
+including uncommitted changes. The canonical answer is `overview_diff`, with
+fan-in/out, cycle, coupling, active-entrypoint and complexity-centroid deltas.
+`analysis` retains its basis and per-side imports/complexity completeness.
+Missing required evidence, including capped import discovery, makes deltas
+unavailable and exits 3; invalid resources or refs exit 2.
 
-**`--against REF` → architectural diff against a git ref**
-```bash
-reveal architecture src/ --against main
-reveal architecture src/ --against v1.2.0 --format json
-reveal 'architecture://src?against=main' --format json
-```
-Base = `REF` (materialized read-only via git, working tree untouched), head = the current working tree. Reports fan-in/fan-out deltas, circular-dependency groups introduced or resolved, component-coupling changes, complexity-centroid shift, and entry-point changes — "what did this branch actually change architecturally" instead of diffing file-by-file. Both snapshots are counted by one stated rule (`edge_rule` beside `deltas`; function-level imports included, cycles on the load-time view). Deltas are only meaningful for graph-backed languages (Python/JS/TS/Go/Rust/C/C++ today).
+Comparison top controls the centroid population: `max(top,1)*4`, twenty at the
+default five and four at zero. Identical-tree proof has null unmeasured centroid
+base/head values and proved zero change. Omit ordinary-only no_imports/all/verbose
+controls, even explicitly false values. URI refs percent-decode once and preserve
+plus; encode literal percent as `%25`. See the
+[overview guide](adapters/OVERVIEW_ADAPTER_GUIDE.md) for controls and limits.
 
-Both forms preserve `architecture_diff` identity on success and failure. Diff rejects explicit `no_imports`/`verbose`, including false URI values. `top` is an analysis population control: ordinary `top*4`, diff `max(top,1)*4`. Ordinary `--verbose` expands analysis and text on both forms; URI `--all` stays text-only. URI ref values percent-decode once and preserve plus; encode literal percent as `%25`. Architecture exits 0 for completed answers, 2 for invalid requests and 3 for required incomplete analysis/output failures. Only `--fail-on none` is supported, and it cannot suppress required failures. See [the adapter guide](adapters/ARCHITECTURE_ADAPTER_GUIDE.md) for encoding and evidence limits.
-
-**Use case:** Pre-edit orientation for a specific module. More targeted than `reveal overview` — works on subdirectories and produces a risks + next_commands structure agents can act on directly. `next_commands` tells the agent exactly what to look at next without further reasoning.
+`architecture` and `architecture://` are retired aliases returning canonical
+`overview`/`overview_diff` answers with a replaced-by note. The old risks and
+next-commands brief is removed. Use the compact map above for pre-edit orientation,
+then gather targeted import, metrics, AST, check and history evidence.
 
 ---
 
@@ -1754,7 +1756,7 @@ reveal contracts src/ --impls 0             # Display every implementer; JSON is
 
 **What it finds:** Abstract base classes (ABC, ABCMeta), `typing.Protocol` definitions, `TypedDict` schemas, `@dataclass` declarations, NamedTuple classes — the structural contracts a codebase exposes between modules. In TypeScript/Java/C#/PHP/Swift/Kotlin it classifies interfaces (Swift protocols, Kotlin interfaces) as the contract, `abstract`-modifier classes as abstract contracts, and implementing classes as the types satisfying each; in Ruby, every `module` is a contract and any class with a direct `include`/`extend` (or a superclass) is an implementation; in Go, every `interface` is a contract and implementers are computed by structural method-set match (Go has no `implements` keyword — satisfaction is by method set, embedded interfaces resolved transitively); in Rust, every `trait` is a contract and implementers come from explicit `impl Trait for Type` blocks; in C++, every abstract class (≥1 pure virtual method) is a contract and subclasses (via inheritance) are its implementers (`.h`-header-declared classes not reached — warns honestly). *(Supported: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++. On other languages it returns an explicit "not supported" note rather than a silent zero.)*
 
-**Use case:** Before refactoring or extending a module, see the *interfaces* it ships rather than the implementation. Pairs well with `reveal architecture` (entry points + abstractions) and `reveal surface` (external boundaries) to build a 3-pass mental model: **architecture** → **contracts** → **surface**.
+**Use case:** Before refactoring or extending a module, see the *interfaces* it ships rather than the implementation. Pairs well with `reveal overview` (scope and import map) and `reveal surface` (external boundaries): **overview** → **contracts** → **surface**.
 
 Direct `reveal contracts` and `contracts://` share declarations and output.
 `--no-implementations` maps to `implementations=false`; `--impls N` is a text cap
@@ -2927,7 +2929,7 @@ reveal file.py --format text         # an explicit --format always wins
 
 `REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal hotspots`, `reveal check`, …). An explicit `--format` on the command line overrides it.
 
-**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for a single file and `reveal check`. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note). With human primary output, `--output json=PATH` works with supported `scheme://` URI requests, `reveal check`, and the six qualified subcommands: `surface`, `architecture`, `contracts`, `deps`, `hotspots` and `overview`. A requested artifact that cannot be written exits 3 for all of them, `reveal check` included. Other subcommands reject it with exit 2; use `--format json` for their JSON output. Primary `--format json` retains the existing `--output json=PATH` no-op. `--output` repeats, and a file sink may name any format the target renders (`--format json --output text=report.txt`, `--output grep=hits.txt` on `ast://`): the one result is rendered again into each file, a format the target does not render exits 2 before the scan, and a failing sink exits 3 after the others were written. `reveal check DIR` renders text, grep and json file sinks from its one scan; a single-file check and `--stdin --check` write json file sinks only (text and grep exit 2). With `--stdin --check` a file sink holds one document for the run (`files[]`, one entry per input); `--stdin` without `--check` rejects a file sink with exit 2.
+**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for a single file and `reveal check`. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note). With human primary output, `--output json=PATH` works with supported `scheme://` URI requests, `reveal check`, and the qualified subcommands `surface`, `contracts`, `deps`, `hotspots` and `overview` (including its retired architecture alias). A requested artifact that cannot be written exits 3 for all of them, `reveal check` included. Other subcommands reject it with exit 2; use `--format json` for their JSON output. Primary `--format json` retains the existing `--output json=PATH` no-op. `--output` repeats, and a file sink may name any format the target renders (`--format json --output text=report.txt`, `--output grep=hits.txt` on `ast://`): the one result is rendered again into each file, a format the target does not render exits 2 before the scan, and a failing sink exits 3 after the others were written. `reveal check DIR` renders text, grep and json file sinks from its one scan; a single-file check and `--stdin --check` write json file sinks only (text and grep exit 2). With `--stdin --check` a file sink holds one document for the run (`files[]`, one entry per input); `--stdin` without `--check` rejects a file sink with exit 2.
 
 **Token budget flags (URI adapters — limits list fields like items/results/checks/commits):**
 ```bash
@@ -3665,7 +3667,7 @@ reveal deep_dir/
 | `ssl://… --check`, `domain://… --check` | pass | warning (e.g. cert expiring <30 days) | critical/failure (expired, <7 days, DNS/HTTP failure) | — |
 | nginx `--validate-nginx-acme` / `--check-acl` / `--cpanel-certs`, `cpanel://USER/full-audit`, `nginx:// --audit` | pass | — | failure / gaps found | — |
 | Direct `deps` / `hotspots` / `imports` (subcommand or URI) | complete without an enabled gate matching | explicit `--fail-on findings` matches (imports: the `--circular`, `--unused` or `--violations` answer has a row) | invalid request | incomplete analysis/output failure |
-| Direct `surface` / `architecture` / `contracts` / `overview` / `pack` / `testability` / `trace` (subcommand or URI) | completed requested analysis | — | invalid resource/parameter or unsupported gate | required analysis/output incomplete or failed |
+| Direct `surface` / `contracts` / `overview` / `pack` / `testability` / `trace`, including retired aliases (subcommand or URI) | completed requested analysis | — | invalid resource/parameter or unsupported gate | required analysis/output incomplete or failed |
 | Other legacy commands given a path that doesn't exist | — | `Error: … not found` | — | — |
 | An argument the run would ignore: a path given to a mode that reads none (`reveal a.py --rules`, `--adapters`, `--languages`, `--list-schemas`, `--explain`, `--stdin`, ...), a second path given to a flag that reads no element (`reveal a.py b.py --check`, `reveal a.html b.html --metadata`, `--links`, `--typed`), an element beside `--section` (`reveal a.md b.md --section X`), `--stdin` beside `--section`, or `--stdin` beside `--decorator-stats`/`--explain-file`/`--capabilities`/`--show-ast` (those read one path; loop over the paths instead) | — | — | usage error: stderr names the flag and the ignored argument, nothing runs | — |
 
@@ -4312,7 +4314,7 @@ Measure the command on your own target; runtime and output size depend on the re
   this tree, timed in one real pass (not a diff of two runs). Use this once
   `--perf` has told you `check` is the slow step and you need to know why.
 - Neither currently breaks down time *inside* a composite command like
-  `architecture`/`hotspots`/`deps` (which sequentially call
+  `overview`/`hotspots`/`deps` (which call
   several sub-adapters internally) — `--perf` gives you the total for the
   whole call, not a per-sub-adapter split. If you need that level of detail
   today, bisect manually with `--select`/scoped sub-calls.

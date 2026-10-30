@@ -27,11 +27,11 @@ def _help(command):
 def test_retirement_inventory_matches_the_shipped_migrations():
     """Keep the inventory explicit; each migration is exercised in its owning tests.
 
-    BACK-2363 adds the four element flags alongside the earlier noun migrations.
+    BACK-2377 adds architecture aliases alongside the earlier noun migrations.
     """
     assert sorted(RETIREMENTS) == ['flag:--also-json', 'flag:--calls', 'flag:--check', 'flag:--deps',
                                    'flag:--mutations', 'flag:--search', 'flag:--writes', 'param:ast.callee_of', 'param:ast.calls',
-                                   'param:calls.external', 'param:calls.modules', 'param:calls.root', 'param:calls.target', 'param:calls.uncalled', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:deps', 'subcommand:review', 'subcommand:testability',
+                                   'param:calls.external', 'param:calls.modules', 'param:calls.root', 'param:calls.target', 'param:calls.uncalled', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:review', 'subcommand:testability',
                                    'subcommand:trace', 'target:health.code', 'value:ast.show=calls']
 
 

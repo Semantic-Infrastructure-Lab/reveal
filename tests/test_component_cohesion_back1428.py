@@ -119,7 +119,7 @@ def test_imports_components_text_shows_n_a_not_zero_percent(go_tree):
 
 def test_architecture_brief_declines_too(go_tree):
     out = run('architecture', str(go_tree)).stdout
-    section = out.split('Components', 1)[1]
+    section = out.split('Major components', 1)[1]
     assert '0.00' not in section.split('\n\n', 1)[0]
     assert 'n/a' in section
 

@@ -107,11 +107,10 @@ def test_flat_list_budgets_do_not_silently_cut_nested_map(project, flag):
     assert flag in result.stderr or any(w['type'] == 'unused_flag' for w in body.get('meta', {}).get('warnings', []))
 
 
-def test_existing_static_sibling_hook_accepts_class_and_instance():
-    from reveal.adapters.architecture import ArchitectureAdapter
+def test_existing_static_sibling_hook_accepts_class_and_instance(tmp_path):
+    from reveal.adapters.deps import DepsAdapter
     from reveal.cli.routing.declared import qualify_declared_answer
-    from reveal.utils.results import ResultBuilder
-    result = ResultBuilder.create('architecture_diff', '.', data={
-        'analysis': {'complete': True, 'basis': 'identical_tree', 'snapshots': {}}})
-    assert qualify_declared_answer(result, ArchitectureAdapter, '.', 'architecture_diff') is result
-    assert qualify_declared_answer(result, ArchitectureAdapter('.'), '.', 'architecture_diff') is result
+    owner = DepsAdapter(str(tmp_path))
+    result = owner.get_structure()
+    assert qualify_declared_answer(result, DepsAdapter, str(tmp_path), 'deps_scan') is result
+    assert qualify_declared_answer(result, owner, str(tmp_path), 'deps_scan') is result

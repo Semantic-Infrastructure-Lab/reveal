@@ -106,7 +106,9 @@ def test_required_errors_preserve_failure_classification(identity, code, expecte
     assert comparison_execution_facts(result).completeness is expected
 
 
-def test_ordinary_architecture_does_not_require_comparison_proof():
-    result = _result('architecture', {'analysis': {'complete': False}})
-    assert ArchitectureAdapter.answer_requirement_error(result, 'architecture') is None
+def test_ordinary_architecture_alias_does_not_require_comparison_proof(tmp_path):
+    owner = ArchitectureAdapter(str(tmp_path))
+    result = owner.get_structure()
+    result['analysis'] = {'complete': False}
+    assert owner.answer_requirement_error(result, 'overview') is None
     assert ArchitectureAdapter.execution_facts(result) == ExecutionFacts(State.COMPLETE)

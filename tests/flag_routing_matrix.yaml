@@ -6,6 +6,8 @@ adapters:
   architecture:
     all:
       via:
+      - declared
+      - structure-param
       - routing-special
     respect_gitignore:
       via:
@@ -22,6 +24,7 @@ adapters:
       via: []
     verbose:
       via:
+      - declared
       - structure-param
       - routing-special
   ast:

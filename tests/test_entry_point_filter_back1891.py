@@ -73,7 +73,7 @@ def test_the_fixture_has_four_fan_in_zero_files_and_one_active(project):
 
 
 def test_architecture_json_counts_fan_in_zero_and_active_and_states_the_rule(project):
-    assert _json(f'architecture://{project}')['entry_point_filter'] == EXPECTED
+    assert _json(f'architecture://{project}')['map']['entry_point_filter'] == {**EXPECTED, 'path_basis': 'producer paths before target-relative display'}
 
 
 def test_overview_json_counts_fan_in_zero_and_active_and_states_the_rule(project):
@@ -83,8 +83,8 @@ def test_overview_json_counts_fan_in_zero_and_active_and_states_the_rule(project
 
 def test_architecture_text_states_both_numbers_and_the_rule(project):
     text = _run(f'architecture://{project}')
-    assert 'Entry Points  (1 active of 4 fan-in=0 files)' in text
-    assert f'active = {RULE}' in text
+    assert '4 raw candidates; 1 active' in text
+    assert RULE in text
 
 
 def test_overview_text_states_both_numbers_and_the_rule(project):
@@ -95,7 +95,7 @@ def test_overview_text_states_both_numbers_and_the_rule(project):
 
 def test_no_imports_architecture_claims_no_entry_point_counts(project):
     # Negative control: without the import graph there are no entry points to count.
-    assert 'entry_point_filter' not in _json(f'architecture://{project}?no_imports=true')
+    assert _json(f'architecture://{project}?no_imports=true')['map'] is None
 
 
 def test_the_filter_counts_by_rule_on_rows():

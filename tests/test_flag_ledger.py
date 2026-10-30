@@ -328,7 +328,7 @@ KNOWN_SILENT: dict = {}
 
 # The cap --all lifts belongs to the text renderer (ACCEPTS_TOP); the JSON result already lists
 # every item, so these pairs are judged on the text view (BACK-1538).
-TEXT_ONLY_EFFECT = {('architecture', 'all'), ('deps', 'all')}
+TEXT_ONLY_EFFECT = {('deps', 'all')}
 
 
 def _enrich_past_default_caps(root, proj):

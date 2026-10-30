@@ -145,7 +145,7 @@ def test_adopter_callable_and_class_local_capability():
     adopted = {get_adapter_class(scheme) for scheme in BUILTIN_SCHEMES
                if uses_bound_query_call(get_adapter_class(scheme))}
     assert adopted == {SurfaceAdapter, get_adapter_class('contracts'), get_adapter_class('trace'),
-                       get_adapter_class('overview')}
+                       get_adapter_class('overview'), get_adapter_class('architecture')}
     assert list(inspect.signature(SurfaceAdapter.get_structure).parameters) == ['self']
     assert SurfaceAdapter.__dict__['BOUND_QUERY_CALL'] is True
     assert ResourceAdapter.BOUND_QUERY_CALL is False

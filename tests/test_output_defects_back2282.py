@@ -93,7 +93,7 @@ def test_against_header_and_path_are_spelled_as_typed(tmp_path):
     base = _repo(tmp_path / 'proj')
     result = _run_reveal_in(tmp_path, 'architecture', 'proj/pkg', '--against', base)
     assert result.returncode == 0, result.stderr
-    assert 'Architecture Diff: proj/pkg\n' in result.stdout
+    assert 'Overview Diff: proj/pkg\n' in result.stdout
     assert tmp_path.resolve().as_posix() not in result.stdout
 
     doc = json.loads(_run_reveal_in(tmp_path, 'architecture', 'proj/pkg', '--against', base,
@@ -132,4 +132,4 @@ def test_against_changed_tree_does_not_claim_identical(tmp_path):
     assert result.returncode == 0, result.stderr
     assert 'is identical to' not in result.stdout
     assert 'Complexity centroid' in result.stdout
-    assert 'Architecture Diff: proj/pkg\n' in result.stdout
+    assert 'Overview Diff: proj/pkg\n' in result.stdout

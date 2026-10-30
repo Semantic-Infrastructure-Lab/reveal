@@ -92,8 +92,8 @@ def uri(name, root, query=''):
     ('deps', 'target', 'incomplete'), ('deps', 'recovered', 'incomplete'),
     ('deps', 'zero', 'failed'), ('deps', 'broken', 'failed'), ('deps', 'lost', 'failed'),
     ('architecture', 'edge', 'incomplete'), ('architecture', 'ast', 'incomplete'),
-    ('architecture', 'import', 'failed'), ('architecture', 'zero', 'failed'),
-    ('architecture', 'broken', 'failed'), ('architecture', 'lost', 'failed'),
+    ('architecture', 'import', 'incomplete'), ('architecture', 'zero', 'incomplete'),
+    ('architecture', 'broken', 'incomplete'), ('architecture', 'lost', 'failed'),
     ('overview', 'zero', 'incomplete'), ('overview', 'broken', 'incomplete'),
     ('overview', 'lost', 'failed'),
 ])
@@ -114,14 +114,18 @@ def test_imports_only_loss_preserves_independent_requested_observations(tmp_path
 
 
 @pytest.mark.parametrize('name', ['architecture'])
-def test_top_zero_retains_uncapped_real_ast_observation(tmp_path, name):
+def test_top_zero_retains_required_census_without_ast_analysis(tmp_path, name):
     from reveal.adapters.ast import AstAdapter
     child = tree(tmp_path, 'ast')
     with denied(child):
         ast = AstAdapter(str(tmp_path), 'complexity>9&limit=0').get_structure()
         assert ast['total_results'] == 1 and ast['displayed_results'] == 0
-        result, state = request(name, tmp_path, 'top=0')
+        with patch.object(AstAdapter, 'get_structure', side_effect=AssertionError('ordinary map must not run AST')) as child_call:
+            result, state = request(name, tmp_path, 'top=0')
+        child_call.assert_not_called()
     assert state == 'incomplete'
+    assert result['scope']['total_code_files'] == 1
+    assert result['map']['components']['rows'] == []
 
 
 @pytest.mark.parametrize('kind', ['boolean_count', 'count_mismatch', 'bad_complexity'])
@@ -137,9 +141,10 @@ def test_malformed_ast_cannot_rescue_directory_loss(tmp_path, kind, surviving_ed
     else:
         data.update(displayed_results=1,
                     results=[{'file': 'invented.py', 'name': 'f', 'complexity': True}])
-    with denied(child), patch.object(AstAdapter, 'get_structure', return_value=data):
+    with denied(child), patch.object(AstAdapter, 'get_structure', return_value=data) as ast_call:
         _, state = request('architecture', tmp_path)
-    assert state == 'failed'
+    ast_call.assert_not_called()
+    assert state == ('incomplete' if surviving_edge else 'failed')
 
 
 @pytest.mark.parametrize('name', OWNERS)
@@ -212,19 +217,28 @@ def test_clean_zero_remains_complete(tmp_path, name):
 
 
 @pytest.mark.parametrize('collector_raises', [False, True])
-def test_architecture_request_capture_is_cleared_on_success_and_exception(tmp_path, collector_raises):
+def test_alias_composition_capture_is_cleared_on_success_and_exception(tmp_path, collector_raises):
     write(tmp_path / 'visible.py', complex_source())
     owner = ArchitectureAdapter(str(tmp_path))
-    if collector_raises:
-        with patch('reveal.adapters.architecture._run_combined_analysis', side_effect=OSError('collector failed')):
-            with pytest.raises(OSError, match='collector failed'):
+    from reveal.adapters import overview
+    original = overview._bound_details
+
+    def finish(result, top):
+        owner.fold_meta({'warnings': [{'type': 'request-local', 'message': 'interrupted finalization'}]})
+        if collector_raises:
+            raise OSError('finalization failed')
+        return original(result, top)
+
+    with patch.object(overview, '_bound_details', finish):
+        if collector_raises:
+            with pytest.raises(OSError, match='finalization failed'):
                 owner.get_structure()
-    else:
-        owner.get_structure()
-    assert not hasattr(owner, '_architecture_observations')
+        else:
+            owner.get_structure()
+    assert owner.composed_meta() is None
     result = owner.get_structure()
     assert owner.execution_facts(result).completeness.value == 'complete'
-    assert not hasattr(owner, '_architecture_observations')
+    assert not any(w['type'] == 'request-local' for w in result.get('meta', {}).get('warnings', []))
 
 
 def test_overview_scope_survives_independent_stats_read_failure(tmp_path):

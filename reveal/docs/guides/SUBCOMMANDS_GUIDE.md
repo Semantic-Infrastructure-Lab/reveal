@@ -690,69 +690,16 @@ limits, comparison controls and drill-down examples.
 
 ---
 
-## reveal architecture — Architectural Brief
+## reveal architecture — Retired: use reveal overview
 
-Targeted architectural briefing for a directory. Answers "what do I need to
-know before editing this code?" Composes entry points, core abstractions,
-component cohesion, circular dependency groups, and derived risks into one
-output. Designed for agent consumption and subdirectory targeting.
+`architecture` and `architecture://` are retired aliases. They emit a replaced-by
+note and return canonical `overview` or, with `against`, `overview_diff` answers.
+Use `reveal overview PATH` for the compact map and `reveal overview PATH --against REF`
+for comparison with the live working tree. The former risks/next-commands brief
+is removed; follow the map's imports, metrics, AST and check drill-downs instead.
+See the [overview guide](../adapters/OVERVIEW_ADAPTER_GUIDE.md).
 
-### Usage
-
-```
-reveal architecture [PATH] [--top N] [--no-imports | --against REF] [--format json]
-```
-
-### CLI Flags
-
-| Flag | Description |
-|------|-------------|
-| `--top N` | Items per section and complexity analysis population (default: 5; ordinary `top*4`, diff `max(top,1)*4`) |
-| `--no-imports` | Skip import graph analysis |
-| `--against REF` | Return `architecture_diff` against a Git ref; rejects explicit no-imports/verbose |
-| `--format json` | Machine-readable output: `{path, facts, risks[], next_commands[]}` |
-
-### Output Sections
-
-- **Entry Points** — files with fan-in=0, sorted by fan-out (active callers of other code)
-- **Core Abstractions** — files most imported by others (high fan-in)
-- **Components** — directory cohesion bars (`n/a`, with one rule line, for directories mostly in Go, Java, Kotlin, C#, Scala or Swift, where files share a package without importing)
-- **Risks** — derived from findings: circular groups, high-complexity entry points, load-bearing files
-- **Next Commands** — specific `reveal` follow-up commands generated from what was found
-
-Every count states its rule (`Rule:` lines in text, `edge_rule` and `edge_rule_sections` in JSON): every static
-import edge except `TYPE_CHECKING` ones, function-level imports included (entry points ignore importers under a
-test path); cycles use the load-time view. `architecture` takes no `&lazy`; `imports://<dir>?rank=fan-in&lazy=exclude`
-is the load-time view. `--against` prints the rule once for both snapshots.
-
-### Examples
-
-```bash
-reveal architecture src/            # Brief for a specific directory
-reveal architecture .               # Whole project
-reveal architecture src/ --format json  # Machine-readable for agents
-reveal architecture src/ --no-imports   # Skip import analysis (faster)
-reveal architecture src/ --against main --format json
-reveal 'architecture://src?against=main' --format json
-```
-
-The two spellings share answers and support human output with `--output json=PATH`.
-Architecture exits 0 for completed answers, 2 for invalid requests and 3 for
-required analysis/output failure or missing evidence. `--fail-on none` retains
-required failures; no adverse-risk gate is declared. Ordinary verbose expands
-both analysis and text. See [the adapter guide](../adapters/ARCHITECTURE_ADAPTER_GUIDE.md)
-for URI encoding, scope and completeness rules.
-
-### Notes
-
-Static imports only — dynamically loaded files (plugins, registries) may appear
-as entry points. High entry point counts often indicate dynamic loading patterns.
-
-### See Also
-
-- `reveal overview` — Compact project map with coverage and drill-downs
-- `reveal imports --external` — Third-party and stdlib packages (`--circular`, `--unused` for the rest of dependency health)
-- `reveal architecture --help` — Full flag reference
+`pack --architecture` keeps its separate fan-in selection and context hint.
 
 ---
 

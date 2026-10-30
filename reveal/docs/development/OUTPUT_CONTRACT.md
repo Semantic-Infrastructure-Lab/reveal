@@ -467,9 +467,10 @@ apply after this legacy outcome handling:
 
 Direct surface, architecture, contracts, deps, hotspots, overview and trace subcommands and their URI equivalents share declared
 parameter binding and one answer/emission path. Surface retains `surface_scan`;
-architecture retains `architecture` or `architecture_diff` by resolved operation.
+Architecture is a deprecated alias of Overview and returns the canonical
+`overview` or `overview_diff` identity, with one central retirement note.
 Contracts retains `contracts`; deps retains `deps_scan`; hotspots retains `hotspots_scan`;
-overview retains `overview`; trace retains `trace`.
+overview selects `overview` or `overview_diff`; trace retains `trace`.
 Their execution policy
 uses explicit completeness and failure causes from the analysis owner, independently
 of `outcome_of()`'s legacy rendering categories:
@@ -543,17 +544,19 @@ optional-field contract; other adapters' confidence policies and the envelope ve
 are unchanged. Completeness and exit classification continue to use execution facts,
 not the presence of a confidence value.
 
-Architecture also supports only `--fail-on none`. Ordinary scope census errors,
-import input loss and failed/recovered parses establish incomplete execution;
-ranking cuts, confidence alone and harmless warnings do not. Diff requires explicit
-`analysis.complete`, basis and per-side component evidence. Proved-identical comparisons
-have empty snapshots; analyzed comparisons require both base/head imports and complexity
-states consistent with overall completeness. Invalid-ref/non-repository requests rejected before
-analysis retain `architecture_diff` identity and exit 2; operational Git failures
-exit 3. Missing or malformed required comparison proof cannot become success or be
-masked by a later usage diagnostic. Supported equivalent requests share complete
-answers; the existing subcommand rejection of `--all` and URI text-only `--all`
-remain an explicit transport acceptance boundary.
+Overview and its deprecated architecture alias support only `--fail-on none`.
+Ordinary scope census errors, import input loss and failed/recovered parses establish
+incomplete execution; ranking cuts and harmless warnings do not. Comparison requires
+explicit `analysis.complete`, basis and per-side component evidence. Proved-identical
+comparisons have empty snapshots; analyzed comparisons require both base/head imports
+and complexity states consistent with overall completeness. Required scan caps are
+incomplete. Invalid-ref/non-repository requests rejected before analysis retain
+`overview_diff` identity and exit 2; operational Git failures exit 3. Missing or
+malformed comparison proof cannot become success or be masked by a later usage
+diagnostic. Both transports share the canonical shapes and supported controls.
+Ordinary `top`, `all` and `verbose` bound or expand the map in text and JSON;
+comparison rejects explicitly supplied `no_imports`, `all` and `verbose`, even false.
+`pack --architecture` remains a separate live selection control.
 
 Contracts supports only `--fail-on none`. Its `recovered_files`, `unparsed_files`
 and producer-owned `E_CONTRACTS_ANALYSIS` errors establish incomplete execution;
@@ -790,11 +793,14 @@ in-place transformations cannot hide previously required comparison proof. A pur
 usage rejection before analysis can legitimately lack that proof. Final field
 selection happens afterward and retains the established analysis facts.
 
-Surface and architecture resource binding preserves an existing literal path first. If it does not
+Adapters that opt into the existing-path-first resource codec, including Surface
+and Overview (and its architecture alias), preserve an existing literal path first. If it does not
 exist, a once-decoded existing path can resolve URI-escaped characters. If both paths
 exist, the literal path wins. The resolved path and raw query remain separate through
 validation, exclusions and construction, so a decoded question mark never becomes a
-new query delimiter. Invalid encoded UTF-8/NUL rejects the resource; permission/I/O
+new query delimiter. Bound Python API URI calls apply the same codec after query
+validation; legacy factories without typed overrides keep their existing path policy.
+Invalid encoded UTF-8/NUL rejects the resource; permission/I/O
 failure is operational failure, never permission to select another path.
 
 ---

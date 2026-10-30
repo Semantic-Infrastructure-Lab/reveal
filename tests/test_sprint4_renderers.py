@@ -50,10 +50,10 @@ def test_parse_degraded_hotspots_never_claims_clean(tmp_path):
 
 
 def _diagnostic_lines(result):
-    """Diagnostics from both streams, prefix-normalised: `⚠ text` lines and `Warning: text` lines."""
+    """Diagnostics from both streams, prefix-normalised: `⚠ text`, `Warning: text` and central retirement `note: text` lines."""
     lines = result.stdout.splitlines() + result.stderr.splitlines()
-    return [re.sub(r'^(?:\s*⚠\s*)+|^Warning:\s*', '', line)
-            for line in lines if '⚠' in line or line.startswith('Warning:')]
+    return [re.sub(r'^(?:\s*⚠\s*)+|^(?:Warning|note):\s*', '', line)
+            for line in lines if '⚠' in line or line.startswith(('Warning:', 'note:'))]
 
 
 @pytest.mark.parametrize('command', [
@@ -61,7 +61,8 @@ def _diagnostic_lines(result):
 ])
 def test_migrated_subcommands_emit_each_diagnostic_once(tmp_path, command):
     # Six .sh files have no import extraction, so every subcommand has something to warn about
-    # (pack warns on stderr, the others on stdout). Plain .lua files gave pack and architecture none.
+    # (pack warns on stderr, the others on stdout). The compact architecture alias
+    # supplies a central retirement note independently of assessment diagnostics.
     (tmp_path / 'app.py').write_text('def small():\n    return 1\n', encoding='utf-8')
     for index in range(6):
         (tmp_path / f'foreign_{index}.sh').write_text('echo hi\n', encoding='utf-8')

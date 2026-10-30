@@ -126,12 +126,12 @@ def _assert_rule_lines(text):
 
 def test_architecture_states_its_rule_in_json(project):
     data = _json(f'architecture://{to_posix(project)}')
-    facts = data['facts']
-    core = {to_posix(e['file']).rsplit('/', 1)[-1]: e['fan_in'] for e in facts['core_abstractions']}
+    facts = data['map']
+    core = {to_posix(e['file']).rsplit('/', 1)[-1]: e['fan_in'] for e in facts['fan_in']['rows']}
     # core: eager + lazy (function level) + the test file; late exists only through the lazy edge.
     assert core == {'core.py': 3, 'late.py': 1, 'ring_a.py': 1, 'ring_b.py': 1}
-    assert facts['circular_groups'] == []  # the ring is a cycle only with function-level imports
-    _assert_rules(data, project)
+    assert facts['cycles']['total'] == 0  # the ring is a cycle only with function-level imports
+    _assert_rules(data['map']['rules'], project, 'overview://')
 
 
 def test_architecture_states_its_rule_in_text(project):
@@ -148,9 +148,9 @@ def test_architecture_without_imports_states_no_rule(project):
 def test_architecture_names_a_language_whose_scope_is_not_recorded(tmp_path):
     root = _tree(tmp_path / 'mixed', MIXED)
     data = _json(f'architecture://{to_posix(root)}')
-    assert [e['fan_in'] for e in data['facts']['core_abstractions']] == [1]
-    assert data['edge_rule']['unclassified_edges'] == 1
-    assert data['edge_rule']['unclassified_languages'] == ['ruby']
+    assert [e['fan_in'] for e in data['map']['fan_in']['rows']] == [1]
+    assert data['map']['rules']['edge_rule']['unclassified_edges'] == 1
+    assert data['map']['rules']['edge_rule']['unclassified_languages'] == ['ruby']
     assert 'Import scope is not recorded for ruby: 1 edge(s)' in _run(f'architecture://{to_posix(root)}')
 
 
@@ -239,7 +239,7 @@ def test_architecture_against_states_its_rule(tmp_path):
     _git(root, '-c', 'commit.gpgsign=false', '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', 'base')
     (root / 'lazy.py').write_text(FILES['lazy.py'], encoding='utf-8')  # the function-level edge to late
     data = _json(f'architecture://{to_posix(root)}?against=HEAD')
-    assert data['type'] == 'architecture_diff'
+    assert data['type'] == 'overview_diff'
     late = [d for d in data['deltas']['fan_in'] if d['file'].endswith('late.py')]
     assert [(d['base'], d['head']) for d in late] == [(0, 1)]  # the delta is the lazy edge
     _assert_rules(data, root)

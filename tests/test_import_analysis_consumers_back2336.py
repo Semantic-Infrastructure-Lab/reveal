@@ -31,7 +31,7 @@ def no_uri_adapter(monkeypatch):
 def test_architecture_uses_real_service_artifact(tree, no_uri_adapter):
     answer = ArchitectureAdapter(str(tree)).get_structure()
     assert any(Path(row['file']).name == 'bb.py' and row['fan_in'] == 1
-               for row in answer['facts']['core_abstractions'])
+               for row in answer['map']['fan_in']['rows'])
     assert not answer.get('meta', {}).get('errors')
 
 

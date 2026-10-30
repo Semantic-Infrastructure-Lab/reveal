@@ -7,18 +7,21 @@ from reveal.adapters.architecture import ArchitectureAdapter
 from reveal.utils.query_binding import bind_declared_params
 
 
-@pytest.mark.parametrize('top,expected', [(None, 20), (0, 0), (2, 8)])
+@pytest.mark.parametrize('top,expected', [(None, 5), (0, 0), (2, 2)])
 @pytest.mark.parametrize('transport', ['typed', 'uri'])
-def test_ordinary_analysis_population(tmp_path, monkeypatch, top, expected, transport):
+def test_ordinary_top_bounds_the_canonical_map(tmp_path, top, expected, transport):
+    for number in range(7):
+        folder = tmp_path / f'part{number}'
+        folder.mkdir()
+        (folder / 'value.py').write_text('VALUE=1\n', encoding='utf-8')
     source = {} if top is None else {'top': top}
     query = '' if top is None else f'top={top}'
     params = bind_declared_params(ArchitectureAdapter.PARAM_SPECS,
                                   source if transport == 'typed' else query, transport=transport)
-    seen = []
-    monkeypatch.setattr('reveal.adapters.architecture._run_combined_analysis',
-                        lambda adapter, path, limit: (seen.append(limit) or [], {}))
-    ArchitectureAdapter(str(tmp_path), params=params).get_structure()
-    assert seen == [expected]
+    result = ArchitectureAdapter(str(tmp_path), params=params).get_structure()
+    assert result['type'] == 'overview'
+    assert result['map']['components']['returned'] == expected
+    assert result['map']['components']['total'] == 7
 
 
 def test_validation_preserves_omitted_controls_and_read_accounting():
@@ -38,9 +41,10 @@ def test_diff_population_preserves_existing_multiplier(tmp_path, monkeypatch, to
     monkeypatch.setattr(architecture_diff, '_open_repo', lambda path: object())
     monkeypatch.setattr(architecture_diff, '_resolve_commit', lambda repo, ref: object())
     seen = []
-    def compare(path, ref, *, top_n):
+    def compare(path, ref, *, head_ref, top_n):
+        assert head_ref == 'working tree'
         seen.append(top_n)
-        return ResultBuilder.create('architecture_diff', str(path), data={'analysis': {'complete': True}})
+        return ResultBuilder.create('overview_diff', str(path), data={'analysis': {'complete': True, 'basis': 'identical_tree', 'snapshots': {}}})
     monkeypatch.setattr(architecture_diff, 'run_architecture_diff', compare)
     values = {'against': 'HEAD'}
     if top is not None:
@@ -49,14 +53,14 @@ def test_diff_population_preserves_existing_multiplier(tmp_path, monkeypatch, to
     assert seen == [expected]
 
 
-@pytest.mark.parametrize('verbose', [False, True])
-def test_verbose_changes_analysis_but_all_does_not(tmp_path, monkeypatch, verbose):
-    from reveal.adapters.overview import UNLIMITED_TOP
-    seen = []
-    monkeypatch.setattr('reveal.adapters.architecture._run_combined_analysis',
-                        lambda adapter, path, limit: (seen.append(limit) or [], {}))
-    ArchitectureAdapter(str(tmp_path)).get_structure(verbose=verbose, all=True)
-    assert seen == [UNLIMITED_TOP * 4 if verbose else 20]
+@pytest.mark.parametrize('flag', ['all', 'verbose'])
+def test_expansion_changes_only_the_canonical_map(tmp_path, flag):
+    for number in range(7):
+        folder = tmp_path / f'part{number}'
+        folder.mkdir()
+        (folder / 'value.py').write_text('VALUE=1\n', encoding='utf-8')
+    result = ArchitectureAdapter(str(tmp_path), 'top=0').get_structure(**{flag: True})
+    assert result['map']['components']['returned'] == 7
 
 
 @pytest.mark.parametrize('warning,incomplete', [
@@ -65,7 +69,7 @@ def test_verbose_changes_analysis_but_all_does_not(tmp_path, monkeypatch, verbos
 ])
 def test_explicit_missing_evidence_taxonomy(warning, incomplete):
     from reveal.utils.results import AnalysisCompleteness, ResultBuilder
-    result = ResultBuilder.create('architecture', '.', confidence=0.0,
+    result = ResultBuilder.create('overview_diff', '.', data={'analysis': {'complete': True, 'basis': 'identical_tree', 'snapshots': {}}}, confidence=0.0,
                                   warnings=[{'type': warning, 'message': 'producer evidence'}])
     facts = ArchitectureAdapter.execution_facts(result)
     assert (facts.completeness is AnalysisCompleteness.INCOMPLETE) is incomplete
@@ -74,7 +78,7 @@ def test_explicit_missing_evidence_taxonomy(warning, incomplete):
 def test_explicit_diff_incompleteness_wins_over_invalid_request():
     from reveal.utils.results import ResultBuilder, execution_exit_code
     result = ResultBuilder.create(
-        'architecture_diff', '.', errors=[{'code': 'invalid_request', 'message': 'invalid input'}],
+        'overview_diff', '.', errors=[{'code': 'invalid_request', 'message': 'invalid input'}],
         data={'analysis': {'complete': False}, 'error': 'required snapshot incomplete'})
     assert execution_exit_code(ArchitectureAdapter.execution_facts(result), fail_on='none') == 3
 
@@ -83,7 +87,7 @@ def test_explicit_diff_incompleteness_wins_over_invalid_request():
 def test_diff_without_explicit_completeness_fails_closed(analysis):
     from reveal.utils.results import ResultBuilder, execution_exit_code
     data = {} if analysis is None else {'analysis': analysis}
-    result = ResultBuilder.create('architecture_diff', '.', data=data)
+    result = ResultBuilder.create('overview_diff', '.', data=data)
     assert execution_exit_code(ArchitectureAdapter.execution_facts(result), fail_on='none') == 3
 
 
@@ -92,8 +96,8 @@ def test_malformed_type_and_metadata_repair_is_a_required_failure():
     from reveal.utils.results import ResultBuilder, execution_exit_code
     wrong = ResultBuilder.create('wrong', '.')
     wrong['meta'] = {'errors': None, 'warnings': None}
-    repaired = qualify_declared_answer(wrong, ArchitectureAdapter, '.', 'architecture_diff')
-    assert repaired['type'] == 'architecture_diff'
+    repaired = qualify_declared_answer(wrong, ArchitectureAdapter('.'), '.', 'overview_diff')
+    assert repaired['type'] == 'overview_diff'
     assert execution_exit_code(ArchitectureAdapter.execution_facts(repaired), fail_on='none') == 3
 
 
@@ -103,7 +107,7 @@ def test_schema_preserves_existing_parameter_examples():
     assert params['no_imports']['examples'] == ['no_imports=true']
 
 
-@pytest.mark.parametrize('identity', ['architecture', 'architecture_diff'])
+@pytest.mark.parametrize('identity', ['overview_diff'])
 @pytest.mark.parametrize('warning', ['analysis_failed', 'partial_parse', 'worker_lost', 'parse_recovered'])
 def test_missing_evidence_wins_over_usage_without_analysis_record(identity, warning):
     from reveal.utils.results import ResultBuilder, execution_exit_code
@@ -120,25 +124,26 @@ def test_complete_comparison_with_only_usage_cause_remains_usage(with_error):
     data = {'analysis': {'complete': True}}
     if with_error:
         data['error'] = 'invalid entry'
-    result = ResultBuilder.create('architecture_diff', '.', data=data,
+    result = ResultBuilder.create('overview_diff', '.', data=data,
                                   errors=[{'code': 'invalid_request', 'message': 'invalid entry'}])
     assert execution_exit_code(ArchitectureAdapter.execution_facts(result), fail_on='none') == 2
 
 
-def test_valid_trust_frame_is_preserved_exactly():
+def test_valid_trust_frame_is_preserved_exactly(tmp_path):
     from reveal.cli.routing.declared import qualify_declared_answer
     from reveal.utils.results import ResultBuilder
     metadata = {'errors': [{'code': 'real_error', 'message': 'preserve error'}],
                 'warnings': [{'type': 'real_warning', 'message': 'preserve warning'}], 'confidence': 0.2}
-    result = ResultBuilder.create('architecture', '.', meta=metadata)
-    assert qualify_declared_answer(result, ArchitectureAdapter, '.') is result
+    result = ArchitectureAdapter(str(tmp_path), 'no_imports=true').get_structure()
+    result['meta'] = metadata
+    assert qualify_declared_answer(result, ArchitectureAdapter(str(tmp_path), 'no_imports=true'), str(tmp_path)) is result
     assert result['meta'] == metadata
 
 
 def test_missing_proof_repair_preserves_original_failure_detail():
     from reveal.cli.routing.declared import qualify_declared_answer
     from reveal.utils.results import ResultBuilder
-    result = ResultBuilder.create_error('architecture_diff', '.', 'original input failure')
-    repaired = qualify_declared_answer(result, ArchitectureAdapter, '.', 'architecture_diff')
+    result = ResultBuilder.create_error('overview_diff', '.', 'original input failure')
+    repaired = qualify_declared_answer(result, ArchitectureAdapter('.'), '.', 'overview_diff')
     assert repaired['error'] == 'original input failure'
     assert any('completeness evidence' in e['message'] for e in repaired['meta']['errors'])

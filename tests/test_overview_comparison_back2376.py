@@ -102,7 +102,7 @@ def test_existing_comparison_rejects_lost_or_contradictory_proof(project, monkey
     response = invoke(project, noun='architecture', transport=transport)
     assert response.returncode == 3, (response.stdout, response.stderr)
     answer = json.loads(response.stdout)
-    assert answer['type'] == 'architecture_diff'
+    assert answer['type'] == 'overview_diff'
     assert any(error['code'] == 'invalid_adapter_answer' for error in answer['meta']['errors'])
 
 
