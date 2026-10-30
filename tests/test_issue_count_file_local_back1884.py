@@ -1,4 +1,4 @@
-"""BACK-1884: the issue count is file-local rules only: one definition for stats, overview, hotspots.
+"""BACK-1884: the issue count is file-local rules only: one definition for stats and hotspots; overview performs no scoring.
 
 Before: every registered rule ran on every file to produce ``quality.check_issues``, so a file's
 count and score moved with a scan cap, a sibling file or the project root, and the cap's
@@ -90,15 +90,16 @@ def test_the_cross_file_rules_still_detect_under_check(tmp_path):
     assert [d['rule_code'] for d in literal['detections']] == ['D005']
 
 
-def test_stats_overview_and_hotspots_agree_on_one_file(tmp_path):
+def test_stats_and_hotspots_agree_on_one_file(tmp_path):
     root = project(tmp_path)
     stats = stats_files(json.loads(run(f'stats://{root}', '--format', 'json').stdout))['pkg/risky.py']
-    overview = json.loads(run('overview', str(root), '--no-git', '--no-imports', '--format', 'json').stdout)
+    overview = json.loads(run('overview', str(root), '--no-imports', '--format', 'json').stdout)
     hotspots = json.loads(run('hotspots', str(root), '--files-only', '--format', 'json').stdout)
-    over = stats_files(overview['stats'])['pkg/risky.py']
     ranked = {row['file']: row for row in hotspots['file_hotspots']}['pkg/risky.py']
-    assert stats['quality']['local_check_issues'] == over['quality']['local_check_issues'] > 0
-    assert stats['quality']['score'] == over['quality']['score'] == ranked['quality_score']
+    assert stats['quality']['local_check_issues'] > 0
+    assert 'stats' not in overview and 'issue_count' not in overview.get('meta', {})
+    assert overview['map'] is None and overview['scope']['total_code_files'] > 0
+    assert stats['quality']['score'] == ranked['quality_score']
 
 
 @pytest.mark.parametrize('cap', ['REVEAL_D005_MAX_FILES', 'REVEAL_T006_MAX_FILES', 'REVEAL_I002_MAX_FILES'])
@@ -141,7 +142,7 @@ def deny_directory(monkeypatch, directory):
 
 COMMANDS = {
     'hotspots': ('hotspots', '{root}', '--format', 'json'),
-    'overview': ('overview', '{root}', '--no-git', '--no-imports', '--format', 'json'),
+    'overview': ('overview', '{root}', '--no-imports', '--format', 'json'),
 }
 
 
@@ -149,8 +150,7 @@ def invoke(name, root):
     return run(*[part.format(root=root) for part in COMMANDS[name]])
 
 
-# overview already dropped the notes that name I002 (its imports slice owns them, BACK-2018), so
-# for the two I002 caps only hotspots changes; D005 and T006 notes reached both.
+# Cross-file rule caps cannot affect file-local scoring or scope-only overview.
 CAPS = [('REVEAL_D005_MAX_FILES', '3'), ('REVEAL_T006_MAX_FILES', '3'),
         ('REVEAL_I002_MAX_FILES', '3'), ('REVEAL_I002_CYCLE_LIMIT', '3')]
 
@@ -168,7 +168,10 @@ def test_a_scan_cap_alone_no_longer_fails_overview_or_hotspots(tmp_path, monkeyp
     result = json.loads(capped.stdout)
     assert 'analysis_incomplete' not in warning_types(result), result.get('meta')
     assert not (result.get('meta') or {}).get('errors')
-    assert result['meta']['issue_count']['rule'] == COUNTING_RULE, 'the count still says what it counts'
+    if command == 'hotspots':
+        assert result['meta']['issue_count']['rule'] == COUNTING_RULE
+    else:
+        assert 'issue_count' not in result.get('meta', {}) and 'stats' not in result
 
 
 @pytest.mark.parametrize('command', sorted(COMMANDS))
@@ -177,7 +180,15 @@ def test_a_traversal_failure_still_fails_overview_and_hotspots(tmp_path, monkeyp
     root = project(tmp_path)
     hidden = root / 'pkg' / 'hidden'
     write(hidden / 'inner.py', 'def inner():\n    return 1\n')
-    deny_directory(monkeypatch, hidden)
+    if command == 'overview':
+        real_scan = os.scandir
+        def scan(path):
+            if Path(path).resolve() == hidden.resolve():
+                raise PermissionError(errno.EACCES, 'controlled required census failure', str(path))
+            return real_scan(path)
+        monkeypatch.setattr(os, 'scandir', scan)
+    else:
+        deny_directory(monkeypatch, hidden)
     result_run = invoke(command, root)
     result = json.loads(result_run.stdout)
     lost = [w for w in result['meta']['warnings']
@@ -187,7 +198,7 @@ def test_a_traversal_failure_still_fails_overview_and_hotspots(tmp_path, monkeyp
 
 
 @pytest.mark.parametrize('command', sorted(COMMANDS))
-def test_a_crashed_file_local_rule_still_fails_overview_and_hotspots(tmp_path, monkeypatch, command):
+def test_file_local_rule_failure_is_required_only_by_hotspots(tmp_path, monkeypatch, command):
     """Negative control: a rule that could not run keeps its warning and exit code."""
     from reveal.rules.bugs.B001 import B001
 
@@ -198,9 +209,13 @@ def test_a_crashed_file_local_rule_still_fails_overview_and_hotspots(tmp_path, m
     root = project(tmp_path)
     result_run = invoke(command, root)
     result = json.loads(result_run.stdout)
-    failed = [w for w in result['meta']['warnings'] if w.get('type') == 'check_rules_failed']
-    assert failed and failed[0]['count'] >= 1
-    assert result_run.returncode == 3, (result_run.returncode, result_run.stderr)
+    failed = [w for w in result.get('meta', {}).get('warnings', []) if w.get('type') == 'check_rules_failed']
+    if command == 'overview':
+        assert result_run.returncode == 0 and not failed
+        assert 'stats' not in result
+    else:
+        assert failed and failed[0]['count'] >= 1
+        assert result_run.returncode == 3, (result_run.returncode, result_run.stderr)
 
 
 @pytest.mark.parametrize('command', ['architecture', 'deps'])
@@ -252,13 +267,14 @@ def assert_states_the_rule(meta):
     assert not {'I002', 'D005', 'M102', 'T006', 'I007', 'L001'} & set(meta['rules'])
 
 
-def test_every_consumer_states_the_counting_rule_and_the_same_rule_set(tmp_path):
+def test_scoring_consumers_share_the_rule_and_overview_omits_it(tmp_path):
     root = project(tmp_path)
     stats = json.loads(run(f'stats://{root}', '--format', 'json').stdout)
     one = json.loads(run(f'stats://{root}/pkg/risky.py', '--format', 'json').stdout)
-    overview = json.loads(run('overview', str(root), '--no-git', '--no-imports', '--format', 'json').stdout)
+    overview = json.loads(run('overview', str(root), '--no-imports', '--format', 'json').stdout)
     hotspots = json.loads(run('hotspots', str(root), '--format', 'json').stdout)
-    metas = [issue_count_meta(r) for r in (stats, one, overview, hotspots)]
+    assert 'issue_count' not in overview.get('meta', {})
+    metas = [issue_count_meta(r) for r in (stats, one, hotspots)]
     for meta in metas:
         assert_states_the_rule(meta)
     assert len({meta['rule_set_id'] for meta in metas}) == 1
@@ -267,7 +283,6 @@ def test_every_consumer_states_the_counting_rule_and_the_same_rule_set(tmp_path)
 @pytest.mark.parametrize('args', [
     ('stats://{root}',),
     ('stats://{root}/pkg/risky.py',),
-    ('overview', '{root}', '--no-git', '--no-imports'),
     ('hotspots', '{root}'),
 ])
 def test_the_text_footer_names_the_rule_and_the_rule_set(tmp_path, args):
@@ -352,7 +367,7 @@ def run_with_every_rule(monkeypatch):
 
 
 def overview_json(root):
-    result = json.loads(run('overview', str(root), '--no-git', '--no-imports', '--format', 'json').stdout)
+    result = json.loads(run('overview', str(root), '--no-imports', '--format', 'json').stdout)
     return result
 
 
@@ -379,16 +394,16 @@ def test_overview_is_unchanged_where_no_cross_file_rule_detects(tmp_path, monkey
     assert without_basis(local_only) == without_basis(every_rule)
 
 
-def test_overview_differs_where_a_cross_file_rule_detects(tmp_path, monkeypatch):
-    """Positive control for the twin above: the every-rule run does see the cycle."""
+def test_overview_is_independent_where_a_cross_file_rule_detects(tmp_path, monkeypatch):
+    """A real cross-file finding belongs to check and cannot change an orientation map."""
     root = project(tmp_path)
     local_only = overview_json(root)
     with monkeypatch.context() as patched:
         run_with_every_rule(patched)
         every_rule = overview_json(root)
-    lo, ev = stats_files(local_only['stats']), stats_files(every_rule['stats'])
-    assert lo['pkg/a.py']['quality']['local_check_issues'] == 0
-    assert ev['pkg/a.py']['quality']['local_check_issues'] == 1, 'the I002 cycle counts when every rule runs'
+    assert local_only == every_rule
+    findings = json.loads(run('check', root, '--select', 'I002', '--format', 'json').stdout)
+    assert any(d['rule_code'] == 'I002' for file in findings['files'] for d in file['detections'])
 
 
 def test_hotspots_adapter_states_the_rule_without_file_ranking(tmp_path):
@@ -461,7 +476,7 @@ def test_review_still_reports_a_cap_on_a_rule_its_own_quality_pass_runs(tmp_path
 
 
 @pytest.mark.mcp
-@pytest.mark.parametrize('scheme, query', [('hotspots', ''), ('overview', '?no_git=true&no_imports=true')])
+@pytest.mark.parametrize('scheme, query', [('hotspots', ''), ('overview', '?no_imports=true')])
 def test_the_mcp_query_tool_adds_no_incomplete_note_for_a_scan_cap(tmp_path, monkeypatch, scheme, query):
     """mcp_server appends 'Required analysis is incomplete' to an INCOMPLETE answer; a cap alone is not one."""
     from reveal import mcp_server
@@ -469,4 +484,7 @@ def test_the_mcp_query_tool_adds_no_incomplete_note_for_a_scan_cap(tmp_path, mon
     monkeypatch.setenv('REVEAL_D005_MAX_FILES', '3')
     answer = mcp_server.reveal_query(f'{scheme}://{root}{query}')
     assert 'Required analysis is incomplete' not in answer, answer
-    assert COUNTING_RULE in answer, 'the answer still says what its count counts'
+    if scheme == 'hotspots':
+        assert COUNTING_RULE in answer
+    else:
+        assert 'Code scope' in answer and COUNTING_RULE not in answer

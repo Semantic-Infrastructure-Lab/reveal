@@ -1,9 +1,7 @@
-"""overview:// must not surface the typo warning for its own internal complexity filter (BACK-1839 F12).
+"""Empty-population diagnostics stay scoped to the owner that performs analysis.
 
-hotspots suppressed the warning privately; overview runs the same kind of internal AST
-query (``complexity>9``) and printed "Filter key(s) 'complexity' never appear ... this may
-be a typo" on a tree with no function to carry the key. The suppression now lives in one
-shared helper both adapters call.
+Hotspots suppresses warnings for its generated AST filter; compact overview runs
+no complexity query. A caller-written AST typo must still warn.
 """
 
 import json
@@ -29,8 +27,8 @@ def no_function_tree(tmp_path_factory):
 
 @pytest.mark.parametrize('form', ['cli', 'uri'])
 def test_overview_text_has_no_internal_filter_typo_warning(no_function_tree, form):
-    args = (('overview', no_function_tree, '--no-git') if form == 'cli'
-            else (f'overview://{no_function_tree}?no_git=true',))
+    args = (('overview', no_function_tree) if form == 'cli'
+            else (f'overview://{no_function_tree}',))
     result = _run(*args)
     assert result.returncode == 0, result.stderr
     assert 'Filter key(s)' not in result.stdout + result.stderr
@@ -38,7 +36,7 @@ def test_overview_text_has_no_internal_filter_typo_warning(no_function_tree, for
 
 
 def test_overview_json_has_no_unknown_filter_key_entry(no_function_tree):
-    result = _run('overview', no_function_tree, '--no-git', '--format', 'json')
+    result = _run('overview', no_function_tree, '--format', 'json')
     assert result.returncode == 0, result.stderr
     warnings = (json.loads(result.stdout).get('meta') or {}).get('warnings') or []
     assert [w for w in warnings if w.get('type') == 'unknown_filter_key'] == []

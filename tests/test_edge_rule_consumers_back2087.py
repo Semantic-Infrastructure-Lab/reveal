@@ -157,22 +157,22 @@ def test_architecture_names_a_language_whose_scope_is_not_recorded(tmp_path):
 # ------------------------------------------------------------------ overview://
 
 def test_overview_states_its_rule_in_json(project):
-    data = _json(f'overview://{to_posix(project)}?no_git=true')
-    arch = data['architecture']
-    fan_in = {to_posix(e['file']).rsplit('/', 1)[-1]: e['fan_in'] for e in arch['fan_in'] if e['fan_in']}
+    data = _json(f'overview://{to_posix(project)}')
+    arch = data['map']
+    fan_in = {to_posix(e['file']).rsplit('/', 1)[-1]: e['fan_in'] for e in arch['fan_in']['rows'] if e['fan_in']}
     assert fan_in == {'core.py': 3, 'late.py': 1, 'ring_a.py': 1, 'ring_b.py': 1}
-    assert arch['circular_count'] == 0
-    _assert_rules(arch, project, 'overview://')
+    assert arch['cycles']['total'] == 0
+    _assert_rules(arch['rules'], project, 'overview://')
 
 
 def test_overview_states_its_rule_in_text(project):
-    _assert_rule_lines(_run(f'overview://{to_posix(project)}?no_git=true'))
+    _assert_rule_lines(_run(f'overview://{to_posix(project)}'))
 
 
 def test_overview_without_imports_states_no_rule(project):
-    data = _json(f'overview://{to_posix(project)}?no_git=true&no_imports=true')
-    assert 'edge_rule' not in data['architecture']
-    assert 'Rule' not in _run(f'overview://{to_posix(project)}?no_git=true&no_imports=true')
+    data = _json(f'overview://{to_posix(project)}?no_imports=true')
+    assert data['map'] is None and data['map_status'] == 'not_requested'
+    assert 'Rule' not in _run(f'overview://{to_posix(project)}?no_imports=true')
 
 
 # ------------------------------------------------------------------ pack

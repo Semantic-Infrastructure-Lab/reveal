@@ -116,11 +116,14 @@ def test_absolute_subdir_scope_names_the_subdir(layout, sub, commits, messages):
     assert f'Commits: {commits} ' in text.stdout
 
 
-def test_overview_of_absolute_subdir_lists_its_own_commits(layout):
-    """overview:// composes git:// with the absolute directory; its log was repo-wide too."""
+def test_overview_of_absolute_subdir_maps_its_own_scope(layout):
+    """Absolute map targets retain their spelling without requesting Git history."""
     parent, repo = layout
     data = json.loads(_reveal(parent, f'overview://{_abs(repo)}/sub', '--format', 'json').stdout)
-    assert [c['message'] for c in data['git_log']] == ['deep one', 'sub one']
+    assert data['path'] == data['source'] == _abs(repo) + '/sub'
+    assert data['scope']['total_code_files'] == 2
+    assert data['map']['metadata']['scanned_files'] == 2
+    assert data['map_status'] == 'complete' and 'git_log' not in data
 
 
 @pytest.mark.parametrize('view', VIEWS)

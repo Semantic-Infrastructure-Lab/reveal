@@ -123,11 +123,14 @@ def test_relative_repo_root_counts_every_commit(layout):
     assert 'Directory History: .' not in text.stdout
 
 
-def test_overview_of_relative_repo_root_lists_every_commit(layout):
-    """overview:// composes git:// with the same relative spelling."""
+def test_overview_of_relative_repo_root_maps_scope_without_history(layout):
+    """The compact map keeps the target spelling and does not collect history."""
     parent, _, _ = layout
     data = json.loads(_reveal(parent, 'overview://repo', '--format', 'json').stdout)
-    assert [c['message'] for c in data['git_log']] == ['root two', 'sub one', 'root one']
+    assert data['path'] == data['source'] == 'repo'
+    assert data['scope']['total_code_files'] == 2
+    assert data['map']['metadata']['scanned_files'] == 2
+    assert data['map_status'] == 'complete' and 'git_log' not in data
 
 
 def test_relative_subdir_of_another_repo_is_unchanged(layout):
