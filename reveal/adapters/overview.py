@@ -4,17 +4,17 @@ from __future__ import annotations
 import logging
 import shlex
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from urllib.parse import quote
 
 from reveal.capabilities import scope_dict_for_path
 from reveal.config import RevealConfig
-from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, WarningEntry
+from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, RevealResult, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.imports import service as import_analysis, resolution
 from ..analyzers.imports.diagnostics import integrity_warnings
-from ..analyzers.imports.map_facts import project_map_facts, validate_scan_budget
+from ..analyzers.imports.map_facts import MapFacts, project_map_facts, validate_scan_budget
 from ..analyzers.imports.views import ImportView
 from ..rendering.adapters.overview import OverviewRenderer
 from ..utils.exclusions import active_exclusions, exclusion_scope
@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 # Live siblings (architecture, hotspots and the URI renderer) share this expansion ceiling.
 UNLIMITED_TOP = 10**9
+DIAGNOSTIC_CUT_HINT = ('Overview diagnostic samples contain at most 50 details; use imports://FILE '
+                       'or reveal FILE for a named source when available.')
 
 
 def without_internal_filter_warnings(meta: Optional[RevealMeta]) -> List[WarningEntry]:
@@ -109,7 +111,7 @@ def _observed_relationships(fan_in, entrypoints, components, cycles) -> bool:
             or any(len(set(group)) >= 2 for group in cycles))
 
 
-def _import_warnings(built, target: Path, budget: dict) -> list:
+def _import_warnings(built, target: Path, limit: Optional[int]) -> list[WarningEntry]:
     warnings = integrity_warnings(built.analysis, target)
     traversal_warning = traversal_failed_warning(built.files.traversal_failures, target)
     if traversal_warning and traversal_warning not in warnings:
@@ -117,13 +119,13 @@ def _import_warnings(built, target: Path, budget: dict) -> list:
     hidden_warning = hidden_entries_warning(built.files.hidden, built.files.analyzed)
     if hidden_warning:
         warnings.append(hidden_warning)
-    if budget['capped']:
-        warnings.append({'type': 'scan_capped', 'limit': budget['limit'],
-                         'message': f"Import discovery stopped at its {budget['limit']} file limit; map totals describe the observed graph only."})
+    if built.files.capped:
+        warnings.append(cast(WarningEntry, {'type': 'scan_capped', 'limit': limit,
+                         'message': f'Import discovery stopped at its {limit} file limit; map totals describe the observed graph only.'}))
     return warnings
 
 
-def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, scope_usable: bool) -> tuple[Optional[dict], str]:
+def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, scope_usable: bool) -> tuple[Optional[MapFacts], str]:
     """Validate full owner evidence before any map or diagnostic presentation cuts."""
     try:
         target = path.resolve()
@@ -131,6 +133,8 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, s
                 gitignore_scope(adapter.respect_gitignore):
             scope = import_analysis.path_scope(target)
             built = import_analysis.analyze(scope)
+        warnings = _import_warnings(built, target, scope.cap)
+        adapter.fold_meta({'warnings': warnings})
         view = ImportView(built.analysis, target, resolution.ScanRoot(target, 'path'),
                           scope.cap)
         with import_analysis.composed_rules('overview://'):
@@ -138,9 +142,8 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, s
             components, circular = view.components(), view.circular()
         metadata = view.get_metadata()
         facts = project_map_facts(fan_in, entries, components, circular, metadata, path=target, top=top)
+        _validate_rules(facts['rules'])
         budget = metadata['scan_budget']
-        warnings = _import_warnings(built, target, budget)
-        adapter.fold_meta({'warnings': warnings})
         directory_loss = any(w['type'] == 'analysis_incomplete' for w in warnings)
         usable = _observed_relationships(fan_in['entries'], entries['entries'],
                                         components['components'], circular['cycles'])
@@ -150,7 +153,7 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, s
             return facts, 'failed'
         incomplete = (bool(metadata['files_failed_count']) or bool(metadata['files_lost_count'])
                       or budget['exact'] is not True or any(w['type'] in (
-                          'analysis_incomplete', 'analysis_failed', 'partial_parse', 'worker_lost') for w in warnings))
+                          'analysis_incomplete', 'analysis_failed', 'partial_parse', 'worker_lost', 'scan_capped') for w in warnings))
         return facts, 'incomplete' if incomplete else 'complete'
     except Exception as exc:  # boundary-ok: broad-except -- required import-service composition boundary; extraction, resolution, view validation and pool failures must be attributed before a failed map is returned
         adapter.record_composed_error('ImportsAdapter', path, exc)
@@ -208,7 +211,7 @@ def _cut_sequence(result: dict, holder: dict, key: str, field: str, limit: int,
     if isinstance(values, list):
         known = len(values) if total is None else total
         holder[key] = values[:limit]
-        note_truncation(result, field, len(holder[key]), known, 'auto_cap')
+        note_truncation(result, field, len(holder[key]), known, 'auto_cap', hint=DIAGNOSTIC_CUT_HINT)
 
 
 def _bound_nested_details(result: dict, value: Any, field: str, limit: int) -> None:
@@ -237,7 +240,8 @@ def _bound_details(result: dict, top: int) -> None:
         metadata['extraction_diagnostics_count'] = len(diagnostics)
         metadata['extraction_diagnostics'] = dict(sorted(diagnostics.items())[:limit])
         note_truncation(result, 'map.metadata.extraction_diagnostics',
-                        len(metadata['extraction_diagnostics']), len(diagnostics), 'auto_cap')
+                        len(metadata['extraction_diagnostics']), len(diagnostics), 'auto_cap',
+                        hint=DIAGNOSTIC_CUT_HINT)
         _bound_nested_details(result, metadata['extraction_diagnostics'],
                               'map.metadata.extraction_diagnostics', limit)
     # Existing owners supply a fixed set of category records. Retain every category,
@@ -268,13 +272,16 @@ def _validate_map_coverage(metadata: Any, status: str) -> None:
         raise ValueError('map must retain import coverage')
     for key in ('scanned_files', 'files_failed_count', 'files_lost_count', 'extraction_diagnostics_count'):
         _count(metadata.get(key), key)
-    budget = metadata.get('scan_budget')
-    validate_scan_budget(budget)
+    validate_scan_budget(metadata.get('scan_budget'))
+    budget = metadata['scan_budget']
     if status == 'complete' and (budget['exact'] is not True or budget['capped'] is not False
                                  or metadata['files_failed_count'] or metadata['files_lost_count']):
         raise ValueError('a complete map requires complete source accounting and no file loss')
     if not isinstance(metadata.get('unsupported_extensions'), dict):
         raise ValueError('map must retain unsupported-extension coverage')
+    for extension, count in metadata['unsupported_extensions'].items():
+        _validate_path(extension)
+        _count(count, 'unsupported extension count')
 
 
 def _validate_path(value: Any) -> None:
@@ -301,6 +308,8 @@ def _validate_relationship(row: Any, kind: str) -> None:
     cohesion = row.get('cohesion')
     if cohesion is None:
         _validate_path(row.get('cohesion_reason'))
+        if not row['cohesion_reason'].strip():
+            raise ValueError('declined component cohesion requires its reason')
     elif type(cohesion) not in (int, float) or not 0 <= cohesion <= 1:
         raise ValueError('component cohesion must be a fraction or declined')
     if row.get('top_bridge') is not None:
@@ -309,16 +318,20 @@ def _validate_relationship(row: Any, kind: str) -> None:
         raise ValueError('component bridge evidence is required')
 
 
+def _validate_counting_rule(rule: Any, lazy: str, tests: str) -> None:
+    if (not isinstance(rule, dict) or not isinstance(rule.get('text'), str) or not rule['text']
+            or rule.get('lazy') != lazy or rule.get('tests') != tests
+            or rule.get('scope') != 'scanned_path' or rule.get('type_checking') != 'excluded'):
+        raise ValueError('map counting rules must retain their distinct view semantics')
+
+
 def _validate_rules(rules: Any) -> None:
     if not isinstance(rules, dict) or not isinstance(rules.get('edge_rule_sections'), dict):
         raise ValueError('map must retain its distinct counting rules')
-    records = [rules.get('edge_rule'), *rules['edge_rule_sections'].values()]
-    for rule in records:
-        if (not isinstance(rule, dict) or not isinstance(rule.get('text'), str) or not rule['text']
-                or rule.get('lazy') not in ('include', 'exclude', 'only')
-                or rule.get('tests') not in ('included', 'importers_not_counted')
-                or rule.get('scope') not in ('scanned_path', 'scan_root')):
-            raise ValueError('map counting rules must retain their semantics')
+    sections = rules['edge_rule_sections']
+    _validate_counting_rule(rules.get('edge_rule'), 'include', 'included')
+    _validate_counting_rule(sections.get('entry_points'), 'include', 'importers_not_counted')
+    _validate_counting_rule(sections.get('cycles'), 'exclude', 'included')
     _validate_path(rules.get('component_order'))
 
 
@@ -369,6 +382,16 @@ def _validate_map(facts: Any, status: str, limit: int) -> None:
     _validate_rules(facts.get('rules'))
     _validate_map_coverage(facts.get('metadata'), status)
     _validate_samples(facts['metadata'], limit)
+
+
+def _distinct_owner_warnings(meta: Optional[RevealMeta]) -> Optional[RevealMeta]:
+    if meta and 'warnings' in meta:
+        distinct: List[WarningEntry] = []
+        for warning in meta['warnings']:
+            if warning not in distinct:
+                distinct.append(warning)
+        meta['warnings'] = distinct
+    return meta
 
 
 @register_adapter('overview')
@@ -491,7 +514,7 @@ class OverviewAdapter(ResourceAdapter):
                                'map_status': {'type': 'string'}, 'scope': {'type': 'object'}}}}],
                 'example_queries': [{'uri': 'overview://src', 'description': 'Compact project map', 'output_type': 'overview'}]}
 
-    def get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> RevealResult:
         with self.composition_run():
             path = Path(self.path)
             # Direct API calls do not pass through the CLI's existing resource stat.
@@ -506,7 +529,7 @@ class OverviewAdapter(ResourceAdapter):
             scope = _run_scope(self, path)
             facts, status = ((None, 'not_requested') if no_imports else _run_imports_analysis(
                 self, path, top, scope_usable=bool(scope.get('total_code_files'))))
-            meta = self.composed_meta()
+            meta = _distinct_owner_warnings(self.composed_meta())
             if not scope:
                 status = 'failed'
             note = 'Static import relationships and entrypoint candidates describe the observed graph, not runtime execution or a risk assessment.'
@@ -515,10 +538,10 @@ class OverviewAdapter(ResourceAdapter):
             if '?' in self.path:
                 note += " AST navigation cannot represent '?' in target paths; inspect files individually."
             result = ResultBuilder.create('overview', source=as_spelled(path, path),
-                contract_version=CONTRACT_VERSION, scope=scope, meta=meta,
+                contract_version=CONTRACT_VERSION, scope=scope, meta=cast(Optional[Dict[str, Any]], meta),
                 data={'path': as_spelled(path, path), 'map': facts, 'map_status': status,
                       'reading_note': note,
                       'next_steps': _next_steps(as_spelled(path, path), _navigation_exclusions(path, self.exclude_patterns),
                                                 self.respect_gitignore)})
-            _bound_details(result, top)
+            _bound_details(cast(Dict[str, Any], result), top)
             return result
