@@ -88,14 +88,22 @@ def create_fixture(root: Path, env: dict[str, str]) -> None:
 
 
 def validate_overview(result: subprocess.CompletedProcess) -> dict:
-    """The regression assertion: absent pygit2 is visible and not exit 3."""
+    """A core-only install must produce the complete fixture's static import map."""
     require(result.returncode == 0, f'overview: expected exit 0, got exit {result.returncode}')
     answer = json.loads(result.stdout)
-    meta = answer.get('meta') or {}
-    require(not meta.get('errors'), 'overview: unexpected analysis errors')
-    warnings = [w for w in meta.get('warnings', []) if w.get('type') == 'git_unavailable']
-    require(len(warnings) == 1, 'overview: expected one git_unavailable warning')
-    require('reveal-cli[git]' in warnings[0].get('message', ''), 'overview: missing install hint')
+    require(not (answer.get('meta') or {}).get('errors'), 'overview: unexpected analysis errors')
+    scope = answer.get('scope') or {}
+    require(scope.get('complete') is True and scope.get('total_code_files') == 3,
+            'overview: fixture code scope is missing or incomplete')
+    graph = answer.get('map') or {}
+    require(answer.get('map_status') == 'complete' and graph.get('metadata', {}).get('scanned_files') == 3,
+            'overview: fixture import map is missing or incomplete')
+    require(graph.get('fan_in', {}).get('rows') == [
+        {'file': 'src/auth.py', 'fan_in': 1, 'fan_out': 0}],
+        'overview: expected the real auth import relationship')
+    require([(row.get('file'), row.get('fan_out'))
+             for row in graph.get('entrypoints', {}).get('rows', [])] == [('src/login.py', 1)],
+            'overview: expected the real login entrypoint')
     return answer
 
 
@@ -140,7 +148,7 @@ def smoke_commands(cli: Path, root: Path, env: dict[str, str]) -> None:
     examples = {
         ('src/auth.py', 'validate_token'): 'return token == "accepted"',
         ('calls://src/?callers=validate_token',): 'run_login',
-        ('overview', '.'): 'reveal-cli[git]',
+        ('overview', '.'): 'Import map: complete',
         ('ast://src/?complexity>10',): 'classify',
         ('check', 'src/'): 'No issues found',
         ('pack', 'src/', '--since', 'main', '--budget', '8000'): 'auth.py',
@@ -152,10 +160,7 @@ def smoke_commands(cli: Path, root: Path, env: dict[str, str]) -> None:
         result = run(prefix + list(args), root, env)
         require(examples[args] in result.stdout, f'{args}: expected {examples[args]!r} in text answer')
     overview = run(prefix + ['overview', '.', '--format', 'json'], root, env)
-    dashboard = validate_overview(overview)
-    require(dashboard['scope']['total_code_files'] == 3
-            and dashboard['stats']['summary']['total_functions'] == 3,
-            'overview: fixture files/functions are missing')
+    validate_overview(overview)
     calls = json.loads(run(prefix + ['calls://src/?callers=validate_token', '--format', 'json'],
                            root, env).stdout)
     ast = json.loads(run(prefix + ['ast://src/?complexity>10', '--format', 'json'], root, env).stdout)
@@ -198,21 +203,20 @@ def _check_findings(cli: Path, root: Path, env: dict[str, str]) -> None:
 
 
 def verify_regression_control(identity: dict, cli: Path, root: Path, env: dict[str, str]) -> None:
-    """Temporarily restore the missing-pygit2 failure in the installed copy only."""
+    """Prove a missing map fails validation in the installed copy only."""
     overview = Path(identity['module']).parent / 'adapters' / 'overview.py'
     original = overview.read_text(encoding='utf-8')
-    guard = 'unavailable = _git_unavailable_warning()'
-    require(original.count(guard) == 1, 'regression control: missing optional-git guard changed')
+    guard = "'map': facts"
+    require(original.count(guard) == 1, 'regression control: map assembly changed')
     sibling = [str(cli), 'src/auth.py', 'validate_token']
     before = run(sibling, root, env).stdout
     args = [str(cli), 'overview', '.', '--format', 'json']
     try:
-        # Skipping this check reaches the old GitAdapter ImportError -> E_COMPOSE path.
-        overview.write_text(original.replace(guard, 'unavailable = None'), encoding='utf-8')
+        # A missing requested map must fail the command contract, not look empty.
+        overview.write_text(original.replace(guard, "'map': None"), encoding='utf-8')
         failed = run(args, root, env, expected=3)
         errors = json.loads(failed.stdout).get('meta', {}).get('errors', [])
-        require(any(error.get('code') == 'E_COMPOSE' for error in errors),
-                'regression control did not restore the historical composed failure')
+        require(bool(errors), 'regression control: missing map did not produce an error')
         try:
             validate_overview(failed)
         except SmokeFailure as exc:
@@ -239,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--wheel', type=Path, help='install an already-built wheel instead of building')
     parser.add_argument('--verify-regression-control', action='store_true',
-                        help='prove the smoke catches the old missing-pygit2 overview failure')
+                        help='prove the smoke rejects an installed Overview with missing map evidence')
     args = parser.parse_args(argv)
     with tempfile.TemporaryDirectory(prefix='reveal-default-install-') as tmp:
         root = Path(tmp).resolve()
@@ -259,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
         smoke_commands(cli, fixture, env)
         if args.verify_regression_control:
             verify_regression_control(identity, cli, fixture, env)
-    print('PASS default-install smoke: README commands, optional-dependency disclosure, findings control',
+    print('PASS default-install smoke: README commands, core-only import map, findings control',
           flush=True)
     return 0
 

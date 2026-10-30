@@ -17,33 +17,49 @@ from scripts.default_install_smoke import (
 pytestmark = pytest.mark.component
 
 
-def _overview(*, code=0, warnings=None, errors=None):
-    meta = {
-        'warnings': warnings if warnings is not None else [
-            {'type': 'git_unavailable', 'message': 'pygit2 missing; install reveal-cli[git]'},
-        ],
-        'errors': errors or [],
+def _overview(*, code=0, errors=None, **overrides):
+    answer = {
+        'scope': {'complete': True, 'total_code_files': 3},
+        'map_status': 'complete',
+        'map': {
+            'metadata': {'scanned_files': 3},
+            'fan_in': {'rows': [{'file': 'src/auth.py', 'fan_in': 1, 'fan_out': 0}]},
+            'entrypoints': {'rows': [{'file': 'src/login.py', 'fan_out': 1}]},
+        },
+        'meta': {'errors': errors or []},
     }
-    return subprocess.CompletedProcess(['reveal', 'overview', '.'], code,
-                                       json.dumps({'meta': meta}), '')
+    answer.update(overrides)
+    return subprocess.CompletedProcess(['reveal', 'overview', '.'], code, json.dumps(answer), '')
 
 
-def test_overview_accepts_disclosed_optional_dependency():
+def test_overview_accepts_complete_core_only_map():
     validate_overview(_overview())
 
 
 def test_overview_rejects_old_missing_pygit2_failure():
-    result = _overview(code=3, warnings=[], errors=[{'code': 'E_COMPOSE', 'message': 'git_root failed'}])
+    result = _overview(code=3, errors=[{'code': 'E_COMPOSE', 'message': 'git_root failed'}])
     with pytest.raises(SmokeFailure, match='overview.*exit 3'):
         validate_overview(result)
 
 
-@pytest.mark.parametrize('result, reason', [
-    (_overview(warnings=[]), 'git_unavailable'),
-    (_overview(warnings=[{'type': 'git_unavailable', 'message': 'missing'}]), 'install hint'),
-    (_overview(errors=[{'code': 'E_COMPOSE', 'message': 'failed'}]), 'analysis errors'),
+@pytest.mark.parametrize('overrides, reason', [
+    ({'scope': {}}, 'code scope'),
+    ({'scope': {'complete': False, 'total_code_files': 3}}, 'code scope'),
+    ({'map': None}, 'import map'),
+    ({'map_status': 'incomplete'}, 'import map'),
+    ({'errors': [{'code': 'E_COMPOSE', 'message': 'failed'}]}, 'analysis errors'),
 ])
-def test_overview_does_not_accept_silent_or_incomplete_answers(result, reason):
+def test_overview_does_not_accept_silent_or_incomplete_answers(overrides, reason):
+    with pytest.raises(SmokeFailure, match=reason):
+        validate_overview(_overview(**overrides))
+
+
+@pytest.mark.parametrize('section, reason', [('fan_in', 'auth import'), ('entrypoints', 'login entrypoint')])
+def test_overview_requires_real_fixture_relationships(section, reason):
+    result = _overview()
+    answer = json.loads(result.stdout)
+    answer['map'][section]['rows'] = []
+    result.stdout = json.dumps(answer)
     with pytest.raises(SmokeFailure, match=reason):
         validate_overview(result)
 
