@@ -200,7 +200,8 @@ def test_lexical_policy_is_comparison_identity_with_legacy_baseline_disclosure(t
     assert any('test_scope not compared' in note for note in notes)
 
 
-def test_public_configured_row_removes_only_reviewed_importers(tmp_path):
+@pytest.fixture
+def nonstandard_corpus(tmp_path):
     root, entry = _repo(tmp_path / 'corpus', {
         'pyproject.toml': '[project]\nname = "pkg"\n',
         'pkg/__init__.py': '', 'pkg/a.py': '', 'pkg/only_helpers.py': '',
@@ -212,6 +213,11 @@ def test_public_configured_row_removes_only_reviewed_importers(tmp_path):
     path = tmp_path / 'policy.yaml'
     path.write_text('test_layout: {additional_paths: [t/unit]}\n', encoding='utf-8')
     policy = gate._read_test_policy(path)
+    return root, entry, path, policy
+
+
+def test_public_configured_row_removes_only_reviewed_importers(nonstandard_corpus):
+    root, entry, _, policy = nonstandard_corpus
     measured = gate.measure(entry, root, policy=policy)
     assert measured['hit_edges'] == measured['oracle_edges'] == 5
     assert measured['extra_edges'] == 0
@@ -224,3 +230,80 @@ def test_public_configured_row_removes_only_reviewed_importers(tmp_path):
     assert configured['policy_input'] == policy
     assert measured['lazy']['only']['oracle_edges'] == 0
     assert measured['lazy']['only']['recall'] is None
+
+
+def test_ignored_configured_filter_cannot_hide_behind_healthy_default(nonstandard_corpus, monkeypatch):
+    from reveal.analyzers.imports.types import ImportGraph
+
+    root, entry, _, policy = nonstandard_corpus
+    baseline = gate.measure(entry, root, policy=policy)
+    monkeypatch.setattr(ImportGraph, 'without_test_importers', lambda self, layout: self)
+    broken = gate.measure(entry, root, policy=policy)
+    assert broken['hit_edges'] == baseline['hit_edges'] == 5
+    assert broken['tests'] == baseline['tests']
+    assert broken['lazy'] == baseline['lazy']
+    configured = broken['configured_tests']['exclude']
+    assert configured['differences'] == [
+        {'target': 'pkg/a.py', 'missed': [], 'extra': ['t/unit/helper.py']},
+        {'target': 'pkg/only_helpers.py', 'missed': [], 'extra': ['t/unit/helper.py']},
+    ]
+    failures = gate.regressions({'py': broken}, {'py': baseline})
+    assert any('configured_tests=exclude extra-edge population changed' in item for item in failures)
+
+
+def test_configured_empty_truth_keeps_unavailable_recall_and_extra_controls(nonstandard_corpus, monkeypatch):
+    from reveal.analyzers.imports.types import ImportGraph
+
+    root, entry, _, policy = nonstandard_corpus
+    entry['recall']['importer_dirs'] = ['t/unit']
+    baseline = gate.measure(entry, root, policy=policy)
+    row = baseline['configured_tests']['exclude']
+    assert row['oracle_edges'] == row['hit_edges'] == row['extra_edges'] == 0
+    assert row['recall'] is row['precision'] is None
+    monkeypatch.setattr(ImportGraph, 'without_test_importers', lambda self, layout: self)
+    broken = gate.measure(entry, root, policy=policy)['configured_tests']['exclude']
+    assert broken['oracle_edges'] == 0 and broken['recall'] is None
+    assert broken['extra_edges'] == 2 and broken['precision'] == 0
+
+
+def test_same_graph_two_inputs_and_equal_recipe_new_provenance(nonstandard_corpus, tmp_path):
+    root, entry, path, policy = nonstandard_corpus
+    baseline = gate.measure(entry, root, policy=policy)
+    other_path = tmp_path / 'other.yaml'
+    other_path.write_text('test_layout:\n  additional_paths: [t/unit]\n', encoding='utf-8')
+    other = gate.measure(entry, root, policy=gate._read_test_policy(other_path))
+    before = baseline['configured_tests']['exclude']['edge_rule']['test_scope']
+    moved = other['configured_tests']['exclude']['edge_rule']['test_scope']
+    assert before['declaration']['path'] != moved['declaration']['path']
+    assert gate._test_policy_identity(before) == gate._test_policy_identity(moved)
+    assert gate.regressions({'py': other}, {'py': baseline}) == []
+    path.write_text('test_layout: {additional_paths: []}\n', encoding='utf-8')
+    changed = gate.measure(entry, root, policy=gate._read_test_policy(path))
+    assert changed['hit_edges'] == baseline['hit_edges'] == 5
+    assert changed['configured_tests']['exclude']['extra_edges'] == 2
+    assert baseline['configured_tests']['exclude']['extra_edges'] == 0
+    assert before['additional_paths'] == ['t/unit']
+    assert gate.regressions({'py': changed}, {'py': baseline})
+
+
+@pytest.mark.parametrize('configured', [False, True])
+@pytest.mark.parametrize('field,value', [('anchor', '..'), ('anchor', '/temporary/export'),
+                                          ('source', 'project'), ('include_anchor_name', True)])
+def test_request_boundary_is_independent_of_producer_metadata(test_import_corpus, tmp_path, monkeypatch,
+                                                              configured, field, value):
+    root, _ = test_import_corpus
+    healthy = gate._importers_request(root, root, None)
+    path = tmp_path / 'policy.yaml'
+    path.write_text('test_layout: {additional_paths: []}\n', encoding='utf-8')
+    policy = gate._read_test_policy(path) if configured else None
+    broken = copy.deepcopy(healthy)
+    scope = _configured_scope(policy) if policy else broken['edge_rule']['test_scope']
+    scope[field] = value
+    if configured and field in ('anchor', 'include_anchor_name'):
+        scope['effective_policy'][field] = value
+        if field == 'include_anchor_name':
+            scope['effective_policy']['anchor_name'] = root.name
+    broken['edge_rule']['test_scope'] = scope
+    monkeypatch.setattr(gate, '_cli_json', lambda *args, **kwargs: broken)
+    with pytest.raises(RuntimeError, match='test_scope|policy'):
+        gate._importers_request(root, root, None, policy=policy)
