@@ -76,8 +76,7 @@ predicate even when `top` cuts the list. `min_complexity` and the two only-flags
 still define the requested population. Both only-flags may coexist, leaving both
 rankings empty while retaining the statistics coverage scan.
 
-File quality counts file-local check rules only, the same count `metrics://` and `overview`
-print; `meta.issue_count` and the text footer name the rule set, and cross-file rules run under
+File quality counts file-local check rules only, the same count `metrics://` prints; `meta.issue_count` and the text footer name the rule set, and cross-file rules run under
 `reveal check`. A scan cap on a cross-file rule neither changes a score nor fails the scan
 ([what the issue count counts](METRICS_ADAPTER_GUIDE.md#what-the-issue-count-counts)).
 

@@ -261,7 +261,7 @@ reveal metrics://src/
 
 Why it is good for this:
 
-- `overview` gives a one-glance dashboard
+- `overview` gives a compact project map with coverage and drill-down commands
 - `hotspots` points to concentrated complexity and churn
 - `reveal imports --circular` / `--unused` surface circular and unused imports
 - `imports://` adds lower-level graph queries and layer checks
@@ -599,7 +599,7 @@ Start with the workflow that matches your job:
 | Goal | Start Here |
 |------|------------|
 | Learn a repo | `reveal .` → `reveal src/` → `reveal file.py` |
-| Find risky code | `reveal overview .` and `reveal hotspots .` |
+| Investigate code quality | `reveal metrics . --hotspots` and `reveal check .` |
 | Review a PR | `reveal check --changed main..HEAD` |
 | Estimate refactor blast radius | `reveal 'calls://src/?callers=func'` and `reveal 'imports://path/to/module.py?importers'` |
 | Prepare AI context | `reveal pack src/ --since main --budget 8000 --content` |

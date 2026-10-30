@@ -79,15 +79,22 @@ def _assert_keys(d, keys, desc):
 # Step 1 — Triage landscape
 # --------------------------------------------------------------------------- #
 
-def test_overview_emits_stats_summary_shape():
+def test_overview_maps_the_fixture_before_deeper_assessment():
     d = _json("overview", "overview", REPO_STR, "--format", "json")
-    _assert_keys(d, ("path", "stats"), "overview")
-    _assert_keys(d["stats"], ("summary", "files"), "overview.stats")
-    _assert_keys(
-        d["stats"]["summary"],
-        ("total_files", "total_functions", "avg_complexity"),
-        "overview.stats.summary",
-    )
+    _assert_keys(d, ("path", "scope", "map", "map_status", "next_steps"), "overview")
+    assert d['type'] == 'overview' and d['map_status'] == 'complete'
+    assert d['scope']['total_code_files'] == 6
+    assert [(row['language'], row['files']) for row in d['scope']['languages']] == [('Python', 6)]
+    assert d['map']['fan_in']['rows'] == [{'file': 'core.py', 'fan_in': 3, 'fan_out': 0}]
+    # This fixture itself lives beneath tests/: producer-path classification
+    # excludes its candidates before paths are shortened for display.
+    assert d['map']['entrypoints']['rows'] == []
+    assert d['map']['entry_point_filter']['fan_in_zero'] == 6
+    assert d['map']['entry_point_filter']['active'] == 0
+    assert [(row['component'], row['files']) for row in d['map']['components']['rows']] == [
+        ('.', 4), ('tests', 1), ('vendor', 1)]
+    assert d['map']['cycles'] == {'rows': [], 'total': 0, 'returned': 0, 'omitted': 0}
+    assert not {'stats', 'complex_functions', 'git_log'} & d.keys()
 
 
 # --------------------------------------------------------------------------- #

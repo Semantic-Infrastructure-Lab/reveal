@@ -212,7 +212,7 @@ reveal hotspots src/ --format json | jq '.function_hotspots[] | select(.has_test
 
 # Architectural analysis
 reveal architecture src/          # Entry points, core abstractions, circular groups, risks
-reveal overview .                 # One-glance dashboard: stats, quality, architecture, git
+reveal overview .                 # Compact project map: scope, components, imports
 
 # Execution and boundary analysis
 reveal calls src/ --callees main --depth 2 --detail  # What main calls, level by level, with side effects
