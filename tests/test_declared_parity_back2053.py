@@ -1,7 +1,8 @@
 """Phase 1 exit audit (BACK-2053): the nine declared nouns answer alike in both spellings.
 
 One table drives every noun through `reveal NOUN ...` and `reveal NOUN://...`: parsed JSON equal except
-the command spelling, same exits and visible diagnostics, provenance off/on, text, requested JSON
+the command spelling and validated central architecture retirement note, same exits and visible
+diagnostics, provenance off/on, text, requested JSON
 artifacts (success and failed write), and a rejected resource. Per-noun depth lives in the
 test_declared_<noun>_* files; this file is the cross-noun gate and fails if a noun is added to
 COMMANDS without a row here.
@@ -149,9 +150,45 @@ def run(noun, spelling, *extra, resource='proj'):
     return _run_reveal_direct(*argv_for(noun, spelling, resource), '--no-gitignore', *extra)
 
 
+def architecture_retirement(spelling):
+    key = f'{"subcommand" if spelling == "cli" else "scheme"}:architecture'
+    entry = RETIREMENTS[key]
+    return {'type': 'retired_spelling', 'code': 'retired_spelling', 'message': entry.text,
+            'field': key, 'old': entry.old, 'replacement': entry.replacement, 'stage': entry.stage}
+
+
+def without_architecture_note(noun, answer, spelling):
+    """Validate the one central transport record before removing exactly that record."""
+    result = copy.deepcopy(answer)
+    if noun == 'architecture':
+        warnings = result['meta']['warnings']
+        records = [warning for warning in warnings
+                   if warning.get('code') == 'retired_spelling' or warning.get('type') == 'retired_spelling']
+        expected = architecture_retirement(spelling)
+        assert records == [expected]
+        warnings.remove(expected)
+    return result
+
+
+def parity_stderr(noun, stderr, spelling, *, noted=True):
+    if noun != 'architecture':
+        return stderr
+    line = f"note: {architecture_retirement(spelling)['message']}\n"
+    assert stderr.count(line) == int(noted)
+    return stderr.replace(line, '', 1) if noted else stderr
+
+
+def assert_equal_stdout(noun, left, right):
+    if noun == 'architecture' and left.strip().startswith('{'):
+        assert_equal_answers(noun, json.loads(left), json.loads(right))
+    else:
+        assert left == right
+
+
 def assert_equal_answers(noun, left, right):
-    """Only the command spelling may differ; a changed count or a dropped diagnostic must not pass."""
-    a, b = copy.deepcopy(left), copy.deepcopy(right)
+    """Only proven transport spelling facts may differ; all analysis and diagnostics stay exact."""
+    a = without_architecture_note(noun, left, "cli")
+    b = without_architecture_note(noun, right, "uri")
     if 'execution' in a:
         assert a['execution']['command'].startswith(f'reveal {noun} ')
         assert b['execution']['command'].startswith(f'reveal {noun}://')
@@ -177,7 +214,7 @@ def test_json_answers_match(project, noun, provenance):
         assert left['execution']['command'].startswith(f'reveal {noun} ')
         assert right['execution']['command'].startswith(f'reveal {noun}://')
     assert_equal_answers(noun, left, right)
-    assert a.stderr == b.stderr
+    assert parity_stderr(noun, a.stderr, 'cli') == parity_stderr(noun, b.stderr, 'uri')
 
 
 @pytest.mark.parametrize('noun', NOUNS)
@@ -185,8 +222,8 @@ def test_text_output_matches(project, noun):
     a, b = run(noun, 'cli'), run(noun, 'uri')
     assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
     assert a.stdout.strip()
-    assert a.stdout == b.stdout
-    assert a.stderr == b.stderr
+    assert_equal_stdout(noun, a.stdout, b.stdout)
+    assert parity_stderr(noun, a.stderr, 'cli') == parity_stderr(noun, b.stderr, 'uri')
 
 
 @pytest.mark.parametrize('noun', NOUNS)
@@ -196,9 +233,13 @@ def test_requested_artifact_equals_the_primary_json(project, tmp_path, noun):
         artifact = tmp_path / f'{spelling}.json'
         result = run(noun, spelling, '--output', f'json={artifact}')
         assert result.returncode == 0, result.stderr
+        parity_stderr(noun, result.stderr, spelling)
         docs[spelling] = json.loads(artifact.read_text(encoding='utf-8'))
-    primary = json.loads(run(noun, 'cli', '--format', 'json').stdout)
-    assert docs['cli'] == primary == docs['uri']
+        primary = run(noun, spelling, '--format', 'json')
+        assert primary.returncode == 0, primary.stderr
+        parity_stderr(noun, primary.stderr, spelling)
+        assert docs[spelling] == json.loads(primary.stdout)
+    assert_equal_answers(noun, docs['cli'], docs['uri'])
 
 
 @pytest.mark.parametrize('noun', NOUNS)
@@ -208,7 +249,7 @@ def test_failed_artifact_write_keeps_the_answer_and_exits_three(project, tmp_pat
     b = run(noun, 'uri', '--also-json', str(tmp_path))
     assert a.returncode == b.returncode == 3, (a.stderr, b.stderr)
     assert a.stdout == b.stdout and a.stdout.strip()
-    assert a.stderr == b.stderr
+    assert parity_stderr(noun, a.stderr, 'cli') == parity_stderr(noun, b.stderr, 'uri')
     assert 'artifact' in a.stderr.lower()
     assert 'Traceback' not in a.stderr
 
@@ -219,8 +260,8 @@ def test_missing_resource_is_rejected_alike(project, noun, fmt):
     a = run(noun, 'cli', '--format', fmt, resource='absent')
     b = run(noun, 'uri', '--format', fmt, resource='absent')
     assert a.returncode == b.returncode == 2, (a.stderr, b.stderr)
-    assert a.stdout == b.stdout
-    assert a.stderr == b.stderr
+    assert_equal_stdout(noun, a.stdout, b.stdout)
+    assert parity_stderr(noun, a.stderr, 'cli') == parity_stderr(noun, b.stderr, 'uri')
 
 
 @pytest.mark.parametrize('gate', ['findings', 'none'])
@@ -242,9 +283,15 @@ def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
         expected = 2
     for name, result in runs.items():
         assert result.returncode == expected, (name, result.stderr)
-    assert len({r.stdout for r in runs.values()}) == 1
+    assert runs['after'].stdout == runs['before'].stdout
+    assert_equal_stdout(noun, runs['after'].stdout, runs['uri'].stdout)
     if expected == 2:
-        assert len({r.stderr for r in runs.values()}) == 1
+        assert runs['after'].stderr == runs['before'].stderr
+        assert parity_stderr(noun, runs['after'].stderr, 'cli') == parity_stderr(
+            noun, runs['uri'].stderr, 'uri', noted=noun != 'architecture')
+    else:
+        assert parity_stderr(noun, runs['after'].stderr, 'cli') == parity_stderr(noun, runs['uri'].stderr, 'uri')
+    if expected == 2:
         assert 'not supported' in runs['uri'].stderr
 
 
@@ -266,13 +313,16 @@ def test_option_values_are_read_alike(project, noun, flags):
     """Zero, negative, malformed and unused values: same exit, same stdout, same ignored-flag notes."""
     a, b = run(noun, 'cli', *flags), run(noun, 'uri', *flags)
     assert a.returncode == b.returncode, (a.stderr, b.stderr)
-    assert a.stdout == b.stdout
+    assert_equal_stdout(noun, a.stdout, b.stdout)
     assert ignored_flags(a.stderr) == ignored_flags(b.stderr)
     if a.returncode == 2:
         # parser-level rejection: no answer, a usage message in both spellings
         assert not a.stdout and 'usage:' in a.stderr and 'usage:' in b.stderr
     else:
         assert a.returncode == 0 and a.stdout.strip()
+        if noun == 'architecture':
+            parity_stderr(noun, a.stderr, 'cli')
+            parity_stderr(noun, b.stderr, 'uri')
 
 
 @pytest.mark.parametrize('noun', NOUNS)
@@ -294,7 +344,11 @@ def test_a_harmless_warning_is_shown_and_never_makes_a_complete_answer_fail(proj
         result = run(noun, spelling, '--format', 'json')
         assert result.returncode == 0, (spelling, result.stderr)
         answers.append(json.loads(result.stdout))
-        assert answers[-1]['meta']['warnings'][-1]['message'] == 'harmless observation'
+        if noun == 'architecture':
+            assert answers[-1]['meta']['warnings'].count(
+                {'type': 'informational', 'message': 'harmless observation'}) == 1
+        else:
+            assert answers[-1]['meta']['warnings'][-1]['message'] == 'harmless observation'
     assert len(calls) == 2, 'the patched entry point was not the one the noun runs'
     assert_equal_answers(noun, *answers)
 
@@ -329,3 +383,53 @@ def test_the_comparison_fails_on_a_changed_count_or_dropped_diagnostic():
     changed['meta']['warnings'].clear()
     with pytest.raises(AssertionError):
         assert_equal_answers('x', answer, changed)
+
+
+@pytest.mark.parametrize('field', ['type', 'code', 'message', 'field', 'old', 'replacement', 'stage'])
+@pytest.mark.parametrize('mutation', ['missing', 'changed'])
+def test_architecture_note_must_match_the_complete_central_record(field, mutation):
+    warning = architecture_retirement('cli')
+    if mutation == 'missing':
+        del warning[field]
+    else:
+        warning[field] = 'corrupted'
+    answer = {'meta': {'warnings': [warning]}}
+    with pytest.raises(AssertionError):
+        without_architecture_note('architecture', answer, 'cli')
+
+
+@pytest.mark.parametrize('copies', [0, 2])
+def test_architecture_note_must_appear_exactly_once(copies):
+    answer = {'meta': {'warnings': [architecture_retirement('cli')] * copies}}
+    with pytest.raises(AssertionError):
+        without_architecture_note('architecture', answer, 'cli')
+
+
+@pytest.mark.parametrize('change', ['count', 'diagnostic'])
+def test_architecture_comparison_still_rejects_analysis_and_diagnostic_loss(change):
+    left = {'type': 'overview', 'total': 2, 'meta': {'warnings': [
+        architecture_retirement('cli'), {'type': 'informational', 'message': 'keep me'}]}}
+    right = copy.deepcopy(left)
+    right['meta']['warnings'][0] = architecture_retirement('uri')
+    assert_equal_answers('architecture', left, right)
+    if change == 'count':
+        right['total'] = 1
+    else:
+        right['meta']['warnings'].pop()
+    with pytest.raises(AssertionError):
+        assert_equal_answers('architecture', left, right)
+
+
+@pytest.mark.parametrize('copies', [0, 2])
+def test_architecture_stderr_note_must_appear_exactly_once(copies):
+    line = f"note: {architecture_retirement('cli')['message']}\n"
+    with pytest.raises(AssertionError):
+        parity_stderr('architecture', line * copies, 'cli')
+
+
+def test_architecture_stderr_normalization_preserves_every_other_line():
+    line = f"note: {architecture_retirement('cli')['message']}\n"
+    assert parity_stderr('architecture', 'first\n' + line + 'last\n', 'cli') == 'first\nlast\n'
+    with pytest.raises(AssertionError):
+        parity_stderr('architecture', line, 'uri')
+    assert parity_stderr('overview', line, 'cli') == line
