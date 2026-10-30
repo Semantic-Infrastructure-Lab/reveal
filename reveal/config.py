@@ -27,7 +27,7 @@ import functools
 import hashlib
 
 from .utils.path_utils import TestLayout, resolve_project_root, reveal_yaml_is_root, failure_of, to_posix
-from .errors import RequestValidationError
+from .errors import TestLayoutValidationError, TestLayoutConfigError
 
 try:
     import yaml
@@ -448,6 +448,7 @@ class RevealConfig:
         self.load_failures: List[Tuple[str, str]] = []
         # The files that were read into this config, lowest precedence first (BACK-2275).
         self.sources: List[ConfigSource] = []
+        self._selected_custom_config: Optional[str] = None
         self._overrides = self._parse_overrides()
 
     def apply_test_layout(self, layout: TestLayout) -> TestLayout:
@@ -456,18 +457,26 @@ class RevealConfig:
         Sources are already in low-to-high precedence order. A root-local empty
         list replaces lower additions independently of global list merging.
         """
+        if self._selected_custom_config and not any(source.layer == 'custom' for source in self.sources):
+            why = next((why for path, why in self.load_failures if path == self._selected_custom_config),
+                       'FileNotFoundError: selected configuration file was not found')
+            raise TestLayoutConfigError(f'Required test_layout configuration could not be loaded: {why}')
+        for path, why in self.load_failures:
+            source = Path(path)
+            if source.parent == layout.anchor or self._selected_custom_config == path:
+                raise TestLayoutConfigError(f'Required test_layout configuration could not be loaded: {why}')
         selected = self._test_layout_source(layout)
         if selected is None:
             return layout
         if selected.test_layout_error:
-            raise RequestValidationError(selected.test_layout_error)
+            raise TestLayoutValidationError(selected.test_layout_error)
         block = json.loads(selected.test_layout_json or 'null')
         if not isinstance(block, dict) or set(block) != {'additional_paths'}:
-            raise RequestValidationError('test_layout must be a mapping with additional_paths')
+            raise TestLayoutValidationError('test_layout must be a mapping with additional_paths')
         try:
             paths = TestLayout.normalize_additional_paths(block['additional_paths'])
         except ValueError as exc:
-            raise RequestValidationError(str(exc)) from exc
+            raise TestLayoutValidationError(str(exc)) from exc
         digest = hashlib.sha256((selected.test_layout_json or '').encode('utf-8')).hexdigest()
         return replace(layout, additional_paths=paths,
                        declaration=(selected.layer, to_posix(selected.path), digest))
@@ -501,6 +510,17 @@ class RevealConfig:
                                  'invalid_capture': source.test_layout_error})
         return {'inspection_scope': 'current_directory', 'effective': effective.as_dict(Path.cwd()),
                 'declarations': declarations}
+
+    @classmethod
+    def require_conventional_test_layout(cls, path: Path, operation: str) -> None:
+        """Decline an unsupported configured filter only at its adopting operation."""
+        target = path.resolve()
+        layout = TestLayout.for_path(target, fallback_root=target)
+        layout = cls.get(layout.anchor).apply_test_layout(layout)
+        if layout.additional_paths:
+            raise TestLayoutValidationError(
+                f'{operation} does not yet support test_layout.additional_paths; '
+                'use imports/overview for configured test-support policy')
 
     def _parse_overrides(self) -> List[Override]:
         """Parse override sections into Override objects."""
@@ -557,12 +577,14 @@ class RevealConfig:
         # Load and merge configs
         failures: List[Tuple[str, str]] = []
         sources: List[ConfigSource] = []
+        selected_custom = os.getenv(CUSTOM_CONFIG_ENV) if not no_config else None
         merged = cls._load_and_merge(start_path, cli_overrides, no_config, failures, sources)
 
         # Create instance
         instance = cls(merged, project_root)
         instance.load_failures = failures
         instance.sources = sources
+        instance._selected_custom_config = selected_custom
 
         # Cache it
         if not no_config:

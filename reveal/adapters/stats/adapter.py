@@ -747,6 +747,9 @@ class MetricsAdapter(ResourceAdapter):
         if self.query_params.get('tests') is None:
             return file_stats
         mode = _TESTS.read(self.query_params)
+        if mode == 'exclude':
+            from ...config import RevealConfig
+            RevealConfig.require_conventional_test_layout(self.path, 'stats hotspots tests=exclude')
         kept = file_stats if mode == 'include' else [
             f for f in file_stats if not in_test_scope(self.path / f['file'], self.path)]
         result['test_scope'] = {'rule': 'is_test_path', 'tests': mode, 'files_excluded': len(file_stats) - len(kept)}

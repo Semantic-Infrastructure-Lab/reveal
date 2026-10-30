@@ -526,6 +526,9 @@ class SurfaceAdapter(ResourceAdapter):
                    for spec in self.PARAM_SPECS if spec.role == 'analysis'}
         type_filter = applied['type']
         source_only = applied['source_only']
+        if source_only:
+            from ..config import RevealConfig
+            RevealConfig.require_conventional_test_layout(Path(self.path), 'surface source_only')
         by = applied['by']
         depth = applied['depth']
 

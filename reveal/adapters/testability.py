@@ -279,6 +279,9 @@ def testability_report(resource: str, query_params: Any, verbose: bool = False) 
     include_unresolved = TestabilityAdapter.PARAM_SPECS[4].read(query_params)
 
     by_test_path = not tests
+    if by_test_path:
+        from ..config import RevealConfig
+        RevealConfig.require_conventional_test_layout(path, 'testability default test selection')
     test_paths = _resolve_test_paths(path, tests)
     if tests and not test_paths:
         raise NotApplicableError(f"none of the tests= paths exist for {path}: {', '.join(tests)}")

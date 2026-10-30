@@ -213,6 +213,8 @@ class PatchesAdapter(ResourceAdapter):
         # from "this suite genuinely does no patching." Same convention as
         # classify.py's own get_structure().
         require_path_exists(Path(self.path))
+        from ...config import RevealConfig
+        RevealConfig.require_conventional_test_layout(Path(self.path), 'patches default test selection')
         # The path is the root; the test files under it are chosen by the shared is_test_path rule, judged from
         # the root's own name down, so patches://tests scans all of tests/ and a repository root only its tests (BACK-1888).
         patches = scan_patches([self.path], by_test_path=True)
