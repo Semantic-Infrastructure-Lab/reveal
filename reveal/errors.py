@@ -19,6 +19,14 @@ class RequestValidationError(ValueError):
     """
 
 
+class NavRequestValidationError(RequestValidationError):
+    """The file-navigation owner rejected an unsupported analysis or depth control.
+
+    Transports recognize this bounded origin without reclassifying legacy exits
+    or unrelated validation failures.
+    """
+
+
 class RevealError(Exception):
     """Base error class for Reveal with actionable suggestions.
 

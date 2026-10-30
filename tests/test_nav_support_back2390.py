@@ -154,3 +154,11 @@ def test_structure_only_file_outline_still_answers():
     result = _run_reveal_direct(SQL, '--outline')
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip()
+
+
+def test_navigation_validation_retains_typed_request_origin():
+    from reveal.errors import NavRequestValidationError, RequestValidationError
+    error = NavRequestValidationError('unsupported navigation')
+    assert isinstance(error, RequestValidationError)
+    assert isinstance(error, ValueError)
+    assert str(error) == 'unsupported navigation'
