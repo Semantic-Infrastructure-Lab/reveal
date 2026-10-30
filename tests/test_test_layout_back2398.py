@@ -163,3 +163,16 @@ def test_unserializable_yaml_is_invalid_only_when_selected(tmp_path, block):
     (tmp_path / '.reveal.yaml').write_text('test_layout: ' + block + '\n', encoding='utf-8')
     RevealConfig.reset_request_cache()
     assert bind(root).additional_paths == ()
+
+
+def test_config_inspection_discloses_actual_cwd_policy_and_ignored_sources(tmp_path, monkeypatch):
+    from reveal.adapters.reveal.config import get_config
+    root = project(tmp_path)
+    (tmp_path / '.reveal.yaml').write_text('test_layout:\n  additional_paths: [ignored]\n', encoding='utf-8')
+    monkeypatch.chdir(root)
+    result = get_config()
+    assert result['metadata']['test_layout_anchor'] == root.as_posix()
+    assert result['test_layout']['effective']['additional_paths'] == ['t/unit', 'src/helper.rs']
+    assert result['test_layout']['declarations'][0]['status'] == 'ignored'
+    assert result['test_layout']['declarations'][-1]['status'] == 'selected'
+    assert result['test_layout']['inspection_scope'] == 'current_directory'
