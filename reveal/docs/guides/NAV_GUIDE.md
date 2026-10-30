@@ -49,10 +49,10 @@ adds a `retired_spelling` diagnostic in `meta.warnings`.
 For code-element `--outline`, `--ifmap`, `--catchmap`, `--loopmap` and `--fanout`,
 `--depth` limits logical nesting (default 3). A TRY and its CATCH/EXCEPT/FINALLY
 alternatives remain peers, including at the depth boundary. Text names the requested
-depth; JSON carries `meta.depth` and `meta.depth_limited`. When the limit leaves source
-subtrees overlapping the selected range uninspected, text and `meta.warnings` disclose
-that boundary. This does not claim a count of omitted records or matching loops/branches;
-increase `--depth` to inspect those bodies. Range filtering alone is not a depth cut.
+depth; JSON carries `meta.depth` and `meta.depth_limited`. When the limit leaves structural
+regions overlapping the selected range unexpanded, text and `meta.warnings` disclose
+that boundary. Other analyses, such as fanout effect collection, may inspect those regions. This does not claim a count of omitted records or matching loops/branches;
+increase `--depth` to expand those structures. Range filtering alone is not a depth cut.
 
 ---
 

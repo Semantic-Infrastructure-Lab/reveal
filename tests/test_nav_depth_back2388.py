@@ -112,7 +112,7 @@ def test_pruned_parent_overlap_does_not_invent_hidden_selector_findings(tmp_path
     assert answer['findings'] == []
     assert answer['meta']['depth_limited'] is True
     message = answer['meta']['warnings'][0]['message']
-    assert 'not inspected' in message
+    assert 'not expanded' in message
     assert 'showing' not in message and 'hidden loops' not in message
 
 

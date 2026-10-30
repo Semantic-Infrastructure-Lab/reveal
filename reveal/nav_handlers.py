@@ -109,7 +109,7 @@ class _NavCtx:
 
 def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
                            findings: list, evidence: OutlineDepth, render: Callable[[], str]) -> None:
-    """Expose the requested structural budget and source left uninspected by it."""
+    """Expose the structural budget and regions not expanded by it."""
     from .utils.results import note_warning
     from .utils.warning_render import render_meta_warnings
 
@@ -118,8 +118,8 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
     if limited:
         note_warning(result, {
             'type': 'depth_limited', 'field': 'findings', 'cause': 'max_depth',
-            'message': f'Source inspection limited by depth {ctx.depth}; deeper source bodies '
-                       'overlapping this selection were not inspected. Increase --depth to inspect them.',
+            'message': f'Control-structure expansion limited by depth {ctx.depth}; deeper structural '
+                       'regions overlapping this selection were not expanded. Increase --depth to expand them.',
         })
     if ctx.as_json:
         _nav_json(flag, ctx.analyzer.path, ctx.element, from_line, to_line,
