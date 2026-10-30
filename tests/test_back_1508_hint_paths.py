@@ -19,12 +19,15 @@ def test_cwd_path_outside_cwd_stays_absolute(tmp_path, monkeypatch):
     assert cwd_path(other, 'mod.py') == os.path.join(other, 'mod.py')
 
 
-def test_overview_hotspot_hint_names_a_path_that_exists(tmp_path, monkeypatch, capsys):
-    from reveal.adapters.overview import _render_hotspots
+
+
+def test_overview_navigation_keeps_the_target_path(tmp_path, monkeypatch):
+    import shlex
+    from reveal.adapters.overview import OverviewAdapter
     pkg = tmp_path / 'pkg'
     pkg.mkdir()
     (pkg / 'mod.py').write_text('x = 1\n', encoding='utf-8')
     monkeypatch.chdir(tmp_path)
-    out = '\n'.join(_render_hotspots([{'file': 'mod.py', 'quality_score': 50, 'issues': []}], 5, root='pkg'))
-    hint = out.split('→ reveal ', 1)[1].strip()
-    assert os.path.exists(hint), hint
+    body = OverviewAdapter('pkg').get_structure()
+    target = shlex.split(body['next_steps'][0]['command'])[1].partition('?')[0]
+    assert target == 'imports://pkg'

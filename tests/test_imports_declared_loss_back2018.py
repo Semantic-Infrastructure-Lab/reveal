@@ -76,14 +76,14 @@ def denied(child, *, imports_only=False):
 
 
 def request(name, root, query=''):
-    query = '&'.join(part for part in (query, 'no_git=true' if name == 'overview' else '') if part)
+    query = '&'.join(part for part in (query, '' if name == 'overview' else '') if part)
     owner = OWNERS[name](str(root), query)
     result = owner.get_structure()
     return result, owner.execution_facts(result).completeness.value
 
 
 def uri(name, root, query=''):
-    query = '&'.join(part for part in (query, 'no_git=true' if name == 'overview' else '') if part)
+    query = '&'.join(part for part in (query, '' if name == 'overview' else '') if part)
     return f'{name}://{root}' + ('?' + query if query else '')
 
 
@@ -113,7 +113,7 @@ def test_imports_only_loss_preserves_independent_requested_observations(tmp_path
     assert state == 'incomplete'
 
 
-@pytest.mark.parametrize('name', ['architecture', 'overview'])
+@pytest.mark.parametrize('name', ['architecture'])
 def test_top_zero_retains_uncapped_real_ast_observation(tmp_path, name):
     from reveal.adapters.ast import AstAdapter
     child = tree(tmp_path, 'ast')
@@ -122,8 +122,6 @@ def test_top_zero_retains_uncapped_real_ast_observation(tmp_path, name):
         assert ast['total_results'] == 1 and ast['displayed_results'] == 0
         result, state = request(name, tmp_path, 'top=0')
     assert state == 'incomplete'
-    if name == 'overview':
-        assert result['complex_functions'] == []
 
 
 @pytest.mark.parametrize('kind', ['boolean_count', 'count_mismatch', 'bad_complexity'])
@@ -147,7 +145,7 @@ def test_malformed_ast_cannot_rescue_directory_loss(tmp_path, kind, surviving_ed
 @pytest.mark.parametrize('name', OWNERS)
 def test_loss_cli_uri_exit_and_provenance_agree(tmp_path, name):
     child = tree(tmp_path, 'edge')
-    flags = ['--no-git'] if name == 'overview' else []
+    flags = [] if name == 'overview' else []
     with denied(child):
         cli = run(name, tmp_path, *flags, '--format', 'json', '--provenance')
         resource = run(uri(name, tmp_path), '--format', 'json', '--provenance')
@@ -197,7 +195,7 @@ def test_repaired_same_owner_and_exact_sibling_are_clean(tmp_path, name):
     root, sibling = tmp_path / 'affected', tmp_path / 'sibling'
     child = tree(root, 'edge')
     write(sibling / 'healthy.py', 'import os\n')
-    query = 'no_git=true' if name == 'overview' else ''
+    query = '' if name == 'overview' else ''
     owner = OWNERS[name](str(root), query)
     clean, sibling_clean = owner.get_structure(), request(name, sibling)
     with denied(child):
@@ -229,7 +227,7 @@ def test_architecture_request_capture_is_cleared_on_success_and_exception(tmp_pa
     assert not hasattr(owner, '_architecture_observations')
 
 
-def test_overview_real_read_failures_are_not_stats_observations(tmp_path):
+def test_overview_scope_survives_independent_stats_read_failure(tmp_path):
     from reveal.adapters.stats import StatsAdapter
     from reveal.adapters.stats import analysis
     child = tree(tmp_path, 'zero')
@@ -254,4 +252,13 @@ def test_overview_real_read_failures_are_not_stats_observations(tmp_path):
         assert stats['files'] == [] and stats['summary']['total_files'] == 0
         assert any(w['type'] == 'analysis_failed' for w in stats['meta']['warnings'])
         _, state = request('overview', tmp_path)
-    assert state == 'failed'
+    assert state == 'incomplete'
+
+
+def test_overview_top_zero_keeps_qualified_census_observation(tmp_path):
+    child = tree(tmp_path, 'ast')
+    with denied(child):
+        result, state = request('overview', tmp_path, 'top=0')
+    assert state == 'incomplete'
+    assert result['scope']['total_code_files'] == 1
+    assert result['map']['components']['rows'] == []

@@ -1,231 +1,163 @@
-"""overview:// adapter - one-glance codebase dashboard.
-
-Scan/render logic lives here (BACK-901/BACK-958). The `reveal overview` command is
-generated from this adapter's declaration.
-"""
-
+"""overview://: a compact project map from the code census and import views."""
 from __future__ import annotations
 
 import logging
-import math
-from copy import deepcopy
+import shlex
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, cast
+from urllib.parse import quote
 
 from reveal.capabilities import scope_dict_for_path
-from reveal.errors import NotApplicableError
-from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealMeta, WarningEntry
+from reveal.config import RevealConfig
+from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, RevealResult, WarningEntry
 
-from .ast import AstAdapter
 from .base import ResourceAdapter, register_adapter, register_renderer
-from .git import GitAdapter
-from .git import adapter as git_adapter
-from .stats import MetricsAdapter
-from .stats.adapter import TEST_CHOICES
-from .stats.issue_count import note_issue_count_basis
 from ..analyzers.imports import service as import_analysis, resolution
 from ..analyzers.imports.diagnostics import integrity_warnings
+from ..analyzers.imports.map_facts import MapFacts, project_map_facts, validate_scan_budget
 from ..analyzers.imports.views import ImportView
-from ..utils.entry_points import entry_point_filter
-from ..utils.exclusions import exclusion_scope
-from ..utils.gitignore import respect_gitignore_param
-from ..utils.path_utils import as_spelled, display_name_for_path, failure_of, in_test_scope, traversal_failed_warning
+from ..rendering.adapters.overview import OverviewRenderer
+from ..utils.exclusions import active_exclusions, exclusion_scope
+from ..utils.entry_points import ACTIVE_ENTRY_POINT_RULE, is_active_entry_point
+from ..utils.gitignore import gitignore_scope, respect_gitignore_param
+from ..utils.path_utils import (HiddenTally, as_spelled, failure_of, hidden_entries_warning,
+                               traversal_failed_warning)
 from ..utils.query_binding import bind_declared_params, boolean_value
-from ..rendering.adapters.overview import (  # noqa: F401 -- the render helpers are re-exported
-    OverviewRenderer,
-    _NON_CODE_EXT_LABELS,
-    _age_label,
-    _language_breakdown,
-    _relpath,
-    _render_architecture,
-    _render_codebase_stats,
-    _render_complex_functions,
-    _render_git_log,
-    _render_hotspots,
-    _render_language_breakdown,
-    _render_next_steps,
-    _render_overview,
-    _render_quality_pulse,
-)
-from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
-                                  join_exclude_patterns, nonnegative_display_limit,
-                                  param_schema, peek_query_items, split_exclude_param)
+from ..utils.query_parser import (CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
+                                  nonnegative_display_limit, param_schema, split_exclude_param)
+from ..utils.query_parser import peek_query_items
 from ..utils.results import ResultBuilder, note_truncation
 
 logger = logging.getLogger(__name__)
 
-
-# Large-but-finite stand-in for "no cap" on overview's --top-bounded sections
-# (Languages, Hotspots, Entry points, Components; also the Complex-functions and
-# git-log data fetch limits). Keeps every `[:top]`/`min(len(x), top)` call site
-# plain int arithmetic instead of needing None-handling threaded through each
-# renderer/collector — and a real "-n <huge>" git-log/AST query behaves exactly
-# like an uncapped one, bounded by the actual repo/result size either way
-# (BACK-1226).
+# Live siblings (architecture, hotspots and the URI renderer) share this expansion ceiling.
 UNLIMITED_TOP = 10**9
+DIAGNOSTIC_CUT_HINT = ('Overview diagnostic samples contain at most 50 details; use imports://FILE '
+                       'or reveal FILE for a named source when available.')
 
 
-def _object(value: Any, field: str) -> Dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ValueError(f'{field} requires an object')
-    return value
+def without_internal_filter_warnings(meta: Optional[RevealMeta]) -> List[WarningEntry]:
+    """Hotspots' generated AST filter is not a caller typo on an empty tree."""
+    return [w for w in ((meta or {}).get('warnings') or []) if w.get('type') != 'unknown_filter_key']
 
 
-def _count(data: Dict[str, Any], field: str) -> int:
-    value = data.get(field)
+def _count(value: Any, field: str) -> int:
     if type(value) is not int or value < 0:
-        raise ValueError(f'{field} requires a non-negative integer count')
+        raise ValueError(f'{field} must be a nonnegative integer')
     return value
 
 
-def _number(value: Any, field: str) -> None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f'{field} requires a finite number')
-    if isinstance(value, float) and not math.isfinite(value):
-        raise ValueError(f'{field} requires a finite number')
-
-
-def _text(value: Any, field: str) -> None:
-    if not isinstance(value, str) or not value:
-        raise ValueError(f'{field} requires a nonempty string')
-
-
-def _rows(data: Dict[str, Any], field: str) -> List[Dict[str, Any]]:
-    value = data.get(field)
-    if not isinstance(value, list) or any(not isinstance(row, dict) for row in value):
-        raise ValueError(f'{field} requires an array of objects')
-    return cast(List[Dict[str, Any]], value)
-
-
-def _validate_stats(data: Any) -> None:
-    data = _object(data, 'MetricsAdapter answer')
-    summary = _object(data.get('summary'), 'stats.summary')
-    for field in ('total_files', 'total_lines', 'total_code_lines', 'total_functions', 'total_classes'):
-        _count(summary, field)
-    for field in ('avg_complexity', 'avg_quality_score'):
-        _number(summary.get(field), field)
-    files = _rows(data, 'files')
-    if len(files) != summary['total_files']:
-        raise ValueError('stats.files must retain the summary total_files inventory')
-    for entry in files:
-        _text(entry.get('file'), 'stats.files.file')
-    for hotspot in _rows(data, 'hotspots'):
-        _text(hotspot.get('file'), 'stats.hotspots.file')
-        _number(hotspot.get('quality_score'), 'stats.hotspots.quality_score')
-        issues = hotspot.get('issues')
-        if not isinstance(issues, list) or any(not isinstance(issue, str) for issue in issues):
-            raise ValueError('stats.hotspots.issues requires an array of strings')
-
-
-def _validate_functions(data: Dict[str, Any], field: str) -> None:
-    for function in _rows(data, field):
-        _text(function.get('file'), f'{field}.file')
-        _text(function.get('name'), f'{field}.name')
-        _count(function, 'complexity')
-
-
-def _validate_ast(data: Any) -> None:
-    data = _object(data, 'AstAdapter answer')
-    field = 'results' if 'results' in data else 'elements'
-    _validate_functions(data, field)
-    for count_field in ('total_files', 'total_results', 'displayed_results'):
-        _count(data, count_field)
-    if data['displayed_results'] != len(data[field]) or data['total_results'] < data['displayed_results']:
-        raise ValueError('AST result counts must cover the retained results')
-
-
-def _validate_scope(data: Any) -> None:
-    data = _object(data, 'scope census')
-    for field in ('total_code_files', 'skipped_gitignore', 'skipped_no_analyzer', 'skipped_dirs'):
-        _count(data, field)
-    languages = _rows(data, 'languages')
-    for language in languages:
-        _text(language.get('language'), 'scope.languages.language')
-        _count(language, 'files')
-    if sum(language['files'] for language in languages) != data['total_code_files']:
+def _validate_scope(scope: Any) -> None:
+    if not isinstance(scope, dict):
+        raise ValueError('scope census must be an object')
+    total = _count(scope.get('total_code_files'), 'scope.total_code_files')
+    rows = scope.get('languages')
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise ValueError('scope languages must contain records')
+    for row in rows:
+        if not isinstance(row.get('language'), str) or not row['language']:
+            raise ValueError('scope language requires its name')
+        _count(row.get('files'), 'scope language files')
+    if sum(row['files'] for row in rows) != total:
         raise ValueError('scope language counts must sum to total_code_files')
 
 
-def _validate_import_rows(data: Any, field: str, kind: str) -> None:
-    for entry in _rows(_object(data, 'ImportsAdapter answer'), field):
-        _text(entry.get('component' if kind == 'components' else 'file'), f'{kind}.path')
-        if kind == 'components':
-            _count(entry, 'files')
-            if entry.get('cohesion') is not None or 'cohesion_reason' not in entry:  # null is a declined value (BACK-1428)
-                _number(entry.get('cohesion'), 'components.cohesion')
-        else:
-            _count(entry, 'fan_out')
-            if kind == 'fan_in':
-                _count(entry, 'fan_in')
+def _validate_scope_disclosure(scope: dict) -> None:
+    if type(scope.get('complete')) is not bool:
+        raise ValueError('scope must retain census completeness')
+    _validate_path(scope.get('counting_rule'))
+    if _count(scope.get('language_count'), 'scope.language_count') != len(scope['languages']):
+        raise ValueError('scope must retain its language population')
+    hidden = scope.get('hidden')
+    if (not isinstance(hidden, dict) or hidden.get('unit') != 'entries'
+            or not isinstance(hidden.get('by_cause'), dict)):
+        raise ValueError('scope must retain hidden-entry units and causes')
+    for cause, count in hidden['by_cause'].items():
+        _validate_path(cause)
+        _count(count, 'hidden entries')
 
 
-def _validate_unsupported(unsupported: Any) -> None:
-    for extension, count in _object(unsupported, 'unsupported_extensions').items():
-        _text(extension, 'unsupported extension')
-        _count({'count': count}, 'count')
-
-
-def _validate_import_metadata(metadata: Any, unsupported: Any) -> None:
-    metadata = _object(metadata, 'architecture.metadata')
-    for field in ('files_failed', 'files_lost'):
-        count = _count(metadata, field+'_count')
-        paths = metadata.get(field)
-        if not isinstance(paths, list) or len(paths) != min(count, 50):
-            raise ValueError(f'{field} must retain the first 50 paths or the full smaller population')
-        for path in paths:
-            _text(path, field)
-    if metadata['files_lost_count'] > metadata['files_failed_count']:
-        raise ValueError('files_lost_count cannot exceed files_failed_count')
-    for path, causes in _object(metadata.get('extraction_diagnostics'), 'extraction_diagnostics').items():
-        _text(path, 'extraction_diagnostics path')
-        _object(causes, 'extraction_diagnostics causes')
-    _validate_unsupported(unsupported)
-
-
-def _validate_architecture(data: Any) -> None:
-    data = _object(data, 'architecture')
-    for field in ('fan_in', 'entrypoints', 'components'):
-        _validate_import_rows(data, field, field)
-    _count(data, 'circular_count')
-    _validate_import_metadata(data.get('metadata'), data.get('unsupported_extensions'))
-
-
-def _validate_git_log(data: Any) -> None:
-    data = _object(data, 'GitAdapter answer')
-    field = 'history' if 'history' in data else 'commits'
-    for commit in _rows(data, field):
-        _text(commit.get('hash'), 'git commit hash')
-        if not isinstance(commit.get('message'), str):
-            raise ValueError('git commit message requires a string')
-        if commit.get('timestamp') is not None:
-            _number(commit['timestamp'], 'git commit timestamp')
-
-
-def _required_child(adapter: 'OverviewAdapter', owner: type, path: Path,
-                    validate: Callable[[Any], None], *,
-                    observations: Optional[Dict[str, bool]] = None, **kwargs: Any) -> Dict[str, Any]:
-    # A unique fallback distinguishes an already-attributed compose failure from
-    # a child returning {}, which is missing evidence rather than empty success.
-    missing = object()
-    data = adapter.compose(owner, str(path), default=missing, **kwargs)
-    if data is missing or (isinstance(data, dict) and data.get('error')):
-        if observations is not None:
-            observations['failed'] = True
-        return {}
+def _run_scope(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
+    failures: List[OSError] = []
+    hidden = HiddenTally()
     try:
-        validate(data)
-    except ValueError as exc:
-        if observations is not None:
-            observations['failed'] = True
-        adapter.record_composed_error(getattr(owner, '__name__', str(owner)), path, exc)
+        scope = scope_dict_for_path(path, exclude_patterns=adapter.exclude_patterns,
+                                    respect_gitignore=adapter.respect_gitignore,
+                                    on_error=failures.append, on_hidden=hidden)
+        _validate_scope(scope)
+        # These legacy counters have no measurement in this census.
+        scope = {key: value for key, value in scope.items() if not key.startswith('skipped_')}
+        scope.update(complete=not failures,
+                     counting_rule='Recognized code files retained by the configured scope; data, markup and unknown extensions are not counted.',
+                     hidden={'unit': 'entries', 'by_cause': dict(hidden)},
+                     language_count=len(scope['languages']))
+        warning = traversal_failed_warning([failure_of(error) for error in failures], path)
+        if warning:
+            adapter.fold_meta({'warnings': [warning]})
+        hidden_warning = hidden_entries_warning(hidden, scope['total_code_files'])
+        if hidden_warning:
+            adapter.fold_meta({'warnings': [hidden_warning]})
+        return scope
+    except Exception as exc:  # boundary-ok: broad-except -- required census boundary; walker, configuration and language sniffing may fail, and record_composed_error discloses the failure rather than fabricating an empty census
+        logger.warning('scope census failed for %s: %s', path, exc)
+        adapter.record_composed_error('scope_dict_for_path', path, exc)
         return {}
-    return cast(Dict[str, Any], data)
 
 
-def _tests_value(value: Any) -> str:
-    if not isinstance(value, str):  # a bare `&tests` parses as True
-        raise TypeError(value)
-    return value
+def _observed_relationships(fan_in, entrypoints, components, cycles) -> bool:
+    rows = [*fan_in, *entrypoints, *components]
+    return (any(type(row.get(key)) is int and row[key] > 0 for row in rows
+                for key in ('fan_in', 'fan_out', 'internal', 'outgoing', 'incoming'))
+            or any(len(set(group)) >= 2 for group in cycles))
+
+
+def _import_warnings(built, target: Path, limit: Optional[int]) -> list[WarningEntry]:
+    warnings = integrity_warnings(built.analysis, target)
+    traversal_warning = traversal_failed_warning(built.files.traversal_failures, target)
+    if traversal_warning and traversal_warning not in warnings:
+        warnings.append(traversal_warning)
+    hidden_warning = hidden_entries_warning(built.files.hidden, built.files.analyzed)
+    if hidden_warning:
+        warnings.append(hidden_warning)
+    if built.files.capped:
+        warnings.append(cast(WarningEntry, {'type': 'scan_capped', 'limit': limit,
+                         'message': f'Import discovery stopped at its {limit} file limit; map totals describe the observed graph only.'}))
+    return warnings
+
+
+def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, scope_usable: bool) -> tuple[Optional[MapFacts], str]:
+    """Validate full owner evidence before any map or diagnostic presentation cuts."""
+    try:
+        target = path.resolve()
+        with exclusion_scope(target if target.is_dir() else target.parent, adapter.exclude_patterns), \
+                gitignore_scope(adapter.respect_gitignore):
+            scope = import_analysis.path_scope(target)
+            built = import_analysis.analyze(scope)
+        warnings = _import_warnings(built, target, scope.cap)
+        adapter.fold_meta({'warnings': warnings})
+        view = ImportView(built.analysis, target, resolution.ScanRoot(target, 'path'),
+                          scope.cap)
+        with import_analysis.composed_rules('overview://'):
+            fan_in, entries = view.fan_in(), view.entrypoints()
+            components, circular = view.components(), view.circular()
+        metadata = view.get_metadata()
+        facts = project_map_facts(fan_in, entries, components, circular, metadata, path=target, top=top)
+        _validate_rules(facts['rules'])
+        budget = metadata['scan_budget']
+        directory_loss = any(w['type'] == 'analysis_incomplete' for w in warnings)
+        usable = _observed_relationships(fan_in['entries'], entries['entries'],
+                                        components['components'], circular['cycles'])
+        if directory_loss and not usable and not scope_usable:
+            adapter.fold_meta({'errors': [{'code': 'E_OVERVIEW_ANALYSIS',
+                'message': 'Required import discovery failed and no relationship observations survived.'}]})
+            return facts, 'failed'
+        incomplete = (bool(metadata['files_failed_count']) or bool(metadata['files_lost_count'])
+                      or budget['exact'] is not True or any(w['type'] in (
+                          'analysis_incomplete', 'analysis_failed', 'partial_parse', 'worker_lost', 'scan_capped') for w in warnings))
+        return facts, 'incomplete' if incomplete else 'complete'
+    except Exception as exc:  # boundary-ok: broad-except -- required import-service composition boundary; extraction, resolution, view validation and pool failures must be attributed before a failed map is returned
+        adapter.record_composed_error('ImportsAdapter', path, exc)
+        return None, 'failed'
 
 
 def _overview_top(value: Any) -> int:
@@ -234,489 +166,303 @@ def _overview_top(value: Any) -> int:
     return nonnegative_display_limit(value)
 
 
-def without_internal_filter_warnings(meta: Optional[RevealMeta]) -> List[WarningEntry]:
-    """The composed warnings minus the typo hint for a filter key this adapter wrote itself.
-
-    overview:// and hotspots:// both compose an AST query they generate (``complexity>9``,
-    ``complexity>=N``); on a tree with no function AST cannot observe that key and warns
-    "this may be a typo", which no caller could act on. A filter the CALLER wrote still
-    warns, because ast:// emits it for a user query that never passes through here.
-    """
-    return [w for w in ((meta or {}).get('warnings') or []) if w.get('type') != 'unknown_filter_key']
+def _obsolete_git(value: Any) -> bool:
+    raise ParamValueError('overview no longer collects Git history; omit no_git and use git:// for history')
 
 
-# ── Data collectors ────────────────────────────────────────────────────────────
-
-def _measured_stats(entry: Dict[str, Any]) -> bool:
-    """Physical measurements survive a degraded parse; a filename alone does not."""
-    lines = entry.get('lines')
-    if entry.get('analysis_failed') or not isinstance(lines, dict):
-        return False
-    valid = all(type(lines.get(key)) is int and lines[key] >= 0
-                for key in ('total', 'code', 'empty', 'comments'))
-    return valid and lines['total'] == lines['code'] + lines['empty'] + lines['comments']
+def _obsolete_tests(value: Any) -> str:
+    raise ParamValueError('overview no longer ranks complexity or hotspots; omit tests and use metrics:// or ast:// with type=function')
 
 
-def _observed_relationships(fan_in, entrypoints, components, cycles) -> bool:
-    rows = [*fan_in, *entrypoints, *components]
-    positive = any(type(row.get(key)) is int and row[key] > 0
-                   for row in rows for key in ('fan_in', 'fan_out', 'internal', 'outgoing', 'incoming'))
-    real_cycle = any(isinstance(cycle, list) and all(isinstance(path, str) and bool(path) for path in cycle)
-                     and len(set(cycle)) >= 2 for cycle in cycles)
-    return positive or real_cycle
+def _next_steps(path: str, exclude_patterns: List[str], respect_gitignore: bool) -> List[dict]:
+    target = quote(path, safe='/.:')
+    questions = (
+        ('Full observed fan-in ranking (subject to scan coverage)', f'imports://{target}?rank=fan-in&scope=path'),
+        ('All observed component relationships', f'imports://{target}?components&scope=path'),
+        ('All observed entrypoint candidates; apply the stated active predicate', f'imports://{target}?entrypoints&scope=path'),
+        ('Full observed cycle groups and witness paths (subject to scan coverage)', f'imports://{target}?circular&scope=path'),
+        ('Detailed file measurements', f'metrics://{target}'),
+    )
+    flags = [] if respect_gitignore else ['--no-gitignore']
+    for pattern in exclude_patterns:
+        flags += ['--exclude', pattern]
+    steps = [(question, ['reveal', uri]) for question, uri in questions]
+    # AST's existing resource codec is raw, unlike imports/metrics. A literal
+    # query delimiter cannot be represented by that codec; do not advertise an
+    # unexecutable URI. Spaces and shell metacharacters remain one quoted token.
+    if '?' not in path:
+        steps.append(('Function complexity ranking', ['reveal', f'ast://{path}?type=function&sort=-complexity']))
+    steps.append(('Concrete rule findings', ['reveal', 'check', path]))
+    return [{'question': question, 'command': shlex.join(tokens + flags)} for question, tokens in steps]
 
 
-def _capture_import_observations(fan_in, entrypoints, components, cycles,
-                                  observations: Optional[Dict[str, bool]]) -> None:
-    if observations is None:
-        return
-    counts_valid = all(type(row.get(key)) is int and row[key] >= 0
-                       for row in components for key in ('internal', 'outgoing', 'incoming'))
-    cycles_valid = (isinstance(cycles, list) and all(isinstance(cycle, list)
-                    and all(isinstance(path, str) and bool(path) for path in cycle) for cycle in cycles))
-    if not counts_valid or not cycles_valid:
-        observations['failed'] = True
-    elif _observed_relationships(fan_in, entrypoints, components, cycles):
-        observations['usable'] = True
+def _navigation_exclusions(path: Path, requested: List[str]) -> List[str]:
+    # Config/REVEAL_IGNORE applies again in every deeper command. Repeat only
+    # request-specific patterns, not the automatic defaults on every hint.
+    root = path if path.is_dir() else path.parent
+    configured = RevealConfig.get(start_path=root).ignore_patterns()
+    active = [pattern for pattern in active_exclusions()[1] if pattern not in configured]
+    return list(dict.fromkeys([*active, *requested]))
 
 
-def _directory_loss_error(meta, observations) -> Optional[ErrorEntry]:
-    if not any(w.get('type') == 'analysis_incomplete' for w in (meta or {}).get('warnings', [])):
-        return None
-    if observations.get('failed') or not observations.get('usable'):
-        return {'code': 'E_OVERVIEW_ANALYSIS',
-                'message': 'Required directory discovery failed; required analysis failed or no overview observations survived'}
-    return None
+def _cut_sequence(result: dict, holder: dict, key: str, field: str, limit: int,
+                  *, total: Optional[int] = None) -> None:
+    values = holder.get(key)
+    if isinstance(values, list):
+        known = len(values) if total is None else total
+        holder[key] = values[:limit]
+        note_truncation(result, field, len(holder[key]), known, 'auto_cap', hint=DIAGNOSTIC_CUT_HINT)
 
 
-def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int, *, tests: str = 'exclude',
-               observations: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
-    """Fetch stats and the top ``top`` hotspots via MetricsAdapter.
-
-    BACK-1042: forwards --exclude/--respect-gitignore as a raw query string
-    (not compose()'s **params/urlencode path — nothing downstream in
-    parse_query_params URL-decodes, so an urlencoded '*' would reach
-    find_analyzable_files still percent-escaped and never match). ',', '&', '='
-    and '%' inside a pattern are escaped by join_exclude_patterns (BACK-1380).
-
-    BACK-1543: ``?top=N`` is forwarded, and stats' cut is restated as this report's
-    ``hotspots``. Before, stats kept its own top 10 and dropped the total, so
-    ``?top=2`` still listed 5 and "... and 5 more" counted against that hidden 10.
-
-    BACK-1428: ``tests`` is forwarded to the stats ranking (the owner of it): overview ranks without
-    test files unless ``?tests=include``; stats' own default still includes them.
-    """
-    query = f'hotspots=true&top={top}&tests={tests}'
-    exclude_patterns = adapter.exclude_patterns
-    if exclude_patterns:
-        query += f'&exclude={join_exclude_patterns(exclude_patterns)}'
-    query += f'&respect_gitignore={"true" if adapter.respect_gitignore else "false"}'
-    stats = _required_child(adapter, MetricsAdapter, path, _validate_stats, query=query,
-                            observations=observations,
-                            cut_as=('hotspots', 'raise ?top=N'))
-    if observations is not None and any(_measured_stats(entry) for entry in stats.get('files', [])):
-        observations['usable'] = True
-    if stats.get('warnings'):
-        adapter.fold_meta({'warnings': stats['warnings']})
-    # Each file's language as the scope census names it, while the file can be
-    # read (`.h` is sniffed for C++); the text census counted by extension alone
-    # and contradicted the JSON scope (BACK-1428).
-    for entry in stats.get('files') or []:
-        entry['language'] = display_name_for_path(path / entry['file'] if path.is_dir() else path)
-    return stats
+def _bound_nested_details(result: dict, value: Any, field: str, limit: int) -> None:
+    if isinstance(value, dict):
+        for key, child in list(value.items()):
+            if isinstance(child, list):
+                _cut_sequence(result, value, key, f'{field}.{key}', limit)
+                child = value[key]
+            _bound_nested_details(result, child, f'{field}.{key}', limit)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _bound_nested_details(result, child, f'{field}.{index}', limit)
 
 
-def _with_scope_warning(meta: Optional[RevealMeta], failures: List[OSError],
-                        path: Path) -> Optional[RevealMeta]:
-    """Append optional census disclosure only after required-source validation."""
-    warning = traversal_failed_warning([
-        failure_of(exc)
-        for exc in failures], path)
-    if warning:
-        warning['message'] = 'Independent scope/language census is incomplete; ' + warning['message']
-        meta = meta or {}
-        meta.setdefault('warnings', []).append(warning)
-    return meta
+def _bound_details(result: dict, top: int) -> None:
+    limit = min(max(top, 5), 50)
+    result['diagnostic_budget'] = {'limit': limit, 'minimum': 5, 'maximum': 50,
+                                   'rule': 'Diagnostic details use max(top, 5), capped at 50; graph expansion has a separate budget.'}
+    facts = result.get('map')
+    if facts is not None:
+        metadata = facts['metadata']
+        for key in ('files_failed', 'files_lost'):
+            _cut_sequence(result, metadata, key, f'map.metadata.{key}', limit,
+                          total=metadata[key + '_count'])
+        diagnostics = metadata['extraction_diagnostics']
+        metadata['extraction_diagnostics_count'] = len(diagnostics)
+        metadata['extraction_diagnostics'] = dict(sorted(diagnostics.items())[:limit])
+        note_truncation(result, 'map.metadata.extraction_diagnostics',
+                        len(metadata['extraction_diagnostics']), len(diagnostics), 'auto_cap',
+                        hint=DIAGNOSTIC_CUT_HINT)
+        _bound_nested_details(result, metadata['extraction_diagnostics'],
+                              'map.metadata.extraction_diagnostics', limit)
+    # Existing owners supply a fixed set of category records. Retain every category,
+    # its count and its cause; bound nested lists rather than cutting failure proof.
+    meta = result.get('meta') or {}
+    for kind in ('warnings', 'errors'):
+        for index, record in enumerate(list(meta.get(kind, []))):
+            if record.get('type') == 'truncated':
+                continue
+            for key in ('files', 'directories', 'causes'):
+                total = record.get('count') if key in ('files', 'directories') else None
+                _cut_sequence(result, record, key, f'meta.{kind}.{index}.{key}', limit,
+                              total=total if type(total) is int else None)
 
 
-def _run_scope(adapter: 'OverviewAdapter', path: Path, *,
-               failures: Optional[List[OSError]] = None) -> Dict[str, Any]:
-    """BACK-884: files discovered/analyzed/skipped by language, with
-    per-language capability tier — additive 'scope' key in JSON output.
-    Shared with architecture.py via capabilities.scope_dict_for_path().
-
-    BACK-1016: routes failures through record_composed_error() (in addition
-    to the existing logger.warning) so a crashed census is reflected in
-    meta.errors/confidence instead of silently rendering as an empty-but-
-    trusted 'scope': {} — the same fix BACK-984 already gave every other
-    sibling-adapter site in this file.
-
-    BACK-1042: honors --exclude/--respect-gitignore so the scope census
-    agrees with what stats/check actually skipped.
-    """
-    if failures is None:
-        failures = []
-    try:
-        scope = scope_dict_for_path(
-            path,
-            exclude_patterns=adapter.exclude_patterns,
-            respect_gitignore=adapter.respect_gitignore,
-            on_error=failures.append,
-        )
-        if failures:
-            adapter.record_composed_error('scope_dict_for_path', path, failures[0])
-            return {}
-        _validate_scope(scope)
-        return scope
-    except Exception as exc:  # boundary-ok: broad-except -- the scope census is an optional report section whose callee chain (directory walk, gitignore, language sniffing in utils/path_utils) is not bounded; a failing census must not end the report, and it is recorded in meta.errors with confidence 0 by record_composed_error and logged
-        logger.warning("scope census failed for %s: %s", path, exc)
-        adapter.record_composed_error('scope_dict_for_path', path, exc)
-        return {}
+def _validate_page(value: Any, name: str) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get('rows'), list):
+        raise ValueError(f'{name} must retain its bounded rows')
+    total = _count(value.get('total'), name + '.total')
+    returned = _count(value.get('returned'), name + '.returned')
+    omitted = _count(value.get('omitted'), name + '.omitted')
+    if returned != len(value['rows']) or total != returned + omitted:
+        raise ValueError(f'{name} must retain exact observed row bounds')
 
 
-def _resolve_git_root(path: Path) -> Optional[Path]:
-    """Discover the git repo root enclosing *path* (BACK-516).
-
-    ``GitAdapter``/pygit2 walk up to the nearest ancestor ``.git`` unconditionally
-    (correct git behavior), so a directory with no ``.git`` of its own — a vendored
-    tree, a sample corpus, a submodule checked out without its own ``.git`` — silently
-    inherits its enclosing repo's history. Returns the discovered root so callers can
-    detect and disclose that mismatch; returns ``None`` if *path* isn't inside a repo
-    at all. A ValueError (GitAdapter's "Failed to open repository", e.g. a libgit2
-    ``safe.directory`` refusal) is not "no repo" and propagates (BACK-1691); see
-    ``_git_root_or_disclose``.
-    """
-    try:
-        metadata = _object(GitAdapter(path=str(path)).get_metadata(), 'Git metadata')
-        root = metadata.get('path')
-        return Path(root).resolve() if root else None
-    except NotApplicableError:
-        return None
+def _validate_map_coverage(metadata: Any, status: str) -> None:
+    if not isinstance(metadata, dict):
+        raise ValueError('map must retain import coverage')
+    for key in ('scanned_files', 'files_failed_count', 'files_lost_count', 'extraction_diagnostics_count'):
+        _count(metadata.get(key), key)
+    validate_scan_budget(metadata.get('scan_budget'))
+    budget = metadata['scan_budget']
+    if status == 'complete' and (budget['exact'] is not True or budget['capped'] is not False
+                                 or metadata['files_failed_count'] or metadata['files_lost_count']):
+        raise ValueError('a complete map requires complete source accounting and no file loss')
+    if not isinstance(metadata.get('unsupported_extensions'), dict):
+        raise ValueError('map must retain unsupported-extension coverage')
+    for extension, count in metadata['unsupported_extensions'].items():
+        _validate_path(extension)
+        _count(count, 'unsupported extension count')
 
 
-def _git_unavailable_warning() -> Optional[WarningEntry]:
-    """The disclosure for a missing optional pygit2 (the ``git`` extra), or None when it is installed.
-
-    An absent extra is a capability gap, the same kind of fact as stats' ``churn_unavailable``: the
-    git section is left out and this says why. It is not a failed composition, so it does not make
-    the result incomplete (BACK-2319).
-    """
-    if git_adapter.PYGIT2_AVAILABLE:
-        return None
-    return {
-        'type': 'git_unavailable',
-        'message': ('recent commit history omitted: pygit2 is not installed '
-                    '(pip install "reveal-cli[git]")'),
-    }
+def _validate_path(value: Any) -> None:
+    if not isinstance(value, str) or not value:
+        raise ValueError('map path must be nonempty text')
 
 
-def _git_probe(adapter: 'OverviewAdapter', path: Path,
-               skipped: bool) -> tuple[Optional[Path], Optional[WarningEntry]]:
-    """(git root, unavailable-warning) for one overview: both None when git was skipped
-    (``?no_git``); the warning only when pygit2 is absent, in which case there is no root."""
-    if skipped:
-        return None, None
-    unavailable = _git_unavailable_warning()
-    if unavailable:
-        return None, unavailable
-    return _git_root_or_disclose(adapter, path), None
-
-
-def _with_warning(meta: Optional[RevealMeta], warning: Optional[WarningEntry]) -> Optional[RevealMeta]:
-    """`meta` with `warning` appended to its ``warnings``; unchanged when there is none."""
-    if warning:
-        meta = meta or {}
-        meta.setdefault('warnings', []).append(warning)
-    return meta
-
-
-def _git_root_or_disclose(adapter: 'OverviewAdapter', path: Path) -> Optional[Path]:
-    """Resolve optional Git, retaining operational failures as composed errors.
-
-    Without it the git-root mismatch warning was skipped and nothing said why.
-    """
-    try:
-        return _resolve_git_root(path)
-    except (ImportError, OSError, ValueError) as exc:
-        adapter.record_composed_error('git_root', path, exc)
-        return None
-
-
-def _run_git_log(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:
-    """Fetch the newest ``limit`` commits via GitAdapter, and restate its cut as ``git_log``.
-
-    BACK-1547: through ``compose`` like the other sections. It had constructed GitAdapter
-    directly with a dict query (BACK-1016), so git's cut never reached this report and
-    ``?top=1`` showed one commit as the whole log. GitAdapter takes ``compose``'s
-    ``(resource, query-string)`` call, since it moves a query string passed as its ``ref``
-    into its query. A crashed git log is still an attributed composed error, not ``[]``.
-
-    BACK-1225: the query type is 'history', which GitAdapter's subpath dispatch recognizes
-    ('log' fell through to its file-content branch on every subdirectory target). The two
-    result shapes differ by key: repo-root's ``refs.get_ref_structure()`` returns
-    'history', a subpath's ``files.get_file_history()`` returns 'commits', so both are read.
-    """
-    data = _required_child(adapter, GitAdapter, path, _validate_git_log,
-                           query=f'type=history&limit={limit}',
-                           cut_as=('git_log', 'raise ?top=N'))
-    return data.get('history', data.get('commits', []))
-
-
-class ComplexFunctions(List[Dict[str, Any]]):
-    """The ranked rows, carrying how many test-file functions the ranking left out (BACK-2257)."""
-    functions_excluded = 0
-
-
-def _run_complex_functions(adapter: 'OverviewAdapter', path: Path, limit: int, *, tests: str = 'exclude',
-                           observations: Optional[Dict[str, bool]] = None) -> List[Dict[str, Any]]:
-    """Fetch top complex functions via AstAdapter.
-
-    BACK-2257: ``tests`` is the parameter that narrows Hotspots (BACK-1428): by default functions in test
-    files (``is_test_path``, judged from the scanned path down) are left out. The filter runs here, on the
-    whole ranking, and the cut after it, so the top N are N non-test functions when they exist; a limit given
-    to ast:// first would leave fewer than N. With ``tests=include`` the query is the one it always was.
-    """
-    exclude = tests == 'exclude'
-    data = _required_child(adapter, AstAdapter, path, _validate_ast,
-                            observations=observations,
-                            query=f'complexity>9&sort=-complexity&limit={UNLIMITED_TOP if exclude else limit}',
-                            cut_as=('complex_functions', 'raise ?top=N'))
-    if observations is not None and data.get('total_results', 0) > 0:
-        # This validated domain count is authoritative even when limit=0 hides rows.
-        observations['usable'] = True
-    ranked = ComplexFunctions(data.get('results', data.get('elements', [])))
-    rows = ranked
-    if exclude:
-        root = path.resolve()  # ast:// rows carry resolved paths; a relative root would fall back to the whole path
-        kept = [fn for fn in rows if not in_test_scope(Path(fn['file']), root)]
-        ranked = ComplexFunctions(kept[:limit])
-        ranked.functions_excluded = len(rows) - len(kept)
-        cut: Dict[str, Any] = {}
-        note_truncation(cut, 'complex_functions', len(ranked), len(kept), 'top', hint='raise ?top=N')
-        adapter.fold_meta(cut.get('meta'))
-    return ranked
-
-
-def _imports_metadata(adapter: 'OverviewAdapter', metadata: Dict[str, Any]) -> Dict[str, Any]:
-    """Retain the import owner's diagnostic fields and its existing path caps."""
-    retained = {key: deepcopy(metadata[key]) for key in (
-        'files_failed_count', 'files_failed', 'files_lost_count', 'files_lost',
-        'extraction_diagnostics') if key in metadata}
-    disclosures: Dict[str, Any] = {}
-    for field in ('files_failed', 'files_lost'):
-        count = field + '_count'
-        if field in retained and count in retained:
-            note_truncation(disclosures, f'architecture.metadata.{field}',
-                            len(retained[field]), retained[count], 'auto_cap',
-                            hint=f'the first 50 by path; {count} is exact')
-    adapter.fold_meta(disclosures.get('meta'))
-    return retained
-
-
-def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, *,
-                          observations: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
-    """Build import graph once and return architectural data for overview.
-
-    Read the public service artifact and shared domain projections; retain required
-    failures through this report's composition owner.
-    """
-    try:
-        # BACK-1495: this call bypasses compose(), so --exclude has to be scoped here.
-        with exclusion_scope(path if path.is_dir() else path.parent, adapter.exclude_patterns):
-            # Match ImportsAdapter.get_structure's resolved analysis target;
-            # its metadata keys must not reinterpret a cwd-relative prefix.
-            target = path.resolve()
-            built = import_analysis.analyze(import_analysis.path_scope(target))
-        importer = ImportView(built.analysis, target, resolution.ScanRoot(target, 'path'),
-                              import_analysis.DEFAULT_FILE_CAP)
-        warnings = integrity_warnings(built.analysis, path)  # BACK-1598, BACK-1753
-        if warnings:
-            adapter.fold_meta({'warnings': warnings})
-        with import_analysis.composed_rules('overview://'):  # BACK-2087
-            fan_in = importer.fan_in()
-            entrypoints = importer.entrypoints()
-            components = importer.components()
-            circular = importer.circular()
-        metadata = importer.get_metadata()
-        _validate_import_rows(fan_in, 'entries', 'fan_in')
-        _validate_import_rows(entrypoints, 'entries', 'entrypoints')
-        _validate_import_rows(components, 'components', 'components')
-        _count(_object(circular, 'circular imports'), 'count')
-        metadata = _object(metadata, 'ImportsAdapter metadata')
-        unsupported = metadata.get('unsupported_extensions')
-        _validate_unsupported(unsupported)
-        try:
-            _validate_import_metadata(metadata, unsupported)
-        except ValueError as exc:
-            if observations is not None:
-                observations['failed'] = True
-            # Retain independently valid rankings and coverage disclosure, but
-            # never fill unknown failure counts with fabricated zero evidence.
-            adapter.record_composed_error('ImportsAdapter', path, exc)
-            retained = {}
+def _validate_relationship(row: Any, kind: str) -> None:
+    if not isinstance(row, dict):
+        raise ValueError('map relationships must contain records')
+    _validate_path(row.get('component' if kind == 'components' else 'file'))
+    if kind != 'components':
+        _count(row.get('fan_out'), kind + '.fan_out')
+        if kind == 'fan_in':
+            if not _count(row.get('fan_in'), 'fan_in'):
+                raise ValueError('fan-in rows must retain positive relationships')
         else:
-            retained = _imports_metadata(adapter, metadata)
-        _capture_import_observations(fan_in['entries'], entrypoints['entries'], components['components'],
-                                     circular.get('cycles'), observations)
-        return {
-            # BACK-2087: the rule these counts were made by (edge_rule, edge_rule_sections).
-            **import_analysis.architecture_edge_rules(fan_in, entrypoints, components, circular),
-            'fan_in': fan_in.get('entries', []),
-            'entrypoints': entrypoints.get('entries', []),
-            # BACK-1891: the fan-in-0 count, the active count and the rule between them.
-            'entry_point_filter': entry_point_filter(entrypoints.get('entries', [])),
-            'components': components.get('components', []),
-            **({'cohesion_rule': components['cohesion_rule']} if components.get('cohesion_rule') else {}),
-            'circular_count': circular.get('count', 0),
-            # BACK-518 part 2: disclose files the import graph couldn't cover,
-            # same signal imports:// itself already gives — otherwise an
-            # unsupported-language repo (all fan_in/entrypoints/components
-            # empty) renders as a blank Architecture section, which reads as
-            # "nothing here" rather than "not analyzed".
-            'unsupported_extensions': unsupported,
-            'metadata': retained,
-        }
-    except Exception as exc:  # boundary-ok: broad-except -- required import-service boundary; analyzer, resolution and pool failures are not a bounded exception set, and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
-        if observations is not None:
-            observations['failed'] = True
-        adapter.record_composed_error('ImportsAdapter', path, exc)
-        return {'fan_in': [], 'entrypoints': [], 'components': [], 'circular_count': 0, 'unsupported_extensions': {}}
+            _count(row.get('test_only_importers'), 'test_only_importers')
+            if row.get('is_test') is not False or not is_active_entry_point(row):
+                raise ValueError('entrypoint rows must retain the active predicate')
+        return
+    for field in ('files', 'internal', 'outgoing', 'incoming'):
+        _count(row.get(field), 'component.' + field)
+    cohesion = row.get('cohesion')
+    if cohesion is None:
+        _validate_path(row.get('cohesion_reason'))
+        if not row['cohesion_reason'].strip():
+            raise ValueError('declined component cohesion requires its reason')
+    elif type(cohesion) not in (int, float) or not 0 <= cohesion <= 1:
+        raise ValueError('component cohesion must be a fraction or declined')
+    if row.get('top_bridge') is not None:
+        _validate_path(row['top_bridge'])
+    if 'top_bridge' not in row:
+        raise ValueError('component bridge evidence is required')
 
 
-def _relativize_import_diagnostics(metadata: Dict[str, Any], base_path: Path) -> None:
-    for field in ('files_failed', 'files_lost'):
-        if field in metadata:
-            # Imports' path lists retain the caller's cwd spelling; diagnostic
-            # keys are already relative to its target. Normalize only the lists.
-            metadata[field] = [_relpath(Path(file).absolute().as_posix(), base_path)
-                               for file in metadata[field]]
-    if 'extraction_diagnostics' in metadata:
-        metadata['extraction_diagnostics'] = {
-            _relpath(file, base_path): cause
-            for file, cause in metadata['extraction_diagnostics'].items()}
+def _validate_counting_rule(rule: Any, lazy: str, tests: str) -> None:
+    if (not isinstance(rule, dict) or not isinstance(rule.get('text'), str) or not rule['text']
+            or rule.get('lazy') != lazy or rule.get('tests') != tests
+            or rule.get('scope') != 'scanned_path' or rule.get('type_checking') != 'excluded'):
+        raise ValueError('map counting rules must retain their distinct view semantics')
 
 
-def _relativize_paths(
-    complex_fns: List[Dict[str, Any]],
-    architecture: Dict[str, Any],
-    base_path: Path,
-) -> None:
-    """Relativize the same file-path fields the text renderer already
-    relativizes (via `_relpath`), but in the raw structures the JSON
-    output serializes directly — get_structure() never routed through
-    the text renderer, so `--format json` leaked absolute host paths
-    (analyst's filesystem layout/username) even after BACK-1194 fixed
-    the text path. Mutates in place.
-    """
-    _relativize_import_diagnostics(architecture.get('metadata', {}), base_path)
-    for fn in complex_fns:
-        if fn.get('file'):
-            fn['file'] = _relpath(fn['file'], base_path)
-    for section in ('fan_in', 'entrypoints'):
-        for entry in architecture.get(section, []):
-            if entry.get('file'):
-                entry['file'] = _relpath(entry['file'], base_path)
-    for component in architecture.get('components', []):
-        if component.get('component'):
-            component['component'] = _relpath(component['component'], base_path)
-        if component.get('top_bridge'):
-            component['top_bridge'] = _relpath(component['top_bridge'], base_path)
+def _validate_rules(rules: Any) -> None:
+    if not isinstance(rules, dict) or not isinstance(rules.get('edge_rule_sections'), dict):
+        raise ValueError('map must retain its distinct counting rules')
+    sections = rules['edge_rule_sections']
+    _validate_counting_rule(rules.get('edge_rule'), 'include', 'included')
+    _validate_counting_rule(sections.get('entry_points'), 'include', 'importers_not_counted')
+    _validate_counting_rule(sections.get('cycles'), 'exclude', 'included')
+    _validate_path(rules.get('component_order'))
 
 
-def _annotate_provenance(complex_fns: List[Dict[str, Any]], architecture: Dict[str, Any]) -> None:
-    """Tag each ranked entry with its provenance classification (BACK-1195):
-    'test' / 'vendor' / 'minified' / None (first-party). Live evidence on a
-    real corpus: overview://'s top-5 components-by-cohesion and top
-    complexity findings were 100% vendored/generated/test code, with the one
-    genuine first-party finding ranked below the noise — a reader had no way
-    to discount the noise in place without this. Must run AFTER
-    `_relativize_paths()` so path fields are already relative to the scan
-    root (classification only needs the relative path components, not the
-    absolute one). Mutates in place.
-    """
-    from ..utils.path_utils import classify_path_provenance
+def _validate_samples(metadata: dict, limit: int) -> None:
+    for name in ('files_failed', 'files_lost'):
+        paths = metadata.get(name)
+        if not isinstance(paths, list) or len(paths) != min(metadata[name + '_count'], limit):
+            raise ValueError('map failure paths must retain the diagnostic sample')
+        for path in paths:
+            _validate_path(path)
+    if metadata['files_lost_count'] > metadata['files_failed_count']:
+        raise ValueError('map lost count exceeds failed count')
+    diagnostics = metadata.get('extraction_diagnostics')
+    if not isinstance(diagnostics, dict) or len(diagnostics) != min(metadata['extraction_diagnostics_count'], limit):
+        raise ValueError('map must retain diagnostic sample counts')
+    for path, cause in diagnostics.items():
+        _validate_path(path)
+        if not isinstance(cause, dict):
+            raise ValueError('map must retain extraction cause records')
 
-    def provenance_for(file_str: Optional[str]) -> Optional[str]:
-        if not file_str:
-            return None
-        rel = Path(file_str)
-        return classify_path_provenance(rel.parts[:-1], rel.name)
 
-    for fn in complex_fns:
-        fn['provenance'] = provenance_for(fn.get('file'))
-    for section in ('fan_in', 'entrypoints'):
-        for entry in architecture.get(section, []):
-            entry['provenance'] = provenance_for(entry.get('file'))
-    for component in architecture.get('components', []):
-        component['provenance'] = provenance_for(component.get('component'))
+def _validate_map(facts: Any, status: str, limit: int) -> None:
+    if not isinstance(facts, dict):
+        raise ValueError('requested map must retain its facts')
+    for name in ('fan_in', 'entrypoints', 'components', 'cycles'):
+        _validate_page(facts.get(name), name)
+        if name != 'cycles':
+            for row in facts[name]['rows']:
+                _validate_relationship(row, name)
+    for cycle in facts['cycles']['rows']:
+        if not isinstance(cycle, dict):
+            raise ValueError('cycle evidence must contain records')
+        for key, minimum in (('members', 2), ('path', 1)):
+            _validate_page(cycle.get(key), 'cycle.' + key)
+            if cycle[key]['total'] < minimum:
+                raise ValueError('cycle evidence must retain real groups and witnesses')
+            for path in cycle[key]['rows']:
+                _validate_path(path)
+    predicate = facts.get('entry_point_filter')
+    if not isinstance(predicate, dict) or predicate.get('rule') != ACTIVE_ENTRY_POINT_RULE:
+        raise ValueError('map must retain its entrypoint predicate')
+    if predicate.get('path_basis') != 'producer paths before target-relative display':
+        raise ValueError('map must retain its entrypoint predicate path basis')
+    raw = _count(predicate.get('fan_in_zero'), 'raw entrypoints')
+    active = _count(predicate.get('active'), 'active entrypoints')
+    if active > raw or active != facts['entrypoints']['total']:
+        raise ValueError('entrypoint totals must retain the raw-to-active selection')
+    _validate_rules(facts.get('rules'))
+    _validate_map_coverage(facts.get('metadata'), status)
+    _validate_samples(facts['metadata'], limit)
+
+
+def _distinct_owner_warnings(meta: Optional[RevealMeta]) -> Optional[RevealMeta]:
+    if meta and 'warnings' in meta:
+        distinct: List[WarningEntry] = []
+        for warning in meta['warnings']:
+            if warning not in distinct:
+                distinct.append(warning)
+        meta['warnings'] = distinct
+    return meta
 
 
 @register_adapter('overview')
 @register_renderer(OverviewRenderer)
 class OverviewAdapter(ResourceAdapter):
-    """Adapter for the one-glance codebase dashboard: languages, quality,
-    hotspots, architecture, recent activity."""
+    """Compact project scope and static import map."""
     HELP_CLUSTER = 'Code Analysis'
-
-    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
-    RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    # --no-gitignore (BACK-1202). --all lifts ?top=N for the data, not only the render
-    # (BACK-1543): overview://X --all printed "showing 5 of 387" complex functions.
-    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'respect_gitignore': 'respect_gitignore=false'}
-
+    LEGACY_INIT = False
+    BOUND_QUERY_CALL = True
+    RESOURCE_IS_PATH = True
+    CLI_QUERY_FLAGS = {'all': 'all=true', 'verbose': 'verbose=true',
+                       'respect_gitignore': 'respect_gitignore=false'}
     RESULT_TYPE = 'overview'
     FINDINGS_POLICIES = ('none',)
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     PARAM_SPECS = (
-        ParamSpec('top', 'integer', 'Items per section; also limits Stats, AST and Git populations',
+        ParamSpec('top', 'integer', 'Rows per map section, cycle members and witness nodes',
                   5, _overview_top, minimum=0, role='analysis', examples=('top=10',),
-                  zero_policy='Stats hotspots: all; AST and Git: none; text rankings: none',
+                  zero_policy='No graph rows; retain observed totals and diagnostic details',
                   cli=CliBinding(('--top',), metavar='N')),
-        ParamSpec('no_git', 'boolean', 'Skip repository discovery and recent Git activity',
-                  False, boolean_value, role='analysis', examples=('no_git=true',),
-                  cli=CliBinding(('--no-git',), action='store_true')),
-        ParamSpec('no_imports', 'boolean', 'Skip import graph analysis (architecture section)',
+        ParamSpec('no_git', 'boolean', 'Removed: use Git queries for history',
+                  False, _obsolete_git, role='analysis', cli=CliBinding(('--no-git',), action='store_true')),
+        ParamSpec('no_imports', 'boolean', 'Request only the recognized-code census; omit import analysis explicitly',
                   False, boolean_value, role='analysis', examples=('no_imports=true',),
                   cli=CliBinding(('--no-imports',), action='store_true')),
-        ParamSpec('tests', 'string',
-                  'Test files in the Hotspots ranking and the Complex functions list (path_utils.is_test_path: a tests/ or '
-                  'test/ directory, test_*.py, *_test.go, *Tests.java, *.spec.ts, ...): exclude them (default) or include '
-                  'them. The other sections are not filtered by it',
-                  'exclude', _tests_value, role='analysis', examples=('tests=include',), choices=TEST_CHOICES,
+        ParamSpec('tests', 'string', 'Removed: use metrics or AST for test-filtered rankings',
+                  'exclude', _obsolete_tests, role='analysis',
                   cli=CliBinding(('--tests',), metavar='{include,exclude}')),
+        ParamSpec('all', 'boolean', 'Expand map evidence; diagnostic details remain capped at 50',
+                  False, boolean_value, role='presentation'),
+        ParamSpec('verbose', 'boolean', 'Expand map evidence; diagnostic details remain capped at 50',
+                  False, boolean_value, role='presentation'),
     )
 
-    def __init__(self, resource: str, query: Optional[str] = None, *,
-                 params: Optional[Dict[str, Any]] = None):
+    def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                self.PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
-        self._warn_unknown_query_params(self.query_params)  # BACK-507
-        # BACK-1042
-        exclude_param = self.query_params.get('exclude')
-        self.exclude_patterns: List[str] = (
-            split_exclude_param(exclude_param)
-        )
-        self.respect_gitignore: bool = respect_gitignore_param(self.query_params)
+        self.query_params = (params if isinstance(params, QueryParams) else bind_declared_params(
+            self.PARAM_SPECS, params if params is not None else query or '',
+            transport='typed' if params is not None else 'uri'))
+        self._warn_unknown_query_params(self.query_params)
+        self.exclude_patterns = split_exclude_param(self.query_params.get('exclude'))
+        self.respect_gitignore = respect_gitignore_param(self.query_params)
 
     def answer_requirement_error(self, result, expected_type, prior_facts=None):
-        # A canonical failed answer may lack section payloads. Enabled child
-        # collectors have already recorded those failures before projection.
-        if result.get('error') or result.get('meta', {}).get('errors'):
+        if result.get('error'):
+            return None
+        if (prior_facts is None and result.get('map_status') == 'failed'
+                and result.get('meta', {}).get('errors')):
             return None
         try:
-            _validate_stats(result.get('stats'))
             _validate_scope(result.get('scope'))
-            _validate_functions(result, 'complex_functions')
-            _rows(result, 'git_log')
-            architecture = _object(result.get('architecture'), 'architecture')
+            _validate_scope_disclosure(result['scope'])
+            _validate_path(result.get('reading_note'))
+            status = result.get('map_status')
             no_imports = dict(peek_query_items(self.query_params)).get('no_imports', False)
-            if not no_imports or architecture:
-                _validate_architecture(architecture)
+            diagnostic_budget = result.get('diagnostic_budget')
+            if not isinstance(diagnostic_budget, dict):
+                raise ValueError('overview must retain its diagnostic budget')
+            limit = _count(diagnostic_budget.get('limit'), 'diagnostic limit')
+            if not 5 <= limit <= 50:
+                raise ValueError('diagnostic limit must stay between five and fifty')
+            if status == 'not_requested':
+                if not no_imports or result.get('map') is not None:
+                    raise ValueError('scope-only overview must omit graph evidence')
+            elif status in ('complete', 'incomplete', 'failed'):
+                if no_imports:
+                    raise ValueError('scope-only overview cannot manufacture a requested map')
+                _validate_map(result.get('map'), status, limit)
+            else:
+                raise ValueError('overview must retain its requested-map status')
         except ValueError as exc:
             return f'Overview missing required answer evidence: {exc}'
         return None
@@ -724,157 +470,78 @@ class OverviewAdapter(ResourceAdapter):
     @staticmethod
     def execution_facts(result):
         from ..utils.results import AnalysisCompleteness, result_execution_facts
-        meta = result.get('meta', {})
-        errors = meta.get('errors', [])
-        required_warnings = {'analysis_failed', 'parse_recovered', 'parse_degraded',
-                             'partial_parse', 'worker_lost', 'check_rules_failed', 'analysis_incomplete'}
-        missing = any(warning.get('type') in required_warnings for warning in meta.get('warnings', []))
-        architecture = result.get('architecture')
-        metadata = architecture.get('metadata') if isinstance(architecture, dict) else None
-        metadata = metadata if isinstance(metadata, dict) else {}
-        missing = missing or any(type(metadata.get(field)) is int and metadata[field] > 0
-                                 for field in ('files_failed_count', 'files_lost_count'))
-        incomplete = missing or bool(errors)
-        state = AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
-        if any(error.get('code') == 'E_OVERVIEW_ANALYSIS' for error in errors):
+        status = result.get('map_status')
+        scope = result.get('scope') or {}
+        errors = (result.get('meta') or {}).get('errors', [])
+        no_scope_observation = (status == 'not_requested' and not scope.get('complete')
+                                and not scope.get('total_code_files'))
+        if status == 'failed' or not scope or no_scope_observation or any(e.get('code') == 'E_OVERVIEW_ANALYSIS' for e in errors):
             state = AnalysisCompleteness.FAILED
+        elif status == 'incomplete' or not scope.get('complete') or errors:
+            state = AnalysisCompleteness.INCOMPLETE
+        else:
+            state = AnalysisCompleteness.COMPLETE
         return result_execution_facts(result, completeness=state)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
-        return {
-            'name': 'overview',
-            'description': 'One-glance codebase dashboard: languages, quality, hotspots, recent activity.',
-            'syntax': 'overview://<path>[?top=5&no_git=true&no_imports=true&tests=include]',
-            'examples': [
-                {'uri': 'overview://src', 'description': 'Dashboard for src/'},
-                {'uri': 'overview://.?no_git=true', 'description': 'Skip the recent-activity section'},
-                {'uri': 'overview://.?top=10', 'description': 'Top 10 items per section'},
-                {'uri': 'overview://.?tests=include', 'description': 'Rank test files in Hotspots too (default: left out)'},
-            ],
-            'features': [
-                'Language breakdown, codebase size, quality pulse',
-                'Hotspots (via metrics://) and complex functions (via ast://)',
-                'Architecture summary: entry points, core abstractions, components (via imports://)',
-                'Recent git activity (via git://)',
-                "complex_functions[]/architecture.{fan_in,entrypoints,components}[] each carry a "
-                "'provenance' field: 'test'/'vendor'/'minified'/null (first-party) — BACK-1195, "
-                'so a reader can discount vendored/generated/test noise in the ranking in place.',
-            ],
-            'notes': [
-                'Hotspots leave out test files (path_utils.is_test_path, judged from the scanned path\'s own name down) and say so in one line with the count; '
-                '?tests=include (--tests include) ranks them. The Complex functions list follows the same parameter and prints the same line with the number of functions left out (JSON: complex_test_scope); its top N is N non-test functions when they exist. Totals and Languages still count test files.',
-                'Component cohesion is n/a (null in JSON, with one cohesion_rule) for directories mostly in Go, Java, Kotlin, C#, Scala or Swift, where files share a package without importing.',
-                'Static imports only for the architecture section — dynamically loaded files may appear as entry points.',
-                'The architecture section states the rule it counted by (Rule: lines in text, edge_rule and '
-                'edge_rule_sections in JSON under architecture): function-level imports count, circulars use the load-time view.',
-                '?exclude= applies to stats/hotspots, scope and the Imports architecture section. '
-                'Complex functions are filtered by tests= (above); global --exclude also filters AST.',
-                'Every section skips what git ignores (tracked files are never skipped); '
-                'respect_gitignore=false / --no-gitignore includes it everywhere (BACK-1386).',
-                'Both spellings use the overview v1.1 answer and none-only execution policy. '
-                'Completed work exits 0; invalid requests exit 2; required analysis/output failures exit 3.',
-            ],
-            'see_also': [
-                'reveal overview <path> - CLI subcommand form',
-            ],
-            'output_formats': ['text', 'json'],
-        }
+        return {'name': 'overview', 'description': 'Compact project map: recognized-code scope, components and static import relationships.',
+                'syntax': 'overview://<path>[?top=5&no_imports=true]',
+                'examples': [{'uri': 'overview://src', 'description': 'Compact project map'},
+                             {'uri': 'overview://.?top=10', 'description': 'Expand map evidence'},
+                             {'uri': 'overview://.?no_imports=true', 'description': 'Scope census only'}],
+                'features': ['Recognized-code language counts', 'Bounded fan-in, active entrypoint candidates, components and cycles',
+                             'Coverage, losses, counting rules and drill-down commands'],
+                'notes': ['Static imports are not runtime execution evidence or risk judgments.',
+                          'top=0 shows no graph rows; diagnostic details retain a minimum of five and maximum of fifty.',
+                          'Graph totals describe the observed graph; scan accounting and losses qualify its coverage.',
+                          'Data, markup and unknown extensions are not counted by the code census.',
+                          'no_git and tests are obsolete; use Git, metrics and AST queries for those questions.'],
+                'output_formats': ['text', 'json']}
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
-        return {
-            'adapter': 'overview',
-            'description': 'One-glance codebase dashboard (languages, quality, hotspots, architecture, recent activity)',
-            'uri_syntax': 'overview://<path>?top=5&no_git=true&no_imports=true&tests=exclude&exclude=pat&respect_gitignore=true',
-            'resource': OverviewAdapter.RESOURCE_SPEC.schema(),
-            'execution_policy': {'default_fail_on': OverviewAdapter.DEFAULT_FAIL_ON,
-                                 'fail_on': list(OverviewAdapter.FINDINGS_POLICIES)},
-            'query_params': {
-                **param_schema(OverviewAdapter.PARAM_SPECS),
-                'exclude': {'type': 'string', 'description': 'Comma-separated globs for stats/hotspots, scope and Imports; does not filter AST complex functions', 'examples': ['exclude=dist/*,*.min.js']},
-                'respect_gitignore': {'type': 'boolean', 'description': 'Respect .gitignore for the stats/hotspots and scope sections (default: true)', 'examples': ['respect_gitignore=false']},
-            },
-            'elements': {},
-            'supports_batch': False,
-            'supports_advanced': False,
-            'output_types': [
-                {
-                    'type': 'overview',
-                    'description': 'Stats/hotspots, complex functions, architecture summary, recent git log',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'stats': {'type': 'object'},
-                            'git_log': {'type': 'array'},
-                            'architecture': {'type': 'object'},
-                        },
-                    },
-                },
-            ],
-            'example_queries': [
-                {'uri': 'overview://src', 'description': 'Dashboard for src/', 'output_type': 'overview'},
-            ],
-            'notes': [
-                'Composed from metrics://, git://, ast://, and imports:// — not an independent scan.',
-                'Quality counts file-local rules only (stats.files[].quality.local_check_issues); meta.issue_count names the rule and the rule set. Cross-file rules run under reveal check.',
-            ],
-        }
+        return {'adapter': 'overview', 'description': 'Compact project map',
+                'uri_syntax': 'overview://<path>?top=5&no_imports=true',
+                'resource': OverviewAdapter.RESOURCE_SPEC.schema(),
+                'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
+                'query_params': {**param_schema(OverviewAdapter.PARAM_SPECS),
+                    'exclude': {'type': 'string', 'description': 'Comma-separated scope exclusion globs'},
+                    'respect_gitignore': {'type': 'boolean', 'description': 'Respect .gitignore (default: true)'}},
+                'elements': {}, 'supports_batch': False, 'supports_advanced': False,
+                'output_types': [{'type': 'overview', 'description': 'Bounded project scope and import map',
+                    'schema': {'type': 'object', 'properties': {'map': {'type': ['object', 'null']},
+                               'map_status': {'type': 'string'}, 'scope': {'type': 'object'}}}}],
+                'example_queries': [{'uri': 'overview://src', 'description': 'Compact project map', 'output_type': 'overview'}]}
 
-    def get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> RevealResult:
         with self.composition_run():
-            return self._get_structure(all=all, verbose=verbose, **kwargs)
-
-    def _get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
-        path = Path(self.path)
-        top_spec, no_git_spec, no_imports_spec, tests_spec = self.PARAM_SPECS
-        requested_top = top_spec.read(self.query_params)
-        top = UNLIMITED_TOP if all or verbose else requested_top
-        no_git = no_git_spec.read(self.query_params)
-        no_imports = no_imports_spec.read(self.query_params)
-
-        observations: Dict[str, bool] = {}
-        stats = _run_stats(self, path, top, tests=tests_spec.read(self.query_params), observations=observations)
-        git_root, git_unavailable = _git_probe(self, path, no_git)
-        git_log = [] if git_root is None else _run_git_log(self, path, top)
-        git_foreign_root: Optional[Path] = None
-        # Compare resolved: 'overview://.' at a repo root is not foreign to itself.
-        if git_log and git_root is not None and git_root.resolve() != path.resolve():
-            git_foreign_root = git_root
-        tests = tests_spec.read(self.query_params)
-        complex_fns = _run_complex_functions(self, path, top, tests=tests, observations=observations)
-        architecture = {} if no_imports else _run_imports_analysis(self, path, observations=observations)
-        _relativize_paths(complex_fns, architecture, path)
-        _annotate_provenance(complex_fns, architecture)
-
-        scope_failures: List[OSError] = []
-        report: Dict[str, Any] = {
-            'path': str(path),
-            'stats': stats,
-            'git_log': git_log,
-            'git_foreign_root': as_spelled(git_foreign_root, path) if git_foreign_root else None,
-            'complex_functions': complex_fns,
-            'complex_test_scope': {'rule': 'is_test_path', 'tests': tests,
-                                   'functions_excluded': getattr(complex_fns, 'functions_excluded', 0)},
-            'architecture': architecture,
-            'scope': _run_scope(self, path, failures=scope_failures),
-        }
-
-        meta = _with_warning(self.composed_meta(), git_unavailable)
-        error = _directory_loss_error(meta, observations)
-        if error:
-            meta = meta or {}
-            meta.setdefault('errors', []).append(error)
-        meta = _with_scope_warning(meta, scope_failures, path)
-        result = ResultBuilder.create(
-            result_type='overview',
-            source=self.path,
-            contract_version=CONTRACT_VERSION,
-            scope=report.pop('scope'),
-            data=report,
-            warnings=without_internal_filter_warnings(meta) or None,
-            errors=meta.get('errors') if meta else None,
-            confidence=meta.get('confidence') if meta else None,
-        )
-        note_issue_count_basis(result)  # the quality section counts file-local rules only (BACK-1884)
-        return result
+            path = Path(self.path)
+            # Direct API calls do not pass through the CLI's existing resource stat.
+            # A missing/inaccessible target must not become a successful empty walk.
+            path.stat()
+            top = self.PARAM_SPECS[0].read(self.query_params)
+            no_imports = self.PARAM_SPECS[2].read(self.query_params)
+            all_requested = self.PARAM_SPECS[4].read(self.query_params)
+            verbose_requested = self.PARAM_SPECS[5].read(self.query_params)
+            expanded = all_requested or verbose_requested
+            top = UNLIMITED_TOP if all or verbose or expanded else top
+            scope = _run_scope(self, path)
+            facts, status = ((None, 'not_requested') if no_imports else _run_imports_analysis(
+                self, path, top, scope_usable=bool(scope.get('total_code_files'))))
+            meta = _distinct_owner_warnings(self.composed_meta())
+            if not scope:
+                status = 'failed'
+            note = 'Static import relationships and entrypoint candidates describe the observed graph, not runtime execution or a risk assessment.'
+            if no_imports:
+                note += ' Import analysis was not requested (no_imports=true).'
+            if '?' in self.path:
+                note += " AST navigation cannot represent '?' in target paths; inspect files individually."
+            result = ResultBuilder.create('overview', source=as_spelled(path, path),
+                contract_version=CONTRACT_VERSION, scope=scope, meta=cast(Optional[Dict[str, Any]], meta),
+                data={'path': as_spelled(path, path), 'map': facts, 'map_status': status,
+                      'reading_note': note,
+                      'next_steps': _next_steps(as_spelled(path, path), _navigation_exclusions(path, self.exclude_patterns),
+                                                self.respect_gitignore)})
+            _bound_details(cast(Dict[str, Any], result), top)
+            return result

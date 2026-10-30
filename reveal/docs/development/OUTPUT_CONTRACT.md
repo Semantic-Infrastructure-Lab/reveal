@@ -406,7 +406,7 @@ apply after this legacy outcome handling:
   `source_type` `unknown` unless the source is an existing file or directory, and one
   `meta.errors` entry whose `code` (`adapter_error`, `element_not_found`) says the router
   built it. A `NotApplicableError` becomes a `not_applicable` result the same way.
-- **Record a cut list; don't print it.** `note_truncation` is the only spelling of a cut
+- **Record a raw-list cut; don't print it.** `note_truncation` is the spelling of a raw-list cut
   (`cause`: `limit`, `auto_cap`, `max_items`, `head`, `tail`, `range`). The router records
   its own `--max-items`/`--head` cuts the same way and prints every cut once, after the
   render: `⚠ Truncated <field>: showing N of M — <how to see more>` on stdout for text, on
@@ -419,9 +419,17 @@ apply after this legacy outcome handling:
   N and record it with the adapter's own knob as the hint (`hint='raise ?top=N'`). Cut where
   the knob is read, not inside a shared helper: a helper that returns only the top N has lost
   the total (`identify_hotspots`, `group_patches` did, BACK-1543). A total field (`total`,
-  `total_modules`, `count`) may stay for JSON readers, but it doesn't replace the marker. The
+  `total_modules`, `count`) may stay for JSON readers, but it doesn't replace the marker for a raw list. The
   hint can also say how to narrow the question (`help://search`: `raise ?top=N (0 = all), or
   add a search word to narrow it`); a cap with no knob still records the cut and says that.
+- **A bounded rows record carries its own presentation proof.** An intrinsic page such as
+  overview's graph sections may use `{rows, total, returned, omitted}` instead of repeating
+  the same cut in `meta.warnings`. All counts are nonnegative integers; returned equals
+  the row-array length, total equals returned plus omitted, and total is the actual uncut
+  observed population. Text states those bounds too. Each bounded cycle member/witness
+  list has its own record. Source scan limits and input loss still require their separate
+  coverage evidence: an exact observed total is not proof of an exhaustive project scan.
+  Diagnostic details and router cuts of raw arrays continue to use `note_truncation`.
 - **A cap cuts the answer; it doesn't bound what is read.** Build the whole answer, order it,
   then keep the first N. Stop reading early only when the reading order is the answer's order,
   and then read one past the page: that item proves more exist, so record a lower bound,
@@ -448,7 +456,7 @@ apply after this legacy outcome handling:
   the exit path and the truncation line; `tests/test_output_contract_compliance.py` runs
   every registered adapter and subcommand against them. Its invariant 7 (`own_cap`) runs each
   adapter with its cap knob at 1 and uncapped, and fails on any list that got shorter without
-  a `truncated` entry, on a capped list that isn't the uncapped list's first N, and on a
+  a `truncated` entry or a validated bounded-row parent, on a capped list that isn't the uncapped list's first N, and on a
   disclosed `total` that isn't the uncapped length (or, when `exact` is false, is above it).
 
 ---
@@ -536,7 +544,9 @@ not the presence of a confidence value.
 Architecture also supports only `--fail-on none`. Ordinary scope census errors,
 import input loss and failed/recovered parses establish incomplete execution;
 ranking cuts, confidence alone and harmless warnings do not. Diff requires explicit
-`analysis.complete` evidence. Invalid-ref/non-repository requests rejected before
+`analysis.complete`, basis and per-side component evidence. Proved-identical comparisons
+have empty snapshots; analyzed comparisons require both base/head imports and complexity
+states consistent with overall completeness. Invalid-ref/non-repository requests rejected before
 analysis retain `architecture_diff` identity and exit 2; operational Git failures
 exit 3. Missing or malformed required comparison proof cannot become success or be
 masked by a later usage diagnostic. Supported equivalent requests share complete
@@ -586,17 +596,22 @@ remains rejected; URI `--all` preserves an explicit top. Default text findings
 now exit 0; explicit `--fail-on findings` restores the findings gate in either
 format and transport. Neither fields nor output cuts erase captured facts.
 
-Overview supports only `--fail-on none`. Stats, AST and scope are required, as is
-Imports unless explicitly skipped. Required payload validation happens before
-projection; failed/recovered analysis, check-rule failures and Imports input loss
-make execution incomplete. Optional Git absence, churn notices, unsupported
-languages, confidence and ranking cuts alone do not. Returned producer errors
-remain analysis failures even when labeled invalid request. Top5 affects analysis
-and text; whole decimal/scientific spellings normalize, invalid booleans/fractions
-reject. Both `--all` and `--verbose` override explicit top in both spellings.
-Without either, top0 retains all Stats hotspots but zero AST/Git results. The
-documented query-exclusion boundary remains: query exclude filters Stats/scope/
-Imports, while only global exclusions also filter AST complex functions.
+Ordinary overview supports only `--fail-on none`. Required owners are the recognized-code
+census and import analysis unless `no_imports` explicitly requests scope only. It does not
+collect Stats, quality rules, complexity rankings or Git history. Qualified graph facts,
+counting rules and source coverage are validated before bounded presentation; malformed
+required evidence stays failed even at top zero. A validated partial graph and surviving
+census can support useful incomplete orientation; wholesale required-owner failure stays
+failed. Unsupported extensions and presentation cuts alone do not establish failure.
+
+Top defaults to five and bounds graph rows, cycle members and witnesses in text and JSON;
+zero retains observed totals without rows. Diagnostic details have a separate disclosed
+five-to-fifty bound. All/verbose expand map rows only. Obsolete no_git/tests controls reject
+with corrections toward their existing assessment queries. Exclusions/gitignore apply to
+both census and graph. Hidden counts use entries, not an invented skipped-file population.
+Validated execution facts survive postprocessing and `--fields`; an explicit field selection
+may omit unselected payload sections while failure metadata, exits and MCP error state
+remain honest. Human-primary artifacts use the same bounded map.
 
 Directory enumeration failures collected by Stats, AST, trace, patch scanning and testability
 are disclosed as `analysis_incomplete`. Its `count` with `unit: directories` counts

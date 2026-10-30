@@ -216,7 +216,7 @@ reveal check --changed main..HEAD || exit 1
 
 ---
 
-### 8. Codebase Dashboard (`reveal overview` and `reveal imports`)
+### 8. Project Map (`reveal overview` and `reveal imports`)
 
 Two commands for answering the orientation question before you start reading code.
 
@@ -231,7 +231,7 @@ reveal imports . --circular              # circular import chains
 reveal imports . --unused --format json  # unused imports, CI-friendly output
 ```
 
-**What you get:** `reveal overview` replaces the multi-command orientation sequence — file count, language breakdown, quality score, and recent git activity in one output. `reveal imports` surfaces structural debt that `reveal check` doesn't: import-level coupling and circular dependency cycles that accumulate quietly over time. Use `reveal imports . --circular --fail-on findings` to exit 1 on a circular group (or `--unused` on unused imports); its default reports findings without failing. Required incomplete analysis or output failures exit 3. (`reveal deps`, which printed all three on one page, is retired and prints a note naming these.)
+**What you get:** `reveal overview` gives a compact map of recognized code files, languages, components and static import relationships, with coverage and drill-down commands. Use metrics, checks and history queries for deeper assessment. `reveal imports` surfaces structural debt that `reveal check` doesn't: import-level coupling and circular dependency cycles that accumulate quietly over time. Use `reveal imports . --circular --fail-on findings` to exit 1 on a circular group (or `--unused` on unused imports); its default reports findings without failing. Required incomplete analysis or output failures exit 3. (`reveal deps`, which printed all three on one page, is retired and prints a note naming these.)
 
 ---
 
@@ -310,7 +310,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 3. **Native MCP server (`reveal-mcp`)** — exposes all reveal capabilities as MCP tools for Claude Code, Cursor, and Windsurf. One install, ten tools: `reveal_structure`, `reveal_element`, `reveal_nav`, `reveal_query`, `reveal_pack`, `reveal_check`, `reveal_grep`, `reveal_trace`, `reveal_health`, `reveal_review` — with `reveal_query` acting as a generic URI router reaching all 35 URI adapters beyond the nine convenience wrappers. Agents get progressive disclosure, deep-dive nav (boundary / sideeffects / deps / mutations), and call-graph analysis without subprocess overhead.
 
-4. **`reveal overview` + `reveal imports`** — codebase orientation dashboard and dependency health. `reveal imports --circular` and `--unused` find circular import chains and unused imports across a full project, `--external` lists the packages it uses; `reveal overview` synthesises file count, language breakdown, quality score, and git velocity into a single output.
+4. **`reveal overview` + `reveal imports`** — codebase orientation map and dependency health. `reveal imports --circular` and `--unused` find circular import chains and unused imports across a full project, `--external` lists the packages it uses; `reveal overview` maps recognized code files, languages, components and static import relationships; it does not collect quality scores or Git activity.
 
 5. **Quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required. `reveal --rules` lists them live; `--all` adds reveal's own dogfooding self-checks.
 

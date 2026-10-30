@@ -59,7 +59,7 @@ They live in the `adapters/` directory.
 | [LETSENCRYPT_ADAPTER_GUIDE.md](adapters/LETSENCRYPT_ADAPTER_GUIDE.md) | Let's Encrypt certificate inventory: orphan and duplicate detection |
 | [METRICS_ADAPTER_GUIDE.md](adapters/METRICS_ADAPTER_GUIDE.md) | Codebase metrics, file hotspots and provenance (replaces `stats://` and `classify://`) |
 | [MYSQL_ADAPTER_GUIDE.md](adapters/MYSQL_ADAPTER_GUIDE.md) | MySQL introspection and schema analysis |
-| [OVERVIEW_ADAPTER_GUIDE.md](adapters/OVERVIEW_ADAPTER_GUIDE.md) | One-glance dashboard: languages, quality, git |
+| [OVERVIEW_ADAPTER_GUIDE.md](adapters/OVERVIEW_ADAPTER_GUIDE.md) | Compact project map: scope, components, import relationships |
 | [PATCHES_ADAPTER_GUIDE.md](adapters/PATCHES_ADAPTER_GUIDE.md) | Test patch pressure: repeated mocks, private patches |
 | [PYTHON_ADAPTER_GUIDE.md](adapters/PYTHON_ADAPTER_GUIDE.md) | Python runtime introspection |
 | [REVEAL_ADAPTER_GUIDE.md](adapters/REVEAL_ADAPTER_GUIDE.md) | Reveal introspection (analyzers, adapters, config); reference implementation |

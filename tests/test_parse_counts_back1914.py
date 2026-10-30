@@ -493,3 +493,42 @@ def test_hotspots_identity_uses_owned_summary_coverage(kind):
     result['summary']['total_files'] = 2
     with pytest.raises(ValueError, match='total_files'):
         validate_command_output(0, json.dumps(result), spec, 3)
+
+
+def _compact_overview():
+    return {'type': 'overview', 'scope': {'total_code_files': 3, 'complete': True},
+            'map_status': 'complete', 'map': {'metadata': {
+                'scanned_files': 3, 'files_failed_count': 0, 'files_lost_count': 0,
+                'unsupported_extensions': {}, 'scan_budget': {
+                    'scope': 'scan', 'total': 3, 'returned': 3, 'exact': True, 'capped': False}}}}
+
+
+def test_overview_qualifies_census_and_graph_coverage_without_stats():
+    result = _compact_overview()
+    spec = {'type': 'overview', 'exit_code': 0}
+    assert validate_command_output(0, json.dumps(result), spec, 3) == {
+        'total_code_files': 3, 'scanned_files': 3, 'map_status': 'complete',
+        'warnings': [], 'result': result}
+
+
+@pytest.mark.parametrize('path,value', [
+    (('scope', 'total_code_files'), 2), (('scope', 'complete'), False),
+    (('scope', 'complete'), 1), (('map_status',), 'not_requested'),
+    (('map', 'metadata', 'scanned_files'), 2),
+    (('map', 'metadata', 'files_failed_count'), 1),
+    (('map', 'metadata', 'files_lost_count'), 1),
+    (('map', 'metadata', 'unsupported_extensions'), {'.lua': 1}),
+    (('map', 'metadata', 'scan_budget', 'total'), 2),
+    (('map', 'metadata', 'scan_budget', 'returned'), 2),
+    (('map', 'metadata', 'scan_budget', 'exact'), False),
+    (('map', 'metadata', 'scan_budget', 'exact'), 1),
+    (('map', 'metadata', 'scan_budget', 'capped'), True),
+])
+def test_overview_coverage_loss_cannot_qualify_as_fewer_parses(path, value):
+    result = _compact_overview()
+    owner = result
+    for key in path[:-1]:
+        owner = owner[key]
+    owner[path[-1]] = value
+    with pytest.raises(ValueError):
+        validate_command_output(0, json.dumps(result), {'type': 'overview', 'exit_code': 0}, 3)

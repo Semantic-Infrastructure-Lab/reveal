@@ -1,10 +1,10 @@
 """Provenance tag for every file in a directory's full, unranked population (BACK-1233).
 
-BACK-1195 wired 'provenance' tagging into overview://'s/hotspots://'s/
-pack://'s RANKED output, but a DD consumer asking "what fraction of this
+BACK-1195 introduced ranked provenance tagging; hotspots:// and pack://
+retain that selection-based output, but a DD consumer asking "what fraction of this
 codebase is first-party" needs the tag over the FULL file population,
 independent of any adapter's own ranking or selection -- structurally
-uncomputable from any of those three (each only tags whatever subset it
+uncomputable from either ranked view (each only tags whatever subset it
 already selects for its own purpose). This reuses BACK-1195's
 classify_path_provenance() and the stats walker find_analyzable_files()
 rather than building a new classifier or a new directory walk.

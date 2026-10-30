@@ -285,7 +285,7 @@ Default penalties:
 | `churn` | boolean | Fold commit-touch counts into hotspot scoring (default: on for git repos, silently off otherwise) | `?hotspots=true&churn=false` |
 | `since` | string (ISO date) | Bound the churn walk to commits on/after this date (default: full history) | `?hotspots=true&since=2026-01-01` |
 | `no_merges` | boolean | Exclude merge commits from the churn tally | `?hotspots=true&no_merges=1` |
-| `tests` | `include` (default), `exclude` | With `hotspots=true`: leave test files (`path_utils.is_test_path`, judged from the scanned path's own name down) out of the ranking. Only the ranking is narrowed; totals and `files` still count them. A request that names it adds `test_scope` (`rule`, `tests`, `files_excluded`). overview:// passes `exclude` by default; the default here, and `reveal hotspots`, still rank test files. | `?hotspots=true&tests=exclude` |
+| `tests` | `include` (default), `exclude` | With `hotspots=true`: leave test files (`path_utils.is_test_path`, judged from the scanned path's own name down) out of the ranking. Only the ranking is narrowed; totals and `files` still count them. A request that names it adds `test_scope` (`rule`, `tests`, `files_excluded`). The default here, and `reveal hotspots`, rank test files. Ordinary overview does not request this ranking. | `?hotspots=true&tests=exclude` |
 | `summary_only` | boolean | Omit the per-file `files` array — aggregate summary (+ hotspots, if requested) only. Use on large repos where the per-file array is impractically large. | `?summary_only=true` |
 
 **Note**: Legacy parameters still work but unified query syntax (below) is preferred for new queries. `churn`/`since`/`no_merges` only affect hotspot scoring (`hotspots=true`) and are ignored otherwise.
@@ -622,7 +622,7 @@ only: rules that declare `RuleScope.FILE` because they answer from the file's ow
 read other files, a project-wide index or the network (import cycles `I002`, duplicate
 literals `D005`, orphan modules `M102`, `TypedDict` index `T006`, dependency reconciliation
 `I007`, link and nginx include checks, ...) run under `reveal check`, not here. One definition
-serves `metrics://`, `overview` and `hotspots`, so a file has one count and one score in all three.
+serves `metrics://` and `hotspots`, so both use the same file count and score.
 
 The result says so. `meta.issue_count` holds the counting rule (`file-local rules only`), the
 field, the rule count, a stable `rule_set_id` (the first 8 hex digits of a SHA-256 over the
@@ -634,14 +634,14 @@ not counted; set `scope = RuleScope.FILE` on it, see the
 Why: a cross-file rule answers differently when a scan cap trips, a sibling file changes or
 the project root is mis-detected, so counting it gave one file two scores. Its scan-cap and
 discovery-loss notes (`analysis_incomplete` with a `rule`) no longer qualify Stats, and they no
-longer fail `overview` or `hotspots` with exit 3 — `check` still discloses them for the rules it
+longer fail `hotspots` with exit 3 — `check` still discloses them for the rules it
 runs. A rule that crashes is unchanged: `check_rules_failed` marks the file's count as a
-lower bound and `overview` and `hotspots` exit 3. Directory enumeration loss
+lower bound and `hotspots` exits 3. Directory enumeration loss
 (`analysis_incomplete`, `unit: directories`) is unchanged too.
 
-**Score change.** Where no cross-file rule detects, nothing changes (the celery
-package's stats and overview JSON are identical apart from the renamed field and the new
-`meta.issue_count`; Go `pkg/kubelet` is unchanged). Scores only rise. Rust `crates` (659
+**Historical score measurement (BACK-1884).** Where no cross-file rule detected,
+the celery package's Stats scores were unchanged apart from the renamed field and
+new `meta.issue_count`; Go `pkg/kubelet` was unchanged. Scores only rise. Rust `crates` (659
 files): 160 files change score (142 `.rs`, 17 `Cargo.toml`, 1 `.md`), the files under 70
 fall from 171 to 144 (27 cross up, none cross down), the average rises from 80.9 to 82.6,
 mostly because `I002` reported the module tree as import cycles. TypeScript
@@ -1787,8 +1787,7 @@ done
 `?view=provenance` tags every analyzable file under a directory with its provenance
 (`first_party`, `test`, `vendor`, `minified`): one row per file, over the **full, unranked**
 population. It is what `classify://` answered (`classify://` is a retired spelling of it). It
-is the full-population counterpart to the `provenance` field of `overview`, `hotspots` and
-`pack`, which only tag the ranked or capped subset each of them selects.
+is the full-population counterpart to the `provenance` field of `hotspots` and `pack`, which only tag the ranked or capped subset each of them selects.
 
 ```bash
 reveal 'metrics://src?view=provenance'

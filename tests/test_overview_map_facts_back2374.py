@@ -23,8 +23,9 @@ def source():
     fans = [{'file': f'pkg/a{n}.py', 'fan_in': 9-n, 'fan_out': 1} for n in range(8)]
     entries = [{'file': f'pkg/e{n}.py', 'fan_out': 1, 'is_test': False,
                 'test_only_importers': 2} for n in range(8)]
-    entries += [{'file': 'tests/test_a.py', 'fan_out': 1}, {'file': 'pkg/__init__.py', 'fan_out': 1},
-                {'file': 'pkg/leaf.py', 'fan_out': 0}]
+    entries += [{'file': 'tests/test_a.py', 'fan_out': 1, 'is_test': True, 'test_only_importers': 0},
+                {'file': 'pkg/__init__.py', 'fan_out': 1, 'is_test': False, 'test_only_importers': 0},
+                {'file': 'pkg/leaf.py', 'fan_out': 0, 'is_test': False, 'test_only_importers': 0}]
     components = [{'component': f'pkg/c{n}', 'files': 2, 'internal': 1, 'outgoing': 3,
                    'incoming': 4, 'cohesion': None, 'cohesion_reason': 'declined fixture',
                    'top_bridge': f'pkg/c{n}/a.py'} for n in range(8)]
@@ -209,6 +210,50 @@ def test_cycle_witness_fallback_need_not_close(source, tmp_path):
     source[3]['cycle_paths'][0] = source[3]['cycles'][0].copy()
     result = project_map_facts(*source, path=tmp_path)
     assert result['cycles']['rows'][0]['path']['total'] == 8
+
+
+def test_cycle_prefix_does_not_depend_on_producer_group_order(source, tmp_path):
+    source[3]['cycles'].reverse()
+    source[3]['cycle_paths'].reverse()
+    result = project_map_facts(*source, path=tmp_path, top=1)
+    cycle = result['cycles']['rows'][0]
+    assert cycle['members']['rows'] == ['pkg/c0/a0.py']
+    assert cycle['path']['rows'] == ['pkg/c0/a0.py']
+
+
+def test_active_predicate_keeps_producer_path_scope_before_display(source, tmp_path):
+    root = tmp_path / 'tests' / 'project'
+    for row in source[1]['entries']:
+        row['file'] = (root / row['file']).as_posix()
+        row['is_test'] = True
+    result = project_map_facts(*source, path=root)
+    assert result['entrypoints']['total'] == 0
+    assert result['entry_point_filter']['fan_in_zero'] == 11
+    assert result['entry_point_filter']['active'] == 0
+
+
+@pytest.mark.parametrize('top', [0, 5])
+@pytest.mark.parametrize('index', [0, -1])
+@pytest.mark.parametrize('field', ['is_test', 'test_only_importers'])
+def test_all_source_entrypoint_proof_is_required_before_cuts(source, tmp_path, top, index, field):
+    source[1]['entries'][index].pop(field)
+    with pytest.raises(ValueError, match=field):
+        project_map_facts(*source, path=tmp_path, top=top)
+
+
+@pytest.mark.parametrize('field,value', [('is_test', 'false'), ('is_test', True),
+                                        ('test_only_importers', True), ('test_only_importers', -1)])
+def test_source_entrypoint_labels_and_counts_match_producer_semantics(source, tmp_path, field, value):
+    source[1]['entries'][0][field] = value
+    with pytest.raises(ValueError, match=field):
+        project_map_facts(*source, path=tmp_path, top=0)
+
+
+@pytest.mark.parametrize('top', [0, 5])
+def test_declined_component_requires_its_reason_before_cuts(source, tmp_path, top):
+    source[2]['components'][0]['cohesion_reason'] = ''
+    with pytest.raises(ValueError, match='cohesion'):
+        project_map_facts(*source, path=tmp_path, top=top)
 
 
 @pytest.mark.parametrize('damage', ['loss', 'causes', 'count', 'witness', 'rule'])

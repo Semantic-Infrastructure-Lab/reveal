@@ -64,7 +64,7 @@ class RevealMeta(TypedDict, total=False):
     confidence: float
     warnings: List[WarningEntry]
     errors: List[ErrorEntry]
-    # What stats://, overview and hotspots count as issues: the counting rule, the rule set
+    # What stats:// and hotspots count as issues: the counting rule, the rule set
     # (count, id, codes) and any plugin rule left out for declaring no scope (BACK-1884).
     issue_count: Dict[str, Any]
 

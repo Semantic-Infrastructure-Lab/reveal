@@ -357,13 +357,12 @@ def classify_path_provenance(parts: Iterable[str], filename: str) -> Optional[st
 
 # BACK-1238: content-marker vendoring signal, deliberately kept separate from
 # classify_path_provenance() above rather than folded into it. That function
-# is shared by overview://, hotspots://, and pack:// — ranking adapters that
+# is shared by hotspots:// and pack:// — ranking adapters that
 # tag only the handful of entries they already select, on a signature that
-# doesn't even carry a real filesystem path (overview:// calls it after
-# relativizing). classify://'s full-population walk already opens every file
-# path it visits (find_analyzable_files), so the extra read here is close to
+# doesn't even require a real filesystem path. classify://'s full-population
+# walk already opens every file path it visits (find_analyzable_files), so the extra read here is close to
 # free for that one caller — see the ticket's scope note. Only classify.py
-# calls this; the other three callers stay path-only and untouched.
+# calls this; the ranked callers stay path-only.
 #
 # A "bang comment" -- `/*!` or `//!` -- is a minifier-preservation convention
 # (UglifyJS/Terser/cssnano strip normal comments but keep these) used almost

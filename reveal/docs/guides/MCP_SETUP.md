@@ -293,7 +293,7 @@ a tool call every time an agent needs to check valid syntax. All four mirror
 
 ```
 # 0. Orient in an unfamiliar codebase first
-reveal_query("overview://src/")             # quality score, hotspots, git activity, one screen
+reveal_query("overview://src/")             # compact scope, component and import map with coverage
 
 # 1. Understand the shape of a codebase area
 reveal_structure("src/")                    # ~100-3,000 tokens by size: what files exist
