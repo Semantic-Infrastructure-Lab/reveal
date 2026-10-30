@@ -11,7 +11,7 @@ import sys
 from argparse import Namespace
 from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple
+from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple, cast
 
 from ...errors import NotApplicableError, RequestValidationError
 from ...rendering.base import emit_rendered
@@ -340,9 +340,10 @@ def _preparation_answer(uri, element, args, exception) -> Optional[Answer]:
     path = resource.partition('?')[0]
     cause = (FailureCause.INVALID_REQUEST
              if isinstance(exception, RequestValidationError) or '\x00' in path else FailureCause.ANALYSIS)
-    return _invalid_answer(adapter_class, scheme, path, _exception_message(exception), args, cause,
-                           default_fail_on=getattr(adapter_class, 'DEFAULT_FAIL_ON'),
-                           result_type=_uri_result_type(adapter_class, resource))
+    return cast(Answer, _invalid_answer(
+        adapter_class, scheme, path, _exception_message(exception), args, cause,
+        default_fail_on=getattr(adapter_class, 'DEFAULT_FAIL_ON'),
+        result_type=_uri_result_type(adapter_class, resource)))
 
 
 def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> Answer:
@@ -358,10 +359,10 @@ def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> An
         try:
             adapter_class, scheme, resource, args = dispatch.enter_context(_dispatch(uri, None, args, consumed))
         except (OSError, ValueError) as exc:
-            answer = _preparation_answer(uri, None, args, exc)
-            if answer is None:
+            prepared = _preparation_answer(uri, None, args, exc)
+            if prepared is None:
                 raise
-            return answer
+            return prepared
         answer = resolve_adapter(adapter_class, _renderer_class_of(scheme), scheme, resource, None, args)
     return answer
 
