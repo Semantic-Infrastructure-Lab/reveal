@@ -171,3 +171,26 @@ def test_returned_ownership_payloads_cannot_mutate_collector_evidence():
     assert [s['text'] for s in evidence.unresolved_sites] == ['exit(1)', 'exit(2)']
     assert [s['kind'] for s in evidence.unresolved_sites] == ['EXIT', 'EXIT']
     assert evidence.scope_metadata()['unresolved_sites'][0]['text'] == 'exit(1)'
+
+
+def test_ownership_filters_the_existing_walk_without_revisiting_subtrees(monkeypatch):
+    from collections import Counter
+    from reveal.adapters.ast import nav_exits
+    source = 'def outer():\n def inner(x=exit(1)):\n  return 2\n return 3\n'
+    tree, node, text = _scope('python', source, 'function_definition')
+    reads = Counter()
+    seen_exits = []
+    children = nav_exits._children
+    exit_at = nav_exits._exit_at
+    def counted_children(n):
+        reads[(_zero_arg(n, 'kind'), _zero_arg(n, 'start_byte'), _zero_arg(n, 'end_byte'))] += 1
+        return children(n)
+    def counted_exit(n, get_text, call_types):
+        seen_exits.append(get_text(n))
+        return exit_at(n, get_text, call_types)
+    monkeypatch.setattr(nav_exits, '_children', counted_children)
+    monkeypatch.setattr(nav_exits, '_exit_at', counted_exit)
+    rows = collect_exits(node, 1, 99, text, ownership=ExitOwnership('python', node))
+    assert [r['text'] for r in rows] == ['exit(1)', 'return 3']
+    assert max(reads.values()) == 1
+    assert 'return 2' not in seen_exits

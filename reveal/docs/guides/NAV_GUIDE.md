@@ -127,7 +127,7 @@ and counting `rule`. Unqualified resolved scopes remain inventories with an expl
 scope warning. Ruby dynamic block binding, Kotlin inline/label semantics and other
 unqualified execution edges retain potential sites with `ownership_unresolved`
 diagnostics. Python generator bodies, filters and later iterables likewise retain
-potential sites with a deferred-execution warning; the leftmost iterable is evaluated
+potential sites with a deferred-execution warning, as do Rust async-block sites; the leftmost iterable is evaluated
 when the generator is formed, and eager list comprehensions keep their existing scope.
 Each diagnostic identifies actual recorded sites by kind, text, line and
 parser-source byte span (zero-based, half-open offsets in parser input, not a promise

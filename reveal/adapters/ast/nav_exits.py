@@ -308,6 +308,8 @@ def _language_exit_uncertainty(language: str, node: Any, child: Any) -> Optional
     kind = _zero_arg(child, 'kind')
     if language == 'python' and _generator_deferred_edge(node, child):
         return 'Python generator body, filter or later iterable execution is deferred until iteration'
+    if language == 'rust' and kind == 'async_block':
+        return 'Rust async block execution is deferred until the future is polled'
     if language == 'ruby' and kind in {'block', 'do_block'}:
         return 'Ruby block return ownership depends on callable binding'
     if language == 'kotlin' and kind == 'lambda_literal':
