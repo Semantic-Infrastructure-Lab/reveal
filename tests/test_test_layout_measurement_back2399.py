@@ -150,3 +150,33 @@ def test_policy_provenance_does_not_split_comparison_identity(tmp_path):
     assert gate._test_policy_identity(original) == gate._test_policy_identity(moved)
     moved['declaration']['input_digest'] = '0' * 64
     assert gate._test_policy_identity(original) != gate._test_policy_identity(moved)
+
+
+@pytest.mark.parametrize('extra', [['--write-baseline'], ['--signal', 'calls']])
+def test_configured_gate_cannot_overwrite_baseline_or_claim_calls(tmp_path, extra):
+    with pytest.raises(SystemExit) as error:
+        gate.main(['--corpus-root', str(tmp_path), '--output', str(tmp_path / 'report.json'),
+                   '--test-policy', 'py=policy.yaml', *extra])
+    assert error.value.code == 2
+
+
+def test_configured_comparison_fails_missing_or_changed_policy_even_with_healthy_default(test_import_corpus, tmp_path):
+    root, entry = test_import_corpus
+    ordinary = gate.measure(entry, root)
+    path = tmp_path / 'policy.yaml'
+    path.write_text('test_layout: {additional_paths: [t/unit]}\n', encoding='utf-8')
+    policy = gate._read_test_policy(path)
+    configured = copy.deepcopy(ordinary['tests']['exclude'])
+    configured['edge_rule']['test_scope'] = _configured_scope(policy)
+    baseline = {**ordinary, 'configured_tests': {'exclude': configured}}
+    assert gate.regressions({'py': baseline}, {'py': baseline}) == []
+    for damage in ('missing', 'digest', 'selectors'):
+        broken = copy.deepcopy(baseline)
+        if damage == 'missing':
+            del broken['configured_tests']
+        elif damage == 'digest':
+            broken['configured_tests']['exclude']['edge_rule']['test_scope']['declaration']['input_digest'] = '0' * 64
+        else:
+            broken['configured_tests']['exclude']['edge_rule']['test_scope']['effective_policy']['additional_paths'] = []
+        assert gate.regressions({'py': broken}, {'py': baseline})
+        assert broken['hit_edges'] == ordinary['hit_edges']

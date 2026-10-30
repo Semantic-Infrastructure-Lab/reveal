@@ -102,8 +102,37 @@ def _read_test_policy(path: Path) -> dict[str, Any]:
         normalized.add('/'.join(part for part in parts if part not in ('', '.')) or '.')
     return {'path': path.resolve().as_posix(), 'file_sha256': hashlib.sha256(raw).hexdigest(),
             'input_digest': hashlib.sha256(json.dumps(declaration, sort_keys=True,
-                                                     separators=(',', ':')).encode('utf-8')).hexdigest(),
+                                                     separators=(',', ':'), ensure_ascii=True,
+                                                     allow_nan=False).encode('utf-8')).hexdigest(),
             'additional_paths': sorted(normalized)}
+
+
+def _test_policy_identity(scope: dict) -> dict:
+    """Portable comparison recipe and selected declaration, excluding source-file provenance."""
+    declaration = scope.get('declaration') or {}
+    return {'effective_policy': copy.deepcopy(scope.get('effective_policy')),
+            'input_digest': declaration.get('input_digest')}
+
+
+def _validate_test_policy(scope: dict, policy: dict, *, anchor_name: str | None = None) -> None:
+    """Check independently supplied selectors and digest against the actual public answer."""
+    version = 'project-test-layout-v1'
+    selectors = policy['additional_paths']
+    include_name = scope.get('include_anchor_name')
+    expected = {'classifier_version': version, 'anchor': scope.get('anchor'),
+                'include_anchor_name': include_name,
+                'anchor_name': anchor_name if include_name else None,
+                'additional_paths': selectors}
+    declaration = scope.get('declaration')
+    if (scope.get('classifier_version') != version
+            or scope.get('additional_paths') != selectors
+            or scope.get('whole_scope') is not ('.' in selectors)
+            or scope.get('effective_policy') != expected
+            or not isinstance(declaration, dict)
+            or declaration.get('layer') != 'custom'
+            or declaration.get('path') != policy['path']
+            or declaration.get('input_digest') != policy['input_digest']):
+        raise RuntimeError('imports:// configured test policy evidence differs from selected input')
 
 
 @contextlib.contextmanager
@@ -148,7 +177,7 @@ def _cli_json(uri: str, label: str, *, incomplete_ok: bool = False) -> dict[str,
 
 
 def _importers_request(target: Path, scan: Path, cap: int | None, lazy: str = 'include',
-                       tests: str = 'include') -> dict[str, Any]:
+                       tests: str = 'include', *, policy: dict | None = None) -> dict[str, Any]:
     """One ``imports://<target>?importers`` request at the scan root; a capped scan raises like any
     other failed answer. ``cap`` is the corpus's own ``scan_file_cap``, else the engine's default."""
     query = f'importers&root={urllib.parse.quote(scan.as_posix(), safe="/:")}' + (f'&max_files={cap}' if cap else '')
@@ -166,7 +195,11 @@ def _importers_request(target: Path, scan: Path, cap: int | None, lazy: str = 'i
     if applied != scored:
         shown = ', '.join(f'{key}={value!r}' for key, value in applied.items() if value != scored[key])
         raise RuntimeError(f'imports:// answered under rule {shown}; the gate scores {scored}')
-    _edge_rule(result)  # Reject lost policy evidence before accepting any scores.
+    scope = _edge_rule(result)['test_scope']
+    if policy is not None:
+        _validate_test_policy(scope, policy, anchor_name=scan.name)
+    elif scope.get('additional_paths'):
+        raise RuntimeError('Configured test policy contaminates conventional measurement; use --test-policy')
     return result
 
 
@@ -177,6 +210,7 @@ def _edge_rule(result: dict[str, Any]) -> dict[str, Any]:
     if (not isinstance(scope, dict)
             or any(not isinstance(scope.get(key), str) or not scope[key]
                    for key in ('anchor', 'source', 'basis'))
+            or scope.get('source') not in ('project', 'explicit_root', 'scan_root_fallback')
             or scope.get('rule') != 'is_test_path'
             or not isinstance(scope.get('include_anchor_name'), bool)):
         raise RuntimeError('imports:// carries missing or malformed test_scope; measurement unavailable')
@@ -210,14 +244,14 @@ def rendered_dependents(scan: Path, target: Path, cap: int | None) -> dict[str, 
 
 
 def rendered_reverse_graph(scan: Path, cap: int | None, lazy: str = 'include',
-                           tests: str = 'include') -> dict[str, Any]:
+                           tests: str = 'include', *, policy: dict | None = None) -> dict[str, Any]:
     """Every module's importers from ONE ``imports://<scan dir>?importers`` request (the importer summary).
 
     ``imports://<file>?importers`` rebuilds the full import graph per request (4837 files, 10-28 s each
     on the Java corpus), so a per-target gate would take hours; the directory summary lists every
     module with at least one importer, sorted, in a single answer.
     """
-    result = _importers_request(scan, scan, cap, lazy, tests)
+    result = _importers_request(scan, scan, cap, lazy, tests, policy=policy)
     entries = result['entries']
     if len(entries) != result['total']:
         raise RuntimeError(f'imports:// summary truncated: {len(entries)} of {result["total"]} modules shown')
@@ -230,7 +264,7 @@ def corpus_key(entry: dict) -> str:
     return entry.get('id', entry['language'])
 
 
-def measure(entry: dict, root: Path) -> dict[str, Any]:
+def measure(entry: dict, root: Path, *, policy: dict | None = None) -> dict[str, Any]:
     head = subprocess.run(['git', '-C', str(root), 'rev-parse', 'HEAD'], check=True,
                           capture_output=True, text=True, encoding='utf-8', timeout=30).stdout.strip()
     if not entry.get('sha') or head != entry['sha']:
@@ -279,6 +313,17 @@ def measure(entry: dict, root: Path) -> dict[str, Any]:
         if graph is None:
             raise RuntimeError('Test exclusion scoring requires the directory importer view')
         result['tests'] = {'exclude': _measure_tests(Scope(root, scan, importers, config), edges, cap, population)}
+    if policy is not None:
+        if 'test_importer_dirs' not in config or graph is None:
+            raise RuntimeError('Configured test policy requires independently labelled test importers')
+        if _read_test_policy(Path(policy['path'])) != policy:
+            raise RuntimeError('Selected test policy input changed before measurement')
+        with _test_policy_config(Path(policy['path'])):
+            row = _measure_tests(Scope(root, scan, importers, config), edges, cap, population, policy=policy)
+        if _read_test_policy(Path(policy['path'])) != policy:
+            raise RuntimeError('Selected test policy input changed during measurement')
+        row['policy_input'] = copy.deepcopy(policy)
+        result['configured_tests'] = {'exclude': row}
     return result
 
 
@@ -325,14 +370,14 @@ def _measure_lazy(oracle, scope: Scope, edges: dict[str, list[str]], root: Path,
 
 
 def _measure_tests(scope: Scope, edges: dict[str, list[str]], cap: int | None,
-                   population: set[Path]) -> dict[str, Any]:
+                   population: set[Path], *, policy: dict | None = None) -> dict[str, Any]:
     """Remove independently labelled test importers, retaining every target for extra-edge controls."""
     labels = test_importers(scope)
     truth = {target: sorted(set(importers) - labels) for target, importers in edges.items()}
     removed = sum(len(set(importers) & labels) for importers in edges.values())
     if not removed:
         raise RuntimeError('Declared test population has zero oracle edges; exclusion control is vacuous')
-    graph = rendered_reverse_graph(scope.scan, cap, tests='exclude')
+    graph = rendered_reverse_graph(scope.scan, cap, tests='exclude', policy=policy)
     hit, expected, extra, differences = _score(
         truth, lambda target: graph['by_target'].get(scope.root / target, set()), scope.root, population)
     if expected and not hit:
@@ -418,7 +463,7 @@ def regressions(current: dict, baseline: dict, notes: list[str] | None = None) -
             if measured[field] + 1e-12 < reference[field]:
                 failures.append(f'{key}: {field} dropped {reference[field]:.6%} -> {measured[field]:.6%}')
         _compare_partial_files(key, measured, reference, failures, notes)
-        for dimension in ('lazy', 'tests'):
+        for dimension in ('lazy', 'tests', 'configured_tests'):
             _compare_modes(key, dimension, measured.get(dimension) or {}, reference.get(dimension) or {}, failures, notes)
     return failures
 
@@ -441,6 +486,12 @@ def _compare_modes(key: str, dimension: str, measured: dict, reference: dict, fa
         for field in ('recall', 'precision'):
             if None not in (row[field], ref[field]) and row[field] + 1e-12 < ref[field]:
                 failures.append(f'{key}: {dimension}={mode} {field} dropped {ref[field]:.6%} -> {row[field]:.6%}')
+        if dimension == 'configured_tests':
+            now = (row.get('edge_rule') or {}).get('test_scope') or {}
+            before = (ref.get('edge_rule') or {}).get('test_scope') or {}
+            if (not now.get('effective_policy') or not before.get('effective_policy')
+                    or _test_policy_identity(now) != _test_policy_identity(before)):
+                failures.append(f'{key}: {dimension}={mode} test policy identity changed or missing; review required')
         _compare_partial_files(f'{key}: {dimension}={mode}', row, ref, failures, notes)
 
 
@@ -505,13 +556,24 @@ def main(argv=None) -> int:
     parser.add_argument('--signal', choices=['imports', 'calls'], default='imports')
     parser.add_argument('--corpus', action='append', default=[], metavar='ID',
                         help='measure only this recall corpus id (repeatable); compared to its own baseline rows')
+    parser.add_argument('--test-policy', action='append', default=[], metavar='ID=YAML',
+                        help='separately measure tests=exclude using a recorded policy-only external YAML input')
     parser.add_argument('--write-baseline', action='store_true',
                         help='store reviewed new measurements (only the corpora measured), never used in scheduled CI')
     args = parser.parse_args(argv)
+    if args.test_policy and (args.write_baseline or args.signal != 'imports'):
+        parser.error('--test-policy requires imports and cannot be combined with --write-baseline')
     manifest = yaml.safe_load(MANIFEST.read_text(encoding='utf-8'))
     if args.baseline is None:
         args.baseline = BASELINE.with_name('calls_baseline.json') if args.signal == 'calls' else BASELINE
     entries, errors = _selected(manifest, args.corpus, args.signal)
+    policies = {}
+    eligible = {corpus_key(entry) for entry in entries}
+    for selection in args.test_policy:
+        key, separator, path = selection.partition('=')
+        if not separator or not path or key not in eligible or key in policies:
+            parser.error('--test-policy requires a unique selected corpus ID and YAML path (ID=YAML)')
+        policies[key] = Path(path).resolve()
     current: dict[str, Any] = {}
     notes: list[str] = []
     for entry in entries:
@@ -519,10 +581,18 @@ def main(argv=None) -> int:
         started = time.monotonic()
         try:
             measurement = measure_calls if args.signal == 'calls' else measure
-            current[key] = measurement(entry, (args.corpus_root / key).resolve())
+            root = (args.corpus_root / key).resolve()
+            if key in policies:
+                current[key] = measure(entry, root, policy=_read_test_policy(policies[key]))
+            else:
+                current[key] = measurement(entry, root)
             print(f'{key}: recall={current[key]["recall"]:.4%} precision={current[key]["precision"]:.4%} '
                   f'({current[key]["hit_edges"]}/{current[key]["oracle_edges"]} edges, '
                   f'{time.monotonic() - started:.0f}s)', flush=True)
+            if 'configured_tests' in current[key]:
+                row = current[key]['configured_tests']['exclude']
+                print(f'{key}: configured tests=exclude: {row["hit_edges"]}/{row["oracle_edges"]} edges, '
+                      f'{row["extra_edges"]} extras (separate external-policy measurement)', flush=True)
         except (OSError, RuntimeError, subprocess.SubprocessError, ValueError, SyntaxError) as exc:
             errors.append(f'{key}: {type(exc).__name__}: {exc}')
     if not current:
