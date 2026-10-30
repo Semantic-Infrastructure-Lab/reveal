@@ -323,11 +323,13 @@ def retired_flag_key(option: str) -> Optional[str]:
     key = 'flag:' + option
     if key in RETIREMENTS:
         return key
+    matches = [name for name in RETIREMENTS
+               if name.startswith('flag:') and name[5:].startswith(option)]
+    if not matches:
+        return None
     from .parser import create_argument_parser
     if option in create_argument_parser('')._option_string_actions:
         return None
-    matches = [name for name in RETIREMENTS
-               if name.startswith('flag:') and name[5:].startswith(option)]
     return matches[0] if len(matches) == 1 else None
 
 
