@@ -42,6 +42,9 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Named `--exits`, `--returns` and `--flowto` analyses distinguish the selected callable's execution regions from nested bodies. Results name their scope, preserve qualified declaration and default-argument evaluation, and identify retained candidates whose ownership is unresolved; source-region and aggregate inventories can still include multiple owners (BACK-2389).
+- Code-analysis navigation on explicitly structure-only formats, such as SQL, now rejects with guidance instead of returning an empty successful analysis. Invalid zero/negative depth on code-element structural views exits 2, and registered MCP navigation marks these rejections as errors; file, directory and Markdown depth controls keep their behavior (BACK-2390).
+
 - Configuration lookups in root and nested directories no longer reuse whichever directory was queried first. Nested YAML/TOML overrides apply consistently, while repeated lookups of a file and its parent reuse the same cached configuration (BACK-2387).
 - Element `--outline`, branch maps, `--loopmap` and `--fanout` keep same-depth exception and alternative branches when deeper bodies are collapsed. Text and JSON name the requested depth and disclose structural regions left unexpanded by that limit (BACK-2388).
 
