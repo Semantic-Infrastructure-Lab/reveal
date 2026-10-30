@@ -732,7 +732,7 @@ def _comparison_report(path: Path, base_ref: str, head_ref: str, deltas: Optiona
 
 def render_diff_brief(report: Dict[str, Any]) -> None:
     """Compatibility printer; the rendering owner returns the shared text body."""
-    from ..rendering.adapters.architecture import architecture_diff_text
+    from ..rendering.diff import architecture_diff_text
     print(architecture_diff_text(report), end='')
 
 
