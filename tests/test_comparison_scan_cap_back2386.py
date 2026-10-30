@@ -11,7 +11,6 @@ pygit2 = pytest.importorskip('pygit2')
 from conftest import _run_reveal_direct as run  # noqa: E402
 from reveal.analyzers.imports import service  # noqa: E402
 from reveal.diff import architecture_diff as diff  # noqa: E402
-from reveal.mcp_server import _ToolFailure, reveal_query  # noqa: E402
 
 
 @pytest.fixture
@@ -82,6 +81,9 @@ def test_real_capped_snapshot_rejects_comparison(project, monkeypatch, scheme, t
 @pytest.mark.parametrize('scheme', ['architecture', 'overview'])
 @pytest.mark.parametrize('side', ['base', 'head'])
 def test_cap_remains_failed_through_fields_provenance_and_mcp(project, monkeypatch, scheme, side):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import _ToolFailure, reveal_query
+
     dirty(project)
     cap_snapshot(monkeypatch, project, side)
     response = invoke(project, scheme, 'uri', '--fields', 'analysis', '--provenance')
