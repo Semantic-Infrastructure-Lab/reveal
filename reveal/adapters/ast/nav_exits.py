@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Collection, Dict, List, Optional
+from dataclasses import dataclass, field
+from typing import Any, Callable, Collection, Dict, List, Optional, Tuple, TypedDict, Literal
 
 from .nav_calls import _extract_callee
 from .nav_bindings import BindingScope
@@ -10,11 +11,12 @@ from ...conventions import FAMILY_BY_LANGUAGE, conventions_for
 from .nav_varflow import all_var_flow
 from .node_taxonomy import (
     CATCH_NODES, ELIF_NODES, ELSE_NODES, EXCEPT_NODES, GATE_NODES, IF_NODES,
-    exit_label, is_rust_try_operator, zig_catch_parts,
+    exit_label, is_rust_try_operator, zig_catch_parts, MEMBER_CONTAINER_NODES,
 )
 from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
 from reveal.utils.lines import split_lines
+from reveal.reveal_types import WarningEntry
 
 
 # Language-construct names treated as hard exits even when represented as calls.
@@ -223,14 +225,227 @@ def _exit_at(node: Any, get_text: Callable,
     return ('EXIT', name, False) if name else None
 
 
+# Exit execution ownership is deliberately separate from definition/import scope.
+# These kinds identify callable syntax, not class/struct aggregate inventories.
+_EXIT_CALLABLE_KINDS = {
+    'python': frozenset({'function_definition', 'lambda'}),
+    'js': frozenset({'function_declaration', 'function_expression', 'arrow_function',
+                     'method_definition', 'generator_function', 'generator_function_declaration'}),
+    'c': frozenset({'function_definition'}),
+    'cpp': frozenset({'function_definition', 'lambda_expression'}),
+    'go': frozenset({'function_declaration', 'method_declaration', 'func_literal'}),
+    'java': frozenset({'method_declaration', 'constructor_declaration', 'lambda_expression'}),
+    'csharp': frozenset({'method_declaration', 'constructor_declaration', 'local_function_statement',
+                        'lambda_expression', 'anonymous_method_expression'}),
+    'rust': frozenset({'function_item', 'closure_expression'}),
+    'ruby': frozenset({'method', 'singleton_method', 'lambda'}),
+    'lua': frozenset({'function_declaration', 'function_definition'}),
+    'php': frozenset({'function_definition', 'method_declaration', 'anonymous_function', 'arrow_function'}),
+    'kotlin': frozenset({'function_declaration', 'anonymous_function', 'secondary_constructor'}),
+    'swift': frozenset({'function_declaration', 'lambda_literal', 'init_declaration', 'deinit_declaration'}),
+    'dart': frozenset({'function_body', 'function_signature', 'function_expression', 'lambda_expression'}),
+    'scala': frozenset({'function_definition'}),
+    'gdscript': frozenset({'function_definition', 'constructor_definition', 'lambda'}),
+}
+_JS_EXIT_LANGUAGES = frozenset(language for language, family in FAMILY_BY_LANGUAGE.items() if family == 'js')
+_EXIT_BODY_CHILDREN = frozenset({'function_body', 'function_expression_body', 'statements', 'Block'})
+_EXIT_PARAMETER_CHILDREN = frozenset({'parameters', 'formal_parameters', 'parameter_list',
+                                    'formal_parameter_list', 'function_value_parameters',
+                                    'parameter', 'default_value', 'lambda_function_type'})
+_EXIT_DECLARATOR_CHILDREN = frozenset({'function_declarator', 'lambda_declarator',
+                                     'constructor_initializer', 'field_initializer_list', 'FnProto'})
+_EXIT_CLASS_KINDS = frozenset({'class_declaration', 'class_definition', 'class_specifier',
+                              'struct_specifier', 'struct_declaration', 'object_declaration'})
+
+
+def _exit_callable(node: Any, language: str) -> bool:
+    kind = _zero_arg(node, 'kind')
+    if language == 'zig':
+        return kind == 'Decl' and any(_zero_arg(c, 'kind') == 'FnProto' for c in _children(node))
+    key = 'js' if language in _JS_EXIT_LANGUAGES else language
+    return _zero_arg(node, 'is_named') and kind in _EXIT_CALLABLE_KINDS.get(key, ())
+
+
+def _field_is(node: Any, child: Any, name: str) -> bool:
+    value = node.child_by_field_name(name)
+    return value is not None and _same_span(value, child)
+
+
+def _body_edge(node: Any, child: Any) -> bool:
+    return _field_is(node, child, 'body') or _zero_arg(child, 'kind') in _EXIT_BODY_CHILDREN
+
+
+def _parameter_edge(node: Any, child: Any) -> bool:
+    return (_field_is(node, child, 'parameters') or _field_is(node, child, 'parameter')
+            or _zero_arg(child, 'kind') in _EXIT_PARAMETER_CHILDREN)
+
+
+def _js_deferred_field(node: Any, child: Any) -> bool:
+    if _zero_arg(node, 'kind') not in {'field_definition', 'public_field_definition', 'property_definition'}:
+        return False
+    return _field_is(node, child, 'value') and not any(
+        _zero_arg(c, 'kind') == 'static' for c in _children(node))
+
+
+class ExitOwnershipSite(TypedDict):
+    line: int
+    kind: str
+    text: str
+    start_byte: int
+    end_byte: int
+    region_start: int
+    region_end: int
+    cause: str
+
+
+class _ExitScopeRequired(TypedDict):
+    mode: Literal['selected_callable', 'source_scope']
+    language: str
+    rule: str
+
+
+class ExitScope(_ExitScopeRequired, total=False):
+    unresolved_sites: List[ExitOwnershipSite]
+    reason: str
+    site_byte_basis: str
+
+
+class ExitOwnershipWarning(WarningEntry, total=False):
+    sites: List[ExitOwnershipSite]
+
+
+@dataclass
+class ExitOwnership:
+    """Request-local callable execution scope, with unresolved recorded-site evidence.
+
+    An absent record leaves the library collectors' source-scope inventory unchanged.
+    """
+    language: str
+    scope_node: Any
+    unresolved_sites: List[ExitOwnershipSite] = field(default_factory=list)
+    mode: Literal['selected_callable', 'source_scope'] = field(init=False)
+    reason: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.mode = 'selected_callable' if _exit_callable(self.scope_node, self.language) else 'source_scope'
+        if self.mode == 'selected_callable':
+            self.reason = 'verified_callable_syntax'
+        elif _zero_arg(self.scope_node, 'parent') is None:
+            self.reason = 'source_root_inventory'
+        elif _zero_arg(self.scope_node, 'kind') in MEMBER_CONTAINER_NODES:
+            self.reason = 'aggregate_scope_inventory'
+        else:
+            self.reason = 'unqualified_resolved_scope'
+
+    def selected(self, node: Any) -> bool:
+        return (_zero_arg(node, 'kind') == _zero_arg(self.scope_node, 'kind')
+                and _same_span(node, self.scope_node))
+
+    def allows(self, node: Any, child: Any) -> bool:
+        if self.mode == 'source_scope':
+            return True
+        if self.selected(node):
+            return self._selected_edge(node, child)
+        if self.language in _JS_EXIT_LANGUAGES and _js_deferred_field(node, child):
+            return False
+        if not _exit_callable(node, self.language):
+            return True
+        if self.language == 'python':
+            return not _body_edge(node, child)
+        if self.language == 'dart' and _zero_arg(node, 'kind') == 'function_body':
+            return False
+        return not (_body_edge(node, child) or _parameter_edge(node, child)
+                    or _zero_arg(child, 'kind') in _EXIT_DECLARATOR_CHILDREN)
+
+    def _selected_edge(self, node: Any, child: Any) -> bool:
+        if self.language == 'python':
+            return _body_edge(node, child)
+        if self.language in _JS_EXIT_LANGUAGES or self.language == 'ruby':
+            return _body_edge(node, child) or _parameter_edge(node, child)
+        return _zero_arg(child, 'kind') not in {'lambda_capture_specifier', 'capture_list'}
+
+    def context(self, node: Any, child: Any, inherited: Optional[Tuple[str, int, int]]) -> Optional[Tuple[str, int, int]]:
+        if self.mode == 'source_scope':
+            return None
+        kind = _zero_arg(child, 'kind')
+        cause = None
+        if self.language == 'ruby' and kind in {'block', 'do_block'}:
+            cause = 'Ruby block return ownership depends on callable binding'
+        elif self.language == 'kotlin' and kind == 'lambda_literal':
+            cause = 'Kotlin lambda return ownership depends on inline and label semantics'
+        elif self.language == 'scala' and kind == 'lambda_expression':
+            cause = 'Scala nonlocal-return language-version support is not qualified'
+        elif kind in _EXIT_CLASS_KINDS and self.language not in {'python', 'ruby'} | _JS_EXIT_LANGUAGES:
+            cause = 'Local aggregate initializer execution ownership is not qualified'
+        elif (self.selected(node) and not _body_edge(node, child)
+              and self.language not in {'python', 'ruby', 'kotlin', 'scala'} | _JS_EXIT_LANGUAGES):
+            cause = 'Invocation-associated header execution ownership is not qualified'
+        if cause is None:
+            return inherited
+        return cause, _zero_arg(child, 'start_position').row + 1, _zero_arg(child, 'end_position').row + 1
+
+    def record(self, node: Any, kind: str, text: str, context: Optional[Tuple[str, int, int]]) -> None:
+        if context is None:
+            return
+        cause, start, end = context
+        site: ExitOwnershipSite = {'line': _zero_arg(node, 'start_position').row + 1,
+                                   'kind': kind, 'text': text,
+                                   'start_byte': _zero_arg(node, 'start_byte'),
+                                   'end_byte': _zero_arg(node, 'end_byte'),
+                                   'region_start': start, 'region_end': end, 'cause': cause}
+        if site not in self.unresolved_sites:
+            self.unresolved_sites.append(site)
+
+    def scope_metadata(self) -> ExitScope:
+        data: ExitScope = {'mode': self.mode, 'language': self.language, 'reason': self.reason,
+                'rule': ('Invocation-associated source expressions; separately owned nested bodies excluded'
+                         if self.mode == 'selected_callable' else
+                         'Source-scope inventory may include sites from multiple callable owners')}
+        if self.unresolved_sites:
+            data['unresolved_sites'] = self.unresolved_sites
+            data['site_byte_basis'] = 'parser_source'
+        return data
+
+    def warnings(self) -> List[ExitOwnershipWarning]:
+        warnings: List[ExitOwnershipWarning] = []
+        if self.unresolved_sites:
+            sites = ', '.join(f"L{s['line']} {s['kind']} {s['text']}" for s in self.unresolved_sites)
+            warnings.append({'type': 'ownership_unresolved',
+                             'message': f'Execution ownership is unresolved for recorded sites at {sites}; '
+                                        'review their source regions before attributing them to this callable.',
+                             'sites': self.unresolved_sites})
+        if self.reason == 'unqualified_resolved_scope':
+            warnings.append({'type': 'ownership_scope_limited',
+                             'message': 'Callable ownership is not qualified for this resolved scope; '
+                                        'the result is a source-scope inventory and can cross callable owners.'})
+        if self.mode == 'selected_callable' and self.language == 'dart':
+            warnings.append({'type': 'ownership_scope_limited',
+                             'message': 'Dart navigation resolved a function body; signature and constructor '
+                                        'initializer context is not available here. Use a source-region '
+                                        'inventory to inspect that syntax.'})
+        return warnings
+
+
+def _exit_children(node: Any, ownership: Optional[ExitOwnership], context=None):
+    """The existing traversal's next direct children and their ownership context."""
+    for child in _children(node):
+        if ownership is None or ownership.allows(node, child):
+            yield child, ownership.context(node, child, context) if ownership else None
+
+
 def collect_exits(
     scope_node: Any,
     from_line: int,
     to_line: int,
     get_text: Callable,
     call_node_types: Optional[Collection[str]] = None,
+    *,
+    ownership: Optional[ExitOwnership] = None,
 ) -> List[Dict[str, Any]]:
     """Collect exit nodes within a line range.
+
+    Without ownership this is a source-scope inventory. ExitOwnership narrows
+    verified callable execution edges without changing the list record shape.
 
     Each item is a dict:
         kind -- 'RETURN', 'RAISE', 'THROW', 'YIELD', 'BREAK', 'CONTINUE', or 'EXIT'
@@ -242,9 +457,9 @@ def collect_exits(
         call_node_types = CALL_NODE_TYPES
 
     results: List[Dict[str, Any]] = []
-    stack = list(reversed(_children(scope_node)))
+    stack = list(reversed(list(_exit_children(scope_node, ownership))))
     while stack:
-        node = stack.pop()
+        node, context = stack.pop()
         line = _zero_arg(node, 'start_position').row + 1
         if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
@@ -254,10 +469,12 @@ def collect_exits(
             if found is not None:
                 kind, text, descend = found
                 results.append({'kind': kind, 'line': line, 'text': text})
+                if ownership is not None:
+                    ownership.record(node, kind, text, context)
                 if not descend:
                     continue
 
-        stack.extend(reversed(_children(node)))
+        stack.extend(reversed(list(_exit_children(node, ownership, context))))
 
     results.extend(_tail_returns(scope_node, from_line, to_line, get_text, call_node_types))
 
@@ -619,8 +836,12 @@ def collect_gate_chains(
     to_line: int,
     get_text: Callable,
     call_node_types: Optional[Collection[str]] = None,
+    *,
+    ownership: Optional[ExitOwnership] = None,
 ) -> List[Dict[str, Any]]:
     """Collect exit nodes in a line range, each annotated with their gate chain.
+
+    Optional ownership uses the same execution-edge policy as collect_exits.
 
     Each result dict:
         kind  -- exit kind ('RETURN', 'EXIT', 'RAISE', etc.)
@@ -634,7 +855,7 @@ def collect_gate_chains(
 
     results: List[Dict[str, Any]] = []
 
-    def walk(node: Any, gates: List[Dict[str, Any]]) -> None:
+    def walk(node: Any, gates: List[Dict[str, Any]], context=None) -> None:
         line = _zero_arg(node, 'start_position').row + 1
         if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             return
@@ -644,11 +865,14 @@ def collect_gate_chains(
             if found is not None:
                 kind, text, descend = found
                 results.append({'kind': kind, 'line': line, 'text': text, 'gates': gates[:]})
+                if ownership is not None:
+                    ownership.record(node, kind, text, context)
                 if not descend:
                     return
 
         for child, child_gates in _gated_children(node, gates, get_text):
-            walk(child, child_gates)
+            if ownership is None or ownership.allows(node, child):
+                walk(child, child_gates, ownership.context(node, child, context) if ownership else None)
 
     walk(scope_node, [])
 
