@@ -1582,7 +1582,9 @@ metrics, function complexity, checks or history. It does not run those assessmen
 
 For due diligence, orient first, gather the relevant deeper evidence, then make
 a judgment. A bounded static map does not establish runtime behavior or safety.
-See the [overview guide](adapters/OVERVIEW_ADAPTER_GUIDE.md).
+Compare the live working tree with a ref using `reveal overview . --against HEAD`.
+This selects `overview_diff` and required snapshot analysis; invalid refs exit 2,
+incomplete comparisons exit 3. See the [overview guide](adapters/OVERVIEW_ADAPTER_GUIDE.md).
 
 ---
 

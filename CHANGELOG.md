@@ -20,6 +20,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - Ordinary `overview` becomes a compact project map in text and JSON: recognized code-file/language counts, bounded components, import relationships, entrypoint candidates and cycles, with coverage and drill-down commands. Quality, complexity and history move to their existing queries; `no_git` and test-ranking controls reject with guidance. Top zero shows totals without graph rows, and `no_imports` explicitly requests only scope (BACK-2374, BACK-2375).
 
+### Added
+
+- `reveal overview PATH --against REF` and `overview://PATH?against=REF` compare a tracked base with the live working tree through the existing architecture diff engine. Both return `overview_diff`, with per-side completeness, explicit working-tree labeling and the same output/MCP failure policy; ordinary map collectors do not run for comparisons (BACK-2376).
+
 ### Changed
 
 

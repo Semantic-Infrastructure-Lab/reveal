@@ -25,6 +25,8 @@ reveal 'overview://src?top=10'
 
 ## Controls
 
+These controls describe the ordinary map; comparison controls are listed below.
+
 | Parameter | Purpose |
 |-----------|---------|
 | `top` | Nonnegative whole-number presentation limit, default 5. Bounds each graph section and each cycle's member and witness lists. Zero shows totals without graph rows. Whole-valued `3.0` and `3e0` normalize; fractions, booleans and negatives reject. |
@@ -95,7 +97,7 @@ a judgment. Absence of a relationship in a bounded map is not proof of absence.
 
 ## Output and Outcomes
 
-CLI and URI requests use answer type `overview` and the same declared operation.
+Ordinary CLI and URI requests use answer type `overview` and the same declared operation.
 Completed work exits 0; invalid resources or parameters exit 2; required analysis
 or requested output failure exits 3. `--fail-on none` is the sole supported gate.
 A map has no adverse-findings verdict.
@@ -104,6 +106,38 @@ Human-primary `--output json=PATH` writes the same bounded map as a JSON artifac
 a failed artifact write exits 3. Primary JSON retains its existing JSON-file-sink
 no-op. `--max-items` and URI `--head` have no sliceable outer list: they disclose
 no effect. Use top to expand or reduce the map's graph sections.
+
+## Compare Against a Git Ref
+
+```bash
+reveal overview . --against HEAD
+reveal overview ./src --against HEAD --format json
+reveal 'overview://.?against=HEAD&top=5'
+```
+
+Against selects a separate `overview_diff` operation before ordinary map work.
+It compares the tracked base at the ref with the live working tree, including
+uncommitted changes. The head label is `working tree`. It uses the existing
+architecture comparison engine; it does not compare the former quality dashboard.
+The Git extra is required: `pip install 'reveal-cli[git]'`.
+
+Comparison preserves fan-in/out, cycle, coupling, active-entrypoint and complexity
+centroid deltas. Its centroid population is `max(top, 1) * 4`: default top five
+means twenty functions, and top zero means four. This is different from ordinary
+map presentation, where top zero shows no graph rows.
+
+`analysis` states completeness, basis and per-side imports/complexity evidence.
+An `identical_tree` proof has no measured snapshots: centroid base/head values
+are null, with proved change zero. Analyzed snapshots may legitimately measure
+zero. Missing required snapshot evidence gives unavailable deltas and exit 3;
+invalid refs/resources give exit 2. Existing exclusions and gitignore policy
+remain symmetric across the base and live head.
+
+Top, scope exclusions, gitignore, output, provenance and the none-only failure
+gate remain supported. Omit ordinary-only no_imports, all and verbose controls
+in comparisons, even if explicitly false; no_git/tests remain obsolete.
+Explicit field selection may omit payload sections while validated execution
+facts and failure diagnostics still determine exits and MCP error state.
 
 ## See Also
 
