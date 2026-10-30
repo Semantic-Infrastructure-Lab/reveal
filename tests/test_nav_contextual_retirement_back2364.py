@@ -77,6 +77,27 @@ def test_retirement_teaching_context_distinguishes_code_and_markdown():
     assert scan('reveal app.py work --flow=if,loop') == []
 
 
+@pytest.mark.parametrize('command', [
+    'reveal --format json app.py work --outline',
+    'reveal app.py --format json work --outline',
+    'reveal --outline "source folder/app.py" "MyClass.work" --format=json',
+])
+def test_teaching_uses_actual_global_option_and_positional_identity(command):
+    from scripts.check_retired_names import scan
+    assert [key for _, key, _ in scan(command)] == ['target:nav.outline']
+
+
+@pytest.mark.parametrize('command', [
+    'reveal --format json app.py --outline',
+    'reveal --format json guide.md Setup --outline',
+    'reveal guide.markdown --format=json "Long Heading" --outline',
+    'reveal --outline "source folder/app.py" --format=json',
+])
+def test_teaching_global_option_order_preserves_live_outline_domains(command):
+    from scripts.check_retired_names import scan
+    assert scan(command) == []
+
+
 def test_ambiguous_flow_prefix_stays_an_argparse_error(source):
     result = _run_reveal_direct(source, 'work', '--flo')
     assert result.returncode == 2
