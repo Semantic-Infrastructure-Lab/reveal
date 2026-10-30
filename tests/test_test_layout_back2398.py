@@ -273,3 +273,37 @@ def test_live_policy_relocates_once_for_both_git_sides_and_fast_proof(tmp_path, 
     assert result['analysis']['basis'] == 'identical_tree'
     assert result['analysis']['test_scope']['additional_paths'] == ['helpers']
     assert seen == []
+
+
+@pytest.mark.parametrize('yaml,expected', [('test_layout: {}\n', ('t/unit',)), ('test_layout: malformed\n', None)])
+def test_omitted_additions_and_malformed_block_preserve_selected_precedence(tmp_path, yaml, expected):
+    root = project(tmp_path, yaml)
+    (root / 'pyproject.toml').write_text('[tool.reveal.test_layout]\nadditional_paths=["t/unit"]\n', encoding='utf-8')
+    if expected is None:
+        with pytest.raises(ValueError, match='test_layout'):
+            bind(root)
+    else:
+        assert bind(root).additional_paths == expected
+
+
+def test_configured_nested_and_explicit_roots_select_one_anchor_policy(tmp_path):
+    from reveal.adapters.imports import ImportsAdapter
+    outer = project(tmp_path, 'test_layout:\n  additional_paths: [nested/custom]\n')
+    nested = outer / 'nested'
+    nested.mkdir()
+    (nested / 'pyproject.toml').write_text('[project]\nname="nested"\n', encoding='utf-8')
+    (nested / '.reveal.yaml').write_text('test_layout:\n  additional_paths: [other]\n', encoding='utf-8')
+    (nested / 'custom').mkdir()
+    (nested / 'custom' / 'worker.py').write_text('import core\n', encoding='utf-8')
+    (nested / 'core.py').write_text('VALUE=1\n', encoding='utf-8')
+    (outer / 'core.py').write_text('VALUE=2\n', encoding='utf-8')
+    discovered = ImportsAdapter(str(nested), 'entrypoints')
+    rows = discovered.get_structure()['entries']
+    assert discovered._test_layout.anchor == nested
+    assert discovered._test_layout.additional_paths == ('other',)
+    assert next(row for row in rows if row['file'] == 'custom/worker.py')['is_test'] is False
+    explicit = ImportsAdapter(str(nested), f'entrypoints&root={outer}')
+    rows = explicit.get_structure()['entries']
+    assert explicit._test_layout.anchor == outer
+    assert explicit._test_layout.additional_paths == ('nested/custom',)
+    assert next(row for row in rows if row['file'] == 'custom/worker.py')['is_test'] is True
