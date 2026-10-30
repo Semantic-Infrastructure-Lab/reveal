@@ -117,17 +117,17 @@ def _test_policy_identity(scope: dict) -> dict:
             'input_digest': declaration.get('input_digest')}
 
 
-def _validate_test_policy(scope: dict, policy: dict, *, anchor_name: str | None = None) -> None:
+def _validate_test_policy(scope: dict, policy: dict, *, anchor: str = '.') -> None:
     """Check independently supplied selectors and digest against the actual public answer."""
     version = 'project-test-layout-v1'
     selectors = policy['additional_paths']
-    include_name = scope.get('include_anchor_name')
-    expected = {'classifier_version': version, 'anchor': scope.get('anchor'),
-                'include_anchor_name': include_name,
-                'anchor_name': anchor_name if include_name else None,
+    expected = {'classifier_version': version, 'anchor': anchor,
+                'include_anchor_name': False, 'anchor_name': None,
                 'additional_paths': selectors}
     declaration = scope.get('declaration')
-    if (scope.get('classifier_version') != version
+    if (scope.get('anchor') != anchor or scope.get('source') != 'explicit_root'
+            or scope.get('include_anchor_name') is not False
+            or scope.get('classifier_version') != version
             or scope.get('additional_paths') != selectors
             or scope.get('whole_scope') is not ('.' in selectors)
             or scope.get('effective_policy') != expected
@@ -199,8 +199,13 @@ def _importers_request(target: Path, scan: Path, cap: int | None, lazy: str = 'i
         shown = ', '.join(f'{key}={value!r}' for key, value in applied.items() if value != scored[key])
         raise RuntimeError(f'imports:// answered under rule {shown}; the gate scores {scored}')
     scope = _edge_rule(result)['test_scope']
+    base = target if target.is_dir() else target.parent
+    anchor = Path(os.path.relpath(scan, base)).as_posix()
+    if (scope['anchor'] != anchor or scope['source'] != 'explicit_root'
+            or scope['include_anchor_name'] is not False):
+        raise RuntimeError('imports:// test_scope differs from the explicitly requested root')
     if policy is not None:
-        _validate_test_policy(scope, policy, anchor_name=scan.name)
+        _validate_test_policy(scope, policy, anchor=anchor)
     elif scope.get('additional_paths'):
         raise RuntimeError('Configured test policy contaminates conventional measurement; use --test-policy')
     return result
