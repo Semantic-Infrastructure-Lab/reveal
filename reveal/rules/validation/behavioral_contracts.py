@@ -5,6 +5,7 @@ violations; exceptions propagate so the runner reports unavailable checks.
 """
 
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
+from contextvars import Context
 from io import StringIO
 import json
 import logging
@@ -106,6 +107,11 @@ def renderer_violations(renderer=None):
     Exercises a registered renderer plus the URI outcome seam. This is a
     bounded canary, not a claim that every renderer has been fixture-tested.
     """
+    return Context().run(_renderer_violations, renderer)
+
+
+def _renderer_violations(renderer):
+    """Render the fixture without inheriting the caller's dispatch metadata."""
     from reveal.adapters.base import get_renderer_class
     from reveal.cli.routing.uri import announce_outcome, conclude_outcome
     from reveal.reveal_types import CONTRACT_VERSION
@@ -113,7 +119,9 @@ def renderer_violations(renderer=None):
     renderer = renderer or get_renderer_class('stats')
     if renderer is None:
         raise RuntimeError('Registered stats renderer unavailable for recorded fixture')
-    result = ResultBuilder.create('stats_file', 'probe', data={'file': 'probe'},
+    # Supplied execution metadata keeps ambient --provenance from launching Git/config probes.
+    result = ResultBuilder.create('stats_file', 'probe', data={
+        'file': 'probe', 'execution': {'command': 'recorded renderer probe'}},
         contract_version=CONTRACT_VERSION,
         warnings=[{'type': 'probe_warning', 'code': 'W_PROBE', 'message': 'recorded renderer warning'}],
         errors=[{'code': 'E_PROBE', 'message': 'recorded partial error'}])
