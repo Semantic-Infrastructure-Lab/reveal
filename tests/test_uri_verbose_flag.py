@@ -51,9 +51,14 @@ def test_without_verbose_flag_nothing_changes():
     assert inject_query_flags('src?circular', 'imports', _args()) == 'src?circular'
 
 
-@pytest.mark.parametrize('scheme', ['stats', 'hotspots', 'overview', 'claude', 'nosuchscheme'])
+@pytest.mark.parametrize('scheme', ['stats', 'hotspots', 'claude', 'nosuchscheme'])
 def test_adapters_without_declaration_untouched(scheme):
     assert inject_query_flags('src', scheme, _args(verbose=True)) == 'src'
+
+
+def test_overview_verbose_uses_its_declared_map_expansion_control():
+    assert inject_query_flags('src', 'overview', _args(verbose=True)) == 'src?verbose=true'
+    assert inject_query_flags('src?verbose=false', 'overview', _args(verbose=True)) == 'src?verbose=false'
 
 
 def test_ampersand_verbose_does_not_warn_unknown(tmp_path):

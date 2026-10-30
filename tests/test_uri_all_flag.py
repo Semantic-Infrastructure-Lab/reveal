@@ -31,7 +31,7 @@ def test_hotspots_declares_top():
 @pytest.mark.parametrize('scheme,fragment', [
     ('ast', 'limit=1000000'), ('calls', 'top=1000000'), ('patches', 'limit=1000000'),
     ('testability', 'top=1000000'), ('stats', 'top=1000000'), ('git', 'limit=1000000'),
-    ('overview', 'top=1000000'),  # BACK-1543: --all lifted only the render cap
+    ('overview', 'all=true'),  # Constructor-bound map expansion; does not request assessments.
 ])
 def test_back1379_adapters_declare_all(scheme, fragment):
     from reveal import adapters  # noqa: F401
