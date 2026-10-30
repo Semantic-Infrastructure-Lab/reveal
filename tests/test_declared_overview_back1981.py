@@ -111,6 +111,7 @@ def test_existing_static_sibling_hook_accepts_class_and_instance():
     from reveal.adapters.architecture import ArchitectureAdapter
     from reveal.cli.routing.declared import qualify_declared_answer
     from reveal.utils.results import ResultBuilder
-    result = ResultBuilder.create('architecture_diff', '.', data={'analysis': {'complete': True}})
+    result = ResultBuilder.create('architecture_diff', '.', data={
+        'analysis': {'complete': True, 'basis': 'identical_tree', 'snapshots': {}}})
     assert qualify_declared_answer(result, ArchitectureAdapter, '.', 'architecture_diff') is result
     assert qualify_declared_answer(result, ArchitectureAdapter('.'), '.', 'architecture_diff') is result
