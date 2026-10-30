@@ -224,6 +224,8 @@ def test_nested_swift_capture_is_formation_but_its_body_is_deferred(tmp_path):
     ('[exit(x) for x in [1, 2]]', []),
     ('(x for x in exit(1))', []),
     ('(x for x in [1] for y in exit(2) if exit(3))', ['exit(2)', 'exit(3)']),
+    ('((y for y in exit(1)) for x in [1])', ['exit(1)']),
+    ('(x for x in (exit(y) for y in [1]))', ['exit(y)']),
 ])
 def test_generator_deferred_regions_are_not_confident_outer_execution(tmp_path, expression, uncertain):
     source = 'def outer():\n g = ' + expression + '\n return g\n'
