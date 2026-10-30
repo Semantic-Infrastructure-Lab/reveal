@@ -37,7 +37,9 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
-- Proved-identical architecture comparisons report unmeasured centroid base/head values as null, retaining proved zero change. Health no longer forwards an unsupported filter to metrics/stats and mislabels clean answers incomplete. Renderer self-validation stays independent of surrounding JSON/provenance options and preserves the real invocation's diagnostics (BACK-2373, BACK-2379, BACK-2381).
+- Proved-identical architecture comparisons report unmeasured centroid base/head values as null with proved zero change. Comparisons reject missing or contradictory basis and per-side snapshot evidence instead of accepting a bare complete flag (BACK-2373, BACK-2376).
+- Health no longer forwards an unsupported filter to metrics/stats and mislabels clean answers incomplete; real parse loss still makes the result incomplete (BACK-2379).
+- Renderer self-validation stays independent of surrounding JSON/provenance options and preserves the real invocation's diagnostics (BACK-2381).
 
 - Python D001 no longer calls different string values identical after stripping `#`, URLs, comment markers or internal whitespace, and keeps floor division intact. Genuine duplicates still match after actual comments and docstrings are removed; other languages and rule scope/defaults are unchanged (BACK-2360, BACK-2362).
 - Adapter warnings must include a nonempty string `type`. Python result builders now raise `ValueError` for malformed warnings; declared commands report an invalid adapter answer instead of treating one as valid. Warning `code` stays optional, and error diagnostics keep their separate contract (BACK-2324).
