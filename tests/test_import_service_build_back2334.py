@@ -2,7 +2,9 @@
 
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
+import os
 from pathlib import Path
+import time
 
 import pytest
 
@@ -107,6 +109,10 @@ def test_discovery_build_and_extraction_counts_keep_existing_reuse_and_edit_guar
     from reveal.analyzers.imports import extraction
     # Count request-memo reuse independently of the separate disk-cache layer.
     monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
+    # Fresh Windows mtimes can reach the request boundary; this is an unchanged tree.
+    aged = time.time_ns() - 60_000_000_000
+    for path in tree.iterdir():
+        os.utime(path, ns=(aged, aged))
     counts = {'discover': 0, 'build': 0, 'extract': 0}
 
     def counted(original, key):
