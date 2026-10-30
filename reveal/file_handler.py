@@ -178,6 +178,16 @@ def _has_nav_flag(args) -> bool:
     )
 
 
+def _flat_nav_selected(args) -> bool:
+    """The existing flat-file modes; bare flow is selected by presence."""
+    flags = (
+        'varflow', 'narrow', 'calls', 'ifmap', 'catchmap', 'exits', 'flowto',
+        'inputs', 'outputs', 'deps', 'mutations', 'writes', 'sideeffects', 'loopmap', 'fanout',
+        'statewrites', 'keys', 'returns', 'boundary',
+    )
+    return getattr(args, 'flow', None) is not None or any(getattr(args, flag, None) for flag in flags)
+
+
 def _resolve_func_node(analyzer, element: str):
     """Resolve the function/scope node for nav flags that need an element.
 
@@ -233,7 +243,7 @@ def _resolve_func_node(analyzer, element: str):
 
 def _note_nav_retirements() -> None:
     """Read old spellings from the invocation before aliases lose their identity."""
-    from .cli.invocation import RETIREMENTS, current_invocation, retirement_note
+    from .cli.invocation import RETIREMENTS, current_invocation, retired_flag_key, retirement_note
 
     invocation = current_invocation()
     for token in invocation.argv if invocation is not None else ():
@@ -244,10 +254,10 @@ def _note_nav_retirements() -> None:
             continue
         # argparse has already rejected ambiguous prefixes. Its accepted unique
         # abbreviations must obey the same retirement stage as the full spelling.
-        for key, entry in RETIREMENTS.items():
-            if (key.startswith('flag:') and key[5:].startswith(option)
-                    and entry.replacement in {'--inputs', '--outputs', '--callsites'}):
-                retirement_note(key)
+        key = retired_flag_key(option)
+        if (key is not None and RETIREMENTS[key].replacement.split()[0].partition('=')[0]
+                in {'--inputs', '--outputs', '--callsites', '--flow', '--exits'}):
+            retirement_note(key)
 
 
 def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
@@ -267,6 +277,10 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         return
 
     handler = next((handler for _, check, handler in _NAV_DISPATCH if check(args)), None)
+    if handler in (_nav_outline, _nav_flow, _nav_branchmap, _nav_loopmap, _nav_exits, _nav_returns):
+        from .cli.routing.formats import DEFAULT_OUTPUT_FORMATS, require_supported_format
+        require_supported_format(args, DEFAULT_OUTPUT_FORMATS, 'flow/exits navigation')
+        output_format = getattr(args, 'format', output_format)
     if not (getattr(args, 'scope', False) or getattr(args, 'around', None) is not None):
         _validate_nav_request(analyzer, handler, args)
 
@@ -289,6 +303,9 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         return
 
     func_node, func_start, func_end = _resolve_func_node(analyzer, element)
+    if handler is _nav_outline:
+        from .cli.invocation import retirement_note
+        retirement_note('target:nav.outline')
     ctx = _NavCtx(
         func_node=func_node,
         element=element,
@@ -447,19 +464,9 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         # show_structure, which renders a top-level structural outline.  Adding
         # --outline here would route it through _dispatch_nav on root_node instead,
         # producing a different (lower-level) output and breaking existing behaviour.
-        _FLAT_FLAGS = (
-            'varflow', 'narrow', 'calls', 'ifmap', 'catchmap', 'exits', 'flowto',
-            'inputs', 'outputs', 'deps', 'mutations', 'writes', 'sideeffects', 'loopmap', 'fanout',
-            'statewrites', 'keys', 'returns', 'boundary',
-        )
-        if getattr(args, 'flow', None) is not None:
+        if _flat_nav_selected(args):
             total = len(split_lines(analyzer.content))
             element = f':1-{total}'
-        for flag in _FLAT_FLAGS:
-            if getattr(args, flag, None):
-                total = len(split_lines(analyzer.content))
-                element = f':1-{total}'
-                break
 
     if element:
         # Sub-function nav flags take priority over normal element extraction

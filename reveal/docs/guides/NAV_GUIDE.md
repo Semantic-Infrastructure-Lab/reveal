@@ -2,7 +2,7 @@
 title: Deep-Dive Code Navigation (Nav Flags)
 category: guide
 help_topic: nav
-help_description: "Deep-dive code navigation flags (--outline, --boundary, --varflow, --sideeffects)"
+help_description: "Deep-dive code navigation flags (--flow, --boundary, --varflow, --sideeffects)"
 help_category: feature_guides
 ---
 # Deep-Dive Code Navigation (Nav Flags)
@@ -25,13 +25,12 @@ adds a `retired_spelling` diagnostic in `meta.warnings`.
 
 | Flag | Question it answers |
 |------|---------------------|
-| `--outline` | What's the shape of this function? |
+| `--flow` | What recognized structures are inside this selection? |
 | `--scope :LINE` | What scope is this line inside, and what gates it (JSON `condition` field per ancestor)? |
 | `--around N` | What's near line N? (verbatim ±N lines) |
-| `--ifmap` | What conditional branches exist? |
-| `--catchmap` | What try/except structure exists? |
-| `--exits` | Where can this range exit (return/raise/break/die)? |
-| `--flowto` | Can control reach the end of this range? |
+| `--flow=if` | What conditional branches exist? |
+| `--flow=try` | What try/except structure exists? |
+| `--exits` | Which static exit sites and syntactic gates were recorded? |
 | `--callsites` | What does this call? (sub-element scope) |
 | `--varflow VAR` | Where is VAR read, written, or tested? |
 | `--varflow VAR --cross-calls` | Same, but follows VAR across function call boundaries |
@@ -39,20 +38,42 @@ adds a `retired_spelling` diagnostic in `meta.warnings`.
 | `--inputs` | Candidate inputs (undefined reads; review bindings) |
 | `--outputs` | What does this range write that's read later? |
 | `--sideeffects` | What DB/HTTP/FS/log/sleep calls fire here? |
-| `--loopmap` | What loops exist, and how are they nested? |
+| `--flow=loop` | What loops exist, and how are they nested? |
 | `--fanout` | Which loops make DB/HTTP/FS/log calls inside them? (N+1 / per-item fan-out review) |
 | `--statewrites` | Detected global/nonlocal/field/env/session/cache/db/file writes |
 | `--keys VAR` | Which keys/properties of VAR are read, written, or tested (dict/object/array shape)? |
-| `--returns` | Exit sites with enclosing syntactic conditions (not a reachability proof) |
 | `--boundary` | One-shot contract: inputs + builtins + environment + effects |
+
+Bare `--flow` includes all recognized skeleton records. Select with `--flow=if`,
+`--flow=loop` or `--flow=try`, or combine them: `--flow=if,loop`. Unions retain
+source order and remove duplicate selections. `if` includes switch/case; `try`
+includes handlers/finally. Empty or unknown selector members are rejected before
+analysis. Put the target first for bare flow; use equals-form selectors to avoid
+an optional value consuming a following path. File-only flow inspects the full
+source region; file hierarchy and Markdown headings remain `--outline`.
+
+```bash
+reveal app.py --outline
+reveal app.py process_order --flow
+reveal app.py process_order --flow=if,loop --depth 8
+reveal guide.md Setup --outline
+```
+
+The retired code-element `--outline` spelling is replaced by `--flow`; file and
+Markdown-section outlines remain valid. Retired `--ifmap`, `--loopmap` and
+`--catchmap` are replaced by the corresponding flow selectors. Retired `--returns`
+and `--flowto` are replaced by `--exits`, which reports static sites and recorded
+gates rather than a reachability verdict. Old spellings run the canonical answer
+and report one correction until the cut. JSON `meta.flag` is `flow` or `exits`;
+`meta.flow_selectors` records the normalized union (empty for bare flow).
 
 Structural navigation lists recognized nodes, not every exit expression. Inspect
 `--exits` for candidate exit sites. Implicit tail returns are inferred only for the
 resolved scope, not for nested callable scopes in a literal source region. Named
 callables and source regions therefore need not record the same implicit tails.
-These limits appear in text and JSON alongside the selected scope.
+These limits appear in text and JSON alongside the selected scope. The supported output formats for flow/exits are text and JSON; other formats are rejected.
 
-For code-element `--outline`, `--ifmap`, `--catchmap`, `--loopmap` and `--fanout`,
+For `--flow` (including selectors) and `--fanout`,
 `--depth` limits logical nesting (default 3). A TRY and its CATCH/EXCEPT/FINALLY
 alternatives remain peers, including at the depth boundary. Text names the requested
 depth; JSON carries `meta.depth` and `meta.depth_limited`. When the limit leaves structural
@@ -112,10 +133,10 @@ reveal file.py :120-340 --boundary    # → inputs + environment + classified ef
 Useful for WordPress, CodeIgniter, or any large flat PHP file.
 
 ```bash
-reveal legacy_handler.php :878-2130 --ifmap        # control-flow skeleton
+reveal legacy_handler.php :878-2130 --flow=if        # control-flow skeleton
 reveal legacy_handler.php :120-340 --boundary      # what does this slice consume + emit?
 reveal legacy_handler.php :120-340 --sideeffects   # which DB / curl / session calls fire?
-reveal legacy_handler.php :120-340 --returns       # exits + reported syntactic conditions
+reveal legacy_handler.php :120-340 --exits       # exits + reported syntactic conditions
 reveal legacy_handler.php :120-340 --varflow $userId  # where does $userId flow?
 ```
 
@@ -125,7 +146,7 @@ reveal legacy_handler.php :120-340 --varflow $userId  # where does $userId flow?
 
 ## Exit Scope and Ownership
 
-`--exits`, `--returns` and the legacy `--flowto` share one execution-ownership rule.
+`--exits` reports static candidate sites with recorded syntactic gate chains.
 When the resolved target is a qualified callable, separately owned nested function,
 method and lambda bodies are excluded. Expressions evaluated while forming a nested
 declaration remain where qualified: Python decorators/defaults, JavaScript computed
@@ -184,7 +205,7 @@ Different scope, different question.
 
 ## Known Limitations
 
-- `--returns` reports static syntactic gates; enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. Check source before making reachability claims.
+- `--exits` reports static syntactic gates; enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. Check source before making reachability claims.
 - `--inputs` respects supported closure/with/except/catch/comprehension/range binders and preserves free captures and default-expression reads. Registered Python builtins remain visible as BUILTIN/JSON `kind: builtin`, separate from `--boundary` INPUTS. Explicit lexical shadows stay candidate inputs. Dynamic names and unsupported binding shapes still require source review.
 - `--statewrites` detects Python/JS module-bound container writes and explicit Python/PHP `global` assignments; explicit Python `nonlocal` writes are separate. PHP also recognizes `$GLOBALS`. Local/parameter containers stay local. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, dynamic names, and imported-object resolution remain outside coverage. An empty result does not establish that shared state is untouched.
 - `--boundary` includes assignment writes in EFFECTS (JSON `via: assignment`). Under `--transitive`, call effects follow callees but assignment writes remain entry-function only; text and JSON warnings disclose this limit. Inputs/builtins/environment also remain entry-function scoped.

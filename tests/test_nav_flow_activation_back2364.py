@@ -23,7 +23,10 @@ def _fixture(language):
 def _json(path, element, *flags):
     result = _run_reveal_direct(path, element, *flags, '--format', 'json')
     assert result.returncode == 0, result.stderr
-    return json.loads(result.stdout)
+    assert 'ignored' not in result.stderr
+    answer = json.loads(result.stdout)
+    assert not any(w['type'] == 'retired_spelling' for w in answer.get('meta', {}).get('warnings', []))
+    return answer
 
 
 @pytest.mark.parametrize('language', sorted(ROWS))
@@ -177,3 +180,28 @@ def test_registered_mcp_flow_values_and_invalid_selector(tmp_path):
         assert not sibling.is_error
 
     _run(tmp_path, scenario)
+
+
+@pytest.mark.parametrize('flag', ['--flow', '--flow=if', '--exits'])
+@pytest.mark.parametrize('fmt', ['text', 'json'])
+def test_active_spellings_have_no_retirement_or_ignored_flag_note(tmp_path, flag, fmt):
+    path = tmp_path / 'work.py'
+    path.write_text('def work(a):\n if a:\n  return 1\n', encoding='utf-8')
+    result = _run_reveal_direct(path, 'work', flag, '--format', fmt)
+    assert result.returncode == 0
+    assert 'deprecated' not in result.stderr
+    assert 'ignored' not in result.stderr
+    if fmt == 'json':
+        assert not any(w['type'] in {'retired_spelling', 'ignored_flag'}
+                       for w in json.loads(result.stdout)['meta'].get('warnings', []))
+
+
+@pytest.mark.parametrize('flag', ['--flow', '--exits'])
+@pytest.mark.parametrize('fmt', ['grep', 'typed'])
+def test_flow_and_exits_reject_unsupported_formats(tmp_path, flag, fmt):
+    path = tmp_path / 'work.py'
+    path.write_text('def work():\n return 1\n', encoding='utf-8')
+    result = _run_reveal_direct(path, 'work', flag, '--format', fmt)
+    assert result.returncode == 2
+    assert result.stdout == ''
+    assert 'supported: text, json' in result.stderr

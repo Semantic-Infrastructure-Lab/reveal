@@ -202,11 +202,11 @@ If the question is "can I turn this into a repeatable gate?" Reveal is often a g
 Reveal is good for code that is too big, too nested, or too awkward to understand by reading top to bottom.
 
 ```bash
-reveal app.py process_batch --outline
+reveal app.py process_batch --flow
 reveal app.py :123 --around
-reveal app.py process_batch --ifmap
-reveal app.py process_batch --catchmap
-reveal app.py process_batch --flowto
+reveal app.py process_batch --flow=if
+reveal app.py process_batch --flow=try
+reveal app.py process_batch --exits
 reveal app.py process_batch --varflow result
 reveal app.py process_batch --outputs --range 20-80
 reveal app.py :123 --scope
@@ -227,8 +227,8 @@ Why it is good for this:
 
 - `--around` gives exact nearby context from a line number or stack trace
 - `--scope` shows enclosing function / class / block ancestry
-- `--ifmap` and `--catchmap` turn control flow into a readable skeleton
-- `--flowto` gives a reachability verdict for a range
+- `--flow=if` and `--flow=try` turn control flow into a readable skeleton
+- `--exits` reports static exit sites and recorded syntactic gates, without a reachability verdict
 - `--boundary` summarises inputs and effects in one view — handy before refactor or extraction
 - `--sideeffects` classifies DB / HTTP / FS / logging calls so you can audit risk without reading every line
 - `--varflow`, `--inputs`, and `--outputs` help with extraction and debugging

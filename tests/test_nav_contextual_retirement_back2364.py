@@ -25,6 +25,7 @@ def source(tmp_path):
     ('--catchmap', '--flow=try', 'flag:--catchmap'),
     ('--returns', '--exits', 'flag:--returns'),
     ('--flowto', '--exits', 'flag:--flowto'),
+    ('--flowt', '--exits', 'flag:--flowto'),
 ])
 def test_old_navigation_answers_canonically_and_corrects_once(source, old, new, field):
     old_run = _run_reveal_direct(source, 'work', old, '--format', 'json')
@@ -74,3 +75,37 @@ def test_retirement_teaching_context_distinguishes_code_and_markdown():
     assert scan('reveal guide.md Setup --outline') == []
     assert scan('reveal guide.markdown "Long Heading" --outline') == []
     assert scan('reveal app.py work --flow=if,loop') == []
+
+
+def test_ambiguous_flow_prefix_stays_an_argparse_error(source):
+    result = _run_reveal_direct(source, 'work', '--flo')
+    assert result.returncode == 2
+    assert 'ambiguous' in result.stderr
+
+
+def test_registered_mcp_contextual_error_names_replacement(source, tmp_path):
+    pytest.importorskip('mcp')
+    from test_mcp_expected_errors_back1992 import _run, _text
+    code = '''
+from dataclasses import replace
+from reveal.cli.invocation import RETIREMENTS
+from reveal import mcp_server
+key = 'target:nav.outline'
+RETIREMENTS[key] = replace(RETIREMENTS[key], stage='error')
+mcp_server.main()
+'''
+    doc = tmp_path / 'guide.md'
+    doc.write_text('# Setup\n\n## Install\n', encoding='utf-8')
+
+    async def scenario(session):
+        rejected = await session.call_tool('reveal_nav', {
+            'path': str(source), 'element': 'work', 'flag': 'outline'})
+        assert rejected.is_error
+        assert '--flow' in _text(rejected)
+        assert 'code-element --outline' in _text(rejected)
+        live = await session.call_tool('reveal_nav', {
+            'path': str(doc), 'element': 'Setup', 'flag': 'outline'})
+        assert not live.is_error
+        assert 'Install' in _text(live)
+
+    _run(tmp_path, scenario, code)

@@ -51,7 +51,7 @@ reveal app.py process_batch --inputs         # candidate inputs; builtins marked
 reveal app.py process_batch --outputs        # read-after-write hazards; use --range for a block
 reveal app.py process_batch --callsites      # calls within the selected function
 reveal app.py :123 --around                  # nearby context from a line number / stack trace
-reveal app.py process_batch --ifmap          # control-flow skeleton (branches + early exits)
+reveal app.py process_batch --flow=if          # recognized branch skeleton
 reveal legacy.php :120-340 --boundary        # same flags work on flat PHP, not just OO
 ```
 Pinpoint inspection inside a single function or line range — built for triaging giant handlers, legacy files, and stack traces without reading top-to-bottom. See [`AGENT_HELP.md`](reveal/docs/AGENT_HELP.md) for the full nav-flag family.

@@ -40,6 +40,15 @@ LIST_ITEM = re.compile(r'\s*(?:[-*+]|\d+\.)\s')
 FILE_ROUTE_CHECK = re.compile(r"reveal\s+(?!@|-|\S*://)[^\s|'\"]+\s[^|\n]*--(?:check|lint)(?![\w-])")
 # `reveal health` takes ops targets; a plain path (code) is `reveal check`'s. `.conf` stays an ops target.
 HEALTH_ARG = re.compile(r"reveal\s+health\b([^|\n#]*)")
+ELEMENT_OUTLINE = re.compile(
+    r'''reveal\s+(?P<path>"[^"]+"|'[^']+'|[^\s`]+)\s+'''
+    r'''(?P<element>"[^"]+"|'[^']+'|[^\s`-][^\s`]*)\s+[^`\n]*--outline\b''')
+
+
+def _outline_names_a_code_element(line):
+    from reveal.registry import get_markdown_extensions
+    return any(Path(match['path'].strip('"\'')).suffix.lower() not in get_markdown_extensions()
+               for match in ELEMENT_OUTLINE.finditer(line))
 
 
 def _health_names_a_code_path(line):
@@ -76,6 +85,8 @@ def _patterns(key):
         return [re.compile(rf'(?<![\w-]){re.escape(rest)}(?![\w-])')]
     if kind == 'target' and key == 'target:health.code':
         return [_health_names_a_code_path]
+    if kind == 'target' and key == 'target:nav.outline':
+        return [_outline_names_a_code_element]
     return []
 
 
@@ -97,6 +108,8 @@ def _sample(key):
         return f'reveal src/app.py {rest}'
     if key == 'target:health.code':
         return 'reveal health ./src'
+    if key == 'target:nav.outline':
+        return 'reveal app.py work --outline'
     raise AssertionError(f'no sample for {key}')
 
 

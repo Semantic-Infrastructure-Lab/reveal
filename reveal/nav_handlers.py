@@ -27,14 +27,6 @@ _IF_KEYWORDS: frozenset = frozenset({'IF', 'ELIF', 'ELSE', 'UNLESS', 'SWITCH', '
 _CATCH_KEYWORDS: frozenset = frozenset({'TRY', 'CATCH', 'EXCEPT', 'FINALLY'})
 
 
-def parse_flow_selectors(value: str) -> tuple[str, ...]:
-    """Validate an explicit flow value before acquisition; bare flow uses ()."""
-    parts = tuple(part.strip() for part in value.split(','))
-    if any(part not in {'if', 'loop', 'try'} for part in parts):
-        raise ValueError('flow selectors must be nonempty comma-separated if, loop or try values')
-    return tuple(dict.fromkeys(parts))
-
-
 def _resolve_range(args, func_start: int, func_end: int):
     """Return (from_line, to_line) for a nav flag, respecting --range if present.
 
@@ -141,23 +133,15 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
         _nav_json(flag, ctx.analyzer.path, ctx.element, from_line, to_line,
                   findings, extra_meta=result['meta'])
     else:
-        print(f'Navigation depth {ctx.depth}')
-        print(f'Skeleton scope: {structure_scope["rule"]} {structure_scope["exit_sites"]}')
+        print(f'Navigation depth {ctx.depth}\n'
+              f'Skeleton scope: {structure_scope["rule"]} {structure_scope["exit_sites"]}')
         print(render())
         render_meta_warnings(result)
 
 
 def _nav_outline(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import OutlineDepth, element_outline, render_outline  # noqa: I006
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    evidence = OutlineDepth()
-    items = element_outline(ctx.func_node, ctx.get_text, max_depth=ctx.depth,
-                            depth_evidence=evidence)
-    if getattr(ctx.args, 'range', None):
-        items = [i for i in items if from_line <= i['line_start'] <= to_line]
-    _emit_depth_navigation(ctx, 'outline', from_line, to_line, items, evidence,
-                           lambda: render_outline(ctx.element, ctx.func_start, ctx.func_end,
-                                                  items, depth=ctx.depth))
+    ctx.args.flow = ()
+    _nav_flow(ctx)
 
 
 def _nav_flow(ctx: _NavCtx) -> None:
@@ -254,19 +238,8 @@ def _nav_calls(ctx: _NavCtx) -> None:
 
 
 def _nav_branchmap(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import OutlineDepth, element_outline, render_branchmap  # noqa: I006
-    flag = 'ifmap' if getattr(ctx.args, 'ifmap', False) else 'catchmap'
-    keywords = _IF_KEYWORDS if flag == 'ifmap' else _CATCH_KEYWORDS
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    evidence = OutlineDepth()
-    items = element_outline(ctx.func_node, ctx.get_text, max_depth=ctx.depth,
-                            depth_evidence=evidence)
-    filtered = [
-        i for i in items
-        if i['keyword'] in keywords and from_line <= i['line_start'] <= to_line
-    ]
-    _emit_depth_navigation(ctx, flag, from_line, to_line, filtered, evidence,
-                           lambda: render_branchmap(filtered, from_line, to_line))
+    ctx.args.flow = ('if',) if getattr(ctx.args, 'ifmap', False) else ('try',)
+    _nav_flow(ctx)
 
 
 def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
@@ -283,8 +256,7 @@ def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
     else:
         label = ('selected callable execution regions' if ownership.mode == 'selected_callable'
                  else 'source inventory; may include multiple callable owners')
-        print(f'Exit scope: {label}')
-        print(ownership.scope_metadata()['implicit_tail_rule'])
+        print(f'Exit scope: {label}\n{ownership.scope_metadata()["implicit_tail_rule"]}')
         print(render())
         render_meta_warnings(result)
 
@@ -380,13 +352,8 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
 
 
 def _nav_loopmap(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import OutlineDepth, collect_loops, render_loopmap  # noqa: I006
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    evidence = OutlineDepth()
-    loops = collect_loops(ctx.func_node, from_line, to_line, ctx.get_text,
-                          max_depth=ctx.depth, depth_evidence=evidence)
-    _emit_depth_navigation(ctx, 'loopmap', from_line, to_line, loops, evidence,
-                           lambda: render_loopmap(loops, from_line, to_line))
+    ctx.args.flow = ('loop',)
+    _nav_flow(ctx)
 
 
 def _nav_fanout(ctx: _NavCtx) -> None:

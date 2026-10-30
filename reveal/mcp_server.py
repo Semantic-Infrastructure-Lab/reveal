@@ -117,7 +117,8 @@ mcp = MCPServer(
         "   outputs     — variables written in a range and read later\n"
         "   callsites   — call sites within the selected element or range\n"
         "   sideeffects — db/http/cache/log/file/sleep/hard_stop calls\n"
-        "   returns     — exit paths with gate conditions\n"
+        "   flow        — recognized structural skeleton; optional if,loop,try selectors\n"
+        "   exits       — static exit sites with recorded syntactic gates\n"
         "   varflow     — trace one variable's reads and writes\n"
         "5. reveal_grep(path, pattern) — \"where is X used?\" cross-file "
         "search grouped by enclosing function (use instead of shell grep).\n"
@@ -203,8 +204,10 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     err = err_buf.getvalue().strip()
 
     if captured_exception is not None:
+        from .cli.invocation import RetiredSpellingError
         return _tool_failure(str(captured_exception),
-                             public=isinstance(captured_exception, (OSError, NavRequestValidationError)),
+                             public=isinstance(captured_exception, (OSError, NavRequestValidationError,
+                                                                   RetiredSpellingError)),
                              exception=captured_exception)
     if out.strip():
         if capture_stderr and err:
@@ -529,7 +532,8 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
                      the full list. Boolean flags need no flag_value; value
                      flags (varflow, keys, narrow) require one.
         flag_value:  Required for varflow, keys, and narrow (variable name). Optional for
-                     callsites (range string) and around (integer context lines).
+                     flow (comma-separated if,loop,try selectors), callsites (range string)
+                     and around (integer context lines).
 
     Example:
         reveal_nav('app.py', 'process_order', 'boundary')
@@ -538,7 +542,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
     from .cli.invocation import Invocation, RetiredSpellingError, invocation_scope, retirement_note
 
     if flag == 'flow':
-        from .nav_handlers import parse_flow_selectors
+        from .cli.invocation import parse_flow_selectors
         try:
             selectors = parse_flow_selectors(flag_value) if flag_value else ()
         except ValueError as exc:

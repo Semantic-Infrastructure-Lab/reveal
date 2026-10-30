@@ -493,25 +493,29 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                         help='Point claude:// at a different Claude install — pass the projects dir and all paths (history, config, plans) derive from it (e.g., --base-path /mnt/wsl/.claude/projects)')
 
 
+def _flow_selectors(value: str) -> tuple[str, ...]:
+    from .invocation import parse_flow_selectors
+    try:
+        return parse_flow_selectors(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
 def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
     """Add element-scoped deep analysis flags (nav flags).
 
     All flags in this group require a named element or :LINE range as the
-    second positional argument. Start with --outline or --boundary; add
+    second positional argument. Start with --flow or --boundary; add
     --format json for machine-readable output.
     """
-    from ..nav_handlers import parse_flow_selectors
-
-    parser.add_argument('--flow', nargs='?', const=(), type=parse_flow_selectors, metavar='SELECTORS',
+    parser.add_argument('--flow', nargs='?', const=(), type=_flow_selectors, metavar='SELECTORS',
                         help='Recognized code skeleton; optional if,loop,try union in source order. '
                              'Use target-first bare flow or equals-form selectors: '
                              'reveal file.py work --flow; reveal file.py work --flow=if,loop')
     parser.add_argument('--outline', action='store_true',
-                        help='Two modes: without element → file-level hierarchical outline '
-                             '(classes with methods, nested structures); '
-                             'with element → control-flow skeleton of that function '
-                             '(branches, loops, returns); on a markdown section, the headings inside it. '
-                             'Example: `reveal file.py --outline` vs `reveal file.py myfunc --outline`')
+                        help='File-level hierarchy or Markdown section headings. '
+                             'Code-element outline is deprecated; use --flow. '
+                             'Example: reveal file.py --outline; reveal file.py myfunc --flow')
     parser.add_argument('--scope', action='store_true',
                         help='Show ancestor scope chain for a line (use with :LINE syntax, e.g., reveal file.py :123 --scope)')
     parser.add_argument('--around', nargs='?', const=20, type=int, metavar='N',
@@ -529,8 +533,7 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
                              'control how many hops (default 2, max 5) '
                              '(e.g., reveal file.py handle_request --sideeffects --transitive --depth 3)')
     parser.add_argument('--loopmap', action='store_true',
-                        help='Show loop skeleton (FOR/WHILE/LOOP/DO) for a function or line range, with nesting depth '
-                             '(e.g., reveal file.py process_batch --loopmap  or  reveal file.php :100-500 --loopmap)')
+                        help='Deprecated; replaced by --flow=loop (recognized loop skeleton)')
     parser.add_argument('--fanout', action='store_true',
                         help='Show each loop paired with its classified side effects (db/http/cache/log/file calls inside it) — '
                              'for N+1 query checks, per-item HTTP calls, and retry-safety review '
@@ -563,20 +566,16 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
                         help='Show read-after-write hazards: variables written in a range and read after (potential return values). '
                              '(e.g., reveal file.py :20-30 --outputs). --mutations and --writes are deprecated; use --outputs.')
     parser.add_argument('--returns', action='store_true',
-                        help='Show exit sites with syntactic gate chains (static approximation; verify branch and exception paths in source) '
-                             '(e.g., reveal file.php processOrder --returns  or  reveal file.py myfunc --returns)')
+                        help='Deprecated; replaced by --exits (static exit sites and recorded gates)')
     parser.add_argument('--ifmap', action='store_true',
-                        help='Show branching skeleton (IF/ELIF/ELSE) for a function or line range '
-                             '(e.g., reveal file.php :878-2130 --ifmap  or  reveal file.py myfunc --ifmap)')
+                        help='Deprecated; replaced by --flow=if (including switch/case)')
     parser.add_argument('--catchmap', action='store_true',
-                        help='Show exception skeleton (TRY/CATCH/FINALLY) for a function or line range '
-                             '(e.g., reveal file.php :470-525 --catchmap  or  reveal file.py myfunc --catchmap)')
+                        help='Deprecated; replaced by --flow=try (including handlers/finally)')
     parser.add_argument('--exits', action='store_true',
-                        help='List exit nodes (return/raise/break/continue/die) in a line range '
+                        help='List static exit sites and their recorded syntactic gates in a selection '
                              '(e.g., reveal file.php :657-2200 --exits  or  reveal file.py myfunc --exits)')
     parser.add_argument('--flowto', action='store_true',
-                        help='Show exit nodes plus a reachability verdict for a line range '
-                             '(e.g., reveal file.php :2928-3663 --flowto  or  reveal file.py myfunc --flowto)')
+                        help='Deprecated; replaced by --exits for static sites; the reachability verdict is retired')
 
 
 def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
@@ -812,7 +811,7 @@ def create_argument_parser(
     # ── Code analysis ─────────────────────────────────────────────────────────
     g_analysis = parser.add_argument_group(
         'Code analysis  [element-scoped — use with a named function or :LINE range]\n'
-        '  Start with --outline or --boundary. Add --format json for structured output.\n'
+        '  Start with --flow or --boundary. Add --format json for structured output.\n'
         '  Full guide: reveal help://nav')
     _add_code_analysis_options(g_analysis)
 
