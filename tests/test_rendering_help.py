@@ -1102,14 +1102,14 @@ class TestDecisionTreeClusterCoverage(unittest.TestCase):
         # BACK-1154's originally-diagnosed gap — regression guard.
         reachable = self._reachable_schemes()
         previously_missing = {
-            'architecture', 'overview', 'pack', 'hotspots', 'contracts',
+            'overview', 'pack', 'hotspots', 'contracts',
             'surface', 'patches',
             'autossl', 'letsencrypt', 'json', 'reveal',
         }
         self.assertTrue(previously_missing.issubset(reachable), reachable)
 
     def test_retired_adapters_are_not_routed_to(self):
-        # testability, trace, deps, stats and classify still answer but are RETIREMENTS rows:
+        # Architecture and the earlier aliases still answer but are RETIREMENTS rows:
         # a "tooling not named above" line must not send a new reader to them.
         from reveal.adapters.help import HelpAdapter
         from reveal.cli.handlers.introspection import retired_schemes

@@ -176,6 +176,9 @@ def test_a_retirement_row_validates_itself():
 # Every production row and one command line that spells it. A row without a case fails the
 # last test, so a later phase cannot add a spelling it never exercised.
 PRODUCTION_CASES = {
+    # D9: architecture delegates to the canonical compact overview.
+    'subcommand:architecture': lambda f: ['architecture', str(Path(f).parent)],
+    'scheme:architecture': lambda f: [f'architecture://{Path(f).parent}'],
     'flag:--deps': lambda f: [f, 'auth_gate', '--deps'],
     'flag:--mutations': lambda f: [f, 'auth_gate', '--mutations'],
     'flag:--writes': lambda f: [f, 'auth_gate', '--writes'],
