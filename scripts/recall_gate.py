@@ -110,7 +110,10 @@ def _read_test_policy(path: Path) -> dict[str, Any]:
 def _test_policy_identity(scope: dict) -> dict:
     """Portable comparison recipe and selected declaration, excluding source-file provenance."""
     declaration = scope.get('declaration') or {}
-    return {'effective_policy': copy.deepcopy(scope.get('effective_policy')),
+    effective = scope.get('effective_policy') or {
+        'classifier_version': 'lexical-v1', 'anchor': scope.get('anchor'),
+        'include_anchor_name': scope.get('include_anchor_name')}
+    return {'effective_policy': copy.deepcopy(effective),
             'input_digest': declaration.get('input_digest')}
 
 
@@ -462,6 +465,7 @@ def regressions(current: dict, baseline: dict, notes: list[str] | None = None) -
         for field in ('recall', 'precision'):
             if measured[field] + 1e-12 < reference[field]:
                 failures.append(f'{key}: {field} dropped {reference[field]:.6%} -> {measured[field]:.6%}')
+        _compare_test_policy(key, measured, reference, failures, notes)
         _compare_partial_files(key, measured, reference, failures, notes)
         for dimension in ('lazy', 'tests', 'configured_tests'):
             _compare_modes(key, dimension, measured.get(dimension) or {}, reference.get(dimension) or {}, failures, notes)
@@ -486,13 +490,37 @@ def _compare_modes(key: str, dimension: str, measured: dict, reference: dict, fa
         for field in ('recall', 'precision'):
             if None not in (row[field], ref[field]) and row[field] + 1e-12 < ref[field]:
                 failures.append(f'{key}: {dimension}={mode} {field} dropped {ref[field]:.6%} -> {row[field]:.6%}')
-        if dimension == 'configured_tests':
-            now = (row.get('edge_rule') or {}).get('test_scope') or {}
-            before = (ref.get('edge_rule') or {}).get('test_scope') or {}
-            if (not now.get('effective_policy') or not before.get('effective_policy')
-                    or _test_policy_identity(now) != _test_policy_identity(before)):
-                failures.append(f'{key}: {dimension}={mode} test policy identity changed or missing; review required')
+        _compare_test_policy(f'{key}: {dimension}={mode}', row, ref, failures, notes,
+                             required=dimension == 'configured_tests')
         _compare_partial_files(f'{key}: {dimension}={mode}', row, ref, failures, notes)
+
+
+def _policy_input_identity(row: dict) -> dict | None:
+    policy = row.get('policy_input')
+    if (not isinstance(policy, dict) or not isinstance(policy.get('path'), str)
+            or not re.fullmatch('[0-9a-f]{64}', policy.get('file_sha256') or '')
+            or not re.fullmatch('[0-9a-f]{64}', policy.get('input_digest') or '')
+            or not isinstance(policy.get('additional_paths'), list)):
+        return None
+    return {key: policy[key] for key in ('input_digest', 'additional_paths')}
+
+
+def _compare_test_policy(key: str, measured: dict, reference: dict, failures: list[str],
+                         notes: list[str] | None, *, required: bool = False) -> None:
+    now = (measured.get('edge_rule') or {}).get('test_scope') or {}
+    before = (reference.get('edge_rule') or {}).get('test_scope') or {}
+    if not required and (not now or not before):
+        if notes is not None and (now or before):
+            side = 'baseline' if not before else 'measurement'
+            notes.append(f'{key}: test_scope not compared ({side} has no test_scope)')
+        return
+    changed = not now or not before or _test_policy_identity(now) != _test_policy_identity(before)
+    if required:
+        current_input, reference_input = _policy_input_identity(measured), _policy_input_identity(reference)
+        changed = (changed or not now.get('effective_policy') or not before.get('effective_policy')
+                   or current_input is None or reference_input is None or current_input != reference_input)
+    if changed:
+        failures.append(f'{key}: test policy identity changed or missing; review required')
 
 
 def _compare_partial_files(key: str, measured: dict, reference: dict, failures: list[str],
