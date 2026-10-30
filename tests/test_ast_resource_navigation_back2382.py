@@ -7,7 +7,6 @@ from urllib.parse import quote
 import pytest
 
 from conftest import _run_reveal_direct as run
-from reveal.adapters.overview import OverviewAdapter
 
 
 @pytest.mark.parametrize('name', ['project space', pytest.param('project?space',
@@ -17,8 +16,9 @@ def test_overview_ast_hint_uses_encoded_resource_and_preserves_scope(tmp_path, n
     root.mkdir()
     for function in ('keep', 'omit'):
         (root / (function + '.py')).write_text(f'def {function}():\n    return 1\n', encoding='utf-8')
-    owner = OverviewAdapter(str(root), params={'top': 0, 'exclude': 'omit.py'})
-    answer = owner.get_structure()
+    overview = run('overview', str(root), '--top', '0', '--exclude', 'omit.py', '--format', 'json')
+    assert overview.returncode == 0, (overview.stdout, overview.stderr)
+    answer = json.loads(overview.stdout)
     steps = [shlex.split(step['command']) for step in answer['next_steps']
              if step['question'] == 'Function complexity ranking']
     assert len(steps) == 1
