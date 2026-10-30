@@ -886,17 +886,18 @@ def test_my_plugin():
 
 ### Config Caching
 
-Reveal caches config per project root for performance. Clear cache:
+Within a process, Reveal caches each discovery directory and CLI override set. A file
+and its parent directory share the same entry. Different directories can load separately
+even within one project, so nested overrides do not depend on which directory was queried
+first. Repeated lookups in the same context reuse its merged values and environment settings.
+
+CLI commands start fresh. API and MCP host requests reset configuration on entry, so edits
+are visible in the next request. Direct library callers and tests can reset all configuration
+discovery and merged values explicitly:
 
 ```python
 from reveal.config import RevealConfig
-RevealConfig._cache.clear()
-```
-
-Or in tests:
-```python
-def setUp(self):
-    RevealConfig._cache.clear()
+RevealConfig.reset_request_cache()
 ```
 
 ### XDG Base Directory Support

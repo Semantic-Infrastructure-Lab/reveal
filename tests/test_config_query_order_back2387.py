@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from reveal.config import RevealConfig
+from reveal.config import CONFIG_ENV_VARS, RevealConfig
 from reveal.utils.request_cache import host_request
 
 pytestmark = pytest.mark.component
@@ -12,8 +12,7 @@ pytestmark = pytest.mark.component
 
 @pytest.fixture(autouse=True)
 def isolated_config(monkeypatch):
-    for name in ('REVEAL_CONFIG', 'REVEAL_NO_CONFIG', 'REVEAL_BREADCRUMBS',
-                 'REVEAL_C901_THRESHOLD', 'REVEAL_RULES_DISABLE'):
+    for name in CONFIG_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
     # The tests exercise project/custom discovery, independently of installed defaults.
     read_layer = RevealConfig._read_layer.__func__

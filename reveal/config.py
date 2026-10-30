@@ -362,9 +362,9 @@ class FileConfig:
 class RevealConfig:
     """Unified configuration manager with multi-level precedence."""
 
-    # Config instance cache: (resolved_path, cli_overrides_repr) -> RevealConfig.
-    # Avoids re-parsing config files for the same project root within one process.
-    _cache: Dict[Any, 'RevealConfig'] = {}
+    # Config instances share a project anchor but may discover different nested layers.
+    # Cache each discovery directory and CLI override set until the request resets it.
+    _cache: Dict[Tuple[Path, Path, str], 'RevealConfig'] = {}
 
     # Project-root cache: resolved start_path -> project_root.
     # _find_project_root walks the filesystem; this avoids repeating that
@@ -421,7 +421,7 @@ class RevealConfig:
             start_path: Optional[Path] = None,
             cli_overrides: Optional[Dict[str, Any]] = None,
             no_config: bool = False) -> 'RevealConfig':
-        """Get or create config instance (singleton per project root).
+        """Get or create config for a discovery directory and CLI override set.
 
         Args:
             start_path: Starting path for config discovery (default: cwd)
@@ -452,7 +452,7 @@ class RevealConfig:
             project_root = cls._find_project_root(start_path)
             # Make cli_overrides hashable by converting to JSON string
             cli_key = json.dumps(cli_overrides or {}, sort_keys=True)
-            cache_key = (project_root, cli_key)
+            cache_key = (project_root, start_path, cli_key)
             if cache_key in cls._cache:
                 return cls._cache[cache_key]
         else:
