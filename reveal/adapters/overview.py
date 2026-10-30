@@ -203,11 +203,7 @@ def _next_steps(path: str, exclude_patterns: List[str], respect_gitignore: bool)
     for pattern in exclude_patterns:
         flags += ['--exclude', pattern]
     steps = [(question, ['reveal', uri]) for question, uri in questions]
-    # AST's existing resource codec is raw, unlike imports/metrics. A literal
-    # query delimiter cannot be represented by that codec; do not advertise an
-    # unexecutable URI. Spaces and shell metacharacters remain one quoted token.
-    if '?' not in path:
-        steps.append(('Function complexity ranking', ['reveal', f'ast://{path}?type=function&sort=-complexity']))
+    steps.append(('Function complexity ranking', ['reveal', f'ast://{target}?type=function&sort=-complexity']))
     steps.append(('Concrete rule findings', ['reveal', 'check', path]))
     return [{'question': question, 'command': shlex.join(tokens + flags)} for question, tokens in steps]
 
@@ -593,8 +589,6 @@ class OverviewAdapter(ResourceAdapter):
             note = 'Static import relationships and entrypoint candidates describe the observed graph, not runtime execution or a risk assessment.'
             if no_imports:
                 note += ' Import analysis was not requested (no_imports=true).'
-            if '?' in self.path:
-                note += " AST navigation cannot represent '?' in target paths; inspect files individually."
             result = ResultBuilder.create('overview', source=as_spelled(path, path),
                 contract_version=CONTRACT_VERSION, scope=scope, meta=cast(Optional[Dict[str, Any]], meta),
                 data={'path': as_spelled(path, path), 'map': facts, 'map_status': status,

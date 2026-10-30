@@ -63,6 +63,16 @@ reveal 'ast://./src?complexity>10' --format=json
 
 **Note**: Quote URIs containing `>` or `<` to prevent shell redirection.
 
+URI resource paths use existing-path-first decoding. For example,
+`ast://src%20tree?type=function` targets `src tree`; encode a literal `?` in a
+filename as `%3F` so it stays separate from the query. An existing literal percent
+path wins; otherwise an existing path is decoded once. `+` stays literal, malformed
+percent escapes stay literal, and invalid encoded UTF-8 or NUL is rejected before
+analysis. Exclusions and project ignore settings use the resolved target. Query
+filters retain their existing raw codec; this does not decode filter values.
+Python `api.query` URI paths follow the same resource policy; direct `AstAdapter`
+constructor paths remain literal, and AST keyword-override behavior is unchanged.
+
 ---
 
 ## Overview

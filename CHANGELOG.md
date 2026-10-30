@@ -42,6 +42,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- AST URI queries now open percent-encoded paths, including spaces and literal `?`, and Overview emits usable links to them. Existing literal percent paths still win; exclusions follow the resolved target, and invalid UTF-8/NUL resources are rejected before analysis without escaping legacy error handling (BACK-2382).
+
 - Comparison snapshots disclose capped import discovery as incomplete and withhold deltas instead of presenting a complete comparison (BACK-2386).
 
 - Bound Python API queries apply opted-in URI resource decoding, including encoded spaces and Unicode, before opening the target; existing literal percent paths keep precedence (BACK-2385).

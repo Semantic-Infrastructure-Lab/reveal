@@ -793,15 +793,20 @@ in-place transformations cannot hide previously required comparison proof. A pur
 usage rejection before analysis can legitimately lack that proof. Final field
 selection happens afterward and retains the established analysis facts.
 
-Adapters that opt into the existing-path-first resource codec, including Surface
+Adapters that opt into the existing-path-first resource codec, including AST, Surface
 and Overview (and its architecture alias), preserve an existing literal path first. If it does not
 exist, a once-decoded existing path can resolve URI-escaped characters. If both paths
 exist, the literal path wins. The resolved path and raw query remain separate through
 validation, exclusions and construction, so a decoded question mark never becomes a
-new query delimiter. Bound Python API URI calls apply the same codec after query
-validation; legacy factories without typed overrides keep their existing path policy.
-Invalid encoded UTF-8/NUL rejects the resource; permission/I/O
-failure is operational failure, never permission to select another path.
+new query delimiter. Canonical URI construction applies each explicitly declared
+resource codec, including Python API calls without typed overrides. Already-bound
+typed paths and undeclared/raw-codec resources retain literal spelling. Constructor-bound
+query overrides still validate the original URI query before the resource is opened.
+Invalid encoded UTF-8/NUL is explicit request validation; permission/I/O failure
+remains operational failure, never permission to select another path. Qualified AST
+queries classify these as invalid invocation versus required-analysis failure;
+element/check/stdin/batch routes retain their legacy failed-answer policy. Preparation
+failures clear dispatch exclusions before the next request.
 
 ---
 

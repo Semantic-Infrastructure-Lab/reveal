@@ -34,6 +34,7 @@ from ...utils.query import (
 from ...utils.results import ResultBuilder, note_truncation
 from ...errors import RequestValidationError
 from ...utils.path_utils import failure_of
+from ...utils.query_parser import ResourceSpec
 
 # Filter aliases that name a differently-named element field (see filtering.py).
 _SORT_FIELD_ALIASES = {'lines': 'line_count'}
@@ -284,6 +285,7 @@ class AstAdapter(ResourceAdapter):
     CLI_QUERY_FLAGS = {'all': 'limit=1000000', 'respect_gitignore': 'respect_gitignore=false'}  # lifts the 200-result auto-cap (BACK-1379)
     RESULT_TYPE = 'ast_query'
     DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
 
     @staticmethod
     def uri_result_type(resource):
@@ -347,7 +349,7 @@ class AstAdapter(ResourceAdapter):
 
         Returns JSON schema for AI agent integration.
         """
-        return _get_schema()
+        return {**_get_schema(), 'resource': AstAdapter.RESOURCE_SPEC.schema()}
 
     def __init__(self, resource: str, query: Optional[str] = None):
         """Initialize AST adapter.
