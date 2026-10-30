@@ -63,6 +63,7 @@ from .nav_effects import (  # noqa: F401
     render_effects_transitive,
 )
 from .nav_loops import (  # noqa: F401
+    LOOP_KEYWORDS,
     collect_loops,
     collect_fanout,
     render_loopmap,

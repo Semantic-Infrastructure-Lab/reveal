@@ -145,8 +145,7 @@ def _nav_outline(ctx: _NavCtx) -> None:
 
 
 def _nav_flow(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import OutlineDepth, element_outline, render_outline
-    from .adapters.ast.nav_loops import LOOP_KEYWORDS
+    from .adapters.ast.nav import OutlineDepth, element_outline, render_outline, LOOP_KEYWORDS
 
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
     evidence = OutlineDepth()
