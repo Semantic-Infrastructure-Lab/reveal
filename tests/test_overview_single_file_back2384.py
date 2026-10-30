@@ -22,7 +22,7 @@ def test_file_and_directory_targets_share_parent_relative_map_paths(tmp_path, mo
     target = path.as_posix() if absolute else path.relative_to(tmp_path).as_posix()
     uri = 'overview://' + quote(target, safe='/.:')
     if transport == 'api':
-        body = api.query(uri)
+        body = api.query('overview://' + target)  # API keeps the existing raw resource spelling.
     else:
         result = run(*(['overview', target] if transport == 'cli' else [uri]), '--format', 'json')
         assert result.returncode == 0, result.stderr
