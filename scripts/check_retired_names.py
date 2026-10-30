@@ -17,8 +17,11 @@ Run:
     python scripts/check_retired_names.py        # exits 1 and names each line that teaches one
 """
 import re
+import shlex
 import subprocess
 import sys
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -40,15 +43,34 @@ LIST_ITEM = re.compile(r'\s*(?:[-*+]|\d+\.)\s')
 FILE_ROUTE_CHECK = re.compile(r"reveal\s+(?!@|-|\S*://)[^\s|'\"]+\s[^|\n]*--(?:check|lint)(?![\w-])")
 # `reveal health` takes ops targets; a plain path (code) is `reveal check`'s. `.conf` stays an ops target.
 HEALTH_ARG = re.compile(r"reveal\s+health\b([^|\n#]*)")
-ELEMENT_OUTLINE = re.compile(
-    r'''reveal\s+(?P<path>"[^"]+"|'[^']+'|[^\s`]+)\s+'''
-    r'''(?P<element>"[^"]+"|'[^']+'|[^\s`-][^\s`]*)\s+[^`\n]*--outline\b''')
-
-
 def _outline_names_a_code_element(line):
+    from reveal.cli.invocation import Invocation
+    from reveal.cli.parser import create_argument_parser
     from reveal.registry import get_markdown_extensions
-    return any(Path(match['path'].strip('"\'')).suffix.lower() not in get_markdown_extensions()
-               for match in ELEMENT_OUTLINE.finditer(line))
+
+    if '--outline' not in line:
+        return False
+    for match in re.finditer(r'\breveal\s+([^`\n]+)', line):
+        lexer = shlex.shlex(match[1], posix=True, punctuation_chars='|;')
+        lexer.whitespace_split = True
+        try:
+            tokens = list(lexer)
+        except ValueError:
+            continue  # Prose with an unmatched quote is not a command example.
+        end = next((i for i, token in enumerate(tokens) if token in {'|', ';'}), len(tokens))
+        invocation = Invocation.parse(['reveal', *tokens[:end]])
+        if invocation.command is not None:
+            continue
+        parser = create_argument_parser('', full_help=False)
+        with redirect_stderr(StringIO()), redirect_stdout(StringIO()):
+            try:
+                args = parser.parse_args(invocation.argv)
+            except SystemExit:
+                continue  # Only accepted path-form invocations establish this context.
+        if (args.outline and args.path and args.element
+                and Path(args.path).suffix.lower() not in get_markdown_extensions()):
+            return True
+    return False
 
 
 def _health_names_a_code_path(line):
