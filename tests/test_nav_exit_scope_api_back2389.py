@@ -157,3 +157,17 @@ def test_reusing_record_resets_selection_and_preserves_previous_snapshots(collec
     assert evidence.warnings() == []
     assert len(metadata['unresolved_sites']) == 2
     assert len(warnings[0]['sites']) == 2
+
+
+def test_returned_ownership_payloads_cannot_mutate_collector_evidence():
+    source = 'def outer\n lambda { exit(1); exit(2) }\n return 3\nend'
+    tree, node, text = _scope('ruby', source, 'method')
+    evidence = ExitOwnership('ruby', node)
+    collect_exits(node, 1, 99, text, ownership=evidence)
+    metadata = evidence.scope_metadata()
+    warnings = evidence.warnings()
+    metadata['unresolved_sites'][0]['text'] = 'changed metadata'
+    warnings[0]['sites'][1]['kind'] = 'changed warning'
+    assert [s['text'] for s in evidence.unresolved_sites] == ['exit(1)', 'exit(2)']
+    assert [s['kind'] for s in evidence.unresolved_sites] == ['EXIT', 'EXIT']
+    assert evidence.scope_metadata()['unresolved_sites'][0]['text'] == 'exit(1)'
