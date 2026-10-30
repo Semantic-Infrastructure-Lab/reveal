@@ -152,3 +152,14 @@ def test_identical_tree_diff_validates_policy_before_proving_equality(tmp_path):
     revision = str(repo.create_commit('HEAD', author, author, 'fixture', repo.index.write_tree(), []))
     with pytest.raises(ValueError, match='test_layout'):
         run_architecture_diff(root, revision)
+
+
+@pytest.mark.parametrize('block', ['{additional_paths: !!set {foo: null}}', '{additional_paths: [2026-10-30]}', '{1: wrong}', '&loop {additional_paths: [*loop]}'])
+def test_unserializable_yaml_is_invalid_only_when_selected(tmp_path, block):
+    root = project(tmp_path, 'test_layout: ' + block + '\n')
+    with pytest.raises(ValueError, match='test_layout'):
+        bind(root)
+    (root / '.reveal.yaml').write_text('test_layout: {}\n', encoding='utf-8')
+    (tmp_path / '.reveal.yaml').write_text('test_layout: ' + block + '\n', encoding='utf-8')
+    RevealConfig.reset_request_cache()
+    assert bind(root).additional_paths == ()
