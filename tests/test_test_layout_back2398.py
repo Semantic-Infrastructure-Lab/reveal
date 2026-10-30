@@ -138,3 +138,17 @@ def test_configured_importer_exclusion_entrypoint_and_external_agree(tmp_path):
     entries = adapter.get_view('entrypoints')['entries']
     assert next(row for row in entries if row['file'] == 't/unit/helper.py')['is_test'] is True
     assert next(row for row in entries if row['file'] == 't/unitized/app.py')['is_test'] is False
+
+
+def test_identical_tree_diff_validates_policy_before_proving_equality(tmp_path):
+    pygit2 = pytest.importorskip('pygit2')
+    from reveal.diff.architecture_diff import run_architecture_diff
+
+    root = project(tmp_path, 'test_layout:\n  additional_paths: [../escape]\n')
+    repo = pygit2.init_repository(str(root))
+    repo.index.add_all()
+    repo.index.write()
+    author = pygit2.Signature('fixture', 'fixture@example.invalid')
+    revision = str(repo.create_commit('HEAD', author, author, 'fixture', repo.index.write_tree(), []))
+    with pytest.raises(ValueError, match='test_layout'):
+        run_architecture_diff(root, revision)
