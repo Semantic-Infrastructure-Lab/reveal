@@ -165,7 +165,7 @@ reveal surface src/            # external boundary map: CLI args, routes, env va
 reveal dev new-adapter <name>  # scaffold new adapters/rules
 ```
 
-`overview` presents a bounded import map with counting rules, coverage and drill-down commands. `pack --architecture` uses import fan-in to select context; its ranking remains a separate capability.
+`overview` presents a bounded import map with counting rules, coverage and drill-down commands; `overview --against REF` compares a tracked ref with the live working tree. The retired `architecture` spelling returns canonical overview answers. `pack --architecture` uses import fan-in to select context; its ranking remains a separate capability.
 
 ## Adapters
 

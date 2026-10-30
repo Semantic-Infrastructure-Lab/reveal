@@ -210,9 +210,9 @@ reveal pack src/ --architecture   # + entry points and core abstractions brief
 reveal hotspots src/
 reveal hotspots src/ --format json | jq '.function_hotspots[] | select(.has_test_hint == false)'
 
-# Architectural analysis
-reveal architecture src/          # Entry points, core abstractions, circular groups, risks
+# Project map and architectural comparison
 reveal overview .                 # Compact project map: scope, components, imports
+reveal overview src/ --against HEAD  # Tracked base versus live working tree
 
 # Execution and boundary analysis
 reveal calls src/ --callees main --depth 2 --detail  # What main calls, level by level, with side effects
