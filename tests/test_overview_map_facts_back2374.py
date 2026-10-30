@@ -249,6 +249,13 @@ def test_source_entrypoint_labels_and_counts_match_producer_semantics(source, tm
         project_map_facts(*source, path=tmp_path, top=0)
 
 
+@pytest.mark.parametrize('top', [0, 5])
+def test_declined_component_requires_its_reason_before_cuts(source, tmp_path, top):
+    source[2]['components'][0]['cohesion_reason'] = ''
+    with pytest.raises(ValueError, match='cohesion'):
+        project_map_facts(*source, path=tmp_path, top=top)
+
+
 @pytest.mark.parametrize('damage', ['loss', 'causes', 'count', 'witness', 'rule'])
 def test_malformed_source_cannot_become_clean_map(source, tmp_path, damage):
     if damage == 'loss':
