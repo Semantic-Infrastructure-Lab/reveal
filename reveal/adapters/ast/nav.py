@@ -19,6 +19,7 @@ from .nav_outline import (  # noqa: F401
     KEYWORD_LABEL,
     _node_label,
     _make_item,
+    OutlineDepth,
     element_outline,
     _collect_outline,
     _collect_scope_interior,

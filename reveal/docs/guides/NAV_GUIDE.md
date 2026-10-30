@@ -46,6 +46,14 @@ adds a `retired_spelling` diagnostic in `meta.warnings`.
 | `--returns` | Exit sites with enclosing syntactic conditions (not a reachability proof) |
 | `--boundary` | One-shot contract: inputs + builtins + environment + effects |
 
+For code-element `--outline`, `--ifmap`, `--catchmap`, `--loopmap` and `--fanout`,
+`--depth` limits logical nesting (default 3). A TRY and its CATCH/EXCEPT/FINALLY
+alternatives remain peers, including at the depth boundary. Text names the requested
+depth; JSON carries `meta.depth` and `meta.depth_limited`. When the limit leaves source
+subtrees overlapping the selected range uninspected, text and `meta.warnings` disclose
+that boundary. This does not claim a count of omitted records or matching loops/branches;
+increase `--depth` to inspect those bodies. Range filtering alone is not a depth cut.
+
 ---
 
 ## The Highest-Value Flags

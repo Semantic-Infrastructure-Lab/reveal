@@ -1,6 +1,5 @@
 """Logical-depth and visible-pruning controls for navigation (BACK-2388)."""
 import json
-from pathlib import Path
 
 import pytest
 
@@ -106,3 +105,40 @@ def test_depth_cut_evidence_does_not_leak_to_next_call(tmp_path):
     answer = json.loads(complete.stdout)
     assert answer['meta']['depth'] == 8
     assert answer['meta']['depth_limited'] is False
+
+
+def test_pruned_parent_overlap_does_not_invent_hidden_selector_findings(tmp_path):
+    answer = _run_json(_file(tmp_path), '--loopmap', '--range', '4-4')
+    assert answer['findings'] == []
+    assert answer['meta']['depth_limited'] is True
+    message = answer['meta']['warnings'][0]['message']
+    assert 'not inspected' in message
+    assert 'showing' not in message and 'hidden loops' not in message
+
+
+def test_collector_inspects_each_visited_subtree_once(monkeypatch):
+    from collections import Counter
+    from reveal.adapters.ast import nav_outline
+
+    visits = Counter()
+    original = nav_outline._children
+    def counted(node):
+        key = (_zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte'), _zero_arg(node, 'kind'))
+        visits[key] += 1
+        return original(node)
+    monkeypatch.setattr(nav_outline, '_children', counted)
+    rows = _python_outline(SOURCE, 1)
+    assert [r['keyword'] for r in rows] == ['TRY', 'EXCEPT', 'RETURN']
+    assert max(visits.values()) == 1
+    # The IF is the first recognized subtree beyond the budget. Its body is
+    # not traversed again to count or characterize hidden selector findings.
+    assert not any(kind == 'if_statement' for _, _, kind in visits)
+
+
+def test_nested_definition_body_obeys_its_depth_budget():
+    source = ('def work(a):\n    def inner():\n        if a:\n            return 1\n'
+              '    return 2\n')
+    rows = _python_outline(source, 1)
+    assert [(r['keyword'], r['line_start'], r['depth']) for r in rows] == [
+        ('DEF', 2, 1), ('RETURN', 5, 1),
+    ]

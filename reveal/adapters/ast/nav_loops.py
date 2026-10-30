@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-from .nav_outline import element_outline, render_branchmap
+from .nav_outline import OutlineDepth, element_outline, render_branchmap
 from .nav_effects import collect_effects, format_effect_target
 
 LOOP_KEYWORDS: frozenset = frozenset({'FOR', 'WHILE', 'LOOP', 'DO'})
@@ -27,6 +27,8 @@ def collect_loops(
     to_line: int,
     get_text: Callable,
     max_depth: int = 3,
+    *,
+    depth_evidence: Optional[OutlineDepth] = None,
 ) -> List[Dict[str, Any]]:
     """Return loop nodes (FOR/WHILE/LOOP/DO) within a line range.
 
@@ -34,7 +36,7 @@ def collect_loops(
     loop nested inside another loop — or inside an intervening IF/TRY — has
     a higher depth than its enclosing loop).
     """
-    items = element_outline(func_node, get_text, max_depth=max_depth)
+    items = element_outline(func_node, get_text, max_depth=max_depth, depth_evidence=depth_evidence)
     return [
         item for item in items
         if item['keyword'] in LOOP_KEYWORDS and from_line <= item['line_start'] <= to_line
@@ -48,9 +50,12 @@ def collect_fanout(
     get_text: Callable,
     language: Optional[str] = None,
     max_depth: int = 3,
+    *,
+    depth_evidence: Optional[OutlineDepth] = None,
 ) -> List[Dict[str, Any]]:
     """Return each loop in the range paired with its classified side effects."""
-    loops = collect_loops(func_node, from_line, to_line, get_text, max_depth=max_depth)
+    loops = collect_loops(func_node, from_line, to_line, get_text, max_depth=max_depth,
+                          depth_evidence=depth_evidence)
     results = []
     for loop in loops:
         effects = collect_effects(
