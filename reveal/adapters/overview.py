@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from reveal.capabilities import scope_dict_for_path
 from reveal.config import RevealConfig
+from reveal.defaults import UNLIMITED_TOP
 from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, RevealResult, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
@@ -30,8 +31,6 @@ from ..utils.results import ResultBuilder, note_truncation
 
 logger = logging.getLogger(__name__)
 
-# Live siblings (architecture, hotspots and the URI renderer) share this expansion ceiling.
-UNLIMITED_TOP = 10**9
 DIAGNOSTIC_CUT_HINT = ('Overview diagnostic samples contain at most 50 details; use imports://FILE '
                        'or reveal FILE for a named source when available.')
 

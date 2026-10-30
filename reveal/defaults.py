@@ -14,6 +14,10 @@ import re
 from typing import Dict
 
 
+# Shared expansion ceiling for project-map siblings and their URI renderer.
+UNLIMITED_TOP = 10**9
+
+
 # Canonical set of directories that directory walks skip by default.
 #
 # Single source of truth: previously this set was redefined (with drifting

@@ -321,7 +321,7 @@ def _run_complex_functions(adapter: 'ResourceAdapter', path: Path, limit: int, *
                             query=f'complexity>9&sort=-complexity&limit={limit}',
                             cut_as=('complex_functions', 'raise ?top=N'))
     _capture_ast_observations(data, observations)
-    return data.get('results', data.get('elements', []))
+    return cast(List[Dict[str, Any]], data.get('results', data.get('elements', [])))
 
 def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     """Run the import-graph + complexity analysis against `root` exactly once,
