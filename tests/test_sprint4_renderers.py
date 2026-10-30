@@ -65,6 +65,10 @@ def test_migrated_subcommands_emit_each_diagnostic_once(tmp_path, command):
     (tmp_path / 'app.py').write_text('def small():\n    return 1\n', encoding='utf-8')
     for index in range(6):
         (tmp_path / f'foreign_{index}.sh').write_text('echo hi\n', encoding='utf-8')
+    if command == 'architecture':
+        # The compact map does not request assessment of unsupported shell files.
+        # Required import parse loss supplies an actual map diagnostic.
+        (tmp_path / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
     result = _run(command, tmp_path)
     assert result.returncode in (0, 1, 3)
     warnings = _diagnostic_lines(result)
