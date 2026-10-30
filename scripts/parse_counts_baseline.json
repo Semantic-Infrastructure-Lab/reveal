@@ -1441,8 +1441,15 @@
                 "lazy": "include",
                 "lazy_default": true,
                 "scope": "scanned_path",
+                "test_scope": {
+                  "anchor": ".",
+                  "basis": "scan-root name and relative paths; project boundary unknown",
+                  "include_anchor_name": true,
+                  "rule": "is_test_path",
+                  "source": "scan_root_fallback"
+                },
                 "tests": "included",
-                "text": "Rule: fan-in and fan-out count static imports between files under the scanned path, tests included; TYPE_CHECKING imports excluded; function-level (lazy) imports included (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only.",
+                "text": "Rule: fan-in and fan-out count static imports between files under the scanned path, tests included; TYPE_CHECKING imports excluded; function-level (lazy) imports included (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only. Test paths: scan-root name and relative paths; project boundary unknown; anchor ..",
                 "type_checking": "excluded",
                 "unclassified_edges": 0,
                 "unclassified_languages": []
@@ -1452,8 +1459,15 @@
                   "lazy": "exclude",
                   "lazy_default": true,
                   "scope": "scanned_path",
+                  "test_scope": {
+                    "anchor": ".",
+                    "basis": "scan-root name and relative paths; project boundary unknown",
+                    "include_anchor_name": true,
+                    "rule": "is_test_path",
+                    "source": "scan_root_fallback"
+                  },
                   "tests": "included",
-                  "text": "Rule: cycles use static imports between files under the scanned path, tests included; TYPE_CHECKING imports excluded; function-level (lazy) imports excluded (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only.",
+                  "text": "Rule: cycles use static imports between files under the scanned path, tests included; TYPE_CHECKING imports excluded; function-level (lazy) imports excluded (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only. Test paths: scan-root name and relative paths; project boundary unknown; anchor ..",
                   "type_checking": "excluded",
                   "unclassified_edges": 0,
                   "unclassified_languages": []
@@ -1462,8 +1476,15 @@
                   "lazy": "include",
                   "lazy_default": true,
                   "scope": "scanned_path",
+                  "test_scope": {
+                    "anchor": ".",
+                    "basis": "scan-root name and relative paths; project boundary unknown",
+                    "include_anchor_name": true,
+                    "rule": "is_test_path",
+                    "source": "scan_root_fallback"
+                  },
                   "tests": "importers_not_counted",
-                  "text": "Rule: fan-in counts static imports between files under the scanned path, importers under a test path not counted; TYPE_CHECKING imports excluded; function-level (lazy) imports included (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only.",
+                  "text": "Rule: fan-in counts static imports between files under the scanned path, importers under a test path not counted; TYPE_CHECKING imports excluded; function-level (lazy) imports included (default); overview:// takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only. Test paths: scan-root name and relative paths; project boundary unknown; anchor ..",
                   "type_checking": "excluded",
                   "unclassified_edges": 0,
                   "unclassified_languages": []

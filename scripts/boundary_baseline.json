@@ -39,7 +39,6 @@
   "reveal/adapters/calls/index.py": 2,
   "reveal/adapters/git/commits.py": 1,
   "reveal/adapters/help.py": 1,
-  "reveal/analyzers/imports/types.py": 1,
   "reveal/capabilities.py": 1,
   "reveal/cli/commands/check.py": 1,
   "reveal/cli/defaults.py": 1,

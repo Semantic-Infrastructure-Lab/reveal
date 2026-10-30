@@ -133,7 +133,7 @@
   "reveal/display/formatting.py::_format_html_overview": 18,
   "reveal/display/formatting.py::select_fields": 17,
   "reveal/display/structure.py::_enrich_structure": 16,
-  "reveal/file_handler.py::handle_file": 19,
+  "reveal/file_handler.py::handle_file": 18,
   "reveal/grep_handler.py::_group_by_element": 16,
   "reveal/mcp_server.py::reveal_check": 17,
   "reveal/rendering/adapters/contracts.py::_render_report": 17,

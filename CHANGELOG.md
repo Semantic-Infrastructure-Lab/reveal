@@ -18,6 +18,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- Code-element navigation uses `--flow` for the recognized skeleton, with optional `--flow=if,loop,try` selectors. `--exits` now includes recorded syntactic gates and static counts instead of reachability verdicts. Element `--outline`, the old maps, `--returns` and `--flowto` still run with replacement notes; file and Markdown section outlines keep `--outline`. Text and JSON disclose recognition and implicit-tail limits (BACK-2364).
 - `architecture` and `architecture://` are retired aliases for overview, with a replaced-by note and canonical `overview`/`overview_diff` answers. The former risks and next-commands brief is removed; use the compact map, targeted drill-downs and `overview --against REF`. `pack --architecture` keeps its separate context-selection behavior (BACK-2377).
 - Ordinary `overview` becomes a compact project map in text and JSON: recognized code-file/language counts, bounded components, import relationships, entrypoint candidates and cycles, with coverage and drill-down commands. Quality, complexity and history move to their existing queries; `no_git` and test-ranking controls reject with guidance. Top zero shows totals without graph rows, and `no_imports` explicitly requests only scope (BACK-2374, BACK-2375).
 
@@ -42,6 +43,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Import test exclusion uses paths within the selected project, so cloning beneath a `tests` directory or naming the project `tests` no longer hides production imports. Entrypoint labels survive relative display, and comparison snapshots use the same test scope as the live tree. Explicit root selection and markerless fallback scope are disclosed; production imports into test targets remain counted (BACK-2391).
 - Named `--exits`, `--returns` and `--flowto` analyses distinguish the selected callable's execution regions from nested bodies. Results name their scope, preserve qualified declaration and default-argument evaluation, and identify retained candidates whose ownership is unresolved; source-region and aggregate inventories can still include multiple owners (BACK-2389).
 - Code-analysis navigation on explicitly structure-only formats, such as SQL, now rejects with guidance instead of returning an empty successful analysis. Invalid zero/negative depth on code-element structural views exits 2, and registered MCP navigation marks these rejections as errors; file, directory and Markdown depth controls keep their behavior (BACK-2390).
 
