@@ -197,6 +197,8 @@ class ImportView:
             resolved_at=self._resolved_at(cycles), counted=self._edges(default))
         assert self.test_layout is not None
         rule['test_scope'] = self.test_layout.as_dict(self._base_dir())
+        basis = rule['test_scope']
+        rule['text'] += f" Test paths: {basis['basis']}; anchor {basis['anchor']}."
         return rule
 
     def _row_files(self, graph: ImportGraph) -> set:

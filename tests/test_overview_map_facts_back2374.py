@@ -8,6 +8,7 @@ from reveal.analyzers.imports import resolution, service
 from reveal.analyzers.imports.map_facts import project_map_facts
 from reveal.analyzers.imports.views import ImportView
 from reveal.utils.entry_points import active_entry_points
+from reveal.utils.path_utils import TestLayout as LexicalLayout
 
 
 def answers(root):
@@ -225,11 +226,14 @@ def test_active_predicate_keeps_producer_path_scope_before_display(source, tmp_p
     root = tmp_path / 'tests' / 'project'
     for row in source[1]['entries']:
         row['file'] = (root / row['file']).as_posix()
-        row['is_test'] = True
-    result = project_map_facts(*source, path=root)
-    assert result['entrypoints']['total'] == 0
+    layout = LexicalLayout(root, 'project')
+    result = project_map_facts(*source, path=root, test_layout=layout)
+    assert result['entrypoints']['total'] == 8
     assert result['entry_point_filter']['fan_in_zero'] == 11
-    assert result['entry_point_filter']['active'] == 0
+    assert result['entry_point_filter']['active'] == 8
+    source[1]['entries'][-1]['is_test'] = True
+    with pytest.raises(ValueError, match='producer path classification'):
+        project_map_facts(*source, path=root, test_layout=layout, top=0)
 
 
 @pytest.mark.parametrize('top', [0, 5])
@@ -288,7 +292,7 @@ def test_real_conformance_views_preserve_their_answers(language):
     fixtures = Path(__file__).parent / 'fixtures'
     root = (fixtures / ('smoke' if language == 'tsx' else 'conformance') / language).resolve()
     raw = answers(root)
-    result = project_map_facts(*raw, path=root, top=10000)
+    result = project_map_facts(*raw, path=root, top=10000, test_layout=LexicalLayout.for_path(root))
     assert result['fan_in']['total'] == sum(e['fan_in'] > 0 for e in raw[0]['entries'])
     assert result['entrypoints']['total'] == len(active_entry_points(raw[1]['entries']))
     assert result['components']['total'] == raw[2]['total']

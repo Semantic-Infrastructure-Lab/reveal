@@ -196,7 +196,7 @@ def test_test_exclusion_scores_importers_not_targets_and_detects_ignored_paramet
     assert row['test_population'] == {'directories': ['tests'], 'files': 2, 'edges': 2}
     # A target under tests/ remains valid: exclusion selects importers, not targets.
     assert row['targets'] == 2
-    monkeypatch.setattr(ImportGraph, 'without_test_importers', lambda self: self)
+    monkeypatch.setattr(ImportGraph, 'without_test_importers', lambda self, test_layout: self)
     measured = gate.measure(entry, root)
     assert measured['recall'] == measured['precision'] == 1
     assert measured['lazy'] == baseline['lazy']
@@ -227,7 +227,7 @@ def test_test_exclusion_zero_truth_is_unavailable_recall_and_still_scores_extras
     row = measured['tests']['exclude']
     assert row['oracle_edges'] == row['hit_edges'] == row['extra_edges'] == 0
     assert row['recall'] is row['precision'] is None
-    monkeypatch.setattr(ImportGraph, 'without_test_importers', lambda self: self)
+    monkeypatch.setattr(ImportGraph, 'without_test_importers', lambda self, test_layout: self)
     broken = gate.measure(entry, root)['tests']['exclude']
     assert broken['recall'] is None and broken['precision'] == 0
     assert broken['extra_edges'] == 2

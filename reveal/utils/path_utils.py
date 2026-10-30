@@ -183,14 +183,13 @@ class TestLayout:
     logical_root: Optional[Path] = None
 
     def __post_init__(self) -> None:
-        if not self.anchor.is_absolute():
-            raise ValueError('test layout anchor must be absolute')
+        for path in (self.anchor, self.observed_root, self.logical_root):
+            if path is not None and (not path.is_absolute() or '..' in path.parts):
+                raise ValueError('test layout roots must be normalized absolute paths')
         if (self.observed_root is None) != (self.logical_root is None):
             raise ValueError('test layout relocation requires observed and logical roots')
         if self.logical_root is not None:
             self.logical_root.relative_to(self.anchor)
-        if self.observed_root is not None and not self.observed_root.is_absolute():
-            raise ValueError('test layout observed root must be absolute')
 
     @classmethod
     def for_path(cls, path: Path, *, fallback_root: Optional[Path] = None,
@@ -216,6 +215,8 @@ class TestLayout:
 
     def is_test(self, path: Union[str, PurePath]) -> bool:
         candidate = Path(to_posix(path))
+        if not candidate.is_absolute() or '..' in candidate.parts:
+            raise ValueError('test layout source must be a normalized absolute path')
         try:
             if self.observed_root is not None and self.logical_root is not None:
                 candidate = self.logical_root / candidate.relative_to(self.observed_root)
@@ -235,7 +236,7 @@ class TestLayout:
             base = self.logical_root / base.relative_to(self.observed_root)
         basis = ('scan-root name and relative paths; project boundary unknown'
                  if self.include_anchor_name else 'paths relative to the selected project')
-        return {'anchor': to_relative_display(self.anchor, base), 'source': self.source,
+        return {'anchor': to_posix(os.path.relpath(self.anchor, base)), 'source': self.source,
                 'include_anchor_name': self.include_anchor_name, 'rule': 'is_test_path',
                 'basis': basis}
 

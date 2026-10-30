@@ -68,7 +68,7 @@ elements:
   lazy: 'Which function-level import edges count: include, exclude (load-time only) or only'
   importers: 'Who imports a file (=FILE or a file path), or every module under a directory with its importers'
   scope: 'root (default): resolve at the project root, rows under the path; path: the path is the scan root'
-  tests: 'include (default) or exclude importers under a test path from every count'
+  tests: 'include (default) or exclude project-relative test importers; checkout ancestors and project name do not count. Markerless scan-root fallback is disclosed'
   root: 'Pin the scan root to DIR (must contain the path)'
   max_files: 'Source files the walk may keep (default 20000), disclosed when it cuts'
 

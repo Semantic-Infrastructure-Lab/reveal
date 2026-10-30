@@ -30,6 +30,7 @@ def _imports_view(path: str) -> bool:
         analysis=SimpleNamespace(graph=graph, scanned_files={file}),
         _edges=lambda default: graph,
         _row_files=lambda view: {file},
+        is_test=is_test_path,
         _edge_rule=lambda *args, **kwargs: {},
         _build_response=lambda response_type, **fields: fields,
     )

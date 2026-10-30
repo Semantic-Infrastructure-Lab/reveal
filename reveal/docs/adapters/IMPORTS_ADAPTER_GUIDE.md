@@ -672,6 +672,19 @@ reveal 'imports://src?unused'
 
 ## Query Parameters
 
+`tests=exclude` omits edges from test importers, retaining production imports into
+test targets. Test paths are relative to the selected project: checkout ancestors
+and the project directory's own name do not classify its files as tests. Narrowing
+the scan with `scope=path` retains a discovered project boundary. An accepted `root`
+pin deliberately selects that boundary; it remains ignored with `scope=path`.
+
+If no project boundary is found, classification uses a disclosed scan-root fallback
+that retains the root name, so directly inspecting a markerless `tests` directory
+still recognizes unnamed helpers. This fallback cannot establish project scope
+invariance across narrower scans. The counting rule reports the effective basis in
+text and JSON `edge_rule.test_scope`; package tables use `metadata.test_scope`.
+Entrypoint `is_test` labels retain that basis after paths are shortened for display.
+
 ### Query Flags
 
 Use `?flag` syntax for operations:

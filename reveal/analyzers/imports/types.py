@@ -6,13 +6,14 @@ Extracted to a separate module to avoid circular imports.
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 from collections import defaultdict, deque
 
 from .unused import unused_entries
 from ...core.node_taxonomy import LOCAL_SCOPE
 from ...reveal_types import PathFailure
-from ...utils.path_utils import TestLayout
+if TYPE_CHECKING:
+    from ...utils.path_utils import TestLayout
 
 # BACK-2077: which edges a graph view keeps, by the scope of the imports behind each edge.
 # 'include' keeps every edge, 'exclude' the load-time ones (an edge with at least one import
@@ -283,7 +284,7 @@ class ImportGraph:
             views[lazy] = view
         return view
 
-    def without_test_importers(self, test_layout: TestLayout) -> 'ImportGraph':
+    def without_test_importers(self, test_layout: 'TestLayout') -> 'ImportGraph':
         """This graph without the edges whose importer is under a test path
         with one selected lexical context, computed once per effective scope."""
         views: Dict[object, 'ImportGraph'] = self.__dict__.setdefault('_edge_views', {})

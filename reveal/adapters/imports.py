@@ -51,7 +51,7 @@ from ..analyzers.imports.extraction import (
 )
 from ..analyzers.imports import resolution
 from ..registry import get_code_extensions
-from ..utils.path_utils import hidden_entries_warning, to_posix, to_relative_display
+from ..utils.path_utils import TestLayout, hidden_entries_warning, to_posix, to_relative_display
 from ..utils.query_control import ScanBudget
 from ..utils.results import ResultBuilder, note_truncation
 from ..utils.warning_render import meta_warning_lines
@@ -1040,10 +1040,12 @@ class ImportsRenderer:
     def _render_external(result: dict, resource: str, verbose: bool) -> None:
         """Render ?external: the package table, most used first (20 per list unless --verbose)."""
         external, stdlib = result.get('external_packages', []), result.get('stdlib_packages', [])
+        scope = result.get('metadata', {}).get('test_scope', {})
+        scope_note = f"\n  Test paths: {scope['basis']}; anchor {scope['anchor']}." if scope else ''
         print(f"\nPackages: {result.get('source', resource)}")
         print(f"  {result.get('total_imports', 0)} import(s) in {result.get('total_files', 0)} file(s): "
               f"{result.get('internal_imports', 0)} internal, {len(external)} unresolved package(s), "
-              f"{len(stdlib)} stdlib package(s)")
+              f"{len(stdlib)} stdlib package(s){scope_note}")
         multi_stack = len({lang for entry in external for lang in entry.get('languages', [])}) > 1
         for title, entries in (('Unresolved packages (third-party or unresolved-local)', external),
                                ('Stdlib packages', stdlib)):
@@ -1453,6 +1455,7 @@ class ImportsAdapter(ResourceAdapter):
         self._scope_hidden: Optional[WarningEntry] = None
         # Where _build_graph resolved and under which file cap (BACK-1054).
         self._scan: Optional[resolution.ScanRoot] = None
+        self._test_layout: Optional[TestLayout] = None
         self._scan_budget = ScanBudget(_MAX_FILES.default)
         self._parse_extensions = parse_extensions
 
@@ -1683,6 +1686,8 @@ class ImportsAdapter(ResourceAdapter):
                      collect_structures: bool = False) -> None:
         """Build through the public analysis operation, then retain only this request's state."""
         self._scan = scan = _scan_root_of(self._query_params, target_path)
+        self._test_layout = TestLayout.for_path(target_path, fallback_root=scan.root,
+                                                root_override=scan.override_used)
         self._scan_budget = ScanBudget(_MAX_FILES.read(self._query_params))
         supported = self._parse_extensions if self._parse_extensions is not None else frozenset(get_all_extensions())
         code = frozenset() if self._parse_extensions is not None else get_code_extensions()
@@ -1717,7 +1722,7 @@ class ImportsAdapter(ResourceAdapter):
         return ImportView(self.analysis, target, scan, self._scan_budget.limit,
                           lazy=None if lazy is None else _LAZY.validate(lazy),
                           tests=_TESTS.read(self._query_params), scope=_SCOPE.read(self._query_params),
-                          top=int(top) if top else None)
+                          top=int(top) if top else None, test_layout=self._test_layout)
 
     def _build_response(self, response_type: str, **data_fields) -> Dict[str, Any]:
         """Build standardized adapter response with common structure.
