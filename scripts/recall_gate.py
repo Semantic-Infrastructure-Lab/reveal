@@ -88,10 +88,18 @@ def _read_test_policy(path: Path) -> dict[str, Any]:
     declaration = config['test_layout']
     if not isinstance(declaration, dict) or set(declaration) != {'additional_paths'}:
         raise ValueError('test policy must declare only additional_paths')
-    paths = declaration['additional_paths']
+    normalized = _normalize_test_selectors(declaration['additional_paths'])
+    return {'path': path.resolve().as_posix(), 'file_sha256': hashlib.sha256(raw).hexdigest(),
+            'input_digest': hashlib.sha256(json.dumps(declaration, sort_keys=True,
+                                                     separators=(',', ':'), ensure_ascii=True,
+                                                     allow_nan=False).encode('utf-8')).hexdigest(),
+            'additional_paths': normalized}
+
+
+def _normalize_test_selectors(paths: Any) -> list[str]:
     if not isinstance(paths, list):
         raise ValueError('test policy additional_paths must be a list')
-    normalized = set()
+    normalized: set[str] = set()
     for selector in paths:
         if not isinstance(selector, str) or not selector or '\0' in selector:
             raise ValueError('test policy selectors must be nonempty strings without NUL')
@@ -100,11 +108,7 @@ def _read_test_policy(path: Path) -> dict[str, Any]:
         if spelling.startswith('/') or re.match(r'^[A-Za-z]:', spelling) or '..' in parts:
             raise ValueError('test policy selectors must be project-relative without parent traversal')
         normalized.add('/'.join(part for part in parts if part not in ('', '.')) or '.')
-    return {'path': path.resolve().as_posix(), 'file_sha256': hashlib.sha256(raw).hexdigest(),
-            'input_digest': hashlib.sha256(json.dumps(declaration, sort_keys=True,
-                                                     separators=(',', ':'), ensure_ascii=True,
-                                                     allow_nan=False).encode('utf-8')).hexdigest(),
-            'additional_paths': sorted(normalized)}
+    return sorted(normalized)
 
 
 def _test_policy_identity(scope: dict) -> dict:
@@ -117,8 +121,29 @@ def _test_policy_identity(scope: dict) -> dict:
             'input_digest': declaration.get('input_digest')}
 
 
+def _validate_policy_scope(scope: dict, anchor: str) -> None:
+    """Validate configured evidence without re-reading engine-selected configuration."""
+    selectors = scope.get('additional_paths')
+    declaration = scope.get('declaration')
+    effective = scope.get('effective_policy')
+    version = 'project-test-layout-v1'
+    expected = {'classifier_version': version, 'anchor': anchor, 'include_anchor_name': False,
+                'anchor_name': None, 'additional_paths': selectors}
+    if (not isinstance(selectors, list) or not all(isinstance(path, str) for path in selectors)
+            or selectors != _normalize_test_selectors(selectors)
+            or scope.get('classifier_version') != version
+            or scope.get('whole_scope') is not ('.' in selectors)
+            or effective != expected or not isinstance(effective.get('include_anchor_name'), bool)
+            or not isinstance(declaration, dict) or declaration.get('layer') not in ('custom', 'project')
+            or not isinstance(declaration.get('path'), str) or not declaration['path']
+            or not isinstance(declaration.get('input_digest'), str)
+            or not re.fullmatch('[0-9a-f]{64}', declaration['input_digest'])):
+        raise RuntimeError('imports:// carries malformed or unknown configured test policy evidence')
+
+
 def _validate_test_policy(scope: dict, policy: dict, *, anchor: str = '.') -> None:
     """Check independently supplied selectors and digest against the actual public answer."""
+    _validate_policy_scope(scope, anchor)
     version = 'project-test-layout-v1'
     selectors = policy['additional_paths']
     expected = {'classifier_version': version, 'anchor': anchor,
@@ -204,6 +229,9 @@ def _importers_request(target: Path, scan: Path, cap: int | None, lazy: str = 'i
     if (scope['anchor'] != anchor or scope['source'] != 'explicit_root'
             or scope['include_anchor_name'] is not False):
         raise RuntimeError('imports:// test_scope differs from the explicitly requested root')
+    configured_fields = ('classifier_version', 'additional_paths', 'whole_scope', 'declaration', 'effective_policy')
+    if any(key in scope for key in configured_fields):
+        _validate_policy_scope(scope, anchor)
     if policy is not None:
         _validate_test_policy(scope, policy, anchor=anchor)
     elif scope.get('additional_paths'):
