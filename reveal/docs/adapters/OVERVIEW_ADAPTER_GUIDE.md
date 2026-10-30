@@ -119,7 +119,7 @@ Against selects a separate `overview_diff` operation before ordinary map work.
 It compares the tracked base at the ref with the live working tree, including
 uncommitted changes. The head label is `working tree`. It uses the existing
 architecture comparison engine; it does not compare the former quality dashboard.
-The Git extra is required: `pip install 'reveal-cli[git]'`.
+The Git extra is required: `pip install "reveal-cli[git]"`.
 
 Comparison preserves fan-in/out, cycle, coupling, active-entrypoint and complexity
 centroid deltas. Its centroid population is `max(top, 1) * 4`: default top five
