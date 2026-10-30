@@ -1058,7 +1058,7 @@ def test_a_disclosed_total_is_the_real_total(harness, scheme):
 def test_the_own_cap_invariant_bites(harness):
     """Positive control: on wide/ a knob at 1 really cuts these adapters' lists, so
     test_an_adapters_own_cap_is_disclosed is not vacuously green."""
-    expected = ['ast', 'calls', 'depends', 'git', 'hotspots', 'imports', 'json', 'metrics', 'overview',
+    expected = ['architecture', 'ast', 'calls', 'depends', 'git', 'hotspots', 'imports', 'json', 'metrics', 'overview',
                 'patches', 'stats', 'xlsx']
     cuts = {scheme: _knob_cuts(harness, scheme)
             for scheme in sorted(s for s in FIXTURE_URIS if _cap_knobs(s))}
