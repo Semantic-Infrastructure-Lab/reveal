@@ -14,7 +14,7 @@ target path until a config with root:true is found or the filesystem root.
 YAML is the primary format. TOML support via pyproject.toml [tool.reveal] section.
 """
 
-from .utils.request_cache import register_request_cache
+from .utils.request_cache import register_request_cache, in_host_request
 from pathlib import Path
 import os
 import sys
@@ -155,7 +155,7 @@ def _validate_declaration_keys(value: Any) -> None:
 
 def _config_source(layer: str, path: Path, config: Dict[str, Any]) -> ConfigSource:
     raw, error = _capture_test_layout(config)
-    return ConfigSource(layer, path, bool(config.get('root')), raw, error)
+    return ConfigSource(layer, Path(os.path.abspath(path)), bool(config.get('root')), raw, error)
 
 
 _ResolveKey = Union[Path, Tuple[str, Path]]  # absolute path, or (cwd, relative path)
@@ -408,7 +408,7 @@ class RevealConfig:
 
     # Config instances share a project anchor but may discover different nested layers.
     # Cache each discovery directory and CLI override set until the request resets it.
-    _cache: Dict[Tuple[Path, Path, str], 'RevealConfig'] = {}
+    _cache: Dict[Tuple[Path, Path, str, Tuple[Tuple[str, str], ...], Optional[str], Optional[str]], 'RevealConfig'] = {}
 
     # Project-root cache: resolved start_path -> project_root.
     # _find_project_root walks the filesystem; this avoids repeating that
@@ -449,6 +449,7 @@ class RevealConfig:
         # The files that were read into this config, lowest precedence first (BACK-2275).
         self.sources: List[ConfigSource] = []
         self._selected_custom_config: Optional[str] = None
+        self._selected_custom_failure: Optional[str] = None
         self._overrides = self._parse_overrides()
 
     def apply_test_layout(self, layout: TestLayout) -> TestLayout:
@@ -476,13 +477,11 @@ class RevealConfig:
 
     def _require_test_layout_sources(self, layout: TestLayout) -> None:
         """A failed eligible read cannot establish that the policy was absent."""
-        if self._selected_custom_config and not any(source.layer == 'custom' for source in self.sources):
-            why = next((why for path, why in self.load_failures if path == self._selected_custom_config),
-                       'FileNotFoundError: selected configuration file was not found')
-            raise TestLayoutConfigError(f'Required test_layout configuration could not be loaded: {why}')
+        if self._selected_custom_failure:
+            raise TestLayoutConfigError(f'Required test_layout configuration could not be loaded: {self._selected_custom_failure}')
         for path, why in self.load_failures:
             source = Path(path)
-            if (source.parent == layout.anchor and source.name in ('.reveal.yaml', 'pyproject.toml')) or self._selected_custom_config == path:
+            if (source.parent == layout.anchor and source.name in ('.reveal.yaml', 'pyproject.toml')):
                 raise TestLayoutConfigError(f'Required test_layout configuration could not be loaded: {why}')
 
     def _test_layout_source(self, layout: TestLayout) -> Optional[ConfigSource]:
@@ -541,7 +540,7 @@ class RevealConfig:
             start_path: Optional[Path] = None,
             cli_overrides: Optional[Dict[str, Any]] = None,
             no_config: bool = False) -> 'RevealConfig':
-        """Get or create config for a discovery directory and CLI override set.
+        """Get or create config for a discovery directory and actual loader inputs.
 
         Args:
             start_path: Starting path for config discovery (default: cwd)
@@ -567,12 +566,15 @@ class RevealConfig:
         if start_path.is_file():
             start_path = start_path.parent
 
+        selected_custom = os.getenv(CUSTOM_CONFIG_ENV) if not no_config else None
+
         # Check cache (unless no_config mode)
         if not no_config:
             project_root = cls._find_project_root(start_path)
             # Make cli_overrides hashable by converting to JSON string
             cli_key = json.dumps(cli_overrides or {}, sort_keys=True)
-            cache_key = (project_root, start_path, cli_key)
+            env_key, custom_identity, user_identity = cls._cache_inputs()
+            cache_key = (project_root, start_path, cli_key, env_key, custom_identity, user_identity)
             if cache_key in cls._cache:
                 return cls._cache[cache_key]
         else:
@@ -581,20 +583,36 @@ class RevealConfig:
         # Load and merge configs
         failures: List[Tuple[str, str]] = []
         sources: List[ConfigSource] = []
-        selected_custom = os.getenv(CUSTOM_CONFIG_ENV) if not no_config else None
         merged = cls._load_and_merge(start_path, cli_overrides, no_config, failures, sources)
 
         # Create instance
         instance = cls(merged, project_root)
         instance.load_failures = failures
         instance.sources = sources
-        instance._selected_custom_config = selected_custom
+        instance._selected_custom_config = os.path.abspath(selected_custom) if selected_custom else None
+        if selected_custom and not any(source.layer == 'custom' for source in sources):
+            instance._selected_custom_failure = next((why for path, why in failures if path == selected_custom),
+                                                    'FileNotFoundError: selected configuration file was not found')
 
         # Cache it
         if not no_config:
             cls._cache[cache_key] = instance
 
         return instance
+
+    @classmethod
+    def _cache_inputs(cls) -> Tuple[Tuple[Tuple[str, str], ...], Optional[str], Optional[str]]:
+        """Host contexts snapshot on first use; direct calls have no reset boundary.
+
+        Only actual loader inputs separate direct-call contexts. abspath binds a
+        relative selector to cwd lexically, without reading or resolving aliases.
+        """
+        if in_host_request():
+            return (), None, None
+        custom = os.getenv(CUSTOM_CONFIG_ENV)
+        custom_identity = os.path.abspath(custom) if custom else None
+        user_identity = os.path.abspath(cls._get_user_config_path()) if not custom else None
+        return tuple(config_env_vars().items()), custom_identity, user_identity
 
     @classmethod
     def _find_project_root(cls, start_path: Path) -> Path:
