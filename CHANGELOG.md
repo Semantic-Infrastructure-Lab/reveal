@@ -50,7 +50,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 - Configuration lookups in root and nested directories no longer reuse whichever directory was queried first. Nested YAML/TOML overrides apply consistently, while repeated lookups of a file and its parent reuse the same cached configuration (BACK-2387).
 - Element `--outline`, branch maps, `--loopmap` and `--fanout` keep same-depth exception and alternative branches when deeper bodies are collapsed. Text and JSON name the requested depth and disclose structural regions left unexpanded by that limit (BACK-2388).
 
-- AST URI queries now open percent-encoded paths, including spaces and literal `?`, and Overview emits usable links to them. Existing literal percent paths still win; exclusions follow the resolved target, and invalid UTF-8/NUL resources are rejected before analysis without escaping legacy error handling (BACK-2382).
+- AST URI queries now open percent-encoded paths, including spaces and literal `?`, and Overview emits usable links to them. Existing literal percent paths still win; exclusions follow the resolved target, and invalid UTF-8/NUL resources are rejected before analysis without escaping legacy error handling. Missing Windows drive paths retain normal missing-resource handling instead of being rejected as multi-file colon syntax (BACK-2382, BACK-2397).
 
 - Comparison snapshots disclose capped import discovery as incomplete and withhold deltas instead of presenting a complete comparison (BACK-2386).
 

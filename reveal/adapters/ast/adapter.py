@@ -1,5 +1,6 @@
 """Core AST query adapter."""
 
+import ntpath
 import os
 from dataclasses import replace
 from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
@@ -365,7 +366,7 @@ class AstAdapter(ResourceAdapter):
         # Detect multi-file colon syntax (e.g. file1.py:file2.py) which is unsupported.
         # Colons in valid paths: Windows drive letters (C:\), or schemes (://). On Linux/Mac
         # a colon in a plain path almost always means the user copied diff:// syntax by mistake.
-        if ':' in self.path and '://' not in self.path and not os.path.exists(self.path):
+        if ':' in ntpath.splitdrive(self.path)[1] and '://' not in self.path and not os.path.exists(self.path):
             parts = self.path.split(':', 1)
             left, right = parts[0], parts[1]
             # Raise helpful error if either side looks like a code file path

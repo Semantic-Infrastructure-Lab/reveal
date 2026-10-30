@@ -117,3 +117,15 @@ def test_api_kwargs_and_raw_query_codec_are_unchanged(tmp_path):
 
 def test_resource_schema_declares_existing_path_first():
     assert AstAdapter.get_schema()['resource']['uri_codec'] == 'existing-path-first'
+
+
+@pytest.mark.parametrize('path', ['C:/reveal-missing-drive-path/only%2520.py',
+                                  r'C:\reveal-missing-drive-path\only%2520.py'])
+def test_missing_windows_drive_is_not_multifile_colon_syntax(path):
+    assert AstAdapter(path).path == path
+
+
+@pytest.mark.parametrize('path', ['first.py:second.py', 'C:/first.py:D:/second.py'])
+def test_actual_multifile_colon_syntax_still_rejects(path):
+    with pytest.raises(ValueError, match='multi-file colon syntax'):
+        AstAdapter(path)
