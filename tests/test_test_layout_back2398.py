@@ -105,3 +105,36 @@ def test_custom_selection_uses_project_anchor_and_old_layout_stays_immutable(tmp
     assert new.identity != old.identity
     assert old.is_test(root / 'src/lib.rs')
     assert not new.is_test(root / 'src/lib.rs')
+
+
+def test_configured_importer_exclusion_entrypoint_and_external_agree(tmp_path):
+    from reveal.adapters.imports import ImportsAdapter
+
+    root = project(tmp_path)
+    files = {
+        'pkg/__init__.py': '', 'pkg/core.py': 'VALUE=1\n',
+        'pkg/app.py': 'from src.helper import VALUE\nimport requests\n',
+        'src/__init__.py': '', 'src/helper.py': 'VALUE=1\n',
+        't/unit/helper.py': 'from pkg.core import VALUE\nimport pytest\n',
+        't/unitized/app.py': 'from pkg.core import VALUE\nimport requests\n',
+    }
+    for name, content in files.items():
+        file = root / name
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text(content, encoding='utf-8')
+    adapter = ImportsAdapter(str(root), 'importers&tests=include')
+    include = adapter.get_structure()
+    graph = adapter.analysis.graph
+    scanned = adapter.analysis.scanned_files.copy()
+    exclude = adapter.get_view('importers&tests=exclude')
+    assert adapter.analysis.graph is graph
+    assert adapter.analysis.scanned_files == scanned
+    assert include['metadata'] == exclude['metadata']
+    core = next(row for row in exclude['entries'] if row['file'] == 'pkg/core.py')
+    assert core['importers'] == ['t/unitized/app.py']
+    assert next(row for row in exclude['entries'] if row['file'] == 'src/helper.py')['importers'] == ['pkg/app.py']
+    external = adapter.get_view('external&tests=exclude')
+    assert {row['package'] for row in external['external_packages']} == {'requests'}
+    entries = adapter.get_view('entrypoints')['entries']
+    assert next(row for row in entries if row['file'] == 't/unit/helper.py')['is_test'] is True
+    assert next(row for row in entries if row['file'] == 't/unitized/app.py')['is_test'] is False
