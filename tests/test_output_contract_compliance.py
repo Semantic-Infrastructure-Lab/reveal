@@ -868,14 +868,15 @@ def _names(path):
     return {path[-1], '.'.join(path)}
 
 
-def _intrinsic_row_bounds(cut, whole, path):
-    """A bounded rows record discloses its own cut against the actual full probe."""
-    if not path or path[-1] != 'rows':
-        return False
+def _row_parents(cut, whole, path):
     for key in path[:-1]:
         if not isinstance(cut, dict) or not isinstance(whole, dict):
-            return False
+            return None, None
         cut, whole = cut.get(key), whole.get(key)
+    return cut, whole
+
+
+def _row_counts_match(cut, whole):
     if not isinstance(cut, dict) or not isinstance(whole, dict):
         return False
     rows, uncut = cut.get('rows'), whole.get('rows')
@@ -885,7 +886,89 @@ def _intrinsic_row_bounds(cut, whole, path):
     if any(type(count) is not int or count < 0 for count in counts):
         return False
     total, returned, omitted = counts
-    return omitted > 0 and returned == len(rows) and total == returned + omitted == len(uncut)
+    return returned == len(rows) and total == returned + omitted == len(uncut)
+
+
+def _intrinsic_row_bounds(cut, whole, path):
+    """A bounded rows record discloses its own cut against the actual full probe."""
+    if not path or path[-1] != 'rows':
+        return False
+    cut, whole = _row_parents(cut, whole, path)
+    return _row_counts_match(cut, whole) and cut['omitted'] > 0
+
+
+def _same_after_nested_row_cuts(cut, whole):
+    """Only intrinsic pages may differ; ordinary lists and scalar values stay exact."""
+    if not isinstance(cut, dict) or not isinstance(whole, dict):
+        return cut == whole
+    if cut.keys() != whole.keys():
+        return False
+    fields = {'rows', 'total', 'returned', 'omitted'}
+    if fields.issubset(cut):
+        if not _row_counts_match(cut, whole) or not _row_counts_match(whole, whole):
+            return False
+        if not all(_same_after_nested_row_cuts(row, original)
+                   for row, original in zip(cut['rows'], whole['rows'])):
+            return False
+        return all(_same_after_nested_row_cuts(cut[key], whole[key]) for key in cut.keys() - fields)
+    return all(_same_after_nested_row_cuts(value, whole[key]) for key, value in cut.items())
+
+
+def _page(rows, total=None):
+    total = len(rows) if total is None else total
+    return {'rows': rows, 'total': total, 'returned': len(rows), 'omitted': total - len(rows)}
+
+
+def test_nested_intrinsic_prefix_keeps_group_and_witness_order():
+    whole = _page([{'members': _page(['a', 'b']), 'path': _page(['a', 'b', 'a']), 'label': 'first'},
+                   {'members': _page(['c', 'd']), 'path': _page(['c', 'd', 'c']), 'label': 'second'}])
+    cut = _page([{'members': _page(['a'], 2), 'path': _page(['a'], 3), 'label': 'first'}], 2)
+    assert _same_after_nested_row_cuts(cut, whole)
+    assert cut['rows'] != whole['rows'][:1]  # Nested pages differ while their evidence is a true prefix.
+    assert not _same_after_nested_row_cuts(cut, {**whole, 'rows': list(reversed(whole['rows']))})
+
+
+def test_overview_actual_nested_cycle_pages_keep_the_full_probe_prefix(harness):
+    for label in ('first', 'second'):
+        directory = harness.root / 'cycle-pages' / label
+        directory.mkdir(parents=True)
+        (directory / 'a.py').write_text('from .b import value\n', encoding='utf-8')
+        (directory / 'b.py').write_text('from .a import value\nvalue=1\n', encoding='utf-8')
+    _, full, _ = harness.run('overview://cycle-pages?top=20')
+    _, cut, _ = harness.run('overview://cycle-pages?top=1')
+    whole, part = full['map']['cycles'], cut['map']['cycles']
+    assert whole['total'] == whole['returned'] == 2
+    assert part['total'] == 2 and part['returned'] == 1
+    assert part['rows'][0]['members']['rows'] == ['first/a.py']
+    assert part['rows'][0]['members']['total'] == 2
+    assert part['rows'][0]['path']['total'] == 3
+    assert part['rows'] != whole['rows'][:1]
+    assert _intrinsic_row_bounds(cut, full, ('map', 'cycles', 'rows'))
+    assert _same_after_nested_row_cuts(part, whole)
+
+
+@pytest.mark.parametrize('damage', ['order', 'missing', 'bool', 'negative', 'length', 'total', 'scalar', 'raw_list'])
+def test_nested_intrinsic_prefix_rejects_changed_or_dishonest_evidence(damage):
+    whole = _page([{'members': _page(['a', 'b']), 'label': 'first', 'raw': ['x', 'y']}])
+    cut = _page([{'members': _page(['a'], 2), 'label': 'first', 'raw': ['x', 'y']}])
+    row = cut['rows'][0]
+    if damage == 'order':
+        row['members']['rows'] = ['b']
+    elif damage == 'missing':
+        row['members'].pop('omitted')
+    elif damage == 'bool':
+        row['members']['returned'] = True
+    elif damage == 'negative':
+        row['members']['omitted'] = -1
+    elif damage == 'length':
+        row['members']['rows'] = []
+    elif damage == 'total':
+        row['members'].update(total=3, omitted=2)
+    elif damage == 'scalar':
+        row['label'] = 'changed'
+    else:
+        row['raw'] = ['x']
+    assert not _same_after_nested_row_cuts(cut, whole)
 
 
 def test_intrinsic_row_bounds_accept_only_measured_cut_population():
@@ -941,7 +1024,12 @@ def test_an_adapters_own_cap_keeps_the_first_n(harness, scheme):
     for run, (shortened, cut, full) in _knob_cuts(harness, scheme).items():
         whole, part = dict(_lists(full)), dict(_lists(cut))
         for path in shortened:
-            if part[path] != whole[path][:len(part[path])]:
+            if _intrinsic_row_bounds(cut, full, path):
+                parent, uncut_parent = _row_parents(cut, full, path)
+                matches = _same_after_nested_row_cuts(parent, uncut_parent)
+            else:
+                matches = part[path] == whole[path][:len(part[path])]
+            if not matches:
                 wrong[f"{run} {'.'.join(path)}"] = (part[path], whole[path][:len(part[path])])
     assert not wrong, f'capped list is not the first N of the uncapped one: {wrong}'
 
