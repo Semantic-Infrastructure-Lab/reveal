@@ -568,10 +568,12 @@ def f(x):
         result = render_gate_chains(self._make_chains(), 1, 999)
         self.assertIsInstance(result, str)
 
-    def test_unconditional_label_present(self):
+    def test_empty_gates_do_not_claim_unconditional_execution(self):
         from reveal.adapters.ast.nav_exits import render_gate_chains
         result = render_gate_chains(self._make_chains(), 1, 999)
-        self.assertIn('[unconditional]', result)
+        self.assertNotIn('[unconditional]', result)
+        self.assertIn('Exit sites (static)', result)
+        self.assertIn('RETURN: 2', result)
 
     def test_gate_label_present(self):
         from reveal.adapters.ast.nav_exits import render_gate_chains
@@ -586,7 +588,7 @@ def f(x):
     def test_empty_chains_returns_message(self):
         from reveal.adapters.ast.nav_exits import render_gate_chains
         result = render_gate_chains([], 1, 999)
-        self.assertIn('No return/exit paths', result)
+        self.assertIn('No exits recorded in this selection.', result)
 
 
 class TestPhpGateChains(unittest.TestCase):

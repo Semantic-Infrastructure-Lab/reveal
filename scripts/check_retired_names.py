@@ -13,12 +13,19 @@ A new ``RETIREMENTS`` row is covered the day it lands: the patterns are derived 
 (``subcommand:``, ``scheme:``, ``param:``, ``value:``, ``flag:``, ``target:``). Spellings that are due
 to retire but have no row yet (``hotspots``) join when their rows land (BACK-2149). tests/test_retired_names_ratchet_back2196.py holds the positive controls.
 
+Code-element outline examples are classified with the real argument parser. The
+static check covers explicit element positionals; inline ``file.py:2`` binding
+depends on filesystem evidence at runtime and is not inferred from teaching text.
+
 Run:
     python scripts/check_retired_names.py        # exits 1 and names each line that teaches one
 """
 import re
+import shlex
 import subprocess
 import sys
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -40,6 +47,34 @@ LIST_ITEM = re.compile(r'\s*(?:[-*+]|\d+\.)\s')
 FILE_ROUTE_CHECK = re.compile(r"reveal\s+(?!@|-|\S*://)[^\s|'\"]+\s[^|\n]*--(?:check|lint)(?![\w-])")
 # `reveal health` takes ops targets; a plain path (code) is `reveal check`'s. `.conf` stays an ops target.
 HEALTH_ARG = re.compile(r"reveal\s+health\b([^|\n#]*)")
+def _outline_names_a_code_element(line):
+    from reveal.cli.invocation import Invocation
+    from reveal.cli.parser import create_argument_parser
+    from reveal.registry import get_markdown_extensions
+
+    if '--outline' not in line:
+        return False
+    for match in re.finditer(r'\breveal\s+([^`\n]+)', line):
+        lexer = shlex.shlex(match[1], posix=True, punctuation_chars='|;')
+        lexer.whitespace_split = True
+        try:
+            tokens = list(lexer)
+        except ValueError:
+            continue  # Prose with an unmatched quote is not a command example.
+        end = next((i for i, token in enumerate(tokens) if token in {'|', ';'}), len(tokens))
+        invocation = Invocation.parse(['reveal', *tokens[:end]])
+        if invocation.command is not None:
+            continue
+        parser = create_argument_parser('', full_help=False)
+        with redirect_stderr(StringIO()), redirect_stdout(StringIO()):
+            try:
+                args = parser.parse_args(invocation.argv)
+            except SystemExit:
+                continue  # Only accepted path-form invocations establish this context.
+        if (args.outline and args.path and args.element
+                and Path(args.path).suffix.lower() not in get_markdown_extensions()):
+            return True
+    return False
 
 
 def _health_names_a_code_path(line):
@@ -76,6 +111,8 @@ def _patterns(key):
         return [re.compile(rf'(?<![\w-]){re.escape(rest)}(?![\w-])')]
     if kind == 'target' and key == 'target:health.code':
         return [_health_names_a_code_path]
+    if kind == 'target' and key == 'target:nav.outline':
+        return [_outline_names_a_code_element]
     return []
 
 
@@ -97,6 +134,8 @@ def _sample(key):
         return f'reveal src/app.py {rest}'
     if key == 'target:health.code':
         return 'reveal health ./src'
+    if key == 'target:nav.outline':
+        return 'reveal app.py work --outline'
     raise AssertionError(f'no sample for {key}')
 
 

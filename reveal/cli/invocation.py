@@ -235,6 +235,12 @@ RETIREMENTS: Dict[str, Retirement] = {
     'flag:--mutations': Retirement('--mutations', '--outputs'),
     'flag:--writes': Retirement('--writes', '--outputs'),
     'flag:--calls': Retirement('--calls', '--callsites'),
+    'target:nav.outline': Retirement('code-element --outline', '--flow; file and Markdown outlines remain --outline'),
+    'flag:--ifmap': Retirement('--ifmap', '--flow=if'),
+    'flag:--loopmap': Retirement('--loopmap', '--flow=loop'),
+    'flag:--catchmap': Retirement('--catchmap', '--flow=try'),
+    'flag:--returns': Retirement('--returns', '--exits'),
+    'flag:--flowto': Retirement('--flowto', '--exits for static exit sites; the former reachability verdict is retired'),
     'flag:--search': Retirement('--search', '--name PATTERN (regex)'),
     # One row for the file route's --check and its --lint alias.
     'flag:--check': Retirement('file --check/--lint', 'reveal check <path>'),
@@ -302,6 +308,27 @@ class RetiredSpellingError(Exception):
         super().__init__(entry.text)
         self.key = key
         self.entry = entry
+
+
+def parse_flow_selectors(value: str) -> tuple[str, ...]:
+    """Validate an explicit navigation selector; bare flow is represented by ()."""
+    parts = tuple(part.strip() for part in value.split(','))
+    if any(part not in {'if', 'loop', 'try'} for part in parts):
+        raise ValueError('flow selectors must be nonempty comma-separated if, loop or try values')
+    return tuple(dict.fromkeys(parts))
+
+
+def retired_flag_key(option: str) -> Optional[str]:
+    """Resolve a parsed option's retirement, respecting exact live option names."""
+    key = 'flag:' + option
+    if key in RETIREMENTS:
+        return key
+    from .parser import create_argument_parser
+    if option in create_argument_parser('')._option_string_actions:
+        return None
+    matches = [name for name in RETIREMENTS
+               if name.startswith('flag:') and name[5:].startswith(option)]
+    return matches[0] if len(matches) == 1 else None
 
 
 class RetirementLog:

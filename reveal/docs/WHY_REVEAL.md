@@ -86,7 +86,7 @@ reveal app.py process_batch --inputs        # → parameters
 reveal app.py process_batch --outputs   # → return values
 
 # Each return path + the condition chain that leads to it
-reveal app.py process_order --returns
+reveal app.py process_order --exits
 
 # Verbatim context around a stack-trace line number
 reveal app.py :123 --around 10

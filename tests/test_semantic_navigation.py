@@ -486,11 +486,11 @@ class TestNavJsonOutput(unittest.TestCase):
 
     def test_returns_json_envelope(self):
         result = self._run('collect_deps', {'returns': True})
-        self._assert_envelope(result, 'returns')
+        self._assert_envelope(result, 'exits')
 
     def test_loopmap_json_envelope(self):
         result = self._run('collect_deps', {'loopmap': True})
-        self._assert_envelope(result, 'loopmap')
+        self._assert_envelope(result, 'flow')
 
     def test_fanout_json_envelope(self):
         result = self._run('collect_deps', {'fanout': True})
