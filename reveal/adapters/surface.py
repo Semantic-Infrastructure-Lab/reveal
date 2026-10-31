@@ -120,7 +120,9 @@ def _collect_source_files(
     """Map each registered scanner to the files under `path` it should scan."""
 
     path = Path(os.path.abspath(path))
-    layout = test_layout or TestLayout.for_path(path, fallback_root=path)
+    layout = test_layout
+    if source_only and layout is None:
+        layout = TestLayout.for_path(path, fallback_root=path)
 
     def _scanner_for(fpath: Path):
         suffix = fpath.suffix
@@ -137,7 +139,7 @@ def _collect_source_files(
     buckets: Dict[_SurfaceScanner, List[Path]] = {spec: [] for spec in _SURFACE_SCANNERS}
 
     if path.is_file():
-        if source_only and layout.is_test(path):
+        if source_only and layout is not None and layout.is_test(path):
             return buckets
         spec = _scanner_for(path)
         if spec is not None:
@@ -147,11 +149,14 @@ def _collect_source_files(
     # The shared walker (BACK-1577): the same files the coverage census below counts,
     # dot-dir source included (BACK-1038). source_only prunes test dirs before descent.
     for root, dirs, filenames in walk_tree(path, ANALYSIS, on_error=on_error):
-        if source_only:
-            dirs[:] = [d for d in dirs if not layout.is_test(root / d / '__surface_source__')]
+        if source_only and layout is not None:
+            # Require the directory itself too: a precise selector can name the
+            # synthetic child without selecting any of its production siblings.
+            dirs[:] = [d for d in dirs if not (layout.is_test(root / d)
+                       and layout.is_test(root / d / '__surface_source__'))]
         for fname in filenames:
             fpath = root / fname
-            if source_only and layout.is_test(fpath):
+            if source_only and layout is not None and layout.is_test(fpath):
                 continue
             spec = _scanner_for(fpath)
             if spec is not None:
@@ -289,7 +294,9 @@ def _scan_surface(
 ) -> Dict[str, Any]:
     display_path = path
     path = Path(os.path.abspath(path))
-    layout = test_layout or TestLayout.for_path(path, fallback_root=path)
+    layout = test_layout
+    if layout is None and (source_only or type_filter in ('', 'http')):
+        layout = TestLayout.for_path(path, fallback_root=path)
     source_failures: List[PathFailure] = []
     census_failures: List[PathFailure] = []
     collected = _collect_source_files(path, source_only=source_only,
@@ -348,7 +355,7 @@ def _scan_surface(
     # rather than presenting the mix as an undifferentiated route table.
     http_entries = surfaces.get('http', [])
     test_origin_count = 0
-    if http_entries and not source_only:
+    if http_entries and not source_only and layout is not None:
         for entry in http_entries:
             is_test_origin = layout.is_test(Path(entry['file']))
             entry['test_origin'] = is_test_origin
@@ -362,7 +369,7 @@ def _scan_surface(
         **({'_source_traversal_failures': source_failures, '_census_traversal_failures': census_failures,
             '_discovery_error': discovery_error} if directory_loss else {}),
         '_scope_hidden': scope_hidden,
-        **({'test_scope': layout.as_dict(path)} if source_only or type_filter in ('', 'http') else {}),
+        **({'test_scope': layout.as_dict(path)} if layout is not None else {}),
         'path': str(display_path),
         'total': total,
         'surfaces': surfaces,

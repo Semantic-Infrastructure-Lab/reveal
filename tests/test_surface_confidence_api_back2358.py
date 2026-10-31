@@ -57,7 +57,13 @@ def test_complete_baseline_answer_survives_estimate_omission(tmp_path, case):
     native = adapter.get_structure()
     result = api.query(f'surface://{tmp_path}?respect_gitignore=false')
     assert result == native
-    assert _digest(result, tmp_path) == BASELINE[case]
+    legacy = copy.deepcopy(result)
+    assert legacy.pop('test_scope') == {
+        'anchor': '.', 'source': 'scan_root_fallback', 'include_anchor_name': True,
+        'rule': 'is_test_path',
+        'basis': 'scan-root name and relative paths; project boundary unknown',
+    }
+    assert _digest(legacy, tmp_path) == BASELINE[case]
     expected = AnalysisCompleteness.INCOMPLETE if case in ('parse', 'recovered') else AnalysisCompleteness.COMPLETE
     assert adapter.execution_facts(result).completeness is expected
     _absent(result)
