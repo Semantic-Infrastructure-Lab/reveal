@@ -98,6 +98,15 @@ def test_raw_narrowing_uses_project_context_and_does_not_expand_to_declared_sibl
     assert query(f'patches://{nested.parent}')['total_uses'] == 1
 
 
+@pytest.mark.parametrize('scheme', ['patches', 'testability'])
+def test_pressure_file_keeps_existing_parent_scope_and_adds_declared_roots(project, scheme):
+    answer = query(_pressure(project / 'src' / 'app.py', scheme))
+    # Existing file targets scan their parent but do not search its conventional siblings.
+    assert answer['summary']['total_patch_uses'] == 3
+    assert answer['summary']['total_boundary_profiles'] == 1
+    assert answer['test_scope']['files_scanned'] == 3
+
+
 def test_file_selectors_are_literal_and_support_non_test_named_typescript(project):
     _policy(project, ['suite/helper.ts', 'missing.py'])
     raw = query(f'patches://{project}')
