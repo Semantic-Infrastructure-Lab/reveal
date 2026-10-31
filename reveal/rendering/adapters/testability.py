@@ -59,7 +59,12 @@ def boundary_hotspot_lines(rows: List[Dict[str, Any]]) -> List[str]:
 def _scope_line(scope: Any) -> str:
     if not isinstance(scope, dict):
         return 'Test scope: unknown'
-    return f"Test scope: {scope.get('rule')} ({scope.get('files_scanned', 0)} test files scanned)"
+    line = f"Test scope: {scope.get('rule')} ({scope.get('files_scanned', 0)} test files scanned)"
+    if scope.get('basis'):
+        line += f"; {scope['basis']} (anchor: {scope.get('anchor', '.')})"
+    if scope.get('outside_anchor_roots'):
+        line += f"; outside-anchor suites: {len(scope['outside_anchor_roots'])} (conventions only)"
+    return line
 
 
 def testability_text(report: Dict[str, Any]) -> str:

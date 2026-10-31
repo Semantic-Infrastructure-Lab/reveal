@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from ..base import BaseRenderer, RenderOptions, capped_section
 from ...utils.results import outcome_of
+from .testability import _scope_line
 
 
 class PatchesRenderer(BaseRenderer):
@@ -25,7 +26,7 @@ class PatchesRenderer(BaseRenderer):
         lines = [f"Patch Pressure: {result.get('source', '')}",
                  f"Grouped by: {query.get('group', 'target')}",
                  f"Patch uses: {result.get('total_uses', 0)}  Targets: {result.get('total_targets', 0)}",
-                 'Test scope: {rule} ({files_scanned} test files scanned)'.format(**{'rule': None, 'files_scanned': 0, **(result.get('test_scope') or {})})]
+                 _scope_line(result.get('test_scope'))]
         if query.get('suppress', True):
             lines.append('(sys.stdout/stderr and builtins suppressed — use suppress=false to include)')
         lines.append('')
