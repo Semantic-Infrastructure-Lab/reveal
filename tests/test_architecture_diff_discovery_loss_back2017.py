@@ -156,6 +156,7 @@ def test_clean_zero_and_unsupported_language_keep_complete_empty_deltas(tmp_path
 def test_excluded_subtree_and_healthy_sibling_are_exactly_unchanged(tmp_path, monkeypatch):
     root, sibling = tmp_path / 'affected', tmp_path / 'sibling'
     base, sibling_base = make_repo(root), make_repo(sibling)
+    invoke(root, base, 'command', '--exclude', 'included_child')  # warm the once-per-process grammar notice before comparing
     before = invoke(root, base, 'command', '--exclude', 'included_child')
     sibling_before = invoke(sibling, sibling_base)
     attempts = selective_loss(monkeypatch, root)
