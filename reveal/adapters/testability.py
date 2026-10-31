@@ -11,12 +11,13 @@ generated from this adapter's declaration.
 from __future__ import annotations
 
 import re
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..errors import NotApplicableError
-from ..utils.path_utils import is_test_dir
+from ..utils.path_utils import TestLayout, is_test_dir
 from ..rendering.adapters.testability import TestabilityRenderer
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
@@ -119,17 +120,19 @@ def _report_error(result: Dict[str, Any], *, initial: bool = False) -> Optional[
     return None
 
 
-def _resolve_test_paths(src_path: Path, tests: Optional[List[str]]) -> List[Path]:
+def _resolve_test_paths(src_path: Path, tests: Optional[List[str]],
+                        test_layout: Optional[TestLayout] = None) -> List[Path]:
     """The roots the patch scan walks: the given ``tests=`` (trusted as the suite), else the target
-    itself (its parent for a file), where ``is_test_path`` picks the test files, plus the test
+    itself (its parent for a file), where the selected policy picks the test files, plus the test
     directories beside the target (``pkg/`` with a sibling ``tests/`` or ``t/``, the usual layout;
-    BACK-1888)."""
+    BACK-1888). Declared project paths add literal file or directory roots without resolving aliases."""
     if tests:
         return [Path(t).expanduser().resolve() for t in tests if Path(t).expanduser().exists()]
-    root = (src_path if src_path.is_dir() else src_path.parent).resolve()
+    root = Path(os.path.abspath(src_path if src_path.is_dir() else src_path.parent))
     beside = [d for d in sorted(root.parent.iterdir()) if d.is_dir() and d != root and is_test_dir(d.name)] \
         if src_path.is_dir() and root.parent != root else []
-    return [root, *beside]
+    declared = [test_layout.anchor / selector for selector in test_layout.additional_paths] if test_layout else []
+    return list(dict.fromkeys([root, *beside, *(path for path in declared if path.exists())]))
 
 
 @register_adapter('testability')
@@ -266,7 +269,6 @@ class TestabilityAdapter(ResourceAdapter):
 def testability_report(resource: str, query_params: Any, verbose: bool = False) -> Dict[str, Any]:
     """The report both ``testability://`` and ``patches://?view=pressure`` answer (BACK-2160): one owner, read from
     the declared parameters of whichever adapter was asked."""
-    from reveal.testability.patches import iter_test_files, no_scannable_tests_reason
     from reveal.testability.report import build_testability_report
     from reveal.utils.path_utils import as_spelled, detect_non_python_language
 
@@ -279,17 +281,15 @@ def testability_report(resource: str, query_params: Any, verbose: bool = False) 
     include_unresolved = TestabilityAdapter.PARAM_SPECS[4].read(query_params)
 
     by_test_path = not tests
+    layout = None
     if by_test_path:
         from ..config import RevealConfig
-        RevealConfig.require_conventional_test_layout(path, 'testability default test selection')
-    test_paths = _resolve_test_paths(path, tests)
+        target = Path(os.path.abspath(path))
+        layout = TestLayout.for_path(target, fallback_root=target)
+        layout = RevealConfig.get(layout.anchor).apply_test_layout(layout)
+    test_paths = _resolve_test_paths(path, tests, layout)
     if tests and not test_paths:
         raise NotApplicableError(f"none of the tests= paths exist for {path}: {', '.join(tests)}")
-    if by_test_path:
-        unscanned: Dict[str, int] = {}
-        if not iter_test_files(test_paths, by_test_path=True, unscanned=unscanned):
-            raise NotApplicableError(no_scannable_tests_reason(str(path), unscanned))  # one decision with patches:// (BACK-2224)
-
     report = build_testability_report(
         str(path),
         [str(p) for p in test_paths],
@@ -298,6 +298,7 @@ def testability_report(resource: str, query_params: Any, verbose: bool = False) 
         min_categories=max(1, min_categories),
         include_unresolved=include_unresolved,
         by_test_path=by_test_path,
+        test_layout=layout,
     )
     # The tests dirs found were resolved; name them as the user named the target (BACK-1366).
     report['tests'] = [as_spelled(p, resource) for p in test_paths]

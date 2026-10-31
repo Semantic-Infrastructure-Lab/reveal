@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -9,7 +10,7 @@ from reveal.adapters.base import ResourceAdapter, register_adapter, register_ren
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.testability.patches import (group_patches, language_not_scanned_warning, no_scannable_tests_reason,
                                         scan_patches)
-from reveal.utils.path_utils import to_posix
+from reveal.utils.path_utils import TestLayout, to_posix
 from reveal.utils.query_binding import bind_declared_params, boolean_value
 from reveal.utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema,
                                        peek_query_items, whole_number)
@@ -214,10 +215,11 @@ class PatchesAdapter(ResourceAdapter):
         # classify.py's own get_structure().
         require_path_exists(Path(self.path))
         from ...config import RevealConfig
-        RevealConfig.require_conventional_test_layout(Path(self.path), 'patches default test selection')
-        # The path is the root; the test files under it are chosen by the shared is_test_path rule, judged from
-        # the root's own name down, so patches://tests scans all of tests/ and a repository root only its tests (BACK-1888).
-        patches = scan_patches([self.path], by_test_path=True)
+        target = Path(os.path.abspath(self.path))
+        layout = TestLayout.for_path(target, fallback_root=target)
+        layout = RevealConfig.get(layout.anchor).apply_test_layout(layout)
+        # The target bounds discovery; narrowing it retains the selected project's file-role policy.
+        patches = scan_patches([self.path], by_test_path=True, test_layout=layout)
         # A tree with no test file the scan reads has no answer: 0 uses would mean 'not scanned', not 'none'
         # (BACK-2224). The same decision testability makes. A walk that lost directories is reported below instead.
         if not patches.files_scanned and not patches.traversal_failures:
@@ -287,7 +289,9 @@ class PatchesAdapter(ResourceAdapter):
                     'private': private_only,
                     'suppress': suppress,
                 },
-                'test_scope': patches.test_scope('is_test_path'),
+                'test_scope': patches.test_scope('is_test_path', test_layout=layout,
+                                                base=target if target.is_dir() else target.parent,
+                                                roots=[target]),
                 'total_uses': len(patches),
                 'total_targets': len(targets),
                 'displayed_groups': len(groups),

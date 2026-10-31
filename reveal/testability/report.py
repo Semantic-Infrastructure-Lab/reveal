@@ -5,12 +5,14 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from .boundaries import BoundaryProfile, collect_boundary_profiles, module_name_from_file, profile_score
 from ..reveal_types import CONTRACT_VERSION
 from ..utils.results import note_truncation
-from .patches import PatchGroup, PatchUse, group_patches, language_not_scanned_warning, scan_patches
+from ..utils.path_utils import TestLayout
+from .patches import (PatchGroup, PatchUse, group_patches, language_not_scanned_warning,
+                      no_scannable_tests_reason, scan_patches)
 
 
 def _count(value: Any) -> bool:
@@ -93,12 +95,17 @@ def build_testability_report(
     min_categories: int = 3,
     include_unresolved: bool = False,
     by_test_path: bool = False,
+    *,
+    test_layout: Optional[TestLayout] = None,
 ) -> Dict[str, Any]:
     """Build the composed testability pressure report (*by_test_path*: the test files are discovered
-    under *test_paths* by ``is_test_path`` instead of trusting them as the suite)."""
+    under *test_paths* by the supplied project policy instead of trusting them as the suite)."""
     from ..adapters.ast.analysis import analysis_skipped_warning, parse_recovered_warning, traversal_failed_warning
 
-    patches = scan_patches(test_paths, by_test_path=by_test_path)
+    patches = scan_patches(test_paths, by_test_path=by_test_path, test_layout=test_layout)
+    if by_test_path and not patches.files_scanned and not patches.traversal_failures:
+        from ..errors import NotApplicableError
+        raise NotApplicableError(no_scannable_tests_reason(src_path, patches.unscanned_languages))
     profiles = collect_boundary_profiles(src_path)
     _validate_observations(patches, profiles)
     patch_groups = group_patches(patches, group_by='target', min_count=min_patches)
@@ -145,7 +152,10 @@ def build_testability_report(
         'tests': [str(Path(p)) for p in test_paths],
         # The rule that chose the test files, and how many it found: two answers about one suite
         # 1000x apart were once indistinguishable (BACK-1888).
-        'test_scope': patches.test_scope('is_test_path' if by_test_path else 'tests='),
+        'test_scope': patches.test_scope('is_test_path' if by_test_path else 'tests=',
+                                        test_layout=test_layout,
+                                        base=Path(src_path) if Path(src_path).is_dir() else Path(src_path).parent,
+                                        roots=test_paths),
         'summary': {
             'total_patch_uses': len(patches),
             'total_boundary_profiles': len(profiles),

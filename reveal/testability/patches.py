@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import ast
 import logging
+import os
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Callable, Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from ..utils.path_utils import (_display_name_for_language, _walk_code_files, failure_of, in_test_scope,
+from ..utils.path_utils import (TestLayout, _display_name_for_language, _walk_code_files, failure_of, in_test_scope,
                                 is_test_basename_for_language, tally_files_by_language, to_posix)
 from ..utils.pyparse import parse_python
 from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root
@@ -73,10 +74,18 @@ class PatchUses(List[PatchUse]):
             return dict(sorted(self.unscanned_languages.items()))
         return {}
 
-    def test_scope(self, rule: str) -> Dict[str, Any]:
+    def test_scope(self, rule: str, *, test_layout: Optional[TestLayout] = None,
+                   base: Optional[Path] = None, roots: Sequence[str | Path] = ()) -> Dict[str, Any]:
         """The ``test_scope`` block both answers carry: the rule, the files read, and (only when disclosed) the
         test files left unread for want of a scanner, by language."""
         scope: Dict[str, Any] = {'rule': rule, 'files_scanned': self.files_scanned}
+        if test_layout is not None and base is not None:
+            scope.update(test_layout.as_dict(base))
+            scope['suite_roots'] = [to_posix(os.path.relpath(root, base)) for root in roots]
+            outside = [root for root in roots if not Path(root).is_relative_to(test_layout.anchor)]
+            if outside:
+                scope['outside_anchor_roots'] = [to_posix(os.path.relpath(root, base)) for root in outside]
+                scope['outside_anchor_basis'] = 'scan-root name and relative paths; conventions only'
         unscanned = self.unscanned_to_report()
         if unscanned:
             scope['unscanned'] = unscanned
@@ -140,13 +149,15 @@ def iter_test_files(
     on_error: Optional[Callable[[OSError], None]] = None,
     by_test_path: bool = False,
     unscanned: Optional[Dict[str, int]] = None,
+    test_layout: Optional[TestLayout] = None,
 ) -> List[Path]:
     """Return test files under the given paths, dispatching by extension.
 
     When *extensions* is given only files with those suffixes are returned.
     The default (None) returns both Python and TypeScript/JavaScript test files.
-    *by_test_path* is the discovered scope: a directory is walked and a file kept only when
-    :func:`in_test_scope` calls it a test. Without it the paths are trusted as the test suite
+    *by_test_path* is the discovered scope: files are selected by the supplied immutable
+    project policy, or the conventional scan-root rule when no context was supplied.
+    Without it the paths are trusted as the test suite
     (an explicit ``tests=``), and every Python file under them is scanned.
 
     *unscanned*, filled only in the discovered scope, is the other half of the question: the test files in a
@@ -158,7 +169,10 @@ def iter_test_files(
     for raw in paths:
         path = Path(raw).expanduser()
         if path.is_file():
-            if _file_matches(path, extensions):
+            if by_test_path and test_layout is not None:
+                if _in_test_layout(path, path.parent, test_layout):
+                    (files if _file_scannable(path, extensions) else skipped).append(path)
+            elif _file_matches(path, extensions):
                 files.append(path)
             elif by_test_path:
                 skipped.append(path)
@@ -166,16 +180,24 @@ def iter_test_files(
             walked = _walk_code_files(path, on_error=on_error)  # the shared walker (BACK-1577)
             if by_test_path:
                 for fp in walked:
-                    if not in_test_scope(fp, path):
+                    if not _in_test_layout(fp, path, test_layout):
                         continue
                     (files if _file_scannable(fp, extensions) else skipped).append(fp)
             else:
                 files.extend(fp for fp in walked if _file_matches(fp, extensions))
     if unscanned is not None:
-        for lang, entry in tally_files_by_language(skipped).items():
+        for lang, entry in tally_files_by_language(sorted(set(skipped))).items():
             name = _display_name_for_language(lang)
             unscanned[name] = unscanned.get(name, 0) + entry['count']
     return sorted(set(files))
+
+
+def _in_test_layout(path: Path, root: Path, layout: Optional[TestLayout]) -> bool:
+    """Use one request policy; established sibling suites outside it retain conventions."""
+    candidate = Path(os.path.abspath(path))
+    if layout is not None and candidate.is_relative_to(layout.anchor):
+        return layout.is_test(candidate)
+    return in_test_scope(path, root)
 
 
 def _languages_phrase(unscanned: Dict[str, int]) -> str:
@@ -229,11 +251,13 @@ def _file_matches(path: Path, extensions: Optional[Sequence[str]]) -> bool:
     return _is_ts_test_file(path)
 
 
-def scan_patches(paths: Sequence[str | Path], *, by_test_path: bool = False) -> PatchUses:
+def scan_patches(paths: Sequence[str | Path], *, by_test_path: bool = False,
+                 test_layout: Optional[TestLayout] = None) -> PatchUses:
     """Scan Python and TypeScript test files for patch-like calls (*by_test_path*: see ``iter_test_files``)."""
     uses = PatchUses()
     for file_path in iter_test_files(paths, on_error=uses.record_traversal_failure, by_test_path=by_test_path,
-                                     unscanned=uses.unscanned_languages if by_test_path else None):
+                                     unscanned=uses.unscanned_languages if by_test_path else None,
+                                     test_layout=test_layout):
         uses.files_scanned += 1
         if file_path.suffix == '.py':
             uses.merge(_scan_file(file_path))
