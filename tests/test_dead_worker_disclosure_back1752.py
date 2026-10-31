@@ -127,17 +127,17 @@ def test_markdown_body_contains_discloses_unscanned_files(tmp_path, monkeypatch)
     assert lost and lost[0]['count'] >= 1, warnings
 
 
-def test_claude_search_discloses_unscanned_sessions(tmp_path, monkeypatch):
+def test_claude_decoded_search_does_not_depend_on_byte_pool(tmp_path, monkeypatch):
     from reveal.adapters.claude.analysis import search as claude_search
     sessions = []
     for i in range(10):
         p = tmp_path / f's{i}.jsonl'
-        p.write_text('{"message": "needle"}\n', encoding='utf-8')
+        p.write_text('{"type":"user","message":{"role":"user","content":"needle"}}\n', encoding='utf-8')
         sessions.append({'path': str(p), 'session': f's{i}', 'modified': '2026-10-07'})
     monkeypatch.setattr(parallel, 'ProcessPoolExecutor', _BreaksOnSubmit)
     lost: list = []
-    claude_search.search_sessions_for_term(sessions, 'needle', lost_out=lost)
-    assert lost and all(isinstance(p, Path) for p in lost)
+    found = claude_search.search_sessions_for_term(sessions, 'needle', lost_out=lost)
+    assert len(found) == 10 and lost == []
 
 
 def _sessions_dir(tmp_path, n=10):
@@ -150,14 +150,22 @@ def _sessions_dir(tmp_path, n=10):
     return tmp_path
 
 
-def test_claude_file_tracking_discloses_unscanned_sessions(tmp_path, monkeypatch):
-    """BACK-1757: claude://files/<path> read a lost session as 'did not touch the file'."""
-    from reveal.adapters.claude.handlers.sessions import track_file_sessions
+def test_claude_decoded_file_tracking_does_not_depend_on_byte_pool(tmp_path, monkeypatch):
+    """Every session is decoded even if the unused byte-pool implementation is broken."""
+    from reveal.adapters.claude.handlers import sessions as handlers
     base = _sessions_dir(tmp_path)
     monkeypatch.setattr(parallel, 'ProcessPoolExecutor', _BreaksOnSubmit)
-    result = track_file_sessions(base, 'files/src/needle.py', {})
-    (warning,) = [w for w in result['meta']['warnings'] if w['type'] == 'worker_lost']
-    assert warning['count'] >= 1 and 'matches may be missing' in warning['message']
+    visited = []
+    extract = handlers._extract_session_ops
+
+    def observed(session, path):
+        visited.append(session['path'])
+        return extract(session, path)
+
+    monkeypatch.setattr(handlers, '_extract_session_ops', observed)
+    result = handlers.track_file_sessions(base, 'files/src/needle.py', {})
+    assert len(visited) == result['sessions_scanned'] == 10
+    assert not [w for w in result.get('meta', {}).get('warnings', []) if w['type'] == 'worker_lost']
 
 
 def test_claude_file_tracking_negative_control_healthy_pool_has_no_warning(tmp_path):

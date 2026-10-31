@@ -1,5 +1,7 @@
 """Decoded matches and snippets must survive JSON spelling and case expansion."""
 import json
+import builtins
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -79,3 +81,27 @@ def test_raw_schema_metadata_is_not_a_content_match(tmp_path):
     path = session(tmp_path, 'unrelated')
     result = search_sessions_for_term([{'path': str(path), 'session': 'sample', 'modified': ''}], 'timestamp')
     assert result == []
+
+
+@pytest.mark.parametrize('tracking', [False, True])
+def test_decoded_read_failure_is_disclosed_and_repair_is_fresh(tmp_path, monkeypatch, tracking):
+    block = {'type': 'tool_use', 'name': 'Read', 'input': {'file_path': '/workspace/needle.py'}}
+    good = session(tmp_path, 'needle', block=block if tracking else None)
+    bad = good.with_name('denied.jsonl')
+    bad.write_bytes(good.read_bytes())
+    original = builtins.open
+
+    def denied(file, *args, **kwargs):
+        if isinstance(file, (str, Path)) and Path(file) == bad:
+            raise PermissionError(13, 'READ_DENIED', str(bad))
+        return original(file, *args, **kwargs)
+
+    request = 'claude://files/needle.py' if tracking else 'claude://?search=needle'
+    with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+        with monkeypatch.context() as context:
+            context.setattr(builtins, 'open', denied)
+            result = api.query(request)
+            assert result['match_count'] == 1
+            warning, = [w for w in result['meta']['warnings'] if w['type'] == 'entries_skipped']
+            assert warning['count'] == 1 and warning['files'] == ['denied.jsonl']
+        assert api.query(request)['match_count'] == 2
