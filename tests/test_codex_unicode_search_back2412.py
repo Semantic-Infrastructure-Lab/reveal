@@ -2,7 +2,6 @@
 import json
 import sqlite3
 from unittest.mock import patch
-from urllib.parse import quote
 
 import pytest
 
@@ -30,8 +29,8 @@ def test_serialization_equivalence_and_caps(tmp_path, text, term, expected):
             conn.execute('INSERT INTO threads VALUES(?,?,?,?,?,?,?,?)',
                          (name, str(path), name, '', 'synthetic', 1, 'user', 0))
     with patch.object(CodexAdapter, 'CODEX_DB', db):
-        result = api.query('codex://sessions/?search=' + quote(term, safe='') + '&matches=1')
-        full = api.query('codex://sessions/?search=' + quote(term, safe='') + '&matches=0')
+        result = api.query('codex://sessions/?search=' + term + '&matches=1')
+        full = api.query('codex://sessions/?search=' + term + '&matches=0')
     assert result['total'] == full['total'] == expected
     if expected:
         assert all(s['match_count'] == 1 for s in result['sessions'])
