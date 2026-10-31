@@ -163,9 +163,11 @@ def test_child_root_order_and_new_requests_see_policy_edits_without_mutating_old
     assert query(_pressure(project / 'src'))['summary']['total_patch_uses'] == 4
 
 
-def test_trusted_suite_bypasses_required_missing_config_through_registered_sdk(project, tmp_path, monkeypatch):
+@pytest.mark.parametrize('columns', ['40', '80'])
+def test_trusted_suite_bypasses_required_missing_config_through_registered_sdk(project, tmp_path, monkeypatch, columns):
     pytest.importorskip('mcp')
     from test_mcp_expected_errors_back1992 import _run, _text
+    monkeypatch.setenv('COLUMNS', columns)
     monkeypatch.setenv('REVEAL_CONFIG', str(tmp_path / 'missing-policy.yaml'))
     explicit = 'tests=' + quote((project / 'suite').as_posix(), safe='')
     for scheme in ('patches', 'testability'):
@@ -180,7 +182,8 @@ def test_trusted_suite_bypasses_required_missing_config_through_registered_sdk(p
                 'uri': _pressure(project / 'src', scheme, explicit), 'provenance': True})
             assert not result.is_error, _text(result)
             answer, end = json.JSONDecoder().raw_decode(_text(result))
-            assert 'missing-policy.yaml' in _text(result)[end:]
+            # Rich can wrap a long path inside the filename in the legacy stderr suffix.
+            assert 'missing-policy.yaml' in ''.join(_text(result)[end:].split())
             assert answer['summary']['total_patch_uses'] == 2
             assert answer['test_scope']['rule'] == 'tests='
 
