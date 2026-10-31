@@ -159,15 +159,22 @@ def test_selected_suite_stat_loss_is_reported_before_absence(project, monkeypatc
     write(project / 'src/app.py', 'VALUE = 1\n')
     write(suite / 'helper.py', PATCH)
     real = os.stat
+    real_path_stat = Path.stat
 
     def denied(path, *args, **kwargs):
         if not isinstance(path, int) and Path(path) == suite:
             raise PermissionError(13, 'controlled suite stat failure', str(path))
         return real(path, *args, **kwargs)
 
+    def denied_path_stat(path, *args, **kwargs):
+        if path == suite:
+            raise PermissionError(13, 'controlled suite stat failure', str(path))
+        return real_path_stat(path, *args, **kwargs)
+
     adapter = PressureAdapter(str(project / 'src'))
     with monkeypatch.context() as context:
         context.setattr(os, 'stat', denied)
+        context.setattr(Path, 'stat', denied_path_stat)
         result = adapter.get_structure()
     assert adapter.execution_facts(result).completeness.value == 'failed'
     warning, = [w for w in result['meta']['warnings'] if w['type'] == 'analysis_incomplete']
