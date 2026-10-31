@@ -41,7 +41,10 @@ def test_t_layout_is_applicable_and_both_views_agree(t_layout):
     report = _json(f'testability://{t_layout}')
     assert report.get('applicable') is not False, report.get('reason')
     assert patches['total_uses'] == report['summary']['total_patch_uses'] == 2
-    assert patches['test_scope'] == report['test_scope'] == {'rule': 'is_test_path', 'files_scanned': 2}
+    assert patches['test_scope'] == report['test_scope'] == {
+        'rule': 'is_test_path', 'files_scanned': 2, 'anchor': '.',
+        'source': 'scan_root_fallback', 'include_anchor_name': True,
+        'basis': 'scan-root name and relative paths; project boundary unknown', 'suite_roots': ['.']}
 
 
 def test_negative_control_a_patch_call_in_a_source_file_is_not_a_test_use(t_layout):

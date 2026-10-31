@@ -88,7 +88,10 @@ def test_a_stray_script_beside_a_scanned_suite_is_not_disclosed(tmp_path):
     _w(root / 'tests' / 'test_cluster.sh', 'echo ok\n')
     proc, doc = _json(f'patches://{root}')
     assert proc.returncode == 0 and doc['total_uses'] == 3
-    assert doc['test_scope'] == {'rule': 'is_test_path', 'files_scanned': 3}
+    assert doc['test_scope'] == {
+        'rule': 'is_test_path', 'files_scanned': 3, 'anchor': '.',
+        'source': 'scan_root_fallback', 'include_anchor_name': True,
+        'basis': 'scan-root name and relative paths; project boundary unknown', 'suite_roots': ['.']}
     assert not [w for w in doc['meta']['warnings'] if w.get('code') == 'language_not_scanned']
 
 
