@@ -531,8 +531,13 @@ def to_relative_display(file_str: Union[str, PurePath], base_path: Union[str, Pa
         rel = to_posix(resolved_file.relative_to(resolved_base))
         # A single-file target is its own base: "relative to itself" is '.',
         # which renders as '.:42' in locations (BACK-1488). Name the file.
-        if rel == '.' and resolved_base.is_file():
-            return resolved_base.name
+        if rel == '.':
+            try:
+                if resolved_base.is_file():
+                    return resolved_base.name
+            except OSError:
+                # Optional display prettification must not hide a root access failure.
+                return rel
         return rel
     except ValueError:
         return to_posix(file_str)
