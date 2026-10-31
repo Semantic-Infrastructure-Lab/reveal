@@ -19,6 +19,11 @@ from reveal.utils.results import AnalysisCompleteness, FailureCause
 pytestmark = pytest.mark.component
 
 
+def test_invalid_constructor_types_do_not_escape_as_attribute_errors():
+    with pytest.raises(TypeError):
+        MarkdownQueryAdapter(123, 456)
+
+
 def uri(root, query='body-contains=needle'):
     return 'markdown://' + root.as_posix() + '?' + query
 
