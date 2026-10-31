@@ -6,7 +6,6 @@ synthetic input (a negative control for every guard), and a runtime guard runs t
 process-wide cache hands one thread's tree-sitter nodes to another.
 """
 import copy
-import functools
 import gc
 import importlib.util
 import json
@@ -21,11 +20,6 @@ _SCRIPT = Path(__file__).resolve().parent.parent / 'scripts' / 'check_cache_regi
 _SPEC = importlib.util.spec_from_file_location('check_cache_registration', _SCRIPT)
 ccr = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(ccr)
-
-
-@functools.lru_cache(maxsize=None)
-def _real_scan():
-    return ccr.scan()
 
 
 def _sites(source, rel='reveal/m.py', wrappers=None):
@@ -45,18 +39,20 @@ def _site(ident, kind='container', module='reveal/m.py'):
 # --- the real tree --------------------------------------------------------------------------
 
 def test_the_manifest_matches_the_tree():
+    """Check the real tree and its mutation controls against one immutable scan."""
     manifest = json.loads(ccr.MANIFEST.read_text(encoding='utf-8'))
     conftest = Path(__file__).resolve().parent / 'conftest.py'
     module_caches = ccr.conftest_module_caches(conftest.read_text(encoding='utf-8'))
     assert module_caches, 'the conftest scan found no _MODULE_CACHES pairs'
-    assert ccr.check(manifest, _real_scan(), module_caches) == []
+    found = ccr.scan()
+    assert ccr.check(manifest, found, module_caches) == []
+    _assert_conftest_module_caches_are_scan_sites(found, module_caches)
+    _assert_real_manifest_mutations_are_rejected(manifest, found)
 
 
-def test_every_conftest_module_cache_is_a_site_the_scan_finds():
+def _assert_conftest_module_caches_are_scan_sites(found, module_caches):
     """Positive control for the conftest cross-check: its ids are real scan ids (or aliases)."""
-    found = _real_scan()
-    conftest = Path(__file__).resolve().parent / 'conftest.py'
-    for ident in ccr.conftest_module_caches(conftest.read_text(encoding='utf-8')):
+    for ident in module_caches:
         assert found.aliases.get(ident, ident) in found.sites, ident
 
 
@@ -216,10 +212,8 @@ def test_a_conftest_module_cache_the_manifest_lacks_fails():
         module_caches=['reveal/x.py::_y']) == []
 
 
-def test_the_real_manifest_fails_when_one_entry_is_removed_or_misowned():
+def _assert_real_manifest_mutations_are_rejected(manifest, found):
     """Mutations of the real manifest: each is caught."""
-    manifest = json.loads(ccr.MANIFEST.read_text(encoding='utf-8'))
-    found = _real_scan()
     gone = copy.deepcopy(manifest)
     del gone['caches']['reveal/utils/gitignore.py::_REPO_CACHE']
     assert any('unlisted' in p and '_REPO_CACHE' in p for p in ccr.check(gone, found, []))
