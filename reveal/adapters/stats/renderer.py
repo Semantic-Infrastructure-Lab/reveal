@@ -15,6 +15,19 @@ def _print_issue_count_line(result: dict) -> None:
         print(f"\n{line}")
 
 
+def _print_test_scope(result: dict) -> None:
+    """Describe the ranking policy without relabelling aggregate totals."""
+    scope = result.get('test_scope')
+    if not scope:
+        return
+    print(f"\nTest/support scope (ranking only): {scope['tests']}; "
+          f"{scope['files_excluded']} files excluded; {scope['basis']}; "
+          f"anchor={scope['anchor']} ({scope['source']})")
+    declaration = scope.get('declaration')
+    if declaration:
+        print(f"Policy source: {declaration['layer']} {declaration['path']}")
+
+
 def render_provenance(result: Dict[str, Any]) -> None:
     """Text rendering of a provenance report."""
     rows = result.get('files', [])
@@ -80,6 +93,7 @@ class StatsRenderer:
                     print(f"  Long functions: {len(long_funcs)}")
                 if deep_nesting:
                     print(f"  Deep nesting: {len(deep_nesting)}")
+            _print_test_scope(result)
             _print_issue_count_line(result)
             render_meta_warnings(result)
             return
@@ -103,6 +117,7 @@ class StatsRenderer:
                     print(f"\n{i}. {h['file']}")
                     print(f"   Quality: {h['quality_score']:.1f}/100 | Score: {h['hotspot_score']:.1f}")
                     print(f"   Issues: {', '.join(h['issues'])}")
+            _print_test_scope(result)
             _print_issue_count_line(result)
             render_meta_warnings(result)
 

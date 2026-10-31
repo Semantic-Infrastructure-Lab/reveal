@@ -75,6 +75,7 @@ result_control:
 
 filters:
   hotspots: 'Show quality hotspots (e.g., ?hotspots=true)'
+  tests: 'With hotspots=true, include (default) or exclude test/support files selected by conventional names plus project test_layout.additional_paths; changes only the ranking, preserving totals and files'
   min_lines: 'Minimum line count (legacy: ?min_lines=50 or new: ?lines>=50)'
   max_lines: 'Maximum line count (legacy: ?max_lines=500 or new: ?lines<=500)'
   min_complexity: 'Minimum avg complexity (legacy: ?min_complexity=5 or new: ?complexity>=5)'
@@ -123,6 +124,7 @@ notes:
   - 'Legacy parameters (min_lines, max_lines, etc.) still supported for backward compatibility'
   - 'Operator filters (lines>50, complexity=5..15) are URI-only; the subcommand takes the named parameters (--min-lines, --max-complexity, ...)'
   - 'hotspots=true ranks the whole filtered population; limit and offset page the files list only'
+  - 'Explicit tests=include|exclude reports test_scope with the selected policy basis, anchor/source and ranking-only files_excluded. Ordinary overview does not request this ranking'
   - 'Exit codes: 0 complete, 2 rejected request, 3 files lost or not analyzed (analysis_failed, parse_degraded, check_rules_failed, an unreadable directory); metrics has no findings gate (--fail-on findings exits 2)'
   - 'Combine filters and result control: ?lines>100&sort=-complexity&limit=10'
   - 'stats:// and classify:// are retired spellings: they answer the same as metrics:// and metrics://?view=provenance and print a replaced-by note'

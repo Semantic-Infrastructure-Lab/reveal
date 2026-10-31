@@ -6,6 +6,7 @@ and the file hotspot ranking (``?hotspots=true``, which the hotspots noun's file
 prints the replaced-by note from the RETIREMENTS table until the cut (D5).
 """
 
+import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional, cast
 from reveal.reveal_types import CONTRACT_VERSION
@@ -26,7 +27,7 @@ from ...utils.query_parser import (
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.gitignore import respect_gitignore_param
-from ...utils.path_utils import failure_of, in_test_scope, to_relative_display
+from ...utils.path_utils import TestLayout, failure_of, to_relative_display
 from ...utils.results import AnalysisCompleteness, ResultBuilder, note_truncation, note_warning, result_execution_facts
 from ...utils.validation import require_path_exists
 from ...utils.parallel import pool_worker_count, submit_each
@@ -159,9 +160,8 @@ _NO_MERGES = ParamSpec('no_merges', 'boolean', 'Exclude merge commits from the c
                        boolean_value, ('no_merges=1',), role='analysis',
                        cli=CliBinding(('--no-merges',), action='store_true'))
 _TESTS = ParamSpec('tests', 'string',
-                   'Test files in the hotspot ranking (path_utils.is_test_path: a tests/ or test/ directory, test_*.py, *_test.go, *Tests.java, '
-                   '*.spec.ts, ..., judged from the scanned path\'s own name down): include them (default here) or exclude them from '
-                   'hotspots=true. Totals, the files list and every other view still count them; overview passes exclude unless asked',
+                   'Test/support files in the hotspot ranking, selected by conventional names plus project test_layout.additional_paths: '
+                   'include them (default) or exclude them from hotspots=true. Only the ranking changes; totals and files still count them',
                    'include', _text('tests'), ('tests=exclude',), choices=TEST_CHOICES, role='analysis',
                    cli=CliBinding(('--tests',), metavar='{include,exclude}'))
 _SUMMARY_ONLY = ParamSpec('summary_only', 'boolean', 'Omit the per-file "files" array from the result — just the aggregate summary (+ hotspots, if also requested). Use on unscoped whole-repo calls, where the per-file array can reach tens of MB and dwarfs the summary block that is usually the actual signal wanted.',
@@ -202,7 +202,7 @@ _SCHEMA_OUTPUT_TYPES = [
                 'file': {'type': 'string'}, 'quality_score': {'type': 'number'},
                 'hotspot_score': {'type': 'number'}, 'issues': {'type': 'array', 'items': {'type': 'string'}},
             }}},
-            'test_scope': {'type': 'object', 'description': 'Present when ?tests= was given with hotspots=true: the rule, the mode and how many files the ranking left out',
+            'test_scope': {'type': 'object', 'description': 'Present when ?tests= was given with hotspots=true: the selected project policy, the mode and how many analyzed files the ranking left out',
                            'properties': {'rule': {'type': 'string', 'const': 'is_test_path'},
                                           'tests': {'type': 'string', 'enum': list(TEST_CHOICES)},
                                           'files_excluded': {'type': 'integer'}}},
@@ -268,7 +268,7 @@ _SCHEMA_NOTES = [
     'quality_score is 0-100: 100 = no issues; weighted by severity (error/warning/info)',
     'Complexity is cyclomatic, from the tree-sitter AST: 1 plus one per decision node (if/elif, loops, except/catch arms, case arms, and/or, ternaries); languages without a tree-sitter complexity fall back to a text heuristic',
     'hotspots=true adds a ranked list of files most in need of refactoring',
-    'tests=exclude leaves test files (is_test_path) out of the hotspots=true ranking only and reports test_scope.files_excluded; the default (include) ranks them, as overview://\'s own default (exclude) does not',
+    'tests=exclude leaves conventional and project-declared test/support files out of the hotspots=true ranking only; test_scope records the selected policy and files_excluded. The default includes them. Ordinary overview does not request this ranking',
     'quality.local_check_issues counts the findings of file-local check rules only, so a file has one count whatever else is in the tree; meta.issue_count names the rule and the rule set. Cross-file rules (import cycles, duplicate literals, ...) run under reveal check.',
     'Both files and directories are supported; directories show aggregate + per-file breakdown',
     'view=provenance answers what classify:// did: every analyzable file tagged first_party/test/vendor/minified, without analysis or rules; stats:// and classify:// are retired spellings that answer the same',
@@ -365,7 +365,7 @@ class MetricsAdapter(ResourceAdapter):
             params: Parameters already bound against PARAM_SPECS (the declared command and URI route);
                     given, ``query`` is not read.
         """
-        self.path = require_path_exists(Path(resource)).resolve()  # the message names the path as spelled
+        self.path = Path(os.path.abspath(require_path_exists(Path(resource))))  # the message names the path as spelled
         self._churn_disclosure: Optional[str] = None  # BACK-1166: set by _compute_churn_counts
         self._traversal_failures: List[PathFailure] = []
 
@@ -723,9 +723,9 @@ class MetricsAdapter(ResourceAdapter):
             )
             return None
 
-    def _add_hotspots(self, result: dict, file_stats: list) -> None:
+    def _add_hotspots(self, result: dict, file_stats: list, layout: Optional[TestLayout]) -> None:
         """Rank the same analyzed population for file and directory requests."""
-        file_stats = self._rank_population(result, file_stats)
+        file_stats = self._rank_population(result, file_stats, layout)
         churn_counts = None
         if self.query_params.get('churn', True) is not False:
             churn_counts = self._compute_churn_counts(file_stats)
@@ -737,19 +737,20 @@ class MetricsAdapter(ResourceAdapter):
         result['hotspots'] = self._top_hotspots(
             result, identify_hotspots(file_stats, churn_counts=churn_counts))
 
-    def _rank_population(self, result: dict, file_stats: list) -> list:
-        """The files the hotspot ranking sees: all of them, or without the test files (``?tests=exclude``).
+    def _rank_population(self, result: dict, file_stats: list, layout: Optional[TestLayout]) -> list:
+        """Narrow only the ranking, using the policy selected before analysis.
 
-        The rule is ``is_test_path`` judged from the scanned path's own name down (``in_test_scope``, the one
-        patches:// and testability:// use). Only the ranking is narrowed: the totals and the files list keep
-        counting tests. A request that names ``tests`` records what it did as ``test_scope``.
+        Files, totals and diagnostics retain their analyzed population. Counts here
+        describe the filtered ranking population before its top cut, not discovery.
         """
-        if self.query_params.get('tests') is None:
+        if layout is None:
             return file_stats
         mode = _TESTS.read(self.query_params)
+        base = self.path if self.path.is_dir() else self.path.parent
         kept = file_stats if mode == 'include' else [
-            f for f in file_stats if not in_test_scope(self.path / f['file'], self.path)]
-        result['test_scope'] = {'rule': 'is_test_path', 'tests': mode, 'files_excluded': len(file_stats) - len(kept)}
+            f for f in file_stats if not layout.is_test(base / f['file'])]
+        result['test_scope'] = {**layout.as_dict(base), 'tests': mode,
+                                'files_excluded': len(file_stats) - len(kept)}
         return kept
 
     def get_structure(self,
@@ -795,9 +796,11 @@ class MetricsAdapter(ResourceAdapter):
                                     min_complexity, max_complexity, min_functions,
                                     summary_only)
 
-        if hotspots and self.query_params.get('tests') is not None and _TESTS.read(self.query_params) == 'exclude':
+        layout = None
+        if hotspots and self.query_params.get('tests') is not None:
             from ...config import RevealConfig
-            RevealConfig.require_conventional_test_layout(self.path, 'stats hotspots tests=exclude')
+            layout = TestLayout.for_path(self.path, fallback_root=self.path)
+            layout = RevealConfig.get(layout.anchor).apply_test_layout(layout)
 
         # Handle single file analysis
         if self.path.is_file():
@@ -825,7 +828,7 @@ class MetricsAdapter(ResourceAdapter):
                 source_type='file',
             )
             if hotspots:
-                self._add_hotspots(result, kept)
+                self._add_hotspots(result, kept, layout)
             if summary_only:
                 result.pop('files', None)
             return result
@@ -853,7 +856,7 @@ class MetricsAdapter(ResourceAdapter):
         if hotspots:
             # The filtered population, not the limit/offset page: paging the files list must not
             # change which files are the hotspots (BACK-2146).
-            self._add_hotspots(result, dir_file_stats)
+            self._add_hotspots(result, dir_file_stats, layout)
 
         if summary_only:
             result.pop('files', None)
