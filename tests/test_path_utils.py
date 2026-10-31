@@ -903,6 +903,19 @@ class TestToRelativeDisplay:
         f.write_text("x = 1\n", encoding="utf-8")
         assert to_relative_display(str(f), f) == "mod.py"
 
+    @pytest.mark.parametrize('error', [PermissionError, FileNotFoundError])
+    def test_unstatable_anchor_keeps_relative_dot(self, tmp_path, monkeypatch, error):
+        # BACK-2420: rendering a root failure must not repeat the failed stat.
+        original = Path.stat
+
+        def stat(path, *args, **kwargs):
+            if path == tmp_path:
+                raise error('anchor unavailable')
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, 'stat', stat)
+        assert to_relative_display(tmp_path, tmp_path) == '.'
+
     def test_no_base_path_returns_original(self):
         assert to_relative_display("/abs/file.py", None) == "/abs/file.py"
 
