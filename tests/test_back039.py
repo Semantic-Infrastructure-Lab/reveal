@@ -223,7 +223,7 @@ class TestLinkGraphRouting:
     def test_result_source_is_base_path(self, tmp_path):
         adapter = MarkdownQueryAdapter(str(tmp_path), query='link-graph')
         result = adapter.get_structure()
-        assert result['source'] == str(tmp_path)
+        assert result['source'] == tmp_path.as_posix()
 
     def test_link_graph_and_other_params_coexist(self, tmp_path):
         """?link-graph can appear alongside other query params."""
