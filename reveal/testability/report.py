@@ -11,7 +11,7 @@ from .boundaries import BoundaryProfile, collect_boundary_profiles, module_name_
 from ..reveal_types import CONTRACT_VERSION
 from ..utils.results import note_truncation
 from ..utils.path_utils import TestLayout
-from .patches import (PatchGroup, PatchUse, group_patches, language_not_scanned_warning,
+from .patches import (PatchGroup, PatchUse, PatchUses, group_patches, language_not_scanned_warning,
                       no_scannable_tests_reason, scan_patches)
 
 
@@ -103,9 +103,7 @@ def build_testability_report(
     from ..adapters.ast.analysis import analysis_skipped_warning, parse_recovered_warning, traversal_failed_warning
 
     patches = scan_patches(test_paths, by_test_path=by_test_path, test_layout=test_layout)
-    if by_test_path and not patches.files_scanned and not patches.traversal_failures:
-        from ..errors import NotApplicableError
-        raise NotApplicableError(no_scannable_tests_reason(src_path, patches.unscanned_languages))
+    _decline_unscannable(patches, src_path, by_test_path)
     profiles = collect_boundary_profiles(src_path)
     _validate_observations(patches, profiles)
     patch_groups = group_patches(patches, group_by='target', min_count=min_patches)
@@ -154,7 +152,7 @@ def build_testability_report(
         # 1000x apart were once indistinguishable (BACK-1888).
         'test_scope': patches.test_scope('is_test_path' if by_test_path else 'tests=',
                                         test_layout=test_layout,
-                                        base=Path(src_path) if Path(src_path).is_dir() else Path(src_path).parent,
+                                        base=Path(src_path),
                                         roots=test_paths),
         'summary': {
             'total_patch_uses': len(patches),
@@ -178,6 +176,13 @@ def build_testability_report(
     note_truncation(report, 'boundary_hotspots', len(profile_rows), len(all_profiles), 'limit',
                     hint='raise ?top=N')
     return report
+
+
+def _decline_unscannable(patches: PatchUses, src_path: str, by_test_path: bool) -> None:
+    """No-suite answers require successful discovery; explicit suites may be empty."""
+    if by_test_path and not patches.files_scanned and not patches.traversal_failures:
+        from ..errors import NotApplicableError
+        raise NotApplicableError(no_scannable_tests_reason(src_path, patches.unscanned_languages))
 
 
 def _rank_targets(

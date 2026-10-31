@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import logging
 import os
+from stat import S_ISDIR, S_ISREG
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from fnmatch import fnmatch
@@ -80,6 +81,7 @@ class PatchUses(List[PatchUse]):
         test files left unread for want of a scanner, by language."""
         scope: Dict[str, Any] = {'rule': rule, 'files_scanned': self.files_scanned}
         if test_layout is not None and base is not None:
+            base = base if base.is_dir() else base.parent
             scope.update(test_layout.as_dict(base))
             scope['suite_roots'] = [to_posix(os.path.relpath(root, base)) for root in roots]
             outside = [root for root in roots if not Path(root).is_relative_to(test_layout.anchor)]
@@ -168,21 +170,18 @@ def iter_test_files(
     skipped: List[Path] = []
     for raw in paths:
         path = Path(raw).expanduser()
-        if path.is_file():
+        mode = _test_root_mode(path, on_error)
+        if S_ISREG(mode):
             if by_test_path and test_layout is not None:
-                if _in_test_layout(path, path.parent, test_layout):
-                    (files if _file_scannable(path, extensions) else skipped).append(path)
+                _partition_discovered_files([path], path.parent, extensions, test_layout, files, skipped)
             elif _file_matches(path, extensions):
                 files.append(path)
             elif by_test_path:
                 skipped.append(path)
-        elif path.is_dir():
+        elif S_ISDIR(mode):
             walked = _walk_code_files(path, on_error=on_error)  # the shared walker (BACK-1577)
             if by_test_path:
-                for fp in walked:
-                    if not _in_test_layout(fp, path, test_layout):
-                        continue
-                    (files if _file_scannable(fp, extensions) else skipped).append(fp)
+                _partition_discovered_files(walked, path, extensions, test_layout, files, skipped)
             else:
                 files.extend(fp for fp in walked if _file_matches(fp, extensions))
     if unscanned is not None:
@@ -190,6 +189,28 @@ def iter_test_files(
             name = _display_name_for_language(lang)
             unscanned[name] = unscanned.get(name, 0) + entry['count']
     return sorted(set(files))
+
+
+def _test_root_mode(path: Path, on_error: Optional[Callable[[OSError], None]]) -> int:
+    """Missing optional roots add no observations; unreadable roots retain required loss."""
+    try:
+        return path.stat().st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return 0
+    except OSError as exc:
+        if on_error is None:
+            raise
+        on_error(exc)
+        return 0
+
+
+def _partition_discovered_files(candidates: Iterable[Path], root: Path,
+                                 extensions: Optional[Sequence[str]], layout: Optional[TestLayout],
+                                 files: List[Path], skipped: List[Path]) -> None:
+    """Apply the same file-role and language decisions to file and directory roots."""
+    for path in candidates:
+        if _in_test_layout(path, root, layout):
+            (files if _file_scannable(path, extensions) else skipped).append(path)
 
 
 def _in_test_layout(path: Path, root: Path, layout: Optional[TestLayout]) -> bool:

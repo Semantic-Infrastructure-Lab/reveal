@@ -129,10 +129,10 @@ def _resolve_test_paths(src_path: Path, tests: Optional[List[str]],
     if tests:
         return [Path(t).expanduser().resolve() for t in tests if Path(t).expanduser().exists()]
     root = Path(os.path.abspath(src_path if src_path.is_dir() else src_path.parent))
-    beside = [d for d in sorted(root.parent.iterdir()) if d.is_dir() and d != root and is_test_dir(d.name)] \
+    beside = [d for d in sorted(root.parent.iterdir()) if d != root and is_test_dir(d.name)] \
         if src_path.is_dir() and root.parent != root else []
     declared = [test_layout.anchor / selector for selector in test_layout.additional_paths] if test_layout else []
-    return list(dict.fromkeys([root, *beside, *(path for path in declared if path.exists())]))
+    return list(dict.fromkeys([root, *beside, *declared]))
 
 
 @register_adapter('testability')
