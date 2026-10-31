@@ -304,3 +304,23 @@ def test_unusable_observation_is_required_output_failure(tmp_path, monkeypatch, 
     assert response.returncode == 3
     answer = json.loads(response.stdout)
     assert any(error['code'] == 'invalid_adapter_answer' for error in answer['meta']['errors'])
+
+
+@pytest.mark.parametrize('format', ['text', 'grep', 'json'])
+@pytest.mark.parametrize('survivor', [False, True])
+def test_required_loss_diagnostic_is_visible_exactly_once(tmp_path, format, survivor):
+    if survivor:
+        document(tmp_path, 'good.md')
+    document(tmp_path, 'bad.md', b'needle caf\xe9\n')
+    response = run(uri(tmp_path), '--format', format)
+    assert response.returncode == 3
+    if format == 'json':
+        warnings = json.loads(response.stdout)['meta']['warnings']
+        assert len([warning for warning in warnings if warning['type'] == 'unreadable_files']) == 1
+    else:
+        combined = response.stdout + response.stderr
+        assert combined.count('required document evidence is missing') == 1
+        assert 'bad.md' in combined
+        if format == 'grep':
+            assert 'required document evidence is missing' in response.stderr
+            assert 'bad.md' not in response.stdout
