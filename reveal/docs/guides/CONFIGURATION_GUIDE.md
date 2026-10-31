@@ -959,9 +959,19 @@ source that cannot be loaded is an operational failure (exit 3).
 |-----------|-----------------------------|
 | Imports graph/external views and entrypoint labels | Supported; test exclusion removes importer edges and retains incoming edges to selected helper targets. Include preserves graph/scanned populations. |
 | Overview map and Git architecture comparisons | Supported; one request policy governs both comparison sides, including identical-tree proofs. |
-| Metrics hotspots with `tests=exclude`, Surface `source_only=true` | Decline nonempty configured selectors with exit 2 pending adoption. Other queries retain their existing behavior. |
+| Metrics hotspot ranking with `tests=include` or `tests=exclude` | Supported; exclusion narrows the ranking only, preserving analyzed files and totals. |
+| Surface `source_only=true` and HTTP test-origin labels | Supported; directory pruning, individual files and labels share the selected policy. The census retains its broader population. |
 | Patches/default testability selection | Decline nonempty configured selectors with exit 2. Explicit trusted `tests=` in the pressure/testability report remains supported. |
-| Other role labels, M102, Calls test symbols | Existing conventional or language-specific basis; no configured-policy adoption is implied. |
+| Other role labels, M102, Calls test symbols and Hotspots filename hints | Existing conventional or language-specific basis; no configured-policy adoption is implied. |
+
+Surface uses conventional component names plus declared paths, rather than treating
+all directory names beginning with `test` as tests. Declare nonstandard suites such
+as `testing` explicitly; production lookalikes such as `testimonials` stay selected.
+The same source-only policy applies to direct files and scans within a test subtree.
+Non-HTTP queries without source-only filtering do not adopt this role policy.
+Metrics reports the ranking policy and excluded-file count in `test_scope`; Surface
+reports the selected policy there for source-only and HTTP-label operations.
+These labels describe file roles, not test coverage or runtime behavior.
 
 `reveal reveal://config` describes the current directory's selected anchor,
 effective policy and declarations actually read, including ignored sources. It

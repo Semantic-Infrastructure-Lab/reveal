@@ -41,15 +41,21 @@ def test_required_config_syntax_failure_remains_operational(project, scheme, par
 
 
 def test_registered_mcp_keeps_invalid_policy_and_unsupported_filter_diagnostics(project):
+    import json
     pytest.importorskip('mcp')
     from test_mcp_expected_errors_back1992 import _run, _text
     (project / '.reveal.yaml').write_text('test_layout:\n  additional_paths: [helpers]\n', encoding='utf-8')
 
     async def scenario(session):
-        for scheme, params in [('surface', 'source_only=true'), ('patches', ''), ('testability', ''), ('stats', 'hotspots=true&tests=exclude')]:
+        for scheme, params in [('patches', ''), ('testability', '')]:
             rejected = await session.call_tool('reveal_query', {'uri': f'{scheme}://{project}?{params}'})
             assert rejected.is_error
             assert 'test_layout.additional_paths' in _text(rejected)
+        for scheme, params in [('surface', 'source_only=true'), ('metrics', 'hotspots=true&tests=exclude&churn=false')]:
+            supported = await session.call_tool('reveal_query', {'uri': f'{scheme}://{project}?{params}', 'provenance': True})
+            assert not supported.is_error, _text(supported)
+            payload = json.loads(_text(supported))
+            assert payload['test_scope']['additional_paths'] == ['helpers']
         (project / '.reveal.yaml').write_text('test_layout:\n  additional_paths: [../escape]\n', encoding='utf-8')
         invalid = await session.call_tool('reveal_query', {'uri': f'imports://{project}', 'provenance': True})
         assert invalid.is_error and 'test_layout' in _text(invalid)

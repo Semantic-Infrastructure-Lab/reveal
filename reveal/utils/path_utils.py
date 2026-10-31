@@ -108,11 +108,9 @@ def is_test_dir(name: str) -> bool:
     (``Tests/``), not lowercase like every other ecosystem's convention
     this set already covers — confirmed live: `is_test_dir('Tests')` was
     `False` before this fix, silently exempting Swift's entire test tree
-    from every classify:///surface:// consumer of this function. Callers
-    that want the broader, opt-in prefix generalization (``testing/``,
-    ``test-fixtures/``, ...) combine this with their own
-    ``name.startswith(TEST_DIR_PREFIX)`` check — see
-    ``adapters/surface.py::_is_test_dir``.
+    from every classify:///surface:// consumer of this function. Project-scoped
+    file-role consumers use TestLayout for this convention plus explicitly
+    configured nonstandard test/support paths.
     """
     return name.lower() in TEST_DIR_NAMES
 
@@ -283,8 +281,7 @@ class TestLayout:
 def is_test_file_name(path: Union[str, PurePath]) -> bool:
     """The file-name half of :func:`is_test_path` (no directory check): generic
     ``test_``/``_test``/``Test`` naming plus the file's own language convention.
-    ``surface --source-only`` prunes test directories during its walk, so it asks
-    only this."""
+    Whole-path project classification belongs to TestLayout."""
     p = PurePath(path)
     return is_test_filename(p.stem, p.suffix) or is_test_basename_for_language(p.name)
 

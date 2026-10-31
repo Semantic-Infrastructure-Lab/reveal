@@ -19,7 +19,7 @@ def configured(tmp_path, monkeypatch):
     return tmp_path
 
 
-@pytest.mark.parametrize('scheme,parameters', [('stats', 'hotspots=true&tests=exclude'), ('surface', 'source_only=true'), ('patches', ''), ('testability', ''), ('patches', 'view=pressure')])
+@pytest.mark.parametrize('scheme,parameters', [('patches', ''), ('testability', ''), ('patches', 'view=pressure')])
 def test_unqualified_explicit_role_filters_exit_two_and_api_rejects(configured, scheme, parameters):
     uri = f'{scheme}://{configured}?{parameters}'
     with pytest.raises(RequestValidationError, match='test_layout'):
@@ -35,11 +35,13 @@ def test_unrelated_surface_and_trusted_explicit_suite_remain_usable(configured):
     assert result['test_scope']['rule'] == 'tests='
 
 
-def test_stats_declines_before_required_file_analysis(configured, monkeypatch):
+def test_stats_invalid_policy_rejects_before_required_file_analysis(configured, monkeypatch):
     from reveal.adapters.stats.adapter import StatsAdapter
 
+    (configured / '.reveal.yaml').write_text('test_layout:\n  additional_paths: [../escape]\n', encoding='utf-8')
+
     def forbidden(*args, **kwargs):
-        raise AssertionError('unsupported policy must be validated before scanning')
+        raise AssertionError('invalid policy must be validated before scanning')
 
     monkeypatch.setattr(StatsAdapter, '_collect_filtered_stats', forbidden)
     with pytest.raises(RequestValidationError, match='test_layout'):

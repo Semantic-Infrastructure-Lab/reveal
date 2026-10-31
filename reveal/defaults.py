@@ -91,12 +91,10 @@ VENV_MARKERS = ('pyvenv.cfg', 'conda-meta', 'bin/activate', 'Scripts/activate')
 # and flagged it as "orphaned" (not imported anywhere) when in fact it was
 # never expected to be imported at all.
 #
-# TEST_DIR_NAMES is exact-match — the canonical set every consumer agrees
-# on. TEST_DIR_PREFIX is a *broader*, opt-in generalization (also matches
-# `testing/`, `test-fixtures/`, etc.) — surface.py's `--source-only` alone
-# layers it on top; a bare prefix match is too loose for M102/hotspots,
-# which walk real package directories and would false-positive on names
-# like `testpkg` (BACK-1199 regression caught during consolidation).
+# TEST_DIR_NAMES is the exact-match conventional set. Project-scoped
+# TestLayout consumers add explicit selectors for nonstandard test/support paths.
+# TEST_DIR_PREFIX remains a legacy broader naming constant; it is not the
+# project file-role policy, since prefixes also match packages like `testpkg`.
 TEST_DIR_PREFIX = 'test'
 TEST_DIR_NAMES = frozenset({'test', 'tests', '__tests__', 'spec', 'specs'})
 
