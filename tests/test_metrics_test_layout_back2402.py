@@ -1,6 +1,5 @@
 """Metrics ranking adopts one immutable project test/support selection (BACK-2402)."""
 import json
-from pathlib import Path
 
 import pytest
 
@@ -8,6 +7,7 @@ from conftest import _run_reveal_direct
 from reveal.api import query
 from reveal.adapters.stats.adapter import MetricsAdapter, StatsAdapter
 from reveal.errors import RequestValidationError
+from reveal.utils.request_cache import host_request
 
 # Positive hotspot scores from actual analysis, without changing quality configuration.
 SOURCE = 'def work(value):\n' + ''.join(f'    if value == {n}:\n        return {n}\n' for n in range(15)) + '    return -1\n'
@@ -64,14 +64,20 @@ def test_root_child_and_file_choose_same_policy(project):
 
 def test_reused_adapter_rebinds_config_and_old_results_are_immutable(project):
     adapter = MetricsAdapter(str(project), OPTIONS)
-    first = adapter.get_structure()
+    with host_request():
+        first = adapter.get_structure()
     frozen = json.dumps(first, sort_keys=True)
+    first_api = query(f'metrics://{project}?{OPTIONS}')
     write(project / '.reveal.yaml', 'test_layout:\n  additional_paths: [src/support.py, helpers]\n# changed source\n')
-    equal = adapter.get_structure()
+    with host_request():
+        equal = adapter.get_structure()
     assert first['test_scope']['effective_policy'] == equal['test_scope']['effective_policy']
     assert first['test_scope']['declaration']['input_digest'] != equal['test_scope']['declaration']['input_digest']
     write(project / '.reveal.yaml', 'test_layout:\n  additional_paths: []\n')
-    latest = adapter.get_structure()
+    with host_request():
+        latest = adapter.get_structure()
+    assert query(f'metrics://{project}?{OPTIONS}')['test_scope']['files_excluded'] == 1
+    assert first_api['test_scope']['files_excluded'] == 3
     assert latest['test_scope']['files_excluded'] == 1
     assert latest['test_scope']['additional_paths'] == []
     assert json.dumps(first, sort_keys=True) == frozen
