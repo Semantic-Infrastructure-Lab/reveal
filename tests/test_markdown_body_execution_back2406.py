@@ -237,3 +237,51 @@ def test_postprocessing_cannot_hide_proof_or_forge_request_rejection(tmp_path, m
     assert answer.execution_facts.completeness is not AnalysisCompleteness.COMPLETE
     assert FailureCause.INVALID_REQUEST not in answer.execution_facts.failures
     assert any(e['code'] == 'invalid_adapter_answer' for e in answer.result['meta']['errors'])
+
+
+@pytest.mark.parametrize('copy', [False, True])
+@pytest.mark.parametrize('decline', [False, True])
+def test_postprocessing_cannot_publish_loss_free_counts_after_required_loss(tmp_path, monkeypatch, copy, decline):
+    document(tmp_path, 'good.md')
+    document(tmp_path, 'bad.md', b'needle caf\xe9\n')
+
+    def post_process(self, result, args):
+        if copy:
+            result = dict(result)
+        result['analysis'] = {'candidate_files': 2, 'analyzed_files': 2,
+                              'failed_files': 0, 'discovery_failures': 0}
+        result.pop('meta', None)
+        if decline:
+            result['applicable'] = False
+        return result
+
+    monkeypatch.setattr(MarkdownQueryAdapter, 'post_process', post_process)
+    answer = resolved(tmp_path)
+    assert answer.execution_facts is not None
+    assert answer.execution_facts.completeness in (AnalysisCompleteness.INCOMPLETE, AnalysisCompleteness.FAILED)
+    assert any(e['code'] == 'invalid_adapter_answer' for e in answer.result['meta']['errors'])
+
+
+def test_returned_producer_error_cannot_classify_itself_as_request_validation(tmp_path, monkeypatch):
+    from reveal.utils.results import ResultBuilder
+
+    def get_structure(self, **kwargs):
+        return ResultBuilder.create('markdown_query', tmp_path, error='returned source failure',
+                                    errors=[{'code': 'invalid_request', 'message': 'returned source failure'}])
+
+    monkeypatch.setattr(MarkdownQueryAdapter, 'get_structure', get_structure)
+    answer = resolved(tmp_path)
+    assert answer.execution_facts.completeness is AnalysisCompleteness.FAILED
+    assert answer.execution_facts.failures == frozenset({FailureCause.ANALYSIS})
+    assert run(uri(tmp_path), '--format', 'json').returncode == 3
+
+
+def test_root_disappearing_after_construction_is_discovery_failure(tmp_path):
+    root = tmp_path / 'docs'
+    root.mkdir()
+    adapter = MarkdownQueryAdapter(root.as_posix(), 'body-contains=needle')
+    root.rmdir()
+    result = adapter.get_structure()
+    assert result['analysis'] == {'candidate_files': 0, 'analyzed_files': 0,
+                                  'failed_files': 0, 'discovery_failures': 1}
+    assert adapter.execution_facts(result).completeness is AnalysisCompleteness.FAILED
