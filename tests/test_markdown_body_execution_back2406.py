@@ -285,3 +285,22 @@ def test_root_disappearing_after_construction_is_discovery_failure(tmp_path):
     assert result['analysis'] == {'candidate_files': 0, 'analyzed_files': 0,
                                   'failed_files': 0, 'discovery_failures': 1}
     assert adapter.execution_facts(result).completeness is AnalysisCompleteness.FAILED
+
+
+@pytest.mark.parametrize('change', [{}, {'path': ''}, {'relative_path': ''},
+    {'relevance_score': True}, {'relevance_score': -1}, {'has_frontmatter': 'false'}])
+def test_unusable_observation_is_required_output_failure(tmp_path, monkeypatch, change):
+    document(tmp_path, 'good.md')
+
+    def post_process(self, result, args):
+        result = dict(result)
+        row = dict(result['results'][0]) if change else {}
+        row.update(change)
+        result['results'] = [row]
+        return result
+
+    monkeypatch.setattr(MarkdownQueryAdapter, 'post_process', post_process)
+    response = run(uri(tmp_path), '--format', 'json')
+    assert response.returncode == 3
+    answer = json.loads(response.stdout)
+    assert any(error['code'] == 'invalid_adapter_answer' for error in answer['meta']['errors'])
