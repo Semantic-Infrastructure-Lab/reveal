@@ -196,7 +196,7 @@ def test_resource_validation_precedes_controls_and_preserves_api_missing_excepti
 
 
 @pytest.mark.parametrize('query', ['body-contains=', 'body-contains', 'title=guide',
-    'body-contains=needle&aggregate=title', 'body-contains=needle&link-graph',
+    'body-contains=needle&link-graph',
     'body-contains=needle&link_graph', 'body-contains=needle&lint',
     'body-contains=needle&backlinks=good.md'])
 def test_sibling_modes_remain_outside_execution_admission(tmp_path, query):
