@@ -65,7 +65,6 @@
   "reveal/utils/breadcrumbs.py": 1,
   "reveal/utils/exclusions.py": 3,
   "reveal/utils/json_utils.py": 4,
-  "reveal/utils/parallel.py": 1,
   "reveal/utils/path_utils.py": 4,
   "reveal/utils/provenance.py": 2,
   "reveal/utils/request_cache.py": 1,
