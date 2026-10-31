@@ -528,6 +528,31 @@ instead of raising a preflight traceback. Existing primary-JSON file-mirror
 suppression remains. Successful unused-input warning suffixes remain a separate
 JSON parseability limitation; this adoption does not suppress them.
 
+Direct ordinary `markdown://DIR?body-contains=TERM` searches with a nonempty term
+retain `markdown_query` identity and use owner source-completeness facts
+(BACK-2406). Complete searches, including healthy empty results and presentation
+cuts, exit `0`; invalid resources or controls exit `2`; required source or output
+loss exits `3`. Useful partial observations survive. Registered MCP preserves
+disclosed partial answers and marks fully failed searches or output failures as
+errors. Python API calls retain returned source-loss dictionaries and existing
+validation exceptions; authored control errors are `RequestValidationError`, a
+`ValueError` subtype, while a missing directory remains `FileNotFoundError`.
+
+The `analysis` object counts discovered eligible `candidate_files`, completed
+source decisions (`analyzed_files`), unique `failed_files`, and reached
+`discovery_failures` (directory-enumeration events, not estimated missing files).
+Candidates equal analyzed plus failed files. A successful byte prefilter nonmatch
+or a successfully read file rejected by selection still counts as analyzed.
+Required loss with completed source is incomplete; without completed source it
+is failed. Counts precede filtering, pagination and field projection. One decoded
+content read supplies frontmatter, body matching and relevance scoring; the
+earlier byte prefilter remains a separate read, without a snapshot guarantee.
+
+Active aggregate, backlinks, link-graph and lint modes take precedence and retain
+their existing execution policy, as do ordinary listings without a nonempty body
+term, element/check operations, stdin and batches. Their missing-directory CLI
+diagnostic now uses the common `Path not found` wording. No findings gate is added.
+
 Surface is an inventory and declares only `--fail-on none`, also its default; it
 rejects `findings`. `none` never suppresses incomplete analysis or output failure.
 `unparsed_files` or `recovered_files` make its scan incomplete; taxonomy limitations,

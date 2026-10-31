@@ -1028,6 +1028,25 @@ reveal 'markdown://docs/?type=guide&body-contains=nginx&limit=10'
 - `sort=FIELD` puts a file whose field is `null` or missing last, ascending or descending (`sort=-status`
   lists the files with no status at the end, in path order); a list field sorts by its first element
 
+Direct ordinary body searches exit `0` when complete, `2` for an invalid resource
+or control, and `3` when required source or requested output is lost. Missing or
+unreadable files retain diagnostics and surviving matches. A healthy search with
+no matches still succeeds. Registered MCP preserves partial answers and marks
+fully failed searches as errors.
+
+JSON `analysis` counts discovered candidates, completed source decisions, failed
+files and directory-enumeration failure events before selection or pagination.
+A successfully searched file counts as completed even when it does not match.
+Body matching, frontmatter filtering and relevance scoring reuse one decoded
+content read; the earlier byte prefilter is separate, so this is not a filesystem
+snapshot. See the [output contract](../development/OUTPUT_CONTRACT.md#declared-execution-policy)
+for the exact counts and Python API behavior.
+
+This execution policy applies to nonempty `body-contains=` terms in ordinary
+searches. Active `aggregate`, `backlinks`, `link-graph` or `lint` operations take
+precedence and keep their existing policy, along with bare/empty body terms,
+ordinary listings, element/check operations, stdin and batches.
+
 ### Extra Frontmatter Columns (`?fields=`)
 
 Add arbitrary frontmatter fields as inline columns in listing output:

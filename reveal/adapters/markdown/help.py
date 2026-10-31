@@ -135,6 +135,17 @@ _SCHEMA_OUTPUT_TYPES = [
                 'query': {'type': 'string'},
                 'total_files': {'type': 'integer'},
                 'matched_files': {'type': 'integer'},
+                'analysis': {
+                    'type': 'object',
+                    'description': 'Ordinary nonempty body search only; source decisions before selection and pagination.',
+                    'required': ['candidate_files', 'analyzed_files', 'failed_files', 'discovery_failures'],
+                    'properties': {
+                        'candidate_files': {'type': 'integer', 'minimum': 0},
+                        'analyzed_files': {'type': 'integer', 'minimum': 0},
+                        'failed_files': {'type': 'integer', 'minimum': 0},
+                        'discovery_failures': {'type': 'integer', 'minimum': 0},
+                    },
+                },
                 'results': {
                     'type': 'array',
                     'items': {
@@ -323,6 +334,7 @@ def get_schema() -> Dict[str, Any]:
         'notes': [
             'Searches recursively in the specified directory (or current dir if omitted)',
             'body-contains= searches body text after frontmatter; multiple values are AND\'d',
+            'Direct ordinary nonempty body searches exit 0 when complete, 2 for invalid requests, and 3 for required source/output loss; partial matches survive. Other modes keep their execution policy.',
             '!field finds files missing a specific frontmatter field — useful for doc quality audits',
             'List fields match if any item in the list matches (e.g., tags=python matches [python, web])',
             'All filter conditions are AND\'d; OR logic across different fields is not supported',
@@ -381,6 +393,7 @@ def get_help() -> Dict[str, Any]:
             'body-contains= is case-insensitive; multiple values are AND\'d',
             'body-contains= matches files without frontmatter too',
             'body-contains= results are ranked by relevance_score (term frequency + heading boost) unless sort= overrides it; add ?explain for the term_counts/heading_hits breakdown',
+            'Direct ordinary nonempty body searches exit 0 when complete, 2 for invalid requests, and 3 for required source/output loss. Healthy empty searches succeed; partial matches and source-count diagnostics survive.',
             '?lint distinguishes malformed YAML from "no frontmatter at all" — extract_frontmatter() collapses both to None, lint tells you which',
             'Only frontmatter fields require valid YAML frontmatter to filter',
             'Field values in lists are matched if any item matches',
