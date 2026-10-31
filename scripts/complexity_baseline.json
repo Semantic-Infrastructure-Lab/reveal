@@ -163,7 +163,6 @@
   "reveal/treesitter.py::TreeSitterAnalyzer._complexity_depth_and_calls": 18,
   "reveal/treesitter.py::TreeSitterAnalyzer._find_identifier_in_tree": 17,
   "reveal/utils/gitignore.py::_segment_regex": 18,
-  "reveal/utils/parallel.py::grep_files": 17,
   "reveal/utils/pyparse.py::_parenthesize_except": 17,
   "reveal/utils/results.py::ResultBuilder.create": 16
  },

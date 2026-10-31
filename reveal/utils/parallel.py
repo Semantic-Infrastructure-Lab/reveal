@@ -9,6 +9,8 @@ from concurrent.futures.process import BrokenProcessPool
 from ..logging_setup import worker_bootstrap
 from pathlib import Path
 from typing import Any, Iterable, Sequence
+from ..reveal_types import PathFailure
+from .path_utils import failure_of, to_posix
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +65,8 @@ def submit_each(executor, fn, items: Iterable) -> list[Future]:
     return futures
 
 
-def _scan_one(args: tuple) -> Path | None:
-    """Worker: return path if all needles appear in file bytes, else None.
+def _scan_one(args: tuple) -> Path | PathFailure | None:
+    """Return a matching path, a read failure, or a proven nonmatch.
 
     Must be module-level (not a closure or lambda) so multiprocessing can
     pickle it across process boundaries.
@@ -74,7 +76,8 @@ def _scan_one(args: tuple) -> Path | None:
             ``bytes`` objects — one per search term.
 
     Returns:
-        *path* if every needle was found, ``None`` otherwise.
+        *path* if every needle was found, ``None`` for a nonmatch, or the
+        candidate's ``PathFailure`` when its bytes could not be read.
     """
     path, needles = args
     try:
@@ -91,19 +94,36 @@ def _scan_one(args: tuple) -> Path | None:
             return path if all(n in data_lower for n in needles) else None
     except OSError as e:
         logger.warning("grep_file_worker failed for %s: %s", path, e)
-        return None
+        return PathFailure(to_posix(path), failure_of(e).cause)
 
 
 class GrepResult(list):
     """The matching paths (a plain list to every caller) plus ``lost``: the paths a dead
     pool worker kept from being scanned, which are not matches and not non-matches
-    (BACK-1754). Callers that build a result disclose them with ``worker_lost_warning``."""
+    (BACK-1754). ``unreadable`` separately retains ordinary byte-read failures.
+    Neither kind of failure establishes that a file did not match."""
 
     lost: list[Path]
+    unreadable: list[PathFailure]
 
-    def __init__(self, matches=(), lost=()):
+    def __init__(self, matches=(), lost=(), *, unreadable=()):
         super().__init__(matches)
         self.lost = list(lost)
+        self.unreadable = list(unreadable)
+
+
+def _record_scan(result: GrepResult, path: Path, outcome: Path | PathFailure | None) -> None:
+    if isinstance(outcome, PathFailure):
+        result.unreadable.append(outcome)
+    elif outcome is not None:
+        result.append(path)
+
+
+def _grep_sequential(paths: list[Path], needles: tuple[bytes, ...]) -> GrepResult:
+    result = GrepResult()
+    for path in paths:
+        _record_scan(result, path, _scan_one((path, needles)))
+    return result
 
 
 def worker_lost_warning(lost: Iterable, consequence: str, base: Path | None = None) -> dict[str, Any] | None:
@@ -150,8 +170,8 @@ def grep_files(
     Returns:
         Subset of *paths* where all terms were found, in input order. A file
         that could not be read, or was lost to a dead pool worker, is logged
-        as a warning and left out; the files lost to a dead worker are also on
-        the result's ``lost`` attribute so the caller can disclose them (BACK-1754).
+        as a warning and left out. ``unreadable`` contains ordinary read failures;
+        ``lost`` contains paths lost to a dead worker (BACK-1754).
 
     Example::
 
@@ -173,7 +193,7 @@ def grep_files(
 
     # Sequential fast path for small inputs.
     if len(paths_list) < _PARALLEL_THRESHOLD:
-        return GrepResult(p for p in paths_list if _scan_one((p, needles)) is not None)
+        return _grep_sequential(paths_list, needles)
 
     # Parallel scan, one future per file, read in input order. A file lost to a
     # dead worker (which fails every pending future) gets the warning a file
@@ -182,15 +202,15 @@ def grep_files(
         max_workers=min(workers, len(paths_list)), initializer=worker_bootstrap,
     ) as pool:
         futures = submit_each(pool, _scan_one, [(p, needles) for p in paths_list])
-        matches, lost = [], []
+        matches, lost = GrepResult(), []
         for path, future in zip(paths_list, futures):
             try:
-                if future.result() is not None:
-                    matches.append(path)
+                _record_scan(matches, path, future.result())
             except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever the worker raised; the lost file is reported by the warning below
                 lost.append((path, e))
     if lost:
         logger.warning("grep_files: %d file(s) not scanned, a pool worker died (%s: %s): %s%s",
                        len(lost), type(lost[0][1]).__name__, lost[0][1],
                        ', '.join(str(p) for p, _ in lost[:5]), ' ...' if len(lost) > 5 else '')
-    return GrepResult(matches, [p for p, _ in lost])
+    matches.lost = [p for p, _ in lost]
+    return matches

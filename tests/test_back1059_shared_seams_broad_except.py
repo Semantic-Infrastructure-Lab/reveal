@@ -173,8 +173,15 @@ def test_extract_line_range_does_not_swallow_a_bug(tmp_path, monkeypatch):
 
 # -- parallel grep worker --------------------------------------------------------------
 
-def test_scan_one_unreadable_file_is_a_non_match(tmp_path):
-    assert parallel._scan_one((tmp_path / "missing.txt", (b"x",))) is None
+def test_scan_one_unreadable_file_retains_its_failure(tmp_path):
+    from reveal.reveal_types import PathFailure
+    from reveal.utils.path_utils import to_posix
+
+    missing = tmp_path / "missing.txt"
+    outcome = parallel._scan_one((missing, (b"x",)))
+    assert isinstance(outcome, PathFailure)
+    assert outcome.path == to_posix(missing)
+    assert outcome.cause.startswith('FileNotFoundError:')
 
 
 def test_scan_one_does_not_swallow_a_bug(tmp_path, monkeypatch):
