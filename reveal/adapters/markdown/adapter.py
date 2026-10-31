@@ -179,6 +179,8 @@ def _extract_body_contains(filter_query: str) -> tuple:
 
 def _ordinary_body_query(query: str) -> bool:
     """Resolve the existing ordinary body operation without consuming source files."""
+    if not isinstance(query, str):
+        raise TypeError('Markdown query must be a string')
     link_graph, query = _extract_link_graph(query)
     lint, query = _extract_lint(query)
     backlinks, query = _extract_backlinks(query)
