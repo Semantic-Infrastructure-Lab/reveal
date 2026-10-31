@@ -202,50 +202,66 @@ def aggregate_field_values(
     Returns:
         Dict with aggregate frequency table sorted by count descending
     """
-    all_files = files.find_markdown_files(base_path)
+    discovery: List[PathFailure] = []
+    all_files = files.find_markdown_files(base_path, on_error=lambda exc: discovery.append(failure_of(exc)))
     candidates = grep_files(all_files, body_contains) if body_contains else all_files
-    counts: Counter = Counter()
-    matched = 0
-    missing = 0
+    lost = list(getattr(candidates, 'lost', []))
     unreadable = _prefilter_unreadable(candidates)
-
+    failed = set(lost) | {Path(path) for path, _ in unreadable}
+    analyzed = len(all_files) - len(candidates) - len(failed)
+    counts: Counter = Counter()
+    matched = missing = 0
     for path in candidates:
-        frontmatter = files.extract_frontmatter(path)
-        if not filtering.matches_all_filters(frontmatter, filters, query_filters):
+        try:
+            frontmatter, selected = _aggregate_candidate(path, filters, query_filters, body_contains)
+        except (OSError, UnicodeDecodeError) as exc:
+            failed.add(path)
+            unreadable.append((to_posix(path), failure_of(exc).cause))
             continue
-        if body_contains:
-            body, failure = files.read_body_outcome(path)
-            if failure:
-                unreadable.append((str(path), failure))
-                continue
-            if not filtering.body_has_terms(body, body_contains):
-                continue
-        matched += 1
-        value = (frontmatter or {}).get(field)
-        if value is None:
-            missing += 1
-        elif isinstance(value, list):
-            for item in value:
-                if item is not None:
-                    counts[str(item)] += 1
-        else:
-            counts[str(value)] += 1
-
-    aggregate = [
-        {'value': val, 'count': cnt}
-        for val, cnt in counts.most_common()
-    ]
+        analyzed += 1
+        if selected:
+            matched += 1
+            missing += _count_aggregate_value(counts, (frontmatter or {}).get(field))
 
     result: Dict[str, Any] = {
         'field': field,
         'total_files': len(all_files),
         'matched_files': matched,
         'files_missing_field': missing,
-        'aggregate': aggregate,
+        'aggregate': [{'value': val, 'count': cnt} for val, cnt in counts.most_common()],
+        'analysis': {'candidate_files': len(all_files), 'analyzed_files': analyzed,
+                     'failed_files': len(failed), 'discovery_failures': len(discovery)},
     }
     if unreadable:
-        result['unreadable_files'] = [list(item) for item in unreadable]  # BACK-1854
+        result['unreadable_files'] = [list(item) for item in unreadable]
+    note_warning(result, worker_lost_warning(lost, "they were not searched, so counts may be low", base_path))
+    warning = traversal_failed_warning(discovery, base_path)
+    note_warning(result, dict(warning) if warning else None)
     return result
+
+
+def _aggregate_candidate(path: Path, filters: list, query_filters: list,
+                         body_contains: Optional[list]) -> Tuple[Optional[Dict[str, Any]], bool]:
+    """Read once; a missing or malformed frontmatter block remains completed content."""
+    content = path.read_text(encoding='utf-8')
+    frontmatter = files.extract_frontmatter_diagnostic(path, content=content)['frontmatter']
+    if not filtering.matches_all_filters(frontmatter, filters, query_filters):
+        return frontmatter, False
+    if body_contains:
+        body, _ = files.read_body_outcome(path, content=content)
+        if not filtering.body_has_terms(body, body_contains):
+            return frontmatter, False
+    return frontmatter, True
+
+
+def _count_aggregate_value(counts: Counter, value: Any) -> int:
+    """Count list items individually; only an absent value marks a missing field."""
+    if value is None:
+        return 1
+    for item in value if isinstance(value, list) else [value]:
+        if item is not None:
+            counts[str(item)] += 1
+    return 0
 
 
 def _link_graph_fingerprint(base_path: Path, all_files: List[Path]) -> Optional[str]:

@@ -177,8 +177,8 @@ def _extract_body_contains(filter_query: str) -> tuple:
     return body_contains, '&'.join(remaining_parts)
 
 
-def _ordinary_body_query(query: str) -> bool:
-    """Resolve the existing ordinary body operation without consuming source files."""
+def _execution_query_type(query: str) -> Optional[str]:
+    """Resolve qualified operations without consuming source files."""
     if not isinstance(query, str):
         raise TypeError('Markdown query must be a string')
     link_graph, query = _extract_link_graph(query)
@@ -186,7 +186,11 @@ def _ordinary_body_query(query: str) -> bool:
     backlinks, query = _extract_backlinks(query)
     aggregate, query = _extract_aggregate(query)
     terms, _ = _extract_body_contains(query)
-    return bool(terms) and not (link_graph or lint or backlinks or aggregate)
+    if link_graph or lint or backlinks:
+        return None
+    if aggregate:
+        return 'markdown_aggregate'
+    return 'markdown_query' if terms else None
 
 
 def _valid_body_analysis(proof: Any) -> TypeGuard[BodySearchAnalysis]:
@@ -202,6 +206,22 @@ def _valid_body_observations(result, proof: BodySearchAnalysis) -> bool:
             and type(matched) is int and len(observations) <= matched <= proof['analyzed_files'])
 
 
+def _valid_aggregate_observations(result, proof: BodySearchAnalysis) -> bool:
+    rows, matched, missing = (result.get('aggregate'), result.get('matched_files'),
+                              result.get('files_missing_field'))
+    if not (isinstance(result.get('field'), str) and result['field']
+            and type(matched) is int and type(missing) is int
+            and 0 <= missing <= matched <= proof['analyzed_files']
+            and isinstance(rows, list) and all(_valid_aggregate_row(row) for row in rows)):
+        return False
+    return len({row['value'] for row in rows}) == len(rows)
+
+
+def _valid_aggregate_row(row) -> bool:
+    return (isinstance(row, dict) and isinstance(row.get('value'), str)
+            and type(row.get('count')) is int and row['count'] > 0)
+
+
 def _valid_body_row(row) -> bool:
     return (isinstance(row, dict)
             and all(isinstance(row.get(key), str) and row[key] for key in ('path', 'relative_path'))
@@ -215,7 +235,7 @@ def _erased_source_loss(result, proof: BodySearchAnalysis, prior_facts) -> bool:
             and (result.get('applicable') is False or not (proof['failed_files'] or proof['discovery_failures'])))
 
 
-def _directory_resource(resource: str, ordinary_body: bool) -> tuple[Path, str]:
+def _directory_resource(resource: str, qualified: bool) -> tuple[Path, str]:
     clean_path = resource or '.'
     if '://' in clean_path:
         clean_path = clean_path.split('://', 1)[1]
@@ -223,12 +243,12 @@ def _directory_resource(resource: str, ordinary_body: bool) -> tuple[Path, str]:
     try:
         resolved = Path(clean_path).resolve()
     except ValueError as exc:
-        if ordinary_body and '\x00' in clean_path:
+        if qualified and '\x00' in clean_path:
             raise RequestValidationError(str(exc)) from exc
         raise
-    mode = resolved.stat().st_mode if ordinary_body else None
+    mode = resolved.stat().st_mode if qualified else None
     if (stat.S_ISREG(mode) if mode is not None else resolved.is_file()):
-        error = RequestValidationError if ordinary_body else ValueError
+        error = RequestValidationError if qualified else ValueError
         raise error(
             f"markdown:// queries a directory of markdown files, not a single file.\n"
             f"To read a single markdown file, use: reveal {clean_path}")
@@ -238,20 +258,20 @@ def _directory_resource(resource: str, ordinary_body: bool) -> tuple[Path, str]:
     return directory, clean_path or '.'
 
 
-def _request_result_control(query: str, ordinary_body: bool):
+def _request_result_control(query: str, qualified: bool):
     try:
         return parse_result_control(query)
     except ValueError as exc:
-        if ordinary_body:
+        if qualified:
             raise RequestValidationError(str(exc)) from exc
         raise
 
 
-def _request_query_filters(query: str, ordinary_body: bool):
+def _request_query_filters(query: str, qualified: bool):
     try:
         return parse_query_filters(query)
     except ValueError as exc:
-        if ordinary_body:
+        if qualified:
             raise RequestValidationError(str(exc)) from exc
         raise
 
@@ -275,12 +295,12 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
     @classmethod
     def uri_execution_facts(cls, resource):
-        """Only ordinary body-search structure calls adopt the execution policy."""
-        return cls.execution_facts if _ordinary_body_query(resource.partition('?')[2]) else None
+        """Ordinary body searches and aggregates qualify required source decisions."""
+        return cls.execution_facts if _execution_query_type(resource.partition('?')[2]) else None
 
     @staticmethod
     def uri_result_type(resource):
-        return 'markdown_query'
+        return _execution_query_type(resource.partition('?')[2]) or 'markdown_query'
 
     @staticmethod
     def execution_facts(result):
@@ -308,11 +328,13 @@ class MarkdownQueryAdapter(ResourceAdapter):
         proof = result.get('analysis')
         if (not _valid_body_analysis(proof) or type(result.get('total_files')) is not int
                 or result['total_files'] != proof['candidate_files']):
-            return 'Markdown body answer missing consistent nonnegative source analysis counts'
+            return 'Markdown answer missing consistent nonnegative source analysis counts'
         if _erased_source_loss(result, proof, prior_facts):
             return 'Markdown postprocessing cannot erase established required source loss'
-        if not _valid_body_observations(result, proof):
-            return 'Markdown body answer missing consistent observations and match count'
+        valid_observations = (_valid_aggregate_observations(result, proof)
+                              if expected_type == 'markdown_aggregate' else _valid_body_observations(result, proof))
+        if not valid_observations:
+            return 'Markdown answer missing consistent observations and match count'
         return None
 
     @staticmethod
@@ -335,13 +357,13 @@ class MarkdownQueryAdapter(ResourceAdapter):
             resource: Directory to search for markdown files ('' = current directory)
             query: Query string (e.g., 'topics=reveal', '!status', 'lines>100')
         """
-        ordinary_body = _ordinary_body_query(query or '')
-        self.base_path, self.spelling = _directory_resource(resource, ordinary_body)
+        qualified = _execution_query_type(query or '') is not None
+        self.base_path, self.spelling = _directory_resource(resource, qualified)
         self.query = query
 
         # Parse result control (sort, limit, offset) and get cleaned query
         if query:
-            filter_query, self.result_control = _request_result_control(query, ordinary_body)
+            filter_query, self.result_control = _request_result_control(query, qualified)
         else:
             filter_query = ''
             self.result_control = ResultControl()
@@ -393,7 +415,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
         if has_new_operators:
             # No fallback to "no filters": that would answer an unfiltered query as if it
             # were the filtered one (BACK-1059). A ValueError here fails the query.
-            self.query_filters = _request_query_filters(filter_query, ordinary_body)
+            self.query_filters = _request_query_filters(filter_query, qualified)
 
         # Keep legacy filter parsing for backward compatibility
         # Only use legacy parsing if there are no new operators
@@ -449,11 +471,14 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 self.query_filters,
                 self.body_contains or None,
             )
+            warnings = self._unreadable_warnings(result, "required document evidence is missing, so counts may be low")
+            warnings.extend(result.pop('meta', {}).get('warnings', []))
             return ResultBuilder.create(
                 result_type='markdown_aggregate',
                 source=str(self.base_path),
+                source_type='directory',
                 contract_version=CONTRACT_VERSION,
-                warnings=self._unreadable_warnings(result, "their bodies were not searched, so counts may be low"),
+                warnings=warnings,
                 data=result,
             )
 
