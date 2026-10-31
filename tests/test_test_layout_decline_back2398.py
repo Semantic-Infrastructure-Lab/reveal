@@ -1,4 +1,5 @@
 """Unqualified role filters decline configured selectors at their request boundary."""
+import json
 import pytest
 
 from conftest import _run_reveal_direct
@@ -20,13 +21,14 @@ def configured(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('scheme,parameters', [('patches', ''), ('testability', ''), ('patches', 'view=pressure')])
-def test_unqualified_explicit_role_filters_exit_two_and_api_rejects(configured, scheme, parameters):
+def test_qualified_patch_selection_adopts_project_policy(configured, scheme, parameters):
     uri = f'{scheme}://{configured}?{parameters}'
-    with pytest.raises(RequestValidationError, match='test_layout'):
-        query(uri)
+    answer = query(uri)
+    assert answer['test_scope']['additional_paths'] == ['helpers']
+    assert answer['test_scope']['files_scanned'] == 1
     result = _run_reveal_direct(uri, '--format', 'json')
-    assert result.returncode == 2, result.stderr
-    assert 'test_layout' in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)['test_scope'] == answer['test_scope']
 
 
 def test_unrelated_surface_and_trusted_explicit_suite_remain_usable(configured):
