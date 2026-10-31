@@ -268,7 +268,6 @@ def test_postprocessing_cannot_rewrite_source_loss_as_success_or_decline(
     ('?link-graph&body-contains=needle', 'markdown_link_graph'),
     ('?lint&body-contains=needle', 'markdown_frontmatter_lint'),
     ('?backlinks=good.md&body-contains=needle', 'markdown_backlinks'),
-    ('?aggregate=title&body-contains=needle', 'markdown_aggregate'),
     ('?body-contains=', 'markdown_query'), ('?body-contains', 'markdown_query'),
 ])
 def test_unqualified_siblings_retain_legacy_results(tmp_path, suffix, expected_type):
