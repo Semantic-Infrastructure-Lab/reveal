@@ -158,8 +158,12 @@ def _mutation_sites(calls: List[str], base_line: int) -> List[int]:
 @lru_cache(maxsize=None)
 def module_name_from_file(file_path: str, src_root: str) -> str:
     """Best-effort module name for a file under a source root."""
+    source_file = Path(file_path).resolve()
+    root = Path(src_root).resolve()
+    if source_file == root:
+        root = root.parent
     try:
-        rel = Path(file_path).resolve().relative_to(Path(src_root).resolve())
+        rel = source_file.relative_to(root)
     except ValueError:
         rel = Path(file_path).name
     if isinstance(rel, Path):
@@ -171,5 +175,5 @@ def module_name_from_file(file_path: str, src_root: str) -> str:
         # file_path IS src_root's own __init__.py — its module identity is the
         # scanned package itself, not "no module" (which would make it match
         # any symbol-name-only target regardless of qualifier).
-        return Path(src_root).resolve().name
+        return root.name
     return '.'.join(name_parts)
