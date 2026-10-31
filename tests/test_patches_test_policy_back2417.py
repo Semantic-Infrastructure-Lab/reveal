@@ -1,11 +1,13 @@
 """Project-context suite selection; explicit suites retain their established trust."""
 from pathlib import Path
+import os
 
 import pytest
 
 from reveal.adapters.patches import PatchesAdapter
 from reveal.adapters.testability import TestabilityAdapter as PressureAdapter
 from reveal.errors import NotApplicableError
+from reveal.utils.request_cache import host_request
 
 
 PATCH = 'from unittest.mock import patch\npatch("pkg.service.call")\n'
@@ -90,12 +92,14 @@ def test_context_is_selected_once_and_reused_adapters_do_not_retain_policy(proje
     write(project / 'nested/support/helper.py', PATCH)
     write(project / 'nested/test_control.py', PATCH)
     adapter = PatchesAdapter(str(project))
-    old = adapter.get_structure()
+    with host_request():
+        old = adapter.get_structure()
     assert old['total_uses'] == 2
     child = PatchesAdapter(str(project / 'nested')).get_structure()
     assert child['total_uses'] == 2
     configure(project, [])
-    fresh = adapter.get_structure()
+    with host_request():
+        fresh = adapter.get_structure()
     assert fresh['total_uses'] == 1
     assert old['total_uses'] == 2
     assert old['test_scope']['additional_paths'] == ['checks']
@@ -112,3 +116,36 @@ def test_overlapping_declared_roots_count_unsupported_files_once(project):
     assert report['test_scope']['unscanned'] == {'Go': 2}
     warning, = [w for w in report['meta']['warnings'] if w['type'] == 'language_not_scanned']
     assert warning['languages'] == {'Go': 2}
+
+
+def test_default_discovery_loss_is_failed_analysis_not_absent_suite(project, monkeypatch):
+    write(project / 'tests/test_case.py', PATCH)
+    adapter = PressureAdapter(str(project))
+    real = os.scandir
+
+    def denied(path):
+        if Path(path) == project / 'tests':
+            raise PermissionError(13, 'controlled suite enumeration failure', str(path))
+        return real(path)
+
+    with monkeypatch.context() as context:
+        context.setattr(os, 'scandir', denied)
+        result = adapter.get_structure()
+    assert adapter.execution_facts(result).completeness.value == 'failed'
+    warning, = [w for w in result['meta']['warnings'] if w['type'] == 'analysis_incomplete']
+    assert warning['count'] == 1
+    assert result['summary']['total_patch_uses'] == 0
+    clean = adapter.get_structure()
+    assert clean['summary']['total_patch_uses'] == 1
+    assert not any(w['type'] == 'analysis_incomplete' for w in clean['meta']['warnings'])
+
+
+@pytest.mark.parametrize('unsupported', [False, True])
+def test_explicit_empty_and_unsupported_suites_remain_valid(project, unsupported):
+    suite = project / 'chosen'
+    suite.mkdir()
+    if unsupported:
+        write(suite / 'helper.go', 'package chosen\n')
+    result = PressureAdapter(str(project), f'tests={suite}').get_structure()
+    assert result['summary']['total_patch_uses'] == 0
+    assert result['test_scope'] == {'rule': 'tests=', 'files_scanned': 0}
