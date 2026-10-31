@@ -198,8 +198,9 @@ def test_lost_default_suite_is_incomplete_and_healthy_empty_remains_distinct(pro
     assert explicit['summary']['total_boundary_profiles'] == 1
     bare = tmp_path / 'empty-project'
     _write(bare / 'pyproject.toml', '[project]\nname="empty"\n')
+    (bare / 'src').mkdir()
     with pytest.raises(NotApplicableError):
-        query(_pressure(bare, scheme))
+        query(_pressure(bare / 'src', scheme))
 
 
 def test_existing_outside_project_sibling_uses_conventions_without_its_invalid_policy(project):
