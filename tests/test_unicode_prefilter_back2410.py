@@ -52,7 +52,7 @@ from reveal.utils.parallel import grep_files
 print(json.dumps([str(p) for p in grep_files([__import__('pathlib').Path(sys.argv[1])], 'needle')]))
 '''
     run = subprocess.run([sys.executable, '-c', code, str(path)], capture_output=True,
-                         text=True, timeout=30)
+                         text=True, encoding='utf-8', timeout=30)
     assert run.returncode == 0, run.stderr
     assert json.loads(run.stdout) == [str(path)]
 

@@ -21,7 +21,10 @@ def test_serialization_equivalence_and_caps(tmp_path, text, term, expected):
             name = str(escaped)
             path = tmp_path / (name + '.jsonl')
             record = {'type': 'event_msg', 'payload': {'type': 'user_message', 'message': text}}
-            path.write_text((json.dumps(record, ensure_ascii=escaped) + '\n') * 3, encoding='utf-8')
+            malformed = [[], {'type': 'event_msg', 'payload': 42},
+                         {'type': 'event_msg', 'payload': {'type': 'user_message', 'message': {'wrong': 'shape'}}}]
+            prefix = ''.join(json.dumps(item) + '\n' for item in malformed)
+            path.write_text(prefix + (json.dumps(record, ensure_ascii=escaped) + '\n') * 3, encoding='utf-8')
             conn.execute('INSERT INTO threads VALUES(?,?,?,?,?,?,?,?)',
                          (name, str(path), name, '', 'synthetic', 1, 'user', 0))
     with patch.object(CodexAdapter, 'CODEX_DB', db):
