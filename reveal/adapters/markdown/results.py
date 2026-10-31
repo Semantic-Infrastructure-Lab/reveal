@@ -2,12 +2,21 @@
 
 import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, TypedDict
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.query_control import sort_nulls_last
 from ...utils.results import ResultBuilder, note_truncation
 from ...utils.path_utils import to_posix
+
+
+class BodySearchAnalysis(TypedDict):
+    """Required source decisions, before frontmatter/body selection or paging."""
+
+    candidate_files: int
+    analyzed_files: int
+    failed_files: int
+    discovery_failures: int
 
 
 def build_result_item(
@@ -27,7 +36,7 @@ def build_result_item(
     """
     stat = path.stat()
     result = {
-        'path': str(path),
+        'path': to_posix(path),
         'relative_path': to_posix(path.relative_to(Path.cwd())
                                  if path.is_relative_to(Path.cwd())
                                  else path),

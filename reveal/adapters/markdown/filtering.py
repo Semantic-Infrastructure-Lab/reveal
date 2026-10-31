@@ -32,7 +32,7 @@ def body_has_terms(body: str, terms: List[str]) -> bool:
 HEADING_HIT_WEIGHT = 3
 
 
-def score_body_match(path: Path, terms: List[str]) -> Dict[str, Any]:
+def score_body_match(path: Path, terms: List[str], *, body: Optional[str] = None) -> Dict[str, Any]:
     """Score how strongly a file's body matches ``body-contains`` terms.
 
     A simple relevance score (term frequency + a heading-proximity boost) —
@@ -43,6 +43,7 @@ def score_body_match(path: Path, terms: List[str]) -> Dict[str, Any]:
     Args:
         path: Path to markdown file
         terms: Terms that must all appear in the body (case-insensitive)
+        body: Already-read body text; omitted callers retain the file-reading helper
 
     Returns:
         Dict with:
@@ -51,7 +52,8 @@ def score_body_match(path: Path, terms: List[str]) -> Dict[str, Any]:
             heading_hits — {term: occurrences on a heading (#) line}
     """
     from . import files
-    body = files.read_body_text(path)
+    if body is None:
+        body = files.read_body_text(path)
     lines = body.split('\n')
 
     term_counts: Dict[str, int] = {}

@@ -2,9 +2,10 @@
 
 import logging
 import re
+import stat
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple, cast
+from typing import Callable, Dict, Any, Optional, List, Tuple, cast
 
 from ...registry import get_markdown_extensions
 from ...utils.path_utils import _walk_code_files, to_posix, to_relative_display, failure_of
@@ -12,21 +13,31 @@ from ...utils.path_utils import _walk_code_files, to_posix, to_relative_display,
 logger = logging.getLogger(__name__)
 
 
-def find_markdown_files(base_path: Path) -> List[Path]:
+def find_markdown_files(base_path: Path, *,
+                        on_error: Optional[Callable[[OSError], None]] = None) -> List[Path]:
     """Find all markdown files in base_path recursively.
 
     Args:
         base_path: Directory or file path to search
+        on_error: Receive root-stat and directory-enumeration errors when requested
 
     Returns:
         List of Path objects to markdown files
     """
-    if not base_path.exists():
-        return []
+    if on_error is not None:
+        try:
+            is_file = stat.S_ISREG(base_path.stat().st_mode)
+        except OSError as exc:
+            on_error(exc)
+            return []
+    else:
+        if not base_path.exists():
+            return []
+        is_file = base_path.is_file()
 
     md_exts = tuple(get_markdown_extensions())
 
-    if base_path.is_file():
+    if is_file:
         if base_path.suffix.lower() in md_exts:
             return [base_path]
         return []
@@ -34,7 +45,7 @@ def find_markdown_files(base_path: Path) -> List[Path]:
     # The shared walk (BACK-1516): what git ignores (BACK-1386), REVEAL_IGNORE and
     # --exclude. Its own os.walk honored only .gitignore. Only .git is pruned beyond
     # those -- the code walkers' skip list (build/, dist/, vendor/...) is not applied to docs.
-    return sorted(fp for fp in _walk_code_files(base_path, prune_noise=False)
+    return sorted(fp for fp in _walk_code_files(base_path, prune_noise=False, on_error=on_error)
                   if fp.name.lower().endswith(md_exts))
 
 
@@ -67,15 +78,18 @@ def is_content_failure(failure: str) -> bool:
     return failure.startswith('UnicodeDecodeError:')
 
 
-def read_body_outcome(path: Path) -> Tuple[str, Optional[str]]:
+def read_body_outcome(path: Path, *, content: Optional[str] = None) -> Tuple[str, Optional[str]]:
     """``(body, failure)``: the body text of a markdown file (content after frontmatter), or
     ``('', "ErrorType: message")`` when the file could not be read -- an empty body that
-    means "unreadable", which a caller must not treat as "contains nothing" (BACK-1854)."""
-    try:
-        content = path.read_text(encoding='utf-8')
-    except (OSError, UnicodeDecodeError) as e:
-        logger.warning(f"Failed to read {path}, treating body as empty: {e}")
-        return '', failure_of(e).cause
+    means "unreadable", which a caller must not treat as "contains nothing" (BACK-1854).
+    Supplying already-read ``content`` keeps selection and ranking on the same read.
+    """
+    if content is None:
+        try:
+            content = path.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError) as e:
+            logger.warning(f"Failed to read {path}, treating body as empty: {e}")
+            return '', failure_of(e).cause
 
     if not content.startswith('---'):
         return content, None
@@ -183,7 +197,7 @@ def extract_frontmatter(path: Path) -> Optional[Dict[str, Any]]:
     return extract_frontmatter_diagnostic(path)['frontmatter']
 
 
-def extract_frontmatter_diagnostic(path: Path) -> Dict[str, Any]:
+def extract_frontmatter_diagnostic(path: Path, *, content: Optional[str] = None) -> Dict[str, Any]:
     """Extract YAML frontmatter, distinguishing *why* it's missing (BACK-871).
 
     ``extract_frontmatter`` collapses "no frontmatter block", "block present
@@ -193,6 +207,7 @@ def extract_frontmatter_diagnostic(path: Path) -> Dict[str, Any]:
 
     Args:
         path: Path to markdown file
+        content: Already-read UTF-8 text, when a caller owns the source read
 
     Returns:
         Dict with keys:
@@ -200,10 +215,11 @@ def extract_frontmatter_diagnostic(path: Path) -> Dict[str, Any]:
             status      — one of 'ok', 'missing', 'malformed'
             error       — human-readable reason when status != 'ok', else None
     """
-    try:
-        content = path.read_text(encoding='utf-8')
-    except (OSError, UnicodeDecodeError) as exc:
-        return {'frontmatter': None, 'status': 'missing', 'error': f'unreadable: {failure_of(exc).cause}'}
+    if content is None:
+        try:
+            content = path.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError) as exc:
+            return {'frontmatter': None, 'status': 'missing', 'error': f'unreadable: {failure_of(exc).cause}'}
 
     if not content.startswith('---'):
         return {'frontmatter': None, 'status': 'missing', 'error': None}

@@ -1,7 +1,8 @@
 """Markdown query adapter (markdown://)."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional
+import stat
+from typing import Dict, Any, Optional, TypeGuard
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -16,7 +17,10 @@ from . import query as query_module
 from . import operations
 from . import files
 from . import filtering
+from .results import BodySearchAnalysis
 from ...utils.query_parser import note_query_parsed
+from ...errors import RequestValidationError
+from ...utils.results import AnalysisCompleteness, result_execution_facts
 
 
 def _extract_backlinks(filter_query: str) -> tuple:
@@ -173,6 +177,83 @@ def _extract_body_contains(filter_query: str) -> tuple:
     return body_contains, '&'.join(remaining_parts)
 
 
+def _ordinary_body_query(query: str) -> bool:
+    """Resolve the existing ordinary body operation without consuming source files."""
+    link_graph, query = _extract_link_graph(query)
+    lint, query = _extract_lint(query)
+    backlinks, query = _extract_backlinks(query)
+    aggregate, query = _extract_aggregate(query)
+    terms, _ = _extract_body_contains(query)
+    return bool(terms) and not (link_graph or lint or backlinks or aggregate)
+
+
+def _valid_body_analysis(proof: Any) -> TypeGuard[BodySearchAnalysis]:
+    keys = ('candidate_files', 'analyzed_files', 'failed_files', 'discovery_failures')
+    return (isinstance(proof, dict)
+            and all(type(proof.get(key)) is int and proof[key] >= 0 for key in keys)
+            and proof['candidate_files'] == proof['analyzed_files'] + proof['failed_files'])
+
+
+def _valid_body_observations(result, proof: BodySearchAnalysis) -> bool:
+    observations, matched = result.get('results'), result.get('matched_files')
+    return (isinstance(observations, list) and all(_valid_body_row(row) for row in observations)
+            and type(matched) is int and len(observations) <= matched <= proof['analyzed_files'])
+
+
+def _valid_body_row(row) -> bool:
+    return (isinstance(row, dict)
+            and all(isinstance(row.get(key), str) and row[key] for key in ('path', 'relative_path'))
+            and type(row.get('relevance_score')) is int and row['relevance_score'] >= 0
+            and type(row.get('has_frontmatter')) is bool)
+
+
+def _erased_source_loss(result, proof: BodySearchAnalysis, prior_facts) -> bool:
+    return (prior_facts is not None
+            and prior_facts.completeness in (AnalysisCompleteness.INCOMPLETE, AnalysisCompleteness.FAILED)
+            and (result.get('applicable') is False or not (proof['failed_files'] or proof['discovery_failures'])))
+
+
+def _directory_resource(resource: str, ordinary_body: bool) -> tuple[Path, str]:
+    clean_path = resource or '.'
+    if '://' in clean_path:
+        clean_path = clean_path.split('://', 1)[1]
+    clean_path = clean_path.split('?', 1)[0].rstrip('/')
+    try:
+        resolved = Path(clean_path).resolve()
+    except ValueError as exc:
+        if ordinary_body and '\x00' in clean_path:
+            raise RequestValidationError(str(exc)) from exc
+        raise
+    mode = resolved.stat().st_mode if ordinary_body else None
+    if (stat.S_ISREG(mode) if mode is not None else resolved.is_file()):
+        error = RequestValidationError if ordinary_body else ValueError
+        raise error(
+            f"markdown:// queries a directory of markdown files, not a single file.\n"
+            f"To read a single markdown file, use: reveal {clean_path}")
+    if mode is not None and not stat.S_ISDIR(mode):
+        raise RequestValidationError(f"markdown:// directory '{clean_path}' is not a directory: {resolved}")
+    directory = resolved if mode is not None else require_directory(resolved, f"markdown:// directory '{clean_path}'")
+    return directory, clean_path or '.'
+
+
+def _request_result_control(query: str, ordinary_body: bool):
+    try:
+        return parse_result_control(query)
+    except ValueError as exc:
+        if ordinary_body:
+            raise RequestValidationError(str(exc)) from exc
+        raise
+
+
+def _request_query_filters(query: str, ordinary_body: bool):
+    try:
+        return parse_query_filters(query)
+    except ValueError as exc:
+        if ordinary_body:
+            raise RequestValidationError(str(exc)) from exc
+        raise
+
+
 @register_adapter('markdown')
 @register_renderer(MarkdownRenderer)
 class MarkdownQueryAdapter(ResourceAdapter):
@@ -185,7 +266,52 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'results'
     LEGACY_INIT = False
+    RESOURCE_IS_PATH = True
+    RESULT_TYPE = 'markdown_query'
+    DEFAULT_FAIL_ON = 'none'
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
+
+    @classmethod
+    def uri_execution_facts(cls, resource):
+        """Only ordinary body-search structure calls adopt the execution policy."""
+        return cls.execution_facts if _ordinary_body_query(resource.partition('?')[2]) else None
+
+    @staticmethod
+    def uri_result_type(resource):
+        return 'markdown_query'
+
+    @staticmethod
+    def execution_facts(result):
+        """Source decisions precede frontmatter/body selection and pagination."""
+        state = AnalysisCompleteness.COMPLETE
+        if not isinstance(result, dict):
+            state = AnalysisCompleteness.FAILED
+        elif not result.get('error') and result.get('applicable') is not False:
+            proof = result.get('analysis')
+            if not _valid_body_analysis(proof):
+                state = AnalysisCompleteness.FAILED
+            elif proof['failed_files'] or proof['discovery_failures']:
+                state = (AnalysisCompleteness.INCOMPLETE if proof['analyzed_files']
+                         else AnalysisCompleteness.FAILED)
+        return result_execution_facts(result, completeness=state)
+
+    @staticmethod
+    def answer_requirement_error(result, expected_type, prior_facts=None):
+        """Transformations must retain required source proof and observation counts."""
+        if prior_facts is not None and any(
+                error.get('code') == 'invalid_request' for error in result.get('meta', {}).get('errors', [])):
+            return 'Markdown postprocessing cannot establish a request rejection from prior analysis'
+        if prior_facts is None and (result.get('error') or result.get('applicable') is False):
+            return None
+        proof = result.get('analysis')
+        if (not _valid_body_analysis(proof) or type(result.get('total_files')) is not int
+                or result['total_files'] != proof['candidate_files']):
+            return 'Markdown body answer missing consistent nonnegative source analysis counts'
+        if _erased_source_loss(result, proof, prior_facts):
+            return 'Markdown postprocessing cannot erase established required source loss'
+        if not _valid_body_observations(result, proof):
+            return 'Markdown body answer missing consistent observations and match count'
+        return None
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -207,29 +333,13 @@ class MarkdownQueryAdapter(ResourceAdapter):
             resource: Directory to search for markdown files ('' = current directory)
             query: Query string (e.g., 'topics=reveal', '!status', 'lines>100')
         """
-        base_path = resource or '.'
-        # Strip scheme prefix if the full URI was passed (e.g. "markdown://path/to/file")
-        clean_path = base_path
-        if '://' in base_path:
-            clean_path = base_path.split('://', 1)[1]
-        # Strip query string if it ended up in the path (e.g. "docs/?link-graph" from
-        # _try_resource_arg_init which passes the full URI without pre-splitting on '?')
-        if '?' in clean_path:
-            clean_path = clean_path.split('?', 1)[0]
-        clean_path = clean_path.rstrip('/')
-        resolved = Path(clean_path).resolve()
-        if resolved.is_file():
-            raise ValueError(
-                f"markdown:// queries a directory of markdown files, not a single file.\n"
-                f"To read a single markdown file, use: reveal {clean_path}"
-            )
-        self.base_path = require_directory(resolved, f"markdown:// directory '{clean_path}'")
-        self.spelling = clean_path or '.'  # how results name paths (BACK-1366)
+        ordinary_body = _ordinary_body_query(query or '')
+        self.base_path, self.spelling = _directory_resource(resource, ordinary_body)
         self.query = query
 
         # Parse result control (sort, limit, offset) and get cleaned query
         if query:
-            filter_query, self.result_control = parse_result_control(query)
+            filter_query, self.result_control = _request_result_control(query, ordinary_body)
         else:
             filter_query = ''
             self.result_control = ResultControl()
@@ -281,7 +391,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
         if has_new_operators:
             # No fallback to "no filters": that would answer an unfiltered query as if it
             # were the filtered one (BACK-1059). A ValueError here fails the query.
-            self.query_filters = parse_query_filters(filter_query)
+            self.query_filters = _request_query_filters(filter_query, ordinary_body)
 
         # Keep legacy filter parsing for backward compatibility
         # Only use legacy parsing if there are no new operators

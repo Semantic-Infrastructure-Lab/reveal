@@ -3,6 +3,7 @@
 import hashlib
 import stat as stat_module
 from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -11,8 +12,75 @@ from ...core import disk_cache
 from ...utils.parallel import grep_files, worker_lost_warning
 from ...utils.query import unknown_sort_field_warning
 from ...utils.results import note_warning
+from ...utils.path_utils import failure_of, to_posix, traversal_failed_warning
+from ...reveal_types import PathFailure
 
 _LINK_GRAPH_CACHE_NAMESPACE = "markdown_link_graph"
+
+
+@dataclass
+class _QuerySources:
+    items: List[Dict[str, Any]] = field(default_factory=list)
+    seen_fields: set = field(default_factory=set)
+    unreadable: List[Tuple[str, str]] = field(default_factory=list)
+    lost: List[Path] = field(default_factory=list)
+    analyzed: int = 0
+    failed: set[Path] = field(default_factory=set)
+
+
+def _query_candidate(path: Path, filters: list, query_filters: list,
+                     body_contains: Optional[list], extra_fields: Optional[list],
+                     explain: bool) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """One source decision; body selection and ranking share the same UTF-8 read."""
+    body = ''
+    if body_contains:
+        content = path.read_text(encoding='utf-8')
+        frontmatter = files.extract_frontmatter_diagnostic(path, content=content)['frontmatter']
+        body, _ = files.read_body_outcome(path, content=content)
+    else:
+        frontmatter = files.extract_frontmatter(path)
+    if not filtering.matches_all_filters(frontmatter, filters, query_filters):
+        return frontmatter, None
+    if body_contains and not filtering.body_has_terms(body, body_contains):
+        return frontmatter, None
+    item = results.build_result_item(path, frontmatter, extra_fields)
+    if body_contains:
+        score_info = filtering.score_body_match(path, body_contains, body=body)
+        item['relevance_score'] = score_info['score']
+        if explain:
+            item['relevance_explain'] = {
+                'term_counts': score_info['term_counts'],
+                'heading_hits': score_info['heading_hits'],
+            }
+    return frontmatter, item
+
+
+def _collect_query_sources(all_files: List[Path], filters: list, query_filters: list,
+                           body_contains: Optional[list], extra_fields: Optional[list],
+                           explain: bool) -> _QuerySources:
+    candidates = grep_files(all_files, body_contains) if body_contains else all_files
+    collected = _QuerySources(lost=list(getattr(candidates, 'lost', [])))
+    collected.unreadable = [(failure.path, failure.cause)
+                            for failure in getattr(candidates, 'unreadable', [])]
+    collected.failed = set(collected.lost) | {Path(path) for path, _ in collected.unreadable}
+    # A completed byte nonmatch establishes a required source decision too.
+    collected.analyzed = len(all_files) - len(candidates) - len(collected.failed)
+    for path in candidates:
+        try:
+            frontmatter, item = _query_candidate(
+                path, filters, query_filters, body_contains, extra_fields, explain)
+        except (OSError, UnicodeDecodeError) as exc:
+            if not body_contains:
+                raise
+            collected.failed.add(path)
+            collected.unreadable.append((to_posix(path), failure_of(exc).cause))
+            continue
+        collected.analyzed += 1
+        if frontmatter:
+            collected.seen_fields.update(frontmatter)
+        if item is not None:
+            collected.items.append(item)
+    return collected
 
 
 def get_structure(
@@ -44,44 +112,13 @@ def get_structure(
         results are ranked best-first unless the caller specified an explicit
         sort field (BACK-869).
     """
-    all_files = files.find_markdown_files(base_path)
-
-    # Fast parallel pre-filter: eliminate files that can't possibly match
-    # before the expensive frontmatter parse + body-only verification.
-    # grep_files scans whole-file bytes; matches_body_contains re-checks
-    # body-only content to drop any frontmatter false-positives.
-    candidates = grep_files(all_files, body_contains) if body_contains else all_files
-    lost = getattr(candidates, 'lost', [])
-
-    matched_results = []
-    seen_fields = set()
-    unreadable: List[Tuple[str, str]] = []
-
-    # Build results for matching files
-    for path in candidates:
-        frontmatter = files.extract_frontmatter(path)
-        if frontmatter:
-            seen_fields.update(frontmatter.keys())
-        if not filtering.matches_all_filters(frontmatter, filters, query_filters):
-            continue
-        if body_contains:
-            body, failure = files.read_body_outcome(path)
-            if failure:
-                # grep_files matched its bytes; an empty body would drop it as "no match".
-                unreadable.append((str(path), failure))
-                continue
-            if not filtering.body_has_terms(body, body_contains):
-                continue
-        result = results.build_result_item(path, frontmatter, extra_fields)
-        if body_contains:
-            score_info = filtering.score_body_match(path, body_contains)
-            result['relevance_score'] = score_info['score']
-            if explain:
-                result['relevance_explain'] = {
-                    'term_counts': score_info['term_counts'],
-                    'heading_hits': score_info['heading_hits'],
-                }
-        matched_results.append(result)
+    discovery: List[PathFailure] = []
+    if body_contains:
+        all_files = files.find_markdown_files(base_path, on_error=lambda exc: discovery.append(failure_of(exc)))
+    else:
+        all_files = files.find_markdown_files(base_path)
+    collected = _collect_query_sources(all_files, filters, query_filters, body_contains, extra_fields, explain)
+    matched_results = collected.items
 
     # Apply result control (sort, limit, offset). A multi-doc body-contains
     # search with no explicit sort= ranks best-first by relevance_score
@@ -112,22 +149,30 @@ def get_structure(
         total_matches,
         controlled_results
     )
+    if body_contains:
+        analysis: results.BodySearchAnalysis = {
+            'candidate_files': len(all_files), 'analyzed_files': collected.analyzed,
+            'failed_files': len(collected.failed), 'discovery_failures': len(discovery),
+        }
+        response['analysis'] = analysis
 
     # Add truncation warning if needed
     displayed = len(controlled_results)
     results.add_truncation_warning(response, displayed, total_matches)
     note_warning(response, unknown_sort_field_warning(result_control.sort_field, matched_results))
     note_warning(response, worker_lost_warning(
-        lost, "they were not searched, so matches may be missing", base_path))  # BACK-1754
+        collected.lost, "they were not searched, so matches may be missing", base_path))  # BACK-1754
     note_warning(response, files.unreadable_warning(
-        unreadable, "their bodies were not searched, so matches may be missing", base_path))  # BACK-1854
+        collected.unreadable, "required document evidence is missing, so matches or ranking may be incomplete", base_path))
+    discovery_warning = traversal_failed_warning(discovery, base_path)
+    note_warning(response, dict(discovery_warning) if discovery_warning else None)
 
     # Add hint when filter matches very few files (likely front matter mismatch)
     results.add_low_match_rate_hint(response, len(all_files), total_matches, filters)
 
     # Disclose when a zero-match result traces to a filter field that never
     # appeared in any scanned file's frontmatter — typo vs. genuine zero (BACK-1111)
-    results.add_unknown_filter_field_hint(response, total_matches, seen_fields, filters, query_filters)
+    results.add_unknown_filter_field_hint(response, total_matches, collected.seen_fields, filters, query_filters)
 
     return response
 
