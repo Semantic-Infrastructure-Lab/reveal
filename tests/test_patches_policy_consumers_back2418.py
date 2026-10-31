@@ -211,6 +211,10 @@ def test_existing_outside_project_sibling_uses_conventions_without_its_invalid_p
     assert answer['summary']['total_boundary_profiles'] == 5
     assert any(row['key'] == 'outside.target' for row in answer['patch_hotspots'])
     assert 'outside_anchor_roots' in answer['test_scope']
+    text = run(_pressure(project))
+    assert text.returncode == 0, text.stderr
+    assert 'outside-anchor' in text.stdout
+    assert str(len(answer['test_scope']['outside_anchor_roots'])) in text.stdout
 
 
 def test_alias_selector_does_not_relabel_physical_target(project):
@@ -237,10 +241,10 @@ def test_nested_project_and_explicit_root_marker_choose_one_policy(project):
     _policy(nested, ['other'])
     _policy(project, ['nested/custom'])
     answer = query(_pressure(nested))
-    assert {row['key'] for row in answer['patch_hotspots']} == {'nested.other'}
+    assert {row['key'] for row in answer['patch_hotspots']} == {'nested.other', 'app.target'}
     _write(project / '.reveal.yaml', 'root: true\ntest_layout:\n  additional_paths: [nested/custom]\n')
     answer = query(_pressure(nested))
-    assert {row['key'] for row in answer['patch_hotspots']} == {'nested.target'}
+    assert {row['key'] for row in answer['patch_hotspots']} == {'nested.target', 'app.target'}
     assert answer['test_scope']['additional_paths'] == ['nested/custom']
 
 
@@ -253,6 +257,19 @@ def test_markerless_fallback_keeps_suite_name_and_discloses_unknown_project(tmp_
     assert answer['total_uses'] == 1
     assert answer['test_scope']['source'] == 'scan_root_fallback'
     assert answer['test_scope']['include_anchor_name'] is True
+
+
+@pytest.mark.parametrize('view', ['raw', 'pressure', 'retired'])
+def test_actual_text_names_default_policy_basis_and_anchor(project, view):
+    uri = (f'patches://{project}' if view == 'raw' else
+           _pressure(project / 'src', 'testability' if view == 'retired' else 'patches'))
+    answer = query(uri)
+    text = run(uri)
+    assert text.returncode == 0, text.stderr
+    scope = answer['test_scope']
+    assert scope['basis'] in text.stdout
+    assert 'anchor' in text.stdout.lower()
+    assert scope['anchor'] in text.stdout
 
 
 @pytest.mark.parametrize('contents,error,exit_code', [
