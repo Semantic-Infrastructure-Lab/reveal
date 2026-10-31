@@ -123,6 +123,9 @@ def test_whole_project_selector_is_disclosed_and_deduplicates_overlapping_roots(
     assert answer['test_scope']['files_scanned'] == 7
     assert answer['summary']['total_boundary_profiles'] == 1
     assert answer['test_scope']['whole_scope'] is True
+    text = run(_pressure(project / 'src'))
+    assert text.returncode == 0, text.stderr
+    assert 'WHOLE SCOPE selected by explicit .' in text.stdout
 
 
 @pytest.mark.parametrize('scheme', ['patches', 'testability'])
@@ -141,6 +144,10 @@ def test_trusted_external_roots_override_policy_with_existing_python_and_ts_mean
     cli = run(uri, '--format', 'json')
     assert cli.returncode == 0, cli.stderr
     assert _facts(json.loads(cli.stdout)) == _facts(answer)
+    text = run(uri)
+    assert text.returncode == 0, text.stderr
+    scope_line = next(line for line in text.stdout.split('\n') if line.startswith('Test scope:'))
+    assert scope_line == 'Test scope: tests= (2 test files scanned)'
 
 
 def test_child_root_order_and_new_requests_see_policy_edits_without_mutating_old_answers(project):
