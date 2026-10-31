@@ -153,3 +153,11 @@ def test_required_configuration_read_failure_preserved(tmp_path, query):
     with pytest.raises(TestLayoutConfigError, match='ParserError'):
         SurfaceAdapter(str(tmp_path), query).get_structure()
     assert names(SurfaceAdapter(str(tmp_path), 'type=env').get_structure()) == {'APP'}
+
+
+def test_precise_probe_named_helper_does_not_prune_production_sibling(tmp_path):
+    project(tmp_path)
+    write(tmp_path, '.reveal.yaml', 'test_layout:\n  additional_paths: [helpers/__surface_source__]\n')
+    write(tmp_path, 'helpers/__surface_source__', 'declared optional helper\n')
+    env(tmp_path, 'helpers/app.py', 'APP')
+    assert names(SurfaceAdapter(str(tmp_path), 'source_only=true').get_structure()) == {'APP'}
