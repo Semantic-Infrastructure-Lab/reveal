@@ -81,3 +81,15 @@ def test_healthy_and_unconstrained_results_have_no_read_failures(tmp_path):
         assert result == expected
         assert result.lost == []
         assert getattr(result, 'unreadable', []) == []
+
+
+def test_real_pool_returns_read_failure_without_losing_survivors(tmp_path):
+    paths = [tmp_path / f'doc{index}.md' for index in range(parallel._PARALLEL_THRESHOLD)]
+    for path in paths[:-1]:
+        path.write_bytes(b'needle')
+    result = parallel.grep_files(paths, 'needle', workers=2)
+    assert result == paths[:-1]
+    assert result.lost == []
+    assert len(result.unreadable) == 1
+    assert result.unreadable[0].path == to_posix(paths[-1])
+    assert result.unreadable[0].cause.startswith('FileNotFoundError:')
