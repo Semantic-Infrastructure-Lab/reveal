@@ -17,8 +17,8 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from . import RuleRegistry
-from ..utils.path_utils import scan_roots
+from . import RuleRegistry, _file_config, _as_checked
+from ..utils.path_utils import scan_roots, TestLayout
 from ..utils.request_cache import register_request_cache
 
 # Rule code -> why its shared-index preload failed in this process. A failed preload falls
@@ -177,6 +177,19 @@ def _t006_init_worker(project_index: dict) -> None:
     _project_index.update(project_index)
 
 
+def m102_test_layout(directory: Path, select, ignore,
+                     files: Optional[List[Path]]) -> Optional[TestLayout]:
+    """Bind only when an enabled Python target can reach M102's file-role decision."""
+    if not rule_will_run('M102', select, ignore):
+        return None
+    from .maintainability.M102 import M102, select_test_layout
+    rule = M102()
+    eligible = (path for path in files or []
+                if path.suffix == '.py' and not rule._is_entry_point(path)
+                and (select or _file_config(_as_checked(str(path))).is_rule_enabled('M102')))
+    return select_test_layout(directory) if next(eligible, None) is not None else None
+
+
 def _m102_preload(directory: Path, select, ignore, files: Optional[List[Path]] = None) -> dict:
     """Build M102's whole-project import scan in the main process (BACK-1437,
     BACK-1429). Without it every worker re-reads every .py file under the
@@ -195,6 +208,9 @@ def _m102_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
             return {}
         from .maintainability.M102 import M102, _import_cache, _project_root
         rule = M102()
+        rule.test_layout = m102_test_layout(directory, select, ignore, files)
+        if rule.test_layout is None:
+            return dict(_import_cache)
         eligible = [path for path in files or []
                     if path.suffix == '.py' and not rule._is_entry_point(path)
                     and not rule._is_test_file(path)]
@@ -272,7 +288,8 @@ def get_scan_budgets(files: List[Path], select, ignore) -> List[dict]:
             if rule_will_run(code, select, ignore) for row in budgets(files)]
 
 
-def get_scan_disclosures(files: Optional[List[Path]] = None, select=None, ignore=None) -> List[str]:
+def get_scan_disclosures(files: Optional[List[Path]] = None, select=None, ignore=None, *,
+                         directory: Optional[Path] = None) -> List[str]:
     """Collect cached scan-limit and discovery-loss disclosures for selected rules.
     Call only after the check run has completed (serial or parallel) —
     preload_scan_caches guarantees the main process sees a worker's cap
@@ -291,7 +308,8 @@ def get_scan_disclosures(files: Optional[List[Path]] = None, select=None, ignore
                                              ('I007', i007_disclosures)]
                 if rule_will_run(code, select, ignore) for message in collect(files)]
     if rule_will_run('M102', select, ignore):
-        messages.extend(m102_disclosures(files, select=select))
+        layout = m102_test_layout(directory, select, ignore, files) if directory is not None else None
+        messages.extend(m102_disclosures(files, select=select, test_layout=layout))
     for code, reason in sorted(_preload_failures.items()):
         if rule_will_run(code, select, ignore):
             messages.append(

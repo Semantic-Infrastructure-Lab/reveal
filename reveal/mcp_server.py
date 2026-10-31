@@ -736,7 +736,7 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
         ignore: Comma-separated rule codes/series to exclude, e.g. 'N'
     """
     from pathlib import Path
-    from .cli.file_checker import collect_files_to_check, _check_files_json
+    from .cli.file_checker import _check_files_json
 
     p = Path(path)
     if not p.exists():
@@ -751,20 +751,17 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     except ValueError as e:
         return _tool_failure(f"{e}")
 
-    collection = None
-    if p.is_dir():
-        directory = p.resolve()
-        collection = collect_files_to_check(directory)
-        files = collection.files
-        if not files and not collection.traversal_failures:
-            return f"No files found to check in {path}"
-    else:
-        directory = p.parent.resolve()
-        files = [p.resolve()]
+    inputs = _check_inputs(p)
+    if inputs is None:
+        return f"No files found to check in {path}"
+    directory, collection, files = inputs
 
-    total_issues, _, file_results, _, _ = _check_files_json(
-        files, directory, select_list, ignore_list, severity=severity_filter
-    )
+    try:
+        total_issues, _, file_results, _, _ = _check_files_json(
+            files, directory, select_list, ignore_list, severity=severity_filter
+        )
+    except (TestLayoutValidationError, TestLayoutConfigError) as exc:
+        return _tool_failure(str(exc), exception=exc)
     notes, incomplete = _check_notes(
         files, select_list, ignore_list, file_results, collection=collection, directory=directory)
 
@@ -789,6 +786,18 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     return "\n".join(lines)
 
 
+def _check_inputs(path) -> tuple | None:
+    """The existing check inventory, retaining failed discovery even with no files."""
+    from .cli.file_checker import collect_files_to_check
+    if path.is_dir():
+        directory = path.resolve()
+        collection = collect_files_to_check(directory)
+        if not collection.files and not collection.traversal_failures:
+            return None
+        return directory, collection, collection.files
+    return path.parent.resolve(), None, [path.resolve()]
+
+
 def _check_zero_verdict(notes, incomplete) -> str:
     """Keep discovery and rule losses distinct from a complete zero-findings answer."""
     if incomplete:
@@ -805,7 +814,7 @@ def _check_notes(files, select_list, ignore_list, file_results, *,
     note only (BACK-1826)."""
     from .checks import capability_disclosures
     from .rules.scan_caches import get_scan_disclosures
-    disclosures = get_scan_disclosures(files, select_list, ignore_list)
+    disclosures = get_scan_disclosures(files, select_list, ignore_list, directory=directory)
     if collection is not None and directory is not None:
         from .cli.file_checker import _collection_disclosures
         disclosures = _collection_disclosures(collection, directory) + disclosures

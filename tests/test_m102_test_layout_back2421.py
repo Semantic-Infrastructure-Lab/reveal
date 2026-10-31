@@ -7,9 +7,8 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from reveal import api
-from reveal.cli import file_checker
 from reveal.config import RevealConfig
-from reveal.errors import TestLayoutValidationError
+from reveal.errors import TestLayoutValidationError as LayoutValidationError, TestLayoutConfigError as LayoutConfigError
 from reveal.rules import RuleRegistry
 from reveal.utils.request_cache import host_request
 
@@ -116,7 +115,7 @@ def test_policy_edits_change_exemptions_in_fresh_requests(project):
 def test_invalid_selected_policy_rejects_only_active_m102(project):
     write(project / '.reveal.yaml', 'test_layout:\n  additional_paths: [../escape]\n')
     target = project / 'pkg/orphan.py'
-    with pytest.raises(TestLayoutValidationError):
+    with pytest.raises(LayoutValidationError):
         api.check(str(target), select=['M102'])
     assert api.check(str(target), select=['E501']) == []
     for path in (project, target):
@@ -128,10 +127,83 @@ def test_invalid_selected_policy_rejects_only_active_m102(project):
 
 def test_declared_support_only_preload_builds_no_import_inventory(project, monkeypatch):
     from reveal.rules.scan_caches import _m102_preload
-    def forbidden(*args):
-        raise AssertionError('exempt sources do not request importer evidence')
-    monkeypatch.setattr(owner.M102, '_collect_all_imports', forbidden)
+    builds = []
+    monkeypatch.setattr(owner.M102, '_collect_all_imports', lambda *args: builds.append(args))  # noqa: V036 parent-only preload; no worker is launched
     assert _m102_preload(project, ['M102'], None, [project / 'helpers/fixture.py']) == {}
+    assert builds == [], 'exempt sources do not request importer evidence'
+
+
+@pytest.mark.parametrize('selectors', ['[.]', '[missing, pkg/support.py]', '[]'])
+def test_literal_whole_optional_and_precise_paths(project, selectors):
+    write(project / '.reveal.yaml', f'test_layout:\n  additional_paths: {selectors}\n')
+    response, answer = checked(project)
+    expected = set() if selectors == '[.]' else {'helpers/fixture.py', 'helpersish/worker.py', 'pkg/orphan.py'}
+    if selectors == '[]':
+        expected.add('pkg/support.py')
+    assert findings(answer) == expected
+    assert response.returncode == int(bool(expected))
+    if selectors == '[.]':
+        row = next(r for r in answer['coverage']['rules'] if r['rule'] == 'M102')
+        assert row['subjects']['skipped'] == 5
+        assert 'WHOLE SCOPE' in row['reason']
+
+
+def test_discovery_disclosure_uses_same_exemption_policy_as_rule_and_preload(project, monkeypatch):
+    import os
+    from reveal.rules.scan_caches import get_scan_disclosures
+    blocked = project / 'blocked'
+    write(blocked / 'main.py', 'import pkg.orphan\n')
+    original = os.scandir
+    def scandir(path):
+        if Path(path) == blocked:
+            raise PermissionError(13, 'PUBLIC_IMPORT_DISCOVERY_DENIED', str(path))
+        return original(path)
+    with monkeypatch.context() as context:
+        context.setattr(os, 'scandir', scandir)
+        inventory = owner.M102()._collect_all_imports(project)
+    assert inventory.traversal_failures
+    assert get_scan_disclosures([project / 'helpers/fixture.py'], ['M102'], directory=project) == []
+    notes = get_scan_disclosures([project / 'pkg/orphan.py'], ['M102'], directory=project)
+    assert len(notes) == 1 and 'PUBLIC_IMPORT_DISCOVERY_DENIED' in notes[0]
+    assert owner._import_cache[project] is inventory
+
+
+def test_custom_policy_is_project_relative_and_no_config_uses_conventions(project, tmp_path, monkeypatch):
+    custom = write(tmp_path / 'policy.yaml', 'test_layout:\n  additional_paths: [helpersish]\n')
+    monkeypatch.setenv('REVEAL_CONFIG', str(custom))
+    response, answer = checked(project)
+    assert response.returncode == 1
+    assert findings(answer) == {'helpers/fixture.py', 'pkg/support.py', 'pkg/orphan.py'}
+    monkeypatch.setenv('REVEAL_NO_CONFIG', '1')
+    RevealConfig.reset_request_cache()
+    response, answer = checked(project)
+    assert response.returncode == 1
+    assert findings(answer) == {'helpers/fixture.py', 'helpersish/worker.py', 'pkg/support.py', 'pkg/orphan.py'}
+
+
+def test_required_policy_read_failure_is_operational_not_clean(project, monkeypatch):
+    import builtins
+    config_path = project / '.reveal.yaml'
+    original = builtins.open
+    def read(path, *args, **kwargs):
+        if Path(path) == config_path:
+            raise PermissionError(13, 'PUBLIC_POLICY_DENIED', str(path))
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(builtins, 'open', read)
+    with pytest.raises(LayoutConfigError):
+        api.check(str(project / 'pkg/orphan.py'), select=['M102'])
+    for path in (project, project / 'pkg/orphan.py'):
+        result = run('check', str(path), '--select', 'M102')
+        assert result.returncode == 3 and 'PUBLIC_POLICY_DENIED' in result.stderr
+
+
+def test_declared_symlink_does_not_reclassify_physical_production(project):
+    alias = project / 'helpers/linked.py'
+    try:
+        alias.symlink_to(project / 'pkg/orphan.py')
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f'file symlink unavailable: {exc}')
+    assert len(api.check(str(alias), select=['M102'])) == 1
 
 
 def test_direct_markerless_package_keeps_conventional_support_scope(tmp_path):

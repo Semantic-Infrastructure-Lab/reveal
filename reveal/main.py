@@ -118,7 +118,7 @@ from .cli import (
     handle_file,
 )
 from .utils.path_utils import failure_of
-from .errors import NavRequestValidationError
+from .errors import NavRequestValidationError, TestLayoutValidationError, TestLayoutConfigError
 
 
 def _warn_if_subcommand_shadows_path(name: str) -> None:
@@ -251,12 +251,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     try:
         with invocation_scope(invocation):
             _dispatch_and_run(invocation)
-    except (RetiredSpellingError, NavRequestValidationError) as exc:
+    except (RetiredSpellingError, NavRequestValidationError, TestLayoutValidationError) as exc:
         # Each owner supplies an explicit invalid-request origin and public diagnostic.
         message = exc.entry.text if isinstance(exc, RetiredSpellingError) else str(exc)
         print(f'error: {message}', file=sys.stderr)  # boundary-ok: print -- the invalid-invocation error line
         exit_code = 2
         raise SystemExit(2) from None
+    except TestLayoutConfigError as exc:
+        print(f'error: {exc}', file=sys.stderr)  # boundary-ok: print -- required selected configuration failure
+        exit_code = 3
+        raise SystemExit(3) from None
     except SystemExit as e:
         exit_code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
         raise

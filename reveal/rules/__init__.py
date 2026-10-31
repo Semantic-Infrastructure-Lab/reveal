@@ -15,6 +15,8 @@ from typing import List, Type, Optional, Dict, Any, FrozenSet, Tuple
 from .base import BaseRule, Detection, RulePrefix, RuleScope, Severity
 from reveal.config import get_config
 from reveal.utils.request_cache import register_request_cache
+from reveal.utils.path_utils import TestLayout
+from reveal.errors import TestLayoutValidationError, TestLayoutConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -670,12 +672,14 @@ class RuleRegistry:
     })
 
     @classmethod
-    def _configured_rule(cls, rule_class: Type[BaseRule], file_config: Any) -> BaseRule:
+    def _configured_rule(cls, rule_class: Type[BaseRule], file_config: Any,
+                         test_layout: Optional[TestLayout] = None) -> BaseRule:
         """An instance of *rule_class* configured for one file: its ``rules.<CODE>`` keys set
         as attributes, and ``get_config``/``get_threshold`` reading that file's config
         (overrides applied) instead of the cwd's (BACK-1571)."""
         rule = rule_class()
         rule._config = file_config
+        rule.test_layout = test_layout
         rule_config = file_config._config.get('rules', {}).get(rule_class.code, {})
         if rule_config and isinstance(rule_config, dict):
             cls._apply_rule_config(rule, rule_config)
@@ -700,7 +704,8 @@ class RuleRegistry:
                    ignore: Optional[List[str]] = None,
                    profile: Optional[Dict[str, float]] = None,
                    errors: Optional[List[Dict[str, str]]] = None,
-                   coverage: Optional[List[Dict[str, Any]]] = None) -> List[Detection]:
+                   coverage: Optional[List[Dict[str, Any]]] = None,
+                   test_layout: Optional[TestLayout] = None) -> List[Detection]:
         """
         Run all applicable rules against a file.
 
@@ -718,6 +723,8 @@ class RuleRegistry:
                 state to contaminate the comparison.
             coverage: Optional execution ledger with run/skipped/failed and reasons.
                 This reports rule execution, not completeness of internal fixture coverage.
+            test_layout: Request-selected immutable file-role context for adopting rules.
+                Does not alter other rules' configuration or project-index roots.
             errors: When given, a rule that raises during check() appends
                 {"rule": code, "error": "..."} here instead of the crash being
                 visible only in the stderr log (BACK-1083) — callers that want
@@ -757,7 +764,7 @@ class RuleRegistry:
                 continue
 
             try:
-                rule = cls._configured_rule(rule_class, file_config)
+                rule = cls._configured_rule(rule_class, file_config, test_layout)
                 if profile is not None:
                     start = time.perf_counter()
                     rule_detections = rule.check(file_path, structure, content)
@@ -773,6 +780,9 @@ class RuleRegistry:
                 logger.debug(
                     f"Rule {rule_class.code} found {num_issues} issues in {file_path}"
                 )
+            except (TestLayoutValidationError, TestLayoutConfigError):
+                # Selected policy cannot silently become zero findings in library calls.
+                raise
             except Exception as e:  # boundary-ok: broad-except -- rule.check runs rules (including user plugins) over arbitrary files; one failing rule must not end the run, and it is recorded as a failed rule in coverage and the errors list, and logged at error (one line; traceback at debug)
                 _record_coverage(coverage, rule_class.code, "failed", f"{type(e).__name__}: {e}")
                 # One line for the user; the traceback goes to debug, or it reaches stderr

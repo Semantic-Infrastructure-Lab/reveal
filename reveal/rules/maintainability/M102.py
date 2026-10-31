@@ -16,7 +16,7 @@ from ...utils.gitignore import gitignore_enabled
 from ...utils.path_utils import (
     EVIDENCE,
     _walk_code_files,
-    is_test_path,
+    TestLayout,
     is_unsafe_scan_root,
     python_package_top,
     resolve_project_root,
@@ -26,6 +26,7 @@ from ...utils.path_utils import (
 )
 from ...utils.pyparse import parse_python
 from ...reveal_types import PathFailure
+from ...config import RevealConfig
 
 logger = logging.getLogger(__name__)
 
@@ -45,27 +46,38 @@ class _ImportSet(set):
         self.gitignore = gitignore_enabled()
 
 
-def _disclosure_roots(files: List[Path], select) -> Set[Path]:
+def select_test_layout(target: Path) -> TestLayout:
+    """Select role policy independently of M102's Python importer/package root."""
+    target = target.resolve()
+    layout = TestLayout.for_path(target, fallback_root=target)
+    return RevealConfig.get(layout.anchor).apply_test_layout(layout)
+
+
+def _disclosure_roots(files: List[Path], select, test_layout: Optional[TestLayout] = None) -> Set[Path]:
     """Eligible/configured targets, not a ledger of actual rule execution."""
     from .. import _as_checked, _file_config
     rule = M102()
+    rule.test_layout = test_layout
     roots = set()
     for file in files:
         path = Path(_as_checked(str(file)))
-        if not rule.matches_target(str(path)) or rule._is_entry_point(path) or rule._is_test_file(path):
+        if not rule.matches_target(str(path)) or rule._is_entry_point(path):
+            continue
+        if not select and not _file_config(str(path)).is_rule_enabled('M102'):
+            continue
+        if rule._is_test_file(path):
             continue
         root = _project_root(path)
         if root is None or not rule._get_module_name(path, root):
-            continue
-        if not select and not _file_config(str(path)).is_rule_enabled('M102'):
             continue
         roots.add(root)
     return roots
 
 
-def get_scan_disclosures(files: Optional[List[Path]] = None, *, select=None) -> List[str]:
+def get_scan_disclosures(files: Optional[List[Path]] = None, *, select=None,
+                         test_layout: Optional[TestLayout] = None) -> List[str]:
     """Disclose cached importer loss for the requested eligible M102 roots."""
-    roots = _disclosure_roots(files, select) if files is not None else None
+    roots = _disclosure_roots(files, select, test_layout) if files is not None else None
     messages = []
     for root, imports in _import_cache.items():
         if roots is not None and root not in roots:
@@ -320,7 +332,10 @@ class M102(BaseRule):
 
         # Skip test files
         if self._is_test_file(path):
-            return detections
+            layout = self.test_layout or select_test_layout(path)
+            scope = layout.as_dict(path.parent.resolve())
+            return self.not_applicable(
+                f"test/support exemption: {scope['basis']}; policy anchor {scope['anchor']}", str(path))
 
         # The project whose files are the possible importers (BACK-1372)
         package_root = _project_root(path)
@@ -373,12 +388,10 @@ class M102(BaseRule):
         return False
 
     def _is_test_file(self, path: Path) -> bool:
-        """Check if file is a test file (BACK-1199: shared classifier —
-        previously this rule's own `'tests' in parts or 'test' in parts`
-        check didn't know about `spec`/`specs`/`__tests__`, so every RSpec
-        file on a Ruby codebase was treated as regular source and could be
-        flagged as orphaned."""
-        return is_test_path(Path(*(p.lower() for p in path.parts)))
+        """Exempt selected support files, without filtering possible importer evidence."""
+        target = path.resolve()
+        layout = self.test_layout or select_test_layout(target)
+        return layout.is_test(target)
 
     def _get_module_name(self, path: Path, package_root: Path) -> Optional[str]:
         """Get the importable module name for a file."""

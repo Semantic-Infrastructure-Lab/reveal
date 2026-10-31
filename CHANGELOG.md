@@ -50,6 +50,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- M102 now exempts declared test/support files and no longer exempts production modules just because a checkout is named or nested under `tests` or `specs`. Directory checks use one project policy across workers; imports from helpers still count as evidence. Invalid selected policy exits 2 and required configuration failures exit 3 (BACK-2421).
 - `markdown://DIR?link-graph` and `?backlinks=FILE` now report directory discovery failures instead of silently omitting documents and links. Text and grep show the warning, incomplete backlink answers no longer claim a rename is safe, and failed discovery bypasses the graph cache. Root access failures keep relative diagnostic paths; existing exits remain unchanged (BACK-2416, BACK-2420).
 - Markdown body searches and aggregates now find Unicode case matches such as `CAFÉ` for `café` and multiline matches across CRLF or CR line endings; optional StringZilla installations no longer break these searches. Claude and Codex session searches match decoded JSON content, including escaped text and paths, and Claude excerpts keep the match visible after Unicode case expansion. Record field names alone no longer produce empty Claude content hits (BACK-2409, BACK-2410, BACK-2411, BACK-2412).
 - A cold MCP Metrics request with provenance now returns parseable JSON instead of appending the routine rule-discovery progress log after it; warnings and errors keep their existing diagnostic handling (BACK-2404).

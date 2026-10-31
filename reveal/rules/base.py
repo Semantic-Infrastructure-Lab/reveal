@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
 from pathlib import Path
+from ..utils.path_utils import TestLayout
 import re
 import logging
 
@@ -319,6 +320,7 @@ class BaseRule(ABC):
 
     def __init__(self) -> None:
         self._config: Optional[Any] = None  # Lazy-loaded per-instance
+        self.test_layout: Optional[TestLayout] = None  # Immutable request selection, when supplied.
         self.outcomes: List[Dict[str, str]] = []
 
     def unavailable(self, reason: str, subject: str = "") -> List[Detection]:

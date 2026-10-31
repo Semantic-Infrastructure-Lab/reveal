@@ -962,7 +962,8 @@ source that cannot be loaded is an operational failure (exit 3).
 | Metrics hotspot ranking with `tests=include` or `tests=exclude` | Supported; exclusion narrows the ranking only, preserving analyzed files and totals. |
 | Surface `source_only=true` and HTTP test-origin labels | Supported; directory pruning, individual files and labels share the selected policy. The census retains its broader population. |
 | Patches/default pressure selection | Supported. Raw scans select files only within their target. Pressure reports also consider literal declared suite roots; explicit trusted `tests=` overrides default policy selection. |
-| Other role labels, M102, Calls test symbols and Hotspots filename hints | Existing conventional or language-specific basis; no configured-policy adoption is implied. |
+| M102 unimported-module exemption | Supported for checked target files; all Python importers, including selected support files, remain evidence. |
+| Other role labels, Calls test symbols and Hotspots filename hints | Existing conventional or language-specific basis; no configured-policy adoption is implied. |
 
 Surface uses conventional component names plus declared paths, rather than treating
 all directory names beginning with `test` as tests. Declare nonstandard suites such
@@ -972,6 +973,19 @@ Non-HTTP queries without source-only filtering do not adopt this role policy.
 Metrics reports the ranking policy and excluded-file count in `test_scope`; Surface
 reports the selected policy there for source-only and HTTP-label operations.
 These labels describe file roles, not test coverage or runtime behavior.
+
+M102 uses one selected project policy for a directory check, including files within
+nested projects. Checking that nested project separately selects its own policy.
+Direct file and Python API checks select the file's project; markerless checks retain
+the disclosed scan-root convention. Checkout directories above a known project, and
+the project's own name, do not make its production files tests. M102's exemption is
+file-level support selection, not proof of coverage or runtime usage. Its existing
+Python importer root, import extraction and unfiltered import-set cache are separate
+from the selected role policy. Declared helpers can still prove a source module is
+imported. Exemptions appear as skipped outcomes with their policy basis in check
+coverage; explicit `.` is labelled WHOLE SCOPE. When M102 is disabled for every target
+or unselected, it does not validate this policy or preload its index. Invalid selected policy exits 2, required
+policy-read failures exit 3, and Python callers receive the corresponding exception.
 
 Patches uses the same selected project context for directory, narrowed and direct-file
 default requests. A production-named Python file is no longer automatically treated

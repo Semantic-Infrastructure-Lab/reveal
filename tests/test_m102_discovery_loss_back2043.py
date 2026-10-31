@@ -187,7 +187,7 @@ def test_transient_loss_before_healthy_seal_rebuilds_and_repairs_without_clears(
 
 
 @needs_forked_workers
-def test_disabled_config_pool_may_preload_but_must_not_disclose_unused_m102_evidence(tmp_path, observed, monkeypatch):
+def test_disabled_config_pool_neither_preloads_nor_discloses_unused_m102_evidence(tmp_path, observed, monkeypatch):
     root, _, hidden = _project(tmp_path / 'disabled')
     _write(root / '.reveal.yaml', 'root: true\nrules:\n  disable: [M102]\n')
     for index in range(4):
@@ -196,7 +196,7 @@ def test_disabled_config_pool_may_preload_but_must_not_disclose_unused_m102_evid
     monkeypatch.setenv('REVEAL_MAX_WORKERS', '2')
     response = run('check', str(root), '--format', 'json')
     data = json.loads(response.stdout)
-    assert len(observed['builds']) == 1 and observed['events'] == [hidden]
+    assert observed['builds'] == observed['events'] == []
     assert not observed['check_log'].exists(), 'No actual M102.check runs when disabled without select override'
     assert not any('M102' in note for note in data['summary']['scan_disclosures'])
 

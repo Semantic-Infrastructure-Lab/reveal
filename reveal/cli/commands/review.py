@@ -271,7 +271,7 @@ def _run_check(path: Optional[Path], select: str,
             check_files, directory, select_list, None)
         if disclosures is not None:
             from reveal.rules.scan_caches import get_scan_disclosures
-            disclosures.extend(get_scan_disclosures(check_files, select_list, None))
+            disclosures.extend(get_scan_disclosures(check_files, select_list, None, directory=directory))
         if files_errored:
             errors.append(f"quality check could not analyze {files_errored} file(s)")
         violations: List[Dict[str, Any]] = []

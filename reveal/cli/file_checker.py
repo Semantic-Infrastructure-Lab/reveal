@@ -22,6 +22,7 @@ from typing import Optional, List, Dict, Literal, Set, Tuple, TYPE_CHECKING
 
 from ..utils.path_utils import (
     ScopeCensus,
+    TestLayout,
     _language_for_path,
     as_spelled,
     _walk_code_files,
@@ -56,6 +57,7 @@ from reveal.rules.scan_caches import (  # noqa: E402
     get_scan_disclosures,
     init_scan_caches,
     preload_scan_caches,
+    m102_test_layout,
 )
 # Single source of truth for severity icons, shared with Detection.__str__ so
 # the single-file and directory renderers cannot drift apart (BACK-857).
@@ -69,13 +71,14 @@ def _parallel_worker(packed_args: tuple) -> tuple:
     Module-level so it is picklable by multiprocessing.
 
     Args:
-        packed_args: (file_path, directory, select, ignore)
+        packed_args: (file_path, directory, select, ignore[, test_layout])
 
     Returns:
         (file_path, issue_count, detections, status)
     """
-    file_path, directory, select, ignore = packed_args
-    issue_count, detections, status = check_and_collect_file(file_path, directory, select, ignore)
+    file_path, directory, select, ignore, *context = packed_args
+    issue_count, detections, status = check_and_collect_file(
+        file_path, directory, select, ignore, test_layout=context[0] if context else None)
     return file_path, issue_count, detections, status
 
 
@@ -97,7 +100,8 @@ def _check_worker_count(n_files: int) -> int:
     return _pool_size(n_files)
 
 
-def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
+def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore,
+                             test_layout: Optional[TestLayout] = None):
     """Run file checks in parallel, yielding results as each future completes.
 
     Results are emitted as soon as they are ready, in completion order
@@ -124,7 +128,8 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
     """
     from concurrent.futures import as_completed
     workers = _pool_size(len(files))
-    args_list = [(f, directory, select, ignore) for f in files]
+    layout = test_layout or m102_test_layout(directory, select, ignore, files)
+    args_list = [(f, directory, select, ignore, layout) for f in files]
     caches = preload_scan_caches(files, directory, select, ignore)
     with ProcessPoolExecutor(
         max_workers=workers,
@@ -429,6 +434,7 @@ def check_and_collect_file(
     select: Optional[list[str]],
     ignore: Optional[list[str]],
     profile: Optional[dict] = None,
+    test_layout: Optional[TestLayout] = None,
 ) -> tuple[int, list, dict]:
     """Check a single file and return structured results.
 
@@ -439,6 +445,7 @@ def check_and_collect_file(
         ignore: Rule codes to ignore
         profile: When given, accumulates each rule's wall-clock seconds into
             profile[rule.code] (BACK-540). See RuleRegistry.check_file.
+        test_layout: Immutable request selection shared with pool workers.
 
     Returns:
         Tuple of (issue_count, detections_list, status). status is a dict
@@ -453,6 +460,7 @@ def check_and_collect_file(
     from ..registry import get_analyzer
     from ..rules import RuleRegistry
 
+    layout = test_layout or m102_test_layout(directory, select, ignore, [file_path])
     try:
         analyzer_class = get_analyzer(str(file_path), allow_fallback=False)
         if not analyzer_class:
@@ -473,6 +481,7 @@ def check_and_collect_file(
         detections = RuleRegistry.check_file(
             str(file_path), structure, content, select=select, ignore=ignore,
             profile=profile, errors=rule_errors, coverage=ledger,
+            test_layout=layout,
         )
 
         status: dict = {"status": "ok"}
@@ -831,6 +840,8 @@ def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, 
     file (BACK-2137). A file with no ledger (errored, lost with its worker, skipped) is not counted.
     """
     results_by_file: dict = {}
+    # Validate selected policy before a pool can turn an invalid request into file loss.
+    layout = m102_test_layout(directory, select, ignore, sorted_files)
 
     def fold(result: tuple) -> tuple:
         count, detections, status = result
@@ -841,7 +852,8 @@ def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, 
 
     if _check_worker_count(len(sorted_files)) > 1:
         try:
-            for file_path, *rest in _run_parallel_streaming(sorted_files, directory, select, ignore):
+            for file_path, *rest in _run_parallel_streaming(
+                    sorted_files, directory, select, ignore, test_layout=layout):
                 results_by_file[file_path] = fold(tuple(rest))
         except Exception as e:  # boundary-ok: broad-except -- a pool that fails to start falls back to checking the rest serially, logged at warning
             # The pool itself failed (e.g. startup) -- the generator raises when
@@ -850,7 +862,7 @@ def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, 
                             type(e).__name__, e)
     for f in sorted_files:
         if f not in results_by_file:
-            results_by_file[f] = fold(check_and_collect_file(f, directory, select, ignore))
+            results_by_file[f] = fold(check_and_collect_file(f, directory, select, ignore, test_layout=layout))
     return [(f, *results_by_file[f]) for f in sorted_files]
 
 
@@ -1259,7 +1271,7 @@ def _scan_disclosures(files: List[Path], select, ignore, *,
     Also returns whether the scan itself was incomplete (a capped/lost scan,
     not a capability note). Collected once per run: each collection maps every
     file to its project root (BACK-1827)."""
-    scan = get_scan_disclosures(files, select, ignore)
+    scan = get_scan_disclosures(files, select, ignore, directory=directory)
     if collection is not None and directory is not None:
         scan = _collection_disclosures(collection, directory) + scan
     return scan + capability_disclosures(files, select, ignore), bool(scan)
