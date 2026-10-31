@@ -1,6 +1,9 @@
 """Independent aggregate answers and loss evidence through real consumers."""
 import errno
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -66,6 +69,22 @@ def test_existing_healthy_frontmatter_meanings_survive(tmp_path, content, matche
     answer = json.loads(response.stdout)
     assert answer['matched_files'] == matched and answer['files_missing_field'] == missing
     assert _values(answer) == values
+
+
+@pytest.mark.parametrize('output', ['text', 'json'])
+def test_subprocess_cli_preserves_partial_counts_and_failure_exit(tmp_path, output):
+    (tmp_path / 'good.md').write_text('---\nkind: guide\n---\n', encoding='utf-8')
+    (tmp_path / 'bad.md').write_bytes(b'caf\xe9\n')
+    response = subprocess.run(
+        [sys.executable, '-m', 'reveal', _uri(tmp_path), '--format', output],
+        env={**os.environ, 'REVEAL_DISK_CACHE': '0'}, capture_output=True,
+        text=True, encoding='utf-8', timeout=30)
+    assert response.returncode == 3
+    assert 'guide' in response.stdout and 'Traceback' not in response.stderr
+    if output == 'json':
+        answer = json.loads(response.stdout)
+        assert (answer['matched_files'], answer['files_missing_field']) == (1, 0)
+        _counts(answer, (2, 1, 1, 0))
 
 
 @pytest.mark.parametrize('output', ['text', 'grep', 'json'])
@@ -235,20 +254,43 @@ def test_sdk_read_loss_recovery_and_unexpected_failure_privacy(tmp_path, provena
     marker = tmp_path / 'deny'
     code = '''
 from pathlib import Path
+import os
 from reveal import mcp_server
 from reveal.adapters.markdown import MarkdownQueryAdapter
+from reveal.adapters.markdown.renderer import MarkdownRenderer
+from reveal.utils import json_utils
 original = Path.read_text
+original_walk = os.walk
+original_render = MarkdownRenderer.render_structure
+original_json = json_utils.print_json_result
 marker = Path(MARKER)
 def read(path, *args, **kwargs):
-    if path.name == 'denied.md' and marker.exists():
+    if path.name == 'denied.md' and marker.exists() and marker.read_bytes() == b'deny':
         raise PermissionError(13, 'PUBLIC_AGGREGATE_DENIED', str(path))
     return original(path, *args, **kwargs)
+def walked(top, *args, **kwargs):
+    if Path(top) == marker.parent and marker.exists() and marker.read_bytes() == b'scan':
+        callback = kwargs.get('onerror')
+        if callback:
+            callback(PermissionError(13, 'PUBLIC_DISCOVERY_DENIED', str(marker.parent / 'hidden')))
+    yield from original_walk(top, *args, **kwargs)
+def render(result, *args, **kwargs):
+    if marker.exists() and marker.read_bytes() == b'output':
+        raise PermissionError(13, 'PUBLIC_AGGREGATE_OUTPUT_DENIED')
+    return original_render(result, *args, **kwargs)
+def print_json(result, *args, **kwargs):
+    if marker.exists() and marker.read_bytes() == b'output':
+        raise PermissionError(13, 'PUBLIC_AGGREGATE_OUTPUT_DENIED')
+    return original_json(result, *args, **kwargs)
 def processed(self, result, args):
     if marker.exists() and marker.read_bytes() == b'crash':
         raise RuntimeError('PRIVATE_AGGREGATE_CRASH')
     return result
 Path.read_text = read
+os.walk = walked
 MarkdownQueryAdapter.post_process = processed
+MarkdownRenderer.render_structure = staticmethod(render)
+json_utils.print_json_result = print_json
 mcp_server.main()
 '''.replace('MARKER', repr(str(marker)))
 
@@ -262,6 +304,13 @@ mcp_server.main()
         assert denied.is_error
         marker.unlink()
         assert 'hidden' in _text(await request())
+        marker.write_bytes(b'scan')
+        discovery = await request()
+        assert not discovery.is_error and 'incomplete' in _text(discovery).lower()
+        assert 'hidden' in _text(discovery)
+        marker.write_bytes(b'output')
+        output = await request()
+        assert output.is_error and _text(output).strip()
         marker.write_bytes(b'crash')
         failed = await request()
         assert failed.is_error
