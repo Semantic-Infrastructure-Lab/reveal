@@ -548,9 +548,18 @@ is failed. Counts precede filtering, pagination and field projection. One decode
 content read supplies frontmatter, body matching and relevance scoring; the
 earlier whole-file prefilter remains a separate read, without a snapshot guarantee.
 
-Active aggregate, backlinks, link-graph and lint modes take precedence and retain
-their existing execution policy, as do ordinary listings without a nonempty body
-term, element/check operations, stdin and batches. Their missing-directory CLI
+Direct active `aggregate=FIELD` queries also use this source-completeness policy,
+with or without body filtering, and retain `markdown_aggregate` identity
+(BACK-2414). Their `analysis` uses the same counts and classifications. Failed
+sources never increment `matched_files` or `files_missing_field`; readable absent,
+malformed or non-mapping frontmatter keeps its existing missing-field meaning.
+List values expand per item, including duplicates, so aggregate frequencies can
+sum to more than the number of matched files. Frontmatter and optional body
+selection share one decoded read per candidate after any prefilter.
+
+Backlinks, link-graph and lint modes take precedence and retain their existing
+execution policy, as do ordinary listings without a nonempty body term,
+element/check operations, stdin and batches. Their missing-directory CLI
 diagnostic now uses the common `Path not found` wording. No findings gate is added.
 
 Surface is an inventory and declares only `--fail-on none`, also its default; it

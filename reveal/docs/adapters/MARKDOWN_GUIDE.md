@@ -1044,10 +1044,16 @@ content read; the earlier whole-file prefilter is separate, so this is not a fil
 snapshot. See the [output contract](../development/OUTPUT_CONTRACT.md#declared-execution-policy)
 for the exact counts and Python API behavior.
 
-This execution policy applies to nonempty `body-contains=` terms in ordinary
-searches. Active `aggregate`, `backlinks`, `link-graph` or `lint` operations take
-precedence and keep their existing policy, along with bare/empty body terms,
-ordinary listings, element/check operations, stdin and batches.
+Active `aggregate=FIELD` queries also use this execution policy, with or without
+body filters, and include the same `analysis` counts. Unreadable sources never
+count as matched files or missing fields. Readable files with absent, malformed
+or non-mapping frontmatter retain their existing missing-field meaning. List
+values count each item, including duplicates; frequency totals can therefore
+exceed matched file totals. Partial frequencies remain available with diagnostics.
+
+Backlinks, link-graph and lint operations take precedence and keep their existing
+policy, along with bare/empty body terms in ordinary listings, element/check
+operations, stdin and batches.
 
 ### Extra Frontmatter Columns (`?fields=`)
 
