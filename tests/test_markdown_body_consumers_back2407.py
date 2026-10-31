@@ -204,7 +204,9 @@ def test_requested_artifact_failure_preserves_answer_and_primary_json_noop(tmp_p
     assert _names(json.loads(primary.stdout)) == ['good.md']
 
 
-@pytest.mark.parametrize('mode', ['missing_analysis', 'forged_request', 'postprocess_request'])
+@pytest.mark.parametrize('mode', [
+    'missing_analysis', 'missing_row_identity', 'forged_request', 'postprocess_request',
+])
 def test_repair_and_postprocessing_cannot_turn_missing_proof_into_usage(tmp_path, monkeypatch, mode):
     (tmp_path / 'good.md').write_bytes(b'needle\n')
     original = MarkdownQueryAdapter.get_structure
@@ -218,6 +220,8 @@ def test_repair_and_postprocessing_cannot_turn_missing_proof_into_usage(tmp_path
         result = original(self, **kwargs)
         if mode == 'missing_analysis':
             result.pop('analysis', None)
+        elif mode == 'missing_row_identity':
+            result['results'] = [{}]
         elif mode == 'forged_request':
             result['scope'] = []
             forged(result)
