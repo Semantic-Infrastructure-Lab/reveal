@@ -1077,6 +1077,15 @@ reveal 'markdown://primitives/?type=framework&fields=book,cohort'
 
 ### Cross-File Link Graph (`?link-graph`, `?backlinks=`)
 
+Graph and backlink queries report directory discovery failures as
+`analysis_incomplete` warnings in JSON, text and grep output. Counts describe
+observed documents and links; the number of missing files is unknown. An empty
+backlink list with source failures cannot establish that a rename is safe.
+Discovery failures bypass graph-cache reads and writes, so restoring access
+restores the answer without touching document content. These warnings retain
+the existing graph/backlink CLI exit and MCP error policy, including total
+discovery loss. See the [output contract](../development/OUTPUT_CONTRACT.md#declared-execution-policy).
+
 Two related but distinct queries over the tree's `[text](path)` link structure:
 
 ```bash

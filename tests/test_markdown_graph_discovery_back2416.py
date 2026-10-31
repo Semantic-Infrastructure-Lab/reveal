@@ -103,13 +103,16 @@ def test_healthy_empty_graph_and_missing_backlink_are_not_discovery_loss(tmp_pat
 
 @pytest.mark.disk_cache
 @pytest.mark.parametrize('warm', [False, True])
-def test_discovery_loss_bypasses_cache_even_for_same_observed_files(docs, denied, monkeypatch, warm):
+@pytest.mark.parametrize('empty_hidden', [False, True])
+def test_discovery_loss_bypasses_cache_even_for_same_observed_files(
+        docs, denied, monkeypatch, warm, empty_hidden):
     monkeypatch.setenv('REVEAL_DISK_CACHE', '1')
     monkeypatch.setenv('REVEAL_CACHE_DIR', str(docs.parent / 'cache'))
     # An empty hidden directory has the same file fingerprint whether accessible or denied.
-    (docs / 'hidden' / 'source.md').unlink()
+    if empty_hidden:
+        (docs / 'hidden' / 'source.md').unlink()
     if warm:
-        assert operations.build_link_graph(docs)['total_files'] == 1
+        assert operations.build_link_graph(docs)['total_files'] == (1 if empty_hidden else 2)
     calls = []
     original_get, original_put = disk_cache.get, disk_cache.put
 
@@ -130,8 +133,37 @@ def test_discovery_loss_bypasses_cache_even_for_same_observed_files(docs, denied
     assert calls == [], 'a failed discovery must neither serve nor store a graph'
     denied.clear()
     repaired = operations.build_link_graph(docs)
-    assert repaired['total_files'] == 1 and not _warnings(repaired)
+    assert repaired['total_files'] == (1 if empty_hidden else 2) and not _warnings(repaired)
+    assert repaired['total_edges'] == (0 if empty_hidden else 1)
     assert calls == (['get'] if warm else ['get', 'put'])
+
+
+def test_existing_content_loss_and_discovery_loss_both_survive(docs, denied):
+    (docs / 'bad.md').write_bytes(b'\xff\n')
+    denied.add(docs / 'hidden')
+    for mode in ('link-graph', 'backlinks=target.md'):
+        answer = api.query(_uri(docs, mode))
+        assert answer['total_files'] == 2
+        assert {w['type'] for w in _warnings(answer)} == {'unreadable_files', 'analysis_incomplete'}
+        response = run(_uri(docs, mode))
+        assert response.returncode == 0
+        assert 'safe to rename' not in response.stdout
+        assert 'could not be read' in response.stdout
+        assert 'missing file population is unknown' in response.stdout
+
+
+def test_graph_owner_records_root_stat_failure(docs, monkeypatch):
+    original = Path.stat
+
+    def stat(path, *args, **kwargs):
+        if path == docs:
+            raise PermissionError(errno.EACCES, 'PUBLIC_DISCOVERY_DENIED', str(path))
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'stat', stat)
+    answer = operations.build_link_graph(docs)
+    assert answer['total_files'] == 0 and answer['nodes'] == []
+    _loss(answer, '.')
 
 
 @pytest.mark.mcp

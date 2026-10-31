@@ -562,6 +562,16 @@ execution policy, as do ordinary listings without a nonempty body term,
 element/check operations, stdin and batches. Their missing-directory CLI
 diagnostic now uses the common `Path not found` wording. No findings gate is added.
 
+Direct Markdown link-graph and backlink answers disclose root-stat or directory
+enumeration failures in `meta.warnings` as `analysis_incomplete` (BACK-2416).
+Its count is reached failed discovery events; the missing file population is
+unknown. File/edge/backlink counts describe only observed sources. Discovery loss
+bypasses graph cache reads and writes, including when the observed file set is
+unchanged. Text and grep show the warning; incomplete empty backlink lists do
+not claim a rename is safe. This disclosure repair preserves their legacy CLI
+exit and MCP error policy, including total discovery loss; it does not adopt
+the body-search/aggregate execution policy or qualify `--related` consumers.
+
 Surface is an inventory and declares only `--fail-on none`, also its default; it
 rejects `findings`. `none` never suppresses incomplete analysis or output failure.
 `unparsed_files` or `recovered_files` make its scan incomplete; taxonomy limitations,

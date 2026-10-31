@@ -345,9 +345,12 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
                             file, links_to, linked_by
             isolated      — list of filenames with zero edges (in or out)
     """
-    all_files = files.find_markdown_files(base_path)
+    discovery: List[PathFailure] = []
+    all_files = files.find_markdown_files(base_path, on_error=lambda exc: discovery.append(failure_of(exc)))
 
-    fingerprint = _link_graph_fingerprint(base_path, all_files)
+    # Lost discovery can leave the same observed file set (e.g. an empty directory).
+    # Neither an earlier complete hit nor a stored partial graph describes this scan.
+    fingerprint = None if discovery else _link_graph_fingerprint(base_path, all_files)
     cached = _cached_link_graph(fingerprint)
     if cached is not None:
         return cached
@@ -366,6 +369,18 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
         if failure:
             unreadable.append([rel, failure])
 
+    graph = _link_graph_result(forward, len(all_files))
+    if unreadable:
+        graph['unreadable_files'] = unreadable  # BACK-1854: a stored content failure still says it on a hit
+    warning = traversal_failed_warning(discovery, base_path)
+    note_warning(graph, dict(warning) if warning else None)
+    if fingerprint is not None and _storable(unreadable):
+        disk_cache.put(_LINK_GRAPH_CACHE_NAMESPACE, fingerprint, graph)
+    return graph
+
+
+def _link_graph_result(forward: Dict[str, List[str]], total_files: int) -> Dict[str, Any]:
+    """Assemble the observed forward links into the graph's existing public fields."""
     # Build reverse index
     reverse: Dict[str, List[str]] = {k: [] for k in forward}
     for src, targets in forward.items():
@@ -391,17 +406,12 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
         if not n['links_to'] and not n['linked_by']
     ]
 
-    graph = {
-        'total_files': len(all_files),
+    return {
+        'total_files': total_files,
         'total_edges': total_edges,
         'nodes': nodes,
         'isolated': isolated,
     }
-    if unreadable:
-        graph['unreadable_files'] = unreadable  # BACK-1854: a stored content failure still says it on a hit
-    if fingerprint is not None and _storable(unreadable):
-        disk_cache.put(_LINK_GRAPH_CACHE_NAMESPACE, fingerprint, graph)
-    return graph
 
 
 def get_backlinks(base_path: Path, target: str) -> Dict[str, Any]:
@@ -433,6 +443,8 @@ def get_backlinks(base_path: Path, target: str) -> Dict[str, Any]:
     result = _lookup_backlinks(graph, target)
     if graph.get('unreadable_files'):
         result['unreadable_files'] = graph['unreadable_files']  # BACK-1854
+    for warning in graph.get('meta', {}).get('warnings', []):
+        note_warning(result, dict(warning))
     return result
 
 

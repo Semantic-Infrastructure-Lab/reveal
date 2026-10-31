@@ -94,6 +94,9 @@ def _render_backlinks(data: Dict[str, Any], output_format: str) -> None:
     if linked_by:
         for src in linked_by:
             print(f'  ← {src}')
+    elif any(w.get('type') in ('analysis_incomplete', 'unreadable_files')
+             for w in data.get('meta', {}).get('warnings', [])):
+        print('  (none observed — inbound links may be missing)')
     else:
         print('  (none — safe to rename/remove without breaking inbound links)')
     print()

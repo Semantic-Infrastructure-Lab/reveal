@@ -440,7 +440,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 source=source,
                 source_type='directory',
                 contract_version=CONTRACT_VERSION,
-                warnings=self._unreadable_warnings(result, "their links are missing from the graph"),
+                warnings=self._source_warnings(result, "their links are missing from the graph"),
                 data=result,
             )
 
@@ -460,7 +460,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 result_type='markdown_backlinks',
                 source=source,
                 contract_version=CONTRACT_VERSION,
-                warnings=self._unreadable_warnings(result, "links from them are missing, so backlinks may be incomplete"),
+                warnings=self._source_warnings(result, "links from them are missing, so backlinks may be incomplete"),
                 data=result,
             )
 
@@ -472,8 +472,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 self.query_filters,
                 self.body_contains or None,
             )
-            warnings = self._unreadable_warnings(result, "required document evidence is missing, so counts may be low")
-            warnings.extend(result.pop('meta', {}).get('warnings', []))
+            warnings = self._source_warnings(result, "required document evidence is missing, so counts may be low")
             return ResultBuilder.create(
                 result_type='markdown_aggregate',
                 source=source,
@@ -500,12 +499,13 @@ class MarkdownQueryAdapter(ResourceAdapter):
             item['path'] = as_spelled(item['path'], self.spelling)
         return result
 
-    def _unreadable_warnings(self, result: Dict[str, Any], consequence: str) -> list:
-        """The ``unreadable_files`` warning for the files in *result* that could not be read,
-        consuming the carrier key so it is not also data (BACK-1854)."""
+    def _source_warnings(self, result: Dict[str, Any], consequence: str) -> list:
+        """Consume source diagnostics before the builder owns the result envelope."""
         warning = files.unreadable_warning(
             [tuple(item) for item in result.pop('unreadable_files', [])], consequence, self.base_path)
-        return [warning] if warning else []
+        warnings = [warning] if warning else []
+        warnings.extend(result.pop('meta', {}).get('warnings', []))
+        return warnings
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get frontmatter from a specific file.
