@@ -43,8 +43,25 @@ Read the output as a ranked review queue:
 
 Both spellings return `testability_report`. Explicit test roots are checked before
 analysis: every requested path must exist. Paths are relative to the working
-directory. An existing empty tests directory is valid; omitting `tests` searches
-for the usual test directories and returns not-applicable if none exist.
+directory. An existing empty explicit tests directory is valid. Omitting `tests`
+uses one selected project test/support policy over the target (its parent for a
+file), conventional sibling candidates for directory targets, and literal declared
+additional paths. The raw Patches view stays within its target. Narrowed targets
+retain the selected project's file roles. Markerless targets use a disclosed
+scan-root fallback.
+
+`test_scope` records policy basis, anchor, candidate suite roots and scanned-file
+count. Candidate roots include optional missing declarations, so `tests` and
+`suite_roots` do not prove presence or runner collection. Existing sibling suites
+outside the selected anchor use conventional names without loading their config.
+Explicit `tests=` bypasses default policy selection, trusts all Python files and
+retains JS/TS recognized test-name rules. Source boundary profiles remain a separate
+population and include test functions when they lie under the source target.
+
+Healthy default discovery with no scannable tests returns not-applicable. Directory
+or root-stat loss retains analysis diagnostics instead; useful source profiles
+survive with an incomplete outcome. Configured selectors follow the
+[shared declaration contract](CONFIGURATION_GUIDE.md#project-test-and-support-paths).
 
 CLI path arguments stay literal. In a URI list, percent-encode each path before
 joining with commas: `tests=tests%2Cextra,integration_tests` names two roots, the
@@ -68,8 +85,9 @@ Both the default `patches://` scan and `?view=pressure` scan Python tests with A
 - `monkeypatch.delattr(obj, "attr")`
 - `monkeypatch.setenv(name, value)` / `delenv(name)`
 
-TypeScript/JavaScript test files (`.test.ts`/`.spec.ts`/`__tests__/`) are
-scanned with tree-sitter and detect `jest.mock`/`vi.mock`,
+TypeScript/JavaScript files selected by the default project test/support policy,
+or recognized test files (`.test.ts`/`.spec.ts`/`__tests__/`) in explicit suites,
+are scanned with tree-sitter and detect `jest.mock`/`vi.mock`,
 `jest.spyOn`/`vi.spyOn`, `jest.fn`/`vi.fn`, and
 `jest.replaceProperty`/`vi.replaceProperty`.
 

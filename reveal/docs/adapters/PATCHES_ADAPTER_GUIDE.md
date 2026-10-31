@@ -31,6 +31,19 @@ Use JSON when another tool or agent will rank, filter, or store the result:
 reveal 'patches://tests?group=target&limit=20' --format json
 ```
 
+## Default Test Selection
+
+Default scans use the selected project's shared test/support policy: conventional
+paths plus `test_layout.additional_paths`. Raw scans stay within the supplied target;
+narrowing a directory or choosing a file retains its project-relative role. A direct
+production-named Python file is not automatically a test. When no project is found,
+the scan-root-name fallback is disclosed. No test runner is executed.
+
+`test_scope` records the basis, anchor, candidate suite roots and scanned-file count.
+Supported Python and JS/TS files selected by the policy can have nonstandard names.
+Configured selectors are literal files or subtrees; see the
+[configuration guide](../guides/CONFIGURATION_GUIDE.md#project-test-and-support-paths).
+
 ## Query Parameters
 
 | Parameter | Values | Purpose |
@@ -102,8 +115,9 @@ target is read from an object, a dict or a dynamic expression).
 ## Combined Workflow
 
 Use `?view=pressure` (was `testability://`) when you want patch pressure joined with
-production boundary profiles. The path is then the production root; its test files are
-chosen by the shared `is_test_path` rule, or by `tests=` (trusted as the suite):
+source boundary profiles. The path bounds source analysis; default test discovery
+also considers conventional sibling suites and declared project paths. Explicit
+`tests=` overrides this default selection:
 
 ```bash
 reveal patches src --view pressure --tests tests
@@ -119,9 +133,12 @@ The pressure view answers a `testability_report`. Its own parameters are `tests`
 is named in a note. `testability://` and `reveal testability` still answer, with a
 replaced-by note, until the cut release.
 
-That command points at production functions where repeated patching overlaps
-with multiple runtime boundaries such as network calls, persistence, filesystem
-state, sleeps, environment reads, process exits, or mutation.
+The source boundary-profile population is unchanged by test-support policy and can
+include test functions when they are under the source target. The report supplies
+static review hints, not proof of runtime behavior. Candidate test roots can include
+optional missing declarations. Existing outside-anchor sibling suites use disclosed
+conventions only. Explicit suites trust all Python files but retain JS/TS test-name
+recognition; an existing empty explicit suite remains valid.
 
 ## Limits
 

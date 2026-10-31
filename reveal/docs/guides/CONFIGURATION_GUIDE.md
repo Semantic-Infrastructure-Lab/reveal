@@ -961,7 +961,7 @@ source that cannot be loaded is an operational failure (exit 3).
 | Overview map and Git architecture comparisons | Supported; one request policy governs both comparison sides, including identical-tree proofs. |
 | Metrics hotspot ranking with `tests=include` or `tests=exclude` | Supported; exclusion narrows the ranking only, preserving analyzed files and totals. |
 | Surface `source_only=true` and HTTP test-origin labels | Supported; directory pruning, individual files and labels share the selected policy. The census retains its broader population. |
-| Patches/default testability selection | Decline nonempty configured selectors with exit 2. Explicit trusted `tests=` in the pressure/testability report remains supported. |
+| Patches/default pressure selection | Supported. Raw scans select files only within their target. Pressure reports also consider literal declared suite roots; explicit trusted `tests=` overrides default policy selection. |
 | Other role labels, M102, Calls test symbols and Hotspots filename hints | Existing conventional or language-specific basis; no configured-policy adoption is implied. |
 
 Surface uses conventional component names plus declared paths, rather than treating
@@ -972,6 +972,21 @@ Non-HTTP queries without source-only filtering do not adopt this role policy.
 Metrics reports the ranking policy and excluded-file count in `test_scope`; Surface
 reports the selected policy there for source-only and HTTP-label operations.
 These labels describe file roles, not test coverage or runtime behavior.
+
+Patches uses the same selected project context for directory, narrowed and direct-file
+default requests. A production-named Python file is no longer automatically treated
+as a test merely because it was requested directly. Without a discoverable project,
+the existing scan-root-name fallback remains explicit. Pressure reports keep their
+source boundary-profile population separate from test-file selection. Their
+`test_scope.suite_roots` lists candidate roots, including optional missing declarations;
+it does not claim those roots exist or contain scannable tests. Existing conventional
+sibling suites outside the selected anchor remain convention-based and are disclosed
+in `outside_anchor_roots`, without loading those siblings' configuration.
+
+Explicit pressure `tests=` paths retain their established meaning: Python files are
+trusted as the suite, while JS/TS still requires recognized test filenames. This
+override bypasses default test-layout selection, including invalid configured
+additions; source-analysis requirements and diagnostics still apply.
 
 `reveal reveal://config` describes the current directory's selected anchor,
 effective policy and declarations actually read, including ignored sources. It

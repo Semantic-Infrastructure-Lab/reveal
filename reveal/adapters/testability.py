@@ -153,7 +153,7 @@ class TestabilityAdapter(ResourceAdapter):
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     BUDGET_LIST_FIELD = ('patch_hotspots', 'boundary_hotspots')
     PARAM_SPECS = (
-        ParamSpec('tests', 'array', 'Test paths, trusted as the suite (omitted: the test files under the target, by the shared is_test_path rule)', None,
+        ParamSpec('tests', 'array', 'Test paths, trusted as the suite (omitted: default project test/support policy and candidate suite roots)', None,
                   _test_roots, uri_codec='comma-percent', role='analysis',
                   cli=CliBinding(('--tests',), nargs='+')),
         ParamSpec('top', 'integer', 'Maximum groups per hotspot list; zero is unlimited', 20,
@@ -207,7 +207,7 @@ class TestabilityAdapter(ResourceAdapter):
             'description': 'Find testability pressure by joining test patch usage with production boundary fan-out.',
             'syntax': 'testability://<path>[?tests=tests,integration_tests&top=20&min_patches=3&min_categories=3&include_unresolved=true]',
             'examples': [
-                {'uri': 'testability://src', 'description': 'Testability report for src/ (finds its test files by the is_test_path rule)'},
+                {'uri': 'testability://src', 'description': 'Pressure report for src/ using the selected project test/support policy'},
                 {'uri': 'testability://src?tests=tests,integration_tests', 'description': 'Scan specific test directories'},
                 {'uri': 'testability://src?top=10', 'description': 'Top 10 patch/boundary groups'},
             ],
@@ -219,7 +219,9 @@ class TestabilityAdapter(ResourceAdapter):
                 'Patch pressure scans Python unittest.mock/monkeypatch and JS/TS jest/vitest tests',
             ],
             'notes': [
-                'When `tests` is omitted the test files are the ones under the source root that the shared is_test_path rule calls tests (test directories, test_*, *_test, *.spec.*); the report names the rule and the file count in `test_scope`.',
+                'When `tests` is omitted, one selected project policy chooses test/support files under the source root or parent, conventional sibling candidates and declared additional paths; `test_scope` names the basis, anchor, candidate roots and file count.',
+                'Default candidate roots can include absent optional declarations; outside-anchor sibling suites use conventional names without their configuration. Source boundary profiles retain their separate target scope.',
+                'Explicit `tests=` bypasses default policy selection: all Python files are trusted, while JS/TS retains recognized test filenames. Existing empty explicit suites remain valid.',
             ],
             'see_also': [
                 'reveal patches <path> --view pressure - the current spelling (reveal testability is retired)',
