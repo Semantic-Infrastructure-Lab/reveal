@@ -14,8 +14,9 @@ def session(root, text, escaped=True, block=None):
     project = root / 'synthetic-project'
     project.mkdir(parents=True, exist_ok=True)
     path = project / 'sample.jsonl'
-    record = {'type': 'user', 'timestamp': '2026-10-30T12:00:00Z',
-              'message': {'role': 'user', 'content': text if block is None else [block]}}
+    role = 'user' if block is None else 'assistant'
+    record = {'type': role, 'timestamp': '2026-10-30T12:00:00Z',
+              'message': {'role': role, 'content': text if block is None else [block]}}
     path.write_text(json.dumps(record, ensure_ascii=escaped) + '\n', encoding='utf-8')
     return path
 
