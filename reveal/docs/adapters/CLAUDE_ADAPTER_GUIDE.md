@@ -1815,6 +1815,17 @@ A stock Claude Code install stores transcripts at `~/.claude/projects/<project-d
 
 Cross-session content search is fully implemented via `claude://sessions/?search=term`:
 
+Search matches decoded message blocks and `toolUseResult` sidecars, so JSON
+escaping does not change whether text matches. File tracking likewise matches
+decoded paths, including Unicode and Windows backslashes. Record field names
+alone are not content hits. Excerpts use original text positions even when
+lowercasing expands a character.
+
+Ordinary substring search uses Unicode lowercase matching; `?word` retains
+Unicode regex word-boundary matching. Neither adds accent normalization or full
+case folding. Session content searches decode eligible records rather than
+rejecting them from raw JSON text; use `?since` and `?until` to bound large stores.
+
 ```bash
 # Find sessions mentioning a term (20 most recent matches by default)
 reveal 'claude://sessions/?search=validate_token'

@@ -310,6 +310,13 @@ The sample is rendered by the real adapter over a `memories_1.sqlite` built from
 
 `?search=<term>` scans all session JSONL files for a term in `user_message` and `agent_message` payloads:
 
+Matching uses decoded message text with Unicode lowercase comparisons. Literal
+UTF-8, JSON Unicode escapes, quotes and backslashes therefore produce the same
+matches. This does not add accent normalization or full case folding. Eligible
+records must be decoded to establish absence; use the existing date bounds to
+limit large stores. Snippet limits and total match counts keep their existing
+meaning.
+
 ```bash
 reveal 'codex://sessions/?search=authentication'
 # Codex Content Search: 3 session(s) matching 'authentication'

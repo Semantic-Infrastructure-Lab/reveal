@@ -1,8 +1,7 @@
 """Tests for BACK-040: cross-session file tracking via claude://files/<path>.
 
 Architecture:
-  Phase 1 — grep_files() parallel byte-scan pre-filters sessions containing the path.
-  Phase 2 — get_files_touched() extracts per-session Read/Write/Edit counts.
+  get_files_touched() extracts decoded per-session Read/Write/Edit counts.
   Routing — claude://files/<path> triggers _track_file_sessions().
 """
 

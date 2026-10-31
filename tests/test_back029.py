@@ -1,8 +1,7 @@
 """Tests for BACK-029: cross-session content search via claude://?search=term.
 
 Architecture:
-  Phase 1 — grep_files() parallel byte-scan pre-filters the JSONL corpus.
-  Phase 2 — _extract_first_snippet() parses only matching files for excerpts.
+  _extract_first_snippet() matches decoded records and retains original excerpts.
   Routing — bare claude://?search=term triggers _search_sessions(), not name filter.
 """
 
