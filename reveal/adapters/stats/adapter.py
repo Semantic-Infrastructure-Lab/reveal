@@ -798,6 +798,7 @@ class MetricsAdapter(ResourceAdapter):
 
         layout = None
         if hotspots and self.query_params.get('tests') is not None:
+            _TESTS.read(self.query_params)  # reject direct/raw invalid modes before policy or analysis
             from ...config import RevealConfig
             layout = TestLayout.for_path(self.path, fallback_root=self.path)
             layout = RevealConfig.get(layout.anchor).apply_test_layout(layout)
