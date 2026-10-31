@@ -89,7 +89,7 @@
   "reveal/adapters/pack.py::_compute_graph_relevance": 18,
   "reveal/adapters/pack.py::_compute_priority": 27,
   "reveal/adapters/ssl/adapter.py::SSLAdapter.get_structure": 16,
-  "reveal/adapters/surface.py::_scan_surface": 20,
+  "reveal/adapters/surface.py::_scan_surface": 17,
   "reveal/adapters/xlsx.py::XlsxAdapter._build_powerpivot_banner": 18,
   "reveal/adapters/xlsx.py::XlsxAdapter._parse_pbixray": 19,
   "reveal/adapters/xlsx.py::XlsxAdapter._parse_xmla_tables": 25,
