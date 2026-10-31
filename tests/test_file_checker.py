@@ -588,10 +588,17 @@ class TestI002Preload:
 
     def test_preload_survives_import_error(self, tmp_path):
         """_i002_preload returns empty dict if I002 module cannot be imported."""
+        from reveal.rules import RuleRegistry
+        from reveal.rules.scan_caches import _preload_failures
+        # BACK-2422: isolate the preload fault from lazy discovery of the rule set.
+        RuleRegistry.discover()
+        assert RuleRegistry.get_rule('I002') is not None
         with patch("reveal.rules.scan_caches._i002_preload", wraps=_i002_preload):
             with patch.dict("sys.modules", {"reveal.rules.imports.I002": None}):
                 result = _i002_preload(tmp_path, select=None, ignore=None)
         assert isinstance(result, dict)
+        assert 'I002' in _preload_failures
+        assert RuleRegistry.get_rule('I002') is not None
 
     def test_init_worker_populates_cache(self, tmp_path):
         """_i002_init_worker seeds the I002 module-level cache."""
