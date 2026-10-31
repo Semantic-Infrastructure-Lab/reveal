@@ -46,6 +46,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- A cold MCP Metrics request with provenance now returns parseable JSON instead of appending the routine rule-discovery progress log after it; warnings and errors keep their existing diagnostic handling (BACK-2404).
 - Import test exclusion uses paths within the selected project, so cloning beneath a `tests` directory or naming the project `tests` no longer hides production imports. Entrypoint labels survive relative display, and comparison snapshots use the same test scope as the live tree. Explicit root selection and markerless fallback scope are disclosed; production imports into test targets remain counted (BACK-2391).
 - Named `--exits`, `--returns` and `--flowto` analyses distinguish the selected callable's execution regions from nested bodies. Results name their scope, preserve qualified declaration and default-argument evaluation, and identify retained candidates whose ownership is unresolved; source-region and aggregate inventories can still include multiple owners (BACK-2389).
 - Code-analysis navigation on explicitly structure-only formats, such as SQL, now rejects with guidance instead of returning an empty successful analysis. Invalid zero/negative depth on code-element structural views exits 2, and registered MCP navigation marks these rejections as errors; file, directory and Markdown depth controls keep their behavior (BACK-2390).

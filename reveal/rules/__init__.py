@@ -286,7 +286,7 @@ class RuleRegistry:
         """Log summary of discovered rules."""
         num_rules = len(cls._rules)
         num_categories = len(set(r.category for r in cls._rules if r.category))
-        logger.info(f"Discovered {num_rules} rules from {num_categories} categories")
+        logger.debug("Discovered %d rules from %d categories", num_rules, num_categories)
 
     @classmethod
     def discover(cls, force: bool = False):
