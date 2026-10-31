@@ -156,6 +156,12 @@ def surface_text(report: Dict[str, Any], top: Optional[int] = None) -> str:
         lines.extend([f"⚠ {_unparsed_note(report['unparsed_files'])}", ''])
     if report.get('recovered_files'):
         lines.extend([f"⚠ {_recovered_note(report['recovered_files'], _count_error_region(surfaces))}", ''])
+    test_scope = report.get('test_scope')
+    if test_scope:
+        lines.append(f"Test/support policy: {test_scope['basis']} (anchor {test_scope['anchor']}; {test_scope['source']})")
+        declaration = test_scope.get('declaration')
+        if declaration:
+            lines.append(f"Declaration: {declaration['layer']} {declaration['path']}")
     lines.append(f"Total surface entries: {total}")
     if top is not None:
         unit = 'directories' if 'by_dir' in report else 'per category'

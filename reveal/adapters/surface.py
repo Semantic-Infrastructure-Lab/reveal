@@ -33,7 +33,7 @@ from ..utils.path_utils import (
     census_and_coverage_for_path,
     detect_non_python_language,
     hidden_entries_warning,
-    is_test_dir,
+    TestLayout,
     is_test_file_name,
     traversal_failed_warning,
     walk_tree,
@@ -48,21 +48,11 @@ from .surface_file_cache import scan_file_cached
 from .ast.nav_surface_common import ROUTE_CLASSES_KEY, resolve_inherited_route_prefixes
 from .ast.nav_surface_rails import resolve_engine_mounts
 from ..utils.results import ResultBuilder
-from ..defaults import TEST_DIR_PREFIX as _TEST_DIR_PREFIX
 from ..reveal_types import PathFailure
-
-# Test file patterns pruned by --source-only
-
-def _is_test_dir(name: str) -> bool:
-    # Broader than the canonical is_test_dir() by design — also matches
-    # `testing/`, `test-fixtures/`, etc. (prefix-match covers tests/,
-    # testing/, etc.); see defaults.TEST_DIR_PREFIX docstring.
-    return name.startswith(_TEST_DIR_PREFIX) or is_test_dir(name)
 
 
 def _is_test_file(fpath: Path) -> bool:
-    """File-name test detection: generic naming (BACK-1252) plus the file's own
-    language convention from the conventions profile (BACK-1277)."""
+    """Context-free filename convention retained for direct helper callers."""
     return is_test_file_name(fpath)
 
 
@@ -125,8 +115,12 @@ def _supported_coverage_languages() -> frozenset:
 def _collect_source_files(
     path: Path, source_only: bool = False, *,
     on_error: Optional[Callable[[OSError], None]] = None,
+    test_layout: Optional[TestLayout] = None,
 ) -> Dict['_SurfaceScanner', List[Path]]:
     """Map each registered scanner to the files under `path` it should scan."""
+
+    path = Path(os.path.abspath(path))
+    layout = test_layout or TestLayout.for_path(path, fallback_root=path)
 
     def _scanner_for(fpath: Path):
         suffix = fpath.suffix
@@ -143,6 +137,8 @@ def _collect_source_files(
     buckets: Dict[_SurfaceScanner, List[Path]] = {spec: [] for spec in _SURFACE_SCANNERS}
 
     if path.is_file():
+        if source_only and layout.is_test(path):
+            return buckets
         spec = _scanner_for(path)
         if spec is not None:
             buckets[spec].append(path)
@@ -152,10 +148,10 @@ def _collect_source_files(
     # dot-dir source included (BACK-1038). source_only prunes test dirs before descent.
     for root, dirs, filenames in walk_tree(path, ANALYSIS, on_error=on_error):
         if source_only:
-            dirs[:] = [d for d in dirs if not _is_test_dir(d)]
+            dirs[:] = [d for d in dirs if not layout.is_test(root / d / '__surface_source__')]
         for fname in filenames:
             fpath = root / fname
-            if source_only and _is_test_file(fpath):
+            if source_only and layout.is_test(fpath):
                 continue
             spec = _scanner_for(fpath)
             if spec is not None:
@@ -289,11 +285,15 @@ def _surface_traversal_warnings(
 
 def _scan_surface(
     path: Path, type_filter: str = '', source_only: bool = False, by: str = '', depth: int = 0,
+    *, test_layout: Optional[TestLayout] = None,
 ) -> Dict[str, Any]:
+    display_path = path
+    path = Path(os.path.abspath(path))
+    layout = test_layout or TestLayout.for_path(path, fallback_root=path)
     source_failures: List[PathFailure] = []
     census_failures: List[PathFailure] = []
     collected = _collect_source_files(path, source_only=source_only,
-                                     on_error=partial(_record_traversal_error, source_failures))
+                                     on_error=partial(_record_traversal_error, source_failures), test_layout=layout)
 
     unsupported_language = ''
     if not any(collected.values()):
@@ -333,7 +333,6 @@ def _scan_surface(
     # BACK-1332: which of the 0s above are "not implemented" rather than "found none".
     matrix = coverage_matrix(scanned_languages, tuple(surfaces))
 
-    _relativize_surface_paths(surfaces, path)
     from ..utils.path_utils import to_relative_display
     unparsed_files = sorted(to_relative_display(f, path) for f in unparsed)
     recovered_files = sorted(to_relative_display(f, path) for f in recovered)
@@ -351,12 +350,11 @@ def _scan_surface(
     test_origin_count = 0
     if http_entries and not source_only:
         for entry in http_entries:
-            entry_path = Path(entry['file'])
-            is_test_origin = _is_test_file(entry_path) or any(
-                is_test_dir(part) for part in entry_path.parts[:-1]
-            )
+            is_test_origin = layout.is_test(Path(entry['file']))
             entry['test_origin'] = is_test_origin
             test_origin_count += is_test_origin
+
+    _relativize_surface_paths(surfaces, path)
 
     total = sum(len(v) for v in surfaces.values())
     by_dir = {'by_dir': _rollup_by_dir(surfaces, depth)} if by == 'dir' else {}
@@ -364,7 +362,8 @@ def _scan_surface(
         **({'_source_traversal_failures': source_failures, '_census_traversal_failures': census_failures,
             '_discovery_error': discovery_error} if directory_loss else {}),
         '_scope_hidden': scope_hidden,
-        'path': str(path),
+        **({'test_scope': layout.as_dict(path)} if source_only or type_filter in ('', 'http') else {}),
+        'path': str(display_path),
         'total': total,
         'surfaces': surfaces,
         'matrix': matrix,
@@ -466,7 +465,7 @@ class SurfaceAdapter(ResourceAdapter):
             'examples': [
                 {'uri': 'surface://src', 'description': 'All surfaces in src/'},
                 {'uri': 'surface://.?type=env', 'description': 'Only env vars'},
-                {'uri': 'surface://.?source_only=true', 'description': 'Production code only (exclude tests)'},
+                {'uri': 'surface://.?source_only=true', 'description': 'Exclude test/support files using the selected project policy'},
                 {'uri': 'surface://.?by=dir&depth=2', 'description': 'Which directories touch which boundary kinds (two levels deep)'},
             ],
             'features': [
@@ -526,14 +525,17 @@ class SurfaceAdapter(ResourceAdapter):
                    for spec in self.PARAM_SPECS if spec.role == 'analysis'}
         type_filter = applied['type']
         source_only = applied['source_only']
-        if source_only:
+        layout = None
+        if source_only or type_filter in ('', 'http'):
             from ..config import RevealConfig
-            RevealConfig.require_conventional_test_layout(Path(self.path), 'surface source_only')
+            target = Path(os.path.abspath(self.path))
+            layout = TestLayout.for_path(target, fallback_root=target)
+            layout = RevealConfig.get(layout.anchor).apply_test_layout(layout)
         by = applied['by']
         depth = applied['depth']
 
         report = _scan_surface(Path(self.path), type_filter=type_filter, source_only=source_only,
-                               by=by, depth=depth)
+                               by=by, depth=depth, test_layout=layout)
 
         source_failures = report.pop('_source_traversal_failures', [])
         census_failures = report.pop('_census_traversal_failures', [])
