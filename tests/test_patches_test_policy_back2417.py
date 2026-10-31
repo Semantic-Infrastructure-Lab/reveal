@@ -71,7 +71,7 @@ def test_pressure_adds_declared_project_roots_without_changing_boundary_populati
     assert result['summary']['total_patch_uses'] == 2
     assert result['summary']['total_boundary_profiles'] == 2
     assert {Path(p).relative_to(project).as_posix() for p in result['tests']} == {
-        'src', 'checks', 'precise/helper.ts'}
+        'src', 'checks', 'precise/helper.ts', 'missing'}
 
 
 def test_explicit_tests_bypass_invalid_policy_and_keep_js_filename_semantics(project):
@@ -149,3 +149,31 @@ def test_explicit_empty_and_unsupported_suites_remain_valid(project, unsupported
     result = PressureAdapter(str(project), f'tests={suite}').get_structure()
     assert result['summary']['total_patch_uses'] == 0
     assert result['test_scope'] == {'rule': 'tests=', 'files_scanned': 0}
+
+
+@pytest.mark.parametrize('declared', [False, True])
+def test_selected_suite_stat_loss_is_reported_before_absence(project, monkeypatch, declared):
+    suite = project / ('checks' if declared else 'tests')
+    if declared:
+        configure(project, ['checks', 'optional_missing'])
+    write(project / 'src/app.py', 'VALUE = 1\n')
+    write(suite / 'helper.py', PATCH)
+    real = os.stat
+
+    def denied(path, *args, **kwargs):
+        if not isinstance(path, int) and Path(path) == suite:
+            raise PermissionError(13, 'controlled suite stat failure', str(path))
+        return real(path, *args, **kwargs)
+
+    adapter = PressureAdapter(str(project / 'src'))
+    with monkeypatch.context() as context:
+        context.setattr(os, 'stat', denied)
+        result = adapter.get_structure()
+    assert adapter.execution_facts(result).completeness.value == 'failed'
+    warning, = [w for w in result['meta']['warnings'] if w['type'] == 'analysis_incomplete']
+    assert warning['count'] == 1
+    assert 'PermissionError' in warning['message']
+    assert result['summary']['total_patch_uses'] == 0
+    clean = adapter.get_structure()
+    assert clean['summary']['total_patch_uses'] == 1
+    assert not any(w['type'] == 'analysis_incomplete' for w in clean['meta']['warnings'])
