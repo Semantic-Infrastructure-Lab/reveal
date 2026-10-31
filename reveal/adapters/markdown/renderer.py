@@ -1,6 +1,10 @@
 """Renderer for markdown query results."""
 
+import sys
+
 from ...rendering.adapters.markdown_query import render_markdown_query
+from ...utils.results import outcome_of
+from ...utils.warning_render import meta_warning_lines
 
 
 class MarkdownRenderer:
@@ -15,6 +19,10 @@ class MarkdownRenderer:
             format: Output format ('text', 'json', 'grep')
         """
         render_markdown_query(result, format)
+        if (format != 'json' and result.get('type') == 'markdown_query'
+                and 'analysis' in result and outcome_of(result) != 'failed'):
+            for line in meta_warning_lines(result):
+                print(line, file=sys.stderr if format == 'grep' else sys.stdout)
 
     @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:
