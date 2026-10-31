@@ -2,6 +2,7 @@
 import json
 import builtins
 from pathlib import Path
+from urllib.parse import quote
 from unittest.mock import patch
 
 import pytest
@@ -27,13 +28,14 @@ def session(root, text, escaped=True, block=None):
     ('CAFÉ', 'café', False), ('café', 'café', False), ('a"b', 'a"b', False),
     ('C:\\work\\demo', 'C:\\work\\demo', False), ('🔧', '🔧', False),
     ('Istanbul', 'ıstanbul', True), ('ſearch', 'search', True),
+    ('line\nbreak', 'line\nbreak', False),
     ('Straße', 'STRASSE', False), ('cafe\u0301', 'café', False),
 ])
 @pytest.mark.parametrize('escaped', [False, True])
 def test_cross_session_search_uses_decoded_owner(tmp_path, text, term, whole, escaped):
     session(tmp_path, text, escaped)
     with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
-        result = api.query('claude://?search=' + term + ('&word' if whole else ''))
+        result = api.query('claude://?search=' + quote(term, safe='') + ('&word' if whole else ''))
     expected = 0 if text in ('Straße', 'cafe\u0301') else 1
     assert result['match_count'] == expected
     if expected:

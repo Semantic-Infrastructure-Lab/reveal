@@ -13,6 +13,7 @@ from reveal.utils import parallel
 @pytest.mark.parametrize('body,term,expected', [
     ('CAFÉ', 'café', True), ('Kelvin', 'kelvin', True), ('ΟΣ', 'ος', True),
     ('İstanbul', 'i\u0307stanbul', True), ('NEEDLE', 'needle', True),
+    ('line\nbreak', 'line\nbreak', True),
     ('unrelated', 'needle', False), ('Straße', 'STRASSE', False),
     ('cafe\u0301', 'café', False),
 ])
