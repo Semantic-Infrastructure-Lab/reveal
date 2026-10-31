@@ -19,7 +19,7 @@ class MarkdownRenderer:
             format: Output format ('text', 'json', 'grep')
         """
         render_markdown_query(result, format)
-        if (format != 'json' and result.get('type') == 'markdown_query'
+        if (format != 'json' and result.get('type') in ('markdown_query', 'markdown_aggregate')
                 and 'analysis' in result and outcome_of(result) != 'failed'):
             for line in meta_warning_lines(result):
                 print(line, file=sys.stderr if format == 'grep' else sys.stdout)
