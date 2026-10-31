@@ -80,6 +80,11 @@ def test_pressure_child_adds_declared_suite_without_expanding_boundary_populatio
     root = query(_pressure(project, scheme))
     # Existing profiles include suite/support functions as well as source functions.
     assert root['summary']['total_boundary_profiles'] == 5
+    cut = query(_pressure(project / 'src', scheme, 'top=1'))
+    assert cut['summary']['total_patch_uses'] == 4
+    assert cut['test_scope']['files_scanned'] == 4
+    assert len(cut['patch_hotspots']) == 1
+    assert any(w['type'] == 'truncated' for w in cut['meta']['warnings'])
 
 
 def test_raw_narrowing_uses_project_context_and_does_not_expand_to_declared_siblings(project):
@@ -140,6 +145,61 @@ def test_child_root_order_and_new_requests_see_policy_edits_without_mutating_old
     assert child == retained
     _policy(project, ['suite'])
     assert query(_pressure(project / 'src'))['summary']['total_patch_uses'] == 4
+
+
+def test_trusted_suite_bypasses_required_missing_config_through_registered_sdk(project, tmp_path, monkeypatch):
+    pytest.importorskip('mcp')
+    from test_mcp_expected_errors_back1992 import _run, _text
+    monkeypatch.setenv('REVEAL_CONFIG', str(tmp_path / 'missing-policy.yaml'))
+    explicit = 'tests=' + quote((project / 'suite').as_posix(), safe='')
+    for scheme in ('patches', 'testability'):
+        uri = _pressure(project / 'src', scheme, explicit)
+        assert query(uri)['summary']['total_patch_uses'] == 2
+        cli = run(uri, '--format', 'json')
+        assert cli.returncode == 0, cli.stderr
+
+    async def scenario(session):
+        for scheme in ('patches', 'testability'):
+            result = await session.call_tool('reveal_query', {
+                'uri': _pressure(project / 'src', scheme, explicit), 'provenance': True})
+            assert not result.is_error, _text(result)
+            answer, end = json.JSONDecoder().raw_decode(_text(result))
+            assert 'missing-policy.yaml' in _text(result)[end:]
+            assert answer['summary']['total_patch_uses'] == 2
+            assert answer['test_scope']['rule'] == 'tests='
+
+    _run(project, scenario)
+
+
+@pytest.mark.parametrize('scheme', ['patches', 'testability'])
+def test_lost_default_suite_is_incomplete_and_healthy_empty_remains_distinct(project, tmp_path, monkeypatch, scheme):
+    import reveal.testability.patches as scanner
+    _policy(project, [])
+    uri = _pressure(project / 'src', scheme)
+
+    def denied(path, *, on_error=None, **kwargs):
+        if on_error is not None:
+            on_error(PermissionError(13, 'synthetic directory denial', str(path)))
+        return iter(())
+
+    with monkeypatch.context() as failure:
+        failure.setattr(scanner, '_walk_code_files', denied)
+        answer = query(uri)
+        assert answer['summary']['total_patch_uses'] == 0
+        assert answer['summary']['total_boundary_profiles'] == 1
+        assert any(w['type'] == 'analysis_incomplete' for w in answer['meta']['warnings'])
+        cli = run(uri, '--format', 'json')
+        assert cli.returncode == 3, cli.stderr
+    assert query(uri)['summary']['total_patch_uses'] == 1
+    empty = tmp_path / 'empty-suite'
+    empty.mkdir()
+    explicit = query(_pressure(project / 'src', scheme, 'tests=' + quote(empty.as_posix(), safe='')))
+    assert explicit['summary']['total_patch_uses'] == 0
+    assert explicit['summary']['total_boundary_profiles'] == 1
+    bare = tmp_path / 'empty-project'
+    _write(bare / 'pyproject.toml', '[project]\nname="empty"\n')
+    with pytest.raises(NotApplicableError):
+        query(_pressure(bare, scheme))
 
 
 def test_existing_outside_project_sibling_uses_conventions_without_its_invalid_policy(project):
