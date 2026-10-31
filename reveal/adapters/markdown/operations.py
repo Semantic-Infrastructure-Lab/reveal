@@ -66,7 +66,7 @@ def _collect_query_sources(all_files: List[Path], filters: list, query_filters: 
     collected = _QuerySources(lost=list(getattr(candidates, 'lost', [])))
     collected.unreadable = _prefilter_unreadable(candidates)
     collected.failed = set(collected.lost) | {Path(path) for path, _ in collected.unreadable}
-    # A completed byte nonmatch establishes a required source decision too.
+    # A completed prefilter nonmatch establishes a required source decision too.
     collected.analyzed = len(all_files) - len(candidates) - len(collected.failed)
     for path in candidates:
         try:

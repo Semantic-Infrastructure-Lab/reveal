@@ -119,8 +119,7 @@ def search_sessions_for_term(
         term: Search term (case-insensitive substring match).
         workers: Compatibility argument for the former byte prefilter.
         whole_word: If True, only return sessions where the term appears as a
-            whole word (word-boundary semantics).  Phase 1 grep is still
-            substring for speed; whole-word filtering happens in phase 2.
+            whole word (word-boundary semantics) in decoded content.
         lost_out: Compatibility argument for the former byte pool; no workers are used.
         errors_out: When given, receives sessions whose required read failed.
 
