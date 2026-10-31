@@ -68,7 +68,7 @@ def _scan_one(args: tuple) -> Path | PathFailure | None:
 
     Returns:
         *path* if every needle was found, ``None`` for a nonmatch, or the
-        candidate's ``PathFailure`` when its bytes could not be read.
+        candidate's ``PathFailure`` when its content could not be read or decoded.
     """
     path, needles = args
     try:

@@ -541,12 +541,12 @@ validation exceptions; authored control errors are `RequestValidationError`, a
 The `analysis` object counts discovered eligible `candidate_files`, completed
 source decisions (`analyzed_files`), unique `failed_files`, and reached
 `discovery_failures` (directory-enumeration events, not estimated missing files).
-Candidates equal analyzed plus failed files. A successful byte prefilter nonmatch
+Candidates equal analyzed plus failed files. A successful prefilter nonmatch
 or a successfully read file rejected by selection still counts as analyzed.
 Required loss with completed source is incomplete; without completed source it
 is failed. Counts precede filtering, pagination and field projection. One decoded
 content read supplies frontmatter, body matching and relevance scoring; the
-earlier byte prefilter remains a separate read, without a snapshot guarantee.
+earlier whole-file prefilter remains a separate read, without a snapshot guarantee.
 
 Active aggregate, backlinks, link-graph and lint modes take precedence and retain
 their existing execution policy, as do ordinary listings without a nonempty body

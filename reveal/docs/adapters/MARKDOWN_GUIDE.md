@@ -1040,7 +1040,7 @@ JSON `analysis` counts discovered candidates, completed source decisions, failed
 files and directory-enumeration failure events before selection or pagination.
 A successfully searched file counts as completed even when it does not match.
 Body matching, frontmatter filtering and relevance scoring reuse one decoded
-content read; the earlier byte prefilter is separate, so this is not a filesystem
+content read; the earlier whole-file prefilter is separate, so this is not a filesystem
 snapshot. See the [output contract](../development/OUTPUT_CONTRACT.md#declared-execution-policy)
 for the exact counts and Python API behavior.
 
