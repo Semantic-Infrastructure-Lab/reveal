@@ -112,7 +112,7 @@ def test_prefilter_denial_is_not_a_proven_nonmatch_and_repair_is_fresh(tmp_path,
 
     def opened(file, *args, **kwargs):
         mode = args[0] if args else kwargs.get('mode', 'r')
-        if isinstance(file, (str, Path)) and Path(file) == denied and mode == 'rb':
+        if isinstance(file, (str, Path)) and Path(file).resolve() == denied.resolve() and mode == 'rb':
             reached.append(file)
             # No filename: the scanner still knows which candidate was lost.
             raise PermissionError('PUBLIC_PREFILTER_DENIED')
