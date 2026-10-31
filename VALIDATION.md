@@ -2215,9 +2215,13 @@ each view, so an importer listed in the wrong view counts as extra. The gate rec
 `declined` list names the combinations the gate cannot score everywhere, with the reason:
 `lazy=exclude` and `lazy=only` outside the Python/compiler rows (the Rust oracle is a
 regex that cannot tell a function-local `use`, BACK-2079; C, C++, Go and Java have no
-function-scope import). `tests=exclude` is scored at `lazy=include` only for populations
-with independently reviewed `test_importer_dirs` in the corpus manifest. Other populations
-and the tests/lazy cross-product remain explicitly declined.
+function-scope import). `tests=exclude` is scored by default at `lazy=include` for populations
+with independently reviewed `test_importer_dirs` in the corpus manifest. The opt-in gate
+option `--test-lazy` also scores `tests=exclude` with `lazy=exclude` and `lazy=only` when
+the selected corpus has both reviewed test labels and independent function-scope facts.
+It rejects unsupported selected corpora and cannot be combined with `--write-baseline`.
+Default measurements and the committed baseline remain unchanged; new combination rows
+require explicit review. Other populations remain unqualified for these combinations.
 
 The test-exclusion pilot uses Celery's own `t/unit`, `t/integration` and `t/smoke`
 suite/fixture directories (231 tracked Python files); `t/benchmarks` is retained.
@@ -2229,6 +2233,29 @@ from test helpers that Reveal's conventional filename/directory heuristic does n
 `t/unit/tasks/unit_tasks.py`. This is a measured limitation (BACK-2371), not an exact
 test-exclusion claim. The baseline records every extra edge's identity; exchanging
 one extra for another requires review even when the count stays equal.
+
+The bounded combined-mode qualification uses the same Celery pin and independently
+labelled importer population, with Python 3.12.16, tree-sitter 0.25.2 and language-pack
+1.22.1. Its scored results are:
+
+| Test/support policy | Lazy mode | Hits / truth | Scored extras |
+|---------------------|-----------|--------------|---------------|
+| Conventional | `exclude` | 640 / 640 | 32 |
+| Conventional | `only` | 48 / 48 | 2 |
+| Configured suite paths | `exclude` | 640 / 640 | 0 |
+| Configured suite paths | `only` | 48 / 48 | 0 |
+
+Configured inputs declare `t/unit`, `t/integration` and `t/smoke` through a recorded
+external policy file. The new rows live at `tests.exclude.lazy` and
+`configured_tests.exclude.lazy`; each includes the actual rule, policy identity,
+parse-loss count and view-specific excluded-edge count. Every prior measurement
+field is identical after removing only these nested rows. The 640 + 48 retained
+truth pairs partition the existing 688; 683 + 73 excluded truth pairs partition
+the existing 756, and the 32 + 2 extras are exactly the previously recorded 34.
+All four rows have zero partially parsed files. Nine unchanged script-directory
+pairs remain outside this oracle's target rows (BACK-2401): zero scored extras is
+not a claim of global graph precision. These are opt-in measurements, not newly
+promoted scheduled baseline rows or multilingual qualification (BACK-2405).
 
 The `tests.exclude` row records the declared directories, labelled file/edge counts,
 actual answer rule and parse-loss count. Exclusion filters **importers**, not target

@@ -25,6 +25,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Added
 
+- The corpus recall gate can score `tests=exclude` together with `lazy=exclude` and `lazy=only` using `--test-lazy`, recording conventional and configured policies separately. New rows require review, and this option cannot overwrite a baseline (BACK-2405).
 - Project configuration accepts literal `test_layout.additional_paths` for test/support files and subtrees. Imports, entrypoint facts, Overview and comparisons share the selected policy; comparisons apply it to both sides. Patches/Testability filters still reject configured additions with guidance pending adoption. Invalid selected policy exits 2; required configuration failures exit 3. The recall gate records configured results separately with policy/input identity, preserving conventional baselines (BACK-2398, BACK-2399).
 
 - `reveal overview PATH --against REF` and `overview://PATH?against=REF` compare a tracked base with the live working tree through the existing architecture diff engine. Both return `overview_diff`, with per-side completeness, explicit working-tree labeling and the same output/MCP failure policy; ordinary map collectors do not run for comparisons (BACK-2376).
