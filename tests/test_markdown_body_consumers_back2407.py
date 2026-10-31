@@ -233,6 +233,33 @@ def test_repair_and_postprocessing_cannot_turn_missing_proof_into_usage(tmp_path
                for entry in json.loads(response.stdout)['meta']['errors'])
 
 
+@pytest.mark.parametrize('surviving', [False, True])
+@pytest.mark.parametrize('mode', ['all_success', 'decline'])
+def test_postprocessing_cannot_rewrite_source_loss_as_success_or_decline(
+        tmp_path, monkeypatch, surviving, mode):
+    (tmp_path / 'bad.md').write_bytes(b'needle caf\xe9\n')
+    if surviving:
+        (tmp_path / 'good.md').write_bytes(b'needle\n')
+
+    def processed(self, result, args):
+        result.pop('error', None)
+        result['meta'] = {'warnings': [], 'errors': []}
+        if mode == 'decline':
+            result['applicable'] = False
+        else:
+            # This forged proof is arithmetically consistent; prior loss still matters.
+            candidates = 2 if surviving else 1
+            result['analysis'] = {'candidate_files': candidates, 'analyzed_files': candidates,
+                                  'failed_files': 0, 'discovery_failures': 0}
+        return result
+
+    monkeypatch.setattr(MarkdownQueryAdapter, 'post_process', processed, raising=False)
+    response = run(_uri(tmp_path), '--format', 'json')
+    assert response.returncode == 3
+    assert any(entry['code'] == 'invalid_adapter_answer'
+               for entry in json.loads(response.stdout)['meta']['errors'])
+
+
 @pytest.mark.parametrize('suffix,expected_type', [
     ('?link-graph&body-contains=needle', 'markdown_link_graph'),
     ('?lint&body-contains=needle', 'markdown_frontmatter_lint'),
