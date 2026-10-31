@@ -83,6 +83,16 @@ def test_raw_schema_metadata_is_not_a_content_match(tmp_path):
     assert result == []
 
 
+def test_nonmatching_foreign_metadata_does_not_break_decoded_search(tmp_path):
+    path = session(tmp_path, 'needle')
+    leading = {'type': 'user', 'timestamp': 42, 'message': {'content': 'unrelated'}}
+    path.write_text(json.dumps(leading) + '\n' + path.read_text(encoding='utf-8'), encoding='utf-8')
+    with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+        result = api.query('claude://?search=needle')
+    assert result['match_count'] == 1
+    assert result['matches'][0]['message_index'] == 1
+
+
 @pytest.mark.parametrize('tracking', [False, True])
 def test_decoded_read_failure_is_disclosed_and_repair_is_fresh(tmp_path, monkeypatch, tracking):
     block = {'type': 'tool_use', 'name': 'Read', 'input': {'file_path': '/workspace/needle.py'}}
