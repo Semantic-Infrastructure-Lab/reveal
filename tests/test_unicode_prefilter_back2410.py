@@ -27,6 +27,21 @@ def test_unicode_match_and_nonmatch_decisions(tmp_path, body, term, expected, po
     assert found.lost == [] and found.unreadable == []
 
 
+@pytest.mark.parametrize('newline', [b'\n', b'\r\n', b'\r'])
+@pytest.mark.parametrize('pooled', [False, True])
+def test_prefilter_agrees_with_body_reader_on_universal_newlines(tmp_path, newline, pooled):
+    paths = [tmp_path / f'{i}.md' for i in range(8 if pooled else 1)]
+    for path in paths:
+        path.write_bytes(newline.join([b'line', b'break']))
+        assert path.read_text(encoding='utf-8') == 'line\nbreak'
+    found = parallel.grep_files(paths, 'line\nbreak', workers=2)
+    assert found == paths
+    assert found.lost == [] and found.unreadable == []
+    request = f'markdown://{tmp_path.as_posix()}?body-contains=line\nbreak'
+    for suffix in ('', '&aggregate=kind'):
+        assert api.query(request + suffix)['matched_files'] == len(paths)
+
+
 @pytest.mark.parametrize('aggregate', [False, True])
 def test_markdown_modes_match_decoded_unicode_and_retain_loss(tmp_path, aggregate):
     (tmp_path / 'good.md').write_text('---\ntitle: guide\n---\nCAFÉ\n', encoding='utf-8')

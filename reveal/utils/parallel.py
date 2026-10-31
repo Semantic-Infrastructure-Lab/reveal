@@ -74,6 +74,8 @@ def _scan_one(args: tuple) -> Path | PathFailure | None:
     try:
         with open(path, 'rb') as f:
             data = f.read()
+        # Match the body reader's universal-newline view before rejecting candidates.
+        data = data.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
         data_lower = (data.lower() if data.isascii()
                       else data.decode('utf-8').lower().encode('utf-8'))
         return path if all(n in data_lower for n in needles) else None

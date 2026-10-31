@@ -1025,6 +1025,7 @@ reveal 'markdown://docs/?type=guide&body-contains=nginx&limit=10'
 - Multiple `body-contains=` params are AND'd (all must appear)
 - Unicode lowercase matching is supported (for example, `CAFÉ` matches `café`).
   This does not normalize composed/decomposed accents or equate `Straße` with `STRASSE`.
+- LF, CRLF and CR line endings share the body reader's `\n` view, including multiline queries.
 - Files without frontmatter are also matched
 - Combines with all frontmatter filters and result control (`sort=`, `limit=`, `offset=`)
 - `sort=FIELD` puts a file whose field is `null` or missing last, ascending or descending (`sort=-status`
