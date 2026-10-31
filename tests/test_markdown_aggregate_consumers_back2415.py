@@ -30,12 +30,16 @@ def _values(answer):
     return {row['value']: row['count'] for row in answer['aggregate']}
 
 
-def test_aggregate_api_preserves_requested_relative_source_spelling(tmp_path, monkeypatch):
+@pytest.mark.parametrize('query', [
+    'aggregate=kind', 'body-contains=needle', 'link-graph', 'lint',
+    'backlinks=good.md', 'body-contains=', 'body-contains',
+])
+def test_markdown_api_preserves_requested_relative_source_spelling(tmp_path, monkeypatch, query):
     root = tmp_path / 'docs'
     root.mkdir()
-    (root / 'good.md').write_text('---\nkind: guide\n---\n', encoding='utf-8')
+    (root / 'good.md').write_text('---\nkind: guide\n---\nneedle\n', encoding='utf-8')
     monkeypatch.chdir(tmp_path)
-    request = 'markdown://./docs?aggregate=kind'
+    request = 'markdown://./docs?' + query
     answer = api.query(request)
     assert answer['source'] == './docs'
     response = run(request, '--format', 'json')

@@ -432,11 +432,12 @@ class MarkdownQueryAdapter(ResourceAdapter):
             a link graph when ?link-graph is specified, or a maintenance
             queue of frontmatter problems when ?lint is specified.
         """
+        source = as_spelled(self.base_path, self.spelling)
         if self.link_graph:
             result = dict(operations.build_link_graph(self.base_path))
             return ResultBuilder.create(
                 result_type='markdown_link_graph',
-                source=str(self.base_path),
+                source=source,
                 source_type='directory',
                 contract_version=CONTRACT_VERSION,
                 warnings=self._unreadable_warnings(result, "their links are missing from the graph"),
@@ -447,7 +448,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             result = operations.lint_frontmatter(self.base_path, self.lint_fields)
             return ResultBuilder.create(
                 result_type='markdown_frontmatter_lint',
-                source=self.base_path,
+                source=source,
                 source_type='directory',
                 contract_version=CONTRACT_VERSION,
                 data=result,
@@ -457,7 +458,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             result = operations.get_backlinks(self.base_path, self.backlinks_target)
             return ResultBuilder.create(
                 result_type='markdown_backlinks',
-                source=self.base_path,
+                source=source,
                 contract_version=CONTRACT_VERSION,
                 warnings=self._unreadable_warnings(result, "links from them are missing, so backlinks may be incomplete"),
                 data=result,
@@ -475,7 +476,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             warnings.extend(result.pop('meta', {}).get('warnings', []))
             return ResultBuilder.create(
                 result_type='markdown_aggregate',
-                source=as_spelled(self.base_path, self.spelling),
+                source=source,
                 source_type='directory',
                 contract_version=CONTRACT_VERSION,
                 warnings=warnings,
@@ -492,7 +493,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             self.extra_fields,
             self.explain,
         )
-        result.update(contract_version=CONTRACT_VERSION, source_type='directory')
+        result.update(contract_version=CONTRACT_VERSION, source_type='directory', source=source)
         # Paths as the user named the directory, not its resolved location (BACK-1366).
         result['base_path'] = as_spelled(self.base_path, self.spelling)
         for item in result.get('results', []):
