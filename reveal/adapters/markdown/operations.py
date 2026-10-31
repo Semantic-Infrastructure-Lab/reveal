@@ -28,6 +28,10 @@ class _QuerySources:
     failed: set[Path] = field(default_factory=set)
 
 
+def _prefilter_unreadable(candidates) -> List[Tuple[str, str]]:
+    return [(failure.path, failure.cause) for failure in getattr(candidates, 'unreadable', [])]
+
+
 def _query_candidate(path: Path, filters: list, query_filters: list,
                      body_contains: Optional[list], extra_fields: Optional[list],
                      explain: bool) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
@@ -60,8 +64,7 @@ def _collect_query_sources(all_files: List[Path], filters: list, query_filters: 
                            explain: bool) -> _QuerySources:
     candidates = grep_files(all_files, body_contains) if body_contains else all_files
     collected = _QuerySources(lost=list(getattr(candidates, 'lost', [])))
-    collected.unreadable = [(failure.path, failure.cause)
-                            for failure in getattr(candidates, 'unreadable', [])]
+    collected.unreadable = _prefilter_unreadable(candidates)
     collected.failed = set(collected.lost) | {Path(path) for path, _ in collected.unreadable}
     # A completed byte nonmatch establishes a required source decision too.
     collected.analyzed = len(all_files) - len(candidates) - len(collected.failed)
@@ -204,7 +207,7 @@ def aggregate_field_values(
     counts: Counter = Counter()
     matched = 0
     missing = 0
-    unreadable: List[Tuple[str, str]] = []
+    unreadable = _prefilter_unreadable(candidates)
 
     for path in candidates:
         frontmatter = files.extract_frontmatter(path)

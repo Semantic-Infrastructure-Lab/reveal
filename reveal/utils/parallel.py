@@ -18,15 +18,6 @@ logger = logging.getLogger(__name__)
 # outweighs the parallelism benefit for tiny inputs.
 _PARALLEL_THRESHOLD = 8
 
-# Optional stringzilla SIMD accelerator (pip install stringzilla).
-# When present, provides faster substring search on warm-cache workloads.
-try:
-    import stringzilla as _sz  # noqa: F401
-    _HAS_STRINGZILLA = True
-except ImportError:
-    _HAS_STRINGZILLA = False
-
-
 def pool_worker_count(default: int) -> int:
     """Worker processes for one of reveal's process pools; 1 means run serially.
 
@@ -83,16 +74,10 @@ def _scan_one(args: tuple) -> Path | PathFailure | None:
     try:
         with open(path, 'rb') as f:
             data = f.read()
-        if _HAS_STRINGZILLA:
-            data_lower = _sz.Str(data).lower()
-            return path if all(
-                next(_sz.find_all(data_lower, n), None) is not None
-                for n in needles
-            ) else None
-        else:
-            data_lower = data.lower()
-            return path if all(n in data_lower for n in needles) else None
-    except OSError as e:
+        data_lower = (data.lower() if data.isascii()
+                      else data.decode('utf-8').lower().encode('utf-8'))
+        return path if all(n in data_lower for n in needles) else None
+    except (OSError, UnicodeDecodeError) as e:
         logger.warning("grep_file_worker failed for %s: %s", path, e)
         return PathFailure(to_posix(path), failure_of(e).cause)
 
@@ -100,7 +85,7 @@ def _scan_one(args: tuple) -> Path | PathFailure | None:
 class GrepResult(list):
     """The matching paths (a plain list to every caller) plus ``lost``: the paths a dead
     pool worker kept from being scanned, which are not matches and not non-matches
-    (BACK-1754). ``unreadable`` separately retains ordinary byte-read failures.
+    (BACK-1754). ``unreadable`` separately retains read and UTF-8 decoding failures.
     Neither kind of failure establishes that a file did not match."""
 
     lost: list[Path]
@@ -151,12 +136,12 @@ def grep_files(
     *,
     workers: int = 8,
 ) -> GrepResult:
-    """Return paths where all *terms* appear (case-insensitive byte scan).
+    """Return paths where all *terms* appear under Unicode lowercase matching.
 
     Uses parallel worker processes for large corpora. Falls back to sequential
     scanning for small inputs where process-spawn overhead exceeds the benefit.
 
-    This is a **whole-file scan** — it does not distinguish frontmatter from
+    This is a **whole-file UTF-8 scan** — it does not distinguish frontmatter from
     body content.  Use it as a fast pre-filter; callers that need body-only
     matching should run a secondary check on the returned paths.
 
@@ -170,7 +155,7 @@ def grep_files(
     Returns:
         Subset of *paths* where all terms were found, in input order. A file
         that could not be read, or was lost to a dead pool worker, is logged
-        as a warning and left out. ``unreadable`` contains ordinary read failures;
+        as a warning and left out. ``unreadable`` contains read/decode failures;
         ``lost`` contains paths lost to a dead worker (BACK-1754).
 
     Example::
