@@ -475,7 +475,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             warnings.extend(result.pop('meta', {}).get('warnings', []))
             return ResultBuilder.create(
                 result_type='markdown_aggregate',
-                source=str(self.base_path),
+                source=as_spelled(self.base_path, self.spelling),
                 source_type='directory',
                 contract_version=CONTRACT_VERSION,
                 warnings=warnings,
