@@ -56,7 +56,8 @@ DECLINED = (
     {'combination': 'lazy=only', 'reason': 'as lazy=exclude'},
     {'combination': 'tests=exclude', 'reason': 'scored at lazy=include for populations with reviewed '
      'test_importer_dirs; declined elsewhere without independent corpus test labels'},
-    {'combination': 'tests=exclude with lazy=exclude/only', 'reason': 'cross-product not qualified'},
+    {'combination': 'tests=exclude with lazy=exclude/only',
+     'reason': 'not scored by default; --test-lazy requires independent function-scope facts and reviewed test labels'},
 )
 
 
@@ -300,7 +301,8 @@ def corpus_key(entry: dict) -> str:
     return entry.get('id', entry['language'])
 
 
-def measure(entry: dict, root: Path, *, policy: dict | None = None) -> dict[str, Any]:
+def measure(entry: dict, root: Path, *, policy: dict | None = None,
+            test_lazy: bool = False) -> dict[str, Any]:
     head = subprocess.run(['git', '-C', str(root), 'rev-parse', 'HEAD'], check=True,
                           capture_output=True, text=True, encoding='utf-8', timeout=30).stdout.strip()
     if not entry.get('sha') or head != entry['sha']:
@@ -310,6 +312,8 @@ def measure(entry: dict, root: Path, *, policy: dict | None = None) -> dict[str,
     if name not in ORACLES:
         raise RuntimeError(f'Unknown recall oracle {name!r}; expected one of {sorted(ORACLES)}')
     oracle = ORACLES[name]
+    if test_lazy and ('test_importer_dirs' not in config or oracle.lazy_only is None):
+        raise RuntimeError('Combined scoring requires independent test labels and function-scope oracle facts')
     scan = (root / config.get('scan_root', '.')).resolve()
     if not scan.is_dir() or not scan.is_relative_to(root):
         raise RuntimeError(f'scan_root {config.get("scan_root")!r} is not a directory in the corpus')
@@ -343,19 +347,23 @@ def measure(entry: dict, root: Path, *, policy: dict | None = None) -> dict[str,
               'extra_edges': extra, 'recall': hit / expected, 'precision': hit / (hit + extra),
               'coverage': coverage, 'partial_files': meta['partial_files'], 'edge_rule': meta['edge_rule'],
               'differences': differences}
-    if oracle.lazy_only is not None and graph is not None:
-        result['lazy'] = _measure_lazy(oracle, Scope(root, scan, importers, config), edges, root, scan, cap, population)
+    scope = Scope(root, scan, importers, config)
+    lazy_edges = oracle.lazy_only(scope) if oracle.lazy_only is not None and graph is not None else None
+    if lazy_edges is not None:
+        result['lazy'] = _measure_lazy(oracle, scope, edges, root, scan, cap, population, lazy_edges=lazy_edges)
     if 'test_importer_dirs' in config:
         if graph is None:
             raise RuntimeError('Test exclusion scoring requires the directory importer view')
-        result['tests'] = {'exclude': _measure_tests(Scope(root, scan, importers, config), edges, cap, population)}
+        result['tests'] = {'exclude': _measure_test_views(scope, edges, cap, population,
+                                                        lazy_edges if test_lazy else None)}
     if policy is not None:
         if 'test_importer_dirs' not in config or graph is None:
             raise RuntimeError('Configured test policy requires independently labelled test importers')
         if _read_test_policy(Path(policy['path'])) != policy:
             raise RuntimeError('Selected test policy input changed before measurement')
         with _test_policy_config(Path(policy['path'])):
-            row = _measure_tests(Scope(root, scan, importers, config), edges, cap, population, policy=policy)
+            row = _measure_test_views(scope, edges, cap, population,
+                                      lazy_edges if test_lazy else None, policy=policy)
         if _read_test_policy(Path(policy['path'])) != policy:
             raise RuntimeError('Selected test policy input changed during measurement')
         row['policy_input'] = copy.deepcopy(policy)
@@ -379,18 +387,24 @@ def _score(edges: dict[str, list[str]], importers_of, root: Path, population: se
     return hit, expected, extra, differences
 
 
+def _lazy_truth(edges: dict[str, list[str]], lazy_edges: dict[str, list[str]], mode: str) -> dict[str, list[str]]:
+    """Partition independent file-pair facts, keeping targets whose selected truth is empty."""
+    return {target: sorted(set(importers) - set(lazy_edges.get(target, ())) if mode == 'exclude'
+                           else set(lazy_edges.get(target, ())))
+            for target, importers in edges.items()}
+
+
 def _measure_lazy(oracle, scope: Scope, edges: dict[str, list[str]], root: Path, scan: Path, cap: int | None,
-                  population: set[Path]) -> dict[str, Any]:
+                  population: set[Path], *, lazy_edges: dict[str, list[str]] | None = None) -> dict[str, Any]:
     """Score ``&lazy=exclude`` and ``&lazy=only`` as rendered. An edge is function-level only when every import
     behind it is (the engine's ``is_lazy_edge``), so the oracle's edges split into two disjoint sets. Every oracle
     target is scored in each mode, including those whose truth is empty there, so an importer the engine lists
     in the wrong view counts as extra."""
-    lazy_edges = oracle.lazy_only(scope)
+    if lazy_edges is None:
+        lazy_edges = oracle.lazy_only(scope)
     modes: dict[str, Any] = {}
     for mode in LAZY_MODES:
-        truth = {t: sorted(set(importers) - set(lazy_edges.get(t, ())) if mode == 'exclude'
-                           else set(lazy_edges.get(t, ())))
-                 for t, importers in edges.items()}
+        truth = _lazy_truth(edges, lazy_edges, mode)
         graph = rendered_reverse_graph(scan, cap, mode)
         hit, expected, extra, differences = _score(truth, lambda t: graph['by_target'].get(root / t, set()), root, population)
         if expected and not hit:
@@ -405,15 +419,32 @@ def _measure_lazy(oracle, scope: Scope, edges: dict[str, list[str]], root: Path,
     return modes
 
 
+def _measure_test_views(scope: Scope, edges: dict[str, list[str]], cap: int | None,
+                       population: set[Path], lazy_edges: dict[str, list[str]] | None,
+                       *, policy: dict | None = None) -> dict[str, Any]:
+    """Add opt-in intersections to the existing test-exclusion measurement."""
+    row = _measure_tests(scope, edges, cap, population, policy=policy)
+    if lazy_edges is not None:
+        row['lazy'] = {}
+        for mode in LAZY_MODES:
+            selected = _measure_tests(scope, _lazy_truth(edges, lazy_edges, mode), cap, population,
+                                      lazy=mode, policy=policy)
+            if policy is not None:
+                selected['policy_input'] = copy.deepcopy(policy)
+            row['lazy'][mode] = selected
+    return row
+
+
 def _measure_tests(scope: Scope, edges: dict[str, list[str]], cap: int | None,
-                   population: set[Path], *, policy: dict | None = None) -> dict[str, Any]:
+                   population: set[Path], *, policy: dict | None = None,
+                   lazy: str = 'include') -> dict[str, Any]:
     """Remove independently labelled test importers, retaining every target for extra-edge controls."""
     labels = test_importers(scope)
     truth = {target: sorted(set(importers) - labels) for target, importers in edges.items()}
     removed = sum(len(set(importers) & labels) for importers in edges.values())
-    if not removed:
+    if not removed and lazy == 'include':
         raise RuntimeError('Declared test population has zero oracle edges; exclusion control is vacuous')
-    graph = rendered_reverse_graph(scope.scan, cap, tests='exclude', policy=policy)
+    graph = rendered_reverse_graph(scope.scan, cap, lazy, tests='exclude', policy=policy)
     hit, expected, extra, differences = _score(
         truth, lambda target: graph['by_target'].get(scope.root / target, set()), scope.root, population)
     if expected and not hit:
@@ -506,7 +537,8 @@ def regressions(current: dict, baseline: dict, notes: list[str] | None = None) -
 
 
 def _compare_modes(key: str, dimension: str, measured: dict, reference: dict, failures: list[str],
-                   notes: list[str] | None = None) -> None:
+                   notes: list[str] | None = None, *, configured: bool = False,
+                   require_scope: bool = False) -> None:
     """The all-edges checks per parameter view; a new or vanished view requires review."""
     for mode in sorted(measured.keys() - reference.keys()):
         failures.append(f'{key}: {dimension}={mode} baseline missing; review required')
@@ -523,9 +555,14 @@ def _compare_modes(key: str, dimension: str, measured: dict, reference: dict, fa
         for field in ('recall', 'precision'):
             if None not in (row[field], ref[field]) and row[field] + 1e-12 < ref[field]:
                 failures.append(f'{key}: {dimension}={mode} {field} dropped {ref[field]:.6%} -> {row[field]:.6%}')
+        selected_policy = configured or dimension == 'configured_tests'
         _compare_test_policy(f'{key}: {dimension}={mode}', row, ref, failures, notes,
-                             required=dimension == 'configured_tests')
+                             required=selected_policy, require_scope=require_scope)
         _compare_partial_files(f'{key}: {dimension}={mode}', row, ref, failures, notes)
+        if 'lazy' in row or 'lazy' in ref:
+            _compare_modes(f'{key}: {dimension}={mode}', 'lazy', row.get('lazy') or {},
+                           ref.get('lazy') or {}, failures, notes,
+                           configured=selected_policy, require_scope=True)
 
 
 def _policy_input_identity(row: dict) -> dict | None:
@@ -539,10 +576,11 @@ def _policy_input_identity(row: dict) -> dict | None:
 
 
 def _compare_test_policy(key: str, measured: dict, reference: dict, failures: list[str],
-                         notes: list[str] | None, *, required: bool = False) -> None:
+                         notes: list[str] | None, *, required: bool = False,
+                         require_scope: bool = False) -> None:
     now = (measured.get('edge_rule') or {}).get('test_scope') or {}
     before = (reference.get('edge_rule') or {}).get('test_scope') or {}
-    if not required and (not now or not before):
+    if not required and not require_scope and (not now or not before):
         if notes is not None and (now or before):
             side = 'baseline' if not before else 'measurement'
             notes.append(f'{key}: test_scope not compared ({side} has no test_scope)')
@@ -619,11 +657,16 @@ def main(argv=None) -> int:
                         help='measure only this recall corpus id (repeatable); compared to its own baseline rows')
     parser.add_argument('--test-policy', action='append', default=[], metavar='ID=YAML',
                         help='separately measure tests=exclude using a recorded policy-only external YAML input')
+    parser.add_argument('--test-lazy', action='store_true',
+                        help='also score tests=exclude crossed with lazy=exclude/only; requires independent test labels '
+                             'and function-scope facts for each selected corpus; new rows require review')
     parser.add_argument('--write-baseline', action='store_true',
                         help='store reviewed new measurements (only the corpora measured), never used in scheduled CI')
     args = parser.parse_args(argv)
     if args.test_policy and (args.write_baseline or args.signal != 'imports'):
         parser.error('--test-policy requires imports and cannot be combined with --write-baseline')
+    if args.test_lazy and (args.write_baseline or args.signal != 'imports'):
+        parser.error('--test-lazy requires imports and cannot be combined with --write-baseline')
     manifest = yaml.safe_load(MANIFEST.read_text(encoding='utf-8'))
     if args.baseline is None:
         args.baseline = BASELINE.with_name('calls_baseline.json') if args.signal == 'calls' else BASELINE
@@ -643,10 +686,11 @@ def main(argv=None) -> int:
         try:
             measurement = measure_calls if args.signal == 'calls' else measure
             root = (args.corpus_root / key).resolve()
+            options = {'test_lazy': True} if args.test_lazy else {}
             if key in policies:
-                current[key] = measure(entry, root, policy=_read_test_policy(policies[key]))
+                current[key] = measure(entry, root, policy=_read_test_policy(policies[key]), **options)
             else:
-                current[key] = measurement(entry, root)
+                current[key] = measurement(entry, root, **options)
             print(f'{key}: recall={current[key]["recall"]:.4%} precision={current[key]["precision"]:.4%} '
                   f'({current[key]["hit_edges"]}/{current[key]["oracle_edges"]} edges, '
                   f'{time.monotonic() - started:.0f}s)', flush=True)
@@ -674,6 +718,11 @@ def main(argv=None) -> int:
             errors.append(f'Baseline malformed: {type(exc).__name__}: {exc}')
     # The import signal scores one rule and names the combinations it declines (calls scores depth-1 callers).
     combinations = {'scored': SCORED_RULE, 'declined': list(DECLINED)} if args.signal == 'imports' else {}
+    if args.test_lazy:
+        combinations['declined'] = [row for row in DECLINED
+                                   if row['combination'] != 'tests=exclude with lazy=exclude/only']
+        combinations['scored_test_lazy'] = {'tests': 'exclude', 'lazy': list(LAZY_MODES),
+                                           'corpora': sorted(current)}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps({'measured_at': datetime.now(timezone.utc).isoformat(),
                                      'reveal_version': __version__, 'python': sys.version,
