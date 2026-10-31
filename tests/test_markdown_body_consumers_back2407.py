@@ -91,10 +91,12 @@ def test_actual_cli_delivers_partial_or_failed_answer(tmp_path, surviving, outpu
 
 @pytest.mark.parametrize('suffix,options,shown', [
     ('&limit=0', [], []), ('&offset=99', [], []),
-    ('', ['--head', '0'], []), ('', ['--fields', 'results'], ['good.md']),
+    ('', ['--head', '1'], ['good.md']),
+    ('', ['--fields', 'results'], ['good.md', 'peer.md']),
 ])
 def test_display_cuts_and_projection_cannot_erase_loss(tmp_path, suffix, options, shown):
     (tmp_path / 'good.md').write_bytes(b'needle\n')
+    (tmp_path / 'peer.md').write_bytes(b'needle\n')
     (tmp_path / 'bad.md').write_bytes(b'needle caf\xe9\n')
     response = run(_uri(tmp_path, suffix), '--format', 'json', *options)
     assert response.returncode == 3
