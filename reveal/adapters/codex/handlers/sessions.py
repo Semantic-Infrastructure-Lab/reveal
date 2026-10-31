@@ -138,10 +138,13 @@ def _message_snippet(line: str, term: str) -> Optional[Dict[str, Any]]:
     if not isinstance(rec, dict):
         return None
     rec = normalize_record(rec)  # current rollouts' item_completed turns (BACK-1566)
-    payload = rec.get('payload') or {}
+    payload = rec.get('payload')
+    if not isinstance(payload, dict):
+        return None
     ptype = payload.get('type', '')
     text = payload.get('message') or ''
-    if ptype not in ('user_message', 'agent_message') or term not in text.lower():
+    if (ptype not in ('user_message', 'agent_message') or not isinstance(text, str)
+            or term not in text.lower()):
         return None
     return {
         'role': 'user' if ptype == 'user_message' else 'agent',
@@ -150,14 +153,11 @@ def _message_snippet(line: str, term: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def _collect_snippets(content: str, raw_forms: set, term: str, cap: int) -> tuple:
+def _collect_snippets(content: str, term: str, cap: int) -> tuple:
     """(kept snippets, every match found) in one rollout; cap <= 0 keeps them all."""
     snippets: List[Dict[str, Any]] = []
     found = 0
     for line in split_lines(content):
-        line_lower = line.lower()
-        if not any(form in line_lower for form in raw_forms):
-            continue
         snippet = _message_snippet(line, term)
         if snippet:
             found += 1
@@ -213,11 +213,6 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
         ]
 
     term = query.lower()
-    # The prefilters read raw JSON lines, where a quote, backslash or (in some rollouts)
-    # non-ASCII character is escaped: 'awkwardly" name' is stored as 'awkwardly\\" name', so
-    # matching the plain term alone found 0 of 1 sessions. _message_snippet then matches the
-    # decoded text, so an encoded form only widens the prefilter.
-    raw_forms = {term, json.dumps(term, ensure_ascii=False)[1:-1], json.dumps(term)[1:-1]}
     matched: List[Dict[str, Any]] = []
     found_total = 0
 
@@ -234,11 +229,7 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
         except OSError:
             continue
 
-        lowered = content.lower()
-        if not any(form in lowered for form in raw_forms):
-            continue
-
-        snippets, found = _collect_snippets(content, raw_forms, term, max_matches_per_session)
+        snippets, found = _collect_snippets(content, term, max_matches_per_session)
 
         if snippets:
             found_total += found
