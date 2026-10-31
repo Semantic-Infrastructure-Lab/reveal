@@ -104,7 +104,7 @@ reveal 'surface://.?type=env' --format json
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
 | `type` | `cli`, `http`, `mcp`, `env`, `network`, `db`, `sdk`, `fs`, `subprocess` | Filter to one surface category. |
-| `source_only` | `true`, `false` (default) | Exclude test files and directories (`test_*.py`, `*_test.py`, `conftest.py`, `tests/`, `__tests__/`, `*.test.ts`, `*.spec.ts`, etc.). |
+| `source_only` | `true`, `false` (default) | Exclude test/support files using conventional names and project `test_layout.additional_paths` (`test_*.py`, `*_test.py`, `conftest.py`, `tests/`, `__tests__/`, `*.test.ts`, `*.spec.ts`, etc.). |
 | `by` | `dir` | Add a per-directory rollup (see below). |
 | `depth` | integer >= 0 (default `0`) | With `by=dir`: keep only the first N path segments of each directory, so `depth=2` folds `app/api/util` into `app/api`. `0` keeps the full directory. |
 | `top` | nonnegative integer (default: all) | Text entries per category or directories; `0` shows none. JSON stays complete. |
@@ -216,6 +216,15 @@ JSON keeps `surfaces` unchanged and adds `by_dir`, a list of
 absent unless `by=dir` is requested. It honours `type` and `source_only`, and
 its totals sum to the flat `total`.
 
+The same project policy labels HTTP entries with `test_origin` and filters
+`--source-only`, including direct-file and child-directory requests. JSON `test_scope`
+and text disclose the selected anchor and policy basis; configured declarations also
+identify their source. Conventional directory names match exactly: `testimonials/`,
+`testdata/` and `testing/` remain included unless explicitly declared. Non-matches are
+not proof of production status or runtime reachability. The full census remains
+unfiltered. Invalid or unreadable selected policy fails role-bearing requests;
+non-HTTP category requests without `source_only` do not adopt the policy.
+
 ## Good Review Questions
 
 - Does every network/db/sdk import correspond to a boundary the team actually
@@ -223,8 +232,8 @@ its totals sum to the flat `total`.
 - Are there filesystem writes or subprocess calls outside expected locations?
 - Does the CLI/HTTP/MCP surface match what's documented as the public
   interface?
-- With `--source-only`, does production code reach further than tests
-  exercise?
+- With `--source-only`, which boundary indicators remain outside the selected
+  test/support files?
 - With `--by dir`, does each boundary kind sit in the layer that should own it,
   or is it scattered across the tree?
 

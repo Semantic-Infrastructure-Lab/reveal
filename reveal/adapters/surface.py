@@ -112,6 +112,29 @@ def _supported_coverage_languages() -> frozenset:
     return frozenset(langs)
 
 
+def _surface_test_layout(path: Path, layout: Optional[TestLayout], relevant: bool) -> Optional[TestLayout]:
+    return layout or (TestLayout.for_path(path, fallback_root=path) if relevant else None)
+
+
+def _excluded_source(path: Path, source_only: bool, layout: Optional[TestLayout]) -> bool:
+    return source_only and layout is not None and layout.is_test(path)
+
+
+def _excluded_directory(path: Path, layout: Optional[TestLayout]) -> bool:
+    # A precise selector may name the synthetic child without selecting its parent;
+    # a filename-shaped directory may match itself without selecting descendants.
+    return layout is not None and layout.is_test(path) and layout.is_test(path / '__surface_source__')
+
+
+def _label_http_origins(entries: List[Dict[str, Any]], source_only: bool,
+                        layout: Optional[TestLayout]) -> int:
+    if source_only or layout is None:
+        return 0
+    for entry in entries:
+        entry['test_origin'] = layout.is_test(Path(entry['file']))
+    return sum(entry['test_origin'] for entry in entries)
+
+
 def _collect_source_files(
     path: Path, source_only: bool = False, *,
     on_error: Optional[Callable[[OSError], None]] = None,
@@ -120,9 +143,7 @@ def _collect_source_files(
     """Map each registered scanner to the files under `path` it should scan."""
 
     path = Path(os.path.abspath(path))
-    layout = test_layout
-    if source_only and layout is None:
-        layout = TestLayout.for_path(path, fallback_root=path)
+    layout = _surface_test_layout(path, test_layout, source_only)
 
     def _scanner_for(fpath: Path):
         suffix = fpath.suffix
@@ -139,7 +160,7 @@ def _collect_source_files(
     buckets: Dict[_SurfaceScanner, List[Path]] = {spec: [] for spec in _SURFACE_SCANNERS}
 
     if path.is_file():
-        if source_only and layout is not None and layout.is_test(path):
+        if _excluded_source(path, source_only, layout):
             return buckets
         spec = _scanner_for(path)
         if spec is not None:
@@ -149,14 +170,11 @@ def _collect_source_files(
     # The shared walker (BACK-1577): the same files the coverage census below counts,
     # dot-dir source included (BACK-1038). source_only prunes test dirs before descent.
     for root, dirs, filenames in walk_tree(path, ANALYSIS, on_error=on_error):
-        if source_only and layout is not None:
-            # Require the directory itself too: a precise selector can name the
-            # synthetic child without selecting any of its production siblings.
-            dirs[:] = [d for d in dirs if not (layout.is_test(root / d)
-                       and layout.is_test(root / d / '__surface_source__'))]
+        if source_only:
+            dirs[:] = [d for d in dirs if not _excluded_directory(root / d, layout)]
         for fname in filenames:
             fpath = root / fname
-            if source_only and layout is not None and layout.is_test(fpath):
+            if _excluded_source(fpath, source_only, layout):
                 continue
             spec = _scanner_for(fpath)
             if spec is not None:
@@ -294,9 +312,7 @@ def _scan_surface(
 ) -> Dict[str, Any]:
     display_path = path
     path = Path(os.path.abspath(path))
-    layout = test_layout
-    if layout is None and (source_only or type_filter in ('', 'http')):
-        layout = TestLayout.for_path(path, fallback_root=path)
+    layout = _surface_test_layout(path, test_layout, source_only or type_filter in ('', 'http'))
     source_failures: List[PathFailure] = []
     census_failures: List[PathFailure] = []
     collected = _collect_source_files(path, source_only=source_only,
@@ -354,12 +370,7 @@ def _scan_surface(
     # each entry and, when any are test-sourced, disclose it in known_limits
     # rather than presenting the mix as an undifferentiated route table.
     http_entries = surfaces.get('http', [])
-    test_origin_count = 0
-    if http_entries and not source_only and layout is not None:
-        for entry in http_entries:
-            is_test_origin = layout.is_test(Path(entry['file']))
-            entry['test_origin'] = is_test_origin
-            test_origin_count += is_test_origin
+    test_origin_count = _label_http_origins(http_entries, source_only, layout)
 
     _relativize_surface_paths(surfaces, path)
 

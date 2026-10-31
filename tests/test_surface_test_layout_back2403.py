@@ -155,9 +155,17 @@ def test_required_configuration_read_failure_preserved(tmp_path, query):
     assert names(SurfaceAdapter(str(tmp_path), 'type=env').get_structure()) == {'APP'}
 
 
-def test_precise_probe_named_helper_does_not_prune_production_sibling(tmp_path):
+@pytest.mark.parametrize('present', [False, True])
+def test_precise_probe_named_helper_does_not_prune_production_sibling(tmp_path, present):
     project(tmp_path)
     write(tmp_path, '.reveal.yaml', 'test_layout:\n  additional_paths: [helpers/__surface_source__]\n')
-    write(tmp_path, 'helpers/__surface_source__', 'declared optional helper\n')
+    if present:
+        write(tmp_path, 'helpers/__surface_source__', 'declared optional helper\n')
     env(tmp_path, 'helpers/app.py', 'APP')
+    assert names(SurfaceAdapter(str(tmp_path), 'source_only=true').get_structure()) == {'APP'}
+
+
+def test_filename_shaped_directory_does_not_classify_its_children(tmp_path):
+    project(tmp_path)
+    env(tmp_path, 'helper_test.py/app.py', 'APP')
     assert names(SurfaceAdapter(str(tmp_path), 'source_only=true').get_structure()) == {'APP'}
