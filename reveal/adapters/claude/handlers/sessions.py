@@ -9,7 +9,6 @@ from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
 
 from ..analysis import search_sessions_for_term, get_files_touched
-from ....utils.parallel import grep_files as _grep_files, worker_lost_warning
 from ....utils.results import ResultBuilder, note_warning
 from .workspace import skipped_entries_warning
 
@@ -326,9 +325,9 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
         snippet_window = max(60, min(500, int(query_params.get('snippet', 120))))
     except (ValueError, TypeError):
         snippet_window = 120
-    lost: List[Path] = []
+    skipped: List[Tuple[Path, BaseException]] = []
     matches = search_sessions_for_term(all_sessions, term, whole_word=whole_word,
-                                       window_chars=snippet_window, lost_out=lost)
+                                       window_chars=snippet_window, errors_out=skipped)
 
     result = ResultBuilder.create(
         result_type='claude_cross_session_search',
@@ -345,8 +344,8 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
             'matches': matches,
         }
     )
-    note_warning(result, worker_lost_warning(
-        lost, "they were not searched, so matches may be missing", conversation_base))  # BACK-1754
+    note_warning(result, skipped_entries_warning(
+        'sessions', skipped, "they were not searched, so matches may be missing"))
     return result
 
 
@@ -423,14 +422,9 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
     if since:
         all_sessions = [s for s in all_sessions if s.get('modified', '') >= since]
 
-    # Parallel byte-scan pre-filter.
-    matched_paths = _grep_files([Path(s['path']) for s in all_sessions], [file_path])
-    matched_path_strs = {str(p) for p in matched_paths}
-    candidates = [s for s in all_sessions if s['path'] in matched_path_strs]
-
     results = []
     skipped: List[Tuple[Path, BaseException]] = []
-    for session in candidates:
+    for session in all_sessions:
         try:
             entry = _extract_session_ops(session, file_path)
             if entry:
@@ -459,9 +453,6 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
     )
     note_warning(result, skipped_entries_warning(
         'sessions', skipped, "they were not checked, so matches may be missing"))
-    note_warning(result, worker_lost_warning(
-        matched_paths.lost, "they were not searched, so matches may be missing",
-        conversation_base))  # BACK-1757
     return result
 
 

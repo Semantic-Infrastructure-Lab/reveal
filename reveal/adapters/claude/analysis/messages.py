@@ -237,19 +237,21 @@ def _search_block(block: Dict, lower_term: str, term: str, i: int, role: str, ts
         text = block.get('text', '')
         if _matches_term(text, lower_term, whole_word):
             return {'message_index': i, 'role': role, 'block_type': 'text',
-                    'timestamp': ts, 'excerpt': _find_excerpt(text, term, window=window_chars)}
+                    'timestamp': ts, 'excerpt': _find_excerpt(text, term, window=window_chars, whole_word=whole_word)}
     elif btype == 'thinking':
         text = block.get('thinking', '')
         if _matches_term(text, lower_term, whole_word):
             return {'message_index': i, 'role': role, 'block_type': 'thinking',
-                    'timestamp': ts, 'excerpt': _find_excerpt(text, term, window=window_chars)}
+                    'timestamp': ts, 'excerpt': _find_excerpt(text, term, window=window_chars, whole_word=whole_word)}
     elif btype == 'tool_use':
         inp = block.get('input', {})
         searchable = ' '.join(str(v) for v in inp.values() if isinstance(v, str))
         name = block.get('name', '')
-        if _matches_term(searchable, lower_term, whole_word) or _matches_term(name, lower_term, whole_word):
+        input_matches = _matches_term(searchable, lower_term, whole_word)
+        if input_matches or _matches_term(name, lower_term, whole_word):
+            target = searchable if input_matches else name
             return {'message_index': i, 'role': role, 'block_type': f'tool_use:{name}',
-                    'timestamp': ts, 'excerpt': _find_excerpt(searchable or name, term, window=80)}
+                    'timestamp': ts, 'excerpt': _find_excerpt(target, term, window=80, whole_word=whole_word)}
     elif btype == 'tool_result':
         content = block.get('content', '')
         if isinstance(content, list):
@@ -259,7 +261,7 @@ def _search_block(block: Dict, lower_term: str, term: str, i: int, role: str, ts
             text = str(content) if content else ''
         if text and _matches_term(text, lower_term, whole_word):
             return {'message_index': i, 'role': role, 'block_type': 'tool_result',
-                    'timestamp': ts, 'excerpt': _find_excerpt(text, term, window=window_chars)}
+                    'timestamp': ts, 'excerpt': _find_excerpt(text, term, window=window_chars, whole_word=whole_word)}
     return None
 
 
@@ -432,14 +434,31 @@ def get_message_range(messages: List[Dict], session_name: str,
     return base
 
 
-def _find_excerpt(text: str, term: str, window: int = 120) -> str:
-    """Return a short excerpt around the first occurrence of term."""
+def _literal_span(text: str, term: str) -> Optional[tuple[int, int]]:
+    """Locate a lowercase substring in original source coordinates."""
     lower = text.lower()
-    pos = lower.find(term.lower())
+    needle = term.lower()
+    pos = lower.find(needle)
     if pos == -1:
+        return None
+    end = pos + len(needle)
+    if len(lower) == len(text) or not needle:
+        return pos, end
+    offsets = [i for i, char in enumerate(text) for _ in char.lower()]
+    return offsets[pos], offsets[end - 1] + 1
+
+
+def _find_excerpt(text: str, term: str, window: int = 120, *, whole_word: bool = False) -> str:
+    """Return context around a match using original, not lowercased, offsets."""
+    if whole_word:
+        match = re.search(r'\b' + re.escape(term.lower()) + r'\b', text, re.IGNORECASE)
+        span = match.span() if match else None
+    else:
+        span = _literal_span(text, term)
+    if span is None:
         return text[:window]
-    start = max(0, pos - window // 3)
-    end = min(len(text), pos + len(term) + (window * 2 // 3))
+    start = max(0, span[0] - window // 3)
+    end = min(len(text), span[1] + (window * 2 // 3))
     excerpt = text[start:end].strip()
     if start > 0:
         excerpt = '...' + excerpt

@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
-from ....utils.parallel import grep_files
 from .messages import _content_to_blocks, _collect_block_matches, _find_excerpt, _matches_term
 
 
+def _snippet_timestamp(record: Dict[str, Any]) -> str:
+    value = record.get('timestamp')
+    return value[:16].replace('T', ' ') if isinstance(value, str) else ''
+
+
 def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = False,
-                           window_chars: int = 120) -> Dict[str, Any]:
+                           window_chars: int = 120,
+                           errors_out: List[Tuple[Path, BaseException]] | None = None) -> Dict[str, Any]:
     """Scan a JSONL file line-by-line and return the first matching excerpt.
 
     Parses every valid JSON line to maintain an accurate ``message_index`` that
@@ -47,12 +52,12 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
                     continue
                 role = msg.get('type', '')
                 message = msg.get('message')
-                if fallback is None and lower in line.lower():
+                if fallback is None:
                     fallback = _sidecar_hit(msg, role, term, message_index, whole_word, window_chars)
-                if role in ('user', 'assistant') and lower in line.lower() and isinstance(message, dict):
+                if role in ('user', 'assistant') and isinstance(message, dict):
                     content = message.get('content', [])
                     blocks = _content_to_blocks(content)
-                    ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
+                    ts = _snippet_timestamp(msg)
                     matches = _collect_block_matches(blocks, lower, term, message_index, role, ts,
                                                     whole_word=whole_word, window_chars=window_chars)
                     if matches:
@@ -63,8 +68,9 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
                             'message_index': message_index,
                         }
                 message_index += 1
-    except OSError:  # the file vanished or can't be read: no snippet, the hit still stands
-        pass
+    except OSError as exc:
+        if errors_out is not None:
+            errors_out.append((jsonl_path, exc))
     return fallback or {'excerpt': '', 'role': '', 'timestamp': '', 'message_index': None}
 
 
@@ -82,9 +88,9 @@ def _sidecar_hit(msg: Dict[str, Any], role: str, term: str, message_index: int,
     text = sidecar if isinstance(sidecar, str) else json.dumps(sidecar, ensure_ascii=False)
     if not _matches_term(text, term.lower(), whole_word):
         return None
-    ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
+    ts = _snippet_timestamp(msg)
     return {
-        'excerpt': '[toolUseResult] ' + _find_excerpt(text, term, window=window_chars),
+        'excerpt': '[toolUseResult] ' + _find_excerpt(text, term, window=window_chars, whole_word=whole_word),
         'role': role,
         'timestamp': ts,
         'message_index': message_index,
@@ -99,29 +105,24 @@ def search_sessions_for_term(
     whole_word: bool = False,
     window_chars: int = 120,
     lost_out: List[Path] | None = None,
+    errors_out: List[Tuple[Path, BaseException]] | None = None,
 ) -> List[Dict[str, Any]]:
     """Search across multiple sessions for a term and return one snippet per match.
 
-    Uses a two-phase approach:
-
-    * **Phase 1** — ``grep_files()`` runs a parallel byte-level pre-filter
-      across all JSONL files.  Only sessions whose file contains the term bytes
-      proceed to phase 2.
-
-    * **Phase 2** — parse only the matching files line-by-line to extract one
-      representative snippet per session.
+    Each session's existing JSONL reader matches decoded content and extracts one
+    representative snippet. Raw JSON spelling cannot establish that content is absent.
 
     Args:
         sessions: List of session dicts (each must have ``path``, ``session``,
             ``modified``, ``project``).  Produced by
             ``_collect_sessions_from_dir``.
         term: Search term (case-insensitive substring match).
-        workers: Parallel workers for phase 1.  Defaults to 8.
+        workers: Compatibility argument for the former byte prefilter.
         whole_word: If True, only return sessions where the term appears as a
             whole word (word-boundary semantics).  Phase 1 grep is still
             substring for speed; whole-word filtering happens in phase 2.
-        lost_out: When given, receives the session files a dead pool worker kept
-            from being searched (BACK-1754); they are not in the returned matches.
+        lost_out: Compatibility argument for the former byte pool; no workers are used.
+        errors_out: When given, receives sessions whose required read failed.
 
     Returns:
         List of match dicts, sorted most-recent-first, each containing:
@@ -138,20 +139,13 @@ def search_sessions_for_term(
     }
     all_paths = list(path_to_session)
 
-    # Phase 1: parallel byte-level pre-filter (always substring — fast).
-    matching_paths = grep_files(all_paths, term, workers=workers)
-    if lost_out is not None:
-        lost_out.extend(matching_paths.lost)
-
-    # Phase 2: extract one snippet per matching session.
-    # With whole_word=True, sessions that only contain the term as a substring
-    # (e.g. "ict" inside "picture") are filtered out here.
     results = []
-    for path in matching_paths:
+    for path in all_paths:
         session = path_to_session[path]
-        snippet = _extract_first_snippet(path, term, whole_word=whole_word, window_chars=window_chars)
-        if whole_word and not snippet['excerpt']:
-            continue  # no word-boundary match found in this session
+        snippet = _extract_first_snippet(path, term, whole_word=whole_word,
+                                         window_chars=window_chars, errors_out=errors_out)
+        if snippet['message_index'] is None:
+            continue
         results.append({
             'session':       session['session'],
             'modified':      session['modified'],
