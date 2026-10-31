@@ -255,3 +255,13 @@ def test_conventional_nested_child_keeps_project_ancestor_evidence(project):
     assert 'tests/unit/helper.py' not in ranked(root)
     assert ranked(child) == set()
     assert child['test_scope']['files_excluded'] == 1
+
+
+@pytest.mark.parametrize('selectors', ['helpers', '../outside'])
+def test_direct_invalid_mode_is_rejected_before_policy_or_analysis(project, monkeypatch, selectors):
+    write(project / '.reveal.yaml', f'test_layout:\n  additional_paths: [{selectors}]\n')
+    def forbidden(*args, **kwargs):
+        raise AssertionError('invalid tests mode must precede policy and analysis')
+    monkeypatch.setattr(MetricsAdapter, '_collect_filtered_stats', forbidden)
+    with pytest.raises(ValueError, match='tests.*bogus'):
+        MetricsAdapter(str(project), 'hotspots=true&tests=bogus').get_structure()
