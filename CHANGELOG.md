@@ -53,6 +53,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 ### Fixed
 
 - `overview PATH --against REF` no longer exits 3 on every repository that holds one file tree-sitter cannot fully parse. A file that is identical at both refs is left out of the complexity centroid on both sides, and the answer names it; a recovered file that changed, exists on one side only, or is one of more than five is still reported as incomplete, and the error now names the files and suggests `--exclude` (BACK-2432).
+- `markdown://DIR?aggregate=FIELD` text says how many matched files have the field on the headline line (`Files: 78 of 78 matched; 11 have 'type', 67 do not`), instead of `Files: 78 of 78 matched` above a separate `Missing field: 67 files` line. JSON is unchanged (BACK-2434).
 - Git commit filters percent-decode values once, preserving encoded separators, literal plus signs, regex and range semantics. Zoned fractional date bounds now work consistently on Python 3.10 and newer interpreters (BACK-2317).
 - Single-file Metrics results now warn about unknown sort fields, as directory results do. AST output recognizes the optional `method` field instead of incorrectly suggesting that it is an invalid shorthand (BACK-2317).
 - Git commit queries now AND repeated filters, search the complete subject and body before shortening the displayed subject, and keep the ownership-only `merges` parameter from filtering other views. Previously these requests could silently include extra commits or miss matching history (BACK-2312, BACK-2313, BACK-2314).

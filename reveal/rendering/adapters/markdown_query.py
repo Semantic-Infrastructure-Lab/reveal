@@ -120,9 +120,12 @@ def _render_aggregate(data: Dict[str, Any], output_format: str) -> None:
 
     print(f"Aggregate: {field}")
     print(f"Source: {source}/")
-    print(f"Files: {matched} of {total} matched")
+    # 'matched' counts files that pass the filters; say how many of those carry the field (BACK-2434).
+    having = max(matched - missing, 0)
+    split = f"{having} {'has' if having == 1 else 'have'} '{field}'"
     if missing:
-        print(f"Missing field: {missing} files")
+        split += f", {missing} {'does' if missing == 1 else 'do'} not"
+    print(f"Files: {matched} of {total} matched; {split}")
     print()
 
     aggregate = data.get('aggregate', [])

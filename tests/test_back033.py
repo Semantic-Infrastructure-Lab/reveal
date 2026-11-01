@@ -196,14 +196,13 @@ class TestRenderAggregate:
         from reveal.rendering.adapters.markdown_query import render_markdown_query
         result = self._result([{'value': 'guide', 'count': 8}], missing=4)
         out = _capture(render_markdown_query, result, 'text')
-        assert 'Missing' in out
-        assert '4' in out
+        assert ', 4 do not' in out  # the headline states the missing count (BACK-2434)
 
     def test_text_no_missing_line_when_zero(self):
         from reveal.rendering.adapters.markdown_query import render_markdown_query
         result = self._result([{'value': 'guide', 'count': 10}], missing=0)
         out = _capture(render_markdown_query, result, 'text')
-        assert 'Missing' not in out
+        assert 'do not' not in out and 'Missing' not in out
 
     def test_empty_aggregate_shows_message(self):
         from reveal.rendering.adapters.markdown_query import render_markdown_query
