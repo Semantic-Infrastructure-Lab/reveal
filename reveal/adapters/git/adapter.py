@@ -346,7 +346,7 @@ class GitAdapter(ResourceAdapter):
         if filter_query:
             # No fallback to "no filters": that would answer an unfiltered query as if it
             # were the filtered one (BACK-1059). A ValueError here fails the query.
-            self.query_filters = parse_query_filters(filter_query)
+            self.query_filters = parse_query_filters(filter_query, percent_decode_values=True)
 
     def __init__(self, resource: Optional[str] = None,
                  query: Optional[Union[str, Dict[str, Any]]] = None, *,

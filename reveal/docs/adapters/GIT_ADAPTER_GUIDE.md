@@ -138,6 +138,8 @@ git://.@main?limit=100&sort=date
 
 Message filters search the complete commit subject and body. Listed commits still show a subject preview of at most 100 characters; matching text may therefore be absent from that preview.
 
+Commit-filter values are percent-decoded once after the query is split. Use `%20` for a space, `%26` for `&`, `%3D` for `=`, and `%25` for a literal percent sign. A literal `+` remains `+`; it is not a form-encoded space. Encoded glob and regex values keep their normal filter meaning.
+
 Repeated filters on the same field also use AND: `?type=history&message~=feat&message~=fix` selects messages matching both patterns.
 
 **Important**: Commit filters (`author`, `email`, `message`, `hash`) filter a commit list. With `?type=history` (`git://.?type=history&message~=bug`, `git://src/auth?type=history&...`) you get only the matching commits. On the repository overview (`git://.?...` or `git://.@main?...`) they filter the "Recent Commits" block, which is printed below the unfiltered branch and tag lists. On a single file, add `type=history`: without it the file's content at the ref is shown and the filter is not applied.
@@ -696,7 +698,7 @@ on every machine: in Pacific daylight time `date>2026-10-27T22:00:00Z` and
 `date>2026-10-27T15:00:00-07:00` both mean after 15:00 local. Write `+` as itself
 (`+02:00`); git:// query values are not percent-decoded. In the hour a daylight-saving change
 repeats, two instants print the same local time, in the commit dates and in a converted bound
-alike.
+alike. Zoned fractional seconds are normalized to microsecond precision on all supported Python versions: short fractions are padded and digits beyond six are truncated.
 
 **A filter field no commit has warns.** The fields of a commit are `hash`, `author`, `email`,
 `date`, `timestamp` and `message`. A filter written with an operator on any other field
