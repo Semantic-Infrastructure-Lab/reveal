@@ -1753,6 +1753,34 @@ _RANK_RULE_ALL = ('unique callers of every called name the callers index records
                   'methods included, under each spelling it is keyed by (bare and receiver-qualified)')
 
 
+def _rank_entry(callee_name: str, caller_records: List[Dict[str, Any]], include_builtins: bool,
+                include_test_framework: bool) -> Optional[Dict[str, Any]]:
+    """One ranking row: the name's unique (file, caller) records, or None when filtered out."""
+    bare_callee = callee_name.split('.')[-1]
+    if not include_builtins and is_builtin_anywhere(bare_callee):
+        # Builtin names collide with real methods in other languages
+        # (Scala/Ruby `.map`, `.filter`, ...) — only drop the callers whose
+        # own language treats the name as a builtin, keep the rest (BACK-748).
+        caller_records = [
+            r for r in caller_records
+            if bare_callee not in conventions_for(_lang_family(r['file'])).builtins
+        ]
+        if not caller_records:
+            return None
+    if not include_test_framework and bare_callee in TEST_FRAMEWORK_CALLEE_NAMES:
+        return None
+    # Deduplicate caller records by (file, caller) to count unique callers
+    seen: Set[Tuple[str, str]] = set()
+    unique_records = []
+    for rec in caller_records:
+        key = (rec['file'], rec['caller'])
+        if key not in seen:
+            seen.add(key)
+            # '/' on every OS, as find_callers writes it (BACK-1586): the index keeps the walker's spelling.
+            unique_records.append({**rec, 'file': to_posix(rec['file'])} if rec.get('file') else rec)
+    return {'name': callee_name, 'caller_count': len(unique_records), 'callers': unique_records}
+
+
 def rank_by_callers(
     path: str,
     top: int = 10,
@@ -1802,33 +1830,9 @@ def rank_by_callers(
         if not include_builtins and callee_name not in index.defined:
             undefined += 1
             continue
-        bare_callee = callee_name.split('.')[-1]
-        if not include_builtins and is_builtin_anywhere(bare_callee):
-            # Builtin names collide with real methods in other languages
-            # (Scala/Ruby `.map`, `.filter`, ...) — only drop the callers whose
-            # own language treats the name as a builtin, keep the rest (BACK-748).
-            caller_records = [
-                r for r in caller_records
-                if bare_callee not in conventions_for(_lang_family(r['file'])).builtins
-            ]
-            if not caller_records:
-                continue
-        if not include_test_framework and callee_name.split('.')[-1] in TEST_FRAMEWORK_CALLEE_NAMES:
-            continue
-        # Deduplicate caller records by (file, caller) to count unique callers
-        seen: Set[Tuple[str, str]] = set()
-        unique_records = []
-        for rec in caller_records:
-            key = (rec['file'], rec['caller'])
-            if key not in seen:
-                seen.add(key)
-                # '/' on every OS, as find_callers writes it (BACK-1586): the index keeps the walker's spelling.
-                unique_records.append({**rec, 'file': to_posix(rec['file'])} if rec.get('file') else rec)
-        entries.append({
-            'name': callee_name,
-            'caller_count': len(unique_records),
-            'callers': unique_records,
-        })
+        entry = _rank_entry(callee_name, caller_records, include_builtins, include_test_framework)
+        if entry is not None:
+            entries.append(entry)
 
     entries.sort(key=lambda e: e['caller_count'], reverse=True)
 
