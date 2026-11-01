@@ -346,7 +346,7 @@ def measure(entry: dict, root: Path, *, policy: dict | None = None,
     result = {'oracle': name, 'sha': head, 'targets': len(edges), 'oracle_edges': expected, 'hit_edges': hit,
               'extra_edges': extra, 'recall': hit / expected, 'precision': hit / (hit + extra),
               'coverage': coverage, 'partial_files': meta['partial_files'], 'edge_rule': meta['edge_rule'],
-              'differences': differences}
+              'differences': differences, 'target_population': _target_population(edges, graph, root, population)}
     scope = Scope(root, scan, importers, config)
     lazy_edges = oracle.lazy_only(scope) if oracle.lazy_only is not None and graph is not None else None
     if lazy_edges is not None:
@@ -387,6 +387,40 @@ def _score(edges: dict[str, list[str]], importers_of, root: Path, population: se
     return hit, expected, extra, differences
 
 
+def _target_population(edges: dict[str, list[str]], graph: dict[str, Any] | None,
+                       root: Path, population: set[Path]) -> dict[str, Any]:
+    """Disclose observed claims outside scoring authority without declaring them false.
+
+    Keep exact Path membership from _score, including oracle keys whose selected
+    truth is empty. Graph rows with no importer in the scoring population are not
+    observed claims. Root-relative identities can name outside-root targets with
+    ``../``; a different Windows drive leaves its identity explicitly unavailable.
+    """
+    if graph is None:
+        return {'status': 'unavailable', 'oracle_targets': len(edges),
+                'reason': 'Go uses per-target package views; a directory-wide observed target population is unavailable'}
+    observed = {target: selected for target, importers in graph['by_target'].items()
+                if (selected := importers & population)}
+    unscored = observed.keys() - {root / target for target in edges}
+    observed_pairs = sum(len(importers) for importers in observed.values())
+    unscored_pairs = sum(len(observed[target]) for target in unscored)
+    paths, unavailable = [], 0
+    for target in unscored:
+        try:
+            paths.append(Path(os.path.relpath(target, root)).as_posix())
+        except ValueError:
+            unavailable += 1
+    result = {'status': 'observed',
+              'basis': 'Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority',
+              'oracle_targets': len(edges), 'observed_targets': len(observed), 'observed_pairs': observed_pairs,
+              'scored_pairs': observed_pairs - unscored_pairs, 'unscored_targets': len(unscored),
+              'unscored_pairs': unscored_pairs, 'unscored_target_paths': sorted(paths),
+              'unscored_target_paths_unavailable': unavailable}
+    if unavailable:
+        result['unscored_target_paths_reason'] = 'Some target identities cannot be represented relative to the corpus root'
+    return result
+
+
 def _lazy_truth(edges: dict[str, list[str]], lazy_edges: dict[str, list[str]], mode: str) -> dict[str, list[str]]:
     """Partition independent file-pair facts, keeping targets whose selected truth is empty."""
     return {target: sorted(set(importers) - set(lazy_edges.get(target, ())) if mode == 'exclude'
@@ -415,7 +449,8 @@ def _measure_lazy(oracle, scope: Scope, edges: dict[str, list[str]], root: Path,
                        'extra_edges': extra, 'recall': hit / expected if expected else None,
                        'precision': hit / (hit + extra) if hit + extra else None,
                        'partial_files': graph['partial_files'], 'edge_rule': graph['edge_rule'],
-                       'differences': differences}
+                       'differences': differences,
+                       'target_population': _target_population(truth, graph, root, population)}
     return modes
 
 
@@ -456,7 +491,8 @@ def _measure_tests(scope: Scope, edges: dict[str, list[str]], cap: int | None,
             'partial_files': graph['partial_files'], 'edge_rule': graph['edge_rule'],
             'test_population': {'directories': scope.config['test_importer_dirs'],
                                 'files': len(labels), 'edges': removed},
-            'differences': differences}
+            'differences': differences,
+            'target_population': _target_population(truth, graph, scope.root, population)}
 
 
 def rendered_callers(scan: Path, target: str) -> list[dict[str, Any]]:
