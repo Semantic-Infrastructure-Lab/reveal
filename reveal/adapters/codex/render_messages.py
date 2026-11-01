@@ -68,6 +68,7 @@ def _render_codex_exchanges(result: dict) -> None:
     """Render prompt -> next-reply pairs (BACK-943)."""
     session_id = result.get('session_id', 'unknown')
     count = result.get('exchange_count', 0)
+    full = result.get('full', False)
 
     if 'error' in result:
         return
@@ -79,15 +80,19 @@ def _render_codex_exchanges(result: dict) -> None:
         ts = (ex.get('prompt_timestamp') or '')[:19].replace('T', ' ')
         prompt = (ex.get('prompt') or '').strip()
         print(f"[{ts}]" + ('  [rolled back -- the user undid this turn]' if ex.get('rolled_back') else ''))
-        print(f"Q: {prompt[:300]}{'...' if len(prompt) > 300 else ''}")
+        if not full and len(prompt) > 300:
+            print(f"Q: {prompt[:300]}")
+            print(f"  ... ({len(prompt) - 300} more chars, use ?full for complete text)")
+        else:
+            print(f"Q: {prompt}")
 
         answer = ex.get('answer')
         if answer is None:
             print("A: [no agent reply found before the next prompt]")
         else:
-            if len(answer) > 600:
+            if not full and len(answer) > 600:
                 print(f"A: {answer[:600]}")
-                print(f"  ... ({len(answer) - 600} more chars)")
+                print(f"  ... ({len(answer) - 600} more chars, use ?full for complete text)")
             else:
                 print(f"A: {answer}")
         print()

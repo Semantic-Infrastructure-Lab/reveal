@@ -126,12 +126,15 @@ reveal 'codex://memories/pipeline'
 | `codex://<UUID>/messages` | All user and agent turns in order |
 | `codex://<UUID>/digest` | Composed readable view: overview + prompts + agent narrative in one call |
 | `codex://<UUID>/exchanges` | Each user prompt paired with the agent's final reply before the next prompt |
+| `codex://<UUID>/exchanges?full` | Complete paired prompts and answers in text output |
 | `codex://<UUID>/message/<n>` | Single raw JSONL record by 0-based index (negative indexing supported, e.g. `-1` = last) |
 | `codex://<UUID>/tools` | Paired `function_call` + `function_call_output` events |
 | `codex://<UUID>/shell` | `exec_command_end` events: command, exit code, output |
 | `codex://<UUID>/errors` | Error, warning, and guardian_warning events |
 | `codex://<UUID>/workflow` | Tool calls + shell commands interleaved chronologically |
 | `codex://<UUID>/timeline` | All events in session order with brief summaries |
+
+Exchange text previews show at most 300 characters per prompt and 600 per answer, with a `?full` hint when cut. Add `?full` or `?full=true` to show complete paired text; `?full=false` keeps the compact preview. JSON always contains complete prompt and answer strings. Existing `--head`, `--tail`, `--range` and `--max-items` controls still limit the number of exchanges; `?limit=0` is unsupported and warns rather than expanding text.
 
 **UUID prefix**: A unique prefix of 7+ hex characters works instead of the full UUID: `reveal 'codex://019e5cc5'` resolves to the matching session. A prefix several sessions share exits 1 with `Ambiguous session prefix ...: matches <ids>; use more characters`; the first UUID group (8 characters) is usually enough.
 

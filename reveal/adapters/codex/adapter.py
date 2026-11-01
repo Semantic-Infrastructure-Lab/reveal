@@ -12,6 +12,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import CodexRenderer
 from ...utils.query import parse_query_params
+from ...utils.query_binding import boolean_value
 from ...utils.query_parser import ParamSpec, param_schema, whole_number
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
@@ -50,6 +51,10 @@ _UUID_RE = re.compile(
 # Snippets kept per session by ?search=; the cut is disclosed with this knob's name (BACK-1384).
 _MATCHES = ParamSpec('matches', 'integer', 'Snippets kept per session by ?search= (0 = all)',
                      3, whole_number, ('matches=10', 'matches=0'), minimum=0, zero_policy='all')
+
+_FULL = ParamSpec('full', 'boolean',
+                  'For /exchanges: show complete prompts and answers in text output; JSON already contains full text',
+                  False, boolean_value, ('full', 'full=true', 'full=false'))
 
 _USER_FILTER = "(thread_source IS NULL OR thread_source = 'user') AND archived = 0"
 
@@ -459,6 +464,7 @@ class CodexAdapter(ResourceAdapter):
         exchanges = _analysis_get_exchanges(records)
         b['exchange_count'] = len(exchanges)
         b['exchanges'] = exchanges
+        b['full'] = _FULL.read(self.query_params)
         return b
 
     def _result_message(self, records: List[Dict[str, Any]], session_row: Dict[str, Any], index_str: str) -> Dict[str, Any]:
@@ -549,7 +555,7 @@ class CodexAdapter(ResourceAdapter):
             'query_params': {
                 'filter': 'Metadata filter across sessions by title/first-message substring (SQLite index, no JSONL scan) — codex://sessions/?filter=<term>. Renamed from ?search= (BACK-947) to match claude://\'s filter/search split.',
                 'search': 'Full-text search across all session JSONL files — codex://sessions/?search=<term>. Renamed from ?content= (BACK-947) to match claude://\'s ?search= meaning content search.',
-                **param_schema([_MATCHES]),
+                **param_schema([_MATCHES, _FULL]),
                 'since': 'Lower-bound date filter (ISO 8601 or "today") on session updated_at — codex://sessions/?filter=<term>&since=<date> or ?search=<term>&since=<date>',
                 'until': 'Upper-bound date filter (ISO 8601) on session updated_at, pairs with ?since= — codex://sessions/?filter=<term>&since=<date>&until=<date>',
                 'last': 'Last agent message only, for fast session recovery — codex://<UUID>?last',
@@ -605,6 +611,7 @@ class CodexAdapter(ResourceAdapter):
                 'codex://<UUID>/timeline                            # all events in order\n'
                 'codex://<UUID>/digest                              # composed: overview + prompts + agent narrative\n'
                 'codex://<UUID>/exchanges                           # each prompt paired with the agent\'s next reply\n'
+                'codex://<UUID>/exchanges?full                      # complete paired prompts and answers\n'
                 'codex://<UUID>/message/<n>                         # raw JSONL record by index (0-based, negative OK)\n'
                 'codex://info                                       # install paths + DB stats\n'
                 'codex://history                                    # ~/.codex/history.jsonl\n'
