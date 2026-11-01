@@ -473,10 +473,18 @@ def _sole_recovered_files(raw: Dict[str, Any]) -> Optional[List[str]]:
 
 
 def _same_bytes(rel: str, base_root: Path, head_root: Path) -> bool:
+    """The file's content is the same at both refs, ignoring line endings.
+
+    The base side is written from the commit and the head side is the working tree; a checkout
+    with core.autocrlf stores LF and shows CRLF, which is the same file. CRLF is read as LF on
+    both sides, so only a real content change makes a file "changed".
+    """
     try:
-        return (base_root / rel).read_bytes() == (head_root / rel).read_bytes()
+        base = (base_root / rel).read_bytes().replace(b'\r\n', b'\n')
+        head = (head_root / rel).read_bytes().replace(b'\r\n', b'\n')
     except OSError:
         return False  # an unreadable side cannot prove the file unchanged
+    return base == head
 
 
 def _recovered_listing(raw: Dict[str, Any]) -> Tuple[Set[str], int]:

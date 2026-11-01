@@ -64,6 +64,25 @@ def test_unchanged_recovered_file_is_excluded_and_comparison_completes(tmp_path)
     assert 'identical at both refs' in excluded[0]['message']
 
 
+def test_line_ending_only_difference_still_counts_as_unchanged(tmp_path):
+    """A Windows checkout with core.autocrlf stores LF in the commit and CRLF in the working tree:
+    the same file, so the exclusion must hold (the Windows CI shard failed on it)."""
+    base = make_repo(tmp_path)
+    (tmp_path / 'broken.sh').write_bytes(BROKEN_SHELL.replace('\n', '\r\n').encode('utf-8'))
+    response, result = compare(tmp_path, base)
+    assert response.returncode == 0, response.stdout
+    assert result['analysis']['complete'] is True
+    assert result['analysis']['complexity_excluded'] == ['broken.sh']
+
+
+def test_changed_content_is_not_masked_by_line_ending_normalisation(tmp_path):
+    base = make_repo(tmp_path)
+    changed = BROKEN_SHELL.replace('echo ok', 'echo changed').replace('\n', '\r\n')
+    (tmp_path / 'broken.sh').write_bytes(changed.encode('utf-8'))
+    response, _ = compare(tmp_path, base)
+    assert response.returncode == 3
+
+
 def test_exclusion_answer_equals_explicit_exclude(tmp_path):
     base = make_repo(tmp_path)
     _, implicit = compare(tmp_path, base)
