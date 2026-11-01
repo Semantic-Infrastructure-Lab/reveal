@@ -298,7 +298,7 @@ class GitAdapter(ResourceAdapter):
                 result_control_parts.append(f"{k}={v}")
             # Operational parameters (exclude from both)
             elif k in ['type', 'detail', 'element', 'ignore', 'raw', 'context',
-                       'no_merges', 'content', 'content~', 'bucket']:
+                       'no_merges', 'merges', 'content', 'content~', 'bucket']:
                 continue
             # ?ref= overrides the starting ref (alias for @ref in the URI)
             elif k == 'ref':
@@ -486,12 +486,8 @@ class GitAdapter(ResourceAdapter):
                     "not reflect it.",
                     file=sys.stderr,
                 )
-            # 'merges' is legitimately read from self.query directly by
-            # get_ownership() even though _separate_query_parameters()
-            # *also* routes it into query_filters (it isn't in that
-            # method's operational-key exclusion list) — exclude it here
-            # so a real ownership param doesn't get flagged as inert.
-            inert_keys = set(self._filter_keys) - {'merges'}
+            # Ownership aggregates unfiltered; operational keys are separated above.
+            inert_keys = set(self._filter_keys)
             if inert_keys:
                 fields = ', '.join(f"'{key}'" for key in sorted(inert_keys))
                 print(
