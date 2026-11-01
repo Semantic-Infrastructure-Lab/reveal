@@ -50,6 +50,11 @@ def test_default_and_explicit_false_keep_bounded_actionable_previews(session, qu
     assert result.returncode == 0, result.stderr
     assert 'PROMPT_END' not in result.stdout and 'ANSWER_END' not in result.stdout
     assert 'more chars' in result.stdout and '?full' in result.stdout
+    lines = result.stdout.splitlines()
+    assert f'Q: {PROMPT[:300]}' in lines
+    assert f'A: {ANSWER[:600]}' in lines
+    assert f'... ({len(PROMPT) - 300} more chars, use ?full for complete text)' in result.stdout
+    assert f'... ({len(ANSWER) - 600} more chars, use ?full for complete text)' in result.stdout
     assert 'second question' in result.stdout and 'second answer' in result.stdout
     assert '[no agent reply found before the next prompt]' in result.stdout
 
@@ -178,3 +183,33 @@ def test_non_exchange_json_preserves_one_full_warning(session):
                and 'full' in warning.get('fields', [])]
     assert len(ignored) == 1
     assert 'full' not in result.stderr
+
+
+@pytest.fixture
+def whitespace_prompt(session, tmp_path):
+    prompt = '\n    def example():\n        return 1\n\n'
+    records = [
+        {'type': 'event_msg', 'payload': {'type': 'user_message', 'message': prompt}},
+        {'type': 'event_msg', 'payload': {'type': 'agent_message', 'message': 'answer'}},
+    ]
+    (tmp_path / 'rollout.jsonl').write_text(
+        ''.join(json.dumps(record) + '\n' for record in records), encoding='utf-8')
+    return session, prompt
+
+
+@pytest.mark.parametrize('query', ['full', 'full=true'])
+def test_full_text_preserves_prompt_code_indentation_and_blank_lines(whitespace_prompt, query):
+    uri, prompt = whitespace_prompt
+    result = run(uri + '?' + query)
+    assert result.returncode == 0, result.stderr
+    assert f'Q: {prompt}\n' in result.stdout
+    assert api.query(uri + '?' + query)['exchanges'][0]['prompt'] == prompt
+
+
+@pytest.mark.parametrize('query', ['', 'full=false'])
+def test_compact_text_keeps_existing_prompt_whitespace_normalization(whitespace_prompt, query):
+    uri, prompt = whitespace_prompt
+    result = run(uri + ('?' + query if query else ''))
+    assert result.returncode == 0, result.stderr
+    assert f'Q: {prompt.strip()}\n' in result.stdout
+    assert f'Q: {prompt}\n' not in result.stdout
