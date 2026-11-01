@@ -1534,7 +1534,7 @@ class HelpAdapter(ResourceAdapter):
     # one cluster-coverage line per cluster for whatever isn't already named
     # here — see BACK-1154's original complaint (15 of 33 adapters absent).
     _CURATED_DECISION_TREE: List[Dict[str, str]] = [
-        {'want': 'get oriented in an unfamiliar codebase (languages, quality, hotspots, activity)',
+        {'want': 'get oriented in an unfamiliar codebase (compact map: scope, components, imports)',
          'use': 'overview://', 'example': "reveal overview://src/"},
         {'want': 'read one function or class by name',
          'use': 'reveal FILE NAME', 'example': "reveal src/app.py load_config"},
@@ -1548,8 +1548,10 @@ class HelpAdapter(ResourceAdapter):
          'use': 'calls://', 'example': "reveal 'calls://src/?callees=my_fn&depth=2'"},
         {'want': "see a function's inputs, side effects (db/http/file/env) and exits",
          'use': '--boundary / --sideeffects', 'example': "reveal src/app.py my_fn --boundary"},
-        {'want': 'map HTTP routes, env vars, network, db and filesystem access',
+        {'want': 'map HTTP routes',
          'use': 'surface://', 'example': "reveal 'surface://src/?type=http'"},
+        {'want': 'map recognized boundary sites (env vars, network/db imports, file writes and more)',
+         'use': 'surface://', 'example': "reveal 'surface://src/'"},
         {'want': 'search text or an identifier across many files (with enclosing-function context)',
          'use': '--grep', 'example': "reveal src/ --grep 'API_TIMEOUT'"},
         {'want': 'check a file or directory for quality issues (lint-style rules)',
@@ -1570,6 +1572,8 @@ class HelpAdapter(ResourceAdapter):
          'use': 'git://', 'example': "reveal 'git://.?type=history&message~=fix'"},
         {'want': 'search markdown docs or notes by content',
          'use': 'markdown://', 'example': "reveal docs/ --grep 'keyword'"},
+        {'want': 'read one section of a markdown document',
+         'use': 'reveal FILE --section HEADING', 'example': 'reveal README.md --section "Building"'},
         {'want': 'inspect a SQLite, MySQL database, or Excel workbook',
          'use': 'sqlite:// / mysql:// / xlsx://', 'example': "reveal sqlite:///path/to/app.db"},
         {'want': 'inspect environment variables or Python runtime',
