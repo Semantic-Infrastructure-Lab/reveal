@@ -674,36 +674,19 @@ def is_unsafe_scan_root(path: Union[str, PurePath, None]) -> bool:
     return real in _unsafe_scan_roots()
 
 
-def _non_python_display_name(fpath: Path) -> str:
-    """Human-readable language label for *fpath*, or '' if Python/unknown.
-
-    Derived from the registry's single-sourced language_for_extension()
-    instead of a hand-maintained extension table (BACK-431 Issue B) — the
-    prior _NON_PYTHON_LANG_EXTS dict was itself created to fix BACK-403,
-    which was caused by exactly this kind of table falling out of sync.
-    Content-sniffs `.h` for C++ rather than always resolving it to C
-    (BACK-421/630).
-    """
-    lang = _language_for_path(fpath)
-    if not lang or lang == 'python':
-        return ''
-    return LANGUAGE_DISPLAY_NAMES.get(lang, lang.capitalize())
-
-
 def detect_non_python_language(path: Path) -> str:
-    """Return dominant non-Python source language for path, or '' if Python/unknown.
+    """Return the dominant non-Python code language, or '' for Python/non-code.
 
-    Walks the directory counting source files by extension and returns the most
-    common non-Python language found.  Used to emit actionable "not yet supported"
-    notes instead of silent empty results.
+    Use the census's registry-backed code extensions and header language detection,
+    so documentation and data formats cannot outvote source files. Display aliases
+    such as TypeScript/TSX still contribute to one human-readable label.
     """
-    if path.is_file():
-        return _non_python_display_name(path)
+    files = (path,) if path.is_file() else _walk_code_files(path)
     counts: Dict[str, int] = {}
-    for fpath in _walk_code_files(path):  # the files the empty scan itself looked at
-        lang = _non_python_display_name(fpath)
-        if lang:
-            counts[lang] = counts.get(lang, 0) + 1
+    for lang, entry in tally_files_by_language(files).items():
+        if lang != 'python':
+            label = _display_name_for_language(lang)
+            counts[label] = counts.get(label, 0) + entry['count']
     return max(counts, key=counts.__getitem__) if counts else ''
 
 
