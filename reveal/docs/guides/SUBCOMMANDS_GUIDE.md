@@ -403,13 +403,13 @@ reveal calls [PATH] --modules [--external]
 | `--detail` | `detail` | With `--callees`: params and effects of every definition reached; any other mode exits 2 |
 | `--root NAME` | `root` | Retired: `--callees NAME --depth N` is the same walk (`--root` defaulted to depth 2); prints a note |
 | `--depth N` | `depth` | Signed whole integer, clamped 1–5: callers levels (default 1), callee walk levels for `--callees` (default 1) and the retired `--root` (default 2); other modes ignore it with a warning |
-| `--rank callers` | `rank=callers` | Rank every function by caller count |
+| `--rank callers` | `rank=callers` | Rank the functions and classes the path defines by caller count |
 | `--top N` | `top` | Entries for `--rank` (default 10) or the retired `--uncalled` (default all); 0 = all; negative values reject |
 | `--uncalled` | `uncalled` | Retired (D8): functions/methods with no callers; `--callers NAME` for one function, the language's own tool for a project-wide list; prints a note and no confidence |
 | `--type KIND` | `type` | With the retired `--uncalled`: `function` (module-level only) or `method` |
 | `--modules` | `modules` | Retired: module graph, one edge per import under PATH (`reveal imports PATH --importers --scope path`); prints a note |
 | `--external` | `external` | Retired, with `--modules`: importers from the whole project root (`reveal imports PATH --importers`) |
-| `--builtins` | `builtins` | Include language builtins in callees (every depth), the retired root and rank output |
+| `--builtins` | `builtins` | Include language builtins in callees (every depth), the retired root and rank output; rank also lists names the path does not define (library methods) |
 | `--test-framework` | `test-framework` | Count test-framework entrypoints (rank callers, and the retired `--uncalled`) |
 
 `?format=dot` (Graphviz) has no subcommand spelling; `--format` takes `text` or `json`.

@@ -9,9 +9,10 @@ from reveal.adapters.calls import index as calls_index
 
 
 class _Index(dict):
-    """The slice of CallersIndex ``rank_by_callers`` reads: items(), skipped."""
+    """The slice of CallersIndex ``rank_by_callers`` reads: items(), skipped, defined."""
 
     skipped = ()
+    defined = frozenset({'target'})  # rank lists defined names only (BACK-2433)
 
 
 def test_rank_by_callers_records_name_their_file_with_forward_slashes(monkeypatch):

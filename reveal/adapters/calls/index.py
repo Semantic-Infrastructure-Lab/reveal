@@ -439,6 +439,8 @@ class CallersIndex(Dict[str, List[Dict[str, Any]]]):
     skipped: List[Tuple[str, str]]
     traversal_failures: List[PathFailure]
     dropped: Optional[Dict[str, Any]] = None
+    # Lookup keys of the functions, methods and classes the indexed files define (BACK-2433).
+    defined: FrozenSet[str] = frozenset()
 
 
 def _disclose_skipped(result: Dict[str, Any], skipped: Sequence[Tuple[str, str]], *,
@@ -560,9 +562,11 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
     index.skipped = list(structures.skipped)
     index.dropped = dropped_values_summary(structures)
     index.traversal_failures = list(getattr(structures, 'traversal_failures', ()))
+    defined: Set[str] = set()
 
     for file_struct in structures:
         file_path = file_struct.get('file', '')
+        defined.update(_defined_keys(file_struct))
         # Build alias → canonical name map for this file so that calls using
         # an import alias (e.g. `h` for `from utils import helper as h`) also
         # index the definition name (`helper`).  This prevents find_uncalled
@@ -595,8 +599,22 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
                 record.update(_scope_record_fields(elem, callee))
                 _index_callee(index, callee, record, alias_map, class_aliases)
 
+    index.defined = frozenset(defined)
     _cache_callers_index(dir_str, cache_key, index, structures)
     return index
+
+
+def _defined_keys(file_struct: Dict[str, Any]) -> Iterator[str]:
+    """Index keys a call to something this file defines is recorded under: every named call
+    source (function, method, test block, callable class field) and every class, by the same
+    lookup keys a definition search uses plus the bare segment the index keys calls by."""
+    names = [elem.get('name', '') for elem in call_sources(file_struct)
+             if elem.get('category') in _CALL_SOURCE_CATEGORIES and elem.get('category') != 'modules']
+    names += [elem.get('name', '') for elem in file_struct.get('elements', []) if elem.get('category') == 'classes']
+    for name in names:
+        if name:
+            yield from lookup_keys(name)
+            yield _bare_callee_name(name)
 
 
 def find_callees(
@@ -1728,29 +1746,41 @@ def find_uncalled(
         dropped=dropped_values_summary(structures))
 
 
+_RANK_RULE = ('unique callers of each function, method or class defined under the path, matched by name as '
+              '?callers=NAME counts them (a name shared with a library method also counts its calls); names '
+              'defined elsewhere are not ranked (builtins=true ranks them)')
+_RANK_RULE_ALL = ('unique callers of every called name the callers index records, builtins and library '
+                  'methods included, under each spelling it is keyed by (bare and receiver-qualified)')
+
+
 def rank_by_callers(
     path: str,
     top: int = 10,
     include_builtins: bool = False,
     include_test_framework: bool = False,
 ) -> Dict[str, Any]:
-    """Rank all callable symbols by how many unique callers they have.
+    """Rank the functions, methods and classes defined under *path* by unique callers.
 
-    Uses the already-built callers index (cached) — zero extra infrastructure.
+    Uses the already-built callers index (cached) — zero extra infrastructure. Only index keys a
+    scanned file defines are ranked (BACK-2433): library methods (``d.get``, ``xs.append``),
+    stdlib classes and receiver-qualified spellings of one call are lookup keys, not functions,
+    and used to top the list. Each count is what ``?callers=NAME`` reports for that name.
 
     Args:
         path: Root directory (or file) to analyse.
         top: Maximum number of entries to return (default 10; 0 or less means all).
-        include_builtins: If False (default), skip Python-file callers of
-            Python builtins from the ranking; callers of same-named methods
-            in other languages (e.g. Scala/Ruby ``.map``) are unaffected.
+        include_builtins: If False (default), rank only names the scan defines and skip
+            Python-file callers of Python builtins; callers of a defined same-named method
+            in another language (e.g. a Ruby ``map``) are kept. True ranks every index key,
+            builtins and library methods included (the graph invariants read it so).
         include_test_framework: If False (default), suppress test-framework symbols
             (expect, describe, it, vi, jest, cy, etc.) that dominate TS rankings
             with fake in-degree.  Pass ``?test-framework=true`` in the URI to opt in.
 
     Returns:
-        Dict with ``path``, ``top``, ``total_unique_callees``, and ``entries``
-        sorted descending by ``caller_count``.
+        Dict with ``path``, ``top``, ``total_unique_callees`` (ranked names),
+        ``undefined_callees`` (called names left out because the scan does not define them),
+        ``rule`` and ``entries`` sorted descending by ``caller_count``.
 
     Example entry::
 
@@ -1767,7 +1797,11 @@ def rank_by_callers(
     index = build_callers_index(path)
 
     entries = []
+    undefined = 0
     for callee_name, caller_records in index.items():
+        if not include_builtins and callee_name not in index.defined:
+            undefined += 1
+            continue
         bare_callee = callee_name.split('.')[-1]
         if not include_builtins and is_builtin_anywhere(bare_callee):
             # Builtin names collide with real methods in other languages
@@ -1806,6 +1840,8 @@ def rank_by_callers(
         'path': path,
         'top': shown,
         'total_unique_callees': len(entries),
+        'undefined_callees': undefined,
+        'rule': _RANK_RULE_ALL if include_builtins else _RANK_RULE,
         'entries': entries[:shown],
     }, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()), dropped=getattr(index, 'dropped', None))
 

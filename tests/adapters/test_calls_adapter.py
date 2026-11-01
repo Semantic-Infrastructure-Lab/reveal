@@ -1389,8 +1389,18 @@ class TestRankByCallersCrossLanguageBuiltins(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
+    # The Ruby fixtures define their own map/filter: rank lists defined names only (BACK-2433),
+    # and a Python builtin's name must not hide another language's defined method (BACK-748).
     def test_ruby_map_filter_survive_default_ranking(self):
         _write(self.tmpdir, 'sample.rb', '''
+class Items
+  def map
+  end
+
+  def filter
+  end
+end
+
 def process(items)
   items.map { |x| x * 2 }.filter { |x| x > 0 }
 end
@@ -1402,6 +1412,11 @@ end
 
     def test_python_builtin_still_filtered_in_mixed_project(self):
         _write(self.tmpdir, 'sample.rb', '''
+class Items
+  def map
+  end
+end
+
 def process(items)
   items.map { |x| x }
 end

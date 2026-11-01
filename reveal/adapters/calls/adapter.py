@@ -109,7 +109,8 @@ _MODULES = _flag_spec('modules', 'Module-level dependency graph: one edge per im
 _EXTERNAL = _flag_spec('external', 'With modules: also count importers from the rest of the project root '
                        '(imports scope=root; retired with modules)')
 _BUILTINS = _flag_spec('builtins', 'Include language builtins (len, str, ValueError, ...) in callees (every '
-                       'depth), root and rank output (default: false)')
+                       'depth), root and rank output; in rank, also names the scan does not define '
+                       '(library methods such as dict.get) (default: false)')
 _DETAIL = _flag_spec('detail', 'Callees only: add params and effects to every definition the walk reaches '
                      '(not measured, W-CALLS-9); with another mode it exits 2')
 _TEST_FRAMEWORK = _flag_spec('test-framework', 'Include test-framework entrypoints: as callers in rank, and as '

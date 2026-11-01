@@ -91,7 +91,7 @@ calls://<path>?rank=callers[&top=N]
 | `path` | Directory (or file) to index — typically `src/` or `.` |
 | `callers` | Function name to find **callers of** (reverse lookup); `target` is its older name |
 | `callees` | Function name, or `FILE:NAME`, to find **callees of** (forward lookup) |
-| `rank` | Set to `callers` to rank all functions by in-degree (coupling metrics) |
+| `rank` | Set to `callers` to rank the functions and classes the path defines by in-degree (coupling metrics) |
 | `top` | Max results for `?rank=callers` (default: 10; `0` = all) |
 | `depth` | Levels for `?callers` and `?callees` (default: 1, max: 5) |
 | `detail` | `?callees` only: add each reached definition's params and effects |
@@ -198,7 +198,7 @@ callee → [(file, caller_func, line), ...]
 | `uncalled` | flag | — | Retired (D8): lists functions/methods with no static callers, with no confidence; use `?callers=NAME` for one function (see [Retired spellings](#retired-spellings)) |
 | `top` | integer | 10 for `?rank`, all for `?uncalled` | Max results for `?rank=callers` or `?uncalled`; `0` = all; a negative or non-whole value exits 2. `--limit N` becomes `top=N` |
 | `depth` | integer | 1 (the retired `?root`: 2) | Levels for `?callers` and `?callees` (and the retired `?root`): a signed whole integer clamped 1–5 (1 = direct only); `depth=abc` or `1.5` exits 2. A callee walk beyond depth 1 is not measured (W-CALLS-9) |
-| `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` at every depth, the retired `?root` and `?rank=callers`) |
+| `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` at every depth, the retired `?root` and `?rank=callers`); in `?rank=callers` also ranks names the scan does not define, such as library methods |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot`; another value exits 2 |
 | `root` | string | — | Retired: use `callees=NAME&depth=N`, the same walk (`?root` defaults to depth 2). A replaced-by note is printed. Root function name (or `FILE:NAME`) for a level-by-level callee walk. Every matching definition is a starting point and each definition is expanded once, at the shallowest level it is reached. Every call site of an expanded definition is an edge (`call_expr`), including one to a definition already reached, which has `expanded: false`. A callee name that several definitions share, with none in the caller's file or imports, is listed as `ambiguous` with its candidates and not expanded. Totals count edges: `total_edges` = `total_resolved` (ambiguous included, also counted in `total_ambiguous`) + `total_unresolved` |
 | `modules` | boolean | `false` | Retired: a module-level graph, one edge per import that resolves under the path (`imports://<path>?importers&scope=path`, no call count; see [Retired spellings](#retired-spellings)) |
@@ -296,13 +296,13 @@ reveal 'calls://src/?callees=handle_request&detail' --format=json | jq '.definit
 
 ### `rank`
 
-Rank all callable symbols in the project by how many unique callers they have (in-degree coupling metric). Zero new infrastructure — uses the same cached index as `?callers`.
+Rank the functions, methods and classes defined under the path by how many unique callers they have (in-degree coupling metric). Zero new infrastructure — uses the same cached index as `?callers`, and each count is what `?callers=NAME` reports for that name. Called names the scan does not define (library methods such as `dict.get` or `list.append`, stdlib classes, builtins) are counted in `undefined_callees` and not ranked; `builtins=true` ranks every name the index records instead, under each spelling it is keyed by. Matching is by name, so a defined method named like a library method (`get`) also collects that library method's calls.
 
 ```bash
 # Top 10 most-called functions
 reveal 'calls://src/?rank=callers'
 
-# Top 20, include builtins
+# Top 20, every called name including builtins and library methods
 reveal 'calls://src/?rank=callers&top=20&builtins=true'
 ```
 
@@ -310,8 +310,9 @@ Output:
 
 ```
 Most-called functions: src/
-Ranking by:            caller count (in-degree)
-Showing:               10 of 87 unique callees
+Ranking by:            unique callers of each function, method or class defined under the path, …
+Showing:               10 of 87 called definitions
+Not ranked:            412 called names defined elsewhere (library methods, builtins)
 
   validate_item  (5 callers)
     utils/auth.py:42  check_token

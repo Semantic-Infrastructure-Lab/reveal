@@ -1344,7 +1344,7 @@ reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
 # Coupling metrics: rank all functions by how many unique callers they have
 reveal 'calls://src/?rank=callers'             # Top 10 most-called functions
 reveal 'calls://src/?rank=callers&top=20'      # Top 20
-reveal 'calls://src/?rank=callers&builtins=true'  # Include Python builtins
+reveal 'calls://src/?rank=callers&builtins=true'  # Also rank builtins and library methods (dict.get)
 
 # The same queries as a subcommand: one flag per query key, equal JSON
 reveal calls src/ --callers validate_item --depth 2

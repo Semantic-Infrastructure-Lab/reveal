@@ -64,12 +64,22 @@ def test_ranking_states_its_rule_and_the_unranked_names(tmp_path):
     assert 'defined' in result['rule'] and '?callers=' in result['rule']
 
 
+def test_builtins_true_keeps_every_index_key_for_the_graph_invariants(tmp_path):
+    # scripts/graph_invariants.py reads rank&builtins=true as the whole callers index.
+    from reveal.adapters.calls.index import build_callers_index
+    (tmp_path / 'app.py').write_text(SOURCE, encoding='utf-8')
+    full = rank_by_callers(str(tmp_path), top=0, include_builtins=True, include_test_framework=True)
+    assert {entry['name'] for entry in full['entries']} == set(build_callers_index(str(tmp_path)))
+    assert {'get', 'd.get', 'append', 'Path', 'helper'} <= {entry['name'] for entry in full['entries']}
+    assert full['undefined_callees'] == 0 and 'builtins and library methods included' in full['rule']
+
+
 def test_text_output_states_the_rule(tmp_path):
     (tmp_path / 'app.py').write_text(SOURCE, encoding='utf-8')
     response = _run_reveal_direct(f'calls://{tmp_path.as_posix()}/?rank=callers')
     assert response.returncode == 0
     assert 'defined under the path' in response.stdout
-    assert 'not ranked' in response.stdout
+    assert 'Not ranked:' in response.stdout and 'defined elsewhere' in response.stdout
     assert '  get  (' not in response.stdout
 
 

@@ -275,10 +275,13 @@ def _render_ranking_text(data: Dict[str, Any]) -> None:
     entries = data.get('entries', [])
 
     print(f"Most-called functions: {path}")
-    print(f"Ranking by:            caller count (in-degree)")
+    print(f"Ranking by:            {data.get('rule', 'unique callers')}")
     # Counted, not the requested top=: --head/--tail/--range may slice entries after
     # ranking (--tail is not a "top"), and top=10 of 3 callees shows 3 (BACK-1497).
-    print(f"Showing:               {len(entries)} of {total} unique callees")
+    print(f"Showing:               {len(entries)} of {total} called definitions")
+    undefined = data.get('undefined_callees', 0)
+    if undefined:
+        print(f"Not ranked:            {undefined} called names defined elsewhere (library methods, builtins)")
     print()
 
     if not entries:

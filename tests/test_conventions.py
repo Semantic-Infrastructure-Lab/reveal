@@ -96,7 +96,9 @@ class TestScopedBuiltins:
 
     def test_rank_by_callers_hides_python_builtin_keeps_ruby_method(self, tmp_path):
         _write(tmp_path, 'a.py', 'def f(xs):\n    return sorted(xs)\n')
-        _write(tmp_path, 'b.rb', 'def g(xs)\n  xs.sorted\nend\n')
+        # Ruby defines its own `sorted` (rank lists defined names only, BACK-2433); Python's `sorted()`
+        # callers are the builtin and stay out, Ruby callers of the project method stay in (BACK-748).
+        _write(tmp_path, 'b.rb', 'class Bag\n  def sorted\n  end\nend\n\ndef g(xs)\n  xs.sorted\nend\n')
         result = rank_by_callers(str(tmp_path), top=50)
         files = {PureWindowsPath(r['file']).name for e in result['entries'] for r in e.get('callers', [])
                  if e['name'].split('.')[-1] == 'sorted'}

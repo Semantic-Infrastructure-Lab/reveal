@@ -38,7 +38,8 @@ def request(*args):
 def test_relative_and_absolute_ranking_consumers_keep_spelling_and_follow_edit(tmp_path, monkeypatch):
     root = tmp_path / 'project'
     source = root / 'included' / 'deep' / 'caller.py'
-    write(source, 'def caller():\n    return target_old()\n')
+    # The targets are defined: rank lists defined names only (BACK-2433).
+    write(source, 'def target_old():\n    pass\n\ndef caller():\n    return target_old()\n')
     monkeypatch.chdir(tmp_path)
     assert {r['name'] for r in query('project', 'rank=callers&top=0')['entries']} == {'target_old'}
     assert {r['name'] for r in query(root.as_posix(), 'rank=callers&top=0')['entries']} == {'target_old'}
@@ -48,7 +49,7 @@ def test_relative_and_absolute_ranking_consumers_keep_spelling_and_follow_edit(t
     query('project', 'rank=callers&top=0')
     assert index._INDEX_CACHE['project'][1] is relative
     assert index._INDEX_CACHE[str(root)][1] is absolute
-    write(source, 'def caller():\n    return target_new()\n', age=30)
+    write(source, 'def target_new():\n    pass\n\ndef caller():\n    return target_new()\n', age=30)
     assert {r['name'] for r in query('project', 'rank=callers&top=0')['entries']} == {'target_new'}
     assert str(root) not in index._INDEX_CACHE
     assert {r['name'] for r in query(root.as_posix(), 'rank=callers&top=0')['entries']} == {'target_new'}
