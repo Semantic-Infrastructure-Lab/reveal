@@ -139,3 +139,42 @@ def test_registered_sdk_preserves_full_text_and_json_pairing(session, tmp_path):
         assert answer['full'] is False
 
     _run(tmp_path, scenario)
+
+
+@pytest.mark.parametrize('view', ['messages', 'digest', 'sessions'])
+@pytest.mark.parametrize('entry', ['native', 'api', 'cli'])
+def test_full_still_warns_when_selected_mode_does_not_use_it(session, view, entry, capsys):
+    resource = 'sessions' if view == 'sessions' else f'{SESSION_UUID}/{view}'
+    uri = f'codex://{resource}?full'
+    if entry == 'cli':
+        result = run(uri)
+        assert result.returncode == 0, result.stderr
+        warning = result.stderr
+    elif entry == 'api':
+        result = api.query(uri)
+        assert 'full' not in result
+        warning = capsys.readouterr().err
+    else:
+        adapter = CodexAdapter(resource, 'full')
+        assert 'full' not in adapter.get_structure()
+        warning = capsys.readouterr().err
+    assert "'full'" in warning
+    assert 'ignored' in warning or 'has no effect' in warning
+
+
+@pytest.mark.parametrize('override', ['last', 'tokens', 'goal'])
+def test_query_route_override_does_not_claim_full_was_applied(session, override, capsys):
+    api.query(f'{session}?full&{override}')
+    warning = capsys.readouterr().err
+    assert "'full'" in warning and 'ignored' in warning
+
+
+def test_non_exchange_json_preserves_one_full_warning(session):
+    result = run(session.replace('/exchanges', '/messages') + '?full', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    answer = json.loads(result.stdout)
+    ignored = [warning for warning in answer.get('meta', {}).get('warnings', [])
+               if warning.get('type') in ('unknown_query_param', 'unused_query_param')
+               and 'full' in warning.get('fields', [])]
+    assert len(ignored) == 1
+    assert 'full' not in result.stderr
