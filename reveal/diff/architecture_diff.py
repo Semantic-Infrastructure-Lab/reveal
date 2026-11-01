@@ -190,40 +190,57 @@ def _subtree_oid(tree, subpath: str) -> Optional[str]:
         return None
 
 
-def _iter_analyzable_blobs(repo, tree, base_prefix: str = '') -> Iterator[Tuple[str, Any]]:
-    """Yield (relpath, blob) for every analyzable blob under `tree`, recursively.
+def _iter_tree_blobs(repo, tree, base_prefix: str = '') -> Iterator[Tuple[str, Any]]:
+    """Yield (relpath, blob) for every blob under `tree`, recursively.
 
-    Mirrors find_analyzable_files' ignore-dir logic and get_analyzer() filter
-    (reveal/adapters/diff/resolution.py:187), but walks a git tree instead of
-    the filesystem (see _is_skippable_tree_entry).
+    Skips the same directories as find_analyzable_files (see
+    _is_skippable_tree_entry), but walks a git tree instead of the filesystem.
     """
-    from reveal.registry import get_analyzer
-
     for entry in tree:
-        name = entry.name
-        relpath = f"{base_prefix}/{name}" if base_prefix else name
+        relpath = f"{base_prefix}/{entry.name}" if base_prefix else entry.name
         if entry.type_str == 'tree':
-            if _is_skippable_tree_entry(repo, entry):
-                continue
-            yield from _iter_analyzable_blobs(repo, repo[entry.id], relpath)
+            if not _is_skippable_tree_entry(repo, entry):
+                yield from _iter_tree_blobs(repo, repo[entry.id], relpath)
         elif entry.type_str == 'blob':
-            if get_analyzer(relpath, allow_fallback=False):
-                yield relpath, repo[entry.id]
+            yield relpath, repo[entry.id]
+
+
+def _ancestor_blobs(repo, tree, subpath: str) -> Iterator[Tuple[str, Any]]:
+    """Yield (relpath, blob) for the files directly inside each directory above
+    `subpath`, repo root first. Import resolvers climb parent directories for
+    go.mod, Cargo.toml and similar, so the base needs them where the head has them.
+    """
+    node, prefix = tree, ''
+    parts = [p for p in subpath.split('/') if p and p != '.']
+    for depth in range(len(parts)):
+        for entry in node:
+            if entry.type_str == 'blob':
+                yield f"{prefix}{entry.name}", repo[entry.id]
+        node = repo[node[parts[depth]].id]
+        prefix += parts[depth] + '/'
 
 
 @contextmanager
 def materialize_ref(repo, ref: str, subpath: str, cache: Optional[StructureCache] = None):
-    """Materialize the analyzable files under `subpath` at `ref` into a scoped
-    read-only TemporaryDirectory, preserving relative paths.
+    """Materialize `subpath` at `ref` into a read-only TemporaryDirectory.
 
-    Yields the temp root Path — same shape as the live `subpath` directory,
-    so the existing architecture-command helpers can point straight at it.
+    Every file under `subpath` is written, not only the analyzable ones, and so
+    are the files directly inside each ancestor directory, at their real
+    relative positions: the import resolvers read non-code inputs (go.mod,
+    Cargo.toml, tsconfig.json, package.json) from the scope and from above it,
+    and a base that lacks them resolves differently from the head (BACK-2436).
+
+    Yields the path of `subpath` inside the temp tree, the same shape as the
+    live directory, so the architecture helpers can point straight at it.
     Cleaned up unconditionally (context manager) even on exception.
     """
+    from reveal.registry import get_analyzer
+
     commit = _resolve_commit(repo, ref)
     tree = commit.tree
+    parts = [p for p in subpath.split('/') if p and p != '.']
 
-    if subpath in ('', '.'):
+    if not parts:
         scoped_tree = tree
     else:
         try:
@@ -235,20 +252,26 @@ def materialize_ref(repo, ref: str, subpath: str, cache: Optional[StructureCache
         scoped_tree = repo[entry.id]
 
     with tempfile.TemporaryDirectory(prefix='reveal-archdiff-') as tmp:
-        tmp_root = Path(tmp)
+        tmp_base = Path(tmp)
+        scope_root = tmp_base.joinpath(*parts)
+        for relpath, blob in _ancestor_blobs(repo, tree, subpath):
+            dest = tmp_base / relpath
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(blob.data)
         seen_oids: Set[str] = set()
-        for relpath, blob in _iter_analyzable_blobs(repo, scoped_tree):
-            dest = tmp_root / relpath
+        for relpath, blob in _iter_tree_blobs(repo, scoped_tree):
+            dest = scope_root / relpath
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(blob.data)
             oid = str(blob.id)
-            if cache is not None and oid not in seen_oids:
+            if cache is not None and oid not in seen_oids and get_analyzer(relpath, allow_fallback=False):
                 seen_oids.add(oid)
                 # Dedup within this single materialization pass: if the same
                 # blob OID recurs at another path (duplicate content), its
                 # structure is parsed once and reused — see StructureCache.
                 cache.get_structure(dest, oid)
-        yield tmp_root
+        scope_root.mkdir(parents=True, exist_ok=True)
+        yield scope_root
 
 
 def _fast_exit_possible(repo, base_commit, subpath: str) -> bool:
