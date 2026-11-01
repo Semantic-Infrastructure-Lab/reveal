@@ -89,7 +89,8 @@ Two problems shape the current work.
 3. **One quality family.** `metrics` absorbs `hotspots` (BACK-2069, BACK-2149); repeatable
    `--output FORMAT[=PATH]` sinks replace `--also-json` (BACK-2089); commands share
    their requested parses instead of repeating them
-   (BACK-1889, BACK-1890, BACK-1885).
+   (BACK-1889, BACK-1885). Compact overview already uses one import analysis;
+   the old dashboard assessment passes were removed.
 4. **The rest of the result contract.** Typed outcomes at the remaining adapter and analyzer
    boundaries (BACK-1059, BACK-1857), one rendering layer (BACK-916), one scan-budget policy
    (BACK-1052).
