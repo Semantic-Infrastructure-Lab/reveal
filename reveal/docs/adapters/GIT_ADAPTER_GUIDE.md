@@ -136,6 +136,8 @@ git://.?type=history&author~=John&message~=bug
 git://.@main?limit=100&sort=date
 ```
 
+Message filters search the complete commit subject and body. Listed commits still show a subject preview of at most 100 characters; matching text may therefore be absent from that preview.
+
 Repeated filters on the same field also use AND: `?type=history&message~=feat&message~=fix` selects messages matching both patterns.
 
 **Important**: Commit filters (`author`, `email`, `message`, `hash`) filter a commit list. With `?type=history` (`git://.?type=history&message~=bug`, `git://src/auth?type=history&...`) you get only the matching commits. On the repository overview (`git://.?...` or `git://.@main?...`) they filter the "Recent Commits" block, which is printed below the unfiltered branch and tag lists. On a single file, add `type=history`: without it the file's content at the ref is shown and the filter is not applied.

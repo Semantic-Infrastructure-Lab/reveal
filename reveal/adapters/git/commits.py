@@ -115,7 +115,9 @@ def commit_filter(
         if touches is not None and not touches(repo, commit, subpath):
             return None
         commit_dict: Dict[str, Any] = format_commit_func(commit)
-        if not matches_all_filters_func(commit_dict):
+        # Match the full source message; the returned record remains a short subject preview.
+        filter_record = {**commit_dict, 'message': commit.message.rstrip('\n')}
+        if not matches_all_filters_func(filter_record):
             return None
         if content_pattern and not _commit_diff_contains(repo, commit, subpath, content_pattern):
             return None
