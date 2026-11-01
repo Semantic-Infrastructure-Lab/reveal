@@ -252,7 +252,9 @@ def materialize_ref(repo, ref: str, subpath: str, cache: Optional[StructureCache
         scoped_tree = repo[entry.id]
 
     with tempfile.TemporaryDirectory(prefix='reveal-archdiff-') as tmp:
-        tmp_base = Path(tmp)
+        # Resolved: the resolvers climb and compare resolved paths, and the temp dir is a symlink on macOS
+        # (/var -> /private/var) and may be an 8.3 short name on Windows. Unresolved, the base resolves nothing.
+        tmp_base = Path(tmp).resolve()
         scope_root = tmp_base.joinpath(*parts)
         for relpath, blob in _ancestor_blobs(repo, tree, subpath):
             dest = tmp_base / relpath
