@@ -696,9 +696,10 @@ running reveal, with no zone (`2026-10-27 15:46:04`). A bound with no zone is re
 local time. A bound with a zone is converted to local time first, so it names the same instant
 on every machine: in Pacific daylight time `date>2026-10-27T22:00:00Z` and
 `date>2026-10-27T15:00:00-07:00` both mean after 15:00 local. Write `+` as itself
-(`+02:00`); git:// query values are not percent-decoded. In the hour a daylight-saving change
+(`+02:00`) or percent-encode it (`%2B02:00`); literal `+` is not decoded as a space. In the hour a daylight-saving change
 repeats, two instants print the same local time, in the commit dates and in a converted bound
-alike. Zoned fractional seconds are normalized to microsecond precision on all supported Python versions: short fractions are padded and digits beyond six are truncated.
+alike. Zoned fractional seconds use microsecond precision on all supported Python
+versions: short fractions are padded and digits beyond six are truncated.
 
 **A filter field no commit has warns.** The fields of a commit are `hash`, `author`, `email`,
 `date`, `timestamp` and `message`. A filter written with an operator on any other field
