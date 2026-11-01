@@ -11,9 +11,9 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import CodexRenderer
-from ...utils.query import parse_query_params
+from ...utils.query import parse_query_params, warn_unknown_query_params
 from ...utils.query_binding import boolean_value
-from ...utils.query_parser import ParamSpec, param_schema, whole_number
+from ...utils.query_parser import ParamSpec, param_schema, peek_query_items, whole_number
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
     filter_sessions as _h_filter_sessions,
@@ -126,7 +126,12 @@ class CodexAdapter(ResourceAdapter):
         self.resource = resource
         self.query = query
         self.query_params = parse_query_params(query or '')
-        self._warn_unknown_query_params(self.query_params)  # BACK-507
+        known = set(self.get_schema()['query_params'])
+        query_keys = {key for key, _ in peek_query_items(self.query_params)}
+        if (self._session_id_from_resource() is None or self._session_sub_path() != 'exchanges'
+                or query_keys.intersection(('last', 'tokens', 'goal'))):
+            known.discard('full')
+        warn_unknown_query_params(self.query_params, known, adapter='codex')
 
     # ------------------------------------------------------------------
     # Helpers
