@@ -2265,6 +2265,20 @@ so erroneously retained test edges still count as extras. With zero expected edg
 recall is unavailable (`null`), never fabricated as 100%. Fixture controls prove
 ignored exclusion and incorrect production classification fail, while default rows
 stay unchanged. This single Python population establishes no multilingual parity.
+
+Each directory-graph measurement also records `target_population`, including lazy,
+test-excluded, configured and combined views. `oracle_targets` counts every scored
+target key, including keys whose selected truth is empty. `observed_targets` and
+`observed_pairs` count rendered claims after the same importer-population filter used
+by scoring; `scored_pairs` counts claims on oracle target keys. Claims on other keys
+are reported as `unscored_targets`, `unscored_pairs` and sorted
+`unscored_target_paths`, rather than classified as false positives. These observations
+do not establish complete graph coverage or change existing scores and baselines.
+Paths are relative to the corpus root, including `../` for outside-root targets;
+identities that cannot be made relative are counted as unavailable without exposing
+absolute paths. Go's per-target package view reports this population as unavailable,
+with a reason, rather than inventing zero unscored claims (BACK-2429).
+
 The `python-reveal` population is reveal's own repository at public
 `4d4116cc` (whole tree, tests included): 1,397 files, 544 targets, 4,986/4,986 edges, 0 extra.
 
