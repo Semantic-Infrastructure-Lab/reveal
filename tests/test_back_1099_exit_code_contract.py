@@ -298,3 +298,68 @@ class TestUnparsedSiblingInProjectWideIndex:
             assert "W-CAP-1" in result.stdout
             assert "scan incomplete" not in result.stdout
             assert "No issues found" in result.stdout
+
+
+class TestRuleThatRunsOnNoCheckedFileDisclosesNothing:
+    """BACK-2437: D005 and T006 are Python-only. A target with no Python file is not in their
+    population, so a broken .py elsewhere in the project is not a gap in anything the run
+    answers: no index is built for them, no disclosure, no exit 3. Four or more files take
+    the parallel path, which preloads the project-wide indexes (the in-process test harness
+    runs serially), so the control runs a real subprocess. Control: the same broken
+    sibling still makes a Python target exit 3 (BACK-1826)."""
+
+    @staticmethod
+    def _project(tmp_path: Path, suffix: str, body: str) -> Path:
+        (tmp_path / ".git").mkdir()
+        _write_py(tmp_path, "broken.py", "def foo(:\n    pass\n")
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        for i in range(5):
+            (sub / f"m{i}{suffix}").write_text(body.format(i=i), encoding="utf-8")
+        return sub
+
+    @staticmethod
+    def _check(target: Path, *args: str):
+        import os
+        import subprocess
+        import sys
+        env = dict(os.environ, REVEAL_NO_UPDATE_CHECK="1")
+        return subprocess.run([sys.executable, "-m", "reveal", "check", str(target), "--format", "json", *args],
+                              capture_output=True, text=True, env=env, cwd=str(target), timeout=120)
+
+    def test_preload_and_disclosures_skip_rules_matching_no_checked_file(self, tmp_path):
+        from reveal.rules import scan_caches
+        from reveal.rules.duplicates import D005
+        from reveal.rules.types import T006
+        sub = self._project(tmp_path, ".js", "function f{i}() {{ return {i} }}\n")
+        files = sorted(sub.glob("*.js"))
+        D005._clear_index()
+        try:
+            caches = scan_caches.preload_scan_caches(files, sub, None, None)
+            assert caches["D005"] == {} and caches["T006"] == {}
+            messages = scan_caches.get_scan_disclosures(files, None, None, directory=sub)
+            assert not [m for m in messages if m.startswith(("D005", "T006:"))], messages
+        finally:
+            D005._clear_index()
+            T006._project_index.clear()
+
+    def test_python_target_still_gets_the_index_and_its_disclosure(self, tmp_path):
+        from reveal.rules import scan_caches
+        from reveal.rules.duplicates import D005
+        from reveal.rules.types import T006
+        sub = self._project(tmp_path, ".py", "def f{i}():\n    return {i}\n")
+        files = sorted(sub.glob("*.py"))
+        D005._clear_index()
+        try:
+            caches = scan_caches.preload_scan_caches(files, sub, None, None)
+            assert caches["D005"], "a Python target must still build the D005 index"
+            messages = scan_caches.get_scan_disclosures(files, None, None, directory=sub)
+            assert [m for m in messages if m.startswith("D005")], messages
+        finally:
+            D005._clear_index()
+            T006._project_index.clear()
+
+    def test_python_target_with_broken_sibling_exits_three(self, tmp_path):
+        sub = self._project(tmp_path, ".py", "def f{i}():\n    return {i}\n")
+        result = self._check(sub, "--ignore", "I002")
+        assert result.returncode == 3, result.stdout[-800:]

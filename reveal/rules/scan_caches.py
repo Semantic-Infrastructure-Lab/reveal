@@ -55,6 +55,23 @@ def rule_will_run(code: str, select, ignore) -> bool:
     return code in RuleRegistry.effective_codes(select, ignore)
 
 
+def rule_will_run_on(code: str, select, ignore, files) -> bool:
+    """``rule_will_run`` and the rule applies to at least one checked file.
+
+    A rule that matches no checked file reports "skipped: target does not match" for every
+    one of them, so an index built for it answers nothing the run reports, and a file it
+    could not parse is no gap in the run (BACK-2437). ``files`` is None when the caller has
+    no file list (nothing to test against): then the filter set alone decides, as before.
+    """
+    if not rule_will_run(code, select, ignore):
+        return False
+    if files is None:
+        return True
+    rule_class = RuleRegistry.get_rule(code)
+    return rule_class is None or any(rule_class.matches_target(f) for f in files)
+
+
+
 def _project_roots(directory: Path, files, find_root):
     """Resolve each reached root once, using the rule's own root policy."""
     return scan_roots(files or [directory], find_root)
@@ -85,7 +102,7 @@ def _i002_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
     under `directory` keeps the guess consistent with what workers resolve.
     """
     try:
-        if not rule_will_run("I002", select, ignore):
+        if not rule_will_run_on("I002", select, ignore, files):
             return {}
         from .imports.I002 import I002, _find_project_root, _graph_cache
         for root in _project_roots(directory, files, _find_project_root):
@@ -128,7 +145,7 @@ def _d005_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
     picklable without any extra work, same as I002's ImportGraph return.
     """
     try:
-        if not rule_will_run("D005", select, ignore):
+        if not rule_will_run_on("D005", select, ignore, files):
             return {}
         from .duplicates.D005 import D005, _build_index, _find_project_root, _project_index
         for root in _project_roots(directory, files, _find_project_root):
@@ -154,7 +171,7 @@ def _t006_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
     same two reasons as _d005_preload: one build instead of one per worker,
     and a capped scan's disclosure stays visible to the main process."""
     try:
-        if not rule_will_run("T006", select, ignore):
+        if not rule_will_run_on("T006", select, ignore, files):
             return {}
         from .types.T006 import _build_index, _find_project_root, _project_index
         # Every reached root, not files[0]: a capped second project's skip reason
@@ -204,7 +221,7 @@ def _m102_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
     nothing for, e.g., a tests/ directory where no worker would either.
     """
     try:
-        if not rule_will_run("M102", select, ignore):
+        if not rule_will_run_on("M102", select, ignore, files):
             return {}
         from .maintainability.M102 import M102, _import_cache, _project_root
         rule = M102()
@@ -280,12 +297,21 @@ def init_scan_caches(caches: dict) -> None:
     _m102_init_worker(caches.get('M102', {}))
 
 
+def _index_in_play(code: str, select, ignore, files) -> bool:
+    """Whether *code*'s shared index is part of this run. I007 is the exception: its population
+    is dependency manifests, which a source-file check never lists, yet its index is built from
+    the source files; it keeps the filter-set test (BACK-2437 narrows only the source-file rules)."""
+    if code == 'I007':
+        return rule_will_run(code, select, ignore)
+    return rule_will_run_on(code, select, ignore, files)
+
+
 def get_scan_budgets(files: List[Path], select, ignore) -> List[dict]:
     """Numeric source accounting for reached shared indexes, independent of paging."""
     from .imports.I002 import get_scan_budgets as i002_budgets
     from .duplicates.D005 import get_scan_budgets as d005_budgets
     return [row for code, budgets in [('I002', i002_budgets), ('D005', d005_budgets)]
-            if rule_will_run(code, select, ignore) for row in budgets(files)]
+            if rule_will_run_on(code, select, ignore, files) for row in budgets(files)]
 
 
 def get_scan_disclosures(files: Optional[List[Path]] = None, select=None, ignore=None, *,
@@ -306,8 +332,8 @@ def get_scan_disclosures(files: Optional[List[Path]] = None, select=None, ignore
     messages = [message for code, collect in [('I002', i002_disclosures),
                                              ('D005', d005_disclosures), ('T006', t006_disclosures),
                                              ('I007', i007_disclosures)]
-                if rule_will_run(code, select, ignore) for message in collect(files)]
-    if rule_will_run('M102', select, ignore):
+                if _index_in_play(code, select, ignore, files) for message in collect(files)]
+    if rule_will_run_on('M102', select, ignore, files):
         layout = m102_test_layout(directory, select, ignore, files) if directory is not None else None
         messages.extend(m102_disclosures(files, select=select, test_layout=layout))
     for code, reason in sorted(_preload_failures.items()):
