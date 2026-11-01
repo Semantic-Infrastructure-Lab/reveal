@@ -1037,6 +1037,26 @@ class ImportsRenderer:
         print('}')
 
     @staticmethod
+    def _render_external_failures(metadata: dict) -> None:
+        """Name the files under the path that could not be fully read (they make the table incomplete,
+        exit 3) and count the ones outside it, which cannot change it (BACK-2438)."""
+        lost = set(metadata.get('files_lost', []))
+        failed = [fp for fp in metadata.get('files_failed', []) if fp not in lost]
+        failed_count = metadata.get('files_failed_count', 0) - metadata.get('files_lost_count', 0)
+        if failed_count:
+            print(f"  ⚠️  {failed_count} file(s) under this path parsed with errors — their imports may be incomplete")
+            for fp in failed[:10]:
+                print(f"      - {fp}")
+            if failed_count > 10:
+                print(f"      ... and {failed_count - 10} more")
+        if metadata.get('files_lost_count'):
+            print(f"  ⚠️  {metadata['files_lost_count']} file(s) not analyzed — a pool worker died")
+        outside = metadata.get('files_failed_outside_target_count')
+        if outside:
+            print(f"  {outside} file(s) outside this path failed to parse; they cannot change this table, "
+                  "so they do not make it incomplete")
+
+    @staticmethod
     def _render_external(result: dict, resource: str, verbose: bool) -> None:
         """Render ?external: the package table, most used first (20 per list unless --verbose)."""
         external, stdlib = result.get('external_packages', []), result.get('stdlib_packages', [])
@@ -1046,6 +1066,7 @@ class ImportsRenderer:
         print(f"  {result.get('total_imports', 0)} import(s) in {result.get('total_files', 0)} file(s): "
               f"{result.get('internal_imports', 0)} internal, {len(external)} unresolved package(s), "
               f"{len(stdlib)} stdlib package(s){scope_note}")
+        ImportsRenderer._render_external_failures(result.get('metadata', {}))
         multi_stack = len({lang for entry in external for lang in entry.get('languages', [])}) > 1
         for title, entries in (('Unresolved packages (third-party or unresolved-local)', external),
                                ('Stdlib packages', stdlib)):
@@ -1634,8 +1655,8 @@ class ImportsAdapter(ResourceAdapter):
                            spell: Optional[Callable[[Optional[str]], Optional[str]]] = None) -> List[WarningEntry]:
         return import_diagnostics.integrity_warnings(self.analysis, base, spell=spell)
 
-    def get_metadata(self) -> Dict[str, Any]:
-        return self._analysis_view().get_metadata()
+    def get_metadata(self, failures: str = 'scan') -> Dict[str, Any]:
+        return self._analysis_view().get_metadata(failures=failures)
 
     def _scan_budget_dict(self) -> Dict[str, Any]:
         return self._analysis_view()._scan_budget_dict()
@@ -1726,7 +1747,7 @@ class ImportsAdapter(ResourceAdapter):
                           tests=_TESTS.read(self._query_params), scope=_SCOPE.read(self._query_params),
                           top=int(top) if top else None, test_layout=self._test_layout)
 
-    def _build_response(self, response_type: str, **data_fields) -> Dict[str, Any]:
+    def _build_response(self, response_type: str, *, failures: str = 'scan', **data_fields) -> Dict[str, Any]:
         """Build standardized adapter response with common structure.
 
         Args:
@@ -1751,7 +1772,8 @@ class ImportsAdapter(ResourceAdapter):
             data=data_fields,
             warnings=warnings,
         )
-        response['metadata'] = metadata = _spell_metadata_paths(self.get_metadata(), display)
+        raw_metadata = self.get_metadata() if failures == 'scan' else self.get_metadata(failures=failures)
+        response['metadata'] = metadata = _spell_metadata_paths(raw_metadata, display)
         failed = metadata.get('files_failed')
         if isinstance(failed, list):
             # get_metadata keeps the first 50 paths; the count is exact (BACK-1551).
@@ -1842,7 +1864,7 @@ class ImportsAdapter(ResourceAdapter):
         table = package_table(files, view._base_dir())
         languages = table['external_package_languages']
         response = self._build_response(
-            'external_packages',
+            'external_packages', failures='target',
             total_imports=table['total_imports'], total_files=table['total_files'],
             internal_imports=table['relative_count'],
             external_packages=[{'package': name, 'uses': uses, 'languages': languages.get(name, [])}

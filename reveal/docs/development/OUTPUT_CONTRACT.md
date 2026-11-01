@@ -630,6 +630,11 @@ otherwise keeps this shape and these exit codes; the three components are views 
 imports graph build. Imports declares default `none` and supports `findings`: exit 1 when
 the `?circular`, `?unused` or `?violations` answer has a row (an incomplete answer exits
 3 first); every other imports view has no findings to gate.
+An imports answer is incomplete (exit 3) when a file it reads failed to parse or was lost. The
+scan covers the whole project root, so most views count every failed file in that scan: a file
+outside the path can still be an importer or sit on a cycle. `?external` lists only the imports of
+the files under the path, so it counts the failures under the path and reports the rest in
+`metadata.files_failed_outside_target_count` without making the answer incomplete.
 
 Hotspots defaults to `none` and supports `findings` using the owner's pre-cap
 `summary.has_findings`: quality below 70 or complexity above 20. Stats coverage

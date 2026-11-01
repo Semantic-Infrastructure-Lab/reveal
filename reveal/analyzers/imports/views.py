@@ -225,10 +225,23 @@ class ImportView:
         """Cycle groups of ``graph`` that hold a row of this answer (all of each group is shown)."""
         return [group for group in graph.find_cycle_groups() if any(self._in_scope(f) for f in group)]
 
-    def get_metadata(self) -> Dict[str, Any]:
-        """Get metadata about import analysis."""
+    def get_metadata(self, failures: str = 'scan') -> Dict[str, Any]:
+        """Get metadata about import analysis.
+
+        ``failures`` says which failed files the counts cover. ``'scan'`` (the default) is every file
+        the scan could not read: a view that reads the whole graph (fan-in, cycles, importers) can miss
+        an outside importer. ``'target'`` is for a view that lists only the imports of the files under
+        the path: a failure outside the path cannot change it, so it is counted apart in
+        ``files_failed_outside_target_count`` and does not make the answer incomplete (BACK-2438).
+        """
         if not self.analysis.graph:
             return {'status': 'not_analyzed'}
+        failed, lost = self.analysis.files_failed, self.analysis.files_lost
+        outside: Dict[str, int] = {}
+        if failures == 'target':
+            outside = {'files_failed_outside_target_count': sum(1 for f in failed if not self._in_scope(f))}
+            failed = [f for f in failed if self._in_scope(f)]
+            lost = [f for f in lost if self._in_scope(f)]
 
         in_scope = [imports for f, imports in self.analysis.graph.files.items() if self._in_scope(f)]
         return {
@@ -262,10 +275,11 @@ class ImportView:
             },
             # files_failed is every file whose imports may be incomplete; files_lost is
             # the subset a dead pool worker took down before it was parsed (BACK-1753).
-            'files_failed_count': len(self.analysis.files_failed),
-            'files_failed': sorted(str(fp) for fp in self.analysis.files_failed)[:50],
-            'files_lost_count': len(self.analysis.files_lost),
-            'files_lost': sorted(str(fp) for fp in self.analysis.files_lost)[:50],
+            'files_failed_count': len(failed),
+            'files_failed': sorted(str(fp) for fp in failed)[:50],
+            'files_lost_count': len(lost),
+            'files_lost': sorted(str(fp) for fp in lost)[:50],
+            **outside,
             # BACK-1245: None on every corpus except a detected convention-
             # autoloading framework (Rails/Django/Laravel) -- see
             # detect_autoload_regime()/autoload_regime_warning() above.
