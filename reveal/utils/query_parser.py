@@ -5,6 +5,7 @@ import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
+from urllib.parse import unquote
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Mapping, Optional, Set, TextIO, Tuple, Union
 
@@ -609,7 +610,15 @@ def _try_parse_negation_filter(part: str) -> Optional[QueryFilter]:
     return None
 
 
-def _try_parse_two_char_operators(part: str, coerce_numeric: bool) -> Optional[QueryFilter]:
+def _filter_value(text: str, percent_decode_values: bool) -> str:
+    """Trim query spelling, then decode one value without touching query delimiters."""
+    value = text.strip()
+    return unquote(value, encoding='utf-8', errors='strict') if percent_decode_values else value
+
+
+def _try_parse_two_char_operators(
+    part: str, coerce_numeric: bool, percent_decode_values: bool = False,
+) -> Optional[QueryFilter]:
     """Try to parse two-character operators (>=, <=, !=, ~=, !~).
 
     Also handles reversed/doubled forms: => -> >=, =< -> <=, =>= -> >=, =<= -> <=.
@@ -621,7 +630,7 @@ def _try_parse_two_char_operators(part: str, coerce_numeric: bool) -> Optional[Q
             # Strip a spurious trailing = left by =>=, =<= patterns (e.g. field=>=10 -> field>=10)
             if field.endswith('='):
                 field = field[:-1].strip()
-            value_str = value_str.strip()
+            value_str = _filter_value(value_str, percent_decode_values)
 
             value: Union[bool, int, float, str]
             if coerce_numeric and op not in ('~=', '!~'):
@@ -644,7 +653,9 @@ def _parse_equals_special_cases(field: str, value: str) -> Optional[QueryFilter]
     return None
 
 
-def _try_parse_single_char_operators(part: str, coerce_numeric: bool) -> Optional[QueryFilter]:
+def _try_parse_single_char_operators(
+    part: str, coerce_numeric: bool, percent_decode_values: bool = False,
+) -> Optional[QueryFilter]:
     """Try to parse single-character operators (>, <, =).
 
     Also handles reversed forms: => -> >=, =< -> <= (field=trailing-= stripped, op promoted).
@@ -654,7 +665,7 @@ def _try_parse_single_char_operators(part: str, coerce_numeric: bool) -> Optiona
             continue
         field, value = part.split(op, 1)
         field = field.strip()
-        value = value.strip()
+        value = _filter_value(value, percent_decode_values)
         # Detect reversed-operator typos: field=>val or field=<val
         # The trailing = on the field means the user wrote => or =< instead of >= or <=
         if op in ('>', '<') and field.endswith('='):
@@ -674,10 +685,15 @@ def parse_query_filters(
     coerce_numeric: bool = True,
     support_existence: bool = True,
     record: bool = True,
+    *,
+    percent_decode_values: bool = False,
 ) -> List[QueryFilter]:
     """Parse query string into list of QueryFilter objects.
 
     Supports operators: >, <, >=, <=, =, ==, !=, ~=, .., ?, !
+
+    Optional percent decoding applies once to values after structural splitting;
+    fields and literal plus signs stay unchanged. The default retains raw values.
 
     Parsing a filter counts its key as used (the flag ledger). ``record=False`` marks the
     keys only as parsed, for an adapter that applies its filters to some targets and not
@@ -707,12 +723,12 @@ def parse_query_filters(
                 filters.append(parsed_filter)
                 continue
 
-        parsed_filter = _try_parse_two_char_operators(part, coerce_numeric)
+        parsed_filter = _try_parse_two_char_operators(part, coerce_numeric, percent_decode_values)
         if parsed_filter:
             filters.append(parsed_filter)
             continue
 
-        parsed_filter = _try_parse_single_char_operators(part, coerce_numeric)
+        parsed_filter = _try_parse_single_char_operators(part, coerce_numeric, percent_decode_values)
         if parsed_filter:
             filters.append(parsed_filter)
             continue
