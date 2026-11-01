@@ -78,7 +78,9 @@ def _render_codex_exchanges(result: dict) -> None:
 
     for ex in result.get('exchanges', []):
         ts = (ex.get('prompt_timestamp') or '')[:19].replace('T', ' ')
-        prompt = (ex.get('prompt') or '').strip()
+        prompt = ex.get('prompt') or ''
+        if not full:
+            prompt = prompt.strip()
         print(f"[{ts}]" + ('  [rolled back -- the user undid this turn]' if ex.get('rolled_back') else ''))
         if not full and len(prompt) > 300:
             print(f"Q: {prompt[:300]}")
