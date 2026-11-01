@@ -137,7 +137,13 @@ An `identical_tree` proof has no measured snapshots: centroid base/head values
 are null, with proved change zero. Analyzed snapshots may legitimately measure
 zero. Missing required snapshot evidence, including capped import discovery, gives
 unavailable deltas and exit 3;
-invalid refs/resources give exit 2. Existing exclusions and gitignore policy
+invalid refs/resources give exit 2. A file whose syntax tree-sitter cannot fully read
+is the exception when it is byte-identical at both refs: it hides the same functions on
+both sides, so it is left out of the complexity centroid on both, `analysis.complexity_excluded`
+names it and a `complexity_population_excluded` warning states the rule. The answer
+equals an explicit `--exclude` of that file. A recovered file that changed, exists on
+one side only, or is beyond the five the warning lists still makes the comparison
+unavailable; the error names the files. Existing exclusions and gitignore policy
 remain symmetric across the base and live head.
 
 Top, scope exclusions, gitignore, output, provenance and the none-only failure

@@ -486,7 +486,7 @@ def architecture_diff_text(report: Dict[str, Any], *, title: str = 'Architecture
     """
     lines = meta_warning_lines(report)
     if report.get('error'):
-        lines.append('Architecture comparison unavailable: required snapshot evidence is incomplete')
+        lines.append(str(report['error']))
         for side, components in report['analysis']['snapshots'].items():
             lines.extend(f'  {side} {component}: {state}' for component, state in components.items()
                          if state != 'complete')

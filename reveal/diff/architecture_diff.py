@@ -419,6 +419,108 @@ def _complexity_state(meta: Dict[str, Any]) -> str:
     return 'complete'
 
 
+# Warning types that mean required snapshot evidence is missing; the execution facts read the same set.
+_MISSING_EVIDENCE = frozenset({'analysis_failed', 'parse_recovered', 'partial_parse', 'worker_lost',
+                               'analysis_incomplete'})
+
+
+def _sole_recovered_files(raw: Dict[str, Any]) -> Optional[List[str]]:
+    """Root-relative files behind a snapshot's only missing evidence, or None when that is not provable.
+
+    Provable means: no errors, and every missing-evidence warning is the complexity component's
+    ``parse_recovered`` warning with its complete file list (the shared warning lists at most five).
+    """
+    meta = raw.get('meta') or {}
+    if meta.get('errors') or raw['completeness']['imports'] != 'complete':
+        return None
+    files: Set[str] = set()
+    for warning in meta.get('warnings', []):
+        if warning.get('type') not in _MISSING_EVIDENCE:
+            continue
+        listed = warning.get('files') or []
+        if (warning.get('type') != 'parse_recovered' or warning.get('component') != 'complexity'
+                or warning.get('count') != len(listed)):
+            return None
+        for file_str in listed:
+            rel = _relpath_or_none(file_str, raw['root'])
+            if rel is None:
+                return None
+            files.add(rel)
+    return sorted(files)
+
+
+def _same_bytes(rel: str, base_root: Path, head_root: Path) -> bool:
+    try:
+        return (base_root / rel).read_bytes() == (head_root / rel).read_bytes()
+    except OSError:
+        return False  # an unreadable side cannot prove the file unchanged
+
+
+def _recovered_listing(raw: Dict[str, Any]) -> Tuple[Set[str], int]:
+    """Listed recovered files (root-relative) and the total count the complexity warning reports."""
+    listed: Set[str] = set()
+    count = 0
+    for warning in (raw.get('meta') or {}).get('warnings', []):
+        if warning.get('type') == 'parse_recovered' and warning.get('component') == 'complexity':
+            count += warning.get('count') or 0
+            listed.update(rel for rel in (_relpath_or_none(f, raw['root']) for f in warning.get('files') or [])
+                          if rel is not None)
+    return listed, count
+
+
+def _blocking_detail(base_raw: Dict[str, Any], head_raw: Dict[str, Any], base_ref: str) -> str:
+    """Name the recovered files that keep the comparison unavailable, and the way out."""
+    (base_listed, base_count), (head_listed, head_count) = _recovered_listing(base_raw), _recovered_listing(head_raw)
+    if not base_count and not head_count:
+        return ''
+    if base_count > len(base_listed) or head_count > len(head_listed):
+        return (f'; {max(base_count, head_count)} files do not fully parse, more than the warning lists, '
+                'so they cannot be checked as unchanged. Fix their syntax, --exclude them or narrow the path')
+    changed = sorted(rel for rel in base_listed | head_listed
+                     if rel not in base_listed or rel not in head_listed
+                     or not _same_bytes(rel, base_raw['root'], head_raw['root']))
+    if not changed:
+        return ''
+    return (f"; {', '.join(changed)} do not fully parse and differ between {base_ref} and the working tree. "
+            'Fix their syntax or --exclude them')
+
+
+def _exclude_unchanged_recovery(base_raw: Dict[str, Any], head_raw: Dict[str, Any],
+                                top_n: int) -> Optional[List[str]]:
+    """Drop files that do not fully parse but are byte-identical at both refs from complexity (BACK-2432).
+
+    Such a file hides the same functions on both sides, so removing it from both populations gives an
+    exact comparison of the remaining files, the same answer an explicit ``--exclude`` gives. Applies only
+    when it resolves all missing evidence on both sides; returns the excluded files, else None (unchanged).
+    """
+    base_files, head_files = _sole_recovered_files(base_raw), _sole_recovered_files(head_raw)
+    if not base_files or base_files != head_files:
+        return None
+    if not all(_same_bytes(rel, base_raw['root'], head_raw['root']) for rel in base_files):
+        return None
+    excluded = set(base_files)
+    kept = {}
+    for side, raw in (('base', base_raw), ('head', head_raw)):
+        rows = [row for row in raw['complex_fns'] if _relpath_or_none(row['file'], raw['root']) not in excluded]
+        if len(raw['complex_fns']) >= top_n * 4 and len(rows) < top_n:
+            return None  # the cut fetch no longer holds a full centroid population once rows are removed
+        kept[side] = rows
+    for side, raw in (('base', base_raw), ('head', head_raw)):
+        raw['complex_fns'] = kept[side]
+        raw['completeness']['complexity'] = 'complete'
+        meta = raw.get('meta') or {}
+        meta['warnings'] = [w for w in meta.get('warnings', []) if w.get('type') != 'parse_recovered']
+    return base_files
+
+
+def _exclusion_warning(files: List[str]) -> Dict[str, Any]:
+    return {'type': 'complexity_population_excluded', 'component': 'complexity', 'count': len(files),
+            'files': files,
+            'message': (f"complexity centroid excludes {len(files)} file(s) whose syntax tree-sitter could not "
+                        "read; each is identical at both refs, so the comparison is exact for the remaining "
+                        f"files: {', '.join(files)}")}
+
+
 def _relpath_or_none(file_str: str, root: Path) -> Optional[str]:
     try:
         return Path(file_str).resolve().relative_to(root.resolve()).as_posix()
@@ -638,8 +740,7 @@ def comparison_answer_requirement_error(result, prior_facts=None) -> Optional[st
 def _comparison_completeness(result, meta, invalid_only):
     from ..utils.results import AnalysisCompleteness
     errors = meta.get('errors', [])
-    missing = {'analysis_failed', 'parse_recovered', 'partial_parse', 'worker_lost', 'analysis_incomplete'}
-    missing_inputs = any(w.get('type') in missing for w in meta.get('warnings', []))
+    missing_inputs = any(w.get('type') in _MISSING_EVIDENCE for w in meta.get('warnings', []))
     if any(error.get('code') == 'E_ARCHITECTURE_ANALYSIS' for error in errors):
         return AnalysisCompleteness.FAILED
     if invalid_only and 'analysis' not in result and not missing_inputs:
@@ -703,16 +804,23 @@ def run_architecture_diff(
         with remapped_exclusion_scope(path, base_root), gitignore_scope(False):
             base_layout = test_layout.relocate(observed_root=base_root, logical_root=path)
             base_raw = _snapshot(base_root, top_n, test_layout=base_layout)
+        head_raw = _snapshot(path, top_n, test_layout=test_layout)
+        # Both trees are still on disk here, so recovered files can be compared byte for byte.
+        excluded = _exclude_unchanged_recovery(base_raw, head_raw, top_n)
+        detail = '' if excluded else _blocking_detail(base_raw, head_raw, base_ref)
         base_snapshot = _normalize_snapshot(base_raw, top_n)
         base_meta = _snapshot_meta(base_raw, 'base')
 
-    head_raw = _snapshot(path, top_n, test_layout=test_layout)
     head_snapshot = _normalize_snapshot(head_raw, top_n)
     states = {'base': base_raw['completeness'], 'head': head_raw['completeness']}
     complete = all(state == 'complete' for components in states.values() for state in components.values())
     analysis = {'complete': complete, 'basis': 'snapshots', 'snapshots': states, **policy,
                 'unsupported_extensions': {'base': base_raw['unsupported_extensions'],
                                            'head': head_raw['unsupported_extensions']}}
+    comparison_meta: List[Tuple[str, Dict[str, Any]]] = []
+    if excluded:
+        analysis['complexity_excluded'] = excluded
+        comparison_meta.append(('warnings', _exclusion_warning(excluded)))
     confidences = {side: (raw.get('meta') or {}).get('confidence')
                    for side, raw in (('base', base_raw), ('head', head_raw))}
     analysis['confidence'] = confidences
@@ -721,9 +829,10 @@ def run_architecture_diff(
     deltas = diff_snapshots(base_snapshot, head_snapshot, top_n) if complete else None
     # Both sides are counted by one rule (the same formatters and defaults), so the answer states it once.
     return _comparison_report(path, base_ref, head_ref, deltas, analysis,
-                              [*base_meta, *_snapshot_meta(head_raw, 'head')], confidence=confidence,
+                              [*base_meta, *_snapshot_meta(head_raw, 'head'), *comparison_meta],
+                              confidence=confidence,
                               edge_rules=head_raw['edge_rules'] if deltas is not None else None,
-                              spelling=spelling)
+                              spelling=spelling, detail=detail)
 
 
 def _diagnostic_path(value: str, root: Path) -> str:
@@ -765,7 +874,7 @@ def _comparison_report(path: Path, base_ref: str, head_ref: str, deltas: Optiona
                        analysis: Dict[str, Any], diagnostics: List[Tuple[str, Dict[str, Any]]],
                        *, confidence: Optional[float] = None,
                        edge_rules: Optional[Dict[str, Any]] = None,
-                       spelling: Optional[Path] = None) -> Dict[str, Any]:
+                       spelling: Optional[Path] = None, detail: str = '') -> Dict[str, Any]:
     from ..utils.results import ResultBuilder
     from ..utils.path_utils import as_spelled
     from ..reveal_types import CONTRACT_VERSION
@@ -773,7 +882,7 @@ def _comparison_report(path: Path, base_ref: str, head_ref: str, deltas: Optiona
     data = {'base_ref': base_ref, 'head_ref': head_ref, 'path': shown,
             'deltas': deltas, 'analysis': analysis, **(edge_rules or {})}
     if not analysis['complete']:
-        data['error'] = 'Architecture comparison unavailable: required snapshot evidence is incomplete'
+        data['error'] = f'Architecture comparison unavailable: required snapshot evidence is incomplete{detail}'
     return cast(Dict[str, Any], ResultBuilder.create(
         result_type='architecture_diff', source=shown, data=data, contract_version=CONTRACT_VERSION,
         warnings=cast(List[WarningEntry], [entry for kind, entry in diagnostics if kind == 'warnings']) or None,
