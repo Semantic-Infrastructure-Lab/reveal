@@ -292,7 +292,8 @@ def _render_reveal_type(data: Dict[str, Any], output_format: str) -> None:
 
 def _suggest_reveal_type_if_variable(query: str, path: str) -> None:
     """When a name search on a single file finds nothing, check if the term exists in the file."""
-    if not query or query == 'none' or not path:
+    # Other predicates can exclude a real named element; zero is not name absence.
+    if not query or query == 'none' or not path or ' AND ' in query:
         return
     file_path = Path(path)
     if not file_path.is_file():

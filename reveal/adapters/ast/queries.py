@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, Iterator, List, Tuple
 from ...utils.query import parse_query_filters
-from ...utils.query_parser import note_query_parsed
+from ...utils.query_parser import coerce_value, note_query_parsed
 
 
 def parse_equality_value(key: str, value: str) -> Dict[str, Any]:
@@ -54,6 +54,9 @@ def _split_alternatives(value: Any) -> List[str]:
 
 def _condition(op: str, value: Any) -> Dict[str, Any]:
     """The filter condition of one parsed ``key op value``."""
+    if isinstance(value, str) and op not in ('~=', '!~'):
+        # Keep numeric literals distinct from actual true/false predicates.
+        value = int(value) if value in ('0', '1') else coerce_value(value)
     has_alternatives = '|' in str(value) or ',' in str(value)
     if op == '=' and has_alternatives:
         # OR logic for any field: type=class|function, name=main|init
@@ -89,7 +92,7 @@ def parse_query(query_string: str) -> Dict[str, Any]:
         return {}
 
     by_key: Dict[str, List[Dict[str, Any]]] = {}
-    for qf in parse_query_filters(query_string):
+    for qf in parse_query_filters(query_string, coerce_numeric=False):
         by_key.setdefault(qf.field, []).append(_condition(qf.op, qf.value))
     return {
         key: conditions[0] if len(conditions) == 1 else {'op': ALL_OP, 'value': conditions}
