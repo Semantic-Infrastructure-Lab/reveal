@@ -345,7 +345,7 @@ reveal 'ast://./src?lines>50'
 reveal 'ast://./src?complexity>10&lines>50'
 ```
 
-**Why this works:** AST queries search across entire codebase without reading files. Pure metadata search is instant and uses minimal tokens.
+**Why this works:** AST queries search across entire codebase without reading files. A metadata query returns names, locations and metrics without printing function bodies, so it uses few tokens.
 
 **Available filters:**
 - `name=pattern` - Wildcard matching (test_*, *helper*, *_internal, etc.)
