@@ -136,6 +136,14 @@ except ImportError:
     pygit2 = None  # type: ignore[assignment]
 
 
+def _query_parameter_items(query: Optional[Union[str, Dict[str, Any]]]) -> List[Tuple[str, Any]]:
+    """Keep repeated raw keys until Git separates filters from operational controls."""
+    if isinstance(query, str):
+        return [item for part in query.split('&')
+                for item in peek_query_items(parse_query_params(part))]
+    return list(peek_query_items(query or {}))
+
+
 def _absolute_directory_scope(directory: str) -> Tuple[str, Optional[str]]:
     """``(path, subpath)`` for an absolute directory: the repository, or a directory in its work tree.
 
@@ -284,7 +292,7 @@ class GitAdapter(ResourceAdapter):
         # Routing a key is not reading it (BACK-1537): each key counts as used where it is
         # applied -- result control when a view reads the ResultControl, operational keys
         # when a view reads them, filters when parsed.
-        for k, v in peek_query_items(self.query):
+        for k, v in self._query_items:
             # Result control parameters
             if k in ['sort', 'limit', 'offset']:
                 result_control_parts.append(f"{k}={v}")
@@ -364,6 +372,11 @@ class GitAdapter(ResourceAdapter):
         """
         # Normalize resource parameter
         resource = self._normalize_resource_parameter(resource, path)
+        inline_query = resource.rsplit('?', 1)[1] if subpath is None and '?' in resource else ''
+        explicit_items = _query_parameter_items(query)
+        overridden = {key for key, _ in explicit_items}
+        self._query_items = [(key, value) for key, value in _query_parameter_items(inline_query)
+                             if key not in overridden] + explicit_items
         if isinstance(query, str):
             query = parse_query_params(query)
 

@@ -4,8 +4,7 @@
 so a second condition on the same key replaced the first: ``type!=method&type=function``
 returned methods and ``lines>3&lines<8`` dropped ``lines>3``. Every ast filter key went
 through that dict, so every key had the bug. markdown:// and json:// filter the shared
-parser's list directly and already ANDed a repeated key; they are the controls. git://
-does not (its query is a dict before it reaches the parser): a strict xfail records that.
+parser's list directly and already ANDed a repeated key; they are the controls. git:// preserves repeated conditions before its operational mapping is built.
 """
 import os
 import subprocess
@@ -125,9 +124,6 @@ def test_json_repeated_key_control(tmp_path):
     assert JsonAdapter(str(tmp_path / 'j.json'), 'n>2&n<8').get_structure()['value'] == [{'n': 5}]
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    'BACK-2307 finding: git:// reads its query through parse_query_params, a dict, so a '
-    'repeated message~= keeps only the last; git:// filters belong to another lane'))
 def test_git_repeated_key_control(tmp_path):
     from reveal.adapters.git.adapter import GitAdapter
 
