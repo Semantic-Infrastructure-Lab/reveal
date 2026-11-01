@@ -820,6 +820,8 @@ class MetricsAdapter(ResourceAdapter):
                                          min_complexity, max_complexity, min_functions)
             result = aggregate_stats(kept, self.path)
             self._record_analysis_results([file_stats])
+            note_warning(result, unknown_sort_field_warning(
+                self.result_control.sort_field, kept, field_value, SORT_FIELDS))
             note_warning(result, self._unknown_filter_field_warning())
             self._disclose_failures(result)
             result.update(

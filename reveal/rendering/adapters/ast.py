@@ -17,12 +17,11 @@ _FILTER_SHORTHANDS = {
     'classes': '?type=class',
     'class': '?type=class',
     'methods': '?type=method',
-    'method': '?type=method',
     'imports': '?type=import',
 }
 
 # All keys that ast:// actually understands
-_KNOWN_FILTER_KEYS = {'type', 'name', 'complexity', 'size', 'lines', 'depth', 'decorator', 'calls', 'callee_of', 'callers', 'has_annotations', 'param_type', 'return_type', 'reveal_type'}
+_KNOWN_FILTER_KEYS = {'type', 'method', 'name', 'complexity', 'size', 'lines', 'depth', 'decorator', 'calls', 'callee_of', 'callers', 'has_annotations', 'param_type', 'return_type', 'reveal_type'}
 
 
 def _render_meta_warnings(data: Dict[str, Any]) -> None:
