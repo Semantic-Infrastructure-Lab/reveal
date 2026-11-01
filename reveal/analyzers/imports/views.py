@@ -225,6 +225,15 @@ class ImportView:
         """Cycle groups of ``graph`` that hold a row of this answer (all of each group is shown)."""
         return [group for group in graph.find_cycle_groups() if any(self._in_scope(f) for f in group)]
 
+    def _failures(self, failures: str) -> Tuple[List[Path], List[Path], Dict[str, int]]:
+        """The failed and lost files an answer counts, and the outside-count field when it narrows them
+        to the path (``get_metadata``'s ``failures='target'``)."""
+        failed, lost = self.analysis.files_failed, self.analysis.files_lost
+        if failures != 'target':
+            return failed, lost, {}
+        outside = {'files_failed_outside_target_count': sum(1 for f in failed if not self._in_scope(f))}
+        return ([f for f in failed if self._in_scope(f)], [f for f in lost if self._in_scope(f)], outside)
+
     def get_metadata(self, failures: str = 'scan') -> Dict[str, Any]:
         """Get metadata about import analysis.
 
@@ -236,12 +245,7 @@ class ImportView:
         """
         if not self.analysis.graph:
             return {'status': 'not_analyzed'}
-        failed, lost = self.analysis.files_failed, self.analysis.files_lost
-        outside: Dict[str, int] = {}
-        if failures == 'target':
-            outside = {'files_failed_outside_target_count': sum(1 for f in failed if not self._in_scope(f))}
-            failed = [f for f in failed if self._in_scope(f)]
-            lost = [f for f in lost if self._in_scope(f)]
+        failed, lost, outside = self._failures(failures)
 
         in_scope = [imports for f, imports in self.analysis.graph.files.items() if self._in_scope(f)]
         return {

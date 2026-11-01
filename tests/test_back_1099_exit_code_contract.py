@@ -325,7 +325,7 @@ class TestRuleThatRunsOnNoCheckedFileDisclosesNothing:
         import sys
         env = dict(os.environ, REVEAL_NO_UPDATE_CHECK="1")
         return subprocess.run([sys.executable, "-m", "reveal", "check", str(target), "--format", "json", *args],
-                              capture_output=True, text=True, env=env, cwd=str(target), timeout=120)
+                              capture_output=True, text=True, encoding="utf-8", env=env, cwd=str(target), timeout=120)
 
     def test_preload_and_disclosures_skip_rules_matching_no_checked_file(self, tmp_path):
         from reveal.rules import scan_caches
