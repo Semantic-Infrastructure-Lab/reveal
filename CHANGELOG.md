@@ -28,6 +28,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Added
 
+- `codex://<UUID>/exchanges?full` displays complete paired prompts and answers, including prompt indentation. Default text previews point to this control; JSON keeps complete strings and existing item limits still apply (BACK-1953).
 - The corpus recall gate can score `tests=exclude` together with `lazy=exclude` and `lazy=only` using `--test-lazy`, recording conventional and configured policies separately. New rows require review, and this option cannot overwrite a baseline (BACK-2405).
 - Project configuration accepts literal `test_layout.additional_paths` for test/support files and subtrees. Imports, entrypoint facts, Overview and comparisons share the selected policy; comparisons apply it to both sides. Patches/Testability default selection also supports configured additions. Invalid selected policy exits 2; required configuration failures exit 3. The recall gate records configured results separately with policy/input identity, preserving conventional baselines (BACK-2398, BACK-2399).
 
@@ -50,6 +51,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Git commit filters percent-decode values once, preserving encoded separators, literal plus signs, regex and range semantics. Zoned fractional date bounds now work consistently on Python 3.10 and newer interpreters (BACK-2317).
+- Single-file Metrics results now warn about unknown sort fields, as directory results do. AST output recognizes the optional `method` field instead of incorrectly suggesting that it is an invalid shorthand (BACK-2317).
 - Git commit queries now AND repeated filters, search the complete subject and body before shortening the displayed subject, and keep the ownership-only `merges` parameter from filtering other views. Previously these requests could silently include extra commits or miss matching history (BACK-2312, BACK-2313, BACK-2314).
 - AST queries keep numeric `0` and `1` in filter echoes instead of showing `False` and `True`. A zero-result query with additional predicates no longer claims that an existing function name is absent (BACK-2273).
 - Empty code scans no longer identify Markdown, JSON or other data formats as an unsupported source language. Language hints use the same code-file census as coverage reports, retaining unsupported code-language labels (BACK-1585).
