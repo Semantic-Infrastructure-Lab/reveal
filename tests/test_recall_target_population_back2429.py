@@ -77,6 +77,28 @@ def test_surplus_on_known_target_still_changes_existing_score(population_corpus)
     assert after['target_population']['unscored_pairs'] == 0
 
 
+def test_suffix_excluded_importer_does_not_create_an_observed_target(population_corpus):
+    root, entry, additions, _ = population_corpus
+    entry['recall']['exclude_importer_suffixes'] = ['unused.py']
+    additions[root / 'unknown.py'] = {root / 'pkg/unused.py'}
+    row = gate.measure(entry, root)
+    assert row['hit_edges'] == row['oracle_edges'] == 3
+    scope = row['target_population']
+    assert scope['observed_targets'] == 1 and scope['observed_pairs'] == scope['scored_pairs'] == 3
+    assert scope['unscored_targets'] == scope['unscored_pairs'] == 0
+
+
+def test_no_eligible_public_pairs_is_observed_zero_with_known_empty_truth(population_corpus):
+    root, entry, _, _ = population_corpus
+    entry['recall']['importer_dirs'] = ['tests']
+    row = gate.measure(entry, root)['lazy']['only']
+    assert row['oracle_edges'] == 0 and row['recall'] is None
+    scope = row['target_population']
+    assert scope['status'] == 'observed' and scope['oracle_targets'] == 1
+    assert scope['observed_targets'] == scope['observed_pairs'] == scope['scored_pairs'] == 0
+    assert scope['unscored_targets'] == scope['unscored_pairs'] == 0
+
+
 def test_all_parameter_rows_disclose_observed_claims_and_keep_empty_truth_keys(population_corpus, tmp_path):
     root, entry, additions, calls = population_corpus
     # Only the test importer has truth: exclusion leaves the known target empty but still scoreable.
