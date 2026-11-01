@@ -594,7 +594,10 @@ incomplete execution; ranking cuts and harmless warnings do not. Comparison requ
 explicit `analysis.complete`, basis and per-side component evidence. Proved-identical
 comparisons have empty snapshots; analyzed comparisons require both base/head imports
 and complexity states consistent with overall completeness. Required scan caps are
-incomplete. Invalid-ref/non-repository requests rejected before analysis retain
+incomplete. A file whose syntax was only partly recovered but is byte-identical at both
+refs is removed from both complexity populations and named in
+`analysis.complexity_excluded` instead of making complexity incomplete; a changed,
+one-sided or unlisted recovered file stays incomplete (BACK-2432, overview guide). Invalid-ref/non-repository requests rejected before analysis retain
 `overview_diff` identity and exit 2; operational Git failures exit 3. Missing or
 malformed comparison proof cannot become success or be masked by a later usage
 diagnostic. Both transports share the canonical shapes and supported controls.

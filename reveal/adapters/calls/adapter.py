@@ -377,7 +377,8 @@ _SCHEMA: Dict[str, Any] = {
         },
         {
             'type': 'calls_ranking',
-            'description': 'Files/functions ranked by caller count (?rank=callers)',
+            'description': 'Functions, methods and classes defined under the path, ranked by unique callers '
+                           '(?rank=callers), with rule and undefined_callees; builtins=true ranks every called name',
         },
         {
             'type': 'calls_module_graph',
