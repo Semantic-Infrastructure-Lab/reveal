@@ -120,15 +120,18 @@ def test_real_constructor_failure_propagates_once(session_adapter, monkeypatch, 
     error = error_type('session initialization failed')
     calls = []
 
-    def failed(self, params):
-        calls.append((self.resource, self.query))
+    def failed(query):
+        calls.append(query)
         raise error
 
-    monkeypatch.setattr(adapter, '_warn_unknown_query_params', failed)
+    # Both real constructors parse queries before route-specific validation.
+    # Inject at that live seam so the no-retry contract does not depend on which
+    # warning helper an adapter uses for its supported query parameters.
+    monkeypatch.setattr(f'{adapter.__module__}.parse_query_params', failed)
     with pytest.raises(error_type) as caught:
         adapter.from_uri(scheme, resource, None)
     assert caught.value is error
-    assert len(calls) == 1
+    assert calls == ['search=auth' if '?' in resource else '']
 
 
 def test_legacy_keyword_plugin_retains_compatibility_and_one_warning(monkeypatch):
