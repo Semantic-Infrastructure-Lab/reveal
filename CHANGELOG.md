@@ -50,6 +50,9 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Git commit queries now AND repeated filters, search the complete subject and body before shortening the displayed subject, and keep the ownership-only `merges` parameter from filtering other views. Previously these requests could silently include extra commits or miss matching history (BACK-2312, BACK-2313, BACK-2314).
+- AST queries keep numeric `0` and `1` in filter echoes instead of showing `False` and `True`. A zero-result query with additional predicates no longer claims that an existing function name is absent (BACK-2273).
+- Empty code scans no longer identify Markdown, JSON or other data formats as an unsupported source language. Language hints use the same code-file census as coverage reports, retaining unsupported code-language labels (BACK-1585).
 - `help://quick` now describes overview's compact map, separates HTTP routes from broader boundary inspection, and shows how to read a Markdown section. Previously its broad boundary example selected only HTTP results and section reading had no intent route (BACK-2428).
 - M102 now exempts declared test/support files and no longer exempts production modules just because a checkout is named or nested under `tests` or `specs`. Directory checks use one project policy across workers; imports from helpers still count as evidence. Invalid selected policy exits 2 and required configuration failures exit 3 (BACK-2421).
 - `markdown://DIR?link-graph` and `?backlinks=FILE` now report directory discovery failures instead of silently omitting documents and links. Text and grep show the warning, incomplete backlink answers no longer claim a rename is safe, and failed discovery bypasses the graph cache. Root access failures keep relative diagnostic paths; existing exits remain unchanged (BACK-2416, BACK-2420).
