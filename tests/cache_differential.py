@@ -10,7 +10,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from reveal.utils.path_utils import to_posix
 
@@ -57,3 +57,35 @@ def cache_entries(cache_dir: Path) -> Dict[str, Tuple[int, int]]:
     return {to_posix(path.relative_to(cache_dir)): (path.stat().st_size, path.stat().st_mtime_ns)
             for path in cache_dir.rglob('*') if path.is_file()}
 
+
+# A long-lived library host: each ``reveal.api.query`` is one host request (request_cache.host_request),
+# so the validated in-memory caches live across the steps and must notice the edits made between them.
+HOST_DRIVER = r'''
+import json, sys
+from pathlib import Path
+from reveal.api import query
+plan = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+answers = []
+for step in plan['steps']:
+    for rel, text in step:
+        path = Path(rel)
+        if text is None:
+            path.unlink()
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding='utf-8')
+    answers.append({view: query(uri) for view, uri in plan['views'].items()})
+sys.stdout.write(json.dumps(answers, default=str, sort_keys=True))
+'''
+
+
+def run_host(root: Path, views: Dict[str, str], steps: List[List[Tuple[str, Optional[str]]]],
+             cache_dir: Path, *, cache: bool) -> List[Dict[str, Any]]:
+    """Run *steps* in ONE process with cwd *root*: apply a step's edits (relative path, new text or
+    None to delete), then answer every view through ``reveal.api.query``. One answer map per step."""
+    plan = root.parent / f'{root.name}-plan.json'
+    plan.write_text(json.dumps({'views': views, 'steps': steps}), encoding='utf-8')
+    done = subprocess.run([sys.executable, '-c', HOST_DRIVER, str(plan)], cwd=root, capture_output=True,
+                          text=True, encoding='utf-8', env=cache_env(cache_dir, cache=cache), timeout=300)
+    assert done.returncode == 0, done.stderr
+    return comparable(json.loads(done.stdout))
