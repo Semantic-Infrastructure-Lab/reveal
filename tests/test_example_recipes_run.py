@@ -596,6 +596,8 @@ DOC_NAMED_SOURCE_COHORT = {
 
 
 def _source_cohort_reason(source, tokens):
+    if source.endswith('#embedded-md'):
+        return f'embedded Markdown not yet qualified: {source} (BACK-1365)'
     if source == 'AGENT_HELP.md' or source.startswith('guides/'):
         return None
     if (source, shlex.join(tokens)) in DOC_SOURCE_COHORT | DOC_NAMED_SOURCE_COHORT:
@@ -603,18 +605,38 @@ def _source_cohort_reason(source, tokens):
     return f'source cohort not yet qualified: {source} (BACK-1365)'
 
 
+def _embedded_markdown_commands(text):
+    """Inventory single-backtick commands in embedded Markdown tables/lists only."""
+    for fence, kind, block in re.findall(r'^(`{3,}|~{3,})([^\n]*)\n(.*?)^\1[ \t]*$', text, re.M | re.S):
+        if kind not in ('md', 'markdown'):
+            continue
+        for line in block.split('\n'):
+            if re.match(r'\s*(?:\||(?:\d+[.)]|[-+*])\s+)', line):
+                for command in re.findall(r'(?<!`)`([^`\n]+)`(?!`)', line):
+                    for command_text, tokens in _shell_reveal_commands(command):
+                        if len(tokens) > 1:
+                            yield command_text, tokens
+
+
 def _documented_commands(docs=None):
     """(docs-relative source, text, tokens, shown failing) per documented command."""
     from pathlib import Path
     import reveal
     docs = docs or Path(reveal.__file__).parent / 'docs'
+    embedded = []
     for source_name, source in _documented_sources(docs):
-        for block in re.findall(r'```(?:bash|sh|shell)\n(.*?)```', source.read_text(encoding='utf-8'), re.S):
+        text = source.read_text(encoding='utf-8')
+        for block in re.findall(r'```(?:bash|sh|shell)\n(.*?)```', text, re.S):
             for line, tokens in _shell_reveal_commands(block):
                 if tokens:
                     after = block.split(line, 1)[-1].lstrip('\n').split('\n', 1)[0]
                     failing = bool(_DOCUMENTED_FAILURE.search(line) or _DOCUMENTED_FAILURE.match(after))
                     yield source_name, line, tokens, failing
+        embedded.extend((source_name + '#embedded-md', line, tokens, bool(_DOCUMENTED_FAILURE.search(line)))
+                        for line, tokens in _embedded_markdown_commands(text) if tokens)
+    # Keep every existing shell occurrence first: an unqualified embedded copy must
+    # never shadow a later shell example when named fixtures deduplicate commands.
+    yield from embedded
 
 
 def _is_discovery(tokens):

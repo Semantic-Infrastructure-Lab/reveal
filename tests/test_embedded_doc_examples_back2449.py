@@ -77,6 +77,7 @@ Regular prose mentions `reveal help://quick` without instructing a step.
 1. Explain `ast://src/` and `echo reveal help://quick`.
 2. `reveal` is the program name.
 3. ``reveal help://quick`` is outside the single-backtick grammar.
+4. `reveal # explanation` is a program name with a shell comment.
 | Need | `ast://` | `echo reveal env://` |
 reveal env://
 ```
@@ -88,6 +89,23 @@ reveal env://
 ```
 ''')
     assert list(recipes._documented_commands(tmp_path)) == []
+
+
+@pytest.mark.parametrize('fence', ['````', '~~~'])
+def test_markdown_fence_literal_inside_other_fence_is_not_an_instruction(tmp_path, fence):
+    _write(tmp_path, 'AGENT_HELP.md', f'''{fence}text
+```md
+1. `reveal help://quick`
+```
+{fence}
+''')
+    assert list(recipes._documented_commands(tmp_path)) == []
+
+
+def test_unclosed_inline_command_quote_fails_clearly_without_partial_tokens(tmp_path):
+    _write(tmp_path, 'AGENT_HELP.md', '```md\n1. `reveal "unterminated`\n```\n')
+    with pytest.raises(AssertionError, match='Unterminated documented command'):
+        list(recipes._documented_commands(tmp_path))
 
 
 def test_embedded_identity_cannot_borrow_shell_qualification(tmp_path):
