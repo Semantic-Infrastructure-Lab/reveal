@@ -8,13 +8,14 @@ Nav-flag handlers (--outline, --varflow, --calls, etc.) live in reveal.nav_handl
 test imports.
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from .core import tree_root
 from .core.treesitter_compat import _zero_arg
-from .utils.results import outcome_of
+from .utils.results import FailureCause, failure_execution_facts, outcome_of
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -106,7 +107,8 @@ from .nav_handlers import (  # noqa: F401
 from reveal.utils.lines import split_lines
 
 
-def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code: int = 1):
+def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code: int = 1, *,
+                          nav_source: bool = False):
     """Get analyzer for path or exit with error.
 
     Args:
@@ -114,6 +116,7 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code:
         allow_fallback: Whether to allow fallback analyzers
         unreadable_exit_code: Exit code when the file exists but cannot be read
             (`check` passes 3, its "could not be checked" code)
+        nav_source: Adopt authored source failure facts for a navigation request
 
     Returns:
         Analyzer instance
@@ -122,7 +125,7 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code:
         With error code 1 if no analyzer found, *unreadable_exit_code* if unreadable
     """
     from .registry import get_analyzer, get_all_analyzers  # noqa: I006 — circular avoidance
-    from .errors import AnalyzerNotFoundError  # noqa: I006 — circular avoidance
+    from .errors import AnalyzerNotFoundError, NavSourceFailure  # noqa: I006 — circular avoidance
 
     analyzer_class = get_analyzer(path, allow_fallback=allow_fallback)
     if not analyzer_class:
@@ -149,8 +152,32 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code:
     except OSError as e:
         # An unreadable file (chmod 000, a FIFO, a vanished mount) printed a raw
         # traceback, while a missing path got a clean error (BACK-1424).
-        print(f"Error: cannot read {path}: {e.strerror or e}", file=sys.stderr)
+        diagnostic = _source_read_diagnostic(e, path, nav_source)
+        print(diagnostic, file=sys.stderr)
+        if nav_source:
+            raise NavSourceFailure(unreadable_exit_code,
+                                   execution_facts=failure_execution_facts(_nav_read_failure_cause(e, path)),
+                                   public_diagnostic=diagnostic) from e
         sys.exit(unreadable_exit_code)
+
+
+def _source_read_diagnostic(error: OSError, path: str, nav_source: bool) -> str:
+    """Preserve legacy text while spelling the new public nav diagnostic safely."""
+    from .utils.path_utils import failure_of, to_posix
+
+    if nav_source:
+        return f"Error: cannot read {to_posix(path)}: {error.strerror or failure_of(error).cause}"
+    return f"Error: cannot read {path}: {error.strerror or error}"
+
+
+def _nav_read_failure_cause(error: OSError, path: str) -> FailureCause:
+    """Only a missing requested filename establishes invalid source selection."""
+    filename = error.filename
+    if (isinstance(error, FileNotFoundError)
+            and isinstance(filename, (str, bytes, os.PathLike))
+            and Path(os.fsdecode(filename)) == Path(path)):
+        return FailureCause.INVALID_REQUEST
+    return FailureCause.ANALYSIS
 
 
 def _build_file_cli_overrides(args: Optional['Namespace']) -> dict:
@@ -222,6 +249,8 @@ def _resolve_func_node(analyzer, element: str):
     """
     from .display.element import _parse_element_syntax  # noqa: I006
     from .element_resolve import ambiguity_note, describe_candidates  # noqa: I006
+    from .errors import NavSourceFailure
+    from .utils.path_utils import to_posix
     resolution = _resolve_element(analyzer, element) if element else None
     func_node = resolution.node if resolution is not None else None
     # BACK-1400: say which definition the nav flag is analyzing when the name
@@ -240,13 +269,14 @@ def _resolve_func_node(analyzer, element: str):
                 else len(split_lines(analyzer.content))
             )
         else:
-            print(
-                f'Error: could not find function or method {element!r} in {analyzer.path}\n'
+            diagnostic = (
+                f'Error: could not find function or method {element!r} in {to_posix(analyzer.path)}\n'
                 '  Use `reveal <file>` to list available elements.\n'
-                '  For methods, use Class.method syntax (e.g., MyClass.my_method).',
-                file=sys.stderr,
+                '  For methods, use Class.method syntax (e.g., MyClass.my_method).'
             )
-            sys.exit(1)
+            print(diagnostic, file=sys.stderr)
+            raise NavSourceFailure(1, execution_facts=failure_execution_facts(FailureCause.INVALID_REQUEST),
+                                   public_diagnostic=diagnostic)
     else:
         func_start = _zero_arg(func_node, 'start_position').row + 1
         # Dart's grammar splits a function into sibling `function_signature`
@@ -465,7 +495,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
     args = _effects_args(args, path, show_meta)
 
     allow_fallback = not getattr(args, 'no_fallback', False) if args else True
-    analyzer = _get_analyzer_or_exit(path, allow_fallback)
+    analyzer = _get_analyzer_or_exit(path, allow_fallback, nav_source=_has_nav_flag(args))
 
     cli_overrides = _build_file_cli_overrides(args)
     config = RevealConfig.get(

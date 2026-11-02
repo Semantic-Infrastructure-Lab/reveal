@@ -188,6 +188,8 @@ def test_stdio_source_failures_recovery_ranges_and_private_masking(tmp_path, sou
             _diagnostic(_text(missing), True)
             empty = await session.call_tool('reveal_nav', _arguments(source, flag=flag))
             assert not empty.is_error and 'cannot read' not in _text(empty)
+            if flag != 'sideeffects':
+                assert 'deprecated' not in _text(empty)
             absent = await session.call_tool('reveal_nav', _arguments(source, 'absent', flag))
             assert absent.is_error
             _diagnostic(_text(absent), False)

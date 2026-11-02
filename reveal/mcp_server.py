@@ -49,7 +49,7 @@ except ImportError:
 from .cli.defaults import _default_args
 from .cli.global_flags import apply_global_flags
 from .utils.path_utils import failure_of
-from .errors import NavRequestValidationError, TestLayoutValidationError, TestLayoutConfigError
+from .errors import NavSourceFailure, NavRequestValidationError, TestLayoutValidationError, TestLayoutConfigError
 
 # All reveal-mcp tools are read-only (no writes, no side effects) and
 # idempotent (same args -> same result, modulo underlying files changing).
@@ -188,12 +188,15 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     err_buf = io.StringIO()
     exit_code = None
     captured_exception = None
+    source_failure = None
     with _capture_lock:
         old_stdout, old_stderr = sys.stdout, sys.stderr
         sys.stdout = out_buf
         sys.stderr = err_buf
         try:
             fn(*args, **kwargs)
+        except NavSourceFailure as exc:
+            source_failure = exc
         except SystemExit as e:
             exit_code = e.code
         except Exception as exc:  # boundary-ok: broad-except -- arbitrary adapter code; preserve origin for the registered boundary to mask crashes
@@ -205,6 +208,8 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     out = out_buf.getvalue()
     err = err_buf.getvalue().strip()
 
+    if source_failure is not None and _execution_failed(source_failure.execution_facts):
+        return _tool_failure(source_failure.public_diagnostic)
     if captured_exception is not None:
         from .cli.invocation import RetiredSpellingError
         return _tool_failure(str(captured_exception),

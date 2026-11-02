@@ -148,3 +148,49 @@ def test_missing_dependency_or_unknown_filename_is_analysis_not_request(tmp_path
         _get_analyzer_or_exit(str(requested), True, nav_source=True)
     assert caught.value.execution_facts == failure_execution_facts(FailureCause.ANALYSIS)
     assert str(dependency) not in caught.value.public_diagnostic
+
+
+def test_public_read_diagnostic_spells_only_requested_path(monkeypatch):
+    import errno
+    from reveal.file_handler import _get_analyzer_or_exit
+    import reveal.registry as registry
+
+    def construct(path):
+        raise PermissionError(errno.EACCES, 'controlled read', 'PRIVATE_DEPENDENCY_FILENAME')
+
+    monkeypatch.setattr(registry, 'get_analyzer', lambda *a, **kw: construct)
+    with pytest.raises(NavSourceFailure) as caught:
+        _get_analyzer_or_exit('pkg\\requested.py', True, nav_source=True)
+    assert caught.value.public_diagnostic == 'Error: cannot read pkg/requested.py: controlled read'
+    assert 'PRIVATE_DEPENDENCY_FILENAME' not in caught.value.public_diagnostic
+
+
+def test_default_off_read_diagnostic_keeps_legacy_fallback(tmp_path, monkeypatch, capsys):
+    from reveal.file_handler import _get_analyzer_or_exit
+    import reveal.registry as registry
+
+    def construct(path):
+        raise PermissionError('controlled legacy read')
+
+    monkeypatch.setattr(registry, 'get_analyzer', lambda *a, **kw: construct)
+    path = str(tmp_path / 'requested.py')
+    with pytest.raises(SystemExit) as caught:
+        _get_analyzer_or_exit(path, True)
+    assert type(caught.value) is SystemExit
+    assert capsys.readouterr().err == f'Error: cannot read {path}: controlled legacy read\n'
+
+
+def test_definitive_selection_absence_authors_invalid_request_facts(tmp_path):
+    from reveal.file_handler import _resolve_func_node
+    from reveal.registry import get_analyzer
+
+    path = tmp_path / 'source.py'
+    path.write_text('def empty():\n    return 1\n', encoding='utf-8')
+    analyzer = get_analyzer(str(path))(str(path))
+    with pytest.raises(NavSourceFailure) as caught:
+        _resolve_func_node(analyzer, 'absent')
+    assert caught.value.code == 1
+    assert caught.value.execution_facts == failure_execution_facts(FailureCause.INVALID_REQUEST)
+    assert caught.value.public_diagnostic.count('list available elements') == 1
+    node, first, last = _resolve_func_node(analyzer, ':1-2')
+    assert node is not None and (first, last) == (1, 2)
