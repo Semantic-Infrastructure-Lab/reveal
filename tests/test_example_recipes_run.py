@@ -26,6 +26,7 @@ own query: every row satisfies its predicates, in its sort= order, within its li
 """
 
 import json
+import os
 import re
 import shlex
 import shutil
@@ -560,18 +561,49 @@ DISCOVERY_FLAGS = {'--adapters', '--languages', '--discover', '--agent-help', '-
 _DOCUMENTED_FAILURE = re.compile(r'#.*\b(not valid|invalid)\b|^\s*# Error\b', re.IGNORECASE)
 
 
+def _documented_sources(docs):
+    """Canonical source inventory; inventory is broader than qualified execution."""
+    sources = [docs / 'AGENT_HELP.md', *sorted((docs / 'guides').glob('*.md')),
+               docs.parent.parent / 'README.md', *sorted((docs / 'adapters').glob('*.md')),
+               *(docs / name for name in ('QUICK_START.md', 'WHY_REVEAL.md', 'INDEX.md'))]
+    for source in sources:
+        if source.is_file():
+            yield os.path.relpath(source, docs).replace(os.sep, '/'), source
+
+
+# Exact source-command identities accepted by BACK-2444. Other newly inventoried
+# examples stay visible exclusions until their fixture and answer are qualified.
+DOC_SOURCE_COHORT = {
+    ('../../README.md', 'reveal overview .'),
+    ('../../README.md', 'reveal overview . --against HEAD'),
+    ('../../README.md', 'reveal imports . --external'),
+    ('../../README.md', "reveal 'markdown://docs/?aggregate=type'"),
+    ('../../README.md', "reveal 'markdown://docs/?body-contains=retry&type=procedure'"),
+    ('adapters/OVERVIEW_ADAPTER_GUIDE.md', 'reveal overview . --top 0'),
+    ('adapters/IMPORTS_ADAPTER_GUIDE.md', 'reveal imports://src'),
+}
+
+
+def _source_cohort_reason(source, tokens):
+    if source == 'AGENT_HELP.md' or source.startswith('guides/'):
+        return None
+    if (source, shlex.join(tokens)) in DOC_SOURCE_COHORT:
+        return None
+    return f'source cohort not yet qualified: {source} (BACK-1365)'
+
+
 def _documented_commands(docs=None):
-    """(source file name, line as written, shell-split tokens, shown failing) per documented command."""
+    """(docs-relative source, text, tokens, shown failing) per documented command."""
     from pathlib import Path
     import reveal
     docs = docs or Path(reveal.__file__).parent / 'docs'
-    for source in [docs / 'AGENT_HELP.md', *sorted((docs / 'guides').glob('*.md'))]:
+    for source_name, source in _documented_sources(docs):
         for block in re.findall(r'```(?:bash|sh|shell)\n(.*?)```', source.read_text(encoding='utf-8'), re.S):
             for line, tokens in _shell_reveal_commands(block):
                 if tokens:
                     after = block.split(line, 1)[-1].lstrip('\n').split('\n', 1)[0]
                     failing = bool(_DOCUMENTED_FAILURE.search(line) or _DOCUMENTED_FAILURE.match(after))
-                    yield source.name, line, tokens, failing
+                    yield source_name, line, tokens, failing
 
 
 def _is_discovery(tokens):
@@ -584,7 +616,8 @@ def _documentation_commands():
         if not _is_discovery(tokens):
             continue
         query = shlex.join(tokens)
-        marks = []
+        reason = _source_cohort_reason(source, tokens)
+        marks = [pytest.mark.skip(reason=reason)] if reason else []
         for key, value in (('<topic>', 'ast'), ('<adapter>', 'ast'), ('<task>', 'codebase'),
                            ('<lang>', 'python'), ('<file>', 'proj/app.py')):
             query = query.replace(key, value)
@@ -749,7 +782,10 @@ def _named_fixture_commands(docs=None):
             seen.setdefault(shlex.join(tokens), (source, tokens, failing))
     params = []
     for query, (source, tokens, failing) in seen.items():
-        reason = 'the doc shows it failing' if failing else _named_fixture_skip(tokens)
+        reason = ('the doc shows it failing' if failing else
+                  'qualified in dedicated navigation fixture (BACK-2444)'
+                  if (source, query) in DOC_SOURCE_COHORT else
+                  _source_cohort_reason(source, tokens) or _named_fixture_skip(tokens))
         marks = [pytest.mark.skip(reason=f'named fixture: {reason}')] if reason else []
         if query in NAMED_KNOWN_VIOLATIONS:
             marks.append(pytest.mark.xfail(strict=True, reason=NAMED_KNOWN_VIOLATIONS[query]))

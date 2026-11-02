@@ -768,3 +768,26 @@ def _build_once(root: Path) -> Path:
     for branch in BRANCHES[2:]:
         _git(root, 'branch', branch)
     return root
+
+
+NAVIGATION_COHORT_FILES = {
+    'go.mod': 'module example.com/project\n\ngo 1.20\n',
+    'src/main.go': 'package main\nimport "example.com/project/src/helper"\nfunc main() { helper.Run() }\n',
+    'src/helper/helper.go': 'package helper\nfunc Run() {}\n',
+    'src/app.py': 'import os\ndef work():\n    return os.getcwd()\n',
+    'docs/retry.md': '---\ntype: procedure\n---\n# Retry\nretry the operation\n',
+    'docs/guide.md': '---\ntype: guide\n---\n# Guide\nSee [retry](retry.md).\n',
+    'docs/plain.md': '# Plain\nNo metadata.\n',
+}
+
+
+def build_navigation_cohort_tree(root: Path) -> Path:
+    """A small mixed-language project with known import and document answers."""
+    for name, content in NAVIGATION_COHORT_FILES.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding='utf-8')
+    _git(root, 'init', '-q')
+    _git(root, 'add', '.')
+    _git(root, 'commit', '-q', '-m', 'Navigation cohort fixture')
+    return root
