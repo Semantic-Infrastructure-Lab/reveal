@@ -61,10 +61,8 @@ def calls_harness(tmp_path):
 
 
 def _answer(harness, query):
-    argv = shlex.split(query)[1:]
-    code, out, err, _ = harness.run_subcommand(*argv, '--format', 'json')
-    assert code == 0 and not err
-    return json.loads(out)
+    output = recipes._assert_text_as_written(harness, query + ' --format json', literal=True)
+    return json.loads(output)
 
 
 def _assert_callers(query, answer):
