@@ -463,8 +463,9 @@ two. Importers anywhere under the scan root count, tests included unless `&tests
 the scan root. Python, PHP,
 JavaScript, TypeScript and TSX record import scope (positionally: an import, `import()` or
 `require()` in a function, method, arrow or function expression is function-level; a class field
-initializer or static block is module level). Other languages' edges count as load-time under
-every value, and the rule names those languages and the number of edges. An unknown value is an error.
+initializer or static block is module level). Unclassified edges stay in `include` and
+`exclude`, and are omitted by `only`; the rule names their languages and counts. An unknown
+parameter value is an error.
 `overview://` and `pack` print the same rule for the numbers they take from this
 graph; none of them accepts `&lazy`.
 
@@ -474,6 +475,18 @@ both module and local contributions counts under `exclude`, not `only`. These ar
 lexical positions, not a claim that an include executes or that its path is known.
 PHP loader expressions have `ImportStatement.dynamic=True`; namespace `use`
 declarations have `False`. This flag does not describe static path resolvability.
+
+Ruby's bounded subset is an implicit `require`, `require_relative` or `load` call
+with exactly one plain quoted ASCII path literal matching `[A-Za-z0-9_./-]+`.
+Top-level, class, module and singleton-class bodies are module scope; named instance
+and singleton methods confer local scope, including their nested blocks or lambdas.
+Standalone blocks, `define_method` blocks and lambdas do not establish qualified
+scope alone. Interpolation, escapes, computed paths, explicit receivers, additional
+arguments and implicit Zeitwerk convention edges remain unclassified. Existing
+extracted statements and resolved union edges are retained. Qualified loader calls
+have `dynamic=True`, meaning a loader expression, not an unknown path or runtime
+execution claim. Ruby remains ungated: no registered native recall row measures
+this bounded subset or the whole language.
 
 ```bash
 reveal 'imports://src?rank=fan-in&lazy=exclude'   # module-level imports only

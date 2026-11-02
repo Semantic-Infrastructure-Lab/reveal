@@ -1653,8 +1653,20 @@ recurses into function bodies). Each answer prints its rule, a `Rule:` line in t
 resolve importers from the project scan root and `<dir>` only limits which files are listed as rows. `imports://<dir>?rank=fan-in&lazy=exclude`
 is the architecture view (load-time edges only); `?circular` uses it by default, because a
 function-level import runs after every module has loaded and cannot close an import-time
-cycle. Python, JavaScript, TypeScript and TSX record where an import sits; for other languages
-`&lazy` cannot separate edges, and the printed rule names them.
+cycle. Python, PHP, JavaScript, TypeScript and TSX record where an import sits. Ruby has the
+bounded literal-loader subset described below; remaining unclassified edges are disclosed,
+retained by `exclude` and omitted by `only`.
+
+Ruby scope is bounded to implicit `require`/`require_relative`/`load` with exactly one
+plain quoted ASCII path literal matching `[A-Za-z0-9_./-]+`. Named instance/singleton
+methods confer local scope (including nested blocks/lambdas); top-level, class,
+module and singleton-class bodies are module scope. Standalone blocks/lambdas,
+`define_method` blocks, unsupported expressions/escapes/receivers/arguments and
+implicit Zeitwerk convention edges retain unknown scope. This is lexical evidence,
+not execution timing or runtime path resolution. Ruby remains **ungated**: no native
+Ruby oracle is registered and no whole-language recall row or scheduled baseline
+was promoted. See the [imports guide](reveal/docs/adapters/IMPORTS_ADAPTER_GUIDE.md#which-edges-count-lazy)
+for statement and mixed-pair behavior.
 
 The JS/TS rule is positional, like Python's [BACK-2078]: an ES `import`, an `export ... from`
 and a top-level `import()` or `require()` are module level; an `import()` or `require()` inside

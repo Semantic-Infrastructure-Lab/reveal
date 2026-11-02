@@ -1487,7 +1487,7 @@ reveal 'imports://src?importers&format=dot' | dot -Tsvg > deps.svg
 
 Use the three `imports://` views for orientation; `?importers` for targeted impact analysis before a specific change. `depends://` is the retired spelling of `?importers`: it prints a note and answers as before (its shapes, exit 0 on a partial answer) until the cut.
 
-**Which edges count:** every view counts function-level (lazy) imports except `?circular` (and `metadata.has_cycles`), where a lazy back-edge is not an import-time cycle. `&lazy=exclude` gives the load-time (architecture) view, `&lazy=include` makes `?circular` count lazy edges, `&lazy=only` shows only them. Each answer prints its rule: a `Rule:` line in text, `edge_rule` in JSON. Python, JavaScript, TypeScript and TSX record import scope; the rule names any other language whose edges it could not classify.
+**Which edges count:** every view counts function-level (lazy) imports except `?circular` (and `metadata.has_cycles`), where a lazy back-edge is not an import-time cycle. `&lazy=exclude` gives the load-time (architecture) view, `&lazy=include` makes `?circular` count lazy edges, `&lazy=only` shows only them. Each answer prints its rule: a `Rule:` line in text, `edge_rule` in JSON. Python, PHP, JavaScript, TypeScript and TSX record import scope. Ruby qualifies a bounded [literal-loader subset](adapters/IMPORTS_ADAPTER_GUIDE.md#which-edges-count-lazy); unsupported and convention edges remain unclassified and disclosed, retained by `exclude` and omitted by `only`.
 
 **Enforce architectural layers (`?violations`):**
 ```bash
