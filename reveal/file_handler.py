@@ -15,7 +15,7 @@ from typing import Optional, TYPE_CHECKING
 
 from .core import tree_root
 from .core.treesitter_compat import _zero_arg
-from .utils.results import FailureCause, failure_execution_facts, outcome_of
+from .utils.results import FailureCause, NavSourceFailure, failure_execution_facts, outcome_of
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -125,7 +125,7 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code:
         With error code 1 if no analyzer found, *unreadable_exit_code* if unreadable
     """
     from .registry import get_analyzer, get_all_analyzers  # noqa: I006 — circular avoidance
-    from .errors import AnalyzerNotFoundError, NavSourceFailure  # noqa: I006 — circular avoidance
+    from .errors import AnalyzerNotFoundError  # noqa: I006 — circular avoidance
 
     analyzer_class = get_analyzer(path, allow_fallback=allow_fallback)
     if not analyzer_class:
@@ -249,7 +249,6 @@ def _resolve_func_node(analyzer, element: str):
     """
     from .display.element import _parse_element_syntax  # noqa: I006
     from .element_resolve import ambiguity_note, describe_candidates  # noqa: I006
-    from .errors import NavSourceFailure
     from .utils.path_utils import to_posix
     resolution = _resolve_element(analyzer, element) if element else None
     func_node = resolution.node if resolution is not None else None

@@ -1,8 +1,9 @@
 """Mandatory source-authored nav failure contract; shell codes remain independent."""
 import pytest
 
-from reveal.errors import NavSourceFailure
-from reveal.utils.results import AnalysisCompleteness, ExecutionFacts, FailureCause, failure_execution_facts
+from reveal.utils.results import (
+    AnalysisCompleteness, ExecutionFacts, FailureCause, NavSourceFailure, failure_execution_facts,
+)
 
 pytestmark = pytest.mark.component
 

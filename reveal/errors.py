@@ -7,11 +7,8 @@ This module provides error classes that include:
 - Consistent formatting
 """
 
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any
 from pathlib import Path
-
-if TYPE_CHECKING:
-    from .utils.results import ExecutionFacts
 
 
 class RequestValidationError(ValueError):
@@ -28,30 +25,6 @@ class NavRequestValidationError(RequestValidationError):
     Transports recognize this bounded origin without reclassifying legacy exits
     or unrelated validation failures.
     """
-
-
-class NavSourceFailure(SystemExit):
-    """Authored nav source/selection failure with an unchanged legacy shell exit."""
-
-    def __init__(self, legacy_exit_code: int, *, execution_facts: 'ExecutionFacts',
-                 public_diagnostic: str) -> None:
-        from .utils.results import AnalysisCompleteness, ExecutionFacts, FailureCause
-
-        if type(legacy_exit_code) is not int:
-            raise TypeError('legacy_exit_code must be an integer')
-        if not isinstance(execution_facts, ExecutionFacts):
-            raise TypeError('execution_facts must be ExecutionFacts')
-        if (execution_facts.completeness not in (AnalysisCompleteness.FAILED, AnalysisCompleteness.NOT_STARTED)
-                or not execution_facts.failures
-                or not execution_facts.failures <= {FailureCause.INVALID_REQUEST, FailureCause.ANALYSIS}):
-            raise ValueError('NavSourceFailure requires failed source/selection execution facts')
-        if not isinstance(public_diagnostic, str):
-            raise TypeError('public_diagnostic must be a string')
-        if not public_diagnostic.strip():
-            raise ValueError('public_diagnostic must not be empty')
-        super().__init__(legacy_exit_code)
-        self.execution_facts = execution_facts
-        self.public_diagnostic = public_diagnostic
 
 
 class TestLayoutValidationError(RequestValidationError):

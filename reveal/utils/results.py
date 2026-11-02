@@ -135,6 +135,28 @@ class ExecutionFacts:
         object.__setattr__(self, 'failures', failures)
 
 
+class NavSourceFailure(SystemExit):
+    """Authored nav source/selection failure with an unchanged legacy shell exit."""
+
+    def __init__(self, legacy_exit_code: int, *, execution_facts: 'ExecutionFacts',
+                 public_diagnostic: str) -> None:
+        if type(legacy_exit_code) is not int:
+            raise TypeError('legacy_exit_code must be an integer')
+        if not isinstance(execution_facts, ExecutionFacts):
+            raise TypeError('execution_facts must be ExecutionFacts')
+        if (execution_facts.completeness not in (AnalysisCompleteness.FAILED, AnalysisCompleteness.NOT_STARTED)
+                or not execution_facts.failures
+                or not execution_facts.failures <= {FailureCause.INVALID_REQUEST, FailureCause.ANALYSIS}):
+            raise ValueError('NavSourceFailure requires failed source/selection execution facts')
+        if not isinstance(public_diagnostic, str):
+            raise TypeError('public_diagnostic must be a string')
+        if not public_diagnostic.strip():
+            raise ValueError('public_diagnostic must not be empty')
+        super().__init__(legacy_exit_code)
+        self.execution_facts = execution_facts
+        self.public_diagnostic = public_diagnostic
+
+
 def failure_execution_facts(cause: FailureCause) -> ExecutionFacts:
     """Record a returned or caught failure after its owner classifies its cause.
 

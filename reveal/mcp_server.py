@@ -49,7 +49,8 @@ except ImportError:
 from .cli.defaults import _default_args
 from .cli.global_flags import apply_global_flags
 from .utils.path_utils import failure_of
-from .errors import NavSourceFailure, NavRequestValidationError, TestLayoutValidationError, TestLayoutConfigError
+from .utils.results import NavSourceFailure
+from .errors import NavRequestValidationError, TestLayoutValidationError, TestLayoutConfigError
 
 # All reveal-mcp tools are read-only (no writes, no side effects) and
 # idempotent (same args -> same result, modulo underlying files changing).

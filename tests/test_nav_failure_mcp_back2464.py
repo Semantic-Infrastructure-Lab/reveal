@@ -9,8 +9,7 @@ pytest.importorskip('mcp')
 from mcp.types import CallToolRequestParams
 
 from conftest import _run_reveal_direct
-from reveal.errors import NavSourceFailure
-from reveal.utils.results import FailureCause, failure_execution_facts
+from reveal.utils.results import FailureCause, NavSourceFailure, failure_execution_facts
 from test_mcp_expected_errors_back1992 import _run as _stdio, _text
 from test_nav_traversal_loss_back2025 import fault
 
