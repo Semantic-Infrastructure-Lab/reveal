@@ -6,6 +6,8 @@ import os
 import pytest
 
 from reveal.analyzers.kotlin import KotlinAnalyzer
+from reveal.core.treesitter_parse import get_tree
+from reveal.core.treesitter_compat import _zero_arg, node_children, tree_root
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -683,6 +685,47 @@ fun afterFunction(): Int {
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def _assert_recovered_declaration(structure, category, name, line):
+    entries = [entry for entry in structure.get(category, []) if entry['name'] == name]
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry['line'] == entry['line_end'] == line
+    assert entry['recovered_from_error'] is True
+    warnings = structure['parse_warnings']['items']
+    assert any(w['type'] == 'recovered_parse_error' and w['line'] == line
+               and f"'{name}'" in w['message'] and 'may be incomplete' in w['message']
+               for w in warnings)
+
+
+@pytest.mark.parametrize('declaration,category,name', [
+    ('fun damaged(', 'functions', 'damaged'),
+    ('class Damaged(', 'classes', 'Damaged'),
+])
+def test_malformed_declaration_recovery_is_required_and_guard_bites(
+        tmp_path, monkeypatch, declaration, category, name):
+    source = 'fun healthy(): Int { return 1 }\n\n' + declaration + '\n'
+    path = tmp_path / 'damaged.kt'
+    path.write_text(source, encoding='utf-8')
+    root = tree_root(get_tree('kotlin', source))
+    errors = [node for node in node_children(root) if _zero_arg(node, 'kind') == 'ERROR']
+    assert len(errors) == 1
+    assert _zero_arg(errors[0], 'start_position').row + 1 == 3
+    assert [_zero_arg(node, 'kind') for node in node_children(errors[0])][:2] == [
+        declaration.split()[0], 'simple_identifier']
+
+    actual = KotlinAnalyzer(str(path)).get_structure()
+    _assert_recovered_declaration(actual, category, name, 3)
+    assert {row['name']: row for row in actual['functions']}['healthy']['line'] == 1
+    assert 'recovered_from_error' not in actual['functions'][0]
+
+    monkeypatch.setattr(KotlinAnalyzer, '_recover_error_declarations', lambda self, structure: None)
+    without_recovery = KotlinAnalyzer(str(path)).get_structure()
+    with pytest.raises(AssertionError):
+        _assert_recovered_declaration(without_recovery, category, name, 3)
+    healthy = {row['name']: row for row in without_recovery['functions']}['healthy']
+    assert healthy['line'] == 1 and 'recovered_from_error' not in healthy
 
 
 def _kotlin_bases(tmp_path, source):

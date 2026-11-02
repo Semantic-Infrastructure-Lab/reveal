@@ -527,3 +527,12 @@ def test_an_unscoped_function_like_kind_is_caught():
                                    NOT_LOCAL_SCOPE['python']) == {'function_definition'}
     assert unscoped_function_kinds(frozenset({'arrow_function', 'local_lambda_block'}),
                                    frozenset({'arrow_function'})) == {'local_lambda_block'}
+
+
+def test_dart_primary_constructor_fragments_do_not_explain_a_body():
+    """Parameter/signature fragments are explained individually, never a body wildcard."""
+    fragments = {'primary_constructor', 'primary_constructor_body_signature'}
+    assert unscoped_function_kinds(fragments, frozenset(), NOT_LOCAL_SCOPE['dart']) == set()
+    assert all(NOT_LOCAL_SCOPE['dart'][kind] == _FN_PART for kind in fragments)
+    assert unscoped_function_kinds(fragments | {'primary_constructor_body'}, frozenset(),
+                                   NOT_LOCAL_SCOPE['dart']) == {'primary_constructor_body'}
