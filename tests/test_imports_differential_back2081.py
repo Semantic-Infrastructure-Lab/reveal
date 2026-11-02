@@ -11,13 +11,11 @@ every view runs as separate processes through the public path:
 
 An edit that keeps a file's size and mtime is a stat-key design limit and is out of scope here.
 """
-import json
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+
+from cache_differential import run_reveal
 
 pytestmark = [pytest.mark.disk_cache]
 
@@ -61,23 +59,7 @@ def project(tmp_path):
 
 def _answer(root: Path, view, cache_dir: Path, *, cache: bool):
     """One request in its own process, through the public path: (exit code, JSON answer)."""
-    env = {**os.environ, 'PYTHONHASHSEED': '0', 'REVEAL_NO_CONFIG': '1',
-           'REVEAL_CACHE_DIR': str(cache_dir), 'REVEAL_DISK_CACHE': '1' if cache else '0'}
-    done = subprocess.run([sys.executable, '-m', 'reveal', 'imports', str(root), *VIEWS[view],
-                           '--format', 'json'], capture_output=True, text=True, encoding='utf-8', env=env, timeout=120)
-    assert done.returncode in (0, 3), done.stderr
-    return done.returncode, _comparable(json.loads(done.stdout))
-
-
-def _comparable(value):
-    """The answer without what legitimately differs between two runs (timings, cache provenance)."""
-    volatile = {'elapsed', 'elapsed_ms', 'duration', 'duration_ms', 'timing', 'timings', 'cache',
-                'cache_hit', 'from_cache', 'generated_at', 'perf'}
-    if isinstance(value, dict):
-        return {k: _comparable(v) for k, v in value.items() if k not in volatile}
-    if isinstance(value, list):
-        return [_comparable(v) for v in value]
-    return value
+    return run_reveal(['imports', str(root), *VIEWS[view], '--format', 'json'], cache_dir, cache=cache)
 
 
 @pytest.mark.parametrize('view', sorted(VIEWS))
