@@ -161,7 +161,7 @@ def test_missing_runtime_and_timeout_are_measurement_failures(tmp_path, monkeypa
 
 
 @needs_php
-def test_existing_gate_exposes_current_product_scope_gap(tmp_path, monkeypatch):
+def test_existing_gate_scores_qualified_php_scope_and_requires_mode_review(tmp_path, monkeypatch):
     oracle = _oracle()
     root, entry = _repo(tmp_path, {
         'target.php': '<?php\n',
@@ -175,9 +175,10 @@ def test_existing_gate_exposes_current_product_scope_gap(tmp_path, monkeypatch):
         measured = gate.measure(entry, root)
     assert measured['oracle_edges'] == measured['hit_edges'] == 3
     assert measured['recall'] == measured['precision'] == 1
-    # The existing zero-hit guard must remain active for unsupported PHP scope.
-    with pytest.raises(RuntimeError, match='lazy=only: reveal found zero oracle edges'):
-        gate.measure(entry, root)
+    scoped = gate.measure(entry, root)
+    assert scoped['lazy']['only']['oracle_edges'] == scoped['lazy']['only']['hit_edges'] == 1
+    assert scoped['lazy']['exclude']['oracle_edges'] == scoped['lazy']['exclude']['hit_edges'] == 2
+    assert all(row['recall'] == row['precision'] == 1 for row in scoped['lazy'].values())
     failures = []
     gate._compare_modes('php', 'lazy', {'only': {'oracle_edges': 1}, 'exclude': {'oracle_edges': 2}}, {}, failures)
     assert failures == [
