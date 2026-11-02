@@ -52,7 +52,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Query functions by complexity/size/type | `reveal 'ast://src/?type=function&complexity>10&sort=-complexity&limit=10'` |
 | Who calls a function | `reveal 'calls://src/?callers=my_fn'` |
 | What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
-| A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--sideeffects`, `--exits`) |
+| A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--effects`, `--exits`) |
 | Unused or circular imports | `reveal 'imports://src/?unused'` / `?circular` |
 | HTTP routes | `reveal 'surface://src/?type=http'` |
 | Env vars, network/db/fs access, the whole external boundary | `reveal 'surface://src/'` |
@@ -642,14 +642,14 @@ reveal patches src --view pressure --tests tests --top 20
 reveal patches src --view pressure --tests tests --format json
 ```
 
-**Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `reveal patches <tests>` shows what tests patch. `reveal patches <src> --view pressure` joins that pressure with production functions that touch network clients, persistence, filesystem state, logging, sleeps, environment/config, process exit, or mutation -- each function's own calls, classified exactly as `--sideeffects` classifies them, so the two never disagree. *(Supports Python (`unittest.mock`/`pytest`) and TypeScript/JavaScript (Jest/Vitest: `jest.mock`, `vi.mock`, `jest.spyOn`, `vi.spyOn`, `jest.fn`, `vi.fn`, `jest.replaceProperty`). Boundary fan-out half works for all languages. A tree whose only tests are in another language (Go, Java, Rust, ...) is declined as not applicable, exit 0, naming the language, never answered as 0 uses; a mixed tree scans the Python and JS/TS and, once the unread test files outnumber the read ones, discloses them in `test_scope.unscanned` and a `language_not_scanned` warning.)*
+**Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `reveal patches <tests>` shows what tests patch. `reveal patches <src> --view pressure` joins that pressure with production functions that touch network clients, persistence, filesystem state, logging, sleeps, environment/config, process exit, or mutation -- each function's own calls, classified exactly as `--effects` classifies them, so the two never disagree. *(Supports Python (`unittest.mock`/`pytest`) and TypeScript/JavaScript (Jest/Vitest: `jest.mock`, `vi.mock`, `jest.spyOn`, `vi.spyOn`, `jest.fn`, `vi.fn`, `jest.replaceProperty`). Boundary fan-out half works for all languages. A tree whose only tests are in another language (Go, Java, Rust, ...) is declined as not applicable, exit 0, naming the language, never answered as 0 uses; a mixed tree scans the Python and JS/TS and, once the unread test files outnumber the read ones, discloses them in `test_scope.unscanned` and a `language_not_scanned` warning.)*
 
 **How to interpret it:** This is advisory. Mocking an external API, clock, certificate probe, or filesystem boundary can be correct. High signal comes from repeated private/internal patches or patch pressure that overlaps with high boundary fan-out.
 
 **Follow-up commands:**
 ```bash
 reveal src/module.py function_name --boundary
-reveal src/module.py function_name --sideeffects
+reveal src/module.py function_name --effects
 reveal 'calls://src?callees=function_name'
 reveal surface src
 ```
@@ -812,7 +812,7 @@ reveal app.py process_request --narrow response
 ```
 Parses `Optional[X]`, `Union[X,Y,None]`, `X|Y` annotations and classifies `isinstance`, `not isinstance`, `is None`, `is not None` guards. Shows the type at each branch. Useful before editing code that handles nullable types.
 
-> **PHP support**: All nav flags including `--varflow`, `--inputs`, `--outputs`, `--sideeffects`, `--exits`, and `--boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
+> **PHP support**: All nav flags including `--varflow`, `--inputs`, `--outputs`, `--effects`, `--exits`, and `--boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
 
 **`--callsites` → call sites in a line range**
 ```bash
@@ -889,10 +889,17 @@ Suggests variables the caller may need back — what would become return values 
 
 > `--outputs` reports values written in the selected range and read afterwards. Selecting a whole function can correctly return no hazards; this is not an inventory of every write. The empty-result message includes a `--varflow` hint.
 
-**`--sideeffects` → classified side-effect calls (db/http/cache/log/file/sleep/hard_stop)**
+The current modes are `--effects`, `--effects --in-loops`, and
+`--effects --state`. Retired `--sideeffects`, `--fanout`, and `--statewrites`
+still run and report replacements. Select one mode; transitive expansion applies
+only to ordinary effects (depth 1–5, default 2). Loop depth is positive structural
+nesting (default 3). Ordinary nontransitive and state modes reject explicit depth.
+Existing JSON mode names and finding shapes remain unchanged.
+
+**`--effects` → classified side-effect calls (db/http/cache/log/file/sleep/hard_stop)**
 ```bash
-reveal flat_file.php :477-531 --sideeffects
-reveal app.py myfunc --sideeffects
+reveal flat_file.php :477-531 --effects
+reveal app.py myfunc --effects
 
 # Output (flat, in line order):
 # L3       db         mysql_query("SELECT * FROM orders...")
@@ -911,10 +918,10 @@ The property channel is deliberately narrow: it matches an explicit allowlist of
 
 **`--transitive` → follow calls into project-local helpers**
 ```bash
-reveal app.py handle_request --sideeffects --transitive
+reveal app.py handle_request --effects --transitive
 reveal app.py handle_request --boundary --transitive --depth 3
 ```
-Modifier for `--sideeffects` or `--boundary`: instead of only the entry function's own body, walks calls into project-local helper functions and reports their effects too — a real interprocedural blast-radius/agentic-exposure read, not just what's written inline. `--depth` controls how many call hops to follow (default 2, max 5). Stdlib/third-party calls are not followed (no source to walk); only project-local functions resolvable in the same codebase.
+Modifier for `--effects` or `--boundary`: instead of only the entry function's own body, walks calls into project-local helper functions and reports their effects too — a real interprocedural blast-radius/agentic-exposure read, not just what's written inline. `--depth` controls how many call hops to follow (default 2, max 5). Stdlib/third-party calls are not followed (no source to walk); only project-local functions resolvable in the same codebase.
 
 `--boundary --transitive` follows classified call effects into callees, while assignment writes are collected only in the entry function. Text output and JSON warnings disclose this assignment coverage limit. Inputs, builtins, and environment reads also remain entry-function scoped.
 
@@ -931,29 +938,29 @@ reveal file.php :100-500 --flow=loop
 ```
 Filtered view of `--flow` showing only loop nodes, indented by nesting depth. Answers "which loops exist and what do they iterate" without wading through the full control-flow skeleton. Works on every language with supported structural navigation.
 
-**`--fanout` → each loop paired with its classified side effects**
+**`--effects --in-loops` → each loop paired with its classified side effects**
 ```bash
-reveal file.py process_batch --fanout
-reveal file.php :100-500 --fanout --format=json
+reveal file.py process_batch --effects --in-loops
+reveal file.php :100-500 --effects --in-loops --format=json
 
 # Output:
 #   FOR  item in items  L2→L5
 #     L3       db         cursor.execute(item)
 #     L4       http       requests.get(item)
 ```
-Composes `--flow=loop` + `--sideeffects`: for each loop, runs the same classified-call scan `--sideeffects` uses, scoped to just that loop's line range. Purpose-built for N+1 query checks, per-item HTTP fan-out, and retry-safety review — the busywork it removes is manually matching call line numbers back to loop ranges when loops are nested. A loop with no classified effects renders `(no classified side effects)`, not silence, so absence of a finding is visible as a finding.
+Composes `--flow=loop` + `--effects`: for each loop, runs the same classified-call scan `--effects` uses, scoped to just that loop's line range. Purpose-built for N+1 query checks, per-item HTTP fan-out, and retry-safety review — the busywork it removes is manually matching call line numbers back to loop ranges when loops are nested. A loop with no classified effects renders `(no classified side effects)`, not silence, so absence of a finding is visible as a finding.
 
-**`--statewrites` → persistent/shared-state mutation surface (global/nonlocal/field/env/session/cache/db/file)**
+**`--effects --state` → persistent/shared-state mutation surface (global/nonlocal/field/env/session/cache/db/file)**
 ```bash
-reveal file.py process_order --statewrites
-reveal file.php :1-800 --statewrites
+reveal file.py process_order --effects --state
+reveal file.php :1-800 --effects --state
 
 # Output:
 # L190     field    self.path
 # L193     field    self.ref
 # L196     field    self.subpath
 ```
-`--outputs` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented (plus an env property channel) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. Module-bound container writes such as `STATE[k] = v` and explicit Python/PHP `global` assignments are classified as `global`; explicit Python `nonlocal` mutations and rebindings are `nonlocal`. Python/JS module bindings use lexical declarations, including JS function-hoisted `var` and block-local `let`/`const`; ordinary local containers and parameters stay local. PHP requires an explicit `global` declaration or `$GLOBALS`. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, imported-object resolution, and dynamic names remain outside this analysis. DB column/table extraction is not provided; an empty result does not establish the absence of shared-state writes. Works on PHP, Python, and JS/TS.
+`--outputs` is local-variable/refactor oriented (read-after-write hazards) and `--effects` is call oriented (plus an env property channel) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--effects --state` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--effects`'s call taxonomy, merged in by kind. `db` inherits `--effects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. Module-bound container writes such as `STATE[k] = v` and explicit Python/PHP `global` assignments are classified as `global`; explicit Python `nonlocal` mutations and rebindings are `nonlocal`. Python/JS module bindings use lexical declarations, including JS function-hoisted `var` and block-local `let`/`const`; ordinary local containers and parameters stay local. PHP requires an explicit `global` declaration or `$GLOBALS`. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, imported-object resolution, and dynamic names remain outside this analysis. DB column/table extraction is not provided; an empty result does not establish the absence of shared-state writes. Works on PHP, Python, and JS/TS.
 
 **`--keys VAR` → dynamic key/property access surface**
 ```bash
@@ -1004,7 +1011,7 @@ reveal flat_file.php handleRequest --boundary
 #   db   L5       mysql_query("SELECT * FROM items WHERE user=" . $...)
 #   log  L6       error_log("Fetched page " . $page)
 ```
-Composes `--inputs`, `--sideeffects`, and assignment writes from `--statewrites` into a single boundary-contract report: what the code receives (INPUTS), what environment state it reads (ENVIRONMENT — PHP superglobals `$_GET`, `$_POST`, `$_SESSION`, etc.), and what it does to the world (EFFECTS). Unshadowed registered builtins appear separately in BUILTINS, omitted when empty; JSON uses findings with `kind: builtin`. Assignment effects include `via: assignment` and render their target without call parentheses. The ENVIRONMENT section is omitted when empty (Python files rarely have superglobals). The highest-value single-flag summary for understanding an unfamiliar code range.
+Composes `--inputs`, `--effects`, and assignment writes from `--effects --state` into a single boundary-contract report: what the code receives (INPUTS), what environment state it reads (ENVIRONMENT — PHP superglobals `$_GET`, `$_POST`, `$_SESSION`, etc.), and what it does to the world (EFFECTS). Unshadowed registered builtins appear separately in BUILTINS, omitted when empty; JSON uses findings with `kind: builtin`. Assignment effects include `via: assignment` and render their target without call parentheses. The ENVIRONMENT section is omitted when empty (Python files rarely have superglobals). The highest-value single-flag summary for understanding an unfamiliar code range.
 
 **Most flags work on flat/procedural files:**
 ```bash
@@ -1012,7 +1019,7 @@ Composes `--inputs`, `--sideeffects`, and assignment writes from `--statewrites`
 reveal legacy_controller.php :878-2130 --flow=if
 reveal legacy_controller.php :657-2200 --exits
 reveal legacy_controller.php :1136-1463 --inputs
-reveal legacy_controller.php :477-531 --sideeffects
+reveal legacy_controller.php :477-531 --effects
 reveal legacy_controller.php :120-340 --exits
 reveal legacy_controller.php :477-531 --boundary
 ```

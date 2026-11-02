@@ -483,7 +483,7 @@ _NAV_DISPATCH: List[tuple] = [
     (('exits', 'flowto'),         lambda a: getattr(a, 'exits', False) or getattr(a, 'flowto', False),      _nav_exits),
     (('inputs', 'deps'),          lambda a: getattr(a, 'deps', False) or getattr(a, 'inputs', False),       _nav_deps),
     (('outputs', 'mutations', 'writes'), lambda a: getattr(a, 'mutations', False) or getattr(a, 'writes', False) or getattr(a, 'outputs', False), _nav_mutations),
-    (('sideeffects',),            lambda a: getattr(a, 'sideeffects', False),                                _nav_sideeffects),
+    (('sideeffects', 'effects'),            lambda a: getattr(a, 'sideeffects', False),                                _nav_sideeffects),
     (('loopmap',),                lambda a: getattr(a, 'loopmap', False),                                    _nav_loopmap),
     (('fanout',),                 lambda a: getattr(a, 'fanout', False),                                     _nav_fanout),
     (('statewrites',),            lambda a: getattr(a, 'statewrites', False),                                _nav_statewrites),

@@ -186,7 +186,7 @@ disclosure. Routes all `--flag` options to agents without subprocess overhead.
 
 ```
 reveal_nav("src/auth.py", "validate_token", "boundary")     → inputs + environment + effects
-reveal_nav("src/auth.py", "validate_token", "sideeffects")  → classified outbound calls (db/http/cache/log/file)
+reveal_nav("src/auth.py", "validate_token", "effects")  → classified outbound calls (db/http/cache/log/file)
 reveal_nav("src/auth.py", "validate_token", "returns")      → exit paths with gate conditions
 reveal_nav("src/auth.py", "validate_token", "ifmap")        → conditional branch map
 reveal_nav("src/auth.py", "validate_token", "varflow", "token")  → data flow of one variable

@@ -178,6 +178,24 @@ def _has_nav_flag(args) -> bool:
     )
 
 
+
+def _effects_args(args):
+    """Forward a validated effects request through the existing navigation destinations."""
+    from copy import copy
+    from .cli.invocation import normalize_effects_request
+    from .errors import NavRequestValidationError
+
+    if args is None:
+        return args
+    request = normalize_effects_request(args)
+    if request is None:
+        return args
+    if _has_nav_flag(args):
+        raise NavRequestValidationError('--effects cannot combine with another navigation analysis flag.')
+    forwarded = copy(args)
+    setattr(forwarded, request.destination, True)
+    return forwarded
+
 def _flat_nav_selected(args) -> bool:
     """The existing flat-file modes; bare flow is selected by presence."""
     flags = (
@@ -256,7 +274,7 @@ def _note_nav_retirements() -> None:
         # abbreviations must obey the same retirement stage as the full spelling.
         key = retired_flag_key(option)
         if (key is not None and RETIREMENTS[key].replacement.split()[0].partition('=')[0]
-                in {'--inputs', '--outputs', '--callsites', '--flow', '--exits'}):
+                in {'--inputs', '--outputs', '--callsites', '--flow', '--exits', '--effects'}):
             retirement_note(key)
 
 
@@ -426,6 +444,8 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
     """
     from .display import show_structure, show_metadata, extract_element  # noqa: I006 — circular avoidance
     from .config import RevealConfig  # noqa: I006 — circular avoidance
+
+    args = _effects_args(args)
 
     allow_fallback = not getattr(args, 'no_fallback', False) if args else True
     analyzer = _get_analyzer_or_exit(path, allow_fallback)

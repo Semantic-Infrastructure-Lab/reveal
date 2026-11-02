@@ -189,6 +189,9 @@ PRODUCTION_CASES = {
     'flag:--catchmap': lambda f: [f, 'auth_gate', '--catchmap'],
     'flag:--returns': lambda f: [f, 'auth_gate', '--returns'],
     'flag:--flowto': lambda f: [f, 'auth_gate', '--flowto'],
+    'flag:--sideeffects': lambda f: [f, 'auth_gate', '--sideeffects'],
+    'flag:--fanout': lambda f: [f, 'auth_gate', '--fanout'],
+    'flag:--statewrites': lambda f: [f, 'auth_gate', '--statewrites'],
     'flag:--search': lambda f: [f, '--search', 'auth'],
     'flag:--check': lambda f: [f, '--check', '--select', 'B001'],
     # Phase 3 slice 5a (BACK-2089): --output json=PATH is the sink, --also-json its retired spelling.

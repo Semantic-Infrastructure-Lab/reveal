@@ -26,11 +26,13 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Literal, Optional
 
 try:
     from mcp.server import MCPServer
     from mcp.server.mcpserver.exceptions import ToolError
     from mcp.types import ToolAnnotations
+    from pydantic import StrictBool, StrictInt
 except ImportError:
     # BACK-1247: `mcp` lives in its own dedicated extra (reveal-cli[mcp]),
     # not reveal-cli's base dependencies -- a plain `pip install reveal-cli`
@@ -116,7 +118,7 @@ mcp = MCPServer(
         "   inputs      — candidate undefined reads, with builtins distinguished\n"
         "   outputs     — variables written in a range and read later\n"
         "   callsites   — call sites within the selected element or range\n"
-        "   sideeffects — db/http/cache/log/file/sleep/hard_stop calls\n"
+        "   effects     — ordinary calls, loop groups (mode=loops), persistent writes (mode=state)\n"
         "   flow        — recognized structural skeleton; optional if,loop,try selectors\n"
         "   exits       — static exit sites with recorded syntactic gates\n"
         "   varflow     — trace one variable's reads and writes\n"
@@ -512,13 +514,43 @@ _NAV_VAR_NAME_FLAGS = {
 }
 
 
+def _nav_effects_controls(flag, flag_value, mode, transitive, depth):
+    """Adapt typed controls to the same request the CLI validates."""
+    from .cli.invocation import normalize_effects_request
+
+    if flag != 'effects':
+        if mode is not None or transitive is not False or depth is not None:
+            raise NavRequestValidationError('mode, transitive and depth controls apply only to flag=effects.')
+        return None, None
+    if flag_value:
+        raise NavRequestValidationError('effects does not accept flag_value; use typed mode, transitive and depth controls.')
+    args = _default_args(effects=True, transitive=transitive, depth=depth)
+    request = normalize_effects_request(args, mode=mode)
+    assert request is not None
+    args.in_loops, args.state = request.mode == 'loops', request.mode == 'state'
+    return args, request
+
+
+def _nav_invocation(path, element, flag, flag_value, request):
+    """The CLI equivalent of the controls actually supplied to reveal_nav."""
+    from .cli.invocation import Invocation
+
+    option = '--' + flag
+    if flag_value and flag not in _NAV_BOOLEAN_FLAGS:
+        option += '=' + flag_value
+    options = request.tokens() if request is not None else [option]
+    return Invocation.parse(['reveal', *options, '--', path, element])
+
+
 @mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Deep-Dive Nav Analysis')
-def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
+def reveal_nav(path: str, element: str, flag: str, flag_value: str = '', *,
+               mode: Optional[Literal['ordinary', 'loops', 'state']] = None,
+               transitive: StrictBool = False, depth: Optional[StrictInt] = None) -> str:
     """Run a nav analysis flag on a function or line range — the deep-dive layer.
 
     Use after reveal_structure + reveal_element to analyse the internals of
     a specific function without reading its full source. Highest-value flags:
-    boundary (inputs+environment+effects), sideeffects (db/http/cache/log/file
+    boundary (inputs+environment+effects), effects (db/http/cache/log/file
     calls), inputs (candidate reads), outputs (read-after-write hazards),
     callsites (calls within the element), varflow (trace one variable).
 
@@ -535,13 +567,23 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
                      flow (comma-separated if,loop,try selectors), callsites (range string)
                      and around (integer context lines).
 
+        mode:        For effects only: ordinary (default), loops or state.
+        transitive:  For ordinary effects only: follow project-local callees.
+        depth:       For transitive effects: 1..5 (default 2); loops: positive (default 3).
+
     Example:
         reveal_nav('app.py', 'process_order', 'boundary')
     """
     from .file_handler import handle_file  # noqa: I006
-    from .cli.invocation import Invocation, RetiredSpellingError, invocation_scope, retirement_note
+    from .cli.invocation import RetiredSpellingError, invocation_scope, retirement_note
 
-    if flag == 'flow':
+    try:
+        effects_args, request = _nav_effects_controls(flag, flag_value, mode, transitive, depth)
+    except NavRequestValidationError as exc:
+        return _tool_failure(str(exc))
+    if effects_args is not None:
+        args = effects_args
+    elif flag == 'flow':
         from .cli.invocation import parse_flow_selectors
         try:
             selectors = parse_flow_selectors(flag_value) if flag_value else ()
@@ -569,10 +611,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
 
     # This tool promises text; REVEAL_FORMAT controls CLI defaults only.
     args.format = 'text'
-    option = '--' + flag
-    if flag_value and flag not in _NAV_BOOLEAN_FLAGS:
-        option += '=' + flag_value
-    invocation = Invocation.parse(['reveal', option, '--', path, element])
+    invocation = _nav_invocation(path, element, flag, flag_value, request)
     with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
         try:
             retirement_note('flag:--' + flag)

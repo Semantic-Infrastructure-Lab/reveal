@@ -240,6 +240,9 @@ RETIREMENTS: Dict[str, Retirement] = {
     'flag:--loopmap': Retirement('--loopmap', '--flow=loop'),
     'flag:--catchmap': Retirement('--catchmap', '--flow=try'),
     'flag:--returns': Retirement('--returns', '--exits'),
+    'flag:--sideeffects': Retirement('--sideeffects', '--effects'),
+    'flag:--fanout': Retirement('--fanout', '--effects --in-loops'),
+    'flag:--statewrites': Retirement('--statewrites', '--effects --state'),
     'flag:--flowto': Retirement('--flowto', '--exits for static exit sites; the former reachability verdict is retired'),
     'flag:--search': Retirement('--search', '--name PATTERN (regex)'),
     # One row for the file route's --check and its --lint alias.
@@ -316,6 +319,64 @@ def parse_flow_selectors(value: str) -> tuple[str, ...]:
     if any(part not in {'if', 'loop', 'try'} for part in parts):
         raise ValueError('flow selectors must be nonempty comma-separated if, loop or try values')
     return tuple(dict.fromkeys(parts))
+
+
+@dataclass(frozen=True)
+class EffectsRequest:
+    """An exclusive effects mode, retaining explicit controls for host provenance."""
+    mode: str
+    transitive: bool
+    depth: Optional[int]
+
+    @property
+    def destination(self) -> str:
+        return {'ordinary': 'sideeffects', 'loops': 'fanout', 'state': 'statewrites'}[self.mode]
+
+    def tokens(self) -> list[str]:
+        tokens = ['--effects']
+        if self.mode != 'ordinary':
+            tokens.append('--in-loops' if self.mode == 'loops' else '--state')
+        if self.transitive:
+            tokens.append('--transitive')
+        if self.depth is not None:
+            tokens.extend(['--depth', str(self.depth)])
+        return tokens
+
+
+def normalize_effects_request(args, *, mode: Optional[str] = None) -> Optional[EffectsRequest]:
+    """Validate the new request only; legacy navigation keeps its existing policy."""
+    from ..errors import NavRequestValidationError
+
+    effects = getattr(args, 'effects', False)
+    loops, state = getattr(args, 'in_loops', False), getattr(args, 'state', False)
+    if not effects:
+        if loops or state or mode is not None:
+            raise NavRequestValidationError('--in-loops and --state require --effects.')
+        return None
+    if loops and state:
+        raise NavRequestValidationError('--in-loops and --state are exclusive effects modes.')
+    if mode is not None and mode not in ('ordinary', 'loops', 'state'):
+        raise NavRequestValidationError('effects mode must be ordinary, loops or state.')
+    selected = mode or ('loops' if loops else 'state' if state else 'ordinary')
+    transitive, depth = getattr(args, 'transitive', False), getattr(args, 'depth', None)
+    _validate_effects_controls(selected, transitive, depth)
+    return EffectsRequest(selected, transitive, depth)
+
+
+def _validate_effects_controls(selected: str, transitive: bool, depth: Optional[int]) -> None:
+    from ..errors import NavRequestValidationError
+
+    if type(transitive) is not bool:
+        raise NavRequestValidationError('effects --transitive must be a boolean.')
+    if depth is not None and type(depth) is not int:
+        raise NavRequestValidationError('effects --depth must be an integer, not a boolean or other value.')
+    if transitive and selected != 'ordinary':
+        raise NavRequestValidationError('--transitive is only defined for ordinary --effects.')
+    if depth is not None:
+        if selected == 'state' or selected == 'ordinary' and not transitive:
+            raise NavRequestValidationError('--depth is unused for this effects mode.')
+        if depth < 1 or transitive and depth > 5:
+            raise NavRequestValidationError('--depth must be 1..5 for transitive effects, or positive for --in-loops.')
 
 
 def retired_flag_key(option: str) -> Optional[str]:

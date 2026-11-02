@@ -6,19 +6,21 @@ import pytest
 from conftest import _run_reveal_direct
 from test_conformance_matrix import EXPECTED, LANGUAGES, _sample_path
 from test_nav_traversal_consumer_back2025 import discovery_fault
+from test_nav_traversal_loss_back2025 import fault
+from test_transitive_walk_back2098 import twins
 
 pytestmark = pytest.mark.component
 
 MODES = [('--sideeffects', ()), ('--fanout', ('--in-loops',)), ('--statewrites', ('--state',))]
 
 
-def _without_retirement(answer):
-    meta = answer.get('meta', {})
-    warnings = meta.get('warnings')
-    if warnings is not None:
-        meta['warnings'] = [w for w in warnings if w.get('type') != 'retired_spelling']
-        if not meta['warnings']:
-            meta.pop('warnings')
+def _without_legacy_correction(answer, old):
+    meta = answer['meta']
+    notes = [w for w in meta.get('warnings', []) if w.get('type') == 'retired_spelling']
+    assert len(notes) == 1 and notes[0]['field'] == 'flag:' + old
+    meta['warnings'] = [w for w in meta['warnings'] if w not in notes]
+    if not meta['warnings']:
+        meta.pop('warnings')
     return answer
 
 
@@ -32,11 +34,16 @@ def _same(path, element, old, new, extra=()):
         after = _run(path, element, '--effects', *new, *extra, '--format', fmt)
         assert before.returncode == after.returncode == 0, (before.stderr, after.stderr)
         if fmt == 'json':
-            assert _without_retirement(json.loads(before.stdout)) == _without_retirement(json.loads(after.stdout))
+            canonical = json.loads(after.stdout)
+            assert not any(w.get('type') == 'retired_spelling' for w in canonical['meta'].get('warnings', []))
+            assert _without_legacy_correction(json.loads(before.stdout), old) == canonical
         else:
             assert before.stdout == after.stdout
+        from reveal.cli.invocation import RETIREMENTS
+        correction = f"note: {RETIREMENTS['flag:' + old].text}\n"
+        assert before.stderr.count(correction) == 1
+        assert before.stderr.replace(correction, '', 1) == after.stderr
         assert 'deprecated' not in after.stderr
-    return json.loads(after.stdout) if fmt == 'json' else None
 
 
 @pytest.mark.parametrize('language', LANGUAGES)
@@ -147,3 +154,20 @@ def test_tsx_is_only_a_mode_preservation_smoke(tmp_path):
     path.write_text('function work(items) { for (const item of items) { console.log(item); } this.value = 1; }\n', encoding='utf-8')
     for old, new in MODES:
         _same(path, 'work', old, new)
+
+
+def test_new_transitive_keeps_ambiguity_with_no_guessed_effects(twins):
+    path = twins / 'root_amb.py'
+    _same(path, 'run_amb', '--sideeffects', (), ('--transitive',))
+    data = json.loads(_run(path, 'run_amb', '--effects', '--transitive', '--format', 'json').stdout)
+    assert data['findings'] == []
+    assert any('ambiguous' in note for note in data['warnings'])
+
+
+def test_new_transitive_keeps_file_analysis_loss(project, fault):
+    unreadable = project.parent / 'unreadable.py'
+    unreadable.write_text('def unrelated():\n    return 1\n', encoding='utf-8')
+    fault['unreadable'] = unreadable.resolve()
+    _same(project, 'entry', '--sideeffects', (), ('--transitive',))
+    data = json.loads(_run(project, 'entry', '--effects', '--transitive', '--format', 'json').stdout)
+    assert any('could not be analyzed' in note for note in data['warnings'])

@@ -19,8 +19,8 @@ CASES = [({}, ()), ({'mode': 'ordinary'}, ()), ({'mode': 'loops'}, ('--in-loops'
 INVALID = [{'mode': 'unknown'}, {'mode': 'loops', 'transitive': True},
            {'mode': 'state', 'depth': 2}, {'depth': 2},
            *({'transitive': True, 'depth': value} for value in (0, -1, 6, True, '2', 2.0)),
-           *({'transitive': value} for value in ('false', 'yes', 1)),
-           {'flag_value': '--transitive'}, {'mode': 'loops,state'}]
+           *({'transitive': value} for value in ('false', 'yes', 1, 0)),
+           {'flag_value': '--transitive'}, {'mode': 'loops,state'}, {'mode': ['loops', 'state']}]
 
 
 def _arguments(project, controls):
@@ -62,7 +62,7 @@ def test_controls_on_other_flags_are_errors(project, controls):
     assert 'effects' in _text(answer)
 
 
-@pytest.mark.parametrize('controls', [{'depth': True}, {'depth': '2'}, {'depth': 2.0}, {'transitive': 1}, {'transitive': 'false'}])
+@pytest.mark.parametrize('controls', [{'depth': True}, {'depth': '2'}, {'depth': 2.0}, {'transitive': 1}, {'transitive': 0}, {'transitive': 'false'}, {'mode': ['loops', 'state']}])
 def test_direct_calls_also_validate_exact_types(project, controls):
     from reveal.mcp_server import reveal_nav
 
@@ -97,13 +97,18 @@ def test_legacy_mcp_defaults_keep_answer_and_add_only_correction(project):
         new_text = reveal_nav(str(project), 'entry', 'effects', mode=mode)
         assert old_text.startswith(new_text.rstrip())
         assert old_text.count('deprecated') == 1
+        registered = _sdk({'path': str(project), 'element': 'entry', 'flag': old})
+        assert not registered.is_error and _text(registered).rstrip() == old_text.rstrip()
 
 
 def test_stdio_valid_modes_strict_errors_and_sibling_recovery(tmp_path, project):
     async def scenario(session):
+        legacy = await session.call_tool('reveal_nav', {'path': str(project), 'element': 'entry', 'flag': 'sideeffects'})
+        assert not legacy.is_error and _text(legacy).count('deprecated') == 1
         for controls, flags in CASES:
             answer = await session.call_tool('reveal_nav', _arguments(project, controls))
             assert not answer.is_error, _text(answer)
+            assert 'deprecated' not in _text(answer)
             expected = _run_reveal_direct(str(project), 'entry', '--effects', *flags)
             assert _text(answer).rstrip() == expected.stdout.rstrip()
         for controls in INVALID:
@@ -115,4 +120,22 @@ def test_stdio_valid_modes_strict_errors_and_sibling_recovery(tmp_path, project)
         assert not recovered.is_error
         line = await session.call_tool('reveal_nav', {**_arguments(project, {}), 'element': ':6-10'})
         assert not line.is_error
+        unrelated = await session.call_tool('reveal_nav', {'path': str(project), 'element': 'entry', 'flag': 'varflow', 'flag_value': 'items'})
+        assert not unrelated.is_error and 'deprecated' not in _text(unrelated)
     _stdio(tmp_path, scenario)
+
+
+def test_registered_schema_preserves_positional_fields_and_adds_typed_controls():
+    from reveal.mcp_server import mcp
+
+    tools = asyncio.run(mcp.list_tools())
+    tool = next(tool for tool in tools if tool.name == 'reveal_nav')
+    schema = tool.input_schema
+    assert schema['required'] == ['path', 'element', 'flag']
+    properties = schema['properties']
+    assert properties['flag_value']['default'] == ''
+    assert properties['mode']['default'] is None
+    assert properties['mode']['anyOf'] == [{'enum': ['ordinary', 'loops', 'state'], 'type': 'string'}, {'type': 'null'}]
+    assert properties['transitive']['type'] == 'boolean' and properties['transitive']['default'] is False
+    assert properties['depth']['default'] is None
+    assert properties['depth']['anyOf'] == [{'type': 'integer'}, {'type': 'null'}]

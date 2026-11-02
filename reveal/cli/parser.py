@@ -525,22 +525,28 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--boundary', action='store_true',
                         help='Show boundary contract: INPUTS (undefined reads), ENVIRONMENT (superglobal reads), and EFFECTS (classified calls) '
                              '(e.g., reveal file.php processOrder --boundary  or  reveal file.py myfunc --boundary)')
+    parser.add_argument('--effects', action='store_true',
+                        help='Classified effects; use --in-loops for loop groups or --state for persistent writes')
+    parser.add_argument('--in-loops', action='store_true',
+                        help='With --effects: retain each loop and its classified effects; structural --depth defaults to 3')
+    parser.add_argument('--state', action='store_true',
+                        help='With --effects: detected persistent/shared writes')
     parser.add_argument('--sideeffects', action='store_true',
-                        help='Show classified side effects (db/http/cache/log/file/sleep/hard_stop) in a function or line range '
+                        help='Deprecated; replaced by --effects. Show classified side effects (db/http/cache/log/file/sleep/hard_stop) in a function or line range '
                              '(e.g., reveal file.php :477-531 --sideeffects  or  reveal file.py myfunc --sideeffects)')
     parser.add_argument('--transitive', action='store_true',
-                        help='With --sideeffects or --boundary: follow calls into project-local helper functions (blast-radius/'
+                        help='With --effects (ordinary), legacy --sideeffects or --boundary: follow calls into project-local helper functions (blast-radius/'
                              'agentic-exposure read) instead of only the entry function\'s own body; combine with --depth to '
                              'control how many hops (default 2, max 5) '
                              '(e.g., reveal file.py handle_request --sideeffects --transitive --depth 3)')
     parser.add_argument('--loopmap', action='store_true',
                         help='Deprecated; replaced by --flow=loop (recognized loop skeleton)')
     parser.add_argument('--fanout', action='store_true',
-                        help='Show each loop paired with its classified side effects (db/http/cache/log/file calls inside it) — '
+                        help='Deprecated; replaced by --effects --in-loops. Show each loop paired with its classified side effects (db/http/cache/log/file calls inside it) — '
                              'for N+1 query checks, per-item HTTP calls, and retry-safety review '
                              '(e.g., reveal file.py process_batch --fanout  or  reveal file.php :100-500 --fanout --format=json)')
     parser.add_argument('--statewrites', action='store_true',
-                        help='Show detected shared-state writes (module globals may be missed): field writes (self.x=, $obj->x=, this.x=) plus '
+                        help='Deprecated; replaced by --effects --state. Show detected shared-state writes (module globals may be missed): field writes (self.x=, $obj->x=, this.x=) plus '
                              'cache/db/file/env/session writes — a mutation surface --outputs (local vars) and '
                              '--sideeffects (calls only) both miss '
                              '(e.g., reveal file.py process_order --statewrites  or  reveal file.php :1-800 --statewrites)')
@@ -873,6 +879,9 @@ def validate_navigation_args(args):
     Raises:
         SystemExit: If validation fails
     """
+    from .invocation import normalize_effects_request
+    normalize_effects_request(args)
+
     # Check mutual exclusivity
     nav_args = [args.head, args.tail, args.range]
     nav_count = sum(1 for arg in nav_args if arg is not None)

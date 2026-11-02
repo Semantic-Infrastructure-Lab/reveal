@@ -2,7 +2,7 @@
 title: Deep-Dive Code Navigation (Nav Flags)
 category: guide
 help_topic: nav
-help_description: "Deep-dive code navigation flags (--flow, --boundary, --varflow, --sideeffects)"
+help_description: "Deep-dive code navigation flags (--flow, --boundary, --varflow, --effects)"
 help_category: feature_guides
 ---
 # Deep-Dive Code Navigation (Nav Flags)
@@ -37,12 +37,25 @@ adds a `retired_spelling` diagnostic in `meta.warnings`.
 | `--narrow VAR` | How does VAR's type narrow through control-flow branches? |
 | `--inputs` | Candidate inputs (undefined reads; review bindings) |
 | `--outputs` | What does this range write that's read later? |
-| `--sideeffects` | What DB/HTTP/FS/log/sleep calls fire here? |
+| `--effects` | What DB/HTTP/FS/log/sleep calls fire here? |
 | `--flow=loop` | What loops exist, and how are they nested? |
-| `--fanout` | Which loops make DB/HTTP/FS/log calls inside them? (N+1 / per-item fan-out review) |
-| `--statewrites` | Detected global/nonlocal/field/env/session/cache/db/file writes |
+| `--effects --in-loops` | Which loops make DB/HTTP/FS/log calls inside them? (N+1 / per-item fan-out review) |
+| `--effects --state` | Detected global/nonlocal/field/env/session/cache/db/file writes |
 | `--keys VAR` | Which keys/properties of VAR are read, written, or tested (dict/object/array shape)? |
 | `--boundary` | One-shot contract: inputs + builtins + environment + effects |
+
+`--effects` reports ordinary classified sites. Choose one exclusive mode with
+`--effects --in-loops` (loop groups) or `--effects --state` (persistent/shared
+writes). Selectors require `--effects`; combining selectors or another navigation
+analysis is rejected. `--transitive` applies only to ordinary effects. Its depth
+accepts integers 1–5, default 2. An explicit depth is rejected for ordinary
+nontransitive effects and state mode. Loop depth remains positive, default 3,
+with no additional cap. These validation errors exit 2 before producing findings.
+
+Retired `--sideeffects`, `--fanout` and `--statewrites` still run with one
+replacement correction. Their existing payloads, `meta.flag` values (`sideeffects`,
+`fanout`, `statewrites`), grouping, order and warnings also identify the new modes.
+Legacy modifier/depth behavior remains unchanged, including `--boundary`.
 
 Bare `--flow` includes all recognized skeleton records. Select with `--flow=if`,
 `--flow=loop` or `--flow=try`, or combine them: `--flow=if,loop`. Unions retain
@@ -73,7 +86,7 @@ resolved scope, not for nested callable scopes in a literal source region. Named
 callables and source regions therefore need not record the same implicit tails.
 These limits appear in text and JSON alongside the selected scope. The supported output formats for flow/exits are text and JSON; other formats are rejected.
 
-For `--flow` (including selectors) and `--fanout`,
+For `--flow` (including selectors) and `--effects --in-loops`,
 `--depth` limits logical nesting (default 3). A TRY and its CATCH/EXCEPT/FINALLY
 alternatives remain peers, including at the depth boundary. Text names the requested
 depth; JSON carries `meta.depth` and `meta.depth_limited`. When the limit leaves structural
@@ -104,7 +117,7 @@ reveal app.py process_order --boundary
 # → INPUTS (undefined reads), ENVIRONMENT (PHP superglobals), EFFECTS (db/http/log/file/...)
 # Best single-flag summary of what a code range receives and what it does.
 
-reveal app.py process_order --sideeffects
+reveal app.py process_order --effects
 # → flat list of classified external calls, in line order
 # Useful for blast-radius assessment and retry-safety review.
 
@@ -135,7 +148,7 @@ Useful for WordPress, CodeIgniter, or any large flat PHP file.
 ```bash
 reveal legacy_handler.php :878-2130 --flow=if        # control-flow skeleton
 reveal legacy_handler.php :120-340 --boundary      # what does this slice consume + emit?
-reveal legacy_handler.php :120-340 --sideeffects   # which DB / curl / session calls fire?
+reveal legacy_handler.php :120-340 --effects   # which DB / curl / session calls fire?
 reveal legacy_handler.php :120-340 --exits       # exits + reported syntactic conditions
 reveal legacy_handler.php :120-340 --varflow $userId  # where does $userId flow?
 ```
@@ -184,11 +197,21 @@ Primary nav operations are exposed via the MCP server's `reveal_nav` tool:
 
 ```python
 reveal_nav(path="app.py", element="process_order", flag="boundary")
-reveal_nav(path="legacy.php", element=":120-340", flag="sideeffects")
+reveal_nav(path="legacy.php", element=":120-340", flag="effects")
 ```
 
-The typed tool has no `transitive` argument. Passing `--transitive` in
-`flag_value` does not enable the CLI's transitive walk.
+For `flag="effects"`, keyword-only `mode` selects `ordinary` (default), `loops`,
+or `state`. `transitive=True` follows ordinary effects into project-local callees;
+optional `depth` accepts integers 1–5 there (default 2), or positive structural
+nesting depth for loops (default 3). Other flags reject nondefault controls.
+`flag_value` does not encode effects modifiers. The first four positional arguments
+and text return remain unchanged; line-reference elements continue to work.
+
+```python
+reveal_nav("app.py", "process_order", "effects", transitive=True, depth=2)
+reveal_nav("app.py", "process_batch", "effects", mode="loops", depth=8)
+reveal_nav("app.py", "process_order", "effects", mode="state")
+```
 
 See [`MCP_SETUP.md`](MCP_SETUP.md) for setup and the full tool list.
 
@@ -207,10 +230,10 @@ Different scope, different question.
 
 - `--exits` reports static syntactic gates; enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. Check source before making reachability claims.
 - `--inputs` respects supported closure/with/except/catch/comprehension/range binders and preserves free captures and default-expression reads. Registered Python builtins remain visible as BUILTIN/JSON `kind: builtin`, separate from `--boundary` INPUTS. Explicit lexical shadows stay candidate inputs. Dynamic names and unsupported binding shapes still require source review.
-- `--statewrites` detects Python/JS module-bound container writes and explicit Python/PHP `global` assignments; explicit Python `nonlocal` writes are separate. PHP also recognizes `$GLOBALS`. Local/parameter containers stay local. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, dynamic names, and imported-object resolution remain outside coverage. An empty result does not establish that shared state is untouched.
+- `--effects --state` detects Python/JS module-bound container writes and explicit Python/PHP `global` assignments; explicit Python `nonlocal` writes are separate. PHP also recognizes `$GLOBALS`. Local/parameter containers stay local. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, dynamic names, and imported-object resolution remain outside coverage. An empty result does not establish that shared state is untouched.
 - `--boundary` includes assignment writes in EFFECTS (JSON `via: assignment`). Under `--transitive`, call effects follow callees but assignment writes remain entry-function only; text and JSON warnings disclose this limit. Inputs/builtins/environment also remain entry-function scoped.
 
-- `--sideeffects --transitive` and `--boundary --transitive` identify each callee effect with a JSON `file` alongside `line` and a text `[file:line]` suffix. Callee paths follow the target's absolute or relative spelling. Entry-function effects keep their existing request-file context without a new `file` field. These modes retain required directory enumeration failures through collection and text/JSON warnings. Surviving effects remain visible; empty results describe the analyzed portion when discovery failed. Directory counts identify failed directories, with unknown missing file populations. Existing file-analysis notes remain separate, and CLI exits retain their current policy.
+- `--effects --transitive` and `--boundary --transitive` identify each callee effect with a JSON `file` alongside `line` and a text `[file:line]` suffix. Callee paths follow the target's absolute or relative spelling. Entry-function effects keep their existing request-file context without a new `file` field. These modes retain required directory enumeration failures through collection and text/JSON warnings. Surviving effects remain visible; empty results describe the analyzed portion when discovery failed. Directory counts identify failed directories, with unknown missing file populations. Existing file-analysis notes remain separate, and CLI exits retain their current policy.
 - PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but classified as READ rather than WRITE.
 - Variable tracking is name-based; same-named variables in different scopes within a flat file may merge.
 - `--scope` and `--around` take a single `:LINE`. A range (`:100-110`) exits 2 with an error naming the line it would have used; to print a range, drop `--around` (`reveal app.py :100-110`).

@@ -78,7 +78,7 @@ reveal app.py process_order --boundary
 # → INPUTS (undefined reads) + ENVIRONMENT (superglobals on PHP) + EFFECTS (db/http/fs/log/...)
 
 # Classified side-effect calls, in line order
-reveal flat_legacy.php :120-340 --sideeffects
+reveal flat_legacy.php :120-340 --effects
 # → L130  db   mysql_query("..."), L142  http  curl_exec(...), L150  log  error_log("...")
 
 # Refactor pre-flight: what would become parameters / return values?
