@@ -14,6 +14,7 @@ the oracle read, so a population change is visible and a zero is never a clean a
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import re
 import shutil
@@ -428,6 +429,38 @@ def typescript_lazy_only_edges(scope: Scope) -> Edges:
     _, lazy_only, _ = _typescript_scoped_edges(scope)
     return lazy_only
 
+
+def _php_scoped_edges(scope: Scope) -> tuple[Edges, Edges, Coverage]:
+    """Native tokens qualify static include sites, independently of Reveal parsing."""
+    if not shutil.which('php'):
+        raise RuntimeError('PHP oracle prerequisite unavailable: PHP CLI is required')
+    probe = Path(__file__).parent / 'oracles' / 'php_import_oracle.php'
+    result = subprocess.run(
+        ['php', str(probe)], input=json.dumps({'root': str(scope.root),
+                                             'importers': [str(p) for p in scope.importers],
+                                             'config': scope.config}),
+        capture_output=True, text=True, encoding='utf-8', timeout=ORACLE_PROBE_TIMEOUT)
+    if result.returncode:
+        raise RuntimeError(f'PHP native token oracle failed: {result.stderr.strip()}')
+    output = json.loads(result.stdout)
+    coverage = output['coverage']
+    population = [[_relative(scope, path), hashlib.sha256(path.read_bytes()).hexdigest()]
+                  for path in sorted(scope.importers)]
+    coverage['population_digest'] = hashlib.sha256(json.dumps(population).encode('utf-8')).hexdigest()
+    coverage['oracle_digest'] = hashlib.sha256(probe.read_bytes()).hexdigest()
+    coverage['config_digest'] = hashlib.sha256(json.dumps(scope.config, sort_keys=True).encode('utf-8')).hexdigest()
+    return output['edges'], output['lazy_only'], coverage
+
+
+def build_php_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+    edges, _, coverage = _php_scoped_edges(scope)
+    return edges, coverage
+
+
+def php_lazy_only_edges(scope: Scope) -> Edges:
+    _, lazy_only, _ = _php_scoped_edges(scope)
+    return lazy_only
+
 def build_python_calls_oracle(scope: Scope) -> tuple[Edges, Coverage]:
     """Python AST source calls, deduplicated by file/function and bare callee.
 
@@ -535,6 +568,7 @@ def build_go_oracle(scope: Scope) -> tuple[Edges, Coverage]:
 
 
 ORACLES: dict[str, Oracle] = {
+    'php-token-static': Oracle(frozenset({'.php'}), build_php_oracle, php_lazy_only_edges),
     'go-toolchain': Oracle(frozenset({'.go'}), build_go_oracle),
     'gcc-c': Oracle(C_SUFFIXES, _gcc_oracle('c')),
     'gcc-cpp': Oracle(CPP_SUFFIXES, _gcc_oracle('c++')),

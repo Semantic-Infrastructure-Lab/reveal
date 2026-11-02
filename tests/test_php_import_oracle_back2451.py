@@ -1,5 +1,4 @@
 """Independent static PHP include truth; production scope enablement is separate."""
-import json
 import shutil
 import subprocess
 
@@ -46,7 +45,10 @@ def test_php_oracle_is_opt_in_without_scheduled_population_or_product_promotion(
     ("$a = [fn() => 1, include __DIR__ . '/target.php'];", False),
     ("function f() {} require __DIR__ . '/target.php';", False),
     ("$f = fn() => 1; require __DIR__ . '/target.php';", False),
+    ("$f = true ? fn() => 1 : include __DIR__ . '/target.php';", False),
+    ("$f = fn() => true ? include __DIR__ . '/target.php' : null;", True),
     ("require (__DIR__ . ('/target.php'));", False),
+    ('require __DIR__ . "/target.php";', False),
 ])
 def test_native_lexical_scope_and_loader_forms(tmp_path, body, local):
     scope = _scope(tmp_path, {'target.php': '<?php\n', 'use.php': '<?php\n' + body})
@@ -74,7 +76,7 @@ def test_mixed_pair_is_module_and_dirname_is_importer_anchored(tmp_path):
 def test_fake_loaders_and_unsupported_targets_are_disclosed(tmp_path):
     scope = _scope(tmp_path, {
         'target.php': '<?php\n',
-        'use.php': '''<p>require 'target.php'</p><?php
+        'use.php': r'''<p>require 'target.php'</p><?php
 // require 'target.php';
 $s = "require 'target.php'";
 $h = <<<'TEXT'
@@ -107,6 +109,18 @@ def test_plain_relative_literals_require_explicit_importer_relative_policy(tmp_p
 
 
 @needs_php
+def test_namespaced_dirname_override_cannot_invent_an_edge(tmp_path):
+    scope = _scope(tmp_path, {
+        'target.php': '<?php\n',
+        'sub/use.php': "<?php namespace N; function dirname($x) { return '/runtime'; } "
+                       "require dirname(__DIR__).'/target.php';",
+    })
+    edges, coverage = _oracle().build(scope)
+    assert edges == {}
+    assert coverage['unsupported_expressions'] == 1
+
+
+@needs_php
 def test_native_parse_failure_and_toolchain_mismatch_are_not_empty_answers(tmp_path):
     scope = _scope(tmp_path, {'use.php': '<?php function broken( {'})
     oracle = _oracle()
@@ -135,24 +149,56 @@ def test_missing_runtime_and_timeout_are_measurement_failures(tmp_path, monkeypa
 
 
 @needs_php
-def test_existing_gate_exposes_current_product_scope_gap_and_requires_mode_review(tmp_path):
-    _oracle()
+def test_existing_gate_exposes_current_product_scope_gap(tmp_path, monkeypatch):
+    oracle = _oracle()
     root, entry = _repo(tmp_path, {
         'target.php': '<?php\n',
         'module.php': "<?php require __DIR__.'/target.php';",
         'local.php': "<?php function f(){require __DIR__.'/target.php';}",
         'mixed.php': "<?php require __DIR__.'/target.php'; function f(){require __DIR__.'/target.php';}",
     }, {'oracle': 'php-token-static', 'importer_dirs': ['.']})
-    measured = gate.measure(entry, root)
+    # Qualify union separately, then restore the scope callback to expose the gap.
+    with monkeypatch.context() as patch:
+        patch.setitem(oracles.ORACLES, 'php-token-static', oracle._replace(lazy_only=None))
+        measured = gate.measure(entry, root)
     assert measured['oracle_edges'] == measured['hit_edges'] == 3
     assert measured['recall'] == measured['precision'] == 1
-    assert measured['lazy']['only']['oracle_edges'] == 1
-    assert measured['lazy']['exclude']['oracle_edges'] == 2
-    # This oracle-only slice preserves the production gap, rather than promoting PHP.
-    assert measured['lazy']['only']['hit_edges'] == 0
-    assert measured['lazy']['exclude']['extra_edges'] == 1
-    old = {key: value for key, value in measured.items() if key != 'lazy'}
-    assert gate.regressions({'php': measured}, {'php': old}) == [
+    # The existing zero-hit guard must remain active for unsupported PHP scope.
+    with pytest.raises(RuntimeError, match='lazy=only: reveal found zero oracle edges'):
+        gate.measure(entry, root)
+    failures = []
+    gate._compare_modes('php', 'lazy', {'only': {'oracle_edges': 1}, 'exclude': {'oracle_edges': 2}}, {}, failures)
+    assert failures == [
         'php: lazy=exclude baseline missing; review required',
         'php: lazy=only baseline missing; review required',
     ]
+    scope = oracles.Scope(root, root, [root / name for name in ('module.php', 'local.php', 'mixed.php')], entry['recall'])
+    edges, _ = oracle.build(scope)
+    population = set(scope.importers)
+
+    def rendered(mode, selected):
+        return {'by_target': {root / 'target.php': {root / name for name in selected}},
+                'partial_files': 0, 'edge_rule': {'scope': mode}}
+
+    # Scoring-boundary controls, not a claim that production PHP has these facts.
+    monkeypatch.setattr(gate, 'rendered_reverse_graph', lambda scan, cap, mode:
+                        rendered(mode, ['local.php'] if mode == 'only' else ['module.php', 'mixed.php']))
+    baseline = gate._measure_lazy(oracle, scope, edges, root, root, None, population)
+    assert all(row['precision'] == row['recall'] == 1 for row in baseline.values())
+    monkeypatch.setattr(gate, 'rendered_reverse_graph', lambda scan, cap, mode:
+                        rendered(mode, ['module.php', 'local.php', 'mixed.php']))
+    ignored = gate._measure_lazy(oracle, scope, edges, root, root, None, population)
+    assert ignored['only']['extra_edges'] == 2
+    assert ignored['exclude']['extra_edges'] == 1
+    failures = []
+    gate._compare_modes('php', 'lazy', ignored, baseline, failures)
+    assert any('lazy=only precision dropped' in failure for failure in failures)
+    assert any('lazy=exclude precision dropped' in failure for failure in failures)
+
+
+@needs_php
+def test_lost_importer_cannot_become_an_empty_clean_answer(tmp_path):
+    scope = _scope(tmp_path, {'use.php': '<?php\n'})
+    (tmp_path / 'use.php').unlink()
+    with pytest.raises(RuntimeError, match='Importer missing'):
+        _oracle().build(scope)
