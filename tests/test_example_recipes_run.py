@@ -584,10 +584,14 @@ DOC_SOURCE_COHORT = {
 }
 
 
-# BACK-2182 already executes and checks this example through the named fixture.
+# Named fixtures execute these examples; dedicated answer controls qualify the README Calls cohort.
 DOC_NAMED_SOURCE_COHORT = {
     ('adapters/CALLS_ADAPTER_GUIDE.md',
      'reveal calls src/ --callees validate_item --depth 2 --detail'),
+    ('../../README.md', "reveal 'calls://src/?callers=validate_token'"),
+    ('../../README.md', "reveal 'calls://src/?callers=fn&depth=3'"),
+    ('../../README.md', "reveal 'calls://src/?rank=callers&top=20'"),
+    ('../../README.md', 'reveal calls src/ --callees main --depth 2 --detail'),
 }
 
 

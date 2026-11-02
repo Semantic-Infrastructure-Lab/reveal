@@ -36,6 +36,14 @@ def test_previous_navigation_cohort_remains_eligible():
     assert recipes._source_cohort_reason(SOURCE, shlex.split('reveal overview .')) is None
 
 
+def test_unrelated_readme_examples_keep_their_explicit_exclusion():
+    command = 'reveal pack src/ --focus auth --budget 6000'
+    identities = {(source, shlex.join(tokens))
+                  for source, _, tokens, _ in recipes._documented_commands()}
+    assert (SOURCE, command) in identities
+    assert 'not yet qualified' in recipes._source_cohort_reason(SOURCE, shlex.split(command))
+
+
 def test_changed_advertised_example_fails_presence_guard(tmp_path):
     docs = tmp_path / 'reveal' / 'docs'
     docs.mkdir(parents=True)
