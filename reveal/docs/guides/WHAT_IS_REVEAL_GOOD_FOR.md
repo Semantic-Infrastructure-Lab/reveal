@@ -105,7 +105,7 @@ Related strengths:
 Why this matters in practice:
 
 - the docs position token budgeting as a first-class workflow constraint, not an afterthought
-- the MCP server exposes purpose-built tools for structure, elements, nav (deep-dive boundary / sideeffects / deps / mutations), queries, checks, and pack
+- the MCP server exposes purpose-built tools for structure, elements, nav (deep-dive boundary / effects / inputs / outputs), queries, checks, and pack
 - field selection and item limits make adapter output easier to fit into strict budgets
 
 This is one of Reveal's clearest differentiators.
@@ -220,7 +220,7 @@ The same flags work on flat procedural PHP — useful for legacy WordPress/CodeI
 ```bash
 reveal legacy_handler.php :120-340 --boundary       # what does this slice consume and emit?
 reveal legacy_handler.php :120-340 --effects    # which DB / curl / session calls fire?
-reveal legacy_handler.php :120-340 --outputs      # which session/cache/global state changes?
+reveal legacy_handler.php :120-340 --effects --state  # which session/cache/global state changes?
 ```
 
 Why it is good for this:
