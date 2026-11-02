@@ -226,16 +226,17 @@ def _add_global_options(target) -> None:
                              'FORMAT=PATH also writes the result to PATH in that format, one invocation and '
                              'one parse for a human report plus a machine artifact; give several for several '
                              'files. scheme://resource URIs, `reveal check` and declared adapter commands only; '
-                             'a json file sink is a no-op if the stdout sink is already json. A format the '
-                             'command does not render (and text/grep on a single-file check) exits 2 before the '
+                             'explicit JSON destinations are written even with JSON stdout. A format the '
+                             'command does not render exits 2 before the '
                              'scan; a write that fails exits 3 with the answer printed and the other sinks '
-                             'written. With --stdin it needs --check and holds one document for the run.')
+                             'written. With --stdin it needs --check and file paths only: JSON holds one aggregate '
+                             'document; text/grep hold the corresponding per-file stdout stream.')
     target.add_argument('--also-json', metavar='PATH', default=None,
                         help='Retired: use --output json=PATH. Also write the result as JSON to PATH, in addition to '
                              '--format\'s primary output -- one invocation, one parse, both a '
                              'human-readable report and a machine-readable artifact. '
                              'scheme://resource URIs, `reveal check` and declared adapter commands only; '
-                             'no-op if --format is already json. A write that fails exits 3.')
+                             'also written when --format is json. A write that fails exits 3.')
     target.add_argument('--fail-on', choices=['none', 'findings'], default=None,
                         help='Findings gate for qualified commands. none suppresses findings only; '
                              'required analysis/output failures remain errors. Unsupported operations reject it.')

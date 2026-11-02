@@ -263,15 +263,14 @@ class TestWriteAlsoJson:
 
         assert list(tmp_path.iterdir()) == []
 
-    def test_noop_when_format_already_json(self, tmp_path):
-        """--format json already produces the JSON on stdout -- writing it a
-        second time to a file would just be redundant duplication."""
+    def test_writes_requested_destination_when_format_already_json(self, tmp_path):
+        """An explicit JSON destination remains requested beside JSON stdout."""
         out = tmp_path / "result.json"
         args = argparse.Namespace(format='json', also_json=str(out))
 
         write_also_json({'type': 'demo'}, args)
 
-        assert not out.exists()
+        assert json.loads(out.read_text(encoding='utf-8')) == {'type': 'demo'}
 
     def test_missing_also_json_attr_is_noop(self, tmp_path):
         """Namespaces that never registered --also-json (e.g. older/mocked

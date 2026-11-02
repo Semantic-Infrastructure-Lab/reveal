@@ -90,12 +90,12 @@ def test_written_artifact_keeps_the_scan_exit_and_the_format_json_document(tree,
 
 
 @pytest.mark.parametrize('label, target, own_exit', TARGETS, ids=[t[0] for t in TARGETS])
-def test_json_primary_also_json_stays_a_no_op(tree, label, target, own_exit):
-    """The artifact would equal the primary document, so --format json never writes (or fails) it."""
+def test_json_primary_keeps_requested_artifact_failure(tree, label, target, own_exit):
+    """A requested destination fails independently of the JSON primary (BACK-2447)."""
     result = _reveal(tree, 'check', target, '--format', 'json', '--also-json', 'sink')
-    assert result.returncode == own_exit, result.stderr
-    assert _FAILED not in result.stderr
-    assert 'output_errors' not in json.loads(result.stdout).get('meta', {})
+    assert result.returncode == 3, result.stderr
+    assert result.stderr.count(_FAILED) == 1
+    assert json.loads(result.stdout)['type'] == 'check'
 
 
 def test_artifact_failure_cannot_lower_a_degraded_scan(tree):

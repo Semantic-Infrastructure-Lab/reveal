@@ -119,24 +119,18 @@ def _file_sink(args: Any, invocation: Any, file_sinks: list) -> None:
         _sink_error('a file sink with --stdin needs --check: a list of inputs answers once per input and one '
                     'file holds one result; add --check, or run once per input')
     if getattr(args, 'stdin', False) and getattr(args, 'check', False):
-        reject_check_text_sinks(file_sinks, '--stdin --check')
+        require_check_sink_formats(file_sinks, '--stdin --check')
     if file_sinks and getattr(args, 'also_json', None):
         _sink_error('--also-json and --output FORMAT=PATH both name the artifact; use --output FORMAT=PATH only')
     # Left on args.output for the writers (utils.json_utils.file_sinks): the stdout sinks were consumed above.
     args.output = [f'{fmt}={target}' for fmt, target in file_sinks] or None
 
 
-def reject_check_text_sinks(sinks: Sequence[Tuple[str, str]], what: str) -> None:
-    """Exit 2 when a text or grep file sink reaches a check that holds no per-format scan to render it from.
-
-    ``reveal check DIR`` renders every sink from its one scan (BACK-2145). A single file and a ``--stdin``
-    run answer through ``run_pattern_detection``, which writes the json document only, so they still refuse
-    the other formats, before the file is read. *sinks* are (format, path) pairs.
-    """
-    other = sorted({fmt for fmt, _ in sinks if fmt != 'json'})
+def require_check_sink_formats(sinks: Sequence[Tuple[str, str]], what: str) -> None:
+    """Validate native check sink formats before source analysis."""
+    other = sorted({fmt for fmt, _ in sinks if fmt not in ('text', 'grep', 'json')})
     if other:
-        _sink_error(f"{', '.join(other)}: {what} writes only json file sinks; "
-                    'use --output json=PATH, or check the directory for text and grep sinks')
+        _sink_error(f"{', '.join(other)}: {what} supports text, grep and json file sinks")
 
 
 def apply_output_sinks(args: Any, invocation: Any) -> None:
@@ -169,13 +163,11 @@ def reject_unhonored_also_json(args: Any, label: str) -> None:
 
     It is honored by scheme:// URIs (and the file/directory flags that route to
     one), by declared commands and by check; the file view, directory listing, --grep and the other
-    subcommands wrote nothing and said nothing (BACK-1425). With --format json
-    a json sink is redundant, not unhonored: the primary output already is the JSON.
+    subcommands wrote nothing and said nothing (BACK-1425). JSON stdout does not
+    make an unsupported explicit file destination valid.
     """
     from ...utils.json_utils import file_sinks
     sinks = file_sinks(args)
-    if getattr(args, 'format', 'text') == 'json':
-        sinks = [(fmt, path) for fmt, path in sinks if fmt != 'json']
     if not sinks:
         return
     spelling = '--also-json' if _also_json_typed() else f'--output {sinks[0][0]}=PATH'

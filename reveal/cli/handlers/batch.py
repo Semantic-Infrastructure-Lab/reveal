@@ -7,13 +7,14 @@ and multi-URI result rendering.
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Dict, List, Any, Tuple
+from typing import TYPE_CHECKING, Optional, Dict, List, Any, Tuple, Iterable
 
 from ...utils.results import outcome_of
 
 if TYPE_CHECKING:
     from argparse import Namespace
     from ..routing.uri import Answer
+    from ...checks import CheckSinkCollection
 
 # Flags this driver applies itself, so each URI's flag ledger (BACK-1514) does not report
 # them as having no effect on the adapter: --stdin for every URI, and whatever renders the
@@ -71,7 +72,7 @@ def _process_stdin_uri(target: str, args: 'Namespace', is_batch_mode: bool,
 
 def _process_stdin_file(
     target: str, args: 'Namespace', handle_file_func, is_check_mode: bool = False,
-    collect: Optional[List[dict]] = None,
+    collect: Optional['CheckSinkCollection'] = None,
 ) -> Tuple[int, bool, bool]:
     """Process a file path from stdin.
 
@@ -80,7 +81,7 @@ def _process_stdin_file(
         args: Parsed arguments
         handle_file_func: Function to handle individual files
         is_check_mode: When True, run quality check and return violation count
-        collect: The run's list of per-file check results; the json sinks are written once from it
+        collect: The run's canonical results and rendered streams, written once per destination
             (BACK-2095) instead of once per file here.
 
     Returns:
@@ -151,17 +152,34 @@ def _stdin_check_exit(args: 'Namespace', violations: int, degraded: bool, artifa
     return 0 if exit_zero and not artifact_failed else max(file_exit, ssl_exit, uri_exit)
 
 
-def _write_stdin_check_artifact(args: 'Namespace', results: List[dict], failed: bool) -> bool:
-    """Write the one document of a ``--stdin --check`` run to each json sink; True when a write failed, or
-    *failed* already was (exit 3, disclosed by the shared artifact owner). Nothing is written for no checked
-    file or a json stdout sink, which already is the output (BACK-2095)."""
-    from reveal.checks import stdin_check_artifact
-    from reveal.utils.json_utils import json_sink_paths, write_requested_artifact, write_text_artifact
-    sinks = json_sink_paths(args)
-    if not sinks or not results:
+def _write_stdin_check_artifact(args: 'Namespace', results: Optional['CheckSinkCollection'], failed: bool) -> bool:
+    """Write each native file-check stream once; JSON retains its aggregate document."""
+    from reveal.checks import write_check_artifact
+    from reveal.utils.json_utils import file_sinks
+    if results is None:
         return failed
-    write = lambda: write_text_artifact(sinks, stdin_check_artifact(results))  # noqa: E731
-    return write_requested_artifact(write) is not None or failed
+    sinks = file_sinks(args)
+    documents = {fmt: results.document(fmt) for fmt in dict.fromkeys(fmt for fmt, _ in sinks)}
+    for fmt, path in sinks:
+        failed = write_check_artifact(fmt, path, documents[fmt]) or failed
+    return failed
+
+
+def _check_sink_collection(args: 'Namespace') -> Optional['CheckSinkCollection']:
+    from reveal.checks import CheckSinkCollection
+    from reveal.utils.json_utils import file_sinks
+    return CheckSinkCollection() if file_sinks(args) else None
+
+
+def _stdin_check_inputs(is_check_mode: bool, has_file_sinks: bool) -> Iterable[str]:
+    """Validate unsupported URI sink transport before any native file analysis or write."""
+    if not (is_check_mode and has_file_sinks):
+        return sys.stdin
+    inputs = list(sys.stdin)
+    if any('://' in line.strip() for line in inputs):
+        print("Error: --stdin --check file sinks support file paths only, not URI targets", file=sys.stderr)
+        sys.exit(2)
+    return inputs
 
 
 def handle_stdin_mode(args: 'Namespace', handle_file_func):
@@ -204,11 +222,12 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     any_file_degraded = False
     any_artifact_failed = False  # BACK-1939: a requested artifact write failed (exit 3, even under --exit-zero)
     uri_exit = 0  # the worst exit of a URI answered one at a time (BACK-1556)
-    check_results: List[dict] = []  # BACK-2095: each checked file's result; the json sinks get one document
+    check_results = _check_sink_collection(args)
+    inputs = _stdin_check_inputs(is_check_mode, check_results is not None)
 
     # Read paths/URIs from stdin (one per line)
     first_line_checked = False
-    for line in sys.stdin:
+    for line in inputs:
         target = line.strip()
         if not target:
             continue  # Skip empty lines

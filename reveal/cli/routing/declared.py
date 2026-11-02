@@ -284,6 +284,7 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
     if default_fail_on is None:
         default_fail_on = declared_adapter_class(scheme).DEFAULT_FAIL_ON
     policy = getattr(args, 'fail_on', None) or default_fail_on
+    output_format = args.format
     result = attach_provenance(result)
     if announce_error:
         announce_outcome(result, f'{scheme}://')
@@ -294,11 +295,11 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
             execution_answer.exception = failure
     code = execution_exit_code(facts, fail_on=policy)
     try:
-        if args.format == 'json':
+        if output_format == 'json':
             print_json_result(result)
         else:
-            emit_rendered(render, result, args.format, **render_kwargs)
-        print_result_control_notes(result, args.format)
+            emit_rendered(render, result, output_format, **render_kwargs)
+        print_result_control_notes(result, output_format)
         sys.stdout.flush()
     except Exception as exc:  # boundary-ok: broad-except -- selected output boundary contains renderer/plugin failures, discloses required output failure and exits 3
         if is_closed_reader(exc):

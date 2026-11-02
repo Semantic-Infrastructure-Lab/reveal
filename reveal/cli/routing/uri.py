@@ -17,7 +17,7 @@ from ...errors import NotApplicableError, RequestValidationError, TestLayoutVali
 from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
-from ...utils.json_utils import write_requested_artifact
+from ...utils.json_utils import attach_provenance, write_requested_artifact
 from ...utils.path_utils import to_posix
 from ...display.formatting import print_result_control_notes
 from ...utils.results import (ExecutionFacts, FailureCause, Outcome, ResultBuilder, echo_source,
@@ -784,16 +784,18 @@ def _check_answer(adapter, renderer_class: type[Any], args: 'Namespace',
 
 def _emit_check(result: Any, adapter, renderer_class: type[Any], args: 'Namespace') -> NoReturn:
     """Print a check result and exit with its own exit_code (exit-code contract); 3 when a requested sink failed."""
+    output_format = args.format
+    result = attach_provenance(result)
     failure = write_requested_artifact(lambda: write_also_json(result, args), result)
 
     # Render check results
     if hasattr(renderer_class, 'render_check'):
         adapter_qp = getattr(adapter, 'query_params', {})
         render_opts = _build_render_opts(renderer_class, args, query_params=adapter_qp)
-        renderer_class.render_check(result, args.format, **render_opts)
+        renderer_class.render_check(result, output_format, **render_opts)
     else:
         # Fallback to generic JSON rendering
-        if args.format == 'json':
+        if output_format == 'json':
             print_json_result(result)
         else:
             print(result)
@@ -1407,11 +1409,13 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
                              execution_answer=execution_answer, announce_error=announce_error,
                              default_fail_on=default_fail_on, **render_kwargs)
         return
+    output_format = args.format
+    result = attach_provenance(result)
     outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
     failure = write_requested_artifact(lambda: write_also_json(result, args, render, **render_kwargs), result)
-    emit_rendered(render, result, args.format, **render_kwargs)
-    conclude_outcome(result, outcome, args.format)
-    code = exit_code(result, args.format) if exit_code and outcome != 'failed' else 0
+    emit_rendered(render, result, output_format, **render_kwargs)
+    conclude_outcome(result, outcome, output_format)
+    code = exit_code(result, output_format) if exit_code and outcome != 'failed' else 0
     if failure is not None:
         code = 3  # a requested output failed (D6): outranks the renderer's findings exit, the answer was printed
     if code:

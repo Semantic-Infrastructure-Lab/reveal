@@ -152,12 +152,12 @@ def test_a_scan_disclosure_reaches_the_text_sink_and_not_the_grep_file(tree, tmp
     assert 'W-CAP-1' not in grep.read_text(encoding='utf-8')  # grep stays file:line:col:rule:message
 
 
-def test_a_json_sink_beside_a_json_stdout_writes_nothing(tree, tmp_path):
-    """BACK-1939 contract kept: the primary output already is the document."""
+def test_a_json_sink_beside_a_json_stdout_writes_the_primary_document(tree, tmp_path):
+    """Explicit destinations are honored beside JSON stdout (BACK-2447)."""
     out = tmp_path / 'o.json'
     result = run('check', str(tree), '--select', 'B', '--format', 'json', '--output', f'json={out}')
     assert json.loads(result.stdout)['type'] == 'check'
-    assert not out.exists()
+    assert json.loads(out.read_text(encoding='utf-8')) == json.loads(result.stdout)
 
 
 def test_an_unsupported_sink_format_exits_2_before_the_scan(tree, tmp_path, scans):
@@ -172,13 +172,13 @@ def test_an_unsupported_sink_format_exits_2_before_the_scan(tree, tmp_path, scan
     lambda tree, out: ['check', str(tree / 'a.py'), '--output', f'grep={out}'],
     lambda tree, out: [str(tree / 'a.py'), '--check', '--output', f'text={out}'],
 ], ids=['check-file-text', 'check-file-grep', 'file-check-flag'])
-def test_a_single_file_check_still_refuses_text_and_grep_sinks(tree, tmp_path, argv):
-    """Negative control on the sibling path: run_pattern_detection writes the json document only."""
+def test_a_single_file_check_honors_text_and_grep_sinks(tree, tmp_path, argv):
+    """The sibling file path now honors the same requested views (BACK-2446)."""
     out = tmp_path / 'o.out'
     result = run(*argv(tree, out))
-    assert result.returncode == 2, result.stderr
-    assert 'writes only json file sinks' in result.stderr
-    assert not out.exists()
+    assert result.returncode == run('check', str(tree / 'a.py')).returncode, result.stderr
+    fmt = 'grep' if 'grep=' in ' '.join(argv(tree, out)) else 'text'
+    assert out.read_text(encoding='utf-8') == run('check', str(tree / 'a.py'), '--format', fmt).stdout
 
 
 def test_a_single_file_check_keeps_its_json_sink(tree, tmp_path):
@@ -188,12 +188,11 @@ def test_a_single_file_check_keeps_its_json_sink(tree, tmp_path):
     assert json.loads(out.read_text(encoding='utf-8'))['type'] == 'check'
 
 
-def test_a_stdin_check_still_refuses_text_and_grep_sinks(tree, tmp_path, monkeypatch):
-    """Negative control on the sibling path: a --stdin --check run writes one json document, nothing else."""
+def test_a_stdin_check_honors_text_sinks(tree, tmp_path, monkeypatch):
+    """The stdin text artifact is the same stream as its primary (BACK-2446)."""
     import io
     monkeypatch.setattr('sys.stdin', io.StringIO(str(tree / 'a.py') + '\n'))
     out = tmp_path / 'o.txt'
     result = run('--stdin', '--check', '--output', f'text={out}')
-    assert result.returncode == 2, result.stderr
-    assert 'writes only json file sinks' in result.stderr
-    assert not out.exists()
+    assert result.returncode == 3, result.stderr  # default rule set includes incomplete coverage
+    assert out.read_text(encoding='utf-8') == result.stdout

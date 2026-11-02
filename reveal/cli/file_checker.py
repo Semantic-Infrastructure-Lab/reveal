@@ -14,7 +14,7 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from ..logging_setup import worker_bootstrap
 from ..utils.parallel import pool_worker_count, submit_each
-from ..utils.json_utils import file_sinks, write_also_json, write_requested_artifact, write_text_artifact
+from ..utils.json_utils import attach_provenance, file_sinks, write_also_json, write_requested_artifact, write_text_artifact
 from ..utils.results import note_truncation, requested_fail_on
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -547,8 +547,14 @@ def _handle_no_files_found(directory: Path, args: 'Namespace', changed: Optional
     }
     if changed:
         result['scope'] = {'changed': changed}
-    emit_subcommand_result(result, args, name='check', source=directory,
-                           render=lambda _result: print(_no_files_message(directory, changed)))
+    result = attach_provenance(result)
+    render = lambda _result: print(_no_files_message(directory, changed))
+    sinks = file_sinks(args)
+    views = {fmt: (result, render) for fmt in {args.format, *(fmt for fmt, _ in sinks)}}
+    failed = _write_file_sinks(views, sinks, args, as_spelled(directory, directory))
+    emit_subcommand_result(result, args, name='check', source=directory, render=render)
+    if failed:
+        sys.exit(3)
 
 
 _SEVERITY_ORDER = ['low', 'medium', 'high', 'critical']
@@ -1096,7 +1102,8 @@ def _write_also_json_report(path, result: dict, source: str) -> bool:
     """
     from .routing.subcommand import subcommand_json
     return write_requested_artifact(
-        lambda: write_text_artifact(path, subcommand_json(result, name='check', source=source) + '\n')) is not None
+        lambda: write_text_artifact(path, subcommand_json(result, name='check', source=source) + '\n'),
+        result) is not None
 
 
 def _print_grep_output(file_results: List[dict]) -> None:
@@ -1237,8 +1244,8 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     result, render = views[output_format]
 
     from .routing.subcommand import emit_subcommand_result
-    emit_subcommand_result(result, args, name='check', source=shown, render=render)
     artifact_failed = _write_file_sinks(views, sinks, args, shown)
+    emit_subcommand_result(result, args, name='check', source=shown, render=render)
 
     # Exit with appropriate code (BACK-1099: distinguish "clean" from
     # "issues found" from "scan incomplete" -- files_errored/files_degraded
@@ -1365,7 +1372,7 @@ def _check_views(formats, checked: List[_CheckedFile], files: List[Path], direct
             entries, budget = _json_file_entries(
                 checked, getattr(args, 'max_items', None), no_snippets=getattr(args, 'no_snippets', False),
                 max_snippet_chars=getattr(args, 'max_snippet_chars', None))
-            views[fmt] = (report(tally, budget, entries), None)
+            views[fmt] = (attach_provenance(report(tally, budget, entries)), None)
     return views
 
 
@@ -1373,19 +1380,19 @@ def _write_file_sinks(views: dict, sinks: list, args: 'Namespace', shown: str) -
     """Write each requested file sink from its view of the one scan; True when any write failed.
 
     Every sink is attempted; each failure is disclosed once by the shared artifact owner and maps to exit 3
-    (BACK-1939, D6). A json sink beside a json stdout is a no-op: the primary output already is the document.
+    (BACK-1939, D6). JSON destinations are written even beside JSON stdout.
     """
     from types import SimpleNamespace
     failed = False
     for fmt, path in sinks:
         result, render = views[fmt]
         if fmt == 'json':
-            if args.format != 'json':
-                failed = _write_also_json_report([path], result, shown) or failed
+            failed = _write_also_json_report([path], result, shown) or failed
             continue
         one = SimpleNamespace(format=args.format, output=[f'{fmt}={path}'], also_json=None)
         failed = write_requested_artifact(
-            lambda: write_also_json(result, one, lambda r, _fmt, _render=render: _render(r))) is not None or failed
+            lambda: write_also_json(result, one, lambda r, _fmt, _render=render: _render(r)),
+            views[args.format][0]) is not None or failed
     return failed
 
 

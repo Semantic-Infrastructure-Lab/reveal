@@ -118,3 +118,35 @@ def test_empty_stdin_writes_empty_streams_and_existing_empty_aggregate(tmp_path,
     assert destinations['grep'].read_text(encoding='utf-8') == ''
     aggregate = json.loads(destinations['json'].read_text(encoding='utf-8'))
     assert aggregate['files'] == [] and aggregate['summary']['files_checked'] == 0
+
+
+@pytest.mark.parametrize('source_kind', ['file', 'directory'])
+@pytest.mark.parametrize('legacy', [False, True])
+def test_native_json_provenance_is_identical_in_primary_and_mirror(project, tmp_path, source_kind, legacy):
+    target = project / 'a.py' if source_kind == 'file' else project
+    destination = tmp_path / 'mirror.json'
+    options = ['--also-json', str(destination)] if legacy else ['--output', f'json={destination}']
+    result = run('check', str(target), '--format', 'json', '--provenance', *options)
+    assert result.returncode == 1, result.stderr
+    payload = json.loads(result.stdout)
+    assert 'execution' in payload
+    assert json.loads(destination.read_text(encoding='utf-8')) == payload
+
+
+def test_stdin_provenance_aggregate_is_frozen_once_without_per_file_schema_changes(project, tmp_path, monkeypatch):
+    import reveal.checks as checks
+    calls = []
+    real = checks.stdin_check_artifact
+    def aggregate(rows):
+        calls.append(rows)
+        return real(rows)
+    monkeypatch.setattr(checks, 'stdin_check_artifact', aggregate)
+    first, second = tmp_path / 'first.json', tmp_path / 'second.json'
+    result = _stdin(project, monkeypatch, 'json', '--provenance', '--output', f'json={first}',
+                    '--output', f'json={second}')
+    assert result.returncode == 1, result.stderr
+    assert first.read_bytes() == second.read_bytes()
+    payload = json.loads(first.read_text(encoding='utf-8'))
+    assert 'execution' in payload
+    assert all('execution' not in row for row in payload['files'])
+    assert len(calls) == 1

@@ -114,17 +114,14 @@ def write_also_json(result, args, render=None, **render_kwargs) -> None:
     write per sink, each sink rendered on its own.
 
     A ``json`` sink is the result as JSON; any other format is what *render* prints for it
-    (``render(result, fmt, **render_kwargs)``, the call the stdout sink makes). A json sink is a no-op
-    when the stdout sink is already json: the primary output covers it. Every sink is attempted; the first
+    (``render(result, fmt, **render_kwargs)``, the call the stdout sink makes). Every explicit destination
+    is written, including JSON beside JSON stdout. Every sink is attempted; the first
     failure is raised after the rest were tried, tagged with its format (``sink_format``) for the one
     disclosure line in ``write_requested_artifact``, and any later failure is disclosed there as well.
     A non-json sink on a path that cannot render it fails like an unwritable one.
     """
     failures: list = []
-    primary = getattr(args, 'format', 'text')
     for fmt, path in file_sinks(args):
-        if fmt == 'json' and primary == 'json':
-            continue
         try:
             if fmt == 'json':
                 with open(path, 'w', encoding='utf-8') as f:

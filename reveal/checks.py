@@ -4,14 +4,18 @@ This module is separate from main.py to avoid circular dependencies with cli.rou
 """
 
 import re
+import io
+from contextlib import redirect_stdout, redirect_stderr
+from dataclasses import dataclass, field
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Any, List, Tuple
+from typing import Optional, Any, Dict, List, Tuple
 
 from .base import FileAnalyzer
 from .utils import get_file_type_from_analyzer, print_breadcrumbs
-from reveal.utils.json_utils import json_sink_paths, write_requested_artifact, write_text_artifact
+from reveal.utils.json_utils import (ARTIFACT_WRITE_ERRORS, attach_provenance, file_sinks,
+                                     write_requested_artifact, write_text_artifact)
 from reveal.utils.lines import split_lines
 
 # When a single rule fires this many times in one file, collapse to a summary line.
@@ -190,17 +194,31 @@ def _detections_json(path: str, result: dict) -> str:
     return subcommand_json(result, name='check', source=path, source_type='file')
 
 
-def _write_file_artifact(args: Any, output_format: str, path: str, result: dict,
-                         collect: Optional[List[dict]]) -> bool:
-    """Write a single file's result to the json sinks, or hand it to a --stdin run's *collect*; True when a
-    write failed. A json stdout already is the document, so nothing is written for it."""
-    sinks = json_sink_paths(args)
-    if not sinks or output_format == 'json':
-        return False
-    if collect is not None:
-        collect.append(result)
-        return False
-    return write_requested_artifact(lambda: write_text_artifact(sinks, _detections_json(path, result))) is not None
+@dataclass
+class CheckSinkCollection:
+    """The native stdin check's existing aggregate plus requested rendered streams."""
+    results: List[dict] = field(default_factory=list)
+    chunks: Dict[str, List[str]] = field(default_factory=dict)
+
+    def append(self, result: dict, bodies: Dict[str, str]) -> None:
+        # Aggregate rows keep their established raw file-result shape; provenance is on the aggregate.
+        self.results.append({key: value for key, value in result.items() if key != 'execution'})
+        for fmt, body in bodies.items():
+            self.chunks.setdefault(fmt, []).append(body)
+
+    def document(self, fmt: str) -> str:
+        return stdin_check_artifact(self.results) if fmt == 'json' else ''.join(self.chunks.get(fmt, []))
+
+
+def write_check_artifact(fmt: str, path: str, document: str, result: Optional[dict] = None) -> bool:
+    """Use the shared requested-output failure policy for an already rendered check view."""
+    def write() -> None:
+        try:
+            write_text_artifact(path, document)
+        except ARTIFACT_WRITE_ERRORS as exc:
+            setattr(exc, 'sink_format', fmt)
+            raise
+    return write_requested_artifact(write, result) is not None
 
 
 def stdin_check_artifact(results: List[dict]) -> str:
@@ -235,7 +253,7 @@ def _emit_detections(path: str, output_format: str, detections: List[Any],
     from reveal.cli.routing.subcommand import emit_subcommand_result
 
     coverage_selected = result_fields.pop('coverage_selected', False)
-    result = _detections_result(path, rendered, **result_fields)
+    result: dict = attach_provenance(_detections_result(path, rendered, **result_fields))
     printed = _detections_result(path, detections, **result_fields) \
         if output_format == 'grep' else result
 
@@ -394,13 +412,57 @@ def structure_parse_degraded(structure: Any) -> bool:
     return isinstance(structure, dict) and bool(structure.get('_has_errors'))
 
 
+def _capture_file_check(analyzer: FileAnalyzer, path: str, fmt: str, args: Any, config: Any,
+                        detections: list, rendered: list, fields: dict) -> Tuple[dict, str, str]:
+    output, errors = io.StringIO(), io.StringIO()
+    with redirect_stdout(output), redirect_stderr(errors):
+        if fmt == 'text' and _is_generated_file(analyzer.content):
+            print(f"{path}: ℹ️  Auto-generated file detected — results may include unfixable issues\n"
+                  "  💡 Add '# reveal: generated' near the top to suppress in recursive checks\n")
+        result = _emit_detections(path, fmt, detections, rendered, **fields)
+        if fmt == 'text':
+            print_breadcrumbs('quality-check', path, file_type=get_file_type_from_analyzer(analyzer),
+                             config=config, detections=detections)
+    return result, output.getvalue(), errors.getvalue()
+
+
+def _emit_check_outputs(analyzer: FileAnalyzer, path: str, output_format: str, args: Any,
+                        config: Any, detections: list, rendered: list,
+                        collect: Optional[CheckSinkCollection], **fields: Any) -> bool:
+    sinks = file_sinks(args)
+    formats = {output_format, *(fmt for fmt, _ in sinks)}
+    if sinks:
+        formats.add('json')
+    views = {fmt: _capture_file_check(analyzer, path, fmt, args, config, detections, rendered, fields)
+             for fmt in sorted(formats)}
+    primary, body, errors = views[output_format]
+    failed = False
+    if collect is not None:
+        collect.append(views['json'][0], {fmt: views[fmt][1] for fmt, _ in sinks if fmt != 'json'})
+    else:
+        for fmt, destination in sinks:
+            document = views[fmt][1]
+            failed = write_check_artifact(fmt, destination, document, primary) or failed
+    if errors:
+        # boundary-ok: print -- replay the existing check renderer's captured diagnostics once.
+        print(errors, end='', file=sys.stderr)
+    if output_format == 'json' and failed:
+        # Rebuild only when requested writes added errors after the primary view was rendered.
+        # boundary-ok: print -- the existing subcommand JSON seam rebuilds only added output errors.
+        print(_detections_json(path, primary))
+    else:
+        # boundary-ok: print -- replay the existing check renderer's captured primary view.
+        print(body, end='')
+    return failed
+
+
 def run_pattern_detection(
     analyzer: FileAnalyzer,
     path: str,
     output_format: str,
     args: Any,
     config: Optional[Any] = None,
-    collect: Optional[List[dict]] = None,
+    collect: Optional[CheckSinkCollection] = None,
 ) -> Tuple[int, bool, bool]:
     """Run pattern detection rules on a file.
 
@@ -410,8 +472,8 @@ def run_pattern_detection(
         output_format: Output format ('text', 'json', 'grep')
         args: CLI arguments (for --select, --ignore)
         config: Optional RevealConfig for breadcrumb settings
-        collect: A --stdin run's list: the file's result is appended for ``stdin_check_artifact`` to write
-            once, instead of being written to the json sinks here (BACK-2095).
+        collect: A --stdin run's canonical results and requested rendered streams, written once
+            per destination at the end of the invocation (BACK-2095).
 
     Returns:
         (detection_count, degraded, artifact_failed) tuple. `degraded` is True when the file
@@ -435,11 +497,6 @@ def run_pattern_detection(
     # Get structure and content
     structure = analyzer.get_structure()
     content = analyzer.content
-
-    # Warn about auto-generated files (but still check — user asked explicitly)
-    if output_format == 'text' and _is_generated_file(content):
-        print(f"{path}: ℹ️  Auto-generated file detected — results may include unfixable issues\n"
-              f"  💡 Add '# reveal: generated' near the top to suppress in recursive checks\n")
 
     # Run rules
     rule_errors: List[dict] = []
@@ -482,29 +539,16 @@ def run_pattern_detection(
     if max_items is not None and total_available > max_items:
         rendered_detections = detections[:max_items]
 
-    result = _emit_detections(
-        path, output_format, detections, rendered_detections, no_group=no_group,
-        parse_degraded=parse_degraded, rule_errors=rule_errors, no_snippets=no_snippets,
+    artifact_failed = _emit_check_outputs(
+        analyzer, path, output_format, args, config, detections, rendered_detections, collect,
+        no_group=no_group, parse_degraded=parse_degraded, rule_errors=rule_errors,
+        no_snippets=no_snippets,
         parse_error_at=_analyzer_error_position(analyzer) if parse_degraded else None,
-        parse_error_reason=structure.get('error'),  # rendered only when parse_degraded
-        max_snippet_chars=max_snippet_chars, total_available=total_available,
-        disclosures=disclosures, scan_incomplete=bool(scan_disclosures),
-        coverage=outcomes.report(len(rule_errors)), coverage_selected=bool(select),
+        parse_error_reason=structure.get('error'), max_snippet_chars=max_snippet_chars,
+        total_available=total_available, disclosures=disclosures,
+        scan_incomplete=bool(scan_disclosures), coverage=outcomes.report(len(rule_errors)),
+        coverage_selected=bool(select),
     )
-
-    # BACK-1248: the json file sinks on a single file. Built from the same detections
-    # the renderer just used -- no second analysis pass -- and deliberately the
-    # same document `--format json` prints for this invocation, so the artifact
-    # never depends on which --format the human report happened to use.
-    # A --stdin run hands in *collect* and writes once at the end (BACK-2095): one
-    # invocation is one result, so a sink is not rewritten per file.
-    artifact_failed = _write_file_artifact(args, output_format, path, result, collect)
-
-    # Print breadcrumbs after text output (not for json/grep)
-    if output_format == 'text':
-        file_type = get_file_type_from_analyzer(analyzer)
-        print_breadcrumbs('quality-check', path, file_type=file_type, config=config,
-                         detections=detections)
 
     degraded = parse_degraded or bool(rule_errors) or bool(scan_disclosures)
     return len(detections), degraded, artifact_failed
