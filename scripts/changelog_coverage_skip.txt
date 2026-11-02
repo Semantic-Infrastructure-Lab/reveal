@@ -2,16 +2,3 @@
 # internal work a user never sees (CI, ratchets, test harnesses, maintainer scripts), or ids
 # covered by a grouped entry. One per line: id, then why (name the grouped entry).
 # Clear this list in the first commit after each release: it only names work since the last tag.
-BACK-2321 CI default-install smoke and shared packaging test support.
-BACK-2204 Maintainer push-gate evidence validation and private measurement recording.
-
-BACK-2383 # Internal consumer qualification and catalog consistency for compact overview.
-BACK-2422 Isolate the missing-module preload test from lazy rule-registry discovery.
-BACK-2429 Maintainer recall-report target-population disclosure; scores and oracle populations unchanged.
-BACK-2327 # Internal: session adapters construct through one factory; a constructor failure keeps its original exception.
-BACK-2335 # Internal: import-analysis service owns scan state; no user-visible change.
-BACK-2340 # Maintainer corpus graph-invariant report format; no user-visible change.
-BACK-2350 # Maintainer TypeScript import oracle (lexical function scope); default edges unchanged.
-BACK-2373 # Internal: comparison evidence validation for identical trees.
-BACK-2381 # Internal: renderer self-validation isolation.
-BACK-2405 # Maintainer corpus recall gate option.
