@@ -791,3 +791,36 @@ def build_navigation_cohort_tree(root: Path) -> Path:
     _git(root, 'add', '.')
     _git(root, 'commit', '-q', '-m', 'Navigation cohort fixture')
     return root
+
+
+CALLS_COHORT_FILES = {
+    'src/auth.py': (
+        'def validate_token(token):\n    return bool(token)\n\n'
+        'def fn(value):\n    return validate_token(value)\n'
+    ),
+    'src/service.py': (
+        'from .auth import fn, validate_token\nimport shutil\n\n'
+        'def authenticate(value):\n    shutil.copy(value, "audit.log")\n    return validate_token(value)\n\n'
+        'def invoke_fn(value):\n    return fn(value)\n'
+    ),
+    'src/main.py': (
+        'from .service import authenticate, invoke_fn\n\n'
+        'def main(value):\n    events = []\n    events.append(value)\n'
+        '    len(events)\n    return invoke_fn(authenticate(value))\n'
+    ),
+    'src/cli.py': 'from .main import main\n\ndef cli(value):\n    return main(value)\n',
+    'src/ranked.py': (
+        ''.join(f'def ranked_{n:02}():\n    return {n}\n\n' for n in range(25))
+        + 'def rank_caller():\n'
+        + ''.join(f'    ranked_{n:02}()\n' for n in range(25))
+    ),
+}
+
+
+def build_calls_cohort_tree(root: Path) -> Path:
+    """A known cross-file graph with three caller levels and excluded builtin calls."""
+    for name, content in CALLS_COHORT_FILES.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding='utf-8')
+    return root
