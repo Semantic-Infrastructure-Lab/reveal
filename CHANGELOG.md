@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- `check --select M102` now discloses importer-file read failures and warns that orphan findings may be false positives, instead of presenting incomplete import evidence as a completed scan. Findings remain visible, the CLI exits 3 unless `--exit-zero` is selected, and the next host request retries the incomplete inventory. (BACK-2454)
+
 - PHP `imports` queries now distinguish module-level includes from includes inside functions, methods, closures and arrows. `lazy=only` selects local edges, `lazy=exclude` omits them, and default cycle checks leave local back-edges out; the all-edge listing keeps the same dependencies. (BACK-2452)
 
 - `imports://PATH?unused` counts failed inputs under the requested path; outside parse/read failures and worker losses are disclosed separately without making local unused-name verdicts incomplete. Cycle metadata remains unknown when loss could hide a cycle. Target damage, scan caps, discovery loss and whole-graph queries retain exit 3; incomplete zero-unused text no longer claims a clean result. (BACK-2441)

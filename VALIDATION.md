@@ -1310,18 +1310,39 @@ targets so a resolver bug isn't masked by testing only easy cases), root-cause
 every miss to an exact line of code, fix it, and re-measure to confirm the fix
 actually closes the gap without introducing false positives.
 
-### Bounded PHP scope qualification (BACK-2451, BACK-2452)
+### Bounded PHP scope qualification (BACK-2451, BACK-2452, BACK-2453)
 
 The opt-in `php-token-static` oracle uses native PHP `token_get_all(TOKEN_PARSE)`
 without executing corpus code or importing Reveal. At WordPress pin
 `5a57baa3352953e1f9cef97fc480ed14a8135335`, PHP 8.3.36 identifies two module-level
 includes in `wp-includes/class-wp-block-parser.php` and one method-local include in
-`wp-includes/widgets/class-wp-widget-text.php`: three independently reviewed edges.
-Public-path scoring finds all three union edges, both module edges under
-`lazy=exclude`, and the local edge under `lazy=only`, with no extra scored edges
-and two partial-parse disclosures retained in every mode. The complete default
-graph under the same scan root keeps all 673 dependency pairs unchanged after
-scope attribution. This is bounded production qualification, not a scheduled
+`wp-includes/widgets/class-wp-widget-text.php`: the original three independently
+reviewed edges. A separate source-selected cohort adds twelve importers under
+`wp-includes`: `block-patterns.php`, `class-phpmailer.php`, `class-requests.php`,
+`class-smtp.php`, `general-template.php`, `plugin.php`, `wp-db.php`,
+`blocks/navigation-link.php`, `blocks/navigation-submenu.php`, `pomo/mo.php`,
+`pomo/po.php` and `pomo/translations.php`.
+
+Public-path results at source `33460686`, Python 3.12.16, tree-sitter 0.25.2 and
+language-pack 1.23.1:
+
+| Independently frozen population | Union hits/truth | Module (`lazy=exclude`) | Local (`lazy=only`) | Scored extras |
+|---|---:|---:|---:|---:|
+| Original two importers | 3/3 | 2/2 | 1/1 | 0 in every mode |
+| Additional twelve importers | 18/18 | 17/17 | 1/1 | 0 in every mode |
+
+The additional cohort has 23 loader statements: 19 statically resolved, four
+unsupported expressions and no unresolved supported targets. Two method-local
+Requests includes deduplicate to one pair. Its conditional `readonly.php`
+include is module-level regardless of whether the PHP-version condition is true.
+There is no real mixed module/local pair in this cohort; mixed-pair evidence
+remains fixture-based. These purposive populations are not a census or random sample.
+
+Both cohorts retain the same two partial-parse disclosures in every mode. The
+complete default graph under the same scan root keeps all 673 dependency pairs
+unchanged. Deliberately assigning every edge to module or local scope preserves
+the union but fails the corresponding independent mode control; ignoring the mode
+produces scored extras. This is bounded production qualification, not a scheduled
 baseline or whole-language promotion; historical PHP populations below are unchanged.
 
 The oracle supports bounded unescaped literals, `__DIR__` concatenation and global
