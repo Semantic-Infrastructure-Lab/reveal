@@ -45,7 +45,9 @@ def test_failed_json_destination_keeps_primary_and_exits_three(project, tmp_path
     sink = ['--also-json', str(destination)] if legacy else ['--output', f'json={destination}']
     result = _run_reveal_direct(*argv, '--format', 'json', *sink)
     assert result.returncode == 3, result.stderr
-    assert json.loads(result.stdout)['type']
+    primary = json.loads(result.stdout)
+    assert primary['type']
+    assert primary['meta']['output_errors'][0]['code'] == 'artifact_write_failed'
     assert result.stderr.count('Requested JSON artifact failed') == 1
     assert 'Traceback' not in result.stderr
 
@@ -64,3 +66,26 @@ def test_no_file_sink_keeps_json_stdout_unchanged(project):
     result = _run_reveal_direct('metrics', 'proj', '--format', 'json')
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)['type'] == 'stats_summary'
+
+
+@pytest.mark.parametrize('noun', NOUNS)
+@pytest.mark.parametrize('spelling', ['cli', 'uri'])
+def test_declared_text_destination_is_the_existing_primary_text_view(project, tmp_path, noun, spelling):
+    separate = _run_reveal_direct(*argv_for(noun, spelling), '--format', 'text')
+    destination = tmp_path / 'view.txt'
+    result = _run_reveal_direct(*argv_for(noun, spelling), '--format', 'json',
+                                '--output', f'text={destination}')
+    assert result.returncode == separate.returncode
+    assert json.loads(result.stdout)['type']
+    assert destination.read_text(encoding='utf-8') == separate.stdout
+
+
+def test_empty_directory_json_destination_is_a_completed_empty_answer(tmp_path):
+    root = tmp_path / 'empty'
+    root.mkdir()
+    destination = tmp_path / 'empty.json'
+    result = _run_reveal_direct('check', str(root), '--format', 'json', '--output', f'json={destination}')
+    assert result.returncode == 0, result.stderr
+    primary = json.loads(result.stdout)
+    assert primary['summary']['files_checked'] == 0
+    assert json.loads(destination.read_text(encoding='utf-8')) == primary

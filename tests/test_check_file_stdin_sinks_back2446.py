@@ -85,3 +85,36 @@ def test_no_sink_retains_findings_and_uncapped_grep_control(project):
     result = run('check', str(project / 'a.py'), '--select', 'B001', '--format', 'grep', '--max-items', '1')
     assert result.returncode == 1
     assert len(result.stdout.splitlines()) == 2
+
+
+@pytest.mark.parametrize('uri_first', [True, False])
+def test_stdin_uri_targets_with_file_sinks_are_rejected_before_analysis(project, tmp_path, monkeypatch, scans, uri_first):
+    uri = f'ast://{project / "a.py"}'
+    lines = [uri] if uri_first else [str(project / 'a.py'), uri]
+    monkeypatch.setattr('sys.stdin', io.StringIO('\n'.join(lines) + '\n'))
+    destination = tmp_path / 'out.json'
+    result = run('--stdin', '--check', '--output', f'json={destination}')
+    assert result.returncode == 2
+    assert 'file paths only' in result.stderr
+    assert result.stdout == '' and not destination.exists()
+    assert scans == []
+
+
+def test_no_sink_stdin_uri_keeps_its_existing_answer(project, monkeypatch):
+    monkeypatch.setattr('sys.stdin', io.StringIO(f'ast://{project / "a.py"}\n'))
+    result = run('--stdin', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)['type'] == 'ast_query'
+
+
+def test_empty_stdin_writes_empty_streams_and_existing_empty_aggregate(tmp_path, monkeypatch, scans):
+    monkeypatch.setattr('sys.stdin', io.StringIO(''))
+    destinations = {fmt: tmp_path / ('empty.' + fmt) for fmt in ('text', 'grep', 'json')}
+    result = run('--stdin', '--check', '--format', 'json',
+                 *(value for fmt, path in destinations.items() for value in ('--output', f'{fmt}={path}')))
+    assert result.returncode == 0 and result.stdout == ''
+    assert scans == []
+    assert destinations['text'].read_text(encoding='utf-8') == ''
+    assert destinations['grep'].read_text(encoding='utf-8') == ''
+    aggregate = json.loads(destinations['json'].read_text(encoding='utf-8'))
+    assert aggregate['files'] == [] and aggregate['summary']['files_checked'] == 0
