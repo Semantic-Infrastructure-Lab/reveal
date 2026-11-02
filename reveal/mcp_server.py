@@ -267,17 +267,22 @@ def _trace_absence_compatibility(answer) -> bool:
             and answer.execution_facts.failures == frozenset({FailureCause.INVALID_REQUEST}))
 
 
+def _execution_failed(facts) -> bool:
+    """The existing fatal execution-facts decision shared by authored consumers."""
+    from .utils.results import AnalysisCompleteness, FailureCause
+    return (facts.completeness in (AnalysisCompleteness.FAILED, AnalysisCompleteness.NOT_STARTED)
+            or FailureCause.OUTPUT in facts.failures or FailureCause.INVALID_REQUEST in facts.failures)
+
+
 def _declared_failure(answer) -> str | None:
     """Consume owner facts and diagnostic origin, never rendered result text."""
-    from .utils.results import AnalysisCompleteness, FailureCause
+    from .utils.results import FailureCause
     facts = answer.execution_facts
     if facts is None:
         return None
     if FailureCause.OUTPUT not in facts.failures and _trace_absence_compatibility(answer):
         return None
-    failed = (facts.completeness in (AnalysisCompleteness.FAILED, AnalysisCompleteness.NOT_STARTED)
-              or FailureCause.OUTPUT in facts.failures or FailureCause.INVALID_REQUEST in facts.failures)
-    if not failed:
+    if not _execution_failed(facts):
         return None
     if answer.exception is not None:
         exc = answer.exception
