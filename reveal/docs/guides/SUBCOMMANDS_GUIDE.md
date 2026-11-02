@@ -786,7 +786,9 @@ Traversal-incomplete import facts rebuild at the next serialized host request;
 healthy facts retain existing validation and reuse. This directory-loss handling
 does not change the separate public policy for skipped-file-only I007 outcomes.
 
-M102 discloses directory loss while discovering project-wide Python importers.
+M102 discloses directory loss and importer-file read failures while collecting
+project-wide Python imports. File-read notes name the failed sources separately
+from directory enumeration, with the full failure count and up to five details.
 Its root-attributed note warns that orphan findings and removal suggestions may
 be false positives because imports may be missing. Surviving heuristic findings
 remain visible; known loss makes the CLI scan incomplete (exit 3 unless
@@ -801,11 +803,12 @@ existing override of config disabling. A parallel preload may still prepare an
 index for a disabled rule; that alone does not make the requested answer
 incomplete. This is eligibility/config scope, not an execution ledger.
 
-Traversal-incomplete M102 inventories are retried at the next normal serialized
+Discovery- or read-incomplete M102 inventories are retried at the next normal serialized
 host request, even if access recovered before the earlier request finished.
 Healthy inventories retain their existing validation and reuse. This handling
-covers directory enumeration, not the separate importer-file read or
-`__init__.py` fallback-read failure channels. M102 is a cross-file rule, so it is not part
+covers directory enumeration and importer-file reads; the separate per-target
+`__init__.py` fallback-read failure channel remains outside this handling.
+M102 is a cross-file rule, so it is not part
 of the quality scores and rankings of `stats://` and `hotspots`, which count
 file-local rules only ([what the issue count counts](../adapters/METRICS_ADAPTER_GUIDE.md#what-the-issue-count-counts)).
 

@@ -21,6 +21,7 @@ from ...utils.path_utils import (
     python_package_top,
     resolve_project_root,
     to_posix,
+    to_relative_display,
     traversal_failed_warning,
     failure_of,
 )
@@ -39,9 +40,11 @@ class _ImportSet(set):
     """The existing mutable import set with picklable discovery facts."""
 
     def __init__(self, values: Iterable[str] = (), *,
-                 traversal_failures: Sequence[PathFailure] = ()):
+                 traversal_failures: Sequence[PathFailure] = (),
+                 file_read_failures: Sequence[PathFailure] = ()):
         super().__init__(values)
         self.traversal_failures = tuple(traversal_failures)
+        self.file_read_failures = tuple(file_read_failures)
         # The walk honours the gitignore switch, so the import set depends on it.
         self.gitignore = gitignore_enabled()
 
@@ -86,7 +89,22 @@ def get_scan_disclosures(files: Optional[List[Path]] = None, *, select=None,
         if warning:
             messages.append(f"M102: importer discovery under {to_posix(root)} is incomplete: {warning['message']}; "
                             'orphan findings and removal suggestions may be false positives because imports may be missing')
+        failures = getattr(imports, 'file_read_failures', ())
+        if failures:
+            messages.append(_file_read_disclosure(failures, root))
     return messages
+
+
+def _file_read_disclosure(failures: Sequence[PathFailure], root: Path) -> str:
+    """Bound source display without losing the inventory's actual read-failure count."""
+    shown = sorted(failures, key=lambda failure: failure.path or '')[:5]
+    details = '; '.join(
+        f"{to_relative_display(path, root) if path else '<unknown>'} ({cause})"
+        for path, cause in shown)
+    more = f' and {len(failures) - len(shown)} more' if len(failures) > len(shown) else ''
+    return (f'M102: importer evidence under {to_posix(root)} is incomplete: '
+            f'{len(failures)} importer file read(s) failed: {details}{more}; '
+            'orphan findings and removal suggestions may be false positives because imports may be missing')
 
 # What makes a directory a Python project for a file outside any package.
 _PYTHON_BUILD_MARKERS = ('pyproject.toml', 'setup.py')
@@ -434,13 +452,16 @@ class M102(BaseRule):
             failure_of(error)
             for error in enumeration_errors))
 
+        read_failures: List[PathFailure] = []
         for py_file in candidates:
             try:
                 content = py_file.read_text(encoding='utf-8', errors='ignore')
-                _extract_imports_regex(content, imports, py_file, package_root)
-            except OSError:
+            except OSError as error:
+                read_failures.append(PathFailure(to_posix(py_file), failure_of(error).cause))
                 continue
+            _extract_imports_regex(content, imports, py_file, package_root)
 
+        imports.file_read_failures = tuple(read_failures)
         _import_cache[package_root] = imports
         return imports
 
@@ -513,14 +534,15 @@ def _evict_root(root: Path) -> None:
 
 
 def _evict_incomplete_imports() -> None:
-    """Reuse partial import evidence within this request, then retry next time.
+    """Reuse discovery/read-incomplete evidence within this request, then retry next time.
 
     A set built with the gitignore switch off is request-local too: the tree stamp that
     validates a kept entry is taken with the default switch, so it cannot see an edit to an
     ignored file (BACK-2118).
     """
     for root, imports in tuple(_import_cache.items()):
-        if getattr(imports, 'traversal_failures', ()) or not getattr(imports, 'gitignore', True):
+        if (getattr(imports, 'traversal_failures', ()) or getattr(imports, 'file_read_failures', ())
+                or not getattr(imports, 'gitignore', True)):
             _evict_root(root)
 
 

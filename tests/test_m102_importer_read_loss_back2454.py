@@ -195,6 +195,47 @@ def test_registered_sdk_discloses_usable_read_incomplete_evidence(tmp_path, read
     asyncio.run(asyncio.wait_for(scenario(), timeout=30))
 
 
+@pytest.mark.parametrize('view', ['text-artifact', 'grep-artifact', 'cut'])
+def test_existing_output_controls_retain_read_disclosures(tmp_path, reads, view):
+    root, worker, hidden = _project(tmp_path / 'project')
+    source = hidden / 'main.py'
+    reads['denied'] = {source}
+    artifact = tmp_path / 'answer.json'
+    flags = {'text-artifact': ['--output', f'json={artifact}'],
+             'grep-artifact': ['--format', 'grep', '--output', f'json={artifact}'],
+             'cut': ['--format', 'json', '--max-items', '0']}[view]
+    response = run('check', str(root), '--select', 'M102', *flags)
+    data = json.loads(response.stdout if view == 'cut' else artifact.read_text(encoding='utf-8'))
+    assert response.returncode == 3 and data['summary']['total_issues'] == 1
+    loss_note(data['summary']['scan_disclosures'], root, source)
+    if view == 'cut':
+        assert all(not entry['detections'] for entry in data['files'])
+    elif view == 'grep-artifact':
+        assert response.stdout.count(':M102:') == 1
+        assert 'importer file read' in response.stderr and 'importer file read' not in response.stdout
+    else:
+        assert response.stdout.count('importer file read') == 1
+
+
+def test_directory_loss_and_read_loss_keep_separate_facts_and_notes(tmp_path, reads, monkeypatch):
+    root, worker, hidden = _project(tmp_path / 'project')
+    source = hidden / 'main.py'
+    blocked = _write(root / 'blocked' / 'main.py', 'import worker\n').parent
+    reads['denied'] = {source}
+    real_scan = os.scandir
+    def scandir(path):
+        if reads['active'] and Path(path) == blocked:
+            raise PermissionError(13, 'directory denied', str(path))
+        return real_scan(path)
+    monkeypatch.setattr(os, 'scandir', scandir)
+    value = m102.M102()._collect_all_imports(root)
+    assert value.traversal_failures == (PathFailure(blocked.as_posix(), 'PermissionError: directory denied'),)
+    assert value.file_read_failures == (PathFailure(source.as_posix(), 'PermissionError: importer read denied'),)
+    notes = scan_caches.get_scan_disclosures([worker], ['M102'], None)
+    assert len(notes) == 2 and sum('directory enumeration' in note for note in notes) == 1
+    loss_note(notes, root, source)
+
+
 def test_read_loss_uses_existing_config_target_scope_and_plain_set_controls(tmp_path, reads):
     root, worker, hidden = _project(tmp_path / 'project')
     disabled = _write(root / 'disabled.py', 'VALUE=1\n')
