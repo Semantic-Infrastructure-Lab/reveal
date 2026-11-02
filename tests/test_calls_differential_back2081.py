@@ -13,17 +13,21 @@ through the public path, as in ``test_imports_differential_back2081.py``:
 
 A long-lived library host (``reveal.api.query``, one host request per call) adds the validated
 in-memory indexes (``_INDEX_CACHE``, ``_CALLEE_CACHE``) to the same compare: one process answers
-every view after each edit, and each answer must equal a fresh process's.
+every view after each edit, and each answer must equal a fresh process's. A direct library call
+(no host request) after an in-place edit is the strict xfail at the end.
 
 An edit that keeps a file's size and mtime is a stat-key design limit and is out of scope here: every
 edit below changes the size of the file it rewrites.
 """
+import json
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-from cache_differential import cache_entries, run_host, run_reveal
+from cache_differential import cache_entries, cache_env, run_host, run_reveal
 
 pytestmark = [pytest.mark.disk_cache]
 
@@ -144,3 +148,41 @@ def test_a_library_host_sees_every_edit_between_requests(project, tmp_path, disk
     stale = [(name, view) for k, (name, _view, _rel, _text) in enumerate(EDITS, start=1)
              for view in HOST_VIEWS if hosted[k][view] != fresh[k][view]]
     assert not stale, f'the host served stale answers {stale}'
+
+
+# One process asks find_callers, overwrites main.py in place (the root directory's mtime does not
+# move), and asks again, inside host requests or as a direct library call with none.
+_DIRECT_DRIVER = r'''
+import json, sys
+from pathlib import Path
+from reveal.adapters.calls.index import find_callers
+from reveal.utils.request_cache import host_request
+hosted = sys.argv[1] == 'host'
+def callers():
+    if hosted:
+        with host_request():
+            answer = find_callers('.', 'helper')
+    else:
+        answer = find_callers('.', 'helper')
+    return sorted(c['caller'] for level in answer['levels'] for c in level['callers'])
+first = callers()
+Path('main.py').write_text(sys.argv[2], encoding='utf-8')
+print(json.dumps([first, callers()]))
+'''
+
+
+@pytest.mark.parametrize('mode', [
+    'host',
+    pytest.param('direct', marks=pytest.mark.xfail(strict=True, reason=(
+        'NEW: _INDEX_CACHE is read and stored outside a host request (callee_source is gated on '
+        'in_host_request, _cached_callers_index is not); its directory-mtime key misses an in-place '
+        'overwrite, so a second direct call returns the first answer'))),
+])
+def test_a_direct_library_caller_sees_an_in_place_edit(project, tmp_path, mode):
+    edited = 'from pkg.a import run\nfrom pkg.b import helper\n\n\ndef main():\n    run()\n    helper(2)\n'
+    done = subprocess.run([sys.executable, '-c', _DIRECT_DRIVER, mode, edited], cwd=project, capture_output=True,
+                          text=True, encoding='utf-8', env=cache_env(tmp_path / 'cache', cache=False), timeout=120)
+    assert done.returncode == 0, done.stderr
+    first, second = json.loads(done.stdout)
+    assert first == ['run']
+    assert second == ['main', 'run'], f'{mode}: the edit added main as a caller; got {second}'
