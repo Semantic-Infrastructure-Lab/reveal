@@ -365,7 +365,6 @@ def normalize_effects_request(args, *, mode: Optional[str] = None, show_meta: bo
     return EffectsRequest(selected, transitive, depth)
 
 
-
 def _validate_effects_view(args, show_meta: bool, is_directory: bool, preempting: Optional[str]) -> None:
     """New effects requests cannot select another view or silently discard a cut."""
     from ..errors import NavRequestValidationError
@@ -380,6 +379,7 @@ def _validate_effects_view(args, show_meta: bool, is_directory: bool, preempting
         raise NavRequestValidationError('--effects does not use --head or --tail; select inclusive lines with --range.')
     if any(getattr(args, flag, None) for flag in ('grep', 'name', 'sort', 'type')):
         raise NavRequestValidationError('--effects cannot combine with grep or structural-query views.')
+
 
 def _validate_effects_controls(selected: str, transitive: bool, depth: Optional[int]) -> None:
     from ..errors import NavRequestValidationError

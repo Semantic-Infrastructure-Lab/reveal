@@ -582,7 +582,6 @@ def _run_check_with_ledger(args: 'Namespace') -> None:
             ledger.report()
 
 
-
 def _validate_effects_file_view(args, *, is_directory=False):
     """Reject declared element-less views that would preempt a new effects request."""
     if not getattr(args, 'effects', False):
@@ -592,6 +591,7 @@ def _validate_effects_file_view(args, *, is_directory=False):
     selected = _given_flags(args, ELEMENT_LESS_FLAGS)
     normalize_effects_request(args, is_directory=is_directory,
                               preempting=selected[0][1] if selected else None)
+
 
 def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     """Handle regular file or directory path.

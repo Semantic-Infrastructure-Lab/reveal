@@ -470,7 +470,6 @@ def _check_ghost_flags(invocation: Invocation) -> None:
             sys.exit(2)
 
 
-
 def _validate_effects_cli_target(args: Namespace) -> None:
     """New effects modes name one code file through the file-navigation route."""
     if not getattr(args, 'effects', False):
@@ -478,6 +477,7 @@ def _validate_effects_cli_target(args: Namespace) -> None:
     target = getattr(args, 'path', None)
     if not target or '://' in target or target.startswith('@'):
         raise NavRequestValidationError('--effects requires one code file; URI and batch-list targets are unsupported.')
+
 
 def _main_impl(invocation: Invocation, parser: Any, args: Namespace) -> None:
     """Run the path/URI form with its parsed ``args``."""

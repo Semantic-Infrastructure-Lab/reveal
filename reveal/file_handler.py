@@ -178,7 +178,6 @@ def _has_nav_flag(args) -> bool:
     )
 
 
-
 def _effects_args(args, path, show_meta=False):
     """Forward a validated effects request through the existing navigation destinations."""
     from copy import copy
@@ -198,6 +197,7 @@ def _effects_args(args, path, show_meta=False):
     forwarded = copy(args)
     setattr(forwarded, request.destination, True)
     return forwarded
+
 
 def _flat_nav_selected(args) -> bool:
     """The existing flat-file modes; bare flow is selected by presence."""
@@ -391,11 +391,11 @@ def _find_element_node(analyzer, element: str):
     return resolution.node if resolution is not None else None
 
 
-
 def _reject_effects_special_view(args, spelling):
     from .cli.invocation import normalize_effects_request
 
     normalize_effects_request(args, preempting=spelling)
+
 
 def _dispatch_special_flags(analyzer, path: str, output_format: str, args, config) -> bool:
     """Handle flags that short-circuit normal file analysis.
