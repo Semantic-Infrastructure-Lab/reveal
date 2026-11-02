@@ -1,5 +1,6 @@
 """Approved effects modes preserve existing source-based answers and controls."""
 import json
+from pathlib import PurePosixPath
 
 import pytest
 
@@ -100,7 +101,7 @@ def test_transitive_preserves_sources_and_breadth_order(project, depth):
     _same(project, 'entry', '--sideeffects', (), extra)
     data = json.loads(_run(project, 'entry', '--effects', *extra, '--format', 'json').stdout)
     children = [row for row in data['findings'] if row.get('hop', 0) > 0]
-    assert [(row['file'].rsplit('/', 1)[-1], row['line'], row['hop']) for row in children] == [
+    assert [(PurePosixPath(row['file']).name, row['line'], row['hop']) for row in children] == [
         ('left.py', 3, 1), ('right.py', 3, 1)] + ([] if depth == 1 else [('left.py', 6, 2)])
     assert all('file' not in row for row in data['findings'] if row['hop'] == 0)
 
