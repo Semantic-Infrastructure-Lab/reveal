@@ -94,14 +94,24 @@ def _normalised(text):
     return text.replace('\r\n', '\n')
 
 
-def test_unique_names_keep_the_sideeffects_text_byte_for_byte(unique):
+def _located_unique(unique):
+    from reveal.utils.path_utils import to_posix
+
+    return (UNIQUE_SIDEEFFECTS
+            .replace('requests.get("http://example.com")', f'requests.get("http://example.com") [{to_posix(unique / "mid.py")}:6]')
+            .replace('logging.info("x")', f'logging.info("x") [{to_posix(unique / "top.py")}:11]')
+            .replace('open("o.txt"...)', f'open("o.txt"...) [{to_posix(unique / "leaf.py")}:2]'))
+
+
+def test_unique_names_keep_the_sideeffects_text_and_source_order(unique):
     out = _run_reveal_direct(str(unique / 'top.py'), 'entry', '--sideeffects', '--transitive').stdout
-    assert _normalised(out).rstrip('\n') == UNIQUE_SIDEEFFECTS
+    expected = _located_unique(unique)
+    assert _normalised(out).rstrip('\n') == expected
 
 
 def test_unique_names_keep_the_boundary_effects_section(unique):
     out = _normalised(_run_reveal_direct(str(unique / 'top.py'), 'entry', '--boundary', '--transitive').stdout)
-    assert UNIQUE_SIDEEFFECTS.replace('\n', '\n  ').join(['EFFECTS (--transitive, depth=2):\n  ', '']) in out
+    assert _located_unique(unique).replace('\n', '\n  ').join(['EFFECTS (--transitive, depth=2):\n  ', '']) in out
 
 
 def test_the_ambiguity_note_lists_three_candidates_and_counts_the_rest():

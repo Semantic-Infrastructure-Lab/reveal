@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from .core import tree_root
 from reveal.utils.lines import split_lines
+from reveal.utils.path_utils import to_posix
 
 if TYPE_CHECKING:
     from .adapters.ast.nav_outline import OutlineDepth
@@ -335,7 +336,8 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
             {'kind': e['kind'], 'line': e['line'], 'callee': e['callee'],
              'first_arg': e.get('first_arg'), 'has_more_args': e.get('has_more_args', False),
              'via': e.get('via', 'call'),
-             **({'hop': e['hop'], 'chain': e['chain']} if transitive else {})}
+             **({'hop': e['hop'], 'chain': e['chain']} if transitive else {}),
+             **({'file': to_posix(e['file'])} if transitive and e['hop'] > 0 else {})}
             for e in effects if e['kind'] is not None
         ]
         note = skipped_files_note(effects.skipped) if transitive else None
@@ -403,6 +405,8 @@ def _boundary_effect_finding(effect: Dict[str, Any], transitive: bool) -> Dict[s
         finding['via'] = 'assignment'
     if transitive:
         finding.update(hop=effect['hop'], chain=effect['chain'])
+        if effect['hop'] > 0:
+            finding['file'] = to_posix(effect['file'])
     return finding
 
 

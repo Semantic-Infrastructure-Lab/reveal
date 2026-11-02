@@ -12,6 +12,7 @@ from ...core.treesitter_compat import _zero_arg
 from .nav_calls import range_calls
 from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
 from reveal.utils.lines import split_lines
+from ...utils.path_utils import as_spelled, to_posix
 from ...reveal_types import PathFailure
 
 # Each entry: (kind_label, list_of_patterns).
@@ -2121,10 +2122,11 @@ def collect_effects_transitive(
                 # (BACK-1834): the hop stays, labelled `<Name/>` in the chain.
                 renders = edge['call_expr'] in node.record['reference_only_calls']
                 new_chain = chain + [f"<{edge['call_expr']}/>" if renders else edge['callee']]
+                callee_file = as_spelled(child.file, path)
                 for e in collect_effects(def_node, start, end, callee_get_text, callee_language):
                     e['hop'] = child.level
                     e['chain'] = new_chain
-                    e['file'] = child.file
+                    e['file'] = callee_file
                     results.append(e)
                 next_frontier.append((child, new_chain))
         frontier = next_frontier
@@ -2193,6 +2195,7 @@ def _render_transitive_groups(visible: List[Dict[str, Any]], root_name: str) -> 
         lines = [header]
         for e in group_effects:
             kind = e['kind'] or '?'
-            lines.append(f'  L{e["line"]:<6}  {kind:<{kind_width}}  {format_effect_target(e)}')
+            location = f' [{to_posix(e["file"])}:{e["line"]}]' if e.get("hop", 0) > 0 else ''
+            lines.append(f'  L{e["line"]:<6}  {kind:<{kind_width}}  {format_effect_target(e)}{location}')
         blocks.append('\n'.join(lines))
     return '\n'.join(blocks)
