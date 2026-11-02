@@ -50,7 +50,10 @@ writes). Selectors require `--effects`; combining selectors or another navigatio
 analysis is rejected. `--transitive` applies only to ordinary effects. Its depth
 accepts integers 1–5, default 2. An explicit depth is rejected for ordinary
 nontransitive effects and state mode. Loop depth remains positive, default 3,
-with no additional cap. Effects require a code file; directory listings, metadata/check/grep and structural-query
+with no additional cap. Effects require one code file; URI targets, `@file` lists and `--stdin` batches are
+unsupported. Early discovery/special modes (including `--show-ast`, `--capabilities`,
+`--explain-file`, `--decorator-stats` and `--languages`) cannot preempt effects.
+Directory listings, metadata/check/grep and structural-query
 views cannot be combined with them. `--head`/`--tail` are rejected; use inclusive
 `--range` to select lines. Frontmatter `--validate-schema` and specialized nginx
 views (`--extract`, `--check-acl`, `--validate-nginx-acme`, `--global-audit`,
@@ -211,6 +214,11 @@ optional `depth` accepts integers 1–5 there (default 2), or positive structura
 nesting depth for loops (default 3). Other flags reject nondefault controls.
 `flag_value` does not encode effects modifiers. The first four positional arguments
 and text return remain unchanged; line-reference elements continue to work.
+
+Missing-file or missing-element failures retain legacy MCP capture behavior: the
+response may contain explicit error text while the SDK reports `is_error=false`.
+Inspect that text. Invalid effects controls, types and directory requests produce
+authored tool errors; this activation does not change global capture policy.
 
 ```python
 reveal_nav("app.py", "process_order", "effects", transitive=True, depth=2)

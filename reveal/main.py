@@ -393,6 +393,9 @@ def _handle_special_modes(args: Any) -> bool:
     for dest, handler in _SPECIAL_MODES:
         if not getattr(args, dest, None):
             continue
+        if getattr(args, 'effects', False):
+            from .cli.invocation import normalize_effects_request
+            normalize_effects_request(args, preempting='--' + dest.replace('_', '-'))
         if getattr(args, 'fail_on', None) is not None:
             print('Error: --fail-on is not supported by discovery, stdin or special modes.', file=sys.stderr)
             sys.exit(2)
@@ -467,6 +470,15 @@ def _check_ghost_flags(invocation: Invocation) -> None:
             sys.exit(2)
 
 
+
+def _validate_effects_cli_target(args: Namespace) -> None:
+    """New effects modes name one code file through the file-navigation route."""
+    if not getattr(args, 'effects', False):
+        return
+    target = getattr(args, 'path', None)
+    if not target or '://' in target or target.startswith('@'):
+        raise NavRequestValidationError('--effects requires one code file; URI and batch-list targets are unsupported.')
+
 def _main_impl(invocation: Invocation, parser: Any, args: Namespace) -> None:
     """Run the path/URI form with its parsed ``args``."""
     # Check for updates (once per day, non-blocking, opt-out available)
@@ -477,6 +489,8 @@ def _main_impl(invocation: Invocation, parser: Any, args: Namespace) -> None:
     # Handle special modes (exit early)
     if _handle_special_modes(args):
         return
+
+    _validate_effects_cli_target(args)
 
     # Path is required for normal operation. A truly bare invocation (no args
     # at all) advertises capabilities instead of dumping argparse usage --
