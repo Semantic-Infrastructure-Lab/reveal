@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- `imports://PATH?unused` counts failed inputs under the requested path; outside parse/read failures and worker losses are disclosed separately without making local unused-name verdicts incomplete. Cycle metadata remains unknown when loss could hide a cycle. Target damage, scan caps, discovery loss and whole-graph queries retain exit 3; incomplete zero-unused text no longer claims a clean result. (BACK-2441)
+
 - `--output json=PATH` and the retired `--also-json PATH` now write the requested file even when stdout is JSON. Previously they silently wrote nothing. An unwritable requested destination exits 3 while preserving the primary answer; unsupported file/directory views reject file sinks with exit 2. (BACK-2447)
 
 ### Added

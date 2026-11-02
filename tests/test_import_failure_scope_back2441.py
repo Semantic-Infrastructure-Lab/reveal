@@ -1,4 +1,4 @@
-"""Qualify local unused-name verdicts independently from scan completeness (BACK-2441)."""
+"""Qualify local unused-name verdicts and target-scoped completeness (BACK-2441)."""
 import json
 
 import pytest
@@ -14,6 +14,10 @@ CASES = {
                    'broken.js', 'import { x ;\n const = ;;; }{\n'),
     'go': ('a.go', 'package app\nimport "fmt"\nimport "os"\nfunc Main() { fmt.Println("ok") }\n',
            ['os'], 'broken.go', 'package broken\nfunc Broken( {\n'),
+    'typescript': ('a.ts', "import { used, spare } from '../lib.js';\nconsole.log(used);\n", ['spare'],
+                   'broken.ts', 'import { x ;\n const = ;;; }{\n'),
+    'rust': ('a.rs', 'use std::fmt;\nuse std::io;\nfn main() { io::stdin(); }\n', ['fmt'],
+             'broken.rs', 'fn broken( {\n'),
 }
 
 
@@ -34,7 +38,7 @@ def _verdicts(result):
 
 
 @pytest.mark.parametrize('language', CASES)
-def test_outside_parse_loss_changes_completeness_not_local_unused_names(tmp_path, language):
+def test_outside_parse_loss_does_not_change_local_unused_answer(tmp_path, language):
     filename, source, names, broken_name, broken_source = CASES[language]
     (tmp_path / '.git').mkdir()
     _write(tmp_path, 'go.mod', 'module example.invalid/project\ngo 1.21\n')
@@ -44,12 +48,14 @@ def test_outside_parse_loss_changes_completeness_not_local_unused_names(tmp_path
     _write(tmp_path, 'lib.js', 'export const used = 1; export const spare = 2;\n')
     good_code, good = _query(target)
     assert good_code == 0
+    assert good['metadata']['has_cycles'] is False
     assert [name for row in good['unused'] for name in row['unused_names']] == names
     _write(tmp_path, broken_name, broken_source)
     bad_code, bad = _query(target)
-    assert bad_code == 3
-    assert bad['metadata']['files_failed_count'] == 1
-    assert _verdicts(bad) == _verdicts(good)
+    assert bad_code == 0
+    assert bad['metadata']['files_failed_count'] == 0
+    assert bad['metadata']['files_failed_outside_target_count'] == 1
+    assert bad['unused'] == good['unused']
     listing_code, listing = _query(target, '')
     assert listing_code == 0
     assert listing['metadata']['files_failed_outside_target_count'] == 1
@@ -66,7 +72,8 @@ def test_python_reexports_and_package_initializer_are_local_decisions(tmp_path):
     assert [(r['file'], r['unused_names']) for r in before['unused']] == [('exports.py', ['os'])]
     outside.write_text('import os\nx = (\n', encoding='utf-8')
     code, after = _query(target)
-    assert code == 3
+    assert code == 0
+    assert after['metadata']['files_failed_outside_target_count'] == 1
     assert _verdicts(after) == _verdicts(before)
 
 
@@ -80,7 +87,8 @@ def test_javascript_barrel_export_is_not_unused_even_if_outside_target_fails(tmp
     assert [r['unused_names'] for r in before['unused']] == [['spare']]
     outside.write_text('import { x ;\n const = ;;; }{\n', encoding='utf-8')
     code, after = _query(target)
-    assert code == 3
+    assert code == 0
+    assert after['metadata']['files_failed_outside_target_count'] == 1
     assert _verdicts(after) == _verdicts(before)
 
 
@@ -106,7 +114,7 @@ def test_unsupported_unused_language_is_disclosed(tmp_path):
 
 
 @pytest.mark.parametrize('location', ['outside', 'inside'])
-def test_injected_source_read_loss_keeps_required_failure_visible(tmp_path, monkeypatch, location):
+def test_injected_source_read_loss_keeps_scoped_failure_visible(tmp_path, monkeypatch, location):
     """Synthetic PermissionError at the actual reader, distinct from real parse controls."""
     from pathlib import Path
     from reveal.base import FileAnalyzer
@@ -125,8 +133,9 @@ def test_injected_source_read_loss_keeps_required_failure_visible(tmp_path, monk
 
     monkeypatch.setattr(FileAnalyzer, '_read_file', read)  # noqa: V036 reviewed: serial
     code, result = _query(target)
-    assert code == 3
-    assert result['metadata']['files_failed_count'] == 1
+    assert code == (3 if location == 'inside' else 0)
+    assert result['metadata']['files_failed_count'] == int(location == 'inside')
+    assert result['metadata']['files_failed_outside_target_count'] == int(location == 'outside')
     assert [r['unused_names'] for r in result['unused']] == [['os']]
     assert any(detail['parse']['status'] == 'unavailable'
                and 'Permission denied' in detail['parse']['reason']

@@ -731,6 +731,8 @@ class ImportsRenderer:
         print(f"Unused Imports: {count}")
         print(f"{'='*60}\n")
 
+        ImportsRenderer._render_external_failures(result.get('metadata') or {})
+
         # A language with no import extractor (e.g. Kotlin, Swift, Scala) was
         # never analyzed at all — count == 0 in that case means "not checked,"
         # not "clean." Without this, the text renderer prints the same "✅ No
@@ -771,8 +773,8 @@ class ImportsRenderer:
 
     @staticmethod
     def _render_no_unused(result: dict, scope: str) -> None:
-        """Qualify zero unused observations against required discovery loss."""
-        if _discovery_incomplete(result):
+        """Qualify zero unused observations against required input loss."""
+        if _incomplete(result):
             print(f"  No unused imports observed{scope} in the available inputs; analysis is incomplete.\n")
         else:
             print(f"  ✅ No unused imports found{scope}!\n")
@@ -1045,13 +1047,12 @@ class ImportsRenderer:
 
     @staticmethod
     def _render_external_failures(metadata: dict) -> None:
-        """Name the files under the path that could not be fully read (they make the table incomplete,
-        exit 3) and count the ones outside it, which cannot change it (BACK-2438)."""
+        """Disclose failed target inputs and separately counted outside loss for local tables."""
         lost = set(metadata.get('files_lost', []))
         failed = [fp for fp in metadata.get('files_failed', []) if fp not in lost]
         failed_count = metadata.get('files_failed_count', 0) - metadata.get('files_lost_count', 0)
         if failed_count:
-            print(f"  ⚠️  {failed_count} file(s) under this path parsed with errors — their imports may be incomplete")
+            print(f"  ⚠️  {failed_count} file(s) under this path could not be fully analyzed — their imports may be incomplete")
             for fp in failed[:10]:
                 print(f"      - {fp}")
             if failed_count > 10:
@@ -1060,7 +1061,7 @@ class ImportsRenderer:
             print(f"  ⚠️  {metadata['files_lost_count']} file(s) not analyzed — a pool worker died")
         outside = metadata.get('files_failed_outside_target_count')
         if outside:
-            print(f"  {outside} file(s) outside this path failed to parse; they cannot change this table, "
+            print(f"  {outside} file(s) outside this path could not be fully analyzed; they cannot change this table, "
                   "so they do not make it incomplete")
 
     @staticmethod
@@ -1884,7 +1885,7 @@ class ImportsAdapter(ResourceAdapter):
         return response
 
     def _format_unused(self) -> Dict[str, Any]:
-        """Format unused imports."""
+        """Judge local names; outside loss cannot change them, but may hide metadata cycles."""
         if not self.analysis.graph:
             return {'unused': []}
 
@@ -1896,7 +1897,7 @@ class ImportsAdapter(ResourceAdapter):
         # `unused_names` narrows a partly-used `from x import a, b` to the names
         # actually unused (BACK-1066); `count` is statements, like `unused`.
         return self._build_response(
-            'unused_imports',
+            'unused_imports', failures='target',
             unused=[{**self._format_import(stmt), 'unused_names': names} for stmt, names in unused],
             count=len(unused)
         )

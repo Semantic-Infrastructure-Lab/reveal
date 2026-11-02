@@ -248,6 +248,13 @@ reveal 'imports://src?unused' --format=json
 - ❌ Ignores: Imports in `__all__` (re-exports)
 - ❌ Ignores: `TYPE_CHECKING` imports (type hints only)
 
+Each verdict uses the imports and references in that same file. A parse/read
+failure or worker loss outside the requested path does not make this local answer
+incomplete; it is disclosed separately. Failed target inputs, scan caps and
+required directory-discovery loss still exit 3. An incomplete zero-result answer
+says no unused imports were observed in the available inputs, rather than claiming
+the target is clean. See [input failure and cycle metadata](#output-types).
+
 **Use cases**:
 - Clean up dead code
 - Reduce import overhead
@@ -793,12 +800,17 @@ reveal 'imports://src?unused' | grep "api/"
 }
 ```
 
-**Files that failed to parse.** The scan covers the whole project root, but this listing shows only the
-imports of the files under the path, so it counts only the failures under that path (they exit 3 and are
-named). Failures elsewhere in the scan are counted in `metadata.files_failed_outside_target_count` and do
-not make the listing incomplete. They can hide a cycle, so when any file failed and no cycle was seen,
-`has_cycles` is `null` and the text says `Cycles Found:  Unknown`; a cycle that was found stays `true`.
+**Input failure and cycle metadata.** The scan covers the whole project root, but the default listing,
+`?external` package table and `?unused` verdicts describe files under the requested path. These views
+count parse/read failures and worker losses under that path as required input failures (exit 3).
+Failures elsewhere in the scan are counted in `metadata.files_failed_outside_target_count` and do
+not make these local answers incomplete. They can hide a cycle, so when any file failed and no cycle was seen,
+`has_cycles` is `null` and the default listing's text says `Cycles Found:  Unknown`;
+a cycle that was found stays `true`.
 `?importers`, `?circular` and fan-in keep exit 3 on any failed file in the scan.
+Import/file/scanned counts describe the target; unsupported-language and
+unused-not-checked extension counts retain their scan-wide census. Output field
+selection and list caps do not change the execution decision.
 
 ### 2. unused_imports
 
@@ -1709,8 +1721,9 @@ observed cycles, unused imports or entry points cannot establish a clean graph.
 Diagnostics identify failed directories; the number of missing files is unknown.
 Missing resolution targets can hide edges even when the scanned source count is
 unchanged. Known discovery loss prevents reading or writing the resolved graph
-cache. Direct Imports retains its legacy exit behavior, so exit 0 alone does not
-establish complete analysis.
+cache. Direct Imports exits 3 for required input loss. Local views can still exit
+0 with separately disclosed outside-file failures, so exit 0 alone does not
+establish a complete project graph.
 
 Resolution lookup can retain gitignored directories and file-pattern-excluded
 targets even though they are not source candidates. Explicitly excluded
