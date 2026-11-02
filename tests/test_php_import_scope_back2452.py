@@ -2,6 +2,7 @@
 import json
 import shutil
 from dataclasses import asdict
+from pathlib import Path
 
 import pytest
 
@@ -48,7 +49,7 @@ def test_constant_concatenation_keeps_resolution_and_receives_scope(tmp_path):
     path.write_text("<?php function f() { require BASE . '/target.php'; }", encoding='utf-8')
     [statement] = PhpImportExtractor().extract_imports(path, {'BASE': ('absolute', to_posix(tmp_path))})
     assert statement.scope == 'local' and statement.dynamic is True
-    assert statement.module_name == to_posix(tmp_path / 'target.php')
+    assert Path(statement.module_name) == tmp_path / 'target.php'
     assert statement.through_constant
 
 
