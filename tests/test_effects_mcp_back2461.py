@@ -139,3 +139,8 @@ def test_registered_schema_preserves_positional_fields_and_adds_typed_controls()
     assert properties['transitive']['type'] == 'boolean' and properties['transitive']['default'] is False
     assert properties['depth']['default'] is None
     assert properties['depth']['anyOf'] == [{'type': 'integer'}, {'type': 'null'}]
+
+
+def test_registered_effects_rejects_directory_as_authored_request_error(project):
+    answer = _sdk({**_arguments(project, {}), 'path': str(project.parent)})
+    assert answer.is_error and 'code file' in _text(answer)

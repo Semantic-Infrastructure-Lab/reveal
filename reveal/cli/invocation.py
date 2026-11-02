@@ -343,7 +343,8 @@ class EffectsRequest:
         return tokens
 
 
-def normalize_effects_request(args, *, mode: Optional[str] = None) -> Optional[EffectsRequest]:
+def normalize_effects_request(args, *, mode: Optional[str] = None, show_meta: bool = False,
+                              is_directory: bool = False, preempting: Optional[str] = None) -> Optional[EffectsRequest]:
     """Validate the new request only; legacy navigation keeps its existing policy."""
     from ..errors import NavRequestValidationError
 
@@ -353,6 +354,7 @@ def normalize_effects_request(args, *, mode: Optional[str] = None) -> Optional[E
         if loops or state or mode is not None:
             raise NavRequestValidationError('--in-loops and --state require --effects.')
         return None
+    _validate_effects_view(args, show_meta, is_directory, preempting)
     if loops and state:
         raise NavRequestValidationError('--in-loops and --state are exclusive effects modes.')
     if mode is not None and mode not in ('ordinary', 'loops', 'state'):
@@ -362,6 +364,22 @@ def normalize_effects_request(args, *, mode: Optional[str] = None) -> Optional[E
     _validate_effects_controls(selected, transitive, depth)
     return EffectsRequest(selected, transitive, depth)
 
+
+
+def _validate_effects_view(args, show_meta: bool, is_directory: bool, preempting: Optional[str]) -> None:
+    """New effects requests cannot select another view or silently discard a cut."""
+    from ..errors import NavRequestValidationError
+
+    if preempting is not None:
+        raise NavRequestValidationError(f'--effects cannot combine with the {preempting} view.')
+    if is_directory:
+        raise NavRequestValidationError('--effects requires a code file and optional element or inclusive range, not a directory.')
+    if show_meta or getattr(args, 'meta', False) or getattr(args, 'check', False):
+        raise NavRequestValidationError('--effects cannot combine with --meta or --check views.')
+    if any(getattr(args, flag, None) is not None for flag in ('head', 'tail')):
+        raise NavRequestValidationError('--effects does not use --head or --tail; select inclusive lines with --range.')
+    if any(getattr(args, flag, None) for flag in ('grep', 'name', 'sort', 'type')):
+        raise NavRequestValidationError('--effects cannot combine with grep or structural-query views.')
 
 def _validate_effects_controls(selected: str, transitive: bool, depth: Optional[int]) -> None:
     from ..errors import NavRequestValidationError

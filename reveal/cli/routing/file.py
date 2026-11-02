@@ -582,6 +582,17 @@ def _run_check_with_ledger(args: 'Namespace') -> None:
             ledger.report()
 
 
+
+def _validate_effects_file_view(args, *, is_directory=False):
+    """Reject declared element-less views that would preempt a new effects request."""
+    if not getattr(args, 'effects', False):
+        return
+    from ..invocation import normalize_effects_request
+
+    selected = _given_flags(args, ELEMENT_LESS_FLAGS)
+    normalize_effects_request(args, is_directory=is_directory,
+                              preempting=selected[0][1] if selected else None)
+
 def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     """Handle regular file or directory path.
 
@@ -589,6 +600,8 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         path_str: Path string to file or directory
         args: Parsed arguments
     """
+    _validate_effects_file_view(args)
+
     if getattr(args, 'check', False):
         _run_check_with_ledger(args)
         return
@@ -603,6 +616,8 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
 
     path, element_from_path = _parse_file_line_syntax(path_str)
     _validate_path_exists(path, path_str)
+
+    _validate_effects_file_view(args, is_directory=path.is_dir())
 
     if not path.is_dir() and not path.is_file():
         print(f"Error: {path_str} is neither file nor directory", file=sys.stderr)

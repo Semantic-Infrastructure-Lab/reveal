@@ -179,7 +179,7 @@ def _has_nav_flag(args) -> bool:
 
 
 
-def _effects_args(args):
+def _effects_args(args, path, show_meta=False):
     """Forward a validated effects request through the existing navigation destinations."""
     from copy import copy
     from .cli.invocation import normalize_effects_request
@@ -187,7 +187,10 @@ def _effects_args(args):
 
     if args is None:
         return args
-    request = normalize_effects_request(args)
+    request = normalize_effects_request(
+        args, show_meta=show_meta,
+        is_directory=getattr(args, 'effects', False) and Path(path).is_dir(),
+    )
     if request is None:
         return args
     if _has_nav_flag(args):
@@ -388,6 +391,12 @@ def _find_element_node(analyzer, element: str):
     return resolution.node if resolution is not None else None
 
 
+
+def _reject_effects_special_view(args, spelling):
+    from .cli.invocation import normalize_effects_request
+
+    normalize_effects_request(args, preempting=spelling)
+
 def _dispatch_special_flags(analyzer, path: str, output_format: str, args, config) -> bool:
     """Handle flags that short-circuit normal file analysis.
 
@@ -396,34 +405,42 @@ def _dispatch_special_flags(analyzer, path: str, output_format: str, args, confi
     continue.
     """
     if getattr(args, 'extract', None):
+        _reject_effects_special_view(args, '--extract')
         _nginx_flag_handler('_handle_extract_option')(analyzer, args.extract.lower(), args=args)
         return True
 
     if getattr(args, 'check_acl', False):
+        _reject_effects_special_view(args, '--check-acl')
         _nginx_flag_handler('_handle_check_acl')(analyzer)
         return True
 
     if getattr(args, 'validate_nginx_acme', False):
+        _reject_effects_special_view(args, '--validate-nginx-acme')
         _nginx_flag_handler('_handle_validate_nginx_acme')(analyzer, args)
         return True
 
     if getattr(args, 'global_audit', False):
+        _reject_effects_special_view(args, '--global-audit')
         _nginx_flag_handler('_handle_global_audit')(analyzer, args)
         return True
 
     if getattr(args, 'check_conflicts', False):
+        _reject_effects_special_view(args, '--check-conflicts')
         _nginx_flag_handler('_handle_check_conflicts')(analyzer)
         return True
 
     if getattr(args, 'cpanel_certs', False):
+        _reject_effects_special_view(args, '--cpanel-certs')
         _nginx_flag_handler('_handle_cpanel_certs')(analyzer, args=args)
         return True
 
     if getattr(args, 'diagnose', False):
+        _reject_effects_special_view(args, '--diagnose')
         _nginx_flag_handler('_handle_diagnose')(analyzer, log_path=getattr(args, 'log_path', None))
         return True
 
     if getattr(args, 'validate_schema', None):
+        _reject_effects_special_view(args, '--validate-schema')
         from .checks import run_schema_validation  # noqa: I006 — circular avoidance
         run_schema_validation(analyzer, path, args.validate_schema, output_format, args)
         return True
@@ -445,7 +462,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
     from .display import show_structure, show_metadata, extract_element  # noqa: I006 — circular avoidance
     from .config import RevealConfig  # noqa: I006 — circular avoidance
 
-    args = _effects_args(args)
+    args = _effects_args(args, path, show_meta)
 
     allow_fallback = not getattr(args, 'no_fallback', False) if args else True
     analyzer = _get_analyzer_or_exit(path, allow_fallback)

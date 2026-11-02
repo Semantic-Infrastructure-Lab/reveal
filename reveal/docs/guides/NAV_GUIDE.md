@@ -50,7 +50,12 @@ writes). Selectors require `--effects`; combining selectors or another navigatio
 analysis is rejected. `--transitive` applies only to ordinary effects. Its depth
 accepts integers 1–5, default 2. An explicit depth is rejected for ordinary
 nontransitive effects and state mode. Loop depth remains positive, default 3,
-with no additional cap. These validation errors exit 2 before producing findings.
+with no additional cap. Effects require a code file; directory listings, metadata/check/grep and structural-query
+views cannot be combined with them. `--head`/`--tail` are rejected; use inclusive
+`--range` to select lines. Frontmatter `--validate-schema` and specialized nginx
+views (`--extract`, `--check-acl`, `--validate-nginx-acme`, `--global-audit`,
+`--check-conflicts`, `--cpanel-certs`, `--diagnose`) are also exclusive with effects.
+These validation errors exit 2 before producing findings.
 
 Retired `--sideeffects`, `--fanout` and `--statewrites` still run with one
 replacement correction. Their existing payloads, `meta.flag` values (`sideeffects`,
