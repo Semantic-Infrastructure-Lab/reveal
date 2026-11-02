@@ -19,7 +19,7 @@ automatically because they're built by union, not re-declared.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, overload
 
 from .treesitter_compat import _zero_arg, node_children
 
@@ -737,20 +737,37 @@ def is_local_scope(node: Any, kind: str) -> bool:
     return True
 
 
-def edge_scope(node: Any) -> str:
-    """LOCAL_SCOPE when ``node`` sits inside a function-like body, else MODULE_SCOPE.
+@overload
+def edge_scope(node: Any) -> str: ...
+
+
+@overload
+def edge_scope(node: Any, *, unclassified_kinds: frozenset[str]) -> Optional[str]: ...
+
+
+def edge_scope(node: Any, *, unclassified_kinds: frozenset[str] = frozenset()) -> Optional[str]:
+    """LOCAL_SCOPE inside a known function-like body, else MODULE_SCOPE or unknown.
 
     The one positional rule every import extractor uses (BACK-2076). It is not a
     runtime claim: a Rust fn-local ``use`` and a Scala block import are local without
     being lazy, and a class, struct, impl or namespace body is module scope (so a JS class
     field initializer or static block is module, an instance field although it runs at
-    construction; an arrow function in the field is local)."""
+    construction; an arrow function in the field is local).
+
+    A caller may withhold classification for specific ancestor kinds. Such a node
+    does not confer local scope; a known enclosing function still does. Without
+    one, the result is None. Omitting the option preserves the positional rule.
+    """
     current = _zero_arg(node, 'parent')
+    unclassified = False
     while current is not None:
-        if is_local_scope(current, _zero_arg(current, 'kind')):
+        kind = _zero_arg(current, 'kind')
+        if kind in unclassified_kinds:
+            unclassified = True
+        elif is_local_scope(current, kind):
             return LOCAL_SCOPE
         current = _zero_arg(current, 'parent')
-    return MODULE_SCOPE
+    return None if unclassified else MODULE_SCOPE
 
 
 def opens_scope(node: Any, kind: str) -> bool:
