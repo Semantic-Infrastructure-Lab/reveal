@@ -97,7 +97,7 @@ All of the above are measured against an independent ground-truth oracle
 
 `reveal patches --view pressure` joins those patch groups to production function profiles.
 Each production function's categories come from its own calls, classified by the
-same per-language taxonomy as `--sideeffects`:
+same per-language taxonomy as `--effects`:
 
 - `network_client` -- HTTP calls
 - `persistence` -- database, cache and session calls
@@ -136,7 +136,7 @@ There are mocks, therefore the design is wrong.
 ```bash
 # Inspect a patch-heavy production function
 reveal src/module.py function_name --boundary
-reveal src/module.py function_name --sideeffects
+reveal src/module.py function_name --effects
 
 # Find other complex production functions
 reveal 'ast://src?complexity>10&sort=-complexity&limit=20'

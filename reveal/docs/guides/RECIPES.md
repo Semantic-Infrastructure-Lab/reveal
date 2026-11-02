@@ -437,7 +437,7 @@ Follow up on a reported function:
 
 ```bash
 reveal src/module.py function_name --boundary
-reveal src/module.py function_name --sideeffects
+reveal src/module.py function_name --effects
 reveal 'calls://src?callees=function_name'
 ```
 
