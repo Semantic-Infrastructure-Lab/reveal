@@ -32,6 +32,8 @@ def _call(*ancestors):
     (('block', 'singleton_method', 'program'), 'local', 'local'),
     (('lambda', 'method', 'program'), 'local', 'local'),
     (('method', 'do_block', 'program'), 'local', 'local'),
+    (('do_block', 'class', 'module', 'program'), 'module', None),
+    (('do_block', 'lambda', 'method', 'program'), 'local', 'local'),
 ])
 def test_context_uncertainty_is_opt_in_and_known_local_owner_wins(ancestors, default, qualified):
     node = _call(*ancestors)
