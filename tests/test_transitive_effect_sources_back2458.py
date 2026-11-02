@@ -104,3 +104,37 @@ def test_root_and_ordinary_records_keep_existing_shape(sources, flag):
     assert all('file' not in row for row in ordinary['findings'] + own)
     assert [row for row in transitive['findings'] if 'hop' not in row] == [
         row for row in ordinary['findings'] if 'callee' not in row]
+
+
+@pytest.mark.parametrize('flag', ['--sideeffects', '--boundary'])
+def test_absolute_discovered_sources_keep_relative_target_privacy(sources, monkeypatch, flag):
+    from pathlib import Path
+    from reveal.adapters.calls import index as calls_index
+
+    monkeypatch.chdir(sources.parent)
+    real_walk = calls_index.walk_callees
+
+    def absolute_sources(*args, **kwargs):
+        walk = real_walk(*args, **kwargs)
+        frontier = list(walk.roots)
+        seen = set()
+        while frontier:
+            node = frontier.pop()
+            if id(node) in seen:
+                continue
+            seen.add(id(node))
+            for _, child in node.edges:
+                if child is not None:
+                    child.file = str(Path(child.file).resolve())
+                    frontier.append(child)
+        return walk
+
+    monkeypatch.setattr(calls_index, 'walk_callees', absolute_sources)
+    target = f'{sources.name}/root.py'
+    data = json.loads(_run(target, flag, '--transitive', '--format', 'json'))
+    assert [(row.get('file'), row['line']) for row in data['findings'] if row.get('hop', 0) > 0] == [
+        (f'{sources.name}/left.py', 3), (f'{sources.name}/right.py', 3), (f'{sources.name}/left.py', 6)]
+    text = _run(target, flag, '--transitive')
+    assert f'[{sources.name}/left.py:3]' in text and f'[{sources.name}/right.py:3]' in text
+    assert to_posix(sources.resolve()) not in text
+    assert to_posix(sources.resolve()) not in json.dumps(data)
