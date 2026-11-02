@@ -16,6 +16,14 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
+### Behavior changes
+
+- `--output json=PATH` and the retired `--also-json PATH` now write the requested file even when stdout is JSON. Previously they silently wrote nothing. An unwritable requested destination exits 3 while preserving the primary answer; unsupported file/directory views reject file sinks with exit 2. (BACK-2447)
+
+### Added
+
+- `reveal check FILE`, `FILE --check`, and `reveal --stdin --check` accept text and grep file sinks alongside JSON. Each format uses the same analysis; stdin text/grep files preserve input order and JSON files contain one aggregate report. Stdin file sinks require native file paths; URI inputs exit 2 before analysis. (BACK-2446)
+
 ## [0.133.0] - 2026-11-01
 
 A large reliability release. Read "Behavior changes" first: exit codes of `json://`, `ast://`, `markdown://` queries and of `imports DIR` changed, `overview` became a compact map, `calls ?rank=callers` ranks only your own definitions, and several element-navigation flags have new names (the old ones still work with a note).

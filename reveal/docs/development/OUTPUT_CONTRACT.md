@@ -751,18 +751,27 @@ selection. Proven absence remains a normal MCP response for compatibility;
 required output failure overrides that exception. Legacy mixed batches keep their
 existing outcome policy.
 
-Human-primary `--output json=PATH` uses the same result as primary JSON. A requested
-artifact write failure is disclosed on stderr and in `meta.output_errors`, while the
-primary result remains available and the exit is 3. Primary `--format json` retains
-its existing `--output json=PATH` no-op. Closing stdout alone keeps the conventional exit 0;
-it cannot erase an independent analysis or artifact failure.
+Supported direct requests write every explicit `--output FORMAT=PATH` destination,
+including JSON files beside JSON stdout. The retired `--also-json PATH` alias has
+the same write semantics. When all requested writes succeed, direct JSON mirrors
+equal the primary JSON document, including its provenance and diagnostics.
+Unsupported file sinks are rejected instead of being treated as redundant. Closing stdout alone keeps the
+conventional exit 0; it cannot erase an independent analysis or artifact failure.
 
-Native `reveal check` (single file, directory and `--stdin --check`) follows the same artifact
-rule through the one owner, `write_requested_artifact` (`utils/json_utils.py`), which is
-flag-agnostic: a requested `--output json=PATH` write that fails is disclosed once on stderr and exits 3,
-over findings (1) and over the legacy `--exit-zero` (`check_exit_code(..., output_failed=True)`
-through `execution_exit_code`). The report is printed in full first. Primary `--format json`
-keeps the `--output json=PATH` no-op, so check's JSON never carries `meta.output_errors`.
+Native `reveal check` supports text, grep and JSON file sinks on directories and
+single files. Each format renders the same analysis; grep retains all findings
+while text/JSON retain their own caps. Requested write failures use the shared
+`write_requested_artifact` owner (`utils/json_utils.py`), are disclosed once on
+stderr and exit 3 over findings or legacy `--exit-zero`; the primary answer survives.
+Direct JSON answers include failed-write diagnostics in `meta.output_errors`.
+
+`--stdin --check` keeps its existing per-file stdout stream. A JSON file sink uses
+the existing aggregate shape (`files[]`, `summary`) rather than concatenated JSON
+objects; text and grep file sinks hold their corresponding stream in input order.
+Each destination is written once. File-sink stdin requests require native file
+paths; URI inputs are rejected with exit 2 before analysis. Empty stdin writes an
+empty text/grep stream or an aggregate with zero files. This does not migrate
+legacy stdin or URI batch exit policies to declared D6 execution.
 
 The reusable owner API is `ExecutionFacts`, `AnalysisCompleteness`, `FailureCause`,
 `merge_execution_facts()` and `execution_exit_code()` in `utils.results`. Producers

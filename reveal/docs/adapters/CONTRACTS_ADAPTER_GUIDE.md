@@ -145,10 +145,10 @@ diagnostics. Empty results and disclosed unsupported-language coverage remain
 complete. `--fail-on none` is supported and is the default; it does not suppress
 required failures. Contracts has no findings gate.
 
-Text output can also write the complete result with `--output json=PATH`.
-Primary JSON output keeps that option as a no-op. Text implementer caps never
-shrink the JSON arrays. Legacy stdin and mixed URI batches retain their existing
-exit policy and reject `--fail-on` until separately qualified.
+`--output json=PATH` writes the complete result alongside text or JSON stdout.
+The JSON file matches the primary JSON document; a failed requested write exits 3
+and preserves the primary answer. Text implementer caps never shrink the JSON arrays.
+Legacy stdin and mixed URI batches retain their existing exit policy and reject `--fail-on` until separately qualified.
 
 ## Good Review Questions
 

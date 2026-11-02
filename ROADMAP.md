@@ -86,9 +86,8 @@ Two problems shape the current work.
    through `imports`; finish per-language parity before the old names stop working (BACK-2063,
    BACK-2064, BACK-2061), measure through the public request path (BACK-2062), and keep the
    oracle-free graph invariants green in every language (BACK-1096).
-3. **One quality family.** `metrics` absorbs `hotspots` (BACK-2069, BACK-2149); repeatable
-   `--output FORMAT[=PATH]` sinks replace `--also-json` (BACK-2089); commands share
-   their requested parses instead of repeating them
+3. **One quality family.** `metrics` absorbs `hotspots` (BACK-2069, BACK-2149);
+   commands share their requested parses instead of repeating them
    (BACK-1889, BACK-1885). Compact overview already uses one import analysis;
    the old dashboard assessment passes were removed.
 4. **The rest of the result contract.** Typed outcomes at the remaining adapter and analyzer

@@ -1745,9 +1745,9 @@ Direct `reveal contracts` and `contracts://` share declarations and output.
 invalid limits. Boolean query values are validated strictly. Complete work exits
 0, invalid requests 2, required failed/incomplete analysis or output 3. Only
 `--fail-on none` is supported; it retains required failures. Empty/unsupported
-inventories remain complete. Text supports `--output json=PATH`; primary JSON keeps
-the mirror no-op. See [the adapter guide](adapters/CONTRACTS_ADAPTER_GUIDE.md) for
-resource encoding and legacy batch boundaries.
+inventories remain complete. `--output json=PATH` writes a JSON file alongside either
+text or JSON stdout; a failed requested write exits 3. See
+[the adapter guide](adapters/CONTRACTS_ADAPTER_GUIDE.md) for resource encoding and legacy batch boundaries.
 
 ---
 
@@ -2909,7 +2909,11 @@ reveal file.py --format text         # an explicit --format always wins
 
 `REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal hotspots`, `reveal check`, …). An explicit `--format` on the command line overrides it.
 
-**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for a single file and `reveal check`. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note). With human primary output, `--output json=PATH` works with supported `scheme://` URI requests, `reveal check`, and the qualified subcommands `surface`, `contracts`, `deps`, `hotspots` and `overview` (including its retired architecture alias). A requested artifact that cannot be written exits 3 for all of them, `reveal check` included. Other subcommands reject it with exit 2; use `--format json` for their JSON output. Primary `--format json` retains the existing `--output json=PATH` no-op. `--output` repeats, and a file sink may name any format the target renders (`--format json --output text=report.txt`, `--output grep=hits.txt` on `ast://`): the one result is rendered again into each file, a format the target does not render exits 2 before the scan, and a failing sink exits 3 after the others were written. `reveal check DIR` renders text, grep and json file sinks from its one scan; a single-file check and `--stdin --check` write json file sinks only (text and grep exit 2). With `--stdin --check` a file sink holds one document for the run (`files[]`, one entry per input); `--stdin` without `--check` rejects a file sink with exit 2.
+**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for single-file structure and element views. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note).
+
+`--output FORMAT=PATH` writes a file with supported URI requests, `reveal check`, and adapter-backed commands. It repeats for several destinations; FORMAT alone selects stdout. A requested JSON file is written even with JSON stdout. The retired `--also-json PATH` spelling follows the same rule. Unsupported formats and two stdout destinations exit 2 before analysis; a failed file write exits 3 while the primary answer and other successful files survive. Ordinary file/directory views reject file sinks rather than silently ignoring them.
+
+`reveal check DIR`, `reveal check FILE`, and `FILE --check` write text, grep and JSON files from the same analysis. Grep keeps every finding; text and JSON retain their own display limits. `--stdin --check` preserves its per-file stdout stream: text/grep files contain that stream in input order, while each JSON file contains one aggregate document with `files[]` and `summary`. An empty stdin run writes an empty text/grep file or a JSON aggregate with zero files. File-sink stdin requests require native file paths; URI inputs exit 2 before analysis. `--stdin` without `--check` rejects file sinks.
 
 **Token budget flags (URI adapters — limits list fields like items/results/checks/commits):**
 ```bash
