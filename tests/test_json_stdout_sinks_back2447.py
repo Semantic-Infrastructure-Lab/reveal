@@ -89,3 +89,35 @@ def test_empty_directory_json_destination_is_a_completed_empty_answer(tmp_path):
     primary = json.loads(result.stdout)
     assert primary['summary']['files_checked'] == 0
     assert json.loads(destination.read_text(encoding='utf-8')) == primary
+
+
+@pytest.mark.parametrize('legacy', [False, True])
+def test_legacy_uri_failed_source_and_requested_write_failure_exits_three(tmp_path, monkeypatch, legacy):
+    key = '__SHINING_TEST_ABSENT_KEY__'
+    monkeypatch.delenv(key, raising=False)
+    destination = tmp_path / 'missing' / 'out.json'
+    sink = ['--also-json', str(destination)] if legacy else ['--output', f'json={destination}']
+    result = _run_reveal_direct(f'env://{key}', '--format', 'json', *sink)
+    assert result.returncode == 3, result.stderr
+    primary = json.loads(result.stdout)
+    assert primary['error']
+    assert primary['meta']['output_errors'][0]['code'] == 'artifact_write_failed'
+    assert result.stderr.count('Error (env://)') == 1
+    assert result.stderr.count('Requested JSON artifact failed') == 1
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize('with_sink', [False, True])
+def test_legacy_uri_failed_source_keeps_existing_exit_when_no_write_fails(tmp_path, monkeypatch, with_sink):
+    key = '__SHINING_TEST_ABSENT_KEY__'
+    monkeypatch.delenv(key, raising=False)
+    destination = tmp_path / 'out.json'
+    sink = ['--output', f'json={destination}'] if with_sink else []
+    result = _run_reveal_direct(f'env://{key}', '--format', 'json', *sink)
+    assert result.returncode == 1, result.stderr
+    primary = json.loads(result.stdout)
+    assert primary['error']
+    assert 'output_errors' not in primary.get('meta', {})
+    assert 'Requested JSON artifact failed' not in result.stderr
+    if with_sink:
+        assert json.loads(destination.read_text(encoding='utf-8')) == primary
