@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- Ruby `imports` queries now distinguish named-method loaders from module-level loaders for implicit calls with one plain ASCII path literal. Lazy views and default cycle checks use that scope; unsupported expressions, standalone blocks/lambdas and Zeitwerk convention edges stay unclassified, and the all-edge graph is unchanged. (BACK-2470, BACK-2472)
+
 - `reveal_nav` now marks requested-source read failures and unknown selected functions as MCP tool errors instead of successful text responses. Existing CLI exits, successful empty answers and warning-bearing results keep their behavior. (BACK-2464)
 
 - `--effects`, `--effects --in-loops` and `--effects --state` replace `--sideeffects`, `--fanout` and `--statewrites`; the old spellings still run with a replacement note and preserve their existing answers. The same modes accept typed `mode`, `transitive` and `depth` controls in `reveal_nav`; new requests reject undefined combinations, unused modifiers and invalid depths. (BACK-2461)
