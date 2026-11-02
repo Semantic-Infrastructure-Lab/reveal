@@ -150,6 +150,11 @@ function includeSites(string $file, array $config): array {
     $ranges = functionRanges($tokens, delimiters($tokens));
     // An unqualified namespaced dirname() can be overridden; never assume the builtin.
     $dirnameAllowed = !in_array(T_NAMESPACE, array_column($tokens, 'id'), true);
+    foreach ($tokens as $i => $token) {
+        if ($token['id'] === T_USE && ($tokens[$i + 1]['text'] ?? null) !== '(') {
+            $dirnameAllowed = false; // namespace/trait imports are outside this expression subset
+        }
+    }
     $sites = [];
     foreach ($tokens as $i => $token) {
         if (!in_array($token['id'], [T_REQUIRE, T_REQUIRE_ONCE, T_INCLUDE, T_INCLUDE_ONCE], true)) {
@@ -191,7 +196,7 @@ function buildOracle(array $input): array {
                  'population' => 'explicit-static-include-sites',
                  'limitations' => ['no runtime include_path/CWD/autoload', 'namespace use excluded',
                                    'lexical scope is not execution likelihood', 'bounded unescaped literal/dirname expressions',
-                                   'unqualified dirname excluded in namespaces']];
+                                   'unqualified dirname excluded in namespace/import contexts']];
     foreach ($input['importers'] as $file) {
         $file = realpath($file);
         $importer = $file === false ? null : relativePath($root, $file);

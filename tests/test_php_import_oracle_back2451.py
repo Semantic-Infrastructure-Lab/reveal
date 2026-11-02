@@ -1,6 +1,7 @@
 """Independent static PHP include truth; production scope enablement is separate."""
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -121,6 +122,17 @@ def test_namespaced_dirname_override_cannot_invent_an_edge(tmp_path):
 
 
 @needs_php
+def test_imported_dirname_cannot_be_assumed_to_be_the_builtin(tmp_path):
+    scope = _scope(tmp_path, {
+        'target.php': '<?php\n',
+        'sub/use.php': r"<?php use function Other\dirname; require dirname(__DIR__).'/target.php';",
+    })
+    edges, coverage = _oracle().build(scope)
+    assert edges == {}
+    assert coverage['unsupported_expressions'] == 1
+
+
+@needs_php
 def test_native_parse_failure_and_toolchain_mismatch_are_not_empty_answers(tmp_path):
     scope = _scope(tmp_path, {'use.php': '<?php function broken( {'})
     oracle = _oracle()
@@ -202,3 +214,32 @@ def test_lost_importer_cannot_become_an_empty_clean_answer(tmp_path):
     (tmp_path / 'use.php').unlink()
     with pytest.raises(RuntimeError, match='Importer missing'):
         _oracle().build(scope)
+
+
+@needs_php
+def test_native_oracle_does_not_load_or_execute_external_code():
+    # Native tokens also guard oracle independence; comments/string mentions are harmless.
+    probe = r'''
+$tokens = token_get_all(stream_get_contents(STDIN));
+$bad = [];
+foreach ($tokens as $i => $t) {
+    if (is_array($t) && in_array($t[0], [T_REQUIRE,T_REQUIRE_ONCE,T_INCLUDE,T_INCLUDE_ONCE,T_EVAL], true)) $bad[] = $t[1];
+    if ($t === '`') $bad[] = 'backtick execution';
+    if (is_array($t) && $t[0] === T_STRING && in_array(strtolower($t[1]),
+        ['exec','shell_exec','system','passthru','popen','proc_open','call_user_func','call_user_func_array'], true)) $bad[] = $t[1];
+    if (is_array($t) && $t[0] === T_VARIABLE) {
+        $j = $i + 1;
+        while (isset($tokens[$j]) && is_array($tokens[$j]) && $tokens[$j][0] === T_WHITESPACE) $j++;
+        if (($tokens[$j] ?? null) === '(') $bad[] = 'variable call';
+    }
+}
+echo json_encode($bad);
+'''
+    def violations(source):
+        return subprocess.run(['php', '-r', probe], input=source, capture_output=True,
+                              text=True, encoding='utf-8', check=True, timeout=30).stdout.strip()
+    source = (Path(oracles.__file__).parent / 'oracles/php_import_oracle.php').read_text(encoding='utf-8')
+    assert violations(source) == '[]'
+    assert violations("<?php // require 'reveal';\n$s = 'reveal';") == '[]'
+    for planted in ("require 'reveal';", "shell_exec('python -m reveal');", 'eval($source);', "$run('reveal');"):
+        assert violations('<?php ' + planted) != '[]', planted
