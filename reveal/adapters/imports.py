@@ -731,7 +731,7 @@ class ImportsRenderer:
         print(f"Unused Imports: {count}")
         print(f"{'='*60}\n")
 
-        ImportsRenderer._render_external_failures(result.get('metadata') or {})
+        ImportsRenderer._render_external_failures(result.get('metadata', {}))
 
         # A language with no import extractor (e.g. Kotlin, Swift, Scala) was
         # never analyzed at all — count == 0 in that case means "not checked,"
