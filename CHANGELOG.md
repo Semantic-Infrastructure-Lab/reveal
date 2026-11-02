@@ -16,6 +16,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
+## [0.133.0] - 2026-11-01
+
+A large reliability release. Read "Behavior changes" first: exit codes of `json://`, `ast://`, `markdown://` queries and of `imports DIR` changed, `overview` became a compact map, `calls ?rank=callers` ranks only your own definitions, and several element-navigation flags have new names (the old ones still work with a note).
+
 ### Behavior changes
 
 **Exit codes**

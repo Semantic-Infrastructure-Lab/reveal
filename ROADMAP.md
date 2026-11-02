@@ -163,6 +163,15 @@ The release process adds an entry here for each version; the three most recent a
 Everything is in [CHANGELOG.md](CHANGELOG.md), and unreleased work on master is under its
 `[Unreleased]` heading.
 
+### v0.133.0 — Exit codes on json, ast, markdown and imports, compact overview, trustworthy caller ranking
+
+- ✅ `json://`, `ast://` and `markdown://` queries exit 2 for an invalid request and 3 when a required read or parse failed, where they used to report success with matches missing (BACK-2361, 2367, 2414, 2415).
+- ✅ `imports DIR` ignores parse failures outside DIR; `has_cycles` is `null` ("Unknown") when a scan file failed and no cycle was seen (BACK-2438, 2439).
+- ✅ `overview` is a compact project map, and `overview PATH --against REF` compares a ref with the working tree without false changes on Go, Rust and TypeScript projects (BACK-2374, 2376, 2432, 2436).
+- ✅ `calls ?rank=callers` ranks only functions defined under the path; test layout follows `test_layout.additional_paths` (BACK-2433, 2417, 2398).
+- ✅ Element navigation has new names: `--flow`, `--inputs`, `--outputs`, `--callsites`; old spellings run with a note (BACK-2364, 2363).
+- ⚠️ Scripts that relied on the old exit codes, on `has_cycles` being a boolean, or on `architecture` output need the changes under "Behavior changes" in CHANGELOG.md.
+
 ### v0.132.0 — One exit contract, one imports engine, named command forms, retired names noted
 
 - ✅ One exit contract on the declared commands: 0 complete, 1 gated findings, 2 invalid invocation, 3 required analysis or output failed or incomplete; `--fail-on none|findings` on `check`, `review` and `health` (BACK-2051, 2052, 2066).
@@ -180,15 +189,6 @@ Everything is in [CHANGELOG.md](CHANGELOG.md), and unreleased work on master is 
 - ✅ Install hints name `reveal-cli` and a real extra, `reveal-cli[all]` installs every runtime extra, and `help://install` exists (BACK-1699, 1117, 1116); C# parses on a fresh language-pack 1.21 install (BACK-1746).
 - ✅ Self-checks catch the cross-platform failure classes locally: V036-V042 in `reveal reveal:// --check`, the one-hop V026, and Windows test shards balanced by recorded cost; the push gate is the lints plus the 3.12 suite (BACK-1705, 1707, 1720, 1739, 1745, 1747).
 - ⚠️ Scripts that passed extra paths to element-less flags, special modes or `--stdin --section` now get exit 2; line numbers on files containing form feeds or other non-`\n` separators shift by design — see CHANGELOG "Changed".
-
-### v0.130.0 — Reliability seams, one failed and one cut outcome, core-path goldens, namespaces and nesting, help accuracy
-
-- ✅ An error from any URI adapter exits 1 and is reported once, and a cut list says so with one marker, printed once (BACK-1059, 1543, 1547); the silent-except ratchet went from 123 to 0 (BACK-1614), and an unknown `?sort=` field is reported on every sorting adapter (BACK-1644).
-- ✅ Shared seams replaced copies: one walker with gitignore-syntax `--exclude`/`REVEAL_IGNORE` everywhere (BACK-1223, 1576), one parser source with `GrammarUnavailable` (BACK-1045), paths spelled as the user typed them and with `/` on Windows (BACK-1366), one root finder (BACK-1372), and one parsed Invocation behind a flag ledger (BACK-1058, 1539).
-- ✅ The five core operations have golden text tests and text/JSON parity (BACK-1601); `--grep` shows each hit's line and is 3-8x faster over a directory (BACK-1602, 1558-1563).
-- ✅ Rust `mod`, PHP/C#/C++ namespaces and C/C++ enums and unions are listed and extract by name, `Parent.Child` resolves in every language, and `--outline` nests Go receiver and Rust impl methods under their type (BACK-1636, 1648, 1632, 1649); GraphQL operations and fragments are listed (BACK-1416).
-- ✅ Help says what ships: guides open on a runnable command, `--language-info` states each analyzer's conformance level, MCP tool descriptions match behaviour, and data-adapter help promises only what returns (BACK-1613, 1421, 1612, 1608).
-- ⚠️ JSON shape changes for scripts: an element diff's verdict moved from `type` to `change` (BACK-1637), `--fields` selects by one rule on every adapter (BACK-1607), and `--grep` groups carry `hits` (BACK-1602) — see CHANGELOG "Changed".
 
 ## Validation
 
