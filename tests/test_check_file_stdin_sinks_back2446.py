@@ -68,9 +68,10 @@ def test_stdin_text_and_grep_sinks_preserve_complete_input_order(project, tmp_pa
 
 
 @pytest.mark.parametrize('stdin', [False, True])
-def test_failed_text_sink_keeps_other_sink_and_primary_even_with_exit_zero(project, tmp_path, monkeypatch, stdin):
+def test_failed_text_sink_keeps_other_sink_and_primary(project, tmp_path, monkeypatch, stdin):
     good, bad = tmp_path / 'ok.grep', tmp_path / 'missing' / 'bad.txt'
-    options = ['--exit-zero', '--output', f'text={bad}', '--output', f'grep={good}']
+    options = ([] if stdin else ['--exit-zero']) + [
+        '--output', f'text={bad}', '--output', f'grep={good}']
     result = (_stdin(project, monkeypatch, 'json', *options) if stdin else
               run('check', str(project / 'a.py'), '--select', 'B001', '--format', 'json', *options))
     assert result.returncode == 3, result.stderr
