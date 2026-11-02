@@ -51,6 +51,7 @@ dev = [
     "ruff>=0.1.0",
     "pymysql>=1.0.0",  # Required for MySQL adapter tests
     "dnspython>=2.0.0",  # Required for DNS adapter tests
+    "dnspython>=2.9.0;python_version>='3.11'",  # CVE-2026-114605 fixed in 2.9.0, which needs Python 3.11+
     "mcp>=2.0.0",  # Required for MCP server tests. Migrated off FastMCP to mcp.server.MCPServer (BACK-895).
     "pygit2>=1.14.0",  # Required for git:// adapter tests
     "openpyxl>=3.1.0",  # Required for xlsx:// tests (else they importorskip silently in CI)
@@ -75,6 +76,7 @@ git = [
 # DNS records for domain:// (/dns, /mail, /ns-audit); domain:// degrades without it
 dns = [
     "dnspython>=2.0.0",  # DNS resolver; graceful degradation if absent
+    "dnspython>=2.9.0;python_version>='3.11'",  # CVE-2026-114605 fixed in 2.9.0, which needs Python 3.11+; 3.10 has no fixed release
 ]
 # Domain registration data (domain:// /whois element and registrar info)
 whois = [

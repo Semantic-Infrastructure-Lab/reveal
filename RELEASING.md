@@ -98,6 +98,28 @@ regression-only ratchets that need the maintainer environment:
   `~/.cache/reveal-corpus` is absent). Use `corpus_sweep.py complexity --base-ref <last-tag>`
   to review complexity changes since the last release.
 
+#### Dependency vulnerability audit
+
+Nothing else in CI checks dependencies for known CVEs (Dependabot covers GitHub Actions only), so
+audit what a user gets from `pip install "reveal-cli[all]"` before every release, in a throwaway
+venv so your own environment is not what gets audited:
+
+```bash
+python3 -m venv "$SCRATCH/auditenv"
+"$SCRATCH/auditenv/bin/pip" install -q pip-audit ".[all]"
+"$SCRATCH/auditenv/bin/pip-audit" --skip-editable      # exit 1 = known vulnerabilities
+"$SCRATCH/auditenv/bin/pip" list --outdated            # candidates for newer versions
+```
+
+- Triage by owner: only packages reveal declares (`pyproject.toml`) are ours. `pip`, `setuptools`
+  and `filelock` come from the venv and `pip-audit` itself; ignore those.
+- For one of ours, raise the floor in `pyproject.toml` to the fixed version. If the fix needs a newer
+  Python than `requires-python`, use an environment marker (as `dnspython>=2.9.0;python_version>='3.11'`
+  does) and note that older Pythons have no fixed release.
+- Do not "update everything" from `--outdated`: `tree-sitter` is capped below 0.26 on purpose
+  (BACK-1161); lift a ceiling only for the reason written beside it.
+- Run it once with `[all,powerpivot]` when `powerpivot` dependencies changed.
+
 ### Step 1: Update All 4 Required Files
 
 Before running the release script, **4 files must be updated** — CI checks validate all of them and will fail if any are missed:
@@ -371,6 +393,7 @@ Bumping mid-session causes the doc validation test (`test_agent_help_is_current_
 
 **Pre-flight:**
 - [ ] **Self-check passes**: `reveal reveal:// --check` (no errors)
+- [ ] **Dependency audit run**: `pip-audit` on `.[all]` in a throwaway venv; no unaddressed finding in a package reveal declares (see "Dependency vulnerability audit")
 - [ ] **I002 budget holds**: `reveal check reveal/ --select I002 --format json` → total ≤ 23 (ceiling; raise deliberately if needed)
 - [ ] **Version check**: `git tag | grep vX.Y.Z` returns nothing (or use `--resume` if it exists)
 - [ ] All features merged to master
