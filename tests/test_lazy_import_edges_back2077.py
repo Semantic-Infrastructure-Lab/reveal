@@ -221,12 +221,9 @@ def test_depends_prints_its_rule(project):
 
 
 def test_unclassified_language_is_disclosed(tmp_path):
-    """A language whose extractor records no import scope (Ruby, until BACK-2079) is counted
-    under every &lazy value, and the rule names it instead of claiming the filter covered
-    it. The wired languages beside it (Python; JavaScript since BACK-2078) are filtered and
-    not named: wiring a language removes its disclosure."""
+    """Unsupported Ruby block contexts remain disclosed beside qualified Python/JS edges."""
     root = _tree(tmp_path / 'mixed', {
-        'a.rb': 'X = 1\n', 'b.rb': "def f\n  require_relative 'a'\nend\n",
+        'a.rb': 'X = 1\n', 'b.rb': "[1].each { require_relative 'a' }\n",
         'a.js': 'export const x = 1;\n',
         'b.js': "export function f() { return import('./a.js'); }\n",
         'p.py': 'X = 1\n', 'q.py': 'def f():\n    import p\n',

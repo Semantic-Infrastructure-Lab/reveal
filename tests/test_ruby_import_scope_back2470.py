@@ -22,6 +22,7 @@ pytestmark = pytest.mark.component
     ('def self.example\n  {call}\nend\n', 'local'),
     ('def example\n  [1].each do\n    {call}\n  end\nend\n', 'local'),
     ('def example\n  [1].each {{ {call} }}\nend\n', 'local'),
+    ('def example\n  later = -> {{ {call} }}\nend\n', 'local'),
 ])
 def test_literal_loader_scope(tmp_path, loader, template, scope):
     path = tmp_path / 'source.rb'
@@ -42,6 +43,10 @@ def test_literal_loader_scope(tmp_path, loader, template, scope):
     "require File.join('target', 'other')\n",
     "Kernel.require 'target'\n",
     "load 'target', true\n",
+    'require "tar\\x67et"\n',
+    "require 'tar\\get'\n",
+    "require 'target' + '/suffix'\n",
+
 ])
 def test_unqualified_forms_keep_unknown_metadata(tmp_path, body):
     path = tmp_path / 'source.rb'

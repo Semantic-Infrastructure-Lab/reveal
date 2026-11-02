@@ -36,7 +36,7 @@ FILES = {
 MIXED = {
     'pyproject.toml': '[project]\nname = "probe"\n',
     'a.rb': 'X = 1\n',
-    'b.rb': "require_relative 'a'\n",
+    'b.rb': "[1].each { require_relative 'a' }\n",
 }
 
 HEADLINE = {'lazy': 'include', 'lazy_default': True, 'type_checking': 'excluded',

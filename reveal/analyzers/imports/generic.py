@@ -60,7 +60,7 @@ from typing import Any, ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ...core import node_children as _children
 from ...core import tree_root
-from ...core.node_taxonomy import edge_scope
+from ...core.node_taxonomy import RUBY_BLOCK_NODES, edge_scope
 from ...core.treesitter_compat import _zero_arg
 from ...registry import extensions_for_languages
 from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
@@ -3066,6 +3066,31 @@ class RubyImportExtractor(_GenericTreeSitterImportExtractor):
     extensions = {'.rb'}
     language_name = 'Ruby'
     spec = _RUBY_SPEC
+
+    def _call_to_import(self, node, analyzer, file_path: Path) -> Optional[ImportStatement]:
+        statement = super()._call_to_import(node, analyzer, file_path)
+        if statement is None or not self._is_literal_loader(node, analyzer):
+            return statement
+        # Blocks and lambdas alone have no qualified scope in this bounded slice.
+        # A known enclosing method still establishes lexical local ownership.
+        scope = edge_scope(node, unclassified_kinds=RUBY_BLOCK_NODES | {'lambda'})
+        if scope is not None:
+            statement.scope = scope
+            statement.dynamic = True
+        return statement
+
+    @staticmethod
+    def _is_literal_loader(node, analyzer) -> bool:
+        children = _children(node)
+        if [_zero_arg(child, 'kind') for child in children] != ['identifier', 'argument_list']:
+            return False
+        args = [child for child in _children(children[1])
+                if _zero_arg(child, 'kind') not in {'(', ')'}]
+        if len(args) != 1 or _zero_arg(args[0], 'kind') != 'string':
+            return False
+        text = analyzer._get_node_text(args[0])
+        return (len(text) > 2 and text[0] in {'"', "'"} and text[-1] == text[0]
+                and re.fullmatch(r'[A-Za-z0-9_./-]+', text[1:-1]) is not None)
 
     def is_intra_project_import(
         self,
