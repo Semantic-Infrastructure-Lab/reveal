@@ -413,7 +413,7 @@ NOT_LOCAL_SCOPE: Dict[str, Dict[str, str]] = {
         'method_reference': _FN_NAME_ONLY,
     },
     'kotlin': {kind: _FILE_LEVEL for kind in (
-        'annotated_lambda', 'anonymous_function', 'anonymous_initializer', 'getter',
+        'annotated_lambda', 'anonymous_initializer', 'getter',
         'lambda_literal', 'secondary_constructor', 'setter')} | {
         'function_body': _FN_PART, 'function_modifier': _FN_PART,
         'function_value_parameters': _FN_PART, 'lambda_parameters': _FN_PART,
@@ -456,7 +456,6 @@ NOT_LOCAL_SCOPE: Dict[str, Dict[str, str]] = {
 # (tests/test_import_edge_scope_back2076.py has one strict xfail per language).
 LOCAL_SCOPE_GAPS: Dict[str, Dict[str, str]] = {
     'cpp': {'lambda_expression': 'BACK-2079'},
-    'php': {'anonymous_function': 'BACK-2079'},
     'ruby': {'do_block': 'BACK-2079'},
     'rust': {'closure_expression': 'BACK-2079'},
     'scala': {'lambda_expression': 'BACK-2079'},

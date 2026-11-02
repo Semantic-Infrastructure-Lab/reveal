@@ -130,7 +130,7 @@ _LAZY = ParamSpec(
     'lazy', 'string',
     'Function-level (lazy) import edges: include them, exclude them (load-time edges only: '
     'the architecture view) or show only them. Default: ?circular and has_cycles exclude, '
-    'every other view includes. Python, JavaScript, TypeScript and TSX record import scope; '
+    'every other view includes. Python, PHP, JavaScript, TypeScript and TSX record import scope; '
     'other languages\' edges count as load-time under every value, and the printed rule names them',
     None, _lazy_value,
     examples=('imports://src?rank=fan-in&lazy=exclude', 'imports://src?circular&lazy=include'),
@@ -697,7 +697,7 @@ _SCHEMA_NOTES = [
     'Unused import detection works with Python, JavaScript, Go, etc.',
     'False positives: imports that trigger side effects (e.g. decorator-based registration) will be flagged as unused — these are intentional and safe to ignore',
     'Fan-in ranking covers static imports only — decorator-based registration and importlib dynamic imports are not captured',
-    'Function-level (lazy) imports are edges: ?circular and metadata.has_cycles leave them out by default, every other view counts them; &lazy=include|exclude|only overrides. Each answer states its rule in edge_rule (and a Rule: line in text). Python, JavaScript, TypeScript and TSX record import scope; edge_rule names the languages whose edges it could not classify',
+    'Function-level (lazy) imports are edges: ?circular and metadata.has_cycles leave them out by default, every other view counts them; &lazy=include|exclude|only overrides. Each answer states its rule in edge_rule (and a Rule: line in text). Python, PHP, JavaScript, TypeScript and TSX record import scope; edge_rule names the languages whose edges it could not classify',
     '?importers=FILE is the single-module reverse lookup and ?external the whole-tree package table (they replace depends:// and deps://, which still answer as retired spellings); use the raw graph for a query neither covers',
     'Scope (BACK-1054): every answer resolves at the project root (&root=, .reveal.yaml root: true, package marker, VCS root, else the requested directory) through the same cascade the retired depends:// used, and shows rows under the requested path; &scope=path makes the requested path the scan root. edge_rule names the root, its source, &scope, &tests, the edges each cascade stage found (via) and the languages no recall oracle gates',
     'Swift module and Ruby Zeitwerk convention edges (via module, convention) are counted as importers but never close a cycle',

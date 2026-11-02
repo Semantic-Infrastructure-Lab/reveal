@@ -60,6 +60,7 @@ from typing import Any, ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ...core import node_children as _children
 from ...core import tree_root
+from ...core.node_taxonomy import edge_scope
 from ...core.treesitter_compat import _zero_arg
 from ...registry import extensions_for_languages
 from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
@@ -605,7 +606,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
     """Extract imports for one language from a data-driven :class:`_ImportSpec`.
 
     Subclasses set ``extensions``, ``language_name``, and ``spec``. All parsing
-    behaviour is inherited; there is no per-language code.
+    behaviour is inherited; subclasses may annotate the resulting statements.
     """
 
     # Subclasses MUST set these.
@@ -2928,6 +2929,16 @@ class PhpImportExtractor(_GenericTreeSitterImportExtractor):
     extensions = {'.php'}
     language_name = 'PHP'
     spec = _PHP_SPEC
+
+    def _node_to_import(
+        self, node, analyzer, file_path: Path,
+        constant_index: Optional[Dict[str, Tuple[str, str]]] = None,
+    ) -> Optional[ImportStatement]:
+        statement = super()._node_to_import(node, analyzer, file_path, constant_index)
+        if statement is not None:
+            statement.scope = edge_scope(node)
+            statement.dynamic = _zero_arg(node, 'kind') != 'namespace_use_declaration'
+        return statement
 
 
 def _find_ruby_project_root(start_path: Path) -> Optional[Path]:

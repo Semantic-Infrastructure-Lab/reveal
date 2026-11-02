@@ -125,7 +125,7 @@ SNIPPETS = {
         'function f() { loc_a(); }\n'
         'class K { const C = mod_b; function m() { loc_b(); } }\n'
         '$g = fn() => loc_c;\n'
-        '$h = function () { gap_a(); };\n'
+        '$h = function () { loc_d(); };\n'
     ),
     'ruby': (
         "require 'x'\n"
@@ -186,7 +186,6 @@ GAPS = {
     ('gdscript', 'gap_a'): 'BACK-2079: a GDScript 4 property get_body is not in LOCAL_SCOPE_NODES',
     ('rust', 'gap_a'): 'BACK-2079: closure_expression is not in LOCAL_SCOPE_NODES',
     ('cpp', 'gap_a'): 'BACK-2079: lambda_expression is not in LOCAL_SCOPE_NODES',
-    ('php', 'gap_a'): 'BACK-2079: anonymous_function is not in LOCAL_SCOPE_NODES',
     ('ruby', 'gap_a'): 'BACK-2079: do_block is not in LOCAL_SCOPE_NODES',
     ('scala', 'gap_a'): 'BACK-2079: lambda_expression is not in LOCAL_SCOPE_NODES',
     # Dart's function_signature is the sibling of its function_body, not its parent, so no

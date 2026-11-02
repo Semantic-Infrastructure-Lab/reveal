@@ -1,5 +1,6 @@
 """PHP tags and rendered lazy views share the independently qualified scope rule."""
 import json
+import shutil
 from dataclasses import asdict
 
 import pytest
@@ -130,3 +131,27 @@ def test_partial_input_stays_incomplete_and_no_match_stays_invalid(tmp_path, mod
     assert answer['metadata']['files_failed_count'] == 1
     missing = _run_reveal_direct(f'imports://{to_posix(root)}?importers=missing.php&lazy={mode}', '--format', 'json')
     assert missing.returncode == 2
+
+
+@pytest.mark.skipif(not shutil.which('php'), reason='independent native PHP oracle required')
+@pytest.mark.parametrize('wrong_scope,failed_mode', [('module', 'only'), ('local', 'exclude')])
+def test_wrong_scope_fails_independent_modes_without_changing_union(tmp_path, monkeypatch, wrong_scope, failed_mode):
+    from test_recall_gate import _repo, gate, oracles
+    root, entry = _repo(tmp_path, {
+        'target.php': '<?php\n',
+        'module.php': "<?php require __DIR__.'/target.php';",
+        'local.php': "<?php $f = function(){require __DIR__.'/target.php';};",
+        'mixed.php': "<?php require __DIR__.'/target.php'; function f(){require __DIR__.'/target.php';}",
+    }, {'oracle': 'php-token-static', 'importer_dirs': ['.']})
+    baseline = gate.measure(entry, root)
+    assert baseline['hit_edges'] == baseline['oracle_edges'] == 3
+    assert all(row['recall'] == row['precision'] == 1 for row in baseline['lazy'].values())
+    monkeypatch.setattr(generic, 'edge_scope', lambda node: wrong_scope)
+    oracle = oracles.ORACLES['php-token-static']
+    with monkeypatch.context() as patch:
+        patch.setitem(oracles.ORACLES, 'php-token-static', oracle._replace(lazy_only=None))
+        union = gate.measure(entry, root)
+    assert union['hit_edges'] == union['oracle_edges'] == 3
+    assert union['recall'] == union['precision'] == 1
+    with pytest.raises(RuntimeError, match=f'lazy={failed_mode}: reveal found zero oracle edges'):
+        gate.measure(entry, root)

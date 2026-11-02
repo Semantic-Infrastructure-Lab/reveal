@@ -460,13 +460,20 @@ counted by, as a `Rule:` line in text and an `edge_rule` object in JSON (`lazy`,
 `exclude` and `only` split the edges: per file, fan-in under `include` is the sum of the other
 two. Importers anywhere under the scan root count, tests included unless `&tests=exclude`
 (`?entrypoints` never counts importers under a test path); `&scope=path` makes the requested path
-the scan root. Python,
+the scan root. Python, PHP,
 JavaScript, TypeScript and TSX record import scope (positionally: an import, `import()` or
 `require()` in a function, method, arrow or function expression is function-level; a class field
 initializer or static block is module level). Other languages' edges count as load-time under
 every value, and the rule names those languages and the number of edges. An unknown value is an error.
 `overview://` and `pack` print the same rule for the numbers they take from this
 graph; none of them accepts `&lazy`.
+
+PHP `require`/`include` variants inside named functions, methods, closures and arrows
+are local; a conditional include at module level remains module-level. A pair with
+both module and local contributions counts under `exclude`, not `only`. These are
+lexical positions, not a claim that an include executes or that its path is known.
+PHP loader expressions have `ImportStatement.dynamic=True`; namespace `use`
+declarations have `False`. This flag does not describe static path resolvability.
 
 ```bash
 reveal 'imports://src?rank=fan-in&lazy=exclude'   # module-level imports only

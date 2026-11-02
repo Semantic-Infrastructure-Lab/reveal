@@ -169,7 +169,7 @@ def test_existing_gate_scores_qualified_php_scope_and_requires_mode_review(tmp_p
         'local.php': "<?php function f(){require __DIR__.'/target.php';}",
         'mixed.php': "<?php require __DIR__.'/target.php'; function f(){require __DIR__.'/target.php';}",
     }, {'oracle': 'php-token-static', 'importer_dirs': ['.']})
-    # Qualify union separately, then restore the scope callback to expose the gap.
+    # Qualify union separately, then restore independent scope scoring.
     with monkeypatch.context() as patch:
         patch.setitem(oracles.ORACLES, 'php-token-static', oracle._replace(lazy_only=None))
         measured = gate.measure(entry, root)
@@ -193,7 +193,7 @@ def test_existing_gate_scores_qualified_php_scope_and_requires_mode_review(tmp_p
         return {'by_target': {root / 'target.php': {root / name for name in selected}},
                 'partial_files': 0, 'edge_rule': {'scope': mode}}
 
-    # Scoring-boundary controls, not a claim that production PHP has these facts.
+    # Scoring-boundary mutations complement the real rendered checks above.
     monkeypatch.setattr(gate, 'rendered_reverse_graph', lambda scan, cap, mode:
                         rendered(mode, ['local.php'] if mode == 'only' else ['module.php', 'mixed.php']))
     baseline = gate._measure_lazy(oracle, scope, edges, root, root, None, population)

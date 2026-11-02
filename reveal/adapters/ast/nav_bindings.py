@@ -11,7 +11,7 @@ from .nav_varflow import _declared_name_node, _MEMBER_ACCESS_KINDS, var_flow
 
 
 # Anonymous/value-function shapes verified by the Python/JS/PHP fixtures.
-_FUNCTIONS = DEF_NODES | LAMBDA_NODES | FUNCTION_EXPRESSION_NODES | frozenset({'anonymous_function'})
+_FUNCTIONS = DEF_NODES | LAMBDA_NODES | FUNCTION_EXPRESSION_NODES
 _CLASSES = CLASS_NODES
 _ROOTS = frozenset({'module', 'program'})
 
