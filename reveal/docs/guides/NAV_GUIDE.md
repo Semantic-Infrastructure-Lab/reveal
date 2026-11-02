@@ -215,10 +215,13 @@ nesting depth for loops (default 3). Other flags reject nondefault controls.
 `flag_value` does not encode effects modifiers. The first four positional arguments
 and text return remain unchanged; line-reference elements continue to work.
 
-Missing-file or missing-element failures retain legacy MCP capture behavior: the
-response may contain explicit error text while the SDK reports `is_error=false`.
-Inspect that text. Invalid effects controls, types and directory requests produce
-authored tool errors; this activation does not change global capture policy.
+Failure to open the requested navigation source or resolve a selected function
+or method produces an authored MCP tool error (`is_error=true`). Complete empty
+answers and warning-bearing results retain their existing successful behavior.
+Invalid effects controls, types and directory requests also produce tool errors.
+Unsupported-analyzer and other legacy exits retain their captured-text behavior;
+inspect diagnostics rather than treating a successful tool marker as proof of
+complete analysis.
 
 ```python
 reveal_nav("app.py", "process_order", "effects", transitive=True, depth=2)

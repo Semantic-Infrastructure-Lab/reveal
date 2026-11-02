@@ -195,6 +195,11 @@ reveal_nav("src/auth.py", "validate_token", "varflow", "token")  → data flow o
 `flag_value` is required for `varflow`, `keys` and `narrow` (a variable name); it is optional
 for `calls` (a range) and `around` (context lines). `varflow` without it returns a tool error.
 
+Failure to open the requested navigation source or resolve a selected function or
+method returns a tool error (`is_error=true`). Empty answers and warning-bearing
+results keep their existing successful behavior. Unsupported-analyzer and other
+legacy exits retain captured text; inspect diagnostics for their stated limits.
+
 Answers "what does this function touch outside itself?" without ever reading source.
 
 ### `reveal_grep(path, pattern, ignore_case)`
