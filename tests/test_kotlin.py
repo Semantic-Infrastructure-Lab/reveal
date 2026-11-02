@@ -566,18 +566,8 @@ class ShowStore(
         finally:
             os.unlink(temp_path)
 
-    def test_composable_function_param_recovered_from_error(self):
-        """BACK-738 shape 1: `@Composable (() -> Unit)`-style parenthesized
-        annotated function-type parameters trip a fwcd/tree-sitter-kotlin
-        grammar ambiguity (confirmed via --show-ast: the ERROR node's leading
-        children are [fun, simple_identifier, ...]) that swallows the WHOLE
-        enclosing function_declaration into a top-level ERROR node — one of
-        the most common idioms in any Jetpack Compose codebase. Before the
-        BACK-738 recovery pass, `showInBottomSheet` was silently absent from
-        `structure['functions']` with zero warning; now it must be recovered
-        (flagged, not indistinguishable from a normally-parsed function) and
-        a matching parse_warnings entry must be present.
-        """
+    def test_composable_function_param_preserves_parse_provenance(self):
+        """Keep the declaration whether the grammar parses it normally or needs recovery."""
         code = '''fun beforeFunction(): Int {
     return 1
 }
@@ -600,25 +590,15 @@ fun showInBottomSheet(
             functions = {f['name']: f for f in structure['functions']}
             self.assertIn('beforeFunction', functions)
             self.assertIn('showInBottomSheet', functions)
-            self.assertTrue(functions['showInBottomSheet'].get('recovered_from_error'))
             self.assertNotIn('recovered_from_error', functions['beforeFunction'])
-
-            warnings = structure['parse_warnings']['items']
-            self.assertTrue(any(
-                w['type'] == 'recovered_parse_error' and 'showInBottomSheet' in w['message']
-                for w in warnings
-            ))
+            _assert_declaration_parse_provenance(
+                code, structure, 'functions', 'showInBottomSheet', 5, 'function_declaration')
 
         finally:
             os.unlink(temp_path)
 
-    def test_composable_class_constructor_param_recovered_from_error(self):
-        """BACK-738 shape 1 also swallows a class_declaration when the
-        `@Composable (() -> Unit)` parameter is a constructor property
-        instead of a function parameter (e.g. Compose's own
-        BottomSheetOverlay idiom) — same ERROR-node cascade, different
-        enclosing declaration kind. Must recover into structure['classes'].
-        """
+    def test_composable_class_constructor_param_preserves_parse_provenance(self):
+        """Recovery flags describe the actual enclosing parse, not an old grammar defect."""
         code = '''fun beforeFunction(): Int {
     return 1
 }
@@ -638,7 +618,8 @@ class BottomSheetOverlay(
 
             classes = {c['name']: c for c in structure['classes']}
             self.assertIn('BottomSheetOverlay', classes)
-            self.assertTrue(classes['BottomSheetOverlay'].get('recovered_from_error'))
+            _assert_declaration_parse_provenance(
+                code, structure, 'classes', 'BottomSheetOverlay', 5, 'class_declaration')
 
         finally:
             os.unlink(temp_path)
@@ -683,8 +664,25 @@ fun afterFunction(): Int {
             os.unlink(temp_path)
 
 
-if __name__ == '__main__':
-    unittest.main()
+def _assert_declaration_parse_provenance(source, structure, category, name, line, normal_kind):
+    root = tree_root(get_tree('kotlin', source))
+    enclosing = [node for node in node_children(root)
+                 if _zero_arg(node, 'start_position').row + 1 == line]
+    assert len(enclosing) == 1
+    kind = _zero_arg(enclosing[0], 'kind')
+    assert kind in {'ERROR', normal_kind}
+    recovered = kind == 'ERROR'
+    entries = [entry for entry in structure.get(category, []) if entry['name'] == name]
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry['line'] == line
+    assert entry['line_end'] == _zero_arg(enclosing[0], 'end_position').row + 1
+    assert ('recovered_from_error' in entry) is recovered
+    assert entry.get('recovered_from_error', False) is recovered
+    warnings = [warning for warning in structure.get('parse_warnings', {}).get('items', [])
+                if warning['type'] == 'recovered_parse_error' and f"'{name}'" in warning['message']]
+    assert len(warnings) == int(recovered)
+    assert all(warning['line'] == line for warning in warnings)
 
 
 def _assert_recovered_declaration(structure, category, name, line):
@@ -750,3 +748,7 @@ def test_qualified_supertype_links_to_its_interface_in_contracts(tmp_path):
     groups = list(result['by_language'].values()) if 'by_language' in result else [result]
     (shape,) = [p for group in groups for p in group['protocols'] if p['name'] == 'Shape']
     assert [x['name'] for x in shape['implementations']] == ['W']
+
+
+if __name__ == '__main__':
+    unittest.main()

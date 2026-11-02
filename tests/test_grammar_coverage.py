@@ -394,6 +394,9 @@ NOT_LOCAL_SCOPE: Dict[str, Dict[str, str]] = {
         'local_function_declaration', 'redirecting_factory_constructor_signature')} | {
         'function_expression_body': _FN_PART, 'method_signature': _FN_PART,
         'constructor_param': _FN_PART,
+        # A primary constructor in the class header holds only its parameters.
+        # Its in-class `this`/initializer signature has a function_body sibling.
+        'primary_constructor': _FN_PART, 'primary_constructor_body_signature': _FN_PART,
         'constructor_invocation': _FN_NAME_ONLY, 'constructor_tearoff': _FN_NAME_ONLY,
         'function_type': _FN_NAME_ONLY,
     },
