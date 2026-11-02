@@ -199,3 +199,22 @@ def test_direct_handle_file_rejects_effects_when_show_meta_preempts(project):
 
     with pytest.raises(NavRequestValidationError, match='--effects'):
         handle_file(str(project), 'entry', True, 'json', _default_args(effects=True))
+
+
+@pytest.mark.parametrize('extra', [('--extract', 'domains'), ('--check-acl',), ('--validate-nginx-acme',),
+                                  ('--global-audit',), ('--check-conflicts',), ('--cpanel-certs',), ('--diagnose',)])
+def test_new_effects_reject_nginx_views_that_preempt_analysis(tmp_path, extra):
+    path = tmp_path / 'nginx.conf'
+    path.write_text('events {}\nhttp { server { listen 80; } }\n', encoding='utf-8')
+    result = _run(path, None, '--effects', *extra)
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert result.stdout == '' and '--effects' in result.stderr
+
+
+def test_new_effects_reject_frontmatter_schema_view(tmp_path):
+    path, schema = tmp_path / 'guide.md', tmp_path / 'schema.json'
+    path.write_text('---\ntitle: Example\n---\n# Example\n', encoding='utf-8')
+    schema.write_text('{"name": "Example", "required_fields": ["title"]}', encoding='utf-8')
+    result = _run(path, None, '--effects', '--validate-schema', str(schema), '--format', 'json')
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert result.stdout == '' and '--effects' in result.stderr
