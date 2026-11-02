@@ -219,3 +219,39 @@ def test_new_effects_reject_frontmatter_schema_view(tmp_path):
     result = _run(path, None, '--effects', '--validate-schema', str(schema), '--format', 'json')
     assert result.returncode == 2, (result.stdout, result.stderr)
     assert result.stdout == '' and '--effects' in result.stderr
+
+
+@pytest.mark.parametrize('flag', ['--show-ast', '--capabilities', '--explain-file', '--decorator-stats'])
+def test_new_effects_reject_early_special_modes(project, flag):
+    result = _run(project, None, '--effects', flag)
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert result.stdout == '' and '--effects' in result.stderr
+
+
+@pytest.mark.parametrize('target', ['ast', 'help', 'list'])
+def test_new_effects_require_a_file_target_instead_of_uri_or_batch(project, tmp_path, target):
+    if target == 'ast':
+        path = 'ast://' + str(project)
+    elif target == 'help':
+        path = 'help://quick'
+    else:
+        listing = tmp_path / 'targets.txt'
+        listing.write_text(str(project) + '\n', encoding='utf-8')
+        path = '@' + str(listing)
+    result = _run(path, None, '--effects', '--format', 'json')
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert result.stdout == '' and '--effects' in result.stderr
+
+
+def test_new_effects_reject_pathless_discovery_and_stdin(project):
+    from conftest import _run_reveal_in
+
+    discovery = _run_reveal_direct('--effects', '--languages', '--format', 'json')
+    assert discovery.returncode == 2 and discovery.stdout == '' and '--effects' in discovery.stderr
+    batch = _run_reveal_in(project.parent, '--effects', '--stdin', stdin=str(project) + '\n')
+    assert batch.returncode == 2 and batch.stdout == '' and '--effects' in batch.stderr
+
+
+def test_new_effects_are_not_a_subcommand_analysis(project):
+    result = _run_reveal_direct('check', str(project), '--effects', '--format', 'json')
+    assert result.returncode == 2 and result.stdout == '' and '--effects' in result.stderr
