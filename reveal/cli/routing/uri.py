@@ -1414,10 +1414,12 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
     outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
     failure = write_requested_artifact(lambda: write_also_json(result, args, render, **render_kwargs), result)
     emit_rendered(render, result, output_format, **render_kwargs)
+    if failure is not None:
+        # Preserve result-control disclosures, then let the requested write failure outrank source failure.
+        print_result_control_notes(result, output_format)
+        sys.exit(3)
     conclude_outcome(result, outcome, output_format)
     code = exit_code(result, output_format) if exit_code and outcome != 'failed' else 0
-    if failure is not None:
-        code = 3  # a requested output failed (D6): outranks the renderer's findings exit, the answer was printed
     if code:
         sys.exit(code)
 
