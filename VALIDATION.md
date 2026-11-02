@@ -1310,18 +1310,19 @@ targets so a resolver bug isn't masked by testing only easy cases), root-cause
 every miss to an exact line of code, fix it, and re-measure to confirm the fix
 actually closes the gap without introducing false positives.
 
-### Bounded PHP scope-oracle qualification (BACK-2451)
+### Bounded PHP scope qualification (BACK-2451, BACK-2452)
 
 The opt-in `php-token-static` oracle uses native PHP `token_get_all(TOKEN_PARSE)`
 without executing corpus code or importing Reveal. At WordPress pin
 `5a57baa3352953e1f9cef97fc480ed14a8135335`, PHP 8.3.36 identifies two module-level
 includes in `wp-includes/class-wp-block-parser.php` and one method-local include in
 `wp-includes/widgets/class-wp-widget-text.php`: three independently reviewed edges.
-The union-only public-path observation found all three with no extra scored edges,
-while retaining two partial-parse disclosures. With scope scoring enabled, the
-existing gate refuses `lazy=only` because production PHP still supplies no local
-scope facts. This is oracle qualification, not production scope acceptance or a
-scheduled baseline/language promotion; historical PHP populations below are unchanged.
+Public-path scoring finds all three union edges, both module edges under
+`lazy=exclude`, and the local edge under `lazy=only`, with no extra scored edges
+and two partial-parse disclosures retained in every mode. The complete default
+graph under the same scan root keeps all 673 dependency pairs unchanged after
+scope attribution. This is bounded production qualification, not a scheduled
+baseline or whole-language promotion; historical PHP populations below are unchanged.
 
 The oracle supports bounded unescaped literals, `__DIR__` concatenation and global
 `dirname(__DIR__)` expressions without namespace/import context. Relative literals require explicit importer-relative
