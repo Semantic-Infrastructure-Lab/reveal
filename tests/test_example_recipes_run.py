@@ -737,7 +737,7 @@ def _missing_in_uri(uri, paths, refs):
     return _missing_path(resource or '.', paths)
 
 
-def _named_fixture_skip(tokens):
+def _named_fixture_skip(tokens, fixture_names=None):
     """Why a target-specific documented command cannot run in the named fixture, else None."""
     stages, stage = [[]], tokens
     for token in tokens:
@@ -768,7 +768,7 @@ def _named_fixture_skip(tokens):
         return 'downloads grammars or prepares the installed environment'
     if stage[1] in ('dev', 'scaffold') and len(stage) > 2 and stage[2] != 'inspect-config':
         return 'writes generated files into the tree'
-    paths, refs = _fixture_names()
+    paths, refs = _fixture_names() if fixture_names is None else fixture_names
     if stage[1] in SUBCOMMANDS:
         args = [t for t in stage[2:3] if not t.startswith('-')]
         targets = []
@@ -813,12 +813,13 @@ def _named_fixture_commands(docs=None):
     for source, line, tokens, failing in _documented_commands(docs):
         if not _is_discovery(tokens):
             seen.setdefault(shlex.join(tokens), (source, tokens, failing))
+    fixture_names = _fixture_names()
     params = []
     for query, (source, tokens, failing) in seen.items():
         reason = ('the doc shows it failing' if failing else
                   'qualified in dedicated navigation fixture (BACK-2444)'
                   if (source, query) in DOC_SOURCE_COHORT else
-                  _source_cohort_reason(source, tokens) or _named_fixture_skip(tokens))
+                  _source_cohort_reason(source, tokens) or _named_fixture_skip(tokens, fixture_names))
         marks = [pytest.mark.skip(reason=f'named fixture: {reason}')] if reason else []
         if query in NAMED_KNOWN_VIOLATIONS:
             marks.append(pytest.mark.xfail(strict=True, reason=NAMED_KNOWN_VIOLATIONS[query]))
