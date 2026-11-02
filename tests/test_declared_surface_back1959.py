@@ -120,12 +120,12 @@ def test_failed_requested_artifact_is_three(project, tmp_path, spelling):
     assert 'artifact' in result.stderr.lower()
 
 
-def test_primary_json_retains_also_json_noop(project, tmp_path):
+def test_primary_json_writes_also_json_mirror(project, tmp_path):
     artifact = tmp_path / 'redundant.json'
     result = run('surface', 'proj', '--format', 'json', '--also-json', str(artifact), '--no-gitignore')
     assert result.returncode == 0
     assert json.loads(result.stdout)['type'] == 'surface_scan'
-    assert not artifact.exists()
+    assert json.loads(artifact.read_text(encoding='utf-8')) == json.loads(result.stdout)
 
 
 @pytest.mark.parametrize('name', ['src & data,plus+%26', 'src?literal%26'])
@@ -245,7 +245,7 @@ def test_runtime_artifact_failure_preserves_primary_json(project, monkeypatch):
     def fail(*args, **kwargs):
         raise OSError('injected artifact failure')
     # A boundary injection verifies preservation if the artifact writer fails;
-    # the normal --format json no-op has a separate real CLI control above.
+    # the successful --format json mirror has a separate real CLI control above.
     monkeypatch.setattr(json_utils, 'write_also_json', fail)
     result = run('surface://proj', '--format', 'json', '--no-gitignore')
     assert result.returncode == 3

@@ -99,7 +99,7 @@ def test_summary_primary_json_only_and_artifacts(project, transport, format):
         answer = json.loads(result.stdout)
         assert 'files' not in answer['base']
         assert answer['base']['total_files'] == answer['base']['total_imports'] == 2
-        assert not target.exists()  # The established primary-JSON mirror no-op.
+        assert json.loads(target.read_text(encoding='utf-8')) == answer
     else:
         assert 'has no effect' in result.stderr
         answer = json.loads(target.read_text(encoding='utf-8'))

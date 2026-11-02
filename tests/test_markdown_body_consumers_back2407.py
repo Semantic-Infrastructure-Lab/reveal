@@ -189,7 +189,7 @@ def test_resource_rejection_preserves_identity_and_api_policy(tmp_path, kind, ex
         api.query(_uri(resource))
 
 
-def test_requested_artifact_failure_preserves_answer_and_primary_json_noop(tmp_path):
+def test_requested_artifact_failure_preserves_answer_and_json_primary(tmp_path):
     (tmp_path / 'good.md').write_bytes(b'needle\n')
     request = _uri(tmp_path)
     artifact = tmp_path / 'answer.json'
@@ -200,7 +200,10 @@ def test_requested_artifact_failure_preserves_answer_and_primary_json_noop(tmp_p
     assert failed.returncode == 3 and 'good.md' in failed.stdout
     assert 'Error' in failed.stderr
     primary = run(request, '--format', 'json', '--output', f'json={tmp_path}')
-    assert primary.returncode == 0
+    assert primary.returncode == 3
+    answer = json.loads(primary.stdout)
+    assert answer['meta']['output_errors'][0]['code'] == 'artifact_write_failed'
+    assert primary.stderr.count('Requested JSON artifact failed') == 1
     assert _names(json.loads(primary.stdout)) == ['good.md']
 
 

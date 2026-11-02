@@ -188,8 +188,11 @@ def test_invalid_request_text_and_artifact_failure(project, mode):
     assert result.returncode == 3
     assert 'artifact failed' in result.stderr
     result = run('architecture', 'proj', *cli, '--format', 'json', '--also-json', str(project))
-    assert result.returncode == 0  # primary JSON keeps the existing mirror no-op
-    assert json.loads(result.stdout)['type'].startswith('overview')
+    assert result.returncode == 3
+    answer = json.loads(result.stdout)
+    assert answer['type'].startswith('overview')
+    assert answer['meta']['output_errors'][0]['code'] == 'artifact_write_failed'
+    assert result.stderr.count('Requested JSON artifact failed') == 1
 
 
 @pytest.mark.parametrize('kind', ['operational', 'dependency', 'corrupt'])

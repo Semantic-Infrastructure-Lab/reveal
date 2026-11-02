@@ -171,12 +171,17 @@ def test_element_stdin_and_batch_remain_legacy(files, monkeypatch):
         assert 'not valid JSON' in failed.stdout + failed.stderr
 
 
-def test_requested_output_failure_and_primary_json_noop_stay(files):
+def test_requested_output_failure_preserves_json_primary(files):
     failed = run(uri(files / 'good.json'), '--output', 'json=' + files.as_posix())
     assert failed.returncode == 3 and 'Requested JSON artifact failed' in failed.stderr
     assert 'alpha' in failed.stdout
     primary = run(uri(files / 'good.json'), '--format', 'json', '--output', 'json=' + files.as_posix())
-    assert primary.returncode == 0 and json.loads(primary.stdout)['type'] == 'json_value'
+    assert primary.returncode == 3
+    answer = json.loads(primary.stdout)
+    assert answer['type'] == 'json_value'
+    assert 'alpha' in primary.stdout
+    assert answer['meta']['output_errors'][0]['code'] == 'artifact_write_failed'
+    assert primary.stderr.count('Requested JSON artifact failed') == 1
 
 
 def test_resource_resolver_serializes_the_file_before_legacy_missing_diagnostic(monkeypatch):

@@ -164,13 +164,11 @@ def test_cli_json_projections_and_artifact_preserve_loss(tmp_path, monkeypatch, 
     result = json.loads(output.stdout)
     assert len(loss_warning(result)) == 1
     assert 'confidence' not in result['meta']
-    if query_override:
-        saved = json.loads(artifact.read_text(encoding='utf-8'))
-        assert len(loss_warning(saved)) == 1
-        assert 'confidence' not in saved['meta']
-    else:
-        # The shared artifact owner deliberately no-ops when global format is JSON.
-        assert not artifact.exists()
+    saved = json.loads(artifact.read_text(encoding='utf-8'))
+    assert len(loss_warning(saved)) == 1
+    assert 'confidence' not in saved['meta']
+    if not query_override:
+        assert saved == result
 
 
 @pytest.mark.parametrize('query', QUERIES)

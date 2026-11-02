@@ -347,9 +347,9 @@ def test_comparison_artifact_fields_and_output_failure_keep_outcomes(project, tm
     assert text.returncode == 0, (text.stdout, text.stderr)
     answer = canonical(invoke(project, transport=transport))
     assert json.loads(artifact.read_text(encoding='utf-8')) == answer
-    noop = tmp_path / 'primary-json-noop.json'
-    canonical(invoke(project, transport=transport, flags=['--output', f'json={noop}']))
-    assert not noop.exists()
+    mirror = tmp_path / 'primary-json-mirror.json'
+    primary = canonical(invoke(project, transport=transport, flags=['--output', f'json={mirror}']))
+    assert json.loads(mirror.read_text(encoding='utf-8')) == primary
     selected = canonical(invoke(project, transport=transport, flags=['--fields', 'deltas']))
     assert selected['deltas'] == answer['deltas']
     assert 'analysis' not in selected  # explicit payload selection retains the independently captured outcome

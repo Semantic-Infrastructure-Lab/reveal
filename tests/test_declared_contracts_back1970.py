@@ -195,13 +195,16 @@ def test_required_answer_failures_keep_identity(project, monkeypatch, kind):
 
 
 @pytest.mark.parametrize('spelling', ['cli', 'uri'])
-def test_artifact_failure_and_json_primary_noop(project, spelling):
+def test_artifact_failure_preserves_json_primary(project, spelling):
     argv = ['contracts', 'proj'] if spelling == 'cli' else ['contracts://proj']
     result = run(*argv, '--also-json', str(project))
     assert result.returncode == 3 and 'artifact failed' in result.stderr
     result = run(*argv, '--format', 'json', '--also-json', str(project))
-    assert result.returncode == 0
-    assert json.loads(result.stdout)['total_contracts'] == 2
+    assert result.returncode == 3
+    answer = json.loads(result.stdout)
+    assert answer['total_contracts'] == 2
+    assert answer['meta']['output_errors'][0]['code'] == 'artifact_write_failed'
+    assert result.stderr.count('Requested JSON artifact failed') == 1
 
 
 def test_runtime_artifact_failure_keeps_parseable_primary(project, monkeypatch):

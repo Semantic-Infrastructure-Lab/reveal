@@ -197,10 +197,9 @@ def test_domain_facts_survive_top_zero_fields_and_primary_json_artifact(tmp_path
     assert _warnings(result) and 'confidence' not in result['meta']
     assert result['execution']['command'].startswith('reveal ')
     assert bool(result.get('error')) is (not useful)
-    # Primary JSON's existing mirror behavior is transport-owned; evidence must survive either route.
-    if artifact.exists():
-        saved = json.loads(artifact.read_text(encoding='utf-8'))
-        assert _warnings(saved) and bool(saved.get('error')) is (not useful)
+    saved = json.loads(artifact.read_text(encoding='utf-8'))
+    assert _warnings(saved) and bool(saved.get('error')) is (not useful)
+    assert saved == result
     text = run(*_args(root, transport, query), '--also-json', str(artifact))
     assert text.returncode == 3 and artifact.exists()
     saved = json.loads(artifact.read_text(encoding='utf-8'))

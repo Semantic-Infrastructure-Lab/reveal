@@ -196,7 +196,11 @@ def test_projection_and_output_failure_keep_source_policy(tmp_path):
     failed = run(_uri(tmp_path), '--output', f'json={tmp_path}')
     assert failed.returncode == 3 and 'guide' in failed.stdout
     primary = run(_uri(tmp_path), '--format', 'json', '--output', f'json={tmp_path}')
-    assert primary.returncode == 0
+    assert primary.returncode == 3
+    answer = json.loads(primary.stdout)
+    assert answer['meta']['output_errors'][0]['code'] == 'artifact_write_failed'
+    assert primary.stderr.count('Requested JSON artifact failed') == 1
+    assert _values(answer) == {'guide': 1}
 
 
 @pytest.mark.parametrize('mode', ['missing_analysis', 'success', 'decline', 'request'])

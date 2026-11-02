@@ -58,7 +58,7 @@ def test_artifacts_and_fields_keep_canonical_identity(project, transport):
     body = json.loads(result.stdout)
     assert body['type'] == 'overview' and body['scope']['total_code_files'] == 7
     assert 'map' not in body
-    assert not artifact.exists()  # Same-format output is the existing disclosed no-op.
+    assert json.loads(artifact.read_text(encoding='utf-8')) == body
     text = run(*argv, '--output', f'json={artifact}')
     assert text.returncode == 0, text.stderr
     saved = json.loads(artifact.read_text(encoding='utf-8'))

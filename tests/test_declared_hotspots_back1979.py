@@ -204,14 +204,15 @@ def test_artifact_failure_keeps_primary_json(project, monkeypatch, transport):
 
 
 @pytest.mark.parametrize('transport', ['cli', 'uri'])
-def test_human_artifact_and_primary_json_noop(project, transport):
+def test_human_artifact_and_primary_json_mirror(project, transport):
     target = project.parent/f'{transport}.json'
     result = run(*argv(transport), '--also-json', str(target))
     assert result.returncode == 0, result.stderr
     assert json.loads(target.read_text(encoding='utf-8'))['summary']['has_findings']
     target.unlink()
     result = run(*argv(transport), '--format', 'json', '--also-json', str(target))
-    assert result.returncode == 0 and not target.exists()
+    assert result.returncode == 0
+    assert json.loads(target.read_text(encoding='utf-8')) == json.loads(result.stdout)
 
 
 def test_optional_warnings_and_complete_zero_do_not_fail(project, monkeypatch):

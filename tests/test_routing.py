@@ -1770,17 +1770,24 @@ class TestAlsoJson(unittest.TestCase):
 
         self.assertFalse(os.path.exists(self.out_path))
 
-    def test_no_file_written_when_format_already_json(self):
+    def test_json_mirror_written_when_format_already_json(self):
         class OkAdapter:
             def get_structure(self, **kwargs):
                 return {'type': 'x'}
 
+        class JsonRenderer(MockRenderer):
+            @staticmethod
+            def render_structure(result, format='json'):
+                from reveal.utils.json_utils import print_json_result
+                print_json_result(result)
+
         args = Namespace(format='json', also_json=self.out_path)
         buf = io.StringIO()
         with redirect_stdout(buf):
-            _render_structure(OkAdapter(), MockRenderer, args, scheme='stats', resource='src')
+            _render_structure(OkAdapter(), JsonRenderer, args, scheme='stats', resource='src')
 
-        self.assertFalse(os.path.exists(self.out_path))
+        with open(self.out_path, encoding='utf-8') as artifact:
+            self.assertEqual(json.load(artifact), json.loads(buf.getvalue()))
 
 
 def test_a_check_only_flag_selects_check_mode():

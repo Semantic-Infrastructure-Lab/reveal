@@ -142,6 +142,9 @@ def test_also_json_is_written_or_rejected(tmp_path, outside, argv, honored):
         assert not out.exists()
 
 
-def test_also_json_with_json_format_is_redundant_not_rejected():
+def test_unsupported_also_json_is_rejected_even_with_json_primary(capsys):
     args = SimpleNamespace(also_json='x.json', format='json')
-    reject_unhonored_also_json(args, 'the file view')  # no exit
+    with pytest.raises(SystemExit) as exc:
+        reject_unhonored_also_json(args, 'the file view')
+    assert exc.value.code == 2
+    assert 'not supported by the file view' in capsys.readouterr().err
