@@ -119,8 +119,8 @@ def test_every_view_after_an_edit_equals_a_fresh_cache_off_answer(project, tmp_p
     _apply(project, rel, text)
     after_off = {view: _answer(project, view, cache_dir, cache=False) for view in VIEWS}
     assert after_off[moved_view] != before[moved_view], f'{name} did not change the {moved_view} answer'
-    for view in VIEWS:
-        assert _answer(project, view, cache_dir, cache=True) == after_off[view], f'{name}: stale {view}'
+    stale = [view for view in VIEWS if _answer(project, view, cache_dir, cache=True) != after_off[view]]
+    assert not stale, f'{name}: stale views {stale}'
 
 
 @pytest.mark.parametrize('disk', [False, True], ids=['disk-off', 'disk-on'])
@@ -141,6 +141,6 @@ def test_a_library_host_sees_every_edit_between_requests(project, tmp_path, disk
     for k, (name, moved_view, _rel, _text) in enumerate(EDITS, start=1):
         assert fresh[k][moved_view] != fresh[k - 1][moved_view], f'{name} did not change the {moved_view} answer'
     assert hosted[0] == fresh[0]
-    for k, (name, _view, _rel, _text) in enumerate(EDITS, start=1):
-        for view in HOST_VIEWS:
-            assert hosted[k][view] == fresh[k][view], f'{name}: the host served a stale {view}'
+    stale = [(name, view) for k, (name, _view, _rel, _text) in enumerate(EDITS, start=1)
+             for view in HOST_VIEWS if hosted[k][view] != fresh[k][view]]
+    assert not stale, f'the host served stale answers {stale}'
