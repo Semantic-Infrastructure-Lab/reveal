@@ -171,3 +171,31 @@ def test_new_transitive_keeps_file_analysis_loss(project, fault):
     _same(project, 'entry', '--sideeffects', (), ('--transitive',))
     data = json.loads(_run(project, 'entry', '--effects', '--transitive', '--format', 'json').stdout)
     assert any('could not be analyzed' in note for note in data['warnings'])
+
+
+@pytest.mark.parametrize('extra', [('--meta',), ('--check',), ('--head', '1'), ('--tail', '0'),
+                                  ('--grep', 'logging'), ('--name', 'entry'), ('--sort', 'name'), ('--type', 'function')])
+def test_new_effects_reject_preempting_or_unused_views(project, extra):
+    result = _run(project, None, '--effects', *extra, '--format', 'json')
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert result.stdout == ''
+    assert '--effects' in result.stderr
+    if extra[0] in ('--head', '--tail'):
+        assert '--range' in result.stderr
+
+
+def test_new_effects_reject_directory_view_without_changing_legacy(project):
+    rejected = _run(project.parent, None, '--effects', '--in-loops', '--format', 'json')
+    assert rejected.returncode == 2, (rejected.stdout, rejected.stderr)
+    assert rejected.stdout == '' and 'file' in rejected.stderr
+    legacy = _run(project.parent, None, '--fanout', '--format', 'json')
+    assert legacy.returncode == 0
+
+
+def test_direct_handle_file_rejects_effects_when_show_meta_preempts(project):
+    from reveal.cli.defaults import _default_args
+    from reveal.errors import NavRequestValidationError
+    from reveal.file_handler import handle_file
+
+    with pytest.raises(NavRequestValidationError, match='--effects'):
+        handle_file(str(project), 'entry', True, 'json', _default_args(effects=True))
