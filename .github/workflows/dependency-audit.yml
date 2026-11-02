@@ -1,0 +1,87 @@
+name: Dependency vulnerability audit
+
+# BACK-2442: advisory monitoring, not a push/PR gate. Findings stay red.
+on:
+  schedule:
+    - cron: '23 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Installed [all] dependencies (Python ${{ matrix.python-version }}, Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.14']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize diagnostics
+        run: |
+          mkdir -p audit-report
+          echo 'Setup incomplete; no vulnerability scan completed.' > audit-report/status.txt
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install target and separate audit tooling
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          exec > audit-report/setup.log 2>&1
+          python --version
+          python -m venv "$RUNNER_TEMP/audit-tools"
+          python -m venv --without-pip "$RUNNER_TEMP/audit-target"
+          tools="$RUNNER_TEMP/audit-tools/bin/python"
+          "$tools" -m pip install --upgrade pip
+          "$tools" -m pip install 'pip-audit==2.10.1'
+          # The target has no bootstrap pip/setuptools or audit-tool dependencies.
+          # Build isolation also keeps build requirements outside the target graph.
+          "$tools" -m pip --python "$RUNNER_TEMP/audit-target/bin/python" install '.[all]'
+          "$tools" -m pip --python "$RUNNER_TEMP/audit-target/bin/python" inspect > audit-report/installed.json
+          "$tools" -m pip list --format=json > audit-report/tooling.json
+          "$RUNNER_TEMP/audit-target/bin/python" -c 'import platform,sys,sysconfig; print(platform.platform()); print(sys.version); print(sysconfig.get_path("purelib"))' > audit-report/environment.txt
+          echo 'Setup completed; vulnerability scan not yet completed.' > audit-report/status.txt
+      - name: Audit every installed target dependency
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          tools="$RUNNER_TEMP/audit-tools/bin/python"
+          site_packages="$("$RUNNER_TEMP/audit-target/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+          echo 'Collection or vulnerability query incomplete; inspect audit.log and exit-code.txt.' > audit-report/status.txt
+          rc=0
+          "$tools" -m pip_audit --path "$site_packages" --skip-editable --strict \
+            --timeout 30 --progress-spinner off --cache-dir "$RUNNER_TEMP/audit-http" --format json \
+            --output audit-report/audit.json > audit-report/audit.log 2>&1 || rc=$?
+          echo "$rc" > audit-report/exit-code.txt
+          cat audit-report/audit.log
+          # A failed collection/query is not an empty successful scan. pip-audit
+          # emits a complete JSON dependency report for completed findings scans.
+          if [[ -s audit-report/audit.json && "$rc" -le 1 ]]; then
+            "$tools" - <<'PY' > audit-report/summary.txt 2>> audit-report/audit.log
+          import json
+          from pathlib import Path
+          report = json.loads(Path('audit-report/audit.json').read_text(encoding='utf-8'))
+          dependencies = report['dependencies']
+          assert dependencies and all('version' in row and 'vulns' in row for row in dependencies)
+          findings = sum(len(row['vulns']) for row in dependencies)
+          print(f'Completed Linux installed [all] scan: {len(dependencies)} packages, {findings} vulnerability records.')
+          print('Interpreter and resolved versions: environment.txt and installed.json. Tooling: tooling.json.')
+          PY
+            cp audit-report/summary.txt audit-report/status.txt
+          else
+            [[ "$rc" -ne 0 ]] || rc=1
+          fi
+          cat audit-report/status.txt
+          exit "$rc"
+      - name: Preserve findings and incomplete-run diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-audit-linux-py${{ matrix.python-version }}
+          path: audit-report/
+          if-no-files-found: warn
+          retention-days: 30

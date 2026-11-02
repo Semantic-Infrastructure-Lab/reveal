@@ -100,19 +100,26 @@ regression-only ratchets that need the maintainer environment:
 
 #### Dependency vulnerability audit
 
-Nothing else in CI checks dependencies for known CVEs (Dependabot covers GitHub Actions only), so
-audit what a user gets from `pip install "reveal-cli[all]"` before every release, in a throwaway
-venv so your own environment is not what gets audited:
+The weekly/manual `dependency-audit.yml` workflow audits the installed `[all]` dependency graph
+on Linux with Python 3.10 and 3.14; it is not a push/PR gate or an all-platform safety claim.
+Its artifacts retain resolved versions, interpreter/tooling identities, JSON findings and text
+diagnostics, including incomplete setup or collection. Findings fail the job, including the known
+Python 3.10 dnspython gap with no compatible fixed release. Dependabot covers GitHub Actions only.
+Keep the manual pre-release audit: install the selected checkout as a user would, with the auditor
+in a separate throwaway environment so its dependencies cannot be attributed to Reveal:
 
 ```bash
-python3 -m venv "$SCRATCH/auditenv"
-"$SCRATCH/auditenv/bin/pip" install -q pip-audit ".[all]"
-"$SCRATCH/auditenv/bin/pip-audit" --skip-editable      # exit 1 = known vulnerabilities
-"$SCRATCH/auditenv/bin/pip" list --outdated            # candidates for newer versions
+python3 -m venv "$SCRATCH/audit-tools"
+python3 -m venv --without-pip "$SCRATCH/audit-target"
+"$SCRATCH/audit-tools/bin/python" -m pip install --upgrade pip 'pip-audit==2.10.1'
+"$SCRATCH/audit-tools/bin/python" -m pip --python "$SCRATCH/audit-target/bin/python" install ".[all]"
+SITE_PACKAGES=$("$SCRATCH/audit-target/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')
+"$SCRATCH/audit-tools/bin/python" -m pip_audit --path "$SITE_PACKAGES" --skip-editable --strict
+"$SCRATCH/audit-tools/bin/python" -m pip --python "$SCRATCH/audit-target/bin/python" list --outdated
 ```
 
-- Triage by owner: only packages reveal declares (`pyproject.toml`) are ours. `pip`, `setuptools`
-  and `filelock` come from the venv and `pip-audit` itself; ignore those.
+- Triage every target dependency, including transitives; none are excluded by package name.
+  The target has no bootstrap pip/setuptools; build isolation keeps build tools outside it.
 - For one of ours, raise the floor in `pyproject.toml` to the fixed version. If the fix needs a newer
   Python than `requires-python`, use an environment marker (as `dnspython>=2.9.0;python_version>='3.11'`
   does) and note that older Pythons have no fixed release.
