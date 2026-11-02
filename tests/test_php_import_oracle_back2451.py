@@ -89,7 +89,7 @@ require __DIR__ . '/target.php' . $suffix;
 require unknown(__DIR__) . '/target.php';
 require UNKNOWN_CONSTANT . '/target.php';
 require __DIR__ . '/missing.php';
-require dirname(__DIR__) . '/outside.php';
+require __DIR__ . '/../outside.php';
 ''',
     })
     oracle = _oracle()
