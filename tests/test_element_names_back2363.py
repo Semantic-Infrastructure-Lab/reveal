@@ -82,15 +82,18 @@ def test_outputs_are_range_hazards_and_callsites_keep_optional_range(source):
     assert len(result['findings']) == 1 and result['findings'][0]['line'] == 3
 
 
-def test_provenance_records_actual_spelling_and_json_retirement_is_parseable(source):
+def test_provenance_records_actual_spelling_and_json_retirement_is_parseable(source, monkeypatch):
     import shlex
 
+    # Other workers may change the shared checkout's Git state between requests.
+    monkeypatch.chdir(Path(source).parent)
     current_args = [source, 'extract', '--inputs', '--provenance', '--format', 'json']
     old_args = [source, 'extract', '--deps', '--provenance', '--format', 'json']
     current = run(*current_args)
     old = run(*old_args)
     assert current.returncode == old.returncode == 0
     canonical, legacy = json.loads(current.stdout), json.loads(old.stdout)
+    assert canonical['execution']['repo'] is legacy['execution']['repo'] is None
     assert canonical['execution']['command'] == shlex.join(['reveal', *current_args])
     assert legacy['execution']['command'] == shlex.join(['reveal', *old_args])
     legacy = without_note(legacy, 'deps')
