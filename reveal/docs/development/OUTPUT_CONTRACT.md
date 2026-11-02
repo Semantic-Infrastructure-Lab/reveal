@@ -633,8 +633,11 @@ the `?circular`, `?unused` or `?violations` answer has a row (an incomplete answ
 An imports answer is incomplete (exit 3) when a file it reads failed to parse or was lost. The
 scan covers the whole project root, so most views count every failed file in that scan: a file
 outside the path can still be an importer or sit on a cycle. `?external` lists only the imports of
-the files under the path, so it counts the failures under the path and reports the rest in
-`metadata.files_failed_outside_target_count` without making the answer incomplete.
+the files under the path, and so does the default listing, so both count the failures under the
+path and report the rest in `metadata.files_failed_outside_target_count` without making the answer
+incomplete. The listing's cycles verdict is a whole-graph claim: with any failed file in the scan
+and no cycle seen, `metadata.has_cycles` is `null` (not determined); a cycle that was found stays
+`true`.
 
 Hotspots defaults to `none` and supports `findings` using the owner's pre-cap
 `summary.has_findings`: quality below 70 or complexity above 20. Stats coverage

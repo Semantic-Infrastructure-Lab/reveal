@@ -5,7 +5,9 @@
 the host path for anything outside the requested path; under the default ``&scope=root`` the walk covers
 the whole project, so asking about ``src/`` disclosed ``/home/<user>/.../other/bad.js``. Every one is now
 spelled from the requested directory, as the rows are (BACK-2183/2184), and the text summary lists the
-same strings. ``get_metadata()`` itself keeps absolute paths: overview:// and the architecture diff read
+same strings. The default listing counts only failures under the requested path (BACK-2439), so the
+spelling of files OUTSIDE the path is checked on ``?circular``, which reads the whole scan.
+``get_metadata()`` itself keeps absolute paths: overview:// and the architecture diff read
 it as a library and spell it against their own base.
 """
 import json
@@ -29,28 +31,37 @@ def _project(tmp_path):
     return proj
 
 
-def _run(tmp_path, uri, *args):
+def _run(tmp_path, uri, *args, code=3):
     result = _run_reveal_in(tmp_path, uri, *args)
-    assert result.returncode == 3, (uri, result.stderr)  # a partial answer: files parsed with errors
+    assert result.returncode == code, (uri, result.stderr)  # 3: a partial answer, files parsed with errors
     assert str(tmp_path) not in result.stdout and tmp_path.as_posix() not in result.stdout, (uri, result.stdout)
     return result.stdout
 
 
-def _metadata(tmp_path, uri):
-    return json.loads(_run(tmp_path, uri, '--format', 'json'))['metadata']
+def _metadata(tmp_path, uri, code=3):
+    return json.loads(_run(tmp_path, uri, '--format', 'json', code=code))['metadata']
 
 
 def test_files_failed_and_diagnostics_are_spelled_from_the_requested_directory(tmp_path):
     _project(tmp_path)
-    metadata = _metadata(tmp_path, 'imports://proj/src')
+    metadata = _metadata(tmp_path, 'imports://proj/src?circular')
     assert metadata['files_failed_count'] == 2
     assert metadata['files_failed'] == ['../other/bad.js', 'bad.js']
     assert sorted(metadata['extraction_diagnostics']) == ['../other/bad.js', 'bad.js']
 
 
+def test_the_default_listing_counts_only_failures_under_the_path(tmp_path):
+    _project(tmp_path)
+    metadata = _metadata(tmp_path, 'imports://proj/src')
+    assert metadata['files_failed_count'] == 1
+    assert metadata['files_failed'] == ['bad.js']
+    assert metadata['files_failed_outside_target_count'] == 1
+    assert sorted(metadata['extraction_diagnostics']) == ['../other/bad.js', 'bad.js']
+
+
 def test_a_file_target_spells_failed_files_from_its_directory(tmp_path):
     _project(tmp_path)
-    metadata = _metadata(tmp_path, 'imports://proj/src/a.js')
+    metadata = _metadata(tmp_path, 'imports://proj/src/a.js?circular')
     assert metadata['files_failed'] == ['../other/bad.js', 'bad.js']
     assert sorted(metadata['extraction_diagnostics']) == ['../other/bad.js', 'bad.js']
 
@@ -58,7 +69,8 @@ def test_a_file_target_spells_failed_files_from_its_directory(tmp_path):
 def test_the_text_summary_lists_the_same_spelling(tmp_path):
     _project(tmp_path)
     stdout = _run(tmp_path, 'imports://proj/src')
-    assert '      - ../other/bad.js' in stdout and '      - bad.js' in stdout
+    assert '      - bad.js' in stdout and '      - ../other/bad.js' not in stdout
+    assert '1 file(s) outside this path failed to parse' in stdout
 
 
 def test_files_lost_and_a_windows_spelling_reach_the_answer_with_forward_slashes(tmp_path, monkeypatch):
@@ -69,14 +81,14 @@ def test_files_lost_and_a_windows_spelling_reach_the_answer_with_forward_slashes
     real = ImportsAdapter.get_metadata
     lost = str(proj / 'other' / 'lost.js')
 
-    def with_lost(self):
-        metadata = real(self)
+    def with_lost(self, **kwargs):
+        metadata = real(self, **kwargs)
         metadata.update(files_lost=[lost], files_lost_count=1, files_failed_count=metadata['files_failed_count'] + 2,
                         files_failed=sorted(metadata['files_failed'] + [lost, 'deep\\win.js']))
         return metadata
 
     monkeypatch.setattr(ImportsAdapter, 'get_metadata', with_lost)
-    metadata = _metadata(tmp_path, 'imports://proj/src')
+    metadata = _metadata(tmp_path, 'imports://proj/src?circular')
     assert metadata['files_lost'] == ['../other/lost.js']
     assert sorted(metadata['files_failed']) == ['../other/bad.js', '../other/lost.js', 'bad.js', 'deep/win.js']
 

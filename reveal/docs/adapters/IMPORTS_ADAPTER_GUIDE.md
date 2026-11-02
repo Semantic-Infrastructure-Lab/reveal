@@ -793,6 +793,13 @@ reveal 'imports://src?unused' | grep "api/"
 }
 ```
 
+**Files that failed to parse.** The scan covers the whole project root, but this listing shows only the
+imports of the files under the path, so it counts only the failures under that path (they exit 3 and are
+named). Failures elsewhere in the scan are counted in `metadata.files_failed_outside_target_count` and do
+not make the listing incomplete. They can hide a cycle, so when any file failed and no cycle was seen,
+`has_cycles` is `null` and the text says `Cycles Found:  Unknown`; a cycle that was found stays `true`.
+`?importers`, `?circular` and fan-in keep exit 3 on any failed file in the scan.
+
 ### 2. unused_imports
 
 **Use case**: Find dead code

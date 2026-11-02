@@ -241,13 +241,19 @@ class ImportView:
         the scan could not read: a view that reads the whole graph (fan-in, cycles, importers) can miss
         an outside importer. ``'target'`` is for a view that lists only the imports of the files under
         the path: a failure outside the path cannot change it, so it is counted apart in
-        ``files_failed_outside_target_count`` and does not make the answer incomplete (BACK-2438).
+        ``files_failed_outside_target_count`` and does not make the answer incomplete (BACK-2438). It
+        can hide a cycle, so with any failed file and no cycle seen ``has_cycles`` is None (BACK-2439).
         """
         if not self.analysis.graph:
             return {'status': 'not_analyzed'}
         failed, lost, outside = self._failures(failures)
 
         in_scope = [imports for f, imports in self.analysis.graph.files.items() if self._in_scope(f)]
+        cycles: Optional[bool] = len(self._cycle_groups(self._edges(LAZY_EXCLUDE))) > 0
+        if failures == 'target' and not cycles and self.analysis.files_failed:
+            # A cycle that was seen is real, but a failed file anywhere in the scan, outside the path
+            # too, can hide one, so "no cycle" cannot be claimed (BACK-2439).
+            cycles = None
         return {
             'total_imports': sum(len(imports) for imports in in_scope),
             'total_files': len(in_scope),
@@ -260,7 +266,7 @@ class ImportView:
             # text renderer needs this count to tell "clean" from "unchecked."
             'scanned_files': sum(1 for f in self.analysis.scanned_files if self._in_scope(f)),
             # Cycles leave function-level imports out unless &lazy says otherwise (BACK-2077).
-            'has_cycles': len(self._cycle_groups(self._edges(LAZY_EXCLUDE))) > 0,
+            'has_cycles': cycles,
             'cycles_lazy': self._lazy_mode(LAZY_EXCLUDE)[0],
             'analyzer': 'imports',
             # Recognized code files whose language has no import extractor yet.

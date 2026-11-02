@@ -365,7 +365,7 @@ _SCHEMA_OUTPUT_TYPES = [
                     'properties': {
                         'total_files': {'type': 'integer'},
                         'total_imports': {'type': 'integer'},
-                        'has_cycles': {'type': 'boolean'},
+                        'has_cycles': {'type': ['boolean', 'null']},
                         'cycles_lazy': {'type': 'string', 'enum': list(LAZY_MODES)},
                     }
                 },
@@ -870,7 +870,9 @@ class ImportsRenderer:
         total_files = metadata.get('total_files', 0)
         total_imports = metadata.get('total_imports', 0)
         has_cycles = metadata.get('has_cycles', False)
-        if _discovery_incomplete(result) and not has_cycles:
+        if has_cycles is None and total_files > 1 and total_imports:
+            print("  Cycles Found:  Unknown (a file that failed to parse could hide a cycle)")
+        elif _discovery_incomplete(result) and not has_cycles:
             print("  Cycles Found:  Unknown (directory discovery incomplete)")
         elif total_files <= 1 and Path(display_path).is_dir():
             print("  Cycles Found:  N/A (only one file scanned — a cycle needs at least two)")
@@ -917,6 +919,11 @@ class ImportsRenderer:
         files_lost_count = metadata.get('files_lost_count', 0)
         lost = set(metadata.get('files_lost', []))
         files_failed_count = metadata.get('files_failed_count', 0) - files_lost_count
+        outside = metadata.get('files_failed_outside_target_count')
+        if outside:
+            print(f"  {outside} file(s) outside this path failed to parse; they cannot change these imports, "
+                  "so they do not make the listing incomplete")
+            print()
         if files_failed_count:
             # Their recovered imports ARE in the graph (BACK-1460); only what sat
             # inside the error region is missing (BACK-1598 wording).
@@ -1831,7 +1838,7 @@ class ImportsAdapter(ResourceAdapter):
         }
 
         return self._build_response(
-            'imports', files=imports_by_file,
+            'imports', failures='target', files=imports_by_file,
             edge_rule=view._edge_rule(LAZY_EXCLUDE, 'Cycles Found uses static imports between', cycles=True))
 
     def _format_fan_in(self) -> Dict[str, Any]:
