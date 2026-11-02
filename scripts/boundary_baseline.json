@@ -29,7 +29,7 @@
   "reveal/adapters/cpanel/renderer.py": 1,
   "reveal/checks.py": 2,
   "reveal/display/element.py": 1,
-  "reveal/file_handler.py": 6,
+  "reveal/file_handler.py": 5,
   "reveal/logging_setup.py": 1,
   "reveal/nav_handlers.py": 2
  },
