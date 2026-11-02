@@ -205,3 +205,18 @@ def test_stdio_source_failures_recovery_ranges_and_private_masking(tmp_path, sou
         assert not recovered.is_error and 'logging.info' in _text(recovered)
     _stdio(tmp_path, scenario, code=_SERVER)
     assert 'PRIVATE_STDIO_NAV_MARKER' in (tmp_path / 'server-stderr.txt').read_text(encoding='utf-8')
+
+
+@pytest.mark.parametrize('exit_zero,expected', [(False, 3), (True, 0)])
+def test_check_read_override_stays_outside_nav_adoption(source, monkeypatch, exit_zero, expected):
+    import errno
+    import reveal.registry as registry
+
+    def construct(path):
+        raise PermissionError(errno.EACCES, 'controlled check read', path)
+
+    monkeypatch.setattr(registry, 'get_analyzer', lambda *args, **kwargs: construct)
+    extra = ('--exit-zero',) if exit_zero else ()
+    run = _run_reveal_direct('check', source, *extra, '--format', 'json')
+    assert run.returncode == expected and run.stdout == ''
+    assert run.stderr.count('controlled check read') == 1

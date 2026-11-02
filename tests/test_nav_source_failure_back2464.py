@@ -128,3 +128,23 @@ def test_handle_file_adopts_existing_nav_predicate_without_mutating_args(tmp_pat
     with pytest.raises(NavSourceFailure):
         handle_file(path, ':2', False, 'text', args)
     assert reads == [path] and vars(args) == original
+
+
+@pytest.mark.parametrize('filename_kind', ['dependency', 'unknown'])
+def test_missing_dependency_or_unknown_filename_is_analysis_not_request(tmp_path, monkeypatch, filename_kind):
+    import errno
+    from reveal.file_handler import _get_analyzer_or_exit
+    import reveal.registry as registry
+
+    requested = tmp_path / 'requested.py'
+    dependency = tmp_path / 'parser-data.bin'
+
+    def construct(path):
+        filename = str(dependency) if filename_kind == 'dependency' else None
+        raise FileNotFoundError(errno.ENOENT, 'required constructor data missing', filename)
+
+    monkeypatch.setattr(registry, 'get_analyzer', lambda *args, **kwargs: construct)
+    with pytest.raises(NavSourceFailure) as caught:
+        _get_analyzer_or_exit(str(requested), True, nav_source=True)
+    assert caught.value.execution_facts == failure_execution_facts(FailureCause.ANALYSIS)
+    assert str(dependency) not in caught.value.public_diagnostic
