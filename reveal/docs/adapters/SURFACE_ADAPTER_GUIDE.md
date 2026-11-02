@@ -134,8 +134,9 @@ rather than substitute zero or one. Parse mode and the contract version stay unc
 A healthy empty scan keeps its existing complete outcome; census loss does not prove that Surface
 rows or parser results are missing.
 
-`--output json=PATH` works with human output in either spelling. Primary JSON retains
-its existing no-op for that flag. The subcommand's JSON `type` is now `surface_scan`,
+`--output json=PATH` writes the answer beside human or JSON stdout in either
+spelling; successful JSON mirrors equal stdout. A failed requested write preserves
+the primary answer and exits 3. The subcommand's JSON `type` is now `surface_scan`,
 matching the URI form; consumers of the former `surface` identity should update.
 Stdin and mixed URI batches retain their existing exit policy.
 

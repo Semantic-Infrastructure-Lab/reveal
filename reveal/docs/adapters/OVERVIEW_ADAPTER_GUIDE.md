@@ -108,9 +108,9 @@ Completed work exits 0; invalid resources or parameters exit 2; required analysi
 or requested output failure exits 3. `--fail-on none` is the sole supported gate.
 A map has no adverse-findings verdict.
 
-Human-primary `--output json=PATH` writes the same bounded map as a JSON artifact;
-a failed artifact write exits 3. Primary JSON retains its existing JSON-file-sink
-no-op. `--max-items` and URI `--head` have no sliceable outer list: they disclose
+`--output json=PATH` writes the bounded map beside human or JSON stdout;
+successful JSON mirrors equal stdout. A failed artifact write preserves the primary
+answer and exits 3. `--max-items` and URI `--head` have no sliceable outer list: they disclose
 no effect. Use top to expand or reduce the map's graph sections.
 
 ## Compare Against a Git Ref
