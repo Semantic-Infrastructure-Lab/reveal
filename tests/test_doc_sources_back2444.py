@@ -10,7 +10,8 @@ import pytest
 
 from doc_command_fixture import build_navigation_cohort_tree
 from test_example_recipes_run import (
-    DOC_SOURCE_COHORT, _documented_commands, _documented_sources, _source_cohort_reason,
+    DOC_SOURCE_COHORT, DOC_NAMED_SOURCE_COHORT,
+    _documented_commands, _documented_sources, _source_cohort_reason,
     _assert_text_as_written,
 )
 from test_output_contract_compliance import _Harness
@@ -108,6 +109,8 @@ def test_qualified_source_command_answers(navigation_harness, source, query):
 
 def test_new_source_exclusions_are_explicit_and_legacy_sources_still_run():
     rows = list(_documented_commands())
+    identities = {(source, shlex.join(tokens)) for source, _, tokens, _ in rows}
+    assert DOC_NAMED_SOURCE_COHORT <= identities
     reasons = [_source_cohort_reason(source, tokens) for source, _, tokens, _ in rows]
     assert any(reason and 'adapters/' in reason for reason in reasons)
     assert all(reason is None for (source, _, _, _), reason in zip(rows, reasons)

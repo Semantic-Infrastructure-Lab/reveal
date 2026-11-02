@@ -584,10 +584,17 @@ DOC_SOURCE_COHORT = {
 }
 
 
+# BACK-2182 already executes and checks this example through the named fixture.
+DOC_NAMED_SOURCE_COHORT = {
+    ('adapters/CALLS_ADAPTER_GUIDE.md',
+     'reveal calls src/ --callees validate_item --depth 2 --detail'),
+}
+
+
 def _source_cohort_reason(source, tokens):
     if source == 'AGENT_HELP.md' or source.startswith('guides/'):
         return None
-    if (source, shlex.join(tokens)) in DOC_SOURCE_COHORT:
+    if (source, shlex.join(tokens)) in DOC_SOURCE_COHORT | DOC_NAMED_SOURCE_COHORT:
         return None
     return f'source cohort not yet qualified: {source} (BACK-1365)'
 
