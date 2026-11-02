@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- `--effects`, `--effects --in-loops` and `--effects --state` replace `--sideeffects`, `--fanout` and `--statewrites`; the old spellings still run with a replacement note and preserve their existing answers. The same modes accept typed `mode`, `transitive` and `depth` controls in `reveal_nav`; new requests reject undefined combinations, unused modifiers and invalid depths. (BACK-2461)
+
 - `--sideeffects --transitive` and `--boundary --transitive` now identify callee effects with a JSON `file` and a text `[file:line]` location. Previously they showed callee line numbers without their source files; paths now follow the target's relative or absolute spelling. (BACK-2458)
 
 - `check --select M102` now discloses importer-file read failures and warns that orphan findings may be false positives, instead of presenting incomplete import evidence as a completed scan. Findings remain visible, the CLI exits 3 unless `--exit-zero` is selected, and the next host request retries the incomplete inventory. (BACK-2454)
