@@ -41,6 +41,7 @@
 #   scripts/ci-local.sh --push              # the push gate (~6 min, see below)
 #   scripts/ci-local.sh --push --calls-evidence FILE  # external calls measurement record
 #   scripts/ci-local.sh --push --skip-calls-gate REASON # visible, persistently logged override
+#   scripts/ci-local.sh --skip-cpu-gate REASON          # logged override of the pytest-CPU verdict (never fails)
 # Set REVEAL_CALLS_GATE_BASELINE to the external calls runner's baseline JSON.
 # Evidence is bound to this clean checkout, HEAD/tree and the primary CI interpreter.
 #   scripts/ci-local.sh --fresh             # rebuild the venv from scratch
@@ -88,6 +89,8 @@ PUSH=0
 CALLS_EVIDENCE="${REVEAL_CALLS_GATE_EVIDENCE:-}"
 CALLS_SKIP=""
 CALLS_OPTIONS=0
+# Exported so the --push gate's inner default run (`"$0"`) sees the same logged override.
+CPU_SKIP="${REVEAL_CPU_GATE_SKIP:-}"
 PYTEST_TARGETS=(tests/)
 EXPLICIT_TARGETS=0
 while [[ $# -gt 0 ]]; do
@@ -101,6 +104,7 @@ while [[ $# -gt 0 ]]; do
         --push) PUSH=1; shift ;;
         --calls-evidence) [[ $# -ge 2 && -n "$2" ]] || { echo "--calls-evidence needs a path" >&2; exit 2; }; CALLS_EVIDENCE="$2"; CALLS_OPTIONS=1; shift 2 ;;
         --skip-calls-gate) [[ $# -ge 2 && -n "$2" ]] || { echo "--skip-calls-gate needs a reason" >&2; exit 2; }; CALLS_SKIP="$2"; CALLS_OPTIONS=1; shift 2 ;;
+        --skip-cpu-gate) [[ $# -ge 2 && -n "$2" ]] || { echo "--skip-cpu-gate needs a reason" >&2; exit 2; }; CPU_SKIP="$2"; export REVEAL_CPU_GATE_SKIP="$2"; shift 2 ;;
         --) shift; [[ $# -gt 0 ]] && { PYTEST_TARGETS=("$@"); EXPLICIT_TARGETS=1; }; break ;;
         -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -369,10 +373,14 @@ if [[ $PRIMARY -eq 1 ]]; then
 fi
 
 # The suite runs last: the quick lints and ratchets above fail in seconds, the suite takes minutes.
-# CPU seconds (user+sys, xdist workers included) are logged beside wall time: they barely move
-# when other jobs share the machine, so they compare across runs where wall time cannot.
+# CPU seconds (user+sys, xdist workers included) are logged beside wall time. They move less than
+# wall time when other jobs share the machine, but not nothing: 12 busy processes added 8-17% to a
+# fixed test subset, and full runs of near-identical code spread 2,193-2,583 s. Hence the verdict
+# below (scripts/check_pytest_cpu.py) is wide, median-based and load-aware.
 if [[ $RUN_TESTS -eq 1 ]]; then
     step "Run tests (pytest ${PYTEST_TARGETS[*]})"
+    CPU_LOAD1=$("$PY" -c 'import os; print(os.getloadavg()[0])' 2>/dev/null || echo 0)
+    echo "host load at suite start: ${CPU_LOAD1} (1-min average, $(nproc 2>/dev/null || echo '?') CPUs)" | tee -a "$LOG"
     TIME_CMD=(); command -v /usr/bin/time >/dev/null 2>&1 && TIME_CMD=(/usr/bin/time -f '%U %S' -o "$LOG.cpu")
     "${TIME_CMD[@]}" "$PY" -m pytest "${PYTEST_TARGETS[@]}" -q -p no:cacheprovider -n auto \
         --durations=0 --durations-min=0.5 >>"$LOG" 2>&1 \
@@ -381,24 +389,22 @@ if [[ $RUN_TESTS -eq 1 ]]; then
     if [[ -s "$LOG.cpu" ]]; then
         read -r CPU_USER CPU_SYS <"$LOG.cpu"
         printf 'pytest CPU: %ss user + %ss sys\n' "$CPU_USER" "$CPU_SYS" | tee -a "$LOG"
-        printf '%s\t%s\t%s\t%s\t%s\n' "$(date -Iseconds)" "py$PY_VERSION${LP_VERSION:+-lp$LP_VERSION}" \
-            "$(awk -v u="$CPU_USER" -v s="$CPU_SYS" 'BEGIN{printf "%.0f", u+s}')" "pytest CPU seconds" 0 \
-            >>"$LOG_DIR/timings.tsv"
+        CPU_NOW=$(awk -v u="$CPU_USER" -v s="$CPU_SYS" 'BEGIN{printf "%.0f", u+s}')
         rm -f "$LOG.cpu"
         # BACK-2159: the suite grew 30% in one slice (scope=root fixtures) and only a human reading
-        # timings.tsv noticed. The full 3.12 suite is compared with .github/pytest_cpu_baseline.txt
-        # (2,100 s since 10-27: 28,988 tests, four green runs at 1,980-2,198 s; it was 1,850 from the
-        # 10-21 median of 1,718-1,910 s): warn at +8%, fail at +15%. A suite
-        # that really grew raises the file in the commit that grew it, with the reason in the message.
+        # timings.tsv noticed. The full 3.12 suite is judged against .github/pytest_cpu_baseline.txt
+        # by scripts/check_pytest_cpu.py: fail on one run over 125% or a five-run median over 115%,
+        # warn over 110%, warn-only on a busy host, `--skip-cpu-gate REASON` recorded. A suite that
+        # really grew raises the file in the commit that grew it, with the reason in the message.
         if [[ $PRIMARY -eq 1 && "${PYTEST_TARGETS[*]}" == "tests/" && -f .github/pytest_cpu_baseline.txt ]]; then
-            CPU_BASE=$(cat .github/pytest_cpu_baseline.txt)
-            CPU_NOW=$(awk -v u="$CPU_USER" -v s="$CPU_SYS" 'BEGIN{printf "%.0f", u+s}')
-            echo "pytest CPU vs baseline: ${CPU_NOW}s (baseline ${CPU_BASE}s)" | tee -a "$LOG"
-            if awk -v n="$CPU_NOW" -v b="$CPU_BASE" 'BEGIN{exit !(n > b*1.15)}'; then
-                fail "pytest CPU ${CPU_NOW}s is over 115% of the baseline ${CPU_BASE}s (.github/pytest_cpu_baseline.txt): find the slow tests in the log's --durations, or raise the baseline with a reason"
-            elif awk -v n="$CPU_NOW" -v b="$CPU_BASE" 'BEGIN{exit !(n > b*1.08)}'; then
-                echo "WARN: pytest CPU ${CPU_NOW}s is over 108% of the baseline ${CPU_BASE}s" | tee -a "$LOG"
-            fi
+            CPU_PY_TAG="py$PY_VERSION${LP_VERSION:+-lp$LP_VERSION}"
+            "$PY" "$SCRIPT_DIR/check_pytest_cpu.py" --cpu "$CPU_NOW" --baseline-file .github/pytest_cpu_baseline.txt \
+                --timings "$LOG_DIR/timings.tsv" --py-tag "$CPU_PY_TAG" --load1 "$CPU_LOAD1" \
+                ${CPU_SKIP:+--skip-reason "$CPU_SKIP"} 2>&1 | tee -a "$LOG"
+            [[ "${PIPESTATUS[0]}" -eq 0 ]] || fail "pytest CPU verdict (details above)"
+        else
+            printf '%s\t%s\t%s\t%s\t%s\n' "$(date -Iseconds)" "py$PY_VERSION${LP_VERSION:+-lp$LP_VERSION}" \
+                "$CPU_NOW" "pytest CPU seconds" 0 >>"$LOG_DIR/timings.tsv"
         fi
     fi
 fi
