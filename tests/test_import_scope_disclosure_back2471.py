@@ -53,3 +53,15 @@ def test_fully_classified_sibling_has_no_unknown_scope_warning(tmp_path):
     assert answer['total'] == 1
     assert answer['edge_rule']['unclassified_edges'] == 0
     assert 'Import scope is' not in answer['edge_rule']['text']
+
+
+def test_ungated_rule_distinguishes_default_coverage_from_opt_in_pilots(tmp_path):
+    root = _tree(tmp_path / 'project', {'target.rb': '# target\n', 'source.rb': "require_relative 'target'\n"})
+    uri = f'imports://{to_posix(root)}?importers&scope=path'
+    out = _run_reveal_direct(uri, '--format', 'json')
+    assert out.returncode == 0, out.stderr
+    rule = json.loads(out.stdout)['edge_rule']
+    assert rule['unclassified_edges'] == 0
+    assert rule['ungated_languages'] == ['ruby'] and rule['ungated_edges'] == 1
+    assert 'Not gated by default recall checks: ruby' in rule['text']
+    assert 'no recall oracle measures them' not in rule['text']
