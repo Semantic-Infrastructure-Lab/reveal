@@ -177,7 +177,9 @@ class RuleRegistry:
         sys.modules[module_name] = module
         executed = False
         try:
-            spec.loader.exec_module(module)
+            # External rules can change between requests without changing timestamp
+            # or byte length. Compile their source, bypassing timestamp-based .pyc reuse.
+            exec(compile(module_file.read_bytes(), str(module_file), 'exec'), module.__dict__)
             executed = True
         finally:
             # Unregister a module whose top-level code failed (any exception,
