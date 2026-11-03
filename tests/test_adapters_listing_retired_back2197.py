@@ -15,7 +15,8 @@ from reveal.cli.handlers.introspection import (
 )
 from reveal.cli.invocation import RETIREMENTS
 
-RETIRED = {k.split(':', 1)[1]: v for k, v in RETIREMENTS.items() if k.startswith('scheme:')}
+# A removed row (python://, BACK-2225) has no adapter left to list.
+RETIRED = {k.split(':', 1)[1]: v for k, v in RETIREMENTS.items() if k.startswith('scheme:') and not v.removed}
 RETIRED_HEADING = 'Retired adapters'
 OPS_HEADING = 'Hosting and server operations'
 

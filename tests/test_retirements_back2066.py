@@ -8,6 +8,7 @@ below inject test-only rows (one per kind) so the seam is proven independently o
 holds today.
 """
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,7 @@ def source(tmp_path):
 
 def _retire(monkeypatch, key, old, replacement='NEW SPELLING', stage='note'):
     monkeypatch.setitem(RETIREMENTS, key, Retirement(old, replacement, stage))
-    return f'{old} {"was removed" if stage == "error" else "is deprecated"}; use {replacement}.'
+    return f'{old} is deprecated; use {replacement}.'
 
 
 def _notes(stderr, text):
@@ -255,10 +256,14 @@ def test_every_production_row_is_exercised_and_prints_once(source):
         assert [w['field'] for w in _warnings(json.loads(result.stdout))] == [key]
 
 
-def test_an_error_row_says_removed_and_a_note_row_says_deprecated():
-    note = Retirement('old://', 'new://')
-    assert note.text == 'old:// is deprecated; use new://.'
-    assert Retirement('old://', 'new://', 'error').text == 'old:// was removed; use new://.'
+def test_a_removed_row_says_removed_and_is_an_error_from_the_start():
+    assert Retirement('old://', 'new://').text == 'old:// is deprecated; use new://.'
+    # The cut wording of a renamed spelling does not change; only a removed one says so.
+    assert Retirement('old://', 'new://', 'error').text == 'old:// is deprecated; use new://.'
+    assert Retirement('old://', 'new://', 'error', removed=True).text == 'old:// was removed; use new://.'
+    with pytest.raises(ValueError):
+        Retirement('old://', 'new://', removed=True)
+    assert [k for k, row in RETIREMENTS.items() if row.removed] == ['scheme:python']
     assert RETIREMENTS['scheme:python'].stage == 'error'
     assert RETIREMENTS['scheme:python'].text.startswith('python:// was removed; use python -m site')
 
@@ -330,9 +335,9 @@ def test_the_log_is_per_invocation(monkeypatch, source):
 
 @pytest.mark.parametrize('key', sorted(PRODUCTION_CASES))
 def test_a_production_row_at_the_error_stage_exits_2_with_its_text(monkeypatch, source, key):
-    """The cut release flips a row's stage and nothing else: the same replacement, worded as removed, exit 2, no
-    answer. A row already at the error stage (python://) is run as it ships."""
-    monkeypatch.setitem(RETIREMENTS, key, Retirement(RETIREMENTS[key].old, RETIREMENTS[key].replacement, 'error'))
+    """The cut release flips a row's stage and nothing else: same text, exit 2, no answer. A removed row
+    (python://) is already at the error stage and runs as it ships."""
+    monkeypatch.setitem(RETIREMENTS, key, replace(RETIREMENTS[key], stage='error'))
     result = _run_reveal_direct(*PRODUCTION_CASES[key](str(source)), '--format', 'json')
     assert result.returncode == 2
     assert f'error: {RETIREMENTS[key].text}' in result.stderr

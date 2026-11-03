@@ -371,9 +371,10 @@ one parseable document and carries the same fact as a `meta.warnings` entry:
 `field` is the table key (`flag:--search`, `param:calls.root`, ...), so two retired spellings are
 two entries. The MCP server never writes the note to stderr: a JSON result carries the same
 entry, and a text result ends with a `[note: ...]` line. At the `error` stage (the cut release) the
-spelling no longer answers: it prints `error: <old> was removed; use <replacement>.` and exits 2.
-A spelling removed outright starts there (`python://`, BACK-2225). A `phase7` row is recorded and
-prints nothing yet.
+same text is an error and the exit code is 2. A spelling deleted outright rather than renamed is a
+`removed` row: it is at the `error` stage from the start and prints
+`error: <old> was removed; use <replacement>.` (`python://`, BACK-2225). A `phase7` row is recorded
+and prints nothing yet.
 
 ---
 

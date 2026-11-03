@@ -194,9 +194,9 @@ FINDINGS_BY_DEFAULT = ('check', 'review', 'health')
 #   mcp:<tool>                   reveal_trace
 # A row's stage says what the spelling does now: ``note`` prints the note and answers as before,
 # ``phase7`` is recorded and prints nothing yet (MCP tool names stay until Phase 7), ``error``
-# is the cut release: exit 2 naming the same replacement, worded as removed rather than
-# deprecated. A spelling removed outright (python://) starts at ``error``. retirement_note() is
-# the one reader.
+# is the cut release: exit 2 with the same text. A ``removed`` row is a spelling deleted outright
+# rather than renamed (python://): it is at ``error`` from the day it lands and its text says it was
+# removed. retirement_note() is the one reader.
 STAGES = ('note', 'phase7', 'error')
 RETIREMENT_KEY = re.compile(
     r'^(?:subcommand:[a-z][a-z0-9-]*'
@@ -210,22 +210,25 @@ RETIREMENT_KEY = re.compile(
 
 @dataclass(frozen=True)
 class Retirement:
-    """One retired spelling: *old* as the user types it, what replaces it, and its stage."""
+    """One retired spelling: *old* as the user types it, what replaces it, and its stage.
+    ``removed`` marks a spelling deleted outright (no adapter answers it any more)."""
     old: str
     replacement: str
     stage: str = 'note'
+    removed: bool = False
 
     def __post_init__(self) -> None:
         if not self.old or not self.replacement:
             raise ValueError('a retirement names the old spelling and its replacement')
         if self.stage not in STAGES:
             raise ValueError(f'retirement stage {self.stage!r} is not one of {STAGES}')
+        if self.removed and self.stage != 'error':
+            raise ValueError('a removed spelling cannot answer: its stage is error')
 
     @property
     def text(self) -> str:
-        """The one wording, for the note, the error and the JSON warning. An ``error`` row no
-        longer answers, so it says the spelling was removed instead of deprecated."""
-        state = 'was removed' if self.stage == 'error' else 'is deprecated'
+        """The one wording, for the note, the error and the JSON warning."""
+        state = 'was removed' if self.removed else 'is deprecated'
         return f'{self.old} {state}; use {self.replacement}.'
 
 
@@ -308,7 +311,7 @@ RETIREMENTS: Dict[str, Retirement] = {
     # python:// was removed outright, not moved (D4, BACK-2225, Scott 2026-10-25): no reveal scheme answers its
     # questions, so the row names the interpreter's own tools and starts at the error stage.
     'scheme:python': Retirement('python://', 'python -m site (sys.path), python -m pip list or python -m pip show NAME '
-                                '(packages); no reveal scheme replaces it', stage='error'),
+                                '(packages); no reveal scheme replaces it', stage='error', removed=True),
 }
 
 
