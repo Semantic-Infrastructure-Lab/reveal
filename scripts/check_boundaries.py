@@ -115,7 +115,7 @@ Code under ``if __name__ == '__main__':`` is exempt from ``exit`` and ``print``.
 Suppress one deliberate site with ``# boundary-ok: <rule> -- <why>`` on any line of the
 call, or on a comment line directly above it.
 Not detected: aliased callables (``w = os.walk``), ``Path.walk`` (3.12+, and reveal
-supports 3.10), and recursion across modules.
+supports 3.11), and recursion across modules.
 
 Run:
     python scripts/check_boundaries.py                   # exits 1 on regression or stale baseline

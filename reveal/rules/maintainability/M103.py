@@ -16,10 +16,7 @@ import re
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib  # Python < 3.11 fallback
+import tomllib
 
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ..base_mixins import toml_table

@@ -430,13 +430,13 @@ duplicates CI's Linux legs, so it is a tool to reproduce a CI failure or work of
 
 ```bash
 scripts/ci-local.sh                # Python 3.12, latest deps: the CI-only steps, then pytest
-scripts/ci-local.sh --matrix       # 3.10, 3.12, 3.14, then 3.12 @ the language-pack 1.8.1 floor (minutes per leg; use tmux)
+scripts/ci-local.sh --matrix       # 3.11, 3.12, 3.14, then 3.12 @ the language-pack 1.8.1 floor (minutes per leg; use tmux)
 scripts/ci-local.sh --matrix -- tests/test_foo.py   # only these tests, per leg
 scripts/ci-local.sh --lp 1.8.1     # force a tree-sitter-language-pack version (CI's floor leg)
 REVEAL_TEST_SHARD=1/2 pytest tests/  # one half of the suite, as a Windows CI leg runs it
 ```
 
-Classes that pass a 3.12 run and fail elsewhere: 3.10 rejects PEP 701 f-strings (a nested
+Classes that pass a 3.12 run and fail elsewhere: 3.11 rejects PEP 701 f-strings (a nested
 same-type quote), and 3.14 tokenizes t-strings natively. On the language-pack 1.8.1 floor
 `node.start_byte` is a bound method, not a value, so a bare read passes everywhere but CI's compat
 leg -- read Node accessors with `_zero_arg(node, 'start_byte')` (rule V040 in `reveal reveal:// --check`,

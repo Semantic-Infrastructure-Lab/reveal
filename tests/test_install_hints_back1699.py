@@ -27,10 +27,7 @@ from pathlib import Path
 
 import pytest
 
-try:
-    import tomllib
-except ImportError:  # Python 3.10: tomli is a base dependency there (pyproject.toml)
-    tomllib = pytest.importorskip('tomli', reason='no tomllib/tomli to read pyproject.toml')
+import tomllib
 
 pytestmark = pytest.mark.conformance
 

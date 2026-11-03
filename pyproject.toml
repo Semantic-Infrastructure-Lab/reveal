@@ -7,7 +7,7 @@ name = "reveal-cli"
 version = "0.133.0"
 description = "How AI agents understand codebases without wasting tokens — local-first, adapter-driven, progressive disclosure enforced by design"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
     {name = "Progressive Reveal Contributors", email = "scottsen@users.noreply.github.com"}
@@ -22,7 +22,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -34,7 +33,6 @@ classifiers = [
 dependencies = [
     "pyyaml>=6.0",
     "jsonschema>=4.0",  # Config schema validation
-    "tomli>=2.0.0;python_version<'3.11'",  # TOML support for Python <3.11
     "rich>=13.0.0",  # For beautiful terminal output
     "tree-sitter>=0.25.2,<0.26.0",  # Semantic parsing for all languages. Upper bound: 0.26.0 has a reference-counting bug in tree_sitter/binding/point.c (Point.row/.column getters return a borrowed ref instead of a new ref) that corrupts pymalloc's free-list under real workloads -- non-deterministic SIGSEGV/SIGBUS, node-count/size-dependent (BACK-1161). Root-caused and reproduced (11-line repro, ~100 AST nodes) 2026-08-22; fixed upstream unreleased as py-tree-sitter commit afb3836 (merged 2026-07-08, 8 days after v0.26.0 shipped) -- lift this ceiling once a released version contains that commit.
     "tree-sitter-language-pack>=1.8.1",  # Language grammar support (1.x: 305 languages, abi3 wheel). Ceiling that used to sit at <1.12.5 is gone -- BACK-620/BACK-1158 migrated reveal onto the new core-tree-sitter accessor API (zero-arg Node/TreeCursor accessors as properties, parse() takes bytes) that language-pack>=1.12.5 exposes, so pinning language-pack low to keep the vendored old-API parser is no longer needed. See BACK-573 design doc for the full migration arc.
@@ -50,8 +48,7 @@ dev = [
     "black>=23.0",
     "ruff>=0.1.0",
     "pymysql>=1.0.0",  # Required for MySQL adapter tests
-    "dnspython>=2.0.0",  # Required for DNS adapter tests
-    "dnspython>=2.9.0;python_version>='3.11'",  # CVE-2026-114605 fixed in 2.9.0, which needs Python 3.11+
+    "dnspython>=2.9.0",  # Required for DNS adapter tests. CVE-2026-114605 is fixed in 2.9.0, which needs Python 3.11+
     "mcp>=2.0.0",  # Required for MCP server tests. Migrated off FastMCP to mcp.server.MCPServer (BACK-895).
     "pygit2>=1.14.0",  # Required for git:// adapter tests
     "openpyxl>=3.1.0",  # Required for xlsx:// tests (else they importorskip silently in CI)
@@ -75,8 +72,7 @@ git = [
 ]
 # DNS records for domain:// (/dns, /mail, /ns-audit); domain:// degrades without it
 dns = [
-    "dnspython>=2.0.0",  # DNS resolver; graceful degradation if absent
-    "dnspython>=2.9.0;python_version>='3.11'",  # CVE-2026-114605 fixed in 2.9.0, which needs Python 3.11+; 3.10 has no fixed release
+    "dnspython>=2.9.0",  # DNS resolver; graceful degradation if absent. CVE-2026-114605 is fixed in 2.9.0, which needs Python 3.11+
 ]
 # Domain registration data (domain:// /whois element and registrar info)
 whois = [
@@ -189,14 +185,14 @@ exclude_lines = [
 
 [tool.black]
 line-length = 100
-target-version = ['py310', 'py311', 'py312']
+target-version = ['py311', 'py312']
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false  # Progressive: enable after fixing current issues

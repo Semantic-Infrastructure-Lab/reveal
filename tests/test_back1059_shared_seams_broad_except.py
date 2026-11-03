@@ -63,14 +63,12 @@ def test_config_load_file_does_not_swallow_a_bug(tmp_path, monkeypatch):
         cfg.RevealConfig._load_file(ok)
 
 
-@pytest.mark.skipif(cfg.tomllib is None, reason="no TOML reader")
 def test_pyproject_loader_still_turns_bad_toml_into_none(tmp_path):
     bad = tmp_path / "pyproject.toml"
     bad.write_text("[tool.reveal\n", encoding="utf-8")
     assert cfg.RevealConfig._try_load_pyproject_reveal(bad) is None
 
 
-@pytest.mark.skipif(cfg.tomllib is None, reason="no TOML reader")
 def test_pyproject_loader_does_not_swallow_a_bug(tmp_path, monkeypatch):
     ok = tmp_path / "pyproject.toml"
     ok.write_text("[tool.reveal]\nx = 1\n", encoding="utf-8")

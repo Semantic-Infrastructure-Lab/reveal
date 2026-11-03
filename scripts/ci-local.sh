@@ -7,7 +7,7 @@
 # job. The pieces that differ, and what this script does about each:
 #   - dependency versions  -> a dedicated venv, `pip install -e ".[dev]"` with eager upgrades,
 #                             exactly as CI installs (optionally forcing a language-pack version)
-#   - Python version       -> --python picks one of CI's matrix (3.10 / 3.12 / 3.14);
+#   - Python version       -> --python picks one of CI's matrix (3.11 / 3.12 / 3.14);
 #                             --matrix runs all three, plus CI's language-pack floor leg (below)
 #   - CI-only steps        -> the primary leg (3.12, no --lp) also runs the
 #                             V-series self-validation (incl. the Windows/accessor/encoding/env rules V039-V042), shared-seam, complexity, doc-hygiene and B006 ratchets, which CI runs only on
@@ -32,7 +32,7 @@
 # Usage:
 #   scripts/ci-local.sh                     # Python 3.12, latest deps (CI's ubuntu/3.12 `test` leg)
 #   scripts/ci-local.sh --python 3.14
-#   scripts/ci-local.sh --matrix            # 3.10, 3.12, 3.14, then 3.12 @ language-pack 1.8.1 (~8 min: legs measured 92-113 s of pytest each; run it in tmux)
+#   scripts/ci-local.sh --matrix            # 3.11, 3.12, 3.14, then 3.12 @ language-pack 1.8.1 (~8 min: legs measured 92-113 s of pytest each; run it in tmux)
 #   scripts/ci-local.sh --matrix -- tests/test_foo.py   # fast: only these pytest targets per leg
 #   scripts/ci-local.sh --lp 1.12.5         # force tree-sitter-language-pack (CI's compat-matrix)
 #   scripts/ci-local.sh --matrix --changed  # optional quick check (~1 min): only the test files you added/edited
@@ -58,7 +58,7 @@
 # Push, keep working, and let scripts/ci-watch.sh report the GitHub run.
 #
 # What only --matrix catches (both reached GitHub CI from a green 3.12 run, BACK-1438):
-#   - 3.10: PEP 701 f-strings (same quote nested inside, backslashes in {...}) are 3.12+ syntax
+#   - 3.11: PEP 701 f-strings (same quote nested inside, backslashes in {...}) are 3.12+ syntax
 #   - 3.14: tokenize/ast read PEP 750 t-strings and PEP 758 bare except natively, so code or
 #           test expectations written around their absence differ
 # What only the language-pack floor leg (3.12 @ 1.8.1, CI's compat-matrix `include`) catches:
@@ -75,7 +75,7 @@
 # Bare node.start_byte etc. (floor leg above) is also linted in seconds: V040 (reveal:// --check).
 set -euo pipefail
 
-MATRIX_VERSIONS=(3.10 3.12 3.14)  # keep in step with .github/workflows/test.yml
+MATRIX_VERSIONS=(3.11 3.12 3.14)  # keep in step with .github/workflows/test.yml
 FLOOR_LP=1.8.1                    # the compat matrix's `include` leg (3.12 @ pyproject's floor); same file
 
 PY_VERSION="3.12"

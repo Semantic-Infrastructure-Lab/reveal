@@ -183,12 +183,12 @@ fi
 # The steps above run in THIS machine's environment, which drifts from CI (older
 # tree-sitter-language-pack => vendored Node API; CI-only V-series/B006/Windows-lint steps).
 # ci-local.sh reproduces CI's environment and steps, on every Python in CI's matrix: a 3.12-only
-# run missed py3.10/3.14 failures that GitHub then caught (BACK-1438).
+# run missed py3.11/3.14 failures that GitHub then caught (BACK-1438).
 # When GitHub's Tests run is already green for HEAD, it has run every --matrix leg plus
 # macOS and Windows, which --matrix can't, so the local run is skipped (BACK-1646).
 # release.sh refuses a HEAD without that green run anyway (BACK-578). No run for HEAD
 # (unpushed, or gh unavailable): --matrix runs. SKIP_CI_PARITY=1 skips it regardless.
-check_step "CI Parity (CI environment + CI-only steps, Python 3.10/3.12/3.14)" 12 12
+check_step "CI Parity (CI environment + CI-only steps, Python 3.11/3.12/3.14)" 12 12
 
 HEAD_SHA=$(git rev-parse HEAD)
 HEAD_CI=$(gh run list --workflow test.yml --json headSha,conclusion -L 100 \

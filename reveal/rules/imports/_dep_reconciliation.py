@@ -259,10 +259,7 @@ def python_declared_unused(
 
 def _raw_rust_dependency_names(crate_root: Path) -> FrozenSet[str]:
     """Dependency table keys straight out of Cargo.toml, original spelling."""
-    try:
-        import tomllib
-    except ImportError:
-        import tomli as tomllib  # type: ignore  # Python < 3.11 fallback
+    import tomllib
 
     try:
         with open(crate_root / 'Cargo.toml', 'rb') as f:

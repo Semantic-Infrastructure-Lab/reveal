@@ -25,7 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ['3.10', '3.12', '3.14']
+        python-version: ['3.11', '3.12', '3.14']
         shard: ['']
         include:
           # BACK-1357: ubuntu-latest becomes Ubuntu 26.04 from 2026-10-19
@@ -39,8 +39,8 @@ jobs:
           # whole run's wall time, so each Windows leg runs as two halves split by test
           # file (REVEAL_TEST_SHARD, tests/conftest.py). Every Python version stays:
           # Windows 3.12 broke alone twice since 2026-07.
-          - {os: windows-latest, python-version: '3.10', shard: '1/2'}
-          - {os: windows-latest, python-version: '3.10', shard: '2/2'}
+          - {os: windows-latest, python-version: '3.11', shard: '1/2'}
+          - {os: windows-latest, python-version: '3.11', shard: '2/2'}
           - {os: windows-latest, python-version: '3.12', shard: '1/2'}
           - {os: windows-latest, python-version: '3.12', shard: '2/2'}
           - {os: windows-latest, python-version: '3.14', shard: '1/2'}

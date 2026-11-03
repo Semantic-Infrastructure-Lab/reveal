@@ -85,7 +85,7 @@ This validates:
 Fix any errors before proceeding.
 
 `./scripts/pre-release-check.sh` runs the full gate set (its last step, CI parity, runs
-`scripts/ci-local.sh --matrix`: a CI-equivalent venv per Python 3.10/3.12/3.14, the 3.12 @ language-pack 1.8.1 floor, plus the CI-only
+`scripts/ci-local.sh --matrix`: a CI-equivalent venv per Python 3.11/3.12/3.14, the 3.12 @ language-pack 1.8.1 floor, plus the CI-only
 steps -- see CONTRIBUTING.md "Testing". It skips that run when GitHub's Tests run is already
 green for HEAD, which covers every `--matrix` leg plus macOS and Windows (BACK-1646);
 `SKIP_CI_PARITY=1` skips it regardless), including two
@@ -101,10 +101,9 @@ regression-only ratchets that need the maintainer environment:
 #### Dependency vulnerability audit
 
 The weekly/manual `dependency-audit.yml` workflow audits the installed `[all]` dependency graph
-on Linux with Python 3.10 and 3.14; it is not a push/PR gate or an all-platform safety claim.
+on Linux with Python 3.11 and 3.14; it is not a push/PR gate or an all-platform safety claim.
 Its artifacts retain resolved versions, interpreter/tooling identities, JSON findings and text
-diagnostics, including incomplete setup or collection. Findings fail the job, including the known
-Python 3.10 dnspython gap with no compatible fixed release. Dependabot covers GitHub Actions only.
+diagnostics, including incomplete setup or collection. Findings fail the job. Dependabot covers GitHub Actions only.
 Keep the manual pre-release audit: install the selected checkout as a user would, with the auditor
 in a separate throwaway environment so its dependencies cannot be attributed to Reveal:
 

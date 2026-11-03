@@ -559,7 +559,7 @@ def test_m103_parser_bug_escapes(tmp_path, monkeypatch):
     import importlib
     from reveal.rules.maintainability.M103 import M103
     init = _version_project(tmp_path, '[project]\nversion = "2.0.0"\n')
-    # the module's own tomllib alias: stdlib tomllib, or tomli on Python < 3.11
+    # the module's own tomllib binding (stdlib)
     monkeypatch.setattr(importlib.import_module('reveal.rules.maintainability.M103').tomllib,
                         'loads', _boom)
     with pytest.raises(RuntimeError, match='boom'):

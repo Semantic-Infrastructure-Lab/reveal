@@ -34,13 +34,7 @@ try:
 except ImportError:
     yaml = None  # type: ignore[assignment]
 
-try:
-    import tomllib  # Python 3.11+
-except ImportError:
-    try:
-        import tomli as tomllib  # Backport
-    except ImportError:
-        tomllib = None
+import tomllib
 
 logger = logging.getLogger(__name__)
 
@@ -742,7 +736,7 @@ class RevealConfig:
                                    failures: Optional[List[Tuple[str, str]]] = None) -> Optional[Dict[str, Any]]:
         """Load [tool.reveal] section from a pyproject.toml, returning None on error (which
         is recorded in *failures*: an unreadable pyproject.toml hides its [tool.reveal])."""
-        if not pyproject.exists() or not tomllib:
+        if not pyproject.exists():
             return None
         try:
             with open(pyproject, 'rb') as f:

@@ -208,7 +208,6 @@ def test_config_malformed_and_unreadable_are_still_errors(tmp_path, monkeypatch)
 
 # ------------------------------------------------------------ codex system.py
 
-@pytest.mark.skipif(codex_system.tomllib is None, reason='no TOML parser on this interpreter')
 class TestCodexConfig:
     def test_bug_while_masking_propagates(self, tmp_path, monkeypatch):
         (tmp_path / 'config.toml').write_text('model = "x"\n', encoding='utf-8')

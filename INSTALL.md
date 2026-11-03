@@ -52,7 +52,7 @@ pipx install reveal-cli
 
 ## Requirements
 
-- **Python:** 3.10 or higher
+- **Python:** 3.11 or higher
 - **Dependencies:** Automatically installed (PyYAML, rich)
 
 ## What's Included by Default

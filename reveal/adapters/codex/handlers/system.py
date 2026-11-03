@@ -10,13 +10,7 @@ from ....utils.results import ResultBuilder
 from ....utils.secrets import redact_secrets
 from ....utils.path_utils import failure_of
 
-try:
-    import tomllib
-except ImportError:
-    try:
-        import tomli as tomllib
-    except ImportError:
-        tomllib = None
+import tomllib
 
 
 def _path_info(p: Path) -> Dict[str, Any]:
@@ -121,14 +115,6 @@ def get_config(codex_home: Path, query_params: Optional[Dict[str, Any]] = None) 
 
     if not config_path.exists():
         return {**base, 'config': {}, 'error': f'Config not found: {config_path}'}
-
-    if tomllib is None:
-        try:
-            raw = config_path.read_text(encoding='utf-8')
-            return {**base, 'config': {'_raw': raw},
-                    'warning': 'tomllib/tomli not available — returning raw text'}
-        except OSError as exc:
-            return {**base, 'config': {}, 'error': str(exc)}
 
     try:
         with open(config_path, 'rb') as fh:

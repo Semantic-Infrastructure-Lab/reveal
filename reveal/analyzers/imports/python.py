@@ -34,10 +34,7 @@ from ...rules.imports import STDLIB_MODULES
 from ...utils.path_utils import resolve_project_root
 from reveal.utils.lines import split_lines
 
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib  # type: ignore  # Python < 3.11 fallback
+import tomllib
 
 _IMPORTS_CACHE = ImportsDiskCache("python_imports")
 

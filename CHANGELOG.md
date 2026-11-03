@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- reveal now requires Python 3.11 or newer; 3.10 is no longer supported. pip on Python 3.10 keeps installing the last release that supports it. This closes the Python 3.10 `dnspython` advisory gap (the fixed 2.9.0 needs 3.11) and removes the `tomli` backport dependency. (BACK-2481)
+
 - MCP checks and `reveal.api.check` now pick up added, edited and deleted custom rule files between requests instead of retaining stale rules until restart. Edited rule source also refreshes when its timestamp and size are unchanged. (BACK-2473)
 
 - Import results now distinguish default recall coverage from opt-in pilots and correctly say that unclassified edges stay in `lazy=include`/`exclude` and are omitted by `only`. An optional native Ruby relative-import pilot scores a declared importer cohort without adding Ruby to default recall baselines. (BACK-2471)

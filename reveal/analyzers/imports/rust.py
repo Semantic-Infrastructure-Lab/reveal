@@ -22,10 +22,7 @@ from .types import ImportStatement
 from ...utils.request_cache import register_request_cache
 from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
 
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib  # type: ignore  # Python < 3.11 fallback
+import tomllib
 
 # Rust's own "stdlib" — always external, no Cargo.toml needed. `core`/`alloc`
 # are the no_std subsets of `std`; all three are equally never a dependency
