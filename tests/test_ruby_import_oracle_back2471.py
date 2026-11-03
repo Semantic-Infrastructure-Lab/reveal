@@ -173,6 +173,18 @@ def test_native_parser_never_executes_corpus_or_target(tmp_path):
 
 
 @needs_ruby
+def test_ruby_startup_hooks_cannot_execute_corpus_code(tmp_path, monkeypatch):
+    scope, _ = _scope(tmp_path, {'target.rb': '# target\n', 'use.rb': "require_relative 'target'\n"})
+    hook = tmp_path / 'hook.rb'
+    hook.write_text('raise "startup hook must not execute"\n', encoding='utf-8')
+    (tmp_path / 'ripper.rb').write_text('raise "shadow parser must not execute"\n', encoding='utf-8')
+    monkeypatch.setenv('RUBYOPT', '-r' + hook.as_posix())
+    monkeypatch.setenv('RUBYLIB', str(tmp_path))
+    monkeypatch.setenv('RUBYGEMS_GEMDEPS', '-')
+    assert _oracle().build(scope)[0] == {'target.rb': ['use.rb']}
+
+
+@needs_ruby
 def test_tracked_target_loss_is_not_an_unresolved_clean_site(tmp_path):
     scope, _ = _scope(tmp_path, {'target.rb': '# target\n', 'use.rb': "require_relative 'target'\n"})
     (tmp_path / 'target.rb').unlink()
