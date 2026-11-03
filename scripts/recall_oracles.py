@@ -430,6 +430,17 @@ def typescript_lazy_only_edges(scope: Scope) -> Edges:
     return lazy_only
 
 
+def _probe_identity(scope: Scope, probe: Path) -> Coverage:
+    """Identity of one native probe, its declared inputs and exact source population."""
+    population = [[_relative(scope, path), hashlib.sha256(path.read_bytes()).hexdigest()]
+                  for path in sorted(scope.importers)]
+    return {
+        'population_digest': hashlib.sha256(json.dumps(population).encode('utf-8')).hexdigest(),
+        'oracle_digest': hashlib.sha256(probe.read_bytes()).hexdigest(),
+        'config_digest': hashlib.sha256(json.dumps(scope.config, sort_keys=True).encode('utf-8')).hexdigest(),
+    }
+
+
 def _php_scoped_edges(scope: Scope) -> tuple[Edges, Edges, Coverage]:
     """Native tokens qualify static include sites, independently of Reveal parsing."""
     if not shutil.which('php'):
@@ -444,11 +455,7 @@ def _php_scoped_edges(scope: Scope) -> tuple[Edges, Edges, Coverage]:
         raise RuntimeError(f'PHP native token oracle failed: {result.stderr.strip()}')
     output = json.loads(result.stdout)
     coverage = output['coverage']
-    population = [[_relative(scope, path), hashlib.sha256(path.read_bytes()).hexdigest()]
-                  for path in sorted(scope.importers)]
-    coverage['population_digest'] = hashlib.sha256(json.dumps(population).encode('utf-8')).hexdigest()
-    coverage['oracle_digest'] = hashlib.sha256(probe.read_bytes()).hexdigest()
-    coverage['config_digest'] = hashlib.sha256(json.dumps(scope.config, sort_keys=True).encode('utf-8')).hexdigest()
+    coverage.update(_probe_identity(scope, probe))
     return output['edges'], output['lazy_only'], coverage
 
 
@@ -460,6 +467,7 @@ def build_php_oracle(scope: Scope) -> tuple[Edges, Coverage]:
 def php_lazy_only_edges(scope: Scope) -> Edges:
     _, lazy_only, _ = _php_scoped_edges(scope)
     return lazy_only
+
 
 def build_python_calls_oracle(scope: Scope) -> tuple[Edges, Coverage]:
     """Python AST source calls, deduplicated by file/function and bare callee.
