@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- Import results now distinguish default recall coverage from opt-in pilots and correctly say that unclassified edges stay in `lazy=include`/`exclude` and are omitted by `only`. An optional native Ruby relative-import pilot scores a declared importer cohort without adding Ruby to default recall baselines. (BACK-2471)
+
 - Ruby `imports` queries now distinguish named-method loaders from module-level loaders for implicit calls with one plain ASCII path literal. Lazy views and default cycle checks use that scope; unsupported expressions, standalone blocks/lambdas and Zeitwerk convention edges stay unclassified, and the all-edge graph is unchanged. (BACK-2470, BACK-2472)
 
 - `reveal_nav` now marks requested-source read failures and unknown selected functions as MCP tool errors instead of successful text responses. Existing CLI exits, successful empty answers and warning-bearing results keep their behavior. (BACK-2464)
