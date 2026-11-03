@@ -344,7 +344,6 @@ class TestDocumentationCompleteness:
         # Major adapters that should have guides (paths relative to docs_dir)
         expected_guides = {
             'markdown': ['adapters/MARKDOWN_GUIDE.md'],
-            'python': ['adapters/PYTHON_ADAPTER_GUIDE.md'],
             'html': ['adapters/HTML_GUIDE.md'],
             'reveal': ['adapters/REVEAL_ADAPTER_GUIDE.md'],
         }

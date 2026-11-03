@@ -511,9 +511,10 @@ adapters:
       review: unreviewed
       via: []
     verbose:
-      reason: 'stats:// renamed (BACK-2069), the same adapter class: CLI_QUERY_FLAGS declares only
-        respect_gitignore/all; get_structure''s summary_only already defaults to the fuller
-        (non-summarized) shape -- nothing left for verbose to add'
+      reason: 'stats:// renamed (BACK-2069), the same adapter class: CLI_QUERY_FLAGS
+        declares only respect_gitignore/all; get_structure''s summary_only already
+        defaults to the fuller (non-summarized) shape -- nothing left for verbose
+        to add'
       review: not-applicable
       via: []
   mysql:
@@ -631,34 +632,6 @@ adapters:
       reason: 'CLI_QUERY_FLAGS declares only ''all''; get_structure(**kwargs) has
         no detail-level concept; confirmed live: ''Unknown query param verbose'' warning
         (adapter.py:26)'
-      review: not-applicable
-      via: []
-  python:
-    all:
-      reason: get_packages_list has no [:N] slicing; confirmed live, output identical
-      review: not-applicable
-      via: []
-    respect_gitignore:
-      reason: lists installed interpreter packages (adapter.py:148, get_packages)
-        -- reads Python environment metadata, not a project directory walk
-      review: not-applicable
-      via: []
-    since:
-      reason: build_date/source_mtime/pyc_mtime are single-scalar environment facts
-        or single-file staleness checks, not a per-item filterable field in a listable
-        result
-      review: not-applicable
-      via: []
-    until:
-      reason: build_date/source_mtime/pyc_mtime are single-scalar environment facts
-        or single-file staleness checks, not a per-item filterable field in a listable
-        result
-      review: not-applicable
-      via: []
-    verbose:
-      reason: 'no query-string parsing at all, same shape as env://; confirmed live:
-        ''?verbose=1'' errors as an unknown element (adapter.py:148). sys.flags.verbose
-        read elsewhere is the interpreter''s own -v flag, unrelated to reveal''s --verbose'
       review: not-applicable
       via: []
   reveal:

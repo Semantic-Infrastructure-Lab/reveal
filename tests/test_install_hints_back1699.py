@@ -18,7 +18,7 @@ AGENT_HELP.md, adapter guides), pyproject.toml's own comments and the root *.md 
       work in cmd.exe (pip receives the quote characters).
 
 Third-party packages that no extra provides (beautifulsoup4 for a broken base install,
-tree-sitter grammars, the user's own packages in python:// doctor hints) are not checked.
+tree-sitter grammars) are not checked.
 Templated tokens (``{pkg_name}``, ``<extra>``, ``${VERSION}``) are skipped.
 """
 

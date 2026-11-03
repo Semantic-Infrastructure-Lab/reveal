@@ -341,8 +341,8 @@ class TestHelpFrontmatterMetadata(unittest.TestCase):
         wins' heuristic would get it backwards -- these must be resolved by
         the declared help_topic frontmatter (category-based), not length."""
         entries = self._all_guide_entries()
-        self.assertFalse(entries['python-guide'].is_alias, "'python-guide' is the declared canonical (help_topic), despite 'python' being shorter")
-        self.assertTrue(entries['python'].is_alias)
+        self.assertFalse(entries['configuration'].is_alias, "'configuration' is the declared canonical (help_topic), despite 'config' being shorter")
+        self.assertTrue(entries['config'].is_alias)
         self.assertFalse(entries['subcommands'].is_alias, "'subcommands' is the declared canonical, despite 'dev'/'pack' being shorter")
         self.assertTrue(entries['dev'].is_alias)
         self.assertFalse(entries['tricks'].is_alias)

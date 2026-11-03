@@ -141,7 +141,6 @@ FIXTURE_URIS = {
     'env': 'env://',
     'help': 'help://',
     'nginx': 'nginx://',
-    'python': 'python://',
     'reveal': 'reveal://',
 }
 

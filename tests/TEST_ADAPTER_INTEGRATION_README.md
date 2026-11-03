@@ -20,13 +20,13 @@ grep -c '^class Test' tests/test_adapter_integration.py
 python -c "from reveal.adapters import list_supported_schemes as s; print(len(s()))"
 ```
 
-As of 2026-08-21: **40 tests** across **13 test classes**, covering
-**11 of 34** registered adapter schemes (`help`, `env`, `ast`, `git`, `json`,
-`markdown`, `python`, `stats`, `imports`, `diff`, `reveal`). The other 23
+As of 2026-11-03 (python:// removed, BACK-2225): **35 tests** across **12 test classes**, covering
+**10 of 35** registered adapter schemes (`help`, `env`, `ast`, `git`, `json`,
+`markdown`, `stats`, `imports`, `diff`, `reveal`). The other 25
 schemes (`mysql`, `sqlite`, `xlsx`, `ssl`, `nginx`, `domain`, `cpanel`,
 `autossl`, `letsencrypt`, `calls`, `contracts`, `depends`, `deps`,
 `architecture`, `hotspots`, `overview`, `surface`, `testability`, `trace`,
-`patches`, `pack`, `claude`, `codex`) have no CLI-subprocess integration test
+`patches`, `pack`, `claude`, `codex`, `metrics`, `classify`) have no CLI-subprocess integration test
 here -- some are covered by other test files (see the file's own imports/
 adjacent `test_*.py` for adapter-specific unit coverage), this file is not
 the single source of truth for adapter coverage overall.
@@ -69,14 +69,6 @@ the single source of truth for adapter coverage overall.
 #### markdown:// - Markdown Query Adapter (1 test)
 - ✅ Searches directories for markdown files
 - **Usage:** `reveal markdown://./docs`
-
-#### python:// - Python Runtime Adapter (5 tests)
-- ✅ Shows Python environment information
-- ✅ Shows version details
-- ✅ Lists installed packages
-- ✅ Shows virtual environment status
-- ✅ Handles invalid elements gracefully
-- **Usage:** `reveal python://`, `reveal python://version`, `reveal python://packages`
 
 #### stats:// - Codebase Statistics Adapter (2 tests)
 - ✅ Shows codebase metrics (files, lines, functions, complexity)
@@ -141,7 +133,7 @@ time anyone next read it. Don't hardcode a snapshot here again.
 ## Future Improvements
 
 Already done since this doc's original "High Priority" list was written:
-git:// CLI routing fixed, python:// tests added, imports:// tests added
+git:// CLI routing fixed, imports:// tests added
 (`TestImportsAdapterIntegration`), diff:// tests added
 (`TestDiffAdapterIntegration`), stats:// tests added
 (`TestStatsAdapterIntegration`). Still open:

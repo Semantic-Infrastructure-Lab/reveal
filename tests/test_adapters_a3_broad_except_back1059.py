@@ -1,4 +1,4 @@
-"""BACK-1059 (git, stats, markdown, python, diff, ast, help_data adapters): a handler
+"""BACK-1059 (git, stats, markdown, diff, ast, help_data adapters): a handler
 catches the errors its body can actually produce, and a failure that would make a result
 look complete is raised or disclosed instead of swallowed.
 
@@ -378,77 +378,6 @@ def test_markdown_sort_does_not_swallow_a_bug(monkeypatch):
     monkeypatch.setattr(results, 'sort_value', _raise_bug)
     with pytest.raises(_InjectedBug):
         results.apply_sorting([{'title': 'a'}, {'title': 'b'}], 'title', False)
-
-
-# ------------------------------------------------------------------ python
-
-def test_check_bytecode_does_not_swallow_a_bug(tmp_path, monkeypatch):
-    from reveal.adapters.python import bytecode
-    (tmp_path / '__pycache__').mkdir()
-    (tmp_path / '__pycache__' / 'm.cpython-312.pyc').write_bytes(b'')
-    monkeypatch.setattr(bytecode, '_check_pyc_file', _raise_bug)
-    with pytest.raises(_InjectedBug):
-        bytecode.check_bytecode(str(tmp_path))
-
-
-def test_check_bytecode_still_reports_an_unreadable_tree_as_an_error(tmp_path, monkeypatch):
-    from reveal.adapters.python import bytecode
-
-    def denied(_pyc):
-        raise PermissionError('denied')
-
-    (tmp_path / '__pycache__').mkdir()
-    (tmp_path / '__pycache__' / 'm.cpython-312.pyc').write_bytes(b'')
-    monkeypatch.setattr(bytecode, '_check_pyc_file', denied)
-    result = bytecode.check_bytecode(str(tmp_path))
-    assert result['status'] == 'error' and 'denied' in result['error']
-
-
-def test_doctor_does_not_read_a_failed_bytecode_scan_as_clean(tmp_path, monkeypatch):
-    from reveal.adapters.python import bytecode
-    from reveal.adapters.python.doctor import run_doctor
-
-    def denied(_pyc):
-        raise PermissionError('denied')
-
-    (tmp_path / '__pycache__').mkdir()
-    (tmp_path / '__pycache__' / 'm.cpython-312.pyc').write_bytes(b'')
-    monkeypatch.setattr(bytecode, '_check_pyc_file', denied)
-    monkeypatch.chdir(tmp_path)
-    report = run_doctor(lambda: {'active': True})
-    assert 'stale_bytecode' in report.get('checks_failed', [])
-    assert 'stale_bytecode' not in report['checks_performed']
-
-
-def test_doctor_does_not_read_unreadable_site_packages_as_no_conflicts(monkeypatch):
-    import site
-    from reveal.adapters.python.doctor import find_editable_conflict, run_doctor
-
-    def denied():
-        raise PermissionError('denied')
-
-    monkeypatch.setattr(site, 'getsitepackages', denied)
-    report = run_doctor(lambda: {'active': True})
-    assert 'editable_conflicts' in report.get('checks_failed', [])
-    assert 'editable_conflicts' not in report['checks_performed']
-    with pytest.raises(PermissionError):
-        find_editable_conflict('anything')
-
-
-def test_package_details_of_a_missing_package_still_says_not_found():
-    from reveal.adapters.python.packages import get_package_details
-    result = get_package_details('reveal-no-such-distribution-back1059')
-    assert result['error'].startswith('Package not found')
-
-
-def test_package_details_of_a_broken_metadata_read_does_not_claim_not_found(monkeypatch):
-    import importlib.metadata
-    from reveal.adapters.python.packages import get_package_details
-    monkeypatch.setattr(importlib.metadata, 'distribution', _raise_bug)
-    result = get_package_details('anything')
-    assert 'error' in result
-    assert 'not found' not in result['error'].lower()
-    assert 'injected' in (result['error'] + result.get('details', ''))
 
 
 # ------------------------------------------------------------------- stats

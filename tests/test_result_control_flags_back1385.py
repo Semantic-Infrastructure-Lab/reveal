@@ -1,6 +1,6 @@
 """BACK-1385: `sort=`/`limit=` were declared universal but six adapters do not read them.
 
-env://, python://, help://, cpanel://, domain:// and diff:// either glued `?limit=2` onto their
+env://, python:// (removed since, BACK-2225), help://, cpanel://, domain:// and diff:// either glued `?limit=2` onto their
 resource ("Element '?limit=2' not found", a path error) or dropped it; reveal:// ignored it
 silently. For adapters with HONORS_RESULT_CONTROL = False, `--sort`/`--limit` now print a
 "no effect" note, and a typed `?sort=`/`?limit=`/`?offset=` is stripped with the standard
@@ -17,7 +17,7 @@ import pytest
 import reveal.adapters  # noqa: F401  registers every adapter
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
 
-OPTED_OUT = ['cpanel', 'diff', 'domain', 'env', 'help', 'python', 'reveal']
+OPTED_OUT = ['cpanel', 'diff', 'domain', 'env', 'help', 'reveal']
 
 
 def run_reveal(*args):
@@ -35,7 +35,6 @@ class TestOptOutSet:
 class TestTypedKeysAreStrippedWithAWarning:
     URIS = {
         'env': 'env://?sort=name',
-        'python': 'python://?limit=2',
         'help': 'help://?limit=3',
         'domain': 'domain://example.com?limit=2',
         'cpanel': 'cpanel://user@host?limit=2',
@@ -90,7 +89,7 @@ class TestStripHelper:
 
 
 class TestCliFlagsNoLongerBreakTheUri:
-    @pytest.mark.parametrize('scheme,flag', [('env://', '--limit'), ('python://', '--sort')])
+    @pytest.mark.parametrize('scheme,flag', [('env://', '--limit'), ('help://', '--sort')])
     def test_note_instead_of_element_not_found(self, scheme, flag):
         value = '2' if flag == '--limit' else 'name'
         proc = run_reveal(scheme, flag, value)

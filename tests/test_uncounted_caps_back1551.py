@@ -5,12 +5,10 @@ it cannot see a cap that has none. git's repository view now cuts its branches a
 ``?limit`` and is covered there (its fixture has two of each). These are the rest: each
 either lists everything, or records its cut with ``note_truncation``.
 """
-import sys
 
 from conftest import _run_reveal_direct
 from reveal.adapters.help import HelpAdapter
 from reveal.adapters.imports import ImportsAdapter
-from reveal.adapters.python.doctor import check_cwd_shadowing
 from reveal.rendering.adapters.testability import patch_hotspot_lines
 from reveal.analyzers.markdown import MarkdownAnalyzer
 from reveal.utils.results import truncations_of
@@ -81,17 +79,6 @@ def test_failed_file_sample_is_disclosed(tmp_path, monkeypatch):
 def test_no_failed_files_no_note(tmp_path):
     (tmp_path / 'a.py').write_text('import os\n', encoding='utf-8')
     assert not truncations_of(ImportsAdapter(str(tmp_path)).get_structure())
-
-
-def test_doctor_says_its_file_list_is_a_sample(tmp_path, monkeypatch):
-    for i in range(7):
-        (tmp_path / f'm{i}.py').write_text('', encoding='utf-8')
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, 'path', [''] + sys.path[1:])
-    [warning], _ = check_cwd_shadowing()
-    assert len(warning['files']) == 5
-    assert warning['message'].endswith('contains 7 .py files; the first 5 are listed')
-
 
 
 def test_testability_uri_text_carries_the_result_warnings(tmp_path):

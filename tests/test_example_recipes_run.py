@@ -353,8 +353,6 @@ SCHEMA_UNRUNNABLE = (
     'diff://git://app.py@main', 'git://.@abc1234', 'git://.@main',
     'git://src/app.py@v1.0', 'element=load_config', 'sheet=Sales',
     'json://data.json/users', 'json://package.json/', 'format=dot',
-    # Depend on the interpreter running the suite: a venv, an installed `requests`.
-    'python://venv', 'python://packages/requests',
 )
 # Also needs a live host / package / session beyond the recipe list's schemes.
 SCHEMA_SKIP_SCHEMES = NEEDS_HOST + NEEDS_SESSION
@@ -677,12 +675,9 @@ def test_documentation_command_inventory_is_not_vacuous():
 # session it names exists there; the rest stay skips that say what they need.
 
 SUBCOMMANDS = frozenset(COMMANDS)
-# Path-less schemes: their target is the environment, the interpreter or the recorded homes.
-PATHLESS_SCHEMES = ('env://', 'python://', 'reveal://', 'adapter://', 'help://', 'claude://',
-                    'codex://')
+# Path-less schemes: their target is the environment, reveal itself or the recorded homes.
+PATHLESS_SCHEMES = ('env://', 'reveal://', 'adapter://', 'help://', 'claude://', 'codex://')
 SHELL_OPERATORS = {'>', '>>', '||', '&&', ';', '2>/dev/null', '2>&1'}
-# Depend on what the interpreter running the suite has installed (as SCHEMA_UNRUNNABLE).
-INTERPRETER_DEPENDENT = ('python://packages/', 'python://module/', 'python://venv')
 _URI = re.compile(r'^([a-z]+)://(.*)$')
 # A ref as the docs write it: a branch, a tag, HEAD~N, or a commit hash.
 _REF_PARAM = re.compile(r'(?:^|&)(?:ref|since|hash|ignore)=([^&]+)')
@@ -756,9 +751,6 @@ def _named_fixture_skip(tokens, fixture_names=None):
     if any(scheme in t for t in stage for scheme in NEEDS_HOST) or any(
             t.endswith('.conf') or t.startswith(('/etc/', '@')) for t in stage):
         return 'needs a live host or server files'
-    if any(t.startswith(INTERPRETER_DEPENDENT) or t == 'python://packages' and len(stages) > 1
-           for t in stage):
-        return "depends on the suite interpreter's installed packages"
     if '://' not in stage[1] and re.search(r'[*?]', stage[1]):
         return 'an unquoted glob the shell expands'
     conflict = next((why for key, why in FIXTURE_CONFLICTS.items() if key in ' '.join(stage)), None)

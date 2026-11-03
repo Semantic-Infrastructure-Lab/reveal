@@ -125,7 +125,7 @@ class TestRenderHelpListMode(unittest.TestCase):
         data = {
             'adapters': [
                 {'scheme': 'ast', 'has_help': True, 'description': 'AST queries'},
-                {'scheme': 'python', 'has_help': True, 'description': 'Python modules'},
+                {'scheme': 'env', 'has_help': True, 'description': 'Environment variables'},
             ]
         }
         output = capture_stdout(_render_help_list_mode, data)
@@ -133,8 +133,8 @@ class TestRenderHelpListMode(unittest.TestCase):
         self.assertIn('URI Adapters (2)', output)
         self.assertIn('ast://', output)
         self.assertIn('AST queries', output)
-        self.assertIn('python://', output)
-        self.assertIn('Python modules', output)
+        self.assertIn('env://', output)
+        self.assertIn('Environment variables', output)
 
     def test_adapter_without_help_filtered(self):
         """Should only show adapters with help."""
@@ -156,8 +156,8 @@ class TestRenderHelpListMode(unittest.TestCase):
                 {'topic': 'agent', 'file': 'AGENT_HELP.md',
                  'description': 'Complete agent guide', 'category': 'ai_guides',
                  'token_estimate': '~40,000'},
-                {'topic': 'python-guide', 'file': 'adapters/PYTHON_ADAPTER_GUIDE.md',
-                 'description': 'Python adapter deep dive', 'category': 'feature_guides',
+                {'topic': 'reveal-guide', 'file': 'adapters/REVEAL_ADAPTER_GUIDE.md',
+                 'description': 'Reveal adapter deep dive', 'category': 'feature_guides',
                  'token_estimate': '~2,500'},
                 {'topic': 'anti-patterns', 'file': 'AGENT_HELP.md',
                  'description': 'Common mistakes', 'category': 'best_practices',
@@ -171,7 +171,7 @@ class TestRenderHelpListMode(unittest.TestCase):
         self.assertIn('~40,000', output)
         self.assertIn('--agent-help flag', output)  # _TOPIC_ANNOTATIONS for 'agent'
         self.assertIn('Feature Guides', output)
-        self.assertIn('python-guide', output)
+        self.assertIn('reveal-guide', output)
         self.assertIn('Best Practices', output)
         self.assertIn('anti-patterns', output)
 
@@ -182,13 +182,13 @@ class TestRenderHelpListMode(unittest.TestCase):
         it."""
         data = {
             'static_guides': [
-                {'topic': 'python-guide', 'file': 'adapters/PYTHON_ADAPTER_GUIDE.md',
-                 'description': 'Python adapter deep dive', 'category': 'feature_guides',
+                {'topic': 'reveal-guide', 'file': 'adapters/REVEAL_ADAPTER_GUIDE.md',
+                 'description': 'Reveal adapter deep dive', 'category': 'feature_guides',
                  'token_estimate': '~2,500'},
             ]
         }
         output = capture_stdout(_render_help_list_mode, data)
-        self.assertIn('Details: reveal help://python-guide', output)
+        self.assertIn('Details: reveal help://reveal-guide', output)
 
     def test_navigation_tips(self):
         """Should include navigation tips."""
@@ -270,9 +270,9 @@ class TestRenderHelpAdapterSummary(unittest.TestCase):
                     'syntax': 'ast://path/filter',
                     'example': 'ast://. lines>50'
                 },
-                'python': {
-                    'description': 'Explore Python modules',
-                    'syntax': 'python://module.path',
+                'env': {
+                    'description': 'Explore environment variables',
+                    'syntax': 'env://VAR',
                 }
             }
         }
@@ -282,8 +282,8 @@ class TestRenderHelpAdapterSummary(unittest.TestCase):
         self.assertIn('Query code by AST', output)
         self.assertIn('Syntax: ast://path/filter', output)
         self.assertIn('Example: ast://. lines>50', output)
-        self.assertIn('## python://', output)
-        self.assertIn('Explore Python modules', output)
+        self.assertIn('## env://', output)
+        self.assertIn('Explore environment variables', output)
 
     def test_adapter_without_example(self):
         """Should handle adapters without examples."""
@@ -328,15 +328,15 @@ class TestRenderHelpSection(unittest.TestCase):
     def test_try_now_section(self):
         """Should render try-now section."""
         data = {
-            'adapter': 'python',
+            'adapter': 'env',
             'section': 'try-now',
-            'content': ['reveal python://os', 'reveal python://sys']
+            'content': ['reveal env://PATH', 'reveal env:// --format json']
         }
         output = capture_stdout(_render_help_section, data)
-        self.assertIn('python:// - try-now', output)
+        self.assertIn('env:// - try-now', output)
         self.assertIn('Run these in your current directory:', output)
-        self.assertIn('reveal python://os', output)
-        self.assertIn('reveal python://sys', output)
+        self.assertIn('reveal env://PATH', output)
+        self.assertIn('reveal env:// --format json', output)
 
     def test_anti_patterns_section(self):
         """Should render anti-patterns section."""
@@ -486,14 +486,14 @@ class TestRenderHelpAdapterSpecific(unittest.TestCase):
     def test_with_examples_string(self):
         """Should render examples as strings."""
         data = {
-            'scheme': 'python',
-            'description': 'Python modules',
-            'examples': ['python://os', 'python://sys']
+            'scheme': 'env',
+            'description': 'Environment variables',
+            'examples': ['env://PATH', 'env://PYTHONPATH']
         }
         output = capture_stdout(_render_help_adapter_specific, data)
         self.assertIn('## Examples', output)
-        self.assertIn('python://os', output)
-        self.assertIn('python://sys', output)
+        self.assertIn('env://PATH', output)
+        self.assertIn('env://PYTHONPATH', output)
 
     def test_with_try_now(self):
         """Should render try now section."""
@@ -572,11 +572,11 @@ class TestRenderHelpAdapterSpecific(unittest.TestCase):
         data = {
             'scheme': 'ast',
             'description': 'AST queries',
-            'see_also': ['python://', 'help://tricks']
+            'see_also': ['env://', 'help://tricks']
         }
         output = capture_stdout(_render_help_adapter_specific, data)
         self.assertIn('## See Also', output)
-        self.assertIn('* python://', output)
+        self.assertIn('* env://', output)
         self.assertIn('* help://tricks', output)
 
     def test_renders_next_pointers(self):

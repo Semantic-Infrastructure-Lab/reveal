@@ -1,6 +1,6 @@
 """BACK-1591: element results and the directory view carry the Output Contract envelope.
 
-`env://HOME`, every `python://<element>` and `reveal <dir> --format json` answered bare
+`env://HOME`, every python:// element (removed since, BACK-2225) and `reveal <dir> --format json` answered bare
 data with no `type` or `contract_version`, while every structure result had both. The
 contract harness only ran base URIs, so it never saw an element. The router now wraps
 every element result (the adapter's own fields win; the type defaults to the adapter's
@@ -23,9 +23,6 @@ def _json(*argv):
 
 @pytest.mark.parametrize('argv, expected_type', [
     (('env://PATH',), 'env_variable'),
-    (('python://version',), 'python_runtime'),
-    (('python://packages',), 'python_packages'),
-    (('python://doctor',), 'python_doctor'),
     (('reveal://adapters/reveal/adapter.py', 'get_element'), 'code_element'),
 ])
 def test_element_results_carry_the_envelope(argv, expected_type):

@@ -46,7 +46,7 @@ class TestAdapterContracts(unittest.TestCase):
         self.all_schemes = list_supported_schemes()
         # Expected adapters (21 total as of v0.60.x)
         self.expected_schemes = {
-            'env', 'ast', 'help', 'python', 'json', 'git', 'mysql', 'sqlite',
+            'env', 'ast', 'help', 'json', 'git', 'mysql', 'sqlite',
             'imports', 'diff', 'reveal', 'stats', 'markdown', 'claude',
             'autossl', 'cpanel', 'domain', 'nginx', 'ssl', 'xlsx', 'calls',
         }
@@ -149,8 +149,8 @@ class TestAdapterContracts(unittest.TestCase):
                             )
 
     def test_no_arg_adapters_work(self):
-        """Verify no-arg adapters (env, python) can be instantiated without params."""
-        no_arg_adapters = {'env', 'python'}
+        """Verify no-arg adapters (env, reveal) can be instantiated without params."""
+        no_arg_adapters = {'env', 'reveal'}
 
         for scheme in no_arg_adapters:
             with self.subTest(scheme=scheme):
