@@ -161,7 +161,7 @@ def test_parse_loss_version_mismatch_and_read_loss_are_not_zero_truth(tmp_path):
         with pytest.raises(RuntimeError, match='Ruby.*oracle failed.*version'):
             _oracle().build(scope._replace(config=config))
     (tmp_path / 'use.rb').unlink()
-    with pytest.raises(RuntimeError, match='Ruby.*oracle failed.*Importer'):
+    with pytest.raises(RuntimeError, match='Ruby.*identity unavailable.*FileNotFoundError'):
         _oracle().build(scope)
 
 

@@ -470,27 +470,46 @@ def php_lazy_only_edges(scope: Scope) -> Edges:
     return lazy_only
 
 
+def _ruby_probe_identity(scope: Scope, probe: Path) -> Coverage:
+    try:
+        return _probe_identity(scope, probe)
+    except OSError as error:
+        raise RuntimeError(f'Ruby oracle input/probe identity unavailable ({type(error).__name__})') from error
+
+
+def _ruby_target_inventory(scope: Scope) -> tuple[list[Path], str]:
+    paths = tracked_files(scope.root, ['.'], frozenset({'.rb'}))
+    digest = hashlib.sha256(json.dumps(sorted(_relative(scope, path) for path in paths)).encode('utf-8')).hexdigest()
+    return paths, digest
+
+
 def _ruby_scoped_edges(scope: Scope) -> tuple[Edges, Edges, Coverage]:
     """Opt-in native relative-loader facts; no scheduled or product gating promotion."""
     executable = shutil.which(os.environ.get('REVEAL_RUBY_ORACLE', 'ruby'))
     if executable is None:
         raise RuntimeError('Ruby oracle prerequisite unavailable: native Ruby Ripper is required')
     probe = Path(__file__).parent / 'oracles' / 'ruby_import_oracle.rb'
-    targets = tracked_files(scope.root, ['.'], frozenset({'.rb'}))
+    frozen = scope._replace(importers=list(scope.importers),
+                            config=json.loads(json.dumps(scope.config, sort_keys=True)))
+    targets, target_inventory = _ruby_target_inventory(frozen)
+    identity = _ruby_probe_identity(frozen, probe)
     env = {key: value for key, value in os.environ.items()
            if key not in {'RUBYOPT', 'RUBYLIB', 'RUBYGEMS_GEMDEPS'}}
     result = subprocess.run(
         [executable, '--disable-gems', str(probe)],
-        input=json.dumps({'root': str(scope.root), 'scan': str(scope.scan),
-                          'importers': [str(path) for path in scope.importers],
-                          'targets': [str(path) for path in targets], 'config': scope.config}),
+        input=json.dumps({'root': str(frozen.root), 'scan': str(frozen.scan),
+                          'importers': [str(path) for path in frozen.importers],
+                          'targets': [str(path) for path in targets], 'config': frozen.config}),
         capture_output=True, text=True, encoding='utf-8',
         timeout=ORACLE_PROBE_TIMEOUT, cwd=scope.root, env=env)
     if result.returncode:
         raise RuntimeError(f'Ruby native Ripper oracle failed: {result.stderr.strip()}')
     output = json.loads(result.stdout)
     coverage = output['coverage']
-    identity = _probe_identity(scope, probe)
+    if identity != _ruby_probe_identity(scope, probe):
+        raise RuntimeError('Ruby oracle input/probe identity changed during native measurement')
+    if target_inventory != _ruby_target_inventory(scope)[1]:
+        raise RuntimeError('Ruby target inventory changed during native measurement')
     if coverage['oracle_digest'] != identity['oracle_digest']:
         raise RuntimeError('Ruby probe changed during native measurement')
     # Path order differs from string order for names such as pkg.rb and pkg/child.rb.
@@ -501,8 +520,7 @@ def _ruby_scoped_edges(scope: Scope) -> tuple[Edges, Edges, Coverage]:
         if hashlib.sha256((scope.root / target).read_bytes()).hexdigest() != digest:
             raise RuntimeError('Ruby target content changed during native measurement')
     coverage.update(identity)
-    coverage['target_inventory_digest'] = hashlib.sha256(
-        json.dumps(sorted(_relative(scope, path) for path in targets)).encode('utf-8')).hexdigest()
+    coverage['target_inventory_digest'] = target_inventory
     coverage['ruby_executable'] = executable
     return output['edges'], output['lazy_only'], coverage
 
