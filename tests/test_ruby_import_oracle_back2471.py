@@ -10,7 +10,26 @@ from test_recall_gate import _repo, gate, oracles
 
 pytestmark = pytest.mark.component
 RUBY = shutil.which(os.environ.get('REVEAL_RUBY_ORACLE', 'ruby'))
-needs_ruby = pytest.mark.skipif(not RUBY, reason='optional native Ruby Ripper required')
+needs_ruby = pytest.mark.usefixtures('native_ruby')
+
+
+@pytest.fixture(scope='module')
+def native_ruby():
+    if RUBY is None:
+        pytest.skip('optional native Ruby >=3.0 with Ripper is required')
+    env = {key: value for key, value in os.environ.items()
+           if key not in {'RUBYOPT', 'RUBYLIB', 'RUBYGEMS_GEMDEPS'}}
+    try:
+        result = subprocess.run([RUBY, '--disable-gems', '-rripper', '-e', 'print RUBY_VERSION'],
+                                capture_output=True, text=True, encoding='utf-8', timeout=15, env=env)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        pytest.skip(f'optional native Ruby version probe unavailable ({type(error).__name__})')
+    version = result.stdout.strip().split('.')
+    if result.returncode or len(version) != 3 or not all(part.isdigit() for part in version):
+        pytest.skip('optional native Ruby/Ripper version probe did not return a supported version')
+    if tuple(map(int, version)) < (3, 0, 0):
+        pytest.skip('optional native Ruby >=3.0 required; found ' + result.stdout.strip())
+    return RUBY
 
 
 def _oracle():
@@ -25,7 +44,7 @@ def _scope(root, files, **config):
         'oracle': 'ruby-ripper-relative', 'importer_dirs': ['.'],
         'ruby_minimum_version': '3.0', **config,
     })
-    importers = [root / name for name in files if name != 'target.rb']
+    importers = [(root / name).resolve() for name in files if name != 'target.rb']
     return oracles.Scope(root, root, importers, entry['recall']), entry
 
 
@@ -361,3 +380,46 @@ def test_native_identity_uses_the_existing_path_order_for_nested_prefixes(tmp_pa
     assert edges == {'target.rb': ['pkg.rb', 'pkg/child.rb']}
     assert _oracle().lazy_only(scope) == {'target.rb': ['pkg/child.rb']}
     assert set(coverage['source_digests']) == {'pkg.rb', 'pkg/child.rb'}
+
+
+@needs_ruby
+def test_probe_self_edit_cannot_rebind_loaded_code_to_after_only_hash(tmp_path, monkeypatch):
+    scope, _ = _scope(tmp_path, {'target.rb': '# target\n', 'use.rb': "require_relative 'target'\n"})
+    original = Path(oracles.__file__).parent / 'oracles/ruby_import_oracle.rb'
+    copied = tmp_path / 'probe/oracles/ruby_import_oracle.rb'
+    copied.parent.mkdir(parents=True)
+    edit = 'File.binwrite(__FILE__, File.binread(__FILE__) + "\\n# edited after load\\n")\n\n'
+    copied.write_text(original.read_text(encoding='utf-8').replace('class NativeParser <',
+                                                               edit + 'class NativeParser <', 1), encoding='utf-8')
+    monkeypatch.setattr(oracles, '__file__', str(copied.parent.parent / 'recall_oracles.py'))
+    with pytest.raises(RuntimeError, match='probe.*changed|identity.*changed'):
+        _oracle().build(scope)
+
+
+@needs_ruby
+def test_mutable_config_cannot_rebind_a_completed_native_request(tmp_path, monkeypatch):
+    scope, _ = _scope(tmp_path, {'target.rb': '# target\n', 'use.rb': "require_relative 'target'\n"})
+    real = oracles.subprocess.run
+    def changed(command, **kwargs):
+        result = real(command, **kwargs)
+        if command[-1].endswith('ruby_import_oracle.rb'):
+            scope.config['ruby_version'] = '0.0.0'
+        return result
+    monkeypatch.setattr(oracles.subprocess, 'run', changed)
+    with pytest.raises(RuntimeError, match='identity.*changed|config.*changed'):
+        _oracle().build(scope)
+
+
+@needs_ruby
+def test_tracked_target_inventory_drift_refuses_completed_measurement(tmp_path, monkeypatch):
+    scope, _ = _scope(tmp_path, {'target.rb': '# target\n', 'use.rb': "require_relative 'target'\n"})
+    real = oracles.subprocess.run
+    def changed(command, **kwargs):
+        result = real(command, **kwargs)
+        if command[-1].endswith('ruby_import_oracle.rb'):
+            (scope.root / 'late.rb').write_text('# added after native parse\n', encoding='utf-8')
+            real(['git', '-C', str(scope.root), 'add', 'late.rb'], check=True, timeout=30)
+        return result
+    monkeypatch.setattr(oracles.subprocess, 'run', changed)
+    with pytest.raises(RuntimeError, match='target inventory.*changed'):
+        _oracle().build(scope)
