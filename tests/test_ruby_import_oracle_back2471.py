@@ -1,5 +1,4 @@
 """Opt-in native relative-loader truth, independent of Reveal parsing/resolution."""
-import json
 import os
 import shutil
 import subprocess

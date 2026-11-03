@@ -16,6 +16,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -469,6 +470,51 @@ def php_lazy_only_edges(scope: Scope) -> Edges:
     return lazy_only
 
 
+def _ruby_scoped_edges(scope: Scope) -> tuple[Edges, Edges, Coverage]:
+    """Opt-in native relative-loader facts; no scheduled or product gating promotion."""
+    executable = shutil.which(os.environ.get('REVEAL_RUBY_ORACLE', 'ruby'))
+    if executable is None:
+        raise RuntimeError('Ruby oracle prerequisite unavailable: native Ruby Ripper is required')
+    probe = Path(__file__).parent / 'oracles' / 'ruby_import_oracle.rb'
+    targets = tracked_files(scope.root, ['.'], frozenset({'.rb'}))
+    env = {key: value for key, value in os.environ.items()
+           if key not in {'RUBYOPT', 'RUBYLIB', 'RUBYGEMS_GEMDEPS'}}
+    result = subprocess.run(
+        [executable, '--disable-gems', str(probe)],
+        input=json.dumps({'root': str(scope.root), 'scan': str(scope.scan),
+                          'importers': [str(path) for path in scope.importers],
+                          'targets': [str(path) for path in targets], 'config': scope.config}),
+        capture_output=True, text=True, encoding='utf-8',
+        timeout=ORACLE_PROBE_TIMEOUT, cwd=scope.root, env=env)
+    if result.returncode:
+        raise RuntimeError(f'Ruby native Ripper oracle failed: {result.stderr.strip()}')
+    output = json.loads(result.stdout)
+    coverage = output['coverage']
+    identity = _probe_identity(scope, probe)
+    if coverage['oracle_digest'] != identity['oracle_digest']:
+        raise RuntimeError('Ruby probe changed during native measurement')
+    native_population = sorted(coverage['source_digests'].items())
+    if identity['population_digest'] != hashlib.sha256(json.dumps(native_population).encode('utf-8')).hexdigest():
+        raise RuntimeError('Ruby importer content changed during native measurement')
+    for target, digest in coverage['target_digests'].items():
+        if hashlib.sha256((scope.root / target).read_bytes()).hexdigest() != digest:
+            raise RuntimeError('Ruby target content changed during native measurement')
+    coverage.update(identity)
+    coverage['target_inventory_digest'] = hashlib.sha256(
+        json.dumps(sorted(_relative(scope, path) for path in targets)).encode('utf-8')).hexdigest()
+    coverage['ruby_executable'] = executable
+    return output['edges'], output['lazy_only'], coverage
+
+
+def build_ruby_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+    edges, _, coverage = _ruby_scoped_edges(scope)
+    return edges, coverage
+
+
+def ruby_lazy_only_edges(scope: Scope) -> Edges:
+    _, lazy_only, _ = _ruby_scoped_edges(scope)
+    return lazy_only
+
 def build_python_calls_oracle(scope: Scope) -> tuple[Edges, Coverage]:
     """Python AST source calls, deduplicated by file/function and bare callee.
 
@@ -576,6 +622,7 @@ def build_go_oracle(scope: Scope) -> tuple[Edges, Coverage]:
 
 
 ORACLES: dict[str, Oracle] = {
+    'ruby-ripper-relative': Oracle(frozenset({'.rb'}), build_ruby_oracle, ruby_lazy_only_edges),
     'php-token-static': Oracle(frozenset({'.php'}), build_php_oracle, php_lazy_only_edges),
     'go-toolchain': Oracle(frozenset({'.go'}), build_go_oracle),
     'gcc-c': Oracle(C_SUFFIXES, _gcc_oracle('c')),
