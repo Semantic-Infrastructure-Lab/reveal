@@ -493,7 +493,8 @@ def _ruby_scoped_edges(scope: Scope) -> tuple[Edges, Edges, Coverage]:
     identity = _probe_identity(scope, probe)
     if coverage['oracle_digest'] != identity['oracle_digest']:
         raise RuntimeError('Ruby probe changed during native measurement')
-    native_population = sorted(coverage['source_digests'].items())
+    # Path order differs from string order for names such as pkg.rb and pkg/child.rb.
+    native_population = sorted(coverage['source_digests'].items(), key=lambda item: Path(item[0]))
     if identity['population_digest'] != hashlib.sha256(json.dumps(native_population).encode('utf-8')).hexdigest():
         raise RuntimeError('Ruby importer content changed during native measurement')
     for target, digest in coverage['target_digests'].items():
