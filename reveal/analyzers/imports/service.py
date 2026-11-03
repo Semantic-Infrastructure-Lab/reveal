@@ -346,8 +346,8 @@ def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str
     ``lazy`` is the LAZY_MODES value the answer used and ``lazy_default`` whether the
     request left it to the view's default. ``subject`` names what is counted, ``scope``
     which files an edge may join ('scanned_path' or 'scan_root'). ``hint`` replaces the
-    default pointer at the other ``&lazy`` values. Edges from languages whose extractor
-    records no import scope are named: every view counts them as load-time. ``resolved_at``
+    default pointer at the other ``&lazy`` values. Edges lacking qualified import scope
+    are named and counted separately: include/exclude retain them and only omits them. ``resolved_at``
     (imports://) adds where the answer was resolved and its stage and gating counts over
     ``counted``, the view the answer counts (the graph itself when not given).
     """
@@ -364,8 +364,8 @@ def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str
     text = (f'Rule: {subject} {where}{tests}; TYPE_CHECKING imports excluded; '
             f'{_LAZY_PHRASES[lazy]} ({source}); {hint}.')
     if unclassified:
-        text += (f' Import scope is not recorded for {", ".join(languages)}: '
-                 f'{len(unclassified)} edge(s) count as load-time under every &lazy value.')
+        text += (f' Import scope is unknown for {len(unclassified)} edge(s) in {", ".join(languages)}: '
+                 'retained by &lazy=include and &lazy=exclude, and omitted by &lazy=only.')
     rule = {
         'lazy': lazy,
         'lazy_default': lazy_default,

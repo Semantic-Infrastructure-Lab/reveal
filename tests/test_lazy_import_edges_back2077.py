@@ -235,7 +235,7 @@ def test_unclassified_language_is_disclosed(tmp_path):
         assert data['edge_rule']['unclassified_edges'] == 1
         assert data['edge_rule']['unclassified_languages'] == ['ruby']
     text = _run(_uri(root, 'rank=fan-in&lazy=exclude'))
-    assert 'Import scope is not recorded for ruby: 1 edge(s)' in text
+    assert 'Import scope is unknown for 1 edge(s) in ruby' in text
 
 
 # ------------------------------------------------------------------ I002 keeps BACK-445

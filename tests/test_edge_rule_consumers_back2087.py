@@ -151,7 +151,7 @@ def test_architecture_names_a_language_whose_scope_is_not_recorded(tmp_path):
     assert [e['fan_in'] for e in data['map']['fan_in']['rows']] == [1]
     assert data['map']['rules']['edge_rule']['unclassified_edges'] == 1
     assert data['map']['rules']['edge_rule']['unclassified_languages'] == ['ruby']
-    assert 'Import scope is not recorded for ruby: 1 edge(s)' in _run(f'architecture://{to_posix(root)}')
+    assert 'Import scope is unknown for 1 edge(s) in ruby' in _run(f'architecture://{to_posix(root)}')
 
 
 # ------------------------------------------------------------------ overview://
