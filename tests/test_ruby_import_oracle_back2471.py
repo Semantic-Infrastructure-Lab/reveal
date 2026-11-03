@@ -244,3 +244,16 @@ def test_oracle_source_and_config_digests_change_without_mutating_other_oracles(
     assert before['oracle_digest'] == after['oracle_digest']
     assert oracles.ORACLES['python-ast'].build is oracles.build_python_oracle
     assert oracles.ORACLES['php-token-static'].build is oracles.build_php_oracle
+
+
+@needs_ruby
+def test_convention_support_cannot_pass_as_measured_explicit_local_pair(tmp_path):
+    scope, entry = _scope(tmp_path, {
+        'app/models/widget.rb': 'class Widget\nend\n',
+        'use.rb': "def work\n require_relative 'app/models/widget'\n Widget\nend\n",
+    })
+    assert _oracle().lazy_only(scope) == {'app/models/widget.rb': ['use.rb']}
+    # The explicit syntax fact is local, but the graph also has unqualified convention
+    # support. The existing gate must refuse this cohort rather than promote it.
+    with pytest.raises(RuntimeError, match='lazy=only.*positive control failed'):
+        gate.measure(entry, scope.root)

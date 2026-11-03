@@ -135,7 +135,8 @@ class RelativeOracle
                                'implicit single plain ASCII relative literals only',
                                'unknown lexical contexts use declared include/exclude fallback',
                                'opaque support for a qualified pair makes measurement unavailable',
-                               'reflective dispatch and monkeypatched loader behavior unqualified']}
+                               'reflective dispatch and monkeypatched loader behavior unqualified',
+                               'convention-contaminated pairs require separate graph qualification']}
   end
 
   def relative(path)
