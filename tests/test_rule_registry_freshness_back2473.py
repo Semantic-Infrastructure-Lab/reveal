@@ -87,3 +87,49 @@ def test_custom_rules_follow_host_requests(tmp_path, host, location, operation):
     expected = [True, False] if operation == 'unchanged' else [False, operation != 'deleted']
     assert row['fresh'] == expected, 'one-shot CLI must see the current rule source'
     assert row['after'] == expected, 'long-lived host retained stale custom-rule discovery'
+
+
+def test_nested_host_reuses_rules_and_builtin_discovery(tmp_path, monkeypatch):
+    """External discovery is once per outer request; package discovery stays reusable."""
+    from reveal import api
+    from reveal.rules import RuleRegistry
+    from reveal.utils.request_cache import host_request
+
+    (tmp_path / 'pyproject.toml').write_text('[project]\nname="probe"\n', encoding='utf-8')
+    target = tmp_path / 'f.py'
+    target.write_text('VALUE = 1\n', encoding='utf-8')
+    (tmp_path / 'data' / 'reveal' / 'rules').mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'data'))
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'config'))
+    # Restore even private process state after this in-process preservation control.
+    for attr in ('_rules', '_rules_by_code', '_discovered', '_built_in_rules'):
+        if hasattr(RuleRegistry, attr):
+            monkeypatch.setattr(RuleRegistry, attr, getattr(RuleRegistry, attr))
+    counts = {'builtin': 0, 'user': 0, 'project': 0}
+
+    def counted(kind, method):
+        def discover(cls, *args):
+            counts[kind] += 1
+            return method(*args)
+        return classmethod(discover)
+
+    for kind, name in [('builtin', '_discover_built_in_rules'),
+                       ('user', '_discover_user_rules'), ('project', '_discover_project_rules')]:
+        monkeypatch.setattr(RuleRegistry, name, counted(kind, getattr(RuleRegistry, name)))
+    RuleRegistry.discover(force=True)
+    builtin = RuleRegistry.get_rule('B001')
+    with host_request():
+        api.check(str(target))
+        first_rules = RuleRegistry._rules
+        first_codes = RuleRegistry.effective_codes()
+        with host_request():
+            api.check(str(target))
+            assert RuleRegistry._rules is first_rules
+            assert RuleRegistry.effective_codes() is first_codes
+        assert counts == {'builtin': 1, 'user': 2, 'project': 2}
+    api.check(str(target))
+    assert counts == {'builtin': 1, 'user': 3, 'project': 3}
+    assert RuleRegistry.get_rule('B001') is builtin
+    RuleRegistry.discover(force=True)
+    assert counts == {'builtin': 2, 'user': 4, 'project': 4}
