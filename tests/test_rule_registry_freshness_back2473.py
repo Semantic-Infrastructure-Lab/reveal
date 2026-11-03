@@ -15,7 +15,6 @@ from pathlib import Path
 import subprocess
 import sys
 
-from reveal import api, mcp_server
 from reveal.rules import RuleRegistry
 
 root, host, operation, location = Path(sys.argv[1]), *sys.argv[2:5]
@@ -34,16 +33,24 @@ def write(message):
 def snapshot():
     target = str(root / 'f.py')
     if host == 'mcp':
-        text = mcp_server.reveal_check(target)
+        from reveal import mcp_server
+        text = mcp_server.reveal_check(target, ignore=','.join(ignored))
+        assert text == 'No issues found.' or ('[Q901]' in text and '1 issue found.' in text), text
         return 'custom_old' in text, 'custom_new' in text
-    rows = api.check(target)
+    from reveal import api
+    rows = api.check(target, ignore=ignored)
     messages = [row.message for row in rows if row.rule_code == 'Q901']
     return 'custom_old' in messages, any(message.startswith('custom_new') for message in messages)
 
 if operation != 'added':
     write('custom_old')
+# Discover after establishing the initial state; ignore unrelated built-in checks.
+# These are real discovered codes, not an invented select that could error on absence.
+RuleRegistry.discover()
+ignored = [rule.code for rule in RuleRegistry.get_rules() if rule.code != 'Q901']
 before = snapshot()
 builtin = RuleRegistry.get_rule('B001')
+assert builtin is not None
 if operation == 'added':
     write('custom_new')
 elif operation == 'edited':
@@ -58,9 +65,10 @@ elif operation == 'deleted':
 after = snapshot()
 assert RuleRegistry.get_rule('B001') is builtin
 # A new CLI process is the one-shot reference; no host cache survives into it.
-cli = subprocess.run([sys.executable, '-m', 'reveal', 'check', str(root / 'f.py')],
+cli = subprocess.run([sys.executable, '-m', 'reveal', 'check', str(root / 'f.py'),
+                      '--ignore', ','.join(ignored)],
                      text=True, encoding='utf-8', capture_output=True, timeout=30)
-assert cli.returncode in (0, 1), cli.stderr
+assert cli.returncode == (0 if operation == 'deleted' else 1), cli.stderr
 fresh = ('custom_old' in cli.stdout, 'custom_new' in cli.stdout)
 print('RESULT_JSON ' + json.dumps({'before': before, 'after': after, 'fresh': fresh}))
 '''
