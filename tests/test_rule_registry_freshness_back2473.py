@@ -38,7 +38,7 @@ def snapshot():
         return 'custom_old' in text, 'custom_new' in text
     rows = api.check(target)
     messages = [row.message for row in rows if row.rule_code == 'Q901']
-    return 'custom_old' in messages, 'custom_new' in messages
+    return 'custom_old' in messages, any(message.startswith('custom_new') for message in messages)
 
 if operation != 'added':
     write('custom_old')
@@ -47,6 +47,8 @@ builtin = RuleRegistry.get_rule('B001')
 if operation == 'added':
     write('custom_new')
 elif operation == 'edited':
+    write('custom_new_and_longer')
+elif operation == 'same_stat':
     old_stat = rule.stat()
     write('custom_new')
     # Equal byte count and timestamps: don't let Python's bytecode cache hide the edit.
@@ -66,7 +68,7 @@ print('RESULT_JSON ' + json.dumps({'before': before, 'after': after, 'fresh': fr
 
 @pytest.mark.parametrize('host', ['api', 'mcp'])
 @pytest.mark.parametrize('location', ['project', 'user'])
-@pytest.mark.parametrize('operation', ['added', 'edited', 'deleted', 'unchanged'])
+@pytest.mark.parametrize('operation', ['added', 'edited', 'same_stat', 'deleted', 'unchanged'])
 def test_custom_rules_follow_host_requests(tmp_path, host, location, operation):
     (tmp_path / 'pyproject.toml').write_text('[project]\nname="probe"\n', encoding='utf-8')
     (tmp_path / 'f.py').write_text('VALUE = 1\n', encoding='utf-8')
