@@ -125,7 +125,7 @@ code, but for sessions, git history, documents, data stores, and runtime state.
 | Codex CLI sessions | `codex://` | `reveal 'codex://sessions/?search=auth-refactor'` |
 | Markdown / docs | `markdown://` | `reveal docs/ --grep 'decision'` |
 | Databases / workbooks | `sqlite://` `mysql://` `xlsx://` | `reveal sqlite:///app.db` |
-| Environment / runtime | `env://` `python://` | `reveal env://` |
+| Environment variables | `env://` | `reveal env://` |
 | Project-specific tools | live plugins | `reveal help://adapters` |
 
 When adapter syntax is uncertain:
@@ -190,7 +190,6 @@ The most-used adapters; `reveal --adapters` lists every one.
 | `markdown://` | Frontmatter, headings, link graphs, full-text search |
 | `json://` | JMESPath queries, nested navigation, flatten |
 | `env://` | Environment variable analysis, `.env` validation |
-| `python://` | Runtime introspection of live Python modules |
 | `patches://` | Test patch pressure: repeated mocks, private patches, patch-heavy tests; `?view=pressure` joins it with production boundary fan-out (was `testability://`) |
 | `xlsx://` | Excel data extraction and analysis |
 | `claude://` | AI session history, tool usage, file access patterns |

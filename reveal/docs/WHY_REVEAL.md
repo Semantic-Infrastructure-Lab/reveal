@@ -349,7 +349,6 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 | `markdown://` | Frontmatter, headings, link graphs, body search |
 | `json://` | JMESPath queries, nested navigation |
 | `env://` | Environment variable analysis, `.env` validation |
-| `python://` | Runtime introspection of live Python modules |
 | `xlsx://` | Excel data extraction and analysis |
 | `codex://` | OpenAI Codex CLI session index and analysis |
 | `patches://` | Mock/patch pressure in Python and TS/JS tests, grouped by target |

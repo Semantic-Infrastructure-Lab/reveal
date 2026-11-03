@@ -233,7 +233,7 @@ reveal <path or URI>
    │           └─ treesitter.py (50+ languages via tree-sitter)
    │
    └─ URI?  → Adapter System
-               └─ adapters/* (env://, ast://, python://, help://)
+               └─ adapters/* (env://, ast://, help://, ...)
 ```
 
 **Key files:**
@@ -560,7 +560,7 @@ names its `BACK-N`. Internal work (CI, test harnesses, ratchets) goes in
 
 **Adapters:**
 - `adapters/env.py` - Environment variables
-- `adapters/python.py` - Python runtime inspection
+- `adapters/ast/` - Code queries
 
 ---
 

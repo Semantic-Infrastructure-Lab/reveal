@@ -233,7 +233,7 @@ reveal 'ast://file.py?name~=auth' --format json | jq -r '.results[].file' | sort
 | `imports://` | ✅ Import graph | `?unused`, `?circular`, `?importers` (`depends://` is deprecated: it still answers, with a note; use `imports://?importers`) |
 | `nginx://`, `domain://` | ❌ None | Use element paths; unrecognized `?params` are ignored with a warning |
 | `env://` | ❌ None | Use element paths; a `?query` is read as a variable name and fails |
-| `mysql://`, `sqlite://`, `python://` | ❌ None | Use element paths |
+| `mysql://`, `sqlite://` | ❌ None | Use element paths |
 
 ---
 

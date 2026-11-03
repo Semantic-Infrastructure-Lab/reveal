@@ -72,7 +72,6 @@ Just `pip install reveal-cli` gives you everything:
 - `env://` - Environment variable inspection
 - `ast://` - Code queries and semantic analysis
 - `json://` - JSON navigation with path access
-- `python://` - Python runtime inspection and diagnostics
 - `reveal://` - Self-inspection and validation
 - `stats://` - Code quality metrics and hotspot detection
 - ...plus `calls://`, `git://`, `imports://`, `claude://`, `codex://`, `diff://`, `depends://`, and more

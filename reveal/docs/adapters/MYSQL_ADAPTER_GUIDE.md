@@ -1854,7 +1854,6 @@ reveal mysql://localhost/innodb --format=json | jq '.buffer_pool_hit_rate'  # ~5
 - **AST Adapter**: `docs/adapters/AST_ADAPTER_GUIDE.md` - Code structure analysis
 - **JSON Adapter**: `docs/adapters/JSON_ADAPTER_GUIDE.md` - JSON file inspection
 - **SQLite Adapter**: `docs/adapters/SQLITE_ADAPTER_GUIDE.md` - SQLite database inspection
-- **Python Adapter**: `docs/adapters/PYTHON_ADAPTER_GUIDE.md` - Python runtime inspection
 - **Reveal Overview**: `README.md` - Full reveal documentation
 
 ---

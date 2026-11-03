@@ -139,4 +139,3 @@ output_formats:
 
 see_also:
   - 'reveal help://env - Environment variables'
-  - 'reveal help://python - Python runtime inspection'

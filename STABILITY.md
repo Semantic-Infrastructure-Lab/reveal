@@ -34,7 +34,6 @@ This document defines what users and AI agents can safely depend on in reveal. I
   - `help://` - Self-documenting help system
   - `env://` - Environment variable inspection
   - `ast://` - Code queries and structure analysis
-  - `python://` - Python runtime inspection
 - **Quality rules (core):** B001-B005 (bugs), S701 (security), C901 (complexity), E501 (line length) — run `reveal --rules` for the full current set
 - **Languages (full support):** Python, JavaScript, TypeScript, Rust, Go, Java, C, C++ — see [Language Support Stability](#language-support-stability) below; conformance is now tracked per-language via `reveal --language-info <lang>` (BACK-444), not a hand-maintained tier list
 
@@ -170,7 +169,6 @@ v0.37.0: Feature X removed (documented in CHANGELOG)
 | `help://` | 🟢 Stable | Help system format frozen |
 | `env://` | 🟢 Stable | Environment variable inspection, cross-platform |
 | `ast://` | 🟢 Stable | Query syntax stable, new filters may be added |
-| `python://` | 🟢 Stable | Core commands stable, new diagnostics may be added |
 
 ### Beta Adapters (Development & Domain Tools)
 

@@ -1317,7 +1317,6 @@ sqlite3 code.db "SELECT file, symbol, complexity
 - [AGENT_HELP.md](../AGENT_HELP.md) - Complete agent help
 
 **Related adapters:**
-- [PYTHON_ADAPTER_GUIDE.md](PYTHON_ADAPTER_GUIDE.md) - Python runtime inspection
 - [imports:// adapter](IMPORTS_ADAPTER_GUIDE.md) - Dependency analysis
 - [stats:// adapter](STATS_ADAPTER_GUIDE.md) - Codebase statistics
 

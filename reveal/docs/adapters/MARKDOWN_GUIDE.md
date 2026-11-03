@@ -1158,5 +1158,4 @@ reveal 'markdown://docs/?lint&lint-fields=title,type'
 ## See Also
 
 - **help://tricks** - Cool tricks and hidden features
-- **help://python-guide** - Python adapter guide
 - **reveal --help** - CLI reference

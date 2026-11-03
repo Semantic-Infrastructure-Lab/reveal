@@ -192,7 +192,7 @@ not arbitrary nested data. Treat nested diagnostic values as read-only.
 
 ```python
 {
-    'name': str,           # Adapter scheme name (e.g., 'python', 'ast')
+    'name': str,           # Adapter scheme name (e.g., 'env', 'ast')
     'description': str,    # One-line summary (< 80 chars)
 }
 ```
@@ -214,7 +214,7 @@ not arbitrary nested data. Treat nested diagnostic values as read-only.
 {
     'operators': Dict[str, str],      # Query operators (ast:// adapter)
     'filters': Dict[str, str],        # Available filters (ast:// adapter)
-    'elements': Dict[str, str],       # Available elements (python:// adapter)
+    'elements': Dict[str, str],       # Available elements (ssl:// adapter)
     'features': List[str],            # Feature list
     'use_cases': List[str],           # Common use cases
     'coming_soon': List[str],         # Planned features
@@ -251,7 +251,7 @@ not arbitrary nested data. Treat nested diagnostic values as read-only.
 ]
 ```
 
-💡 **Best: Create a comprehensive guide (see PYTHON_ADAPTER_GUIDE.md)**
+💡 **Best: Create a comprehensive guide (see MARKDOWN_GUIDE.md)**
 
 Include:
 - Problem statement
@@ -371,7 +371,7 @@ def get_help() -> Dict[str, Any]:
 
 ## Creating Comprehensive Guides
 
-For complex adapters, create a separate markdown guide (like `PYTHON_ADAPTER_GUIDE.md`):
+For complex adapters, create a separate markdown guide (like `MARKDOWN_GUIDE.md`):
 
 ### Guide Template Structure
 
@@ -559,8 +559,8 @@ reveal help://myscheme-guide
   - How to implement health checks (--check)
   - Clean separation: `certificate.py` (fetching), `adapter.py` (API), `renderer.py` (display)
   - YAML-based help: `reveal/adapters/help_data/ssl.yaml`
-- **Example adapters**: `reveal/adapters/python/adapter.py`, `ast/adapter.py`, `env.py`
-- **Comprehensive guide example**: `reveal/docs/adapters/PYTHON_ADAPTER_GUIDE.md`
+- **Example adapters**: `reveal/adapters/env.py`, `ast/adapter.py`
+- **Comprehensive guide example**: `reveal/docs/adapters/MARKDOWN_GUIDE.md`
 - **Help system**: `reveal/adapters/help.py`
 - **Base adapter**: `reveal/adapters/base.py`
 - **Anti-patterns guide**: `reveal/docs/AGENT_HELP.md`
@@ -570,13 +570,13 @@ reveal help://myscheme-guide
 ## Questions?
 
 - Check existing adapters for patterns
-- Read PYTHON_ADAPTER_GUIDE.md for multi-shot example format
+- Read MARKDOWN_GUIDE.md ("Multi-Shot Examples for LLM Context") for the multi-shot example format
 - Test with `reveal help://your-adapter`
 - Dogfood your own adapter before releasing!
 
 ## See Also
 
-- [PYTHON_ADAPTER_GUIDE.md](../adapters/PYTHON_ADAPTER_GUIDE.md) - Python adapter examples
+- [MARKDOWN_GUIDE.md](../adapters/MARKDOWN_GUIDE.md) - Comprehensive guide with multi-shot examples
 - [ANALYZER_PATTERNS.md](ANALYZER_PATTERNS.md) - Analysis patterns
 - [AGENT_HELP.md](../AGENT_HELP.md) - Mistakes to avoid
 - [HELP_SYSTEM_GUIDE.md](HELP_SYSTEM_GUIDE.md) - Help system integration

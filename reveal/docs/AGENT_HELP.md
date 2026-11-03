@@ -132,7 +132,6 @@ reveal help://schemas/diff --format=json       # Resource comparison
 reveal help://schemas/env --format=json        # Environment variables
 reveal help://schemas/json --format=json       # JSON file navigation
 reveal help://schemas/markdown --format=json   # Markdown queries
-reveal help://schemas/python --format=json     # Python runtime
 reveal help://schemas/mysql --format=json      # MySQL databases
 reveal help://schemas/sqlite --format=json     # SQLite databases
 reveal help://schemas/xlsx --format=json       # Excel/spreadsheet files
@@ -1059,65 +1058,6 @@ reveal app.py process_batch --range 7-12      # full source of that branch only
 reveal flat_file.php :1136-1463 --inputs        # → candidate parameters; check bindings
 reveal flat_file.php :1136-1463 --outputs   # → candidate return values
 reveal flat_file.php :1136-1463 --exits       # → check for unexpected early exits
-```
-
----
-
-### Task: "Debug Python environment issues"
-
-**Pattern:**
-```bash
-# Quick environment check
-reveal python://
-
-# Check for stale .pyc bytecode (common issue!)
-reveal python://debug/bytecode
-
-# Check virtual environment
-reveal python://venv
-
-# List installed packages
-reveal python://packages
-
-# Get details on specific package
-reveal python://packages/requests
-
-# Check sys.path (conflict detection)
-reveal python://syspath
-
-# Check environment variables
-reveal python://env
-```
-
-**Common scenario:** "My code changes aren't working!"
-**Solution:** `reveal python://debug/bytecode` detects stale .pyc files
-
-**python:// adapter provides:**
-- Python version and interpreter path
-- Virtual environment detection (venv, virtualenv, conda)
-- Package inventory (pip list equivalent)
-- sys.path inspection
-- Stale bytecode detection
-- Environment variables (PYTHONPATH, VIRTUAL_ENV, etc.)
-- Import system debugging
-
-**Example output:**
-```
-Python Environment
-
-Version: 3.11.6
-Interpreter: /home/user/.venv/bin/python3
-Virtual Environment: /home/user/.venv (active)
-
-Packages (45 installed):
-  fastapi==0.104.1
-  uvicorn==0.24.0
-  pydantic==2.5.0
-  ...
-
-Stale Bytecode: 3 files
-  src/__pycache__/main.cpython-311.pyc (older than src/main.py)
-  Fix: python -m compileall src/ or delete __pycache__
 ```
 
 ---
@@ -3313,40 +3253,7 @@ reveal check src/processor.py
 
 **Result:** Complex function has multiple issues, good refactoring candidate.
 
-### Example 3: "Setup not working in new environment"
-
-**Scenario:** Dependencies installed but imports fail
-
-```bash
-# 1. Check Python environment
-reveal python://
-
-# Output shows wrong Python version (3.8 vs 3.11 expected)
-
-# 2. Check for stale bytecode
-reveal python://debug/bytecode
-
-# Output:
-# Stale Bytecode: 12 files
-# src/__pycache__/main.cpython-38.pyc (older than src/main.py)
-
-# 3. Check virtual environment
-reveal python://venv
-
-# Output:
-# Virtual Environment: NONE
-# ❌ Not in a virtual environment
-
-# 4. Verify package installed
-reveal python://packages/fastapi
-
-# Output:
-# Package not found: fastapi
-```
-
-**Result:** Not in virtual environment, packages not installed, stale bytecode.
-
-### Example 4: "Review PR changes"
+### Example 3: "Review PR changes"
 
 **Scenario:** Reviewing 15-file pull request
 
@@ -3385,7 +3292,7 @@ reveal check --changed main..HEAD --format json | jq -e '.summary.total_issues =
 
 **Result:** Found security issue and complexity problem before merge.
 
-### Example 5: "Documentation link cleanup"
+### Example 4: "Documentation link cleanup"
 
 **Scenario:** Refactored docs, need to find broken links
 
@@ -4441,8 +4348,6 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 | Unannotated functions | `reveal 'ast://./src?has_annotations=false'` |
 | Heavily-called functions | `reveal 'ast://./src?callers>5'` |
 | Type evidence for var | `reveal 'ast://file.py?reveal_type=result'` |
-| Debug Python env | `reveal python://` |
-| Check stale bytecode | `reveal python://debug/bytecode` |
 | Navigate JSON | `reveal json://file.json/path/to/key` |
 | JSONL records | `reveal file.jsonl --head 10` |
 | Check changes | `git diff --name-only \| reveal --stdin --check` |
@@ -4492,7 +4397,6 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 - **CLI reference** (`reveal --help`) - All flags and options
 - **Progressive help** (`reveal help://`) - Explorable documentation
   - `reveal help://ast` - AST adapter details
-  - `reveal help://python-guide` - Python adapter deep dive
   - `reveal help://tricks` - Cool tricks and hidden features
 
 Start with `reveal --agent-help`, route through `reveal help://quick`, then load the relevant `help://<topic>`. Keep this full guide as a reference.

@@ -531,5 +531,4 @@ Want to help implement these features? See:
 
 - [ANALYZER_PATTERNS.md](../development/ANALYZER_PATTERNS.md) - Code analysis patterns
 - [AGENT_HELP.md](../AGENT_HELP.md) - What NOT to do
-- [PYTHON_ADAPTER_GUIDE.md](../adapters/PYTHON_ADAPTER_GUIDE.md) - Python-specific analysis
 - [README.md](../README.md) - Documentation hub

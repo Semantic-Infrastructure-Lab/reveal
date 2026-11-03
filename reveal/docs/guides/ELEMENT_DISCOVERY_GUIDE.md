@@ -180,14 +180,6 @@ reveal mysql://localhost/innodb         # InnoDB status
 reveal mysql://localhost/slow-queries   # Slow query log
 ```
 
-**Python runtime elements**:
-```bash
-reveal python://version     # Python version details
-reveal python://venv        # Virtual environment status
-reveal python://packages    # Installed packages
-reveal python://doctor      # Environment diagnostics
-```
-
 ### Element with Filters
 
 Combine elements with query operators:
@@ -198,9 +190,6 @@ reveal domain://google.com/dns --format json | jq '.records.a'
 
 # Complex functions, first 10 (ast:// applies filters, sort and limit)
 reveal 'ast://src?type=function&complexity>10&sort=-complexity&limit=10'
-
-# Get packages starting with 'django'
-reveal python://packages | grep django
 ```
 
 ---
@@ -285,37 +274,6 @@ reveal mysql://localhost
 
 # Analyze slow queries (element)
 reveal mysql://localhost/slow-queries
-```
-
----
-
-### Python Adapter
-
-**Elements**: version, env, venv, packages, packages/<name>, module/<name>, imports, syspath, doctor, debug/bytecode
-
-**Overview**:
-```bash
-reveal python://
-```
-
-**Element access**:
-```bash
-reveal python://version     # Python version, build details
-reveal python://venv        # Virtual environment status
-reveal python://packages    # All installed packages
-reveal python://doctor      # Environment health check
-```
-
-**Use case**: Debug import issues
-```bash
-# Check environment overview
-reveal python://
-
-# Check sys.path conflicts
-reveal python://syspath
-
-# Run diagnostics
-reveal python://doctor
 ```
 
 ---
@@ -652,7 +610,6 @@ reveal ssl://google.com --format=json | jq 'has("available_elements")'
 | **ssl** | san, chain, issuer, subject, dates, full | Fixed list |
 | **domain** | dns, whois, ssl, registrar, mail, http, ns-audit | Fixed list (`whois` needs `reveal-cli[whois]`) |
 | **mysql** | connections, performance, innodb, replication, storage, errors, variables, health, databases, indexes, slow-queries, tables | Fixed list |
-| **python** | version, env, venv, packages, packages/<name>, module/<name>, imports, syspath, doctor, debug/bytecode | Fixed list (two take a name) |
 | **env** | (any variable name) | Dynamic |
 | **git** | any file path, plus `@commit/branch/tag` | Dynamic |
 | **json** | (any JSON key) | Dynamic |

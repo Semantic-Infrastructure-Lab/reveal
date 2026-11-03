@@ -1856,7 +1856,6 @@ reveal git://src/app.py@v1.0.0
 - **AST Adapter**: `AST_ADAPTER_GUIDE.md` - Code structure analysis (find complex functions)
 - **Diff Adapter**: `DIFF_ADAPTER_GUIDE.md` - Compare files/directories across refs
 - **Stats Adapter**: `STATS_ADAPTER_GUIDE.md` - Codebase metrics and hotspots
-- **Python Adapter**: `PYTHON_ADAPTER_GUIDE.md` - Runtime inspection
 - **Reveal Overview**: `../README.md` - Full reveal documentation
 
 ---

@@ -36,7 +36,6 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **autossl://** | `only-failures`, `summary`, `user=NAME` | `autossl://latest?only-failures` |
 | **letsencrypt://** | `check-orphans`, `check-duplicates` | `letsencrypt://?check-orphans` |
 | **nginx://** | none (CLI flags only; unrecognized `?params` stripped with warning) | N/A |
-| **python://** | none | N/A |
 | **domain://** | none | N/A |
 | **reveal://** | none | N/A |
 
@@ -658,7 +657,6 @@ The following adapters use **element paths** for navigation — query params are
 - **env://** - `env://VAR_NAME` (element = variable name)
 - **sqlite://** - `sqlite://db.sqlite/table_name` (element = table)
 - **mysql://** - `mysql://host/element` (element = connections, innodb, errors, databases, etc.)
-- **python://** - `python://packages` (element = topic)
 - **reveal://** - `reveal://adapters` (element = topic)
 - **diff://** - Element path selects comparison side
 

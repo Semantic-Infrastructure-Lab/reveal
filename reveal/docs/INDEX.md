@@ -61,7 +61,6 @@ They live in the `adapters/` directory.
 | [MYSQL_ADAPTER_GUIDE.md](adapters/MYSQL_ADAPTER_GUIDE.md) | MySQL introspection and schema analysis |
 | [OVERVIEW_ADAPTER_GUIDE.md](adapters/OVERVIEW_ADAPTER_GUIDE.md) | Compact project map and Git-ref comparison: scope, components, import relationships |
 | [PATCHES_ADAPTER_GUIDE.md](adapters/PATCHES_ADAPTER_GUIDE.md) | Test patch pressure: repeated mocks, private patches |
-| [PYTHON_ADAPTER_GUIDE.md](adapters/PYTHON_ADAPTER_GUIDE.md) | Python runtime introspection |
 | [REVEAL_ADAPTER_GUIDE.md](adapters/REVEAL_ADAPTER_GUIDE.md) | Reveal introspection (analyzers, adapters, config); reference implementation |
 | [SQLITE_ADAPTER_GUIDE.md](adapters/SQLITE_ADAPTER_GUIDE.md) | SQLite introspection and schema analysis |
 | [SSL_ADAPTER_GUIDE.md](adapters/SSL_ADAPTER_GUIDE.md) | SSL/TLS certificate analysis and validation |

@@ -48,7 +48,6 @@ stats://./src                   # Code metrics
 **Element-based resources**:
 ```bash
 env://PATH                      # Specific environment variable
-python://packages               # Python packages info
 help://ast                      # Help topic
 ```
 
@@ -361,11 +360,10 @@ ssl://example.com --check      # Validation
 ```
 
 ### Element-Based Adapters
-**env://, python://, help://** - Navigate via element names
+**env://, help://** - Navigate via element names
 
 ```bash
 env://PATH                     # Specific variable
-python://packages              # Python packages
 help://ast                     # Help topic
 ```
 

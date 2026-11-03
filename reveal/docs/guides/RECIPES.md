@@ -272,41 +272,6 @@ reveal 'ast://./src?type=class' --format=json | \
 
 ## Debugging & Troubleshooting
 
-### Python environment issues
-
-```bash
-# Full health check
-reveal python://doctor
-
-# Check specific module (import shadowing?)
-reveal python://module/requests
-
-# Analyze sys.path conflicts
-reveal python://syspath
-
-# Find stale bytecode
-reveal python://debug/bytecode
-
-# See virtual environment status
-reveal python://venv
-
-# Check installed packages
-reveal python://packages
-```
-
-### Detect import shadowing
-
-```bash
-# Is your local module hiding a pip package?
-reveal python://module/requests
-
-# Output shows:
-# - import_location: Where Python actually imports from
-# - pip_package: Where pip thinks it is
-# - conflicts: [] or [{ type: "cwd_shadowing", ... }]
-# - recommendations: Exact fix if there's a problem
-```
-
 ### Find the code behind the error
 
 ```bash
@@ -1405,11 +1370,6 @@ reveal app.py process_data
 ### Token efficiency
 
 ```bash
-# Python environment
-reveal python://              # Overview (~20 tokens)
-reveal python://packages      # Package list (~200 tokens)
-reveal python://packages/numpy  # Specific package (~50 tokens)
-
 # AST queries
 reveal ast://./src            # All structure (~500 tokens)
 reveal 'ast://./src?complexity>10'  # Just complex ones (~100 tokens)
@@ -1779,7 +1739,6 @@ reveal diff://git://main/.:git://feat/.  # Branch comparison
 ```bash
 reveal reveal://config                   # Show active config
 reveal env://                            # Environment variables
-reveal python://doctor                   # Python health check
 ```
 
 ### AST query operators
@@ -1841,7 +1800,7 @@ reveal help://
 
 # Adapter-specific help
 reveal help://ast
-reveal help://python
+reveal help://env
 reveal help://diff
 
 # Agent documentation

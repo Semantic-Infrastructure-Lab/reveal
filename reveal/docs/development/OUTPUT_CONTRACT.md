@@ -371,7 +371,9 @@ one parseable document and carries the same fact as a `meta.warnings` entry:
 `field` is the table key (`flag:--search`, `param:calls.root`, ...), so two retired spellings are
 two entries. The MCP server never writes the note to stderr: a JSON result carries the same
 entry, and a text result ends with a `[note: ...]` line. At the `error` stage (the cut release) the
-same text is an error and the exit code is 2. A `phase7` row is recorded and prints nothing yet.
+spelling no longer answers: it prints `error: <old> was removed; use <replacement>.` and exits 2.
+A spelling removed outright starts there (`python://`, BACK-2225). A `phase7` row is recorded and
+prints nothing yet.
 
 ---
 
@@ -1171,7 +1173,7 @@ reveal check reveal/adapters/ --select V023
 
 Run `reveal check reveal/adapters/ --select V023` for a live compliance report. The static table that used to live here became stale faster than it could be maintained and was removed.
 
-Element results (`env://HOME`, `python://packages`, `reveal 'reveal://<file>' <element>`) carry the envelope too: the router fills in `contract_version`, `type` (the adapter's `ELEMENT_RESULT_TYPE`, else `<scheme>_element`), `source` and `source_type` around the adapter's own fields, which win. The directory and `--files` views answer `directory_tree` / `file_list` (BACK-1591).
+Element results (`env://HOME`, `reveal 'reveal://<file>' <element>`) carry the envelope too: the router fills in `contract_version`, `type` (the adapter's `ELEMENT_RESULT_TYPE`, else `<scheme>_element`), `source` and `source_type` around the adapter's own fields, which win. The directory and `--files` views answer `directory_tree` / `file_list` (BACK-1591).
 
 ---
 
@@ -1196,7 +1198,7 @@ A: Yes! Add any fields you need, just avoid reserved names. Put domain-specific 
 A: Every adapter has a source:
 - Files: path
 - Databases: connection string
-- Runtime: `"env://"`, `"python://runtime"`
+- Runtime: `"env://"`
 - Network: URL
 
 **Q: Do I need to migrate immediately?**

@@ -182,13 +182,13 @@ reveal/docs/
 ### Content Sources
 
 **Dynamic Content** (Runtime Discovery):
-- URI adapter documentation (`help://ast`, `help://python`, etc.)
+- URI adapter documentation (`help://ast`, `help://env`, etc.)
 - Generated from adapter `get_help()` methods
 - Auto-updates when new adapters registered
 
 **Static Content** (Markdown Files):
 - AI agent guide (`help://agent`)
-- Feature guides (`help://python-guide`, `help://markdown`)
+- Feature guides (`help://reveal-guide`, `help://markdown`)
 - Best practices (`help://tricks`, `help://anti-patterns`)
 - Development (`help://adapter-authoring`)
 

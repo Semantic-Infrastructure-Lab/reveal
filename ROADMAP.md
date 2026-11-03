@@ -145,7 +145,7 @@ with a command.
 - **Hosting-operations adapters** (`cpanel`, `autossl`, `letsencrypt`, the nginx live probes,
   `mysql`, `ssl`, `domain`) move to a separate `reveal-ops` package at the cut, published
   before that release; an old scheme then exits 2 and says how to install it. nginx config analysis and its rules stay in core. `python://`
-  is removed; `env://` stays.
+  is retired outright (removed, not moved); `env://` stays.
 
 ### Exit codes
 

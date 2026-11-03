@@ -819,6 +819,5 @@ links = [self._parse_link_node(node) for node in link_nodes]
 ## See Also
 
 - [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Create custom adapters
-- [PYTHON_ADAPTER_GUIDE.md](../adapters/PYTHON_ADAPTER_GUIDE.md) - Python analysis examples
 - [DUPLICATE_DETECTION_GUIDE.md](../guides/DUPLICATE_DETECTION_GUIDE.md) - Duplicate detection patterns
 - [README.md](../README.md) - Documentation hub

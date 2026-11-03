@@ -1881,7 +1881,6 @@ reveal 'ast://src?complexity>10' --format=json | \
 
 - **AST Adapter**: `AST_ADAPTER_GUIDE.md` - Code structure analysis (find complex code)
 - **Metrics Adapter**: [METRICS_ADAPTER_GUIDE.md](METRICS_ADAPTER_GUIDE.md) - Codebase metrics and hotspots
-- **Python Adapter**: `PYTHON_ADAPTER_GUIDE.md` - Runtime inspection
 - **Reveal Overview**: `../../../README.md` - Full reveal documentation
 
 ---

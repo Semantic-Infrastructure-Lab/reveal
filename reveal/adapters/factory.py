@@ -38,7 +38,7 @@ def _is_constructor_error(exc: TypeError) -> bool:
 
 
 def _try_no_args_init(adapter_class: type) -> Tuple[Any, Optional[Exception]]:
-    """Try no-argument initialization (env, python adapters)."""
+    """Try no-argument initialization (env://)."""
     try:
         return adapter_class(), None
     except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
