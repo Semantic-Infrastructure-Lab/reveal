@@ -27,6 +27,18 @@ def identifier(node)
   end
 end
 
+def receiver_kind(node)
+  return 'object_receiver' unless node.is_a?(Array)
+  if node[0] == :paren && node[1].is_a?(Array) && node[1].length == 1
+    return receiver_kind(node[1][0])
+  end
+  if %i[var_ref const_ref top_const_ref].include?(node[0]) && node[1][0] == :@const && node[1][1] == 'Kernel'
+    'kernel_receiver'
+  else
+    'object_receiver'
+  end
+end
+
 def arguments(node)
   return nil unless node.is_a?(Array)
   node = node[1] if node[0] == :arg_paren
@@ -59,8 +71,9 @@ def loader_site(token, args, receiver, contexts, quoted_starts)
   named = contexts.reverse.find { |context| context.start_with?('def:', 'defs:') }
   uncertain = contexts.any? { |context| context.start_with?('block:', 'lambda') }
   scope = named ? 'local' : (uncertain ? nil : 'module')
+  model = receiver == 'object_receiver' && token[1] != 'require_relative' ? 'unqualified_object_call' : 'native_loader_surface'
   {line: token[2][0], column: token[2][1], operation: token[1], literal: literal,
-   receiver: receiver, scope: scope, named_method: named, contexts: contexts,
+   receiver: receiver, model: model, scope: scope, named_method: named, contexts: contexts,
    qualified_call: receiver == 'implicit' && !literal.nil? && !contexts.include?('attached_loader_block')}
 end
 
@@ -70,6 +83,7 @@ def walk_sites(node, contexts, rows, quoted_starts)
   when :def
     node[2..].each { |child| walk_sites(child, contexts + ["def:#{node[1][1]}"], rows, quoted_starts) }
   when :defs
+    walk_sites(node[1], contexts, rows, quoted_starts)
     node[4..].each { |child| walk_sites(child, contexts + ["defs:#{node[3][1]}"], rows, quoted_starts) }
   when :lambda
     node[1..].each { |child| walk_sites(child, contexts + ['lambda'], rows, quoted_starts) }
@@ -81,10 +95,11 @@ def walk_sites(node, contexts, rows, quoted_starts)
   else
     site = case node[0]
            when :command then loader_site(node[1], node[2], 'implicit', contexts, quoted_starts)
-           when :command_call then loader_site(node[3], node[4], 'explicit_receiver', contexts, quoted_starts)
+           when :command_call then loader_site(node[3], node[4], receiver_kind(node[1]), contexts, quoted_starts)
            when :method_add_arg
              call = node[1]
-             loader_site(identifier(call), node[2], call[0] == :fcall ? 'implicit' : 'explicit_receiver', contexts, quoted_starts)
+             receiver = call[0] == :fcall ? 'implicit' : receiver_kind(call[1])
+             loader_site(identifier(call), node[2], receiver, contexts, quoted_starts)
            end
     rows << site if site
     node.each { |child| walk_sites(child, contexts, rows, quoted_starts) if child.is_a?(Array) }
@@ -124,7 +139,8 @@ class RelativeOracle
     @root = File.realpath(input.fetch('root'))
     @scan = File.realpath(input.fetch('scan'))
     @targets = input.fetch('targets').to_h { |file| [File.expand_path(file), true] }
-    @coverage = {files: 0, import_statements: 0, resolved_statements: 0,
+    @coverage = {files: 0, observed_calls: 0, unqualified_object_calls: 0,
+                 import_statements: 0, resolved_statements: 0,
                  outside_relative_subset: 0, unsupported_expressions: 0,
                  unresolved_targets: 0, scope_unknown_statements: 0, outside_scan: 0,
                  ruby_version: RUBY_VERSION, ruby_description: RUBY_DESCRIPTION,
@@ -136,6 +152,7 @@ class RelativeOracle
                                'unknown lexical contexts use declared include/exclude fallback',
                                'opaque support for a qualified pair makes measurement unavailable',
                                'reflective dispatch and monkeypatched loader behavior unqualified',
+                               'arbitrary receiver load/require calls are observed, not inferred Kernel dependencies',
                                'convention-contaminated pairs require separate graph qualification']}
   end
 
@@ -162,6 +179,11 @@ class RelativeOracle
   def qualified_pairs(file, rows)
     pairs = Hash.new { |hash, key| hash[key] = [] }
     rows.each do |site|
+      @coverage[:observed_calls] += 1
+      if site[:model] == 'unqualified_object_call'
+        @coverage[:unqualified_object_calls] += 1
+        next
+      end
       @coverage[:import_statements] += 1
       unless site[:operation] == 'require_relative'
         @coverage[:outside_relative_subset] += 1
@@ -195,6 +217,7 @@ class RelativeOracle
     rows.each do |site|
       next if site[:operation] == 'require_relative' && site[:qualified_call]
       literal = site[:literal]
+      next if site[:model] == 'unqualified_object_call' && literal.nil?
       if literal.nil? || names.include?(File.basename(literal, '.rb'))
         raise "unqualified loader can affect relative pair in #{site[:source]}:#{site[:line]}"
       end
