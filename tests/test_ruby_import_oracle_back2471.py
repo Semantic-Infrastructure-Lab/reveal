@@ -284,8 +284,8 @@ def test_singleton_receiver_literal_retains_its_outer_scope(tmp_path):
 
 @needs_ruby
 @pytest.mark.parametrize('source,local', [
-    ("def work(value = require_relative 'target')\nend\n", True),
-    ("def self.work(value = require_relative 'target')\nend\n", True),
+    ("def work(value = require_relative('target'))\nend\n", True),
+    ("def self.work(value = require_relative('target'))\nend\n", True),
     ("class Example < (require_relative 'target')\nend\n", False),
     ("class << (require_relative 'target')\nend\n", False),
     ("(require_relative 'target').tap do\nend\n", False),
@@ -327,10 +327,11 @@ def test_possible_object_literal_support_is_refused_before_scoring(tmp_path, rec
 
 @needs_ruby
 @pytest.mark.parametrize('operation', ['require', 'require_relative', 'load'])
-def test_kernel_opaque_support_is_never_an_unqualified_object_method(tmp_path, operation):
+@pytest.mark.parametrize('receiver', ['Kernel.', 'Kernel::', '::Kernel.', '(Kernel).'])
+def test_kernel_opaque_support_is_never_an_unqualified_object_method(tmp_path, operation, receiver):
     scope, _ = _scope(tmp_path, {
         'target.rb': '# target\n',
-        'use.rb': f"Kernel.{operation}(feature)\ndef work\n require_relative 'target'\nend\n",
+        'use.rb': f"{receiver}{operation}(feature)\ndef work\n require_relative 'target'\nend\n",
     })
     with pytest.raises(RuntimeError, match='unqualified loader.*use.rb'):
         _oracle().build(scope)
