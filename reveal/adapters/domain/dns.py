@@ -54,7 +54,7 @@ def get_dns_records(domain: str) -> DnsRecords:
             answers = dns.resolver.resolve(domain, record_type)
             if record_type == 'MX':
                 # MX records have priority, format as "priority hostname"
-                records[record_type.lower()] = [f"{rdata.preference} {rdata.exchange}" for rdata in answers]  # type: ignore[attr-defined]
+                records[record_type.lower()] = [f"{rdata.preference} {rdata.exchange}" for rdata in answers]  # type: ignore[attr-defined,unused-ignore]  # typed from dnspython 2.9
             else:
                 records[record_type.lower()] = [str(rdata) for rdata in answers]
         except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
