@@ -54,6 +54,23 @@ def _node_label(node: Any, get_text: Callable, keyword: Optional[str] = None) ->
     return keyword
 
 
+def _end_line(node: Any, get_text: Callable) -> int:
+    """1-based last line holding the node's own text, not trailing whitespace.
+
+    Some tree-sitter-language-pack versions (Scala case_clause on 1.12.x-1.14.x) end a node
+    after the newline and indent that follow its last token, so the raw end row names the
+    next line and the same source gives a different span per pack. Trimming that whitespace
+    makes the record identical on every supported pack.
+    """
+    row: int = _zero_arg(node, 'end_position').row
+    text = get_text(node)
+    trailing = text[len(text.rstrip()):]
+    start_row: int = _zero_arg(node, 'start_position').row
+    if text.strip() and '\n' in trailing:
+        row = max(start_row, row - trailing.count('\n'))
+    return int(row) + 1
+
+
 def _make_item(
     node: Any,
     depth: int,
@@ -73,7 +90,7 @@ def _make_item(
         'keyword': resolved,
         'label': _node_label(node, get_text, keyword=resolved),
         'line_start': _zero_arg(start_node, 'start_position').row + 1,
-        'line_end': _zero_arg(node, 'end_position').row + 1,
+        'line_end': _end_line(node, get_text),
         'depth': depth,
         'is_exit': is_exit,
     }
