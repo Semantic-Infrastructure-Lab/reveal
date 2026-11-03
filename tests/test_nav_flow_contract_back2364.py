@@ -8,7 +8,6 @@ exit inventory; preserving them does not make them correct.
 from argparse import Namespace
 from contextlib import redirect_stdout
 from io import StringIO
-from importlib.metadata import version
 import json
 from pathlib import Path
 
@@ -155,13 +154,8 @@ ROWS = {
 }
 FIELDS = ('type', 'keyword', 'label', 'line_start', 'line_end', 'depth', 'is_exit')
 
-# The supported floor grammar includes the catch's closing-line boundary in
-# Scala's CASE node. Keep that exact representation explicit rather than
-# dropping end spans or accepting arbitrary changes on all grammar versions.
-if version('tree-sitter-language-pack') == '1.8.1':
-    ROWS['scala'][2] = (
-        'case_clause', 'CASE', 'CASE  _: Exception => return -1', 20, 21, 2, False,
-    )
+# Scala's CASE node ends after the catch's closing-line boundary on some language-pack
+# versions (1.8.1, 1.12.x-1.14.x); records trim that (BACK-2485), so one expectation fits all.
 
 
 def _expected(language, depth=3, bounds=None, keywords=None):
