@@ -186,8 +186,9 @@ def test_existing_gate_scores_relative_scope_and_rejects_ignored_filter(tmp_path
     assert measured['lazy']['exclude']['oracle_edges'] == measured['lazy']['exclude']['hit_edges'] == 3
     assert measured['lazy']['only']['oracle_edges'] == measured['lazy']['only']['hit_edges'] == 1
     assert all(r['extra_edges'] == 0 for r in measured['lazy'].values())
-    assert 'ruby' in measured['edge_rule']['ungated_languages']
-    assert measured['edge_rule']['unclassified_edges'] == 1
+    raw = gate._importers_request(scope.root, scope.scan, None)
+    assert 'ruby' in raw['edge_rule']['ungated_languages']
+    assert raw['edge_rule']['unclassified_edges'] == 1
     edges, _ = _oracle().build(scope)
     def ignored(scan, cap, mode):
         return {'by_target': {scope.root / 'target.rb': set(scope.importers)},
