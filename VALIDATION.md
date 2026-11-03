@@ -1310,6 +1310,71 @@ targets so a resolver bug isn't masked by testing only easy cases), root-cause
 every miss to an exact line of code, fix it, and re-measure to confirm the fix
 actually closes the gap without introducing false positives.
 
+### Bounded Ruby relative-loader pilot (opt-in)
+
+Native Ruby **3.4.7p58 / Ripper 0.1.0**, parse-only, on Discourse
+`4cac48263809d806cee8660c6b1adc6e5d0c9445`. The frozen importer population is exactly
+`script/import_scripts/phpbb3.rb` and `script/import_scripts/phpbb3/database/database.rb`;
+scan root `script/import_scripts`, cap512, with five predeclared relative target pairs.
+The source/native probe qualification is `b88ce04d` (BACK-2471).
+
+| Rendered mode | Independent pairs / found | Extra pairs |
+|---|---:|---:|
+| include |5 /5|0|
+| exclude |3 /3|0|
+| only |2 /2|0|
+
+This is a two-importer, five-target pilot, not whole-Ruby precision. It records eight
+loader-shaped calls: seven within the declared Kernel-loader model (five relative and
+two external `require` sites), plus one arbitrary-object `load` call observed outside
+that model. The five scored relative sites have zero unsupported expressions,
+unresolved targets or unknown scopes. Rendered scan loss/partial count is zero.
+Other corpus sources and importer pairs are outside this scored population.
+
+The oracle parses with native Ripper and never executes corpus or target code.
+Implicit single plain ASCII `require_relative` literals resolve only to exact regular
+tracked `.rb` files. Method/module/unknown lexical facts aggregate per pair; unknown
+support stays in include/exclude and cannot establish local-only truth. Opaque Kernel
+loader support or overlapping literal object calls make measurement unavailable.
+Arbitrary receiver method sends are retained as outside-model observations, not
+inferred Kernel dependencies; reflective dispatch, aliases, monkeypatching, load-path
+winners and Zeitwerk support remain unqualified. Convention-confounded graph answers
+must fail the existing comparison rather than expand native truth to match Reveal.
+
+Ruby **stays outside the default recall gate**. The opt-in `ruby-ripper-relative`
+provider does not change `tests/corpus/manifest.yaml`, committed baselines, scheduled
+rows or `IMPORT_RECALL_GATED`. A runtime older than the declared minimum refuses the
+measurement. `REVEAL_RUBY_ORACLE` selects an installed native binary; Reveal's normal
+Ruby navigation does not acquire a Ruby runtime dependency.
+
+From a source checkout, use the existing gate function with an explicit entry:
+
+```python
+import json
+import sys
+from pathlib import Path
+sys.path.insert(0, "scripts")
+from recall_gate import measure
+entry = {
+    "language": "ruby", "sha": "4cac48263809d806cee8660c6b1adc6e5d0c9445",
+    "recall": {
+        "oracle": "ruby-ripper-relative", "scan_root": "script/import_scripts",
+        "importer_dirs": ["script/import_scripts/phpbb3.rb",
+                          "script/import_scripts/phpbb3/database/database.rb"],
+        "scan_file_cap": 512, "ruby_minimum_version": "3.4", "ruby_version": "3.4.7",
+    },
+}
+print(json.dumps(measure(entry, Path("/path/to/discourse").resolve()), indent=2))
+```
+
+The report retains source/target/probe/config identities, target-population disclosure
+and unsupported/outside-model denominators. Pre/postflight identity checks refuse
+changes during measurement. Handwritten wrong-scope/ignored-filter, mixed/unknown pair,
+opaque header/receiver, alternate-string, version/loss, startup-hook and provenance
+mutations are separate controls; they do not widen the real scored cohort. The original
+Ruby3.0 six-source diagnosis remains separate: Ruby3.4 parses that same finite cohort,
+but no new full-corpus parse-success or promotion claim follows.
+
 ### Bounded PHP scope qualification (BACK-2451, BACK-2452, BACK-2453)
 
 The opt-in `php-token-static` oracle uses native PHP `token_get_all(TOKEN_PARSE)`
@@ -1663,9 +1728,9 @@ methods confer local scope (including nested blocks/lambdas); top-level, class,
 module and singleton-class bodies are module scope. Standalone blocks/lambdas,
 `define_method` blocks, unsupported expressions/escapes/receivers/arguments and
 implicit Zeitwerk convention edges retain unknown scope. This is lexical evidence,
-not execution timing or runtime path resolution. Ruby remains **ungated**: no native
-Ruby oracle is registered and no whole-language recall row or scheduled baseline
-was promoted. See the [imports guide](reveal/docs/adapters/IMPORTS_ADAPTER_GUIDE.md#which-edges-count-lazy)
+not execution timing or runtime path resolution. Ruby remains outside the default
+recall gate; the opt-in relative-loader pilot above does not promote a canonical
+manifest row, whole-language result or scheduled baseline. See the [imports guide](reveal/docs/adapters/IMPORTS_ADAPTER_GUIDE.md#which-edges-count-lazy)
 for statement and mixed-pair behavior.
 
 The JS/TS rule is positional, like Python's [BACK-2078]: an ES `import`, an `export ... from`

@@ -333,7 +333,7 @@ def _resolution_fields(graph: ImportGraph, at: ResolvedAt) -> Tuple[Dict[str, An
         text += '; module and convention edges never close a cycle'
     text += '.' + _outside_root_note(at)
     if ungated:
-        text += (f' Not gated (no recall oracle measures them): {", ".join(sorted(ungated))}, '
+        text += (f' Not gated by default recall checks: {", ".join(sorted(ungated))}, '
                  f'{sum(ungated.values())} edge(s); treat those counts as unmeasured.')
     return fields, text
 

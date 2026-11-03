@@ -485,8 +485,9 @@ scope alone. Interpolation, escapes, computed paths, explicit receivers, additio
 arguments and implicit Zeitwerk convention edges remain unclassified. Existing
 extracted statements and resolved union edges are retained. Qualified loader calls
 have `dynamic=True`, meaning a loader expression, not an unknown path or runtime
-execution claim. Ruby remains ungated: no registered native recall row measures
-this bounded subset or the whole language.
+execution claim. Ruby remains outside default recall coverage. The
+[opt-in native relative-loader pilot](../../../VALIDATION.md#bounded-ruby-relative-loader-pilot-opt-in)
+measures only its declared importer/target population, not whole-language or runtime loading.
 
 ```bash
 reveal 'imports://src?rank=fan-in&lazy=exclude'   # module-level imports only
