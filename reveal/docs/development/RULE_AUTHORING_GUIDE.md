@@ -29,6 +29,10 @@ working directory — they're found identically whether reveal runs from the
 root or a subdirectory. Both locations are scanned on every `reveal check <path>`
 in addition to reveal's own built-in rules; there is no opt-in flag.
 
+MCP checks and `reveal.api.check` pick up added, edited or deleted rule files on the
+next request without restarting the host. Custom rule modules reload between
+requests, recreating their module globals.
+
 ## The three requirements
 
 Discovery (`RuleRegistry._discover_dir` in `reveal/rules/__init__.py`) is
