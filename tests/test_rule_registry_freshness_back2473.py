@@ -133,3 +133,28 @@ def test_nested_host_reuses_rules_and_builtin_discovery(tmp_path, monkeypatch):
     assert RuleRegistry.get_rule('B001') is builtin
     RuleRegistry.discover(force=True)
     assert counts == {'builtin': 2, 'user': 4, 'project': 4}
+
+
+def test_external_reload_preserves_module_metadata_and_source_encoding(tmp_path, monkeypatch):
+    """Source compilation still provides the module lookup dataclasses/typing require."""
+    from typing import get_type_hints
+    from reveal.rules import RuleRegistry
+
+    plugin = tmp_path / 'Q2473.py'
+    plugin.write_bytes(
+        b'# coding: latin-1\nfrom __future__ import annotations\n'
+        b'import sys\nfrom dataclasses import dataclass\n'
+        b'@dataclass\nclass Payload:\n label: str = "caf\xe9"\n'
+        b'def identity(value: Payload) -> Payload:\n return value\n'
+        b'self_module = sys.modules[__name__]\n'
+    )
+    name = 'reveal._external_rules.test.Q2473'
+    monkeypatch.setitem(sys.modules, name, None)
+    module = RuleRegistry._load_module_from_path(plugin, name)
+    assert module is sys.modules[name] is module.self_module
+    assert Path(module.__file__).resolve() == plugin.resolve()
+    assert Path(module.__spec__.origin).resolve() == plugin.resolve()
+    assert module.__loader__ is module.__spec__.loader
+    assert module.__package__ == 'reveal._external_rules.test'
+    assert module.Payload().label == 'café'
+    assert get_type_hints(module.identity) == {'value': module.Payload, 'return': module.Payload}
