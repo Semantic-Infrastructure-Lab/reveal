@@ -7,6 +7,7 @@ sibling ``env://`` route is the negative control: it answers as before.
 """
 import importlib.util
 import json
+from pathlib import Path
 
 import pytest
 
@@ -51,9 +52,22 @@ def test_the_mcp_tool_returns_the_removal_as_an_error():
     assert 'Python Environment' not in out
 
 
+def _has_source(name):
+    """True when *name* imports real code. A checkout that ran python:// before the removal keeps an
+    ignored ``__pycache__``-only directory, which Python imports as an empty namespace package: that
+    spec has no origin and no .py file, and is not the adapter."""
+    spec = importlib.util.find_spec(name)
+    if spec is None:
+        return False
+    if spec.origin is not None:
+        return True
+    return any(next(Path(loc).glob('*.py'), None) is not None
+               for loc in (spec.submodule_search_locations or ()))
+
+
 def test_the_adapter_package_and_renderer_are_gone():
-    assert importlib.util.find_spec('reveal.adapters.python') is None
-    assert importlib.util.find_spec('reveal.rendering.adapters.python') is None
+    assert not _has_source('reveal.adapters.python')
+    assert not _has_source('reveal.rendering.adapters.python')
 
 
 def test_adapter_listings_do_not_name_python():
