@@ -73,17 +73,19 @@ def test_cold_and_warm_answers_equal_the_cache_off_answer(project, tmp_path, vie
     assert _answer(project, view, cache_dir, cache=True) == reference
 
 
-@pytest.mark.parametrize('name,moved_view,edit', EDITS, ids=[e[0] for e in EDITS])
-def test_every_view_after_an_edit_equals_a_fresh_cache_off_answer(project, tmp_path, name, moved_view, edit):
+def test_every_view_after_an_edit_equals_a_fresh_cache_off_answer(project, tmp_path):
+    """Keep one edit timeline, reusing the previously verified cache-on map as before."""
     cache_dir = tmp_path / 'cache'
-    # The edits are a sequence: each starts from the state the previous one left.
-    for earlier, _view, earlier_edit in EDITS:
-        if earlier == name:
-            break
-        earlier_edit(project)
-    before = {view: _answer(project, view, cache_dir, cache=True) for view in VIEWS}  # fills the cache
-    edit(project)
-    after_off = {view: _answer(project, view, cache_dir, cache=False) for view in VIEWS}
-    assert after_off[moved_view] != before[moved_view], f'{name} did not change the {moved_view} answer'
-    for view in VIEWS:
-        assert _answer(project, view, cache_dir, cache=True) == after_off[view], f'{name}: stale {view}'
+    before = {view: _answer(project, view, cache_dir, cache=True) for view in VIEWS}
+    unmoved = []
+    stale = []
+    for name, moved_view, edit in EDITS:
+        edit(project)
+        after_off = {view: _answer(project, view, cache_dir, cache=False) for view in VIEWS}
+        after_on = {view: _answer(project, view, cache_dir, cache=True) for view in VIEWS}
+        if after_off[moved_view] == before[moved_view]:
+            unmoved.append((name, moved_view))
+        stale.extend((name, view) for view in VIEWS if after_on[view] != after_off[view])
+        before = after_on
+    assert not stale, f'stale views {stale}'
+    assert not unmoved, f'unchanged positive-control views {unmoved}'
