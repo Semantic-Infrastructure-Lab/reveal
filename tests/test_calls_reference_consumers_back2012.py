@@ -174,6 +174,7 @@ def test_cli_text_discloses_reference_only_read_loss_once_and_preserves_exit(tmp
     assert 'Zero callers found is not proof of dead code.' in combined
 
 
+@pytest.mark.usefixtures('hosted')
 def test_clean_warm_reference_reuse_and_single_structural_collection(tmp_path, monkeypatch):
     root = tmp_path / 'clean'
     make_tree(root)
@@ -241,6 +242,7 @@ def test_reference_only_discovery_loss_preserves_attribution_and_recovers(
     assert names(CallsAdapter(str(root), 'uncalled').get_structure()) == {'genuinely_dead'}
 
 
+@pytest.mark.usefixtures('hosted')
 def test_excluded_reference_is_policy_and_scope_change_rebuilds_cleanly(tmp_path):
     from reveal.utils.exclusions import exclusion_scope
 
@@ -255,6 +257,7 @@ def test_excluded_reference_is_policy_and_scope_change_rebuilds_cleanly(tmp_path
     assert names(CallsAdapter(str(root), 'uncalled').get_structure()) == {'genuinely_dead'}
 
 
+@pytest.mark.usefixtures('hosted')
 def test_existing_unsafe_parent_policy_is_not_required_loss(tmp_path, monkeypatch):
     root = tmp_path / 'clean'
     make_tree(root)

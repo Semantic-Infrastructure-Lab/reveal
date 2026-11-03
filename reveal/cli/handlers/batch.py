@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Dict, List, Any, Tuple, Iterable
 
+from ...utils.request_cache import host_request
 from ...utils.results import outcome_of
 
 if TYPE_CHECKING:
@@ -183,6 +184,17 @@ def _stdin_check_inputs(is_check_mode: bool, has_file_sinks: bool) -> Iterable[s
 
 
 def handle_stdin_mode(args: 'Namespace', handle_file_func):
+    """Run a --stdin batch as one host request (BACK-2474).
+
+    A batch is a long-lived entry point: one request lets the request-owned caches (the calls
+    callers index, the import graph) be reused across its lines, revalidated on entry and
+    sealed on exit, instead of read without revalidation or rebuilt per line.
+    """
+    with host_request():
+        _run_stdin_mode(args, handle_file_func)
+
+
+def _run_stdin_mode(args: 'Namespace', handle_file_func):
     """Handle --stdin mode to process files/URIs from stdin.
 
     Args:

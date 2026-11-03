@@ -312,10 +312,11 @@ def _python_referenced_names(directory: Path, *,
     from ...utils.exclusions import active_exclusions
     cache_key = (_dir_cache_key(directory), active_exclusions(), gitignore_enabled())
     dir_str = str(directory)
+    hosted = in_host_request()  # outside a request nothing revalidates an entry (BACK-2474)
     known_loss = structures is not None and bool(getattr(structures, 'traversal_failures', ()))
     if known_loss:
         _REFERENCE_CACHE.pop(dir_str, None)
-    cached = _REFERENCE_CACHE.get(dir_str)
+    cached = _REFERENCE_CACHE.get(dir_str) if hosted else None
     if cached and cached[0] == cache_key:
         _REFERENCE_CACHE.move_to_end(dir_str)
         return cached[1]
@@ -342,6 +343,8 @@ def _python_referenced_names(directory: Path, *,
         _record_reference_failures(structures, skipped, traversal_failures)
     if known_loss or skipped or traversal_failures:
         _REFERENCE_CACHE.pop(dir_str, None)
+        return referenced
+    if not hosted:
         return referenced
     _REFERENCE_CACHE[dir_str] = (cache_key, referenced)
     _REFERENCE_CACHE.move_to_end(dir_str)
@@ -478,6 +481,8 @@ def _environmental_loss(skipped: Sequence[Tuple[str, str]],
 
 def _cache_callers_index(dir_str: str, cache_key: Any, index: CallersIndex,
                          structures: StructureList) -> None:
+    if not in_host_request():  # nothing would revalidate it (BACK-2474)
+        return
     if _environmental_loss(index.skipped, getattr(structures, 'traversal_failures', [])):
         _INDEX_CACHE.pop(dir_str, None)
         return
@@ -489,8 +494,12 @@ def _cache_callers_index(dir_str: str, cache_key: Any, index: CallersIndex,
 
 def _cached_callers_index(dir_str: str, cache_key: Any,
                           structures: Optional[StructureList]) -> Optional[CallersIndex]:
-    """Reuse a matching index only when supplied evidence has no known directory loss."""
-    if getattr(structures, 'traversal_failures', []):
+    """Reuse a matching index only inside a host request and without known directory loss.
+
+    Outside a request (a CLI run, a direct library call) nothing revalidates an entry, and the
+    directory-mtime key misses an in-place overwrite, so such a caller always builds (BACK-2474).
+    """
+    if not in_host_request() or getattr(structures, 'traversal_failures', []):
         return None
     if dir_str in _INDEX_CACHE and _INDEX_CACHE[dir_str][0] == cache_key:
         _INDEX_CACHE.move_to_end(dir_str)
@@ -526,8 +535,9 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
           ...
         }
 
-    Results are cached by a directory mtime fingerprint and active scope. This
-    cheap key does not detect every file change. Supplied structures with known
+    Inside a host request results are cached by a directory mtime fingerprint and
+    active scope, and the request revalidates the entry against a tree stamp; outside
+    one the index is always built (BACK-2474). Supplied structures with known
     directory traversal loss bypass a matching hit and are not cached; nor is an index
     with a file skipped for an environmental reason (``environmental_failure``).
 

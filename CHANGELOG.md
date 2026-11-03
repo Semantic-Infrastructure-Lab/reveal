@@ -18,6 +18,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- A direct library `find_callers`, `find_uncalled` or `rank_by_callers` call now sees an in-place file edit; it used to reuse an earlier callers index in the same process, whose directory-time key misses an overwrite. Outside an MCP or `reveal.api` request these indexes are now rebuilt per call, and a `--stdin` batch runs as one request so its lines still share them (three `calls://` lines over one tree build the index once). (BACK-2474)
+
+- Scala flow records (`--flow`, including `--flow=if` and the other selectors) now end a `case` clause on its last line on every supported tree-sitter-language-pack. Packs 1.8.1 and 1.12-1.14 extended it over the following line's whitespace, so the same source gave a different `line_end` per pack. (BACK-2485)
+
 - reveal now requires Python 3.11 or newer; 3.10 is no longer supported. pip on Python 3.10 keeps installing the last release that supports it. This closes the Python 3.10 `dnspython` advisory gap (the fixed 2.9.0 needs 3.11) and removes the `tomli` backport dependency. (BACK-2481)
 
 - MCP checks and `reveal.api.check` now pick up added, edited and deleted custom rule files between requests instead of retaining stale rules until restart. Edited rule source also refreshes when its timestamp and size are unchanged. (BACK-2473)

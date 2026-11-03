@@ -183,17 +183,17 @@ def test_actual_calls_evictions_do_not_remove_other_registration_or_orphan_stamp
     assert (reference_name,str(tmp_path)) in request_cache._STAMPS
 
 
-def test_externally_built_calls_entries_are_rebuilt_before_host_reuse(tmp_path):
+def test_externally_built_calls_entries_are_never_stored_for_host_reuse(tmp_path):
     from reveal.adapters.calls import CallsAdapter
 
     write(tmp_path / 'source.py', 'def visible():\n    return 1\n')
     result = CallsAdapter(str(tmp_path), 'uncalled').get_structure()
-    external_callers = index._INDEX_CACHE[str(tmp_path)][1]
-    external_references = index._REFERENCE_CACHE[str(tmp_path)][1]
+    # BACK-2474: outside a host request nothing would revalidate an entry, so none is stored.
+    assert str(tmp_path) not in index._INDEX_CACHE
+    assert str(tmp_path) not in index._REFERENCE_CACHE
     actual = query(tmp_path, 'uncalled')
     assert actual['entries'] == result['entries']
-    assert index._INDEX_CACHE[str(tmp_path)][1] is not external_callers
-    assert index._REFERENCE_CACHE[str(tmp_path)][1] is not external_references
+    assert str(tmp_path) in index._INDEX_CACHE and str(tmp_path) in index._REFERENCE_CACHE
 
 
 def test_midrequest_changed_entry_is_not_sealed_as_trusted(tmp_path, isolated_owner):
@@ -218,19 +218,16 @@ def test_same_request_reuse_and_one_uncalled_structural_collection(tmp_path, mon
         return real(*args, **kwargs)
 
     monkeypatch.setattr(index, 'collect_structures', collect)
-    request_cache.reset_request_caches()
-    started = request_cache.request_started_ns()
-    try:
+    with request_cache.host_request():
         result = index.find_uncalled(str(tmp_path))
         assert {entry['name'] for entry in result['entries']} == {'visible'}
         cached = index._INDEX_CACHE[str(tmp_path)][1]
         assert index.build_callers_index(str(tmp_path)) is cached
         assert len(collected) == 1
-    finally:
-        request_cache.seal_request_caches(started)
 
 
-def test_direct_callers_and_reference_lrus_keep_eight_entry_limit(tmp_path):
+@pytest.mark.usefixtures('hosted')
+def test_callers_and_reference_lrus_keep_eight_entry_limit(tmp_path):
     roots = [tmp_path / f'root_{number}' for number in range(9)]
     for root in roots:
         write(root / 'source.py', 'def visible():\n    return target()\n')

@@ -32,6 +32,7 @@ def deny(context, child):
 
 
 @pytest.mark.parametrize('prior_entry', [False, True])
+@pytest.mark.usefixtures('hosted')
 def test_known_traversal_loss_is_returned_but_not_cached(tree, monkeypatch, prior_entry):
     root, child = tree
     if prior_entry:
@@ -43,6 +44,7 @@ def test_known_traversal_loss_is_returned_but_not_cached(tree, monkeypatch, prio
     assert str(root) not in calls_index._INDEX_CACHE
 
 
+@pytest.mark.usefixtures('hosted')
 def test_permission_recovery_rebuilds_without_clearing_cache(tree, monkeypatch):
     root, child = tree
     clean_key = calls_index._dir_cache_key(root)
@@ -56,6 +58,7 @@ def test_permission_recovery_rebuilds_without_clearing_cache(tree, monkeypatch):
     assert calls_index.build_callers_index(str(root)) is recovered
 
 
+@pytest.mark.usefixtures('hosted')
 def test_supplied_traversal_loss_evicts_stale_entry(tree):
     root, child = tree
     supplied = StructureList([{'file': str(root / 'visible.py'), 'elements': [
@@ -68,6 +71,7 @@ def test_supplied_traversal_loss_evicts_stale_entry(tree):
     assert str(root) not in calls_index._INDEX_CACHE
 
 
+@pytest.mark.usefixtures('hosted')
 def test_legacy_supplied_collection_without_traversal_attribute_is_cached(tree):
     class LegacyStructures(list):
         skipped = []

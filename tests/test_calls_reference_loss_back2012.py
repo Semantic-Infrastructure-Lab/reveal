@@ -46,6 +46,7 @@ def reference_phase(monkeypatch):
 
 @pytest.mark.parametrize('survivors', [False, True])
 @pytest.mark.parametrize('loss', ['read', 'directory'])
+@pytest.mark.usefixtures('hosted')
 def test_reference_only_loss_recovers_without_manual_eviction(tmp_path, monkeypatch, capsys, survivors, loss):
     root, sibling = tmp_path / 'affected', tmp_path / 'sibling'
     child, hidden = make_tree(root, survivors=survivors)
@@ -161,6 +162,7 @@ def test_supplied_structural_directory_loss_supersedes_warm_reference_hit(tmp_pa
 
 
 @pytest.mark.parametrize('empty', [False, True])
+@pytest.mark.usefixtures('hosted')
 def test_clean_reference_cache_keeps_set_shape_and_warm_identity(tmp_path, monkeypatch, empty):
     if not empty:
         make_tree(tmp_path / 'source', survivors=True)
@@ -246,6 +248,7 @@ def test_existing_parser_boundary_records_loss_and_evicts_old_entry(tmp_path, mo
     assert cause.startswith(f'{type(failure).__name__}:')
 
 
+@pytest.mark.usefixtures('hosted')
 def test_unsafe_root_policy_is_not_required_loss(tmp_path, monkeypatch):
     from reveal.adapters.ast.analysis import StructureList
 

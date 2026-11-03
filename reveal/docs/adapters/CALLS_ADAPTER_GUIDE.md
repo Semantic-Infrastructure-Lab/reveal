@@ -774,11 +774,13 @@ with the shared path/mtime/size fingerprint, rebuilding changed roots while
 preserving unchanged entries. Each distinct retained root incurs a validation
 walk, including on unrelated tool requests. These fingerprints are not atomic
 snapshots or content/readability guarantees; an edit that preserves size and
-mtime can evade them. Direct adapter/helper calls outside the host request
-boundary retain the cheap-key behavior described above.
+mtime can evade them. Outside a host request (a direct adapter or helper call)
+nothing validates a retained entry, so the callers index and the Python-reference
+set are neither read nor retained there: every call rebuilds. A `--stdin` batch is
+one host request, so its lines share them.
 
 `callees` (every depth, `detail`, `FILE:NAME`) keeps the structure collection it
-reads per directory only inside a host request (MCP tools, `reveal.api`), validated
+reads per directory only inside a host request (MCP tools, `reveal.api`, a `--stdin` batch), validated
 by that fingerprint alone, so a repeated query on an unchanged tree skips collection;
 call resolution still runs per query, but each definition's language family is looked up once,
 when the collection is made, and the language census behind the confidence meta is walked once per

@@ -55,6 +55,7 @@ def test_calls_modes_warn_about_the_skipped_file(tree, query):
     assert 'analysis_skipped' not in result, 'the carrier key is consumed, not leaked into the data'
 
 
+@pytest.mark.usefixtures('hosted')
 def test_calls_cached_index_keeps_its_skipped_files(tree):
     first = build_callers_index(str(tree))
     again = build_callers_index(str(tree))

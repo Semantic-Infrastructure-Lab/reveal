@@ -125,6 +125,19 @@ def production_schemes() -> List[str]:
 
 
 @pytest.fixture
+def hosted() -> Generator[None, None, None]:
+    """Run the test inside one host request.
+
+    Request-owned validated caches (the calls callers and reference indexes) are read and
+    stored only inside a host request (BACK-2109, BACK-2474); a test of their warm reuse,
+    eviction or stored content needs one.
+    """
+    from reveal.utils.request_cache import host_request
+    with host_request():
+        yield
+
+
+@pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for test files.
 

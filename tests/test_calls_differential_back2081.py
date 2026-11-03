@@ -14,7 +14,8 @@ through the public path, as in ``test_imports_differential_back2081.py``:
 A long-lived library host (``reveal.api.query``, one host request per call) adds the validated
 in-memory indexes (``_INDEX_CACHE``, ``_CALLEE_CACHE``) to the same compare: one process answers
 every view after each edit, and each answer must equal a fresh process's. A direct library call
-(no host request) after an in-place edit is the strict xfail at the end.
+(no host request) after an in-place edit must see the edit too (BACK-2474): outside a request the
+index is always built.
 
 An edit that keeps a file's size and mtime is a stat-key design limit and is out of scope here: every
 edit below changes the size of the file it rewrites.
@@ -179,14 +180,8 @@ print(json.dumps([first, callers()]))
 '''
 
 
-@pytest.mark.parametrize('mode', [
-    'host',
-    pytest.param('direct', marks=pytest.mark.xfail(strict=True, reason=(
-        'BACK-2474: direct internal-library calls only; supported CLI/MCP/API requests are fresh. '
-        '_INDEX_CACHE is read and stored outside a host request (callee_source is gated on '
-        'in_host_request, _cached_callers_index is not); its directory-mtime key misses an in-place '
-        'overwrite, so a second direct call returns the first answer'))),
-])
+# BACK-2474: outside a host request the callers index is never read or stored, as callee_source.
+@pytest.mark.parametrize('mode', ['host', 'direct'])
 def test_a_direct_library_caller_sees_an_in_place_edit(project, tmp_path, mode):
     edited = 'from pkg.a import run\nfrom pkg.b import helper\n\n\ndef main():\n    run()\n    helper(2)\n'
     done = subprocess.run([sys.executable, '-c', _DIRECT_DRIVER, mode, edited], cwd=project, capture_output=True,

@@ -23,6 +23,7 @@ def callers(index):
 
 
 @pytest.mark.parametrize('file_path', [False, True])
+@pytest.mark.usefixtures('hosted')
 def test_real_supplied_loss_supersedes_matching_warm_hit(tmp_path, monkeypatch, file_path):
     root = tmp_path / 'affected'
     child = make_tree(root)
@@ -66,6 +67,7 @@ def test_real_supplied_loss_supersedes_matching_warm_hit(tmp_path, monkeypatch, 
 
 
 @pytest.mark.parametrize('legacy', [False, True])
+@pytest.mark.usefixtures('hosted')
 def test_healthy_supplied_collection_keeps_matching_warm_identity(tmp_path, monkeypatch, legacy):
     root = tmp_path / 'healthy'
     make_tree(root)
@@ -84,6 +86,7 @@ def test_healthy_supplied_collection_keeps_matching_warm_identity(tmp_path, monk
     assert callers(warm) == {'visible', 'hidden'}
 
 
+@pytest.mark.usefixtures('hosted')
 def test_empty_supplied_collection_keeps_matching_warm_identity(tmp_path, monkeypatch):
     root = tmp_path / 'empty'
     root.mkdir()
