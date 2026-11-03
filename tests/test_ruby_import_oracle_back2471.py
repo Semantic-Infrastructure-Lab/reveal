@@ -257,3 +257,93 @@ def test_convention_support_cannot_pass_as_measured_explicit_local_pair(tmp_path
     # support. The existing gate must refuse this cohort rather than promote it.
     with pytest.raises(RuntimeError, match='lazy=only.*positive control failed'):
         gate.measure(entry, scope.root)
+
+
+@needs_ruby
+def test_singleton_receiver_opaque_loader_is_not_lost(tmp_path):
+    scope, _ = _scope(tmp_path, {
+        'target.rb': '# target\n',
+        'use.rb': "def (require_relative feature).work\nend\ndef local\n require_relative 'target'\nend\n",
+    })
+    with pytest.raises(RuntimeError, match='unqualified loader.*use.rb'):
+        _oracle().build(scope)
+
+
+@needs_ruby
+def test_singleton_receiver_literal_retains_its_outer_scope(tmp_path):
+    scope, _ = _scope(tmp_path, {
+        'target.rb': '# target\n',
+        'use.rb': "def (require_relative 'target').work\nend\ndef local\n require_relative 'target'\nend\n",
+    })
+    edges, coverage = _oracle().build(scope)
+    assert edges == {'target.rb': ['use.rb']}
+    assert coverage['import_statements'] == 2
+    assert [site['scope'] for site in coverage['sites']] == ['module', 'local']
+    assert _oracle().lazy_only(scope) == {}
+
+
+@needs_ruby
+@pytest.mark.parametrize('source,local', [
+    ("def work(value = require_relative 'target')\nend\n", True),
+    ("def self.work(value = require_relative 'target')\nend\n", True),
+    ("class Example < (require_relative 'target')\nend\n", False),
+    ("class << (require_relative 'target')\nend\n", False),
+    ("(require_relative 'target').tap do\nend\n", False),
+])
+def test_header_expressions_and_block_callees_remain_visible(tmp_path, source, local):
+    scope, _ = _scope(tmp_path, {'target.rb': '# target\n', 'use.rb': source})
+    edges, coverage = _oracle().build(scope)
+    assert edges == {'target.rb': ['use.rb']}
+    assert coverage['import_statements'] == 1
+    assert _oracle().lazy_only(scope) == ({'target.rb': ['use.rb']} if local else {})
+
+
+@needs_ruby
+@pytest.mark.parametrize('receiver', ['Settings', 'settings'])
+def test_unqualified_object_load_is_observed_without_kernel_inference(tmp_path, receiver):
+    scope, entry = _scope(tmp_path, {
+        'target.rb': '# target\n',
+        'use.rb': f"{receiver}.load(ARGV[0])\ndef work\n require_relative 'target'\nend\n",
+    })
+    edges, coverage = _oracle().build(scope)
+    assert edges == _oracle().lazy_only(scope) == {'target.rb': ['use.rb']}
+    assert coverage['import_statements'] == 1
+    assert coverage['observed_calls'] == 2 and coverage['unqualified_object_calls'] == 1
+    assert coverage['sites'][0]['model'] == 'unqualified_object_call'
+    measured = gate.measure(entry, scope.root)
+    assert measured['lazy']['only']['hit_edges'] == 1
+
+
+@needs_ruby
+@pytest.mark.parametrize('receiver', ['Settings', 'settings'])
+def test_possible_object_literal_support_is_refused_before_scoring(tmp_path, receiver):
+    scope, _ = _scope(tmp_path, {
+        'target.rb': '# target\n',
+        'use.rb': f"{receiver}.load('target')\ndef work\n require_relative 'target'\nend\n",
+    })
+    with pytest.raises(RuntimeError, match='unqualified loader.*use.rb'):
+        _oracle().build(scope)
+
+
+@needs_ruby
+@pytest.mark.parametrize('operation', ['require', 'require_relative', 'load'])
+def test_kernel_opaque_support_is_never_an_unqualified_object_method(tmp_path, operation):
+    scope, _ = _scope(tmp_path, {
+        'target.rb': '# target\n',
+        'use.rb': f"Kernel.{operation}(feature)\ndef work\n require_relative 'target'\nend\n",
+    })
+    with pytest.raises(RuntimeError, match='unqualified loader.*use.rb'):
+        _oracle().build(scope)
+
+
+@needs_ruby
+def test_computed_object_method_has_no_native_claim_and_confounded_gate_refuses(tmp_path):
+    scope, entry = _scope(tmp_path, {
+        'target.rb': '# target\n',
+        'use.rb': "Settings.load(File.join('target', 'more'))\ndef work\n require_relative 'target'\nend\n",
+    })
+    edges, coverage = _oracle().build(scope)
+    assert edges == _oracle().lazy_only(scope) == {'target.rb': ['use.rb']}
+    assert coverage['unqualified_object_calls'] == 1
+    with pytest.raises(RuntimeError, match='lazy=only.*positive control failed'):
+        gate.measure(entry, scope.root)
