@@ -1683,6 +1683,7 @@ class HelpAdapter(ResourceAdapter):
                     'pairs': [
                         ('sqlite', 'mysql', 'two databases: a SQLite file\'s schema, a MySQL server\'s health'),
                         ('json', 'sqlite', 'inspect app state: exported JSON or live DB'),
+                        ('env', 'json', 'configuration: environment variables vs a JSON config file'),
                         ('xlsx', 'sqlite', 'tabular data inspection across formats'),
                         ('xlsx', 'json', 'structured data: Excel vs JSON'),
                     ],
