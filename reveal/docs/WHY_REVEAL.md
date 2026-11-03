@@ -308,7 +308,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 2. **`reveal health` spanning certs + DB + DNS** — a category collapse. One command, one JSON blob, one exit code.
 
-3. **Native MCP server (`reveal-mcp`)** — exposes all reveal capabilities as MCP tools for Claude Code, Cursor, and Windsurf. One install, ten tools: `reveal_structure`, `reveal_element`, `reveal_nav`, `reveal_query`, `reveal_pack`, `reveal_check`, `reveal_grep`, `reveal_trace`, `reveal_health`, `reveal_review` — with `reveal_query` acting as a generic URI router reaching all 35 URI adapters beyond the nine convenience wrappers. Agents get progressive disclosure, deep-dive nav (boundary / sideeffects / deps / mutations), and call-graph analysis without subprocess overhead.
+3. **Native MCP server (`reveal-mcp`)** — exposes all reveal capabilities as MCP tools for Claude Code, Cursor, and Windsurf. One install, ten tools: `reveal_structure`, `reveal_element`, `reveal_nav`, `reveal_query`, `reveal_pack`, `reveal_check`, `reveal_grep`, `reveal_trace`, `reveal_health`, `reveal_review` — with `reveal_query` acting as a generic URI router reaching all 34 URI adapters beyond the nine convenience wrappers. Agents get progressive disclosure, deep-dive nav (boundary / sideeffects / deps / mutations), and call-graph analysis without subprocess overhead.
 
 4. **`reveal overview` + `reveal imports`** — codebase orientation map and dependency health. `reveal imports --circular` and `--unused` find circular import chains and unused imports across a full project, `--external` lists the packages it uses; `reveal overview` maps recognized code files, languages, components and static import relationships; it does not collect quality scores or Git activity.
 
