@@ -6,7 +6,6 @@ Before this, INSTALL.md lived outside the bundled reveal/docs corpus, so a searc
 and 'extras'/'air-gapped' matched only a passing sentence inside help://agent.
 """
 
-import re
 from pathlib import Path
 
 import pytest
@@ -46,10 +45,10 @@ def test_nonsense_term_finds_nothing():
 
 
 def _pyproject_extras():
-    """Extras names from [project.optional-dependencies] (no tomllib on Python 3.10)."""
-    text = (Path(__file__).resolve().parent.parent / 'pyproject.toml').read_text(encoding='utf-8')
-    section = text.split('[project.optional-dependencies]', 1)[1].split('\n[', 1)[0]
-    return re.findall(r'^(\w+)\s*=\s*\[', section, flags=re.MULTILINE)
+    """Extras names from [project.optional-dependencies]."""
+    import tomllib
+    with (Path(__file__).resolve().parent.parent / 'pyproject.toml').open('rb') as handle:
+        return list(tomllib.load(handle)['project']['optional-dependencies'])
 
 
 def test_install_topic_is_readable_and_lists_every_pyproject_extra():

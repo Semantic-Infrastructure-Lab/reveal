@@ -42,7 +42,7 @@ def _local_time(zoned: 're.Match[str]') -> str:
     day, clock, zone = zoned.groups()
     if '.' in clock:
         whole, fraction = clock.split('.', 1)
-        # Python 3.10 accepts only three/six digits; use datetime's microsecond precision.
+        # Normalize to exactly six digits (datetime's microsecond precision).
         clock = f'{whole}.{fraction[:6]:0<6}'
     zone = '+00:00' if zone.upper() == 'Z' else f'{zone[:3]}:{zone[-2:]}'
     try:

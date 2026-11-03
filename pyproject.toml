@@ -68,7 +68,7 @@ database = [
 ]
 # Git repository inspection (git:// adapter)
 git = [
-    "pygit2>=1.14.0",  # Stable libgit2 bindings with Python 3.10-3.12 support
+    "pygit2>=1.14.0",  # Stable libgit2 bindings
 ]
 # DNS records for domain:// (/dns, /mail, /ns-audit); domain:// degrades without it
 dns = [

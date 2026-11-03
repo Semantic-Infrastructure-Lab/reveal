@@ -120,8 +120,8 @@ SITE_PACKAGES=$("$SCRATCH/audit-target/bin/python" -c 'import sysconfig; print(s
 - Triage every target dependency, including transitives; none are excluded by package name.
   The target has no bootstrap pip/setuptools; build isolation keeps build tools outside it.
 - For one of ours, raise the floor in `pyproject.toml` to the fixed version. If the fix needs a newer
-  Python than `requires-python`, use an environment marker (as `dnspython>=2.9.0;python_version>='3.11'`
-  does) and note that older Pythons have no fixed release.
+  Python than `requires-python`, use an environment marker (e.g. `;python_version>='3.12'`) and note that older
+  Pythons have no fixed release.
 - Do not "update everything" from `--outdated`: `tree-sitter` is capped below 0.26 on purpose
   (BACK-1161); lift a ceiling only for the reason written beside it.
 - Run it once with `[all,powerpivot]` when `powerpivot` dependencies changed.

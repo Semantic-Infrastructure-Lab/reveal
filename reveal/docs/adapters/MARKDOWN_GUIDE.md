@@ -151,7 +151,7 @@ $ reveal README.md --section "Installation"
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.11+
 - pip
 
 ## Quick Install

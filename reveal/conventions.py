@@ -201,8 +201,8 @@ JS_FUNCTION_FACTORIES: Dict[str, FrozenSet[str]] = {
 
 # --- stdlib classification (BACK-1275) --------------------------------------
 
-# Python 3.10+ ships sys.stdlib_module_names; the fallback set covers older
-# interpreters.
+# sys.stdlib_module_names is the source of truth (always present on the 3.11+ floor);
+# the set below only adds names a stripped-down build might omit.
 PYTHON_STDLIB: FrozenSet[str] = frozenset(getattr(sys, 'stdlib_module_names', ())) | frozenset({
     'abc', 'ast', 'asyncio', 'builtins', 'collections', 'contextlib',
     'copy', 'dataclasses', 'datetime', 'enum', 'functools', 'gc',
