@@ -5,7 +5,7 @@ The disk cache (and the host-request memo behind it) must never change what a re
 every view runs as separate processes through the public path:
 
 * cache off: the reference, run twice to prove it is deterministic (the control for every compare);
-* cache on, cold then warm: both equal the reference, and the warm one is served from the entry;
+* cache on, cold then warm: both equal the reference (this does not establish a cache-hit count);
 * after each edit (a cycle added, a cycle removed, a file added, a file deleted): the cache-on answer
   equals a fresh cache-off answer, and the edit really changed the answer (the positive control).
 

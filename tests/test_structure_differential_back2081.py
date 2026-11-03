@@ -7,8 +7,8 @@ added one missing, an element read from the old lines). Every view runs as separ
 through the public path, as in ``test_imports_differential_back2081.py``:
 
 * cache off: the reference, run twice to prove it is deterministic (the control for every compare);
-* cache on, cold then warm: both equal the reference, and the warm run stores nothing (it read back
-  every entry it needed);
+* cache on, cold then warm: both equal the reference, and the warm run visibly rewrites no cache
+  file (this does not establish a cache-hit count);
 * after each edit (a function added, a function removed, a file added, a file deleted): the cache-on
   answer equals a fresh cache-off answer, and the edit really changed the answer (the positive
   control).
@@ -17,14 +17,15 @@ A long-lived library host (``reveal.api.query``, one host request per call) runs
 across the same edits in one process; each answer must equal a fresh process's.
 
 An edit that keeps a file's size and mtime is a stat-key design limit and is out of scope here: every
-edit below changes the size of the file it rewrites.
+edit below changes the size of the file it rewrites. Element views remain equality controls;
+no stale-element mutation has yet qualified their ability to detect a broken cache.
 """
 import shutil
 from pathlib import Path
 
 import pytest
 
-from cache_differential import cache_entries, run_host, run_reveal
+from cache_differential import assert_complete_answer, cache_entries, run_host, run_reveal
 
 pytestmark = [pytest.mark.disk_cache]
 
@@ -103,7 +104,12 @@ def project(tmp_path):
 def _answer(root: Path, view, cache_dir: Path, *, cache: bool):
     """One request in its own process, through the public path: (exit code, answer)."""
     argv, as_json, _reads_cache = VIEWS[view]
-    return run_reveal(argv, cache_dir, cache=cache, cwd=root, as_json=as_json)
+    answer = run_reveal(argv, cache_dir, cache=cache, cwd=root, as_json=as_json, ok_codes=(0,))
+    if as_json:
+        assert_complete_answer(answer[1])
+    else:
+        assert answer[1].strip(), f'{view}: the clean fixture produced no text'
+    return answer
 
 
 @pytest.mark.parametrize('view', sorted(VIEWS))
@@ -120,7 +126,7 @@ def test_cold_and_warm_answers_equal_the_cache_off_answer(project, tmp_path, vie
     else:
         assert not cold, f'{view} now stores an entry: move it to the views that read the cache'
     assert _answer(project, view, cache_dir, cache=True) == reference
-    assert cache_entries(cache_dir) == cold, 'the warm run re-stored an entry: it missed'
+    assert cache_entries(cache_dir) == cold, 'the warm run visibly rewrote a cache file'
 
 
 @pytest.mark.parametrize('name,moved_view,rel,text', EDITS, ids=[e[0] for e in EDITS])

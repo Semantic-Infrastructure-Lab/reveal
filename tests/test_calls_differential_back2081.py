@@ -6,8 +6,8 @@ call graph (a removed call still reported as a caller). Every view runs as separ
 through the public path, as in ``test_imports_differential_back2081.py``:
 
 * cache off: the reference, run twice to prove it is deterministic (the control for every compare);
-* cache on, cold then warm: both equal the reference, and the warm run stores nothing (it read back
-  every entry it needed);
+* cache on, cold then warm: both equal the reference, and the warm run visibly rewrites no cache
+  file (this does not establish a cache-hit count);
 * after each edit (a call added, a call removed, a file added, a file deleted): the cache-on answer
   equals a fresh cache-off answer, and the edit really changed the answer (the positive control).
 
@@ -28,7 +28,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from cache_differential import cache_entries, cache_env, comparable, run_host, run_reveal
+from cache_differential import assert_complete_answer, cache_entries, cache_env, comparable, run_host, run_reveal
 
 pytestmark = [pytest.mark.disk_cache]
 
@@ -96,7 +96,10 @@ def project(tmp_path):
 
 def _answer(root: Path, view, cache_dir: Path, *, cache: bool):
     """One request in its own process, through the public path: (exit code, JSON answer)."""
-    return run_reveal(['calls', '.', *VIEWS[view], '--format', 'json'], cache_dir, cache=cache, cwd=root)
+    answer = run_reveal(['calls', '.', *VIEWS[view], '--format', 'json'], cache_dir,
+                        cache=cache, cwd=root, ok_codes=(0,))
+    assert_complete_answer(answer[1])
+    return answer
 
 
 @pytest.mark.parametrize('view', sorted(VIEWS))
@@ -110,7 +113,7 @@ def test_cold_and_warm_answers_equal_the_cache_off_answer(project, tmp_path, vie
     assert any('/structure/' in f'/{entry}' for entry in cold), \
         'the cold cache-on run wrote no structure entry; the warm compare proves nothing'
     assert _answer(project, view, cache_dir, cache=True) == reference
-    assert cache_entries(cache_dir) == cold, 'the warm run re-stored an entry: it missed'
+    assert cache_entries(cache_dir) == cold, 'the warm run visibly rewrote a cache file'
 
 
 @pytest.mark.parametrize('name,moved_view,rel,text', EDITS, ids=[e[0] for e in EDITS])
@@ -176,7 +179,8 @@ print(json.dumps([first, callers()]))
 @pytest.mark.parametrize('mode', [
     'host',
     pytest.param('direct', marks=pytest.mark.xfail(strict=True, reason=(
-        'NEW: _INDEX_CACHE is read and stored outside a host request (callee_source is gated on '
+        'BACK-2474: direct internal-library calls only; supported CLI/MCP/API requests are fresh. '
+        '_INDEX_CACHE is read and stored outside a host request (callee_source is gated on '
         'in_host_request, _cached_callers_index is not); its directory-mtime key misses an in-place '
         'overwrite, so a second direct call returns the first answer'))),
 ])

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from reveal.utils.path_utils import to_posix
+from reveal.utils.results import outcome_of
 
 VOLATILE = frozenset({'elapsed', 'elapsed_ms', 'duration', 'duration_ms', 'timing', 'timings', 'cache',
                       'cache_hit', 'from_cache', 'generated_at', 'perf'})
@@ -27,10 +28,22 @@ def comparable(value: Any) -> Any:
     return value
 
 
+def assert_complete_answer(answer: Any) -> None:
+    """A clean fixture must succeed before equal answers can qualify cache correctness."""
+    assert isinstance(answer, dict) and answer, f'no structured answer: {answer}'
+    assert outcome_of(answer) == 'ok', f'fixture did not succeed: {answer}'
+    meta = answer.get('meta', {})
+    assert not meta.get('errors'), f'fixture lost required input: {meta}'
+    lost = [warning for warning in meta.get('warnings', [])
+            if warning.get('type') in ('analysis_failed', 'analysis_incomplete', 'parse_recovered')]
+    assert not lost, f'fixture returned incomplete analysis: {lost}'
+
+
 def cache_env(cache_dir: Path, *, cache: bool) -> Dict[str, str]:
     """The environment of one harness process: no user config, the disk cache set explicitly."""
     return {**os.environ, 'PYTHONHASHSEED': '0', 'REVEAL_NO_CONFIG': '1',
-            'REVEAL_CACHE_DIR': str(cache_dir), 'REVEAL_DISK_CACHE': '1' if cache else '0'}
+            'REVEAL_CACHE_DIR': str(cache_dir), 'REVEAL_DISK_CACHE': '1' if cache else '0',
+            'REVEAL_MAX_WORKERS': '1'}
 
 
 def run_reveal(argv: Sequence[str], cache_dir: Path, *, cache: bool, cwd: Optional[Path] = None,
@@ -49,8 +62,8 @@ def run_reveal(argv: Sequence[str], cache_dir: Path, *, cache: bool, cwd: Option
 def cache_entries(cache_dir: Path) -> Dict[str, Tuple[int, int]]:
     """Every stored entry under *cache_dir* with its (size, mtime_ns).
 
-    A miss rebuilds and re-stores its entry, so an unchanged map across a run means the run
-    stored nothing: every entry it needed was read back.
+    An unchanged map establishes no visible file rewrite. It does not prove a read occurred:
+    a cache bypass that recomputed without storing would also leave this map unchanged.
     """
     if not cache_dir.exists():
         return {}
@@ -88,4 +101,8 @@ def run_host(root: Path, views: Dict[str, str], steps: List[List[Tuple[str, Opti
     done = subprocess.run([sys.executable, '-c', HOST_DRIVER, str(plan)], cwd=root, capture_output=True,
                           text=True, encoding='utf-8', env=cache_env(cache_dir, cache=cache), timeout=300)
     assert done.returncode == 0, done.stderr
-    return comparable(json.loads(done.stdout))
+    answers = json.loads(done.stdout)
+    for step in answers:
+        for answer in step.values():
+            assert_complete_answer(answer)
+    return comparable(answers)
