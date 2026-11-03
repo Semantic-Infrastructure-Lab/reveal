@@ -105,6 +105,9 @@ def test_standalone_ambiguous_context_has_static_pair_but_no_local_claim(tmp_pat
     "require_relative 'target', true",
     'require_relative "tar\\x67et"',
     'load feature',
+    'require_relative %q{target}',
+    "require_relative %q'target'",
+    'require_relative <<~PATH\n target\nPATH',
     "require 'target'",
 ])
 def test_opaque_support_cannot_make_a_qualified_pair_local_only(tmp_path, opaque):
