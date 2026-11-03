@@ -173,6 +173,29 @@ def test_native_parser_never_executes_corpus_or_target(tmp_path):
 
 
 @needs_ruby
+def test_tracked_target_loss_is_not_an_unresolved_clean_site(tmp_path):
+    scope, _ = _scope(tmp_path, {'target.rb': '# target\n', 'use.rb': "require_relative 'target'\n"})
+    (tmp_path / 'target.rb').unlink()
+    with pytest.raises(RuntimeError, match='Target missing'):
+        _oracle().build(scope)
+
+
+@needs_ruby
+@pytest.mark.parametrize('name', ['use.rb', 'target.rb'])
+def test_native_source_and_target_identity_drift_refuses_measurement(tmp_path, monkeypatch, name):
+    scope, _ = _scope(tmp_path, {'target.rb': '# target\n', 'use.rb': "require_relative 'target'\n"})
+    real = oracles.subprocess.run
+    def changed(command, **kwargs):
+        result = real(command, **kwargs)
+        if command[-1].endswith('ruby_import_oracle.rb'):
+            (tmp_path / name).write_text('# changed after native parse\n', encoding='utf-8')
+        return result
+    monkeypatch.setattr(oracles.subprocess, 'run', changed)
+    with pytest.raises(RuntimeError, match='changed during native measurement'):
+        _oracle().build(scope)
+
+
+@needs_ruby
 def test_existing_gate_scores_relative_scope_and_rejects_ignored_filter(tmp_path, monkeypatch):
     scope, entry = _scope(tmp_path, {
         'target.rb': '# target\n',
