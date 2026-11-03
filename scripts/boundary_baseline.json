@@ -18,7 +18,6 @@
   "reveal/adapters/markdown/adapter.py": 1,
   "reveal/adapters/mysql/adapter.py": 1,
   "reveal/adapters/patches/adapter.py": 1,
-  "reveal/adapters/python/adapter.py": 1,
   "reveal/adapters/reveal/adapter.py": 1,
   "reveal/adapters/sqlite/adapter.py": 1,
   "reveal/adapters/xlsx.py": 1
