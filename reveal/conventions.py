@@ -201,17 +201,19 @@ JS_FUNCTION_FACTORIES: Dict[str, FrozenSet[str]] = {
 
 # --- stdlib classification (BACK-1275) --------------------------------------
 
-# sys.stdlib_module_names is the source of truth (always present on the 3.11+ floor);
-# the set below only adds names a stripped-down build might omit.
-PYTHON_STDLIB: FrozenSet[str] = frozenset(getattr(sys, 'stdlib_module_names', ())) | frozenset({
-    'abc', 'ast', 'asyncio', 'builtins', 'collections', 'contextlib',
-    'copy', 'dataclasses', 'datetime', 'enum', 'functools', 'gc',
-    'glob', 'hashlib', 'http', 'importlib', 'inspect', 'io', 'itertools',
-    'json', 'logging', 'math', 'multiprocessing', 'operator', 'os',
-    'pathlib', 'pickle', 'platform', 're', 'shutil', 'signal', 'socket',
-    'sqlite3', 'string', 'struct', 'subprocess', 'sys', 'tempfile',
-    'threading', 'time', 'traceback', 'typing', 'unittest', 'urllib',
-    'uuid', 'warnings', 'weakref', 'zipfile', 'zlib',
+# sys.stdlib_module_names is the live list (always present on the 3.11+ floor). The set below is
+# what it can lack: modules removed in 3.11-3.13 (reveal analyses code written for older Pythons, so
+# `import asyncore` must not turn third-party because reveal runs on 3.13+), `test`, and names that
+# are not stdlib modules but never third-party packages. The result still varies with the running
+# interpreter for modules ADDED after 3.11 (BACK-2483); it is the one list for rules I004/I008/B005,
+# the resolver, and imports:// classification (`rules.imports.STDLIB_MODULES` is this set).
+PYTHON_STDLIB: FrozenSet[str] = frozenset(sys.stdlib_module_names) | frozenset({
+    'aifc', 'asynchat', 'asyncore', 'audioop', 'binhex', 'cgi', 'cgitb',
+    'chunk', 'crypt', 'distutils', 'imghdr', 'imp', 'lib2to3', 'mailcap', 'msilib',
+    'nis', 'nntplib', 'ossaudiodev', 'pipes', 'smtpd', 'sndhdr', 'spwd',
+    'sunau', 'telnetlib', 'uu', 'xdrlib',
+    'test',
+    'typing_extensions', 'TYPE_CHECKING',
 })
 
 # Go's standard library is a closed set of top-level path elements. "First
