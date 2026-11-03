@@ -129,19 +129,22 @@ def test_cold_and_warm_answers_equal_the_cache_off_answer(project, tmp_path, vie
     assert cache_entries(cache_dir) == cold, 'the warm run visibly rewrote a cache file'
 
 
-@pytest.mark.parametrize('name,moved_view,rel,text', EDITS, ids=[e[0] for e in EDITS])
-def test_every_view_after_an_edit_equals_a_fresh_cache_off_answer(project, tmp_path, name, moved_view, rel, text):
+def test_every_view_after_an_edit_equals_a_fresh_cache_off_answer(project, tmp_path):
+    """Keep one edit timeline, reusing the previously verified cache-on map as before."""
     cache_dir = tmp_path / 'cache'
-    for earlier, _view, earlier_rel, earlier_text in EDITS:
-        if earlier == name:
-            break
-        _apply(project, earlier_rel, earlier_text)
-    before = {view: _answer(project, view, cache_dir, cache=True) for view in VIEWS}  # fills the cache
-    _apply(project, rel, text)
-    after_off = {view: _answer(project, view, cache_dir, cache=False) for view in VIEWS}
-    assert after_off[moved_view] != before[moved_view], f'{name} did not change the {moved_view} answer'
-    stale = [view for view in VIEWS if _answer(project, view, cache_dir, cache=True) != after_off[view]]
-    assert not stale, f'{name}: stale views {stale}'
+    before = {view: _answer(project, view, cache_dir, cache=True) for view in VIEWS}
+    unmoved = []
+    stale = []
+    for name, moved_view, rel, text in EDITS:
+        _apply(project, rel, text)
+        after_off = {view: _answer(project, view, cache_dir, cache=False) for view in VIEWS}
+        after_on = {view: _answer(project, view, cache_dir, cache=True) for view in VIEWS}
+        if after_off[moved_view] == before[moved_view]:
+            unmoved.append((name, moved_view))
+        stale.extend((name, view) for view in VIEWS if after_on[view] != after_off[view])
+        before = after_on
+    assert not stale, f'stale views {stale}'
+    assert not unmoved, f'unchanged positive-control views {unmoved}'
 
 
 @pytest.mark.parametrize('disk', [False, True], ids=['disk-off', 'disk-on'])
