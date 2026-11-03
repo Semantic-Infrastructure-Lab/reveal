@@ -273,11 +273,10 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
     'runtime': {
         'type': 'query_recipes',
         'task': 'runtime',
-        'description': 'Runtime environment — env vars, Python packages, reveal install state',
+        'description': 'Runtime environment — env vars, reveal install state',
         'recipes': [
             {'goal': 'All environment variables', 'query': 'reveal env://', 'description': 'Full env dump grouped by category (System, Python, Node, Application, Custom); sensitive values redacted', 'output_type': 'environment'},
             {'goal': 'Filter env by prefix', 'query': "reveal env:// --format=grep | grep '^env://DB_'", 'description': 'Show only DB_* variables, one env://NAME:value line each (env:// takes no query params)', 'output_type': 'environment'},
-            {'goal': 'Python package versions', 'query': 'reveal python://packages', 'description': 'Installed packages with versions', 'output_type': 'python_packages'},
             {'goal': 'Reveal install info', 'query': 'reveal reveal://', 'description': 'Registered analyzers, adapters, rules', 'output_type': 'reveal_structure'},
         ]
     },
@@ -391,7 +390,6 @@ class HelpAdapter(ResourceAdapter):
 
         help://ast/anti-patterns   # Just the anti-patterns
         help://env                 # Get env:// adapter help
-        help://python-guide        # Python adapter comprehensive guide
         help://markdown            # Markdown features guide
         help://tricks              # Cool tricks and hidden features
         help://adapters            # List all adapters with help
@@ -450,16 +448,6 @@ class HelpAdapter(ResourceAdapter):
         'nginx': 'adapters/NGINX_GUIDE.md',
         'overview': 'adapters/OVERVIEW_ADAPTER_GUIDE.md',
         'patches': 'adapters/PATCHES_ADAPTER_GUIDE.md',
-        'python': 'adapters/PYTHON_ADAPTER_GUIDE.md',
-        # 'python-guide' (not 'python') is the canonical topic below — pre-dates
-        # the bare 'python' alias (added v0.18.0), deeply referenced as *the*
-        # documented example of the feature_guides convention (AGENT_HELP.md,
-        # HELP_SYSTEM_GUIDE.md, test_rendering_help.py) — kept as-is. No other
-        # adapter guide has a bare+'-guide' duplicate pair except 'reveal-guide'
-        # (which has no bare form to collide with). Removed 'patches-guide'
-        # (BACK-479): added in v0.94.0 by copying this naming pattern, but never
-        # referenced anywhere outside this dict — pure dead duplicate of 'patches'.
-        'python-guide': 'adapters/PYTHON_ADAPTER_GUIDE.md',
         'reveal-guide': 'adapters/REVEAL_ADAPTER_GUIDE.md',
         'sqlite': 'adapters/SQLITE_ADAPTER_GUIDE.md',
         'ssl': 'adapters/SSL_ADAPTER_GUIDE.md',
@@ -549,13 +537,6 @@ class HelpAdapter(ResourceAdapter):
                 {
                     'uri': 'help://adapters',
                     'description': 'List all URI adapters with descriptions'
-                },
-                {
-                    'uri': 'help://python-guide',
-                    'description': (
-                        'Python adapter comprehensive guide '
-                        '(multi-shot examples, LLM integration)'
-                    )
                 },
                 {
                     'uri': 'help://agent',
@@ -1576,8 +1557,8 @@ class HelpAdapter(ResourceAdapter):
          'use': 'reveal FILE --section HEADING', 'example': 'reveal README.md --section "Building"'},
         {'want': 'inspect a SQLite, MySQL database, or Excel workbook',
          'use': 'sqlite:// / mysql:// / xlsx://', 'example': "reveal sqlite:///path/to/app.db"},
-        {'want': 'inspect environment variables or Python runtime',
-         'use': 'env:// / python://', 'example': "reveal env://"},
+        {'want': 'inspect environment variables',
+         'use': 'env://', 'example': "reveal env://"},
         {'want': 'search prior Claude sessions by topic or project',
          'use': 'claude://', 'example': "reveal 'claude://sessions/?search=auth-refactor' --format=json"},
         {'want': 'review a session as prompt/answer pairs, not raw messages',
@@ -1702,7 +1683,6 @@ class HelpAdapter(ResourceAdapter):
                     'pairs': [
                         ('sqlite', 'mysql', 'two databases: a SQLite file\'s schema, a MySQL server\'s health'),
                         ('json', 'sqlite', 'inspect app state: exported JSON or live DB'),
-                        ('env', 'python', 'runtime environment + live module introspection'),
                         ('xlsx', 'sqlite', 'tabular data inspection across formats'),
                         ('xlsx', 'json', 'structured data: Excel vs JSON'),
                     ],
@@ -1723,7 +1703,6 @@ class HelpAdapter(ResourceAdapter):
                     'pairs': [
                         ('help', 'reveal', 'help:// documents it; reveal:// introspects it'),
                         ('reveal', 'ast', 'reveal uses ast:// to analyze itself'),
-                        ('python', 'ast', 'runtime introspection vs static analysis'),
                     ],
                 },
             ],
@@ -1897,7 +1876,7 @@ class HelpAdapter(ResourceAdapter):
                 'content': content
             }
             # BACK-926: guide topics that share a name with an adapter scheme
-            # (ast, python, ssl, ...) get the same relationship-derived 'next'
+            # (ast, env, ssl, ...) get the same relationship-derived 'next'
             # pointers adapter-scheme help does; meta guides (tricks, schema,
             # ...) aren't scheme names so this is a no-op for them.
             self._add_related_next(result, topic)

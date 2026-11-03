@@ -196,7 +196,6 @@ def _render_navigation_section() -> None:
     print("**Learn specific feature:**")
     print("  reveal help://ast           # ast:// quick start (first section)")
     print("  reveal help://ast/full      # Complete ast:// guide")
-    print("  reveal help://python        # python:// quick start")
     print()
     print("**Best practices:**")
     print("  reveal help://anti-patterns # Common mistakes to avoid")

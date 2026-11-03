@@ -574,7 +574,7 @@ class ResourceAdapter(ABC):
             Dict containing help metadata, or None if no help available.
 
             Required keys:
-                - name (str): Adapter scheme name (e.g., 'python', 'ast')
+                - name (str): Adapter scheme name (e.g., 'env', 'ast')
                 - description (str): One-line summary (< 80 chars)
 
             Recommended keys:
@@ -604,7 +604,7 @@ class ResourceAdapter(ABC):
             reveal help://adapter-authoring - Complete adapter authoring guide
 
         Examples:
-            See reveal/adapters/python.py, ast.py, env.py for reference implementations
+            See reveal/adapters/env.py and reveal/adapters/ast/ for reference implementations
         """
         return None
 

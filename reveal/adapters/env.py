@@ -232,7 +232,6 @@ class EnvAdapter(ResourceAdapter):
                     'steps': [
                         "reveal env://VIRTUAL_ENV         # Is venv active?",
                         "reveal env://PYTHONPATH          # Extra import paths?",
-                        "reveal python://venv             # More detailed venv info",
                     ],
                 },
             ],

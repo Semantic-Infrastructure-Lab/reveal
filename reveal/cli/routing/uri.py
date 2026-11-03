@@ -978,7 +978,7 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
 def _element_envelope(adapter: Any, result: Any, scheme: str, resource: str) -> Any:
     """An element result in the Output Contract envelope, as every structure result is.
 
-    `env://HOME` and every `python://<element>` answered bare data: no `type`, no
+    `env://HOME` and other element answers were bare data: no `type`, no
     `contract_version` (BACK-1591). The adapter's own fields win; the type defaults to
     its ELEMENT_RESULT_TYPE, else `<scheme>_element`.
     """

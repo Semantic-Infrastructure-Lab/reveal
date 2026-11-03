@@ -29,7 +29,7 @@ def source(tmp_path):
 
 def _retire(monkeypatch, key, old, replacement='NEW SPELLING', stage='note'):
     monkeypatch.setitem(RETIREMENTS, key, Retirement(old, replacement, stage))
-    return f'{old} is deprecated; use {replacement}.'
+    return f'{old} {"was removed" if stage == "error" else "is deprecated"}; use {replacement}.'
 
 
 def _notes(stderr, text):
@@ -230,6 +230,9 @@ PRODUCTION_CASES = {
     # tests/test_dd_call_exit_contract_back2181.py prove the old shapes and exit codes are kept.
     'subcommand:deps': lambda f: ['deps', str(Path(f).parent)],
     'scheme:deps': lambda f: [f'deps://{Path(f).parent}'],
+    # BACK-2225: python:// was removed outright and starts at the error stage; tests/test_python_scheme_removed_back2225.py
+    # covers its other spellings.
+    'scheme:python': lambda f: ['python://'],
 }
 
 
@@ -244,10 +247,20 @@ def test_every_production_row_is_well_formed():
 def test_every_production_row_is_exercised_and_prints_once(source):
     assert set(RETIREMENTS) == set(PRODUCTION_CASES)
     for key, argv in PRODUCTION_CASES.items():
+        if RETIREMENTS[key].stage == 'error':
+            continue  # no answer to note on: the error-stage test below runs it
         result = _run_reveal_direct(*argv(str(source)), '--format', 'json')
         text = RETIREMENTS[key].text
         assert _notes(result.stderr, text) == 1, (key, result.stderr)
         assert [w['field'] for w in _warnings(json.loads(result.stdout))] == [key]
+
+
+def test_an_error_row_says_removed_and_a_note_row_says_deprecated():
+    note = Retirement('old://', 'new://')
+    assert note.text == 'old:// is deprecated; use new://.'
+    assert Retirement('old://', 'new://', 'error').text == 'old:// was removed; use new://.'
+    assert RETIREMENTS['scheme:python'].stage == 'error'
+    assert RETIREMENTS['scheme:python'].text.startswith('python:// was removed; use python -m site')
 
 
 def test_the_moved_notes_keep_their_wording():
@@ -317,7 +330,8 @@ def test_the_log_is_per_invocation(monkeypatch, source):
 
 @pytest.mark.parametrize('key', sorted(PRODUCTION_CASES))
 def test_a_production_row_at_the_error_stage_exits_2_with_its_text(monkeypatch, source, key):
-    """The cut release flips a row's stage and nothing else: same text, exit 2, no answer."""
+    """The cut release flips a row's stage and nothing else: the same replacement, worded as removed, exit 2, no
+    answer. A row already at the error stage (python://) is run as it ships."""
     monkeypatch.setitem(RETIREMENTS, key, Retirement(RETIREMENTS[key].old, RETIREMENTS[key].replacement, 'error'))
     result = _run_reveal_direct(*PRODUCTION_CASES[key](str(source)), '--format', 'json')
     assert result.returncode == 2

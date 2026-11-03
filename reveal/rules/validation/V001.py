@@ -35,7 +35,7 @@ class V001(BaseRule):
     # Known file types that should have help (paths relative to reveal/docs/)
     EXPECTED_HELP_TOPICS = {
         'markdown': 'MARKDOWN_GUIDE.md',
-        'python': 'PYTHON_ADAPTER_GUIDE.md',
+        'html': 'adapters/HTML_GUIDE.md',
         # Add more as they're documented
     }
 

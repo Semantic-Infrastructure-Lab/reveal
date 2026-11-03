@@ -1,7 +1,7 @@
 """URI and file routing for reveal CLI.
 
 This module handles dispatching to the correct handler based on:
-- URI scheme (env://, ast://, help://, python://, json://, reveal://, etc.)
+- URI scheme (env://, ast://, help://, json://, reveal://, etc.)
 - File type (determined by extension)
 - Directory handling
 

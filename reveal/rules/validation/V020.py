@@ -13,7 +13,7 @@ The contract:
     - If renderer has render_element: adapter is "element-based"
       - Must implement get_element(name) → result or None
       - Handler may call get_element with resource string if no element specified
-      - This is by design - allows "reveal python://PATH" to show PATH details
+      - This is by design - allows "reveal env://PATH" to show the PATH variable
 
     - If renderer lacks render_element: adapter is "structure-only"
       - Only get_structure() is called

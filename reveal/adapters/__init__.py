@@ -50,7 +50,6 @@ __all__ = [
     'JsonAdapter',
     'MarkdownQueryAdapter',
     'MySQLAdapter',
-    'PythonAdapter',
     'RevealAdapter',
     'SQLiteAdapter',
     'SSLAdapter',

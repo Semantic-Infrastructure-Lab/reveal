@@ -110,7 +110,7 @@ class V016(BaseRule):
                 "  - description: str (one-line summary)\n"
                 "  - examples: List[Dict] (usage examples)\n"
                 "  - syntax: str (URI pattern)\n"
-                "See reveal/adapters/python/adapter.py for reference"
+                "See reveal/adapters/env.py for reference"
             )
         )]
 
@@ -239,7 +239,7 @@ class V016(BaseRule):
                     "  - description: str (one-line summary)\n"
                     "  - examples: List[Dict] (usage examples)\n"
                     "  - syntax: str (URI pattern)\n"
-                    "See reveal/adapters/python/adapter.py for reference"
+                    "See reveal/adapters/env.py for reference"
                 )
             ))
 
