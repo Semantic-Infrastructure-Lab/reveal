@@ -348,3 +348,16 @@ def test_computed_object_method_has_no_native_claim_and_confounded_gate_refuses(
     assert coverage['unqualified_object_calls'] == 1
     with pytest.raises(RuntimeError, match='lazy=only.*positive control failed'):
         gate.measure(entry, scope.root)
+
+
+@needs_ruby
+def test_native_identity_uses_the_existing_path_order_for_nested_prefixes(tmp_path):
+    scope, _ = _scope(tmp_path, {
+        'target.rb': '# target\n',
+        'pkg.rb': "require_relative 'target'\n",
+        'pkg/child.rb': "def work\n require_relative '../target'\nend\n",
+    })
+    edges, coverage = _oracle().build(scope)
+    assert edges == {'target.rb': ['pkg.rb', 'pkg/child.rb']}
+    assert _oracle().lazy_only(scope) == {'target.rb': ['pkg/child.rb']}
+    assert set(coverage['source_digests']) == {'pkg.rb', 'pkg/child.rb'}
