@@ -24,10 +24,11 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from cache_differential import cache_entries, cache_env, run_host, run_reveal
+from cache_differential import cache_entries, cache_env, comparable, run_host, run_reveal
 
 pytestmark = [pytest.mark.disk_cache]
 
@@ -155,6 +156,7 @@ def test_a_library_host_sees_every_edit_between_requests(project, tmp_path, disk
 _DIRECT_DRIVER = r'''
 import json, sys
 from pathlib import Path
+from types import SimpleNamespace
 from reveal.adapters.calls.index import find_callers
 from reveal.utils.request_cache import host_request
 hosted = sys.argv[1] == 'host'
@@ -186,3 +188,27 @@ def test_a_direct_library_caller_sees_an_in_place_edit(project, tmp_path, mode):
     first, second = json.loads(done.stdout)
     assert first == ['run']
     assert second == ['main', 'run'], f'{mode}: the edit added main as a caller; got {second}'
+
+
+@pytest.mark.parametrize('exit_code,payload', [
+    (3, {'callers': []}),
+    (0, {'error': 'analysis failed'}),
+    (0, {'applicable': False}),
+    (0, {'meta': {'errors': [{'message': 'required file unreadable'}]}}),
+    (0, {'meta': {'warnings': [{'type': 'analysis_incomplete', 'count': 1}]}}),
+    (0, {'meta': {'warnings': [{'type': 'parse_recovered', 'count': 1}]}}),
+])
+def test_a_failed_or_partial_reference_cannot_qualify_equality(project, tmp_path, monkeypatch,
+                                                              exit_code, payload):
+    # Two identical failed answers would satisfy equality; the clean fixture must first succeed.
+    done = SimpleNamespace(returncode=exit_code, stdout=json.dumps(payload), stderr='')
+    monkeypatch.setattr(subprocess, 'run', lambda *args, **kwargs: done)
+    with pytest.raises(AssertionError):
+        _answer(project, 'callers', tmp_path / 'cache', cache=False)
+
+
+def test_normalization_preserves_semantic_diagnostics():
+    answer = {'elapsed_ms': 10, 'meta': {'errors': [{'message': 'missing input'}],
+              'warnings': [{'type': 'analysis_incomplete', 'count': 2}]}}
+    assert comparable(answer) == {'meta': {'errors': [{'message': 'missing input'}],
+           'warnings': [{'type': 'analysis_incomplete', 'count': 2}]}}
