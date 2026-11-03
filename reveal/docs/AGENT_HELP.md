@@ -158,7 +158,7 @@ reveal help://examples/due-diligence --format=json   # Technical due-diligence w
 reveal help://examples/history --format=json         # Prompt history and session discovery across all projects
 reveal help://examples/infrastructure --format=json  # Server infrastructure inspection — nginx, SSL, domains, cPanel, AutoSSL, Let's Encrypt
 reveal help://examples/quality --format=json         # Code quality and hotspot analysis
-reveal help://examples/runtime --format=json         # Runtime environment — env vars, Python packages, reveal install state
+reveal help://examples/runtime --format=json         # Runtime environment — env vars, reveal install state
 reveal help://examples/security --format=json        # Security review — auth code, complex query construction, certificate expiry, the external attack surface
 reveal help://examples/sessions --format=json        # Claude Code and Codex CLI session analysis — tool usage, files, errors, prompt/answer pairs, search
 ```
