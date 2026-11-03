@@ -57,9 +57,6 @@ def test_actual_reader_loss_full_partial_context_only_and_restored(tmp_path, mon
         return open_file
     monkeypatch.setattr(builtins, 'open', deny(real_builtin))
     monkeypatch.setattr(io, 'open', deny(real_io))
-    accessor = getattr(blocked, '_accessor', None)
-    if accessor is not None:
-        monkeypatch.setattr(accessor, 'open', deny(real_io))
     failed, data = answer(tmp_path)
     assert events and failed.returncode == 3
     assert data['results'] == [] and 'confidence' not in data['meta']

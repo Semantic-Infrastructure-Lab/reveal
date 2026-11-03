@@ -31,8 +31,6 @@ def test_real_source_loss_is_not_a_confident_empty_answer(tmp_path, monkeypatch,
     else:
         monkeypatch.setattr(io, 'open', reader)
         monkeypatch.setattr(builtins, 'open', reader)
-        if hasattr(Path(), '_accessor'):  # Python 3.10 stores io.open at import time.
-            monkeypatch.setattr(Path()._accessor, 'open', reader)
     result = AstAdapter(str(source), 'show=dict-heatmap').get_structure()
     assert result['total_results'] == 0
     if loss == 'read':
@@ -72,8 +70,6 @@ def test_collector_context_only_loss_and_reader_restoration(tmp_path, monkeypatc
     else:
         monkeypatch.setattr(io, 'open', reader)
         monkeypatch.setattr(builtins, 'open', reader)
-        if hasattr(Path(), '_accessor'):  # Python 3.10 stores io.open at import time.
-            monkeypatch.setattr(Path()._accessor, 'open', reader)
     result, facts = _collect(tmp_path)
     assert result == ([], [])
     assert (facts.candidate_files, facts.analyzed_files, facts.failed_files) == (2, 1, 1)
@@ -85,8 +81,6 @@ def test_collector_context_only_loss_and_reader_restoration(tmp_path, monkeypatc
         assert denied
         monkeypatch.setattr(io, 'open', real_open)
         monkeypatch.setattr(builtins, 'open', real_open)
-        if hasattr(Path(), '_accessor'):
-            monkeypatch.setattr(Path()._accessor, 'open', real_open)
     context.write_text('Config = dict\nKEY = "a"\n', encoding='utf-8')
     restored, facts = _collect(tmp_path)
     assert restored == healthy
