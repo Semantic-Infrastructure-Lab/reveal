@@ -1,5 +1,5 @@
 {
- "exempt_ceiling": 33,
+ "exempt_ceiling": 31,
  "caches": {
   "disk:adapter_import_graph": {
    "owner": "disk"
@@ -225,12 +225,10 @@
    "holds": "plain"
   },
   "reveal/rules/__init__.py::RuleRegistry._rules": {
-   "owner": "process-exempt",
-   "reason": "import-time table filled by rule discovery, not an answer cache"
+   "owner": "request"
   },
   "reveal/rules/__init__.py::RuleRegistry._rules_by_code": {
-   "owner": "process-exempt",
-   "reason": "import-time table filled by rule discovery, not an answer cache"
+   "owner": "request"
   },
   "reveal/rules/__init__.py::_effective_codes_cache": {
    "owner": "request"

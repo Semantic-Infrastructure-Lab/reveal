@@ -47,11 +47,19 @@ _effective_codes_cache: Dict[Tuple[Optional[Tuple[str, ...]], Optional[Tuple[str
                              Tuple[List[Type[BaseRule]], int, FrozenSet[str]]] = {}
 
 
-def _clear_effective_codes() -> None:
+def _reset_rule_discovery() -> None:
+    """Keep package rules, but rediscover mutable user/project rules per host request."""
     _effective_codes_cache.clear()
+    RuleRegistry._rules = []
+    RuleRegistry._rules_by_code = {}
+    RuleRegistry._discovered = False
+    namespace = RuleRegistry._EXTERNAL_MODULE_NAMESPACE + '.'
+    for name in tuple(sys.modules):
+        if name.startswith(namespace):
+            del sys.modules[name]
 
 
-register_request_cache(__name__, _clear_effective_codes)
+register_request_cache(__name__, _reset_rule_discovery)
 
 
 class RuleRegistry:
@@ -67,6 +75,8 @@ class RuleRegistry:
     _rules: List[Type[BaseRule]] = []
     _rules_by_code: Dict[str, Type[BaseRule]] = {}
     _discovered: bool = False
+    # Package rule classes are stable for this process. External discoveries are not.
+    _built_in_rules: Optional[Tuple[Type[BaseRule], ...]] = None
 
     # ===== Helper Methods: Rule Discovery Logic =====
     # Clean separation of concerns for maintainability
@@ -308,7 +318,12 @@ class RuleRegistry:
         _effective_codes_cache.clear()
         config = get_config()
 
-        cls._discover_built_in_rules()
+        if cls._built_in_rules is None or force:
+            cls._discover_built_in_rules()
+            cls._built_in_rules = tuple(cls._rules)
+        else:
+            cls._rules = list(cls._built_in_rules)
+            cls._rules_by_code = {rule.code: rule for rule in cls._rules}
         cls._discover_user_rules(config)
         cls._discover_project_rules(config)
 
