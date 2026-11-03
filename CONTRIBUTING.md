@@ -589,7 +589,7 @@ By contributing, you agree that your contributions will be licensed under the MI
 
 ---
 
-**Questions?** Open an issue or discussion. PRs welcome!
+**Questions?** Open an issue. PRs welcome!
 
 Flag-ledger fixtures must contain enough matching data to exercise a cut or exclusion.
 `tests/test_flag_ledger.py` uses ranking-mode calls, several dependency targets and

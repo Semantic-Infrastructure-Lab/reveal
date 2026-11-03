@@ -191,7 +191,6 @@ After installation:
 ## Getting Help
 
 - **Issues:** https://github.com/Semantic-Infrastructure-Lab/reveal/issues
-- **Discussions:** https://github.com/Semantic-Infrastructure-Lab/reveal/discussions
 - **Documentation:** https://github.com/Semantic-Infrastructure-Lab/reveal/tree/master/reveal/docs
 
 ---
