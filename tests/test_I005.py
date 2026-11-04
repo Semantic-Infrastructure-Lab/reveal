@@ -169,13 +169,13 @@ class TestI005Normalization(unittest.TestCase):
         n2 = self.rule._normalize_import(imp2)
         self.assertEqual(n1, n2)
 
-    def test_case_insensitive(self):
-        """Normalization is case-insensitive (for robustness)."""
-        imp1 = {'content': 'Import OS', 'line': 1}
-        imp2 = {'content': 'import os', 'line': 2}
+    def test_case_sensitive(self):
+        """Import names are case-sensitive in every supported language (BACK-2490)."""
+        imp1 = {'content': 'import androidx.compose.ui.unit.Dp', 'line': 1}
+        imp2 = {'content': 'import androidx.compose.ui.unit.dp', 'line': 2}
         n1 = self.rule._normalize_import(imp1)
         n2 = self.rule._normalize_import(imp2)
-        self.assertEqual(n1, n2)
+        self.assertNotEqual(n1, n2)
 
     def test_content_takes_priority_over_statement(self):
         """'content' (Python analyzer key) wins over 'statement'."""
