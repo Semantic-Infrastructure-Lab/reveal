@@ -43,7 +43,7 @@ recorded with ``note_truncation``, and the router prints it; a renderer does not
 
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Dict, Any, Optional, List, Literal, Union
 
 from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealMeta, RevealResult, WarningEntry
@@ -515,7 +515,7 @@ class ResultBuilder:
         result: Dict[str, Any] = {
             'contract_version': contract_version,
             'type': result_type,
-            'source': str(source),
+            'source': _source_text(source),
             'source_type': resolved_source_type,
         }
 
@@ -588,7 +588,7 @@ class ResultBuilder:
         result: Dict[str, Any] = {
             'contract_version': contract_version,
             'type': result_type,
-            'source': str(source),
+            'source': _source_text(source),
             'source_type': source_type or ('directory' if source_path.is_dir() else 'file'),
             'error': error,
         }
@@ -703,6 +703,15 @@ def create_meta(
     return ResultBuilder.create_meta(parse_mode, confidence, warnings, errors)
 
 
+def _source_text(source: Union[str, PurePath]) -> str:
+    """The envelope's source with '/' on every OS (BACK-2310, BACK-1586).
+
+    A path object goes through as_posix(); a string is kept as given, since
+    synthetic sources (``path@ref``, ``network``) are not filesystem paths.
+    """
+    return source.as_posix() if isinstance(source, PurePath) else str(source)
+
+
 def add_cli_contract_fields(
     report: Dict[str, Any],
     *,
@@ -728,7 +737,7 @@ def add_cli_contract_fields(
     return {
         'contract_version': report.get('contract_version', contract_version),
         'type': result_type,
-        'source': str(source),
+        'source': _source_text(source),
         'source_type': source_type,
         **report,
     }

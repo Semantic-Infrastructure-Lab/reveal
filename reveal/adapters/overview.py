@@ -521,7 +521,7 @@ class OverviewAdapter(ResourceAdapter):
         from ..diff.architecture_diff import _open_repo, _resolve_commit, run_architecture_diff
         from ..utils.results import FailureCause
         try:
-            repo = _open_repo(path.resolve())
+            repo = _open_repo(path)
             _resolve_commit(repo, against)
         except ValueError as exc:
             return ResultBuilder.create(

@@ -58,6 +58,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `--help` for `metrics`, `overview`, `surface`, `trace`, `contracts`, `testability`, `pack`, `calls`, `patches` and `architecture` no longer offers `--fail-on findings`, which those commands reject with exit 2; it lists `{none}` and says the command has no findings gate. (BACK-2486)
 
+- `reveal overview DIR --against REF` outside a Git repository now names the target as you typed it (`Not a git repository: proj`) instead of printing your absolute host path. Every JSON envelope's `source` also uses `/` on Windows for nested relative targets, as it already did on Linux and macOS. (BACK-2310)
+
 - `reveal review` no longer suggests `reveal hotspots <path> --all` to see every hotspot; that command exited 2. The hint is now `--top 0`. (BACK-2488)
 
 ## [0.133.0] - 2026-11-01

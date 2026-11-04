@@ -60,7 +60,7 @@ from ..defaults import (
 from ..reveal_types import ErrorEntry, RevealMeta, WarningEntry
 from ..adapters.base import ResourceAdapter
 from ..utils.entry_points import active_entry_points
-from ..utils.path_utils import TestLayout
+from ..utils.path_utils import TestLayout, to_posix
 
 logger = logging.getLogger(__name__)
 
@@ -147,11 +147,16 @@ class StructureCache:
 # ── Materialization (Part A: pygit2 -> scoped TemporaryDirectory) ──────────
 
 def _open_repo(path: Path):
+    """The repository holding *path*, given as the user spelled it.
+
+    Discovery uses the resolved path; the error names the spelling, never the
+    resolved host path (BACK-2310, BACK-1366).
+    """
     import pygit2
 
-    repo_path = pygit2.discover_repository(str(path))
+    repo_path = pygit2.discover_repository(str(Path(path).resolve()))
     if not repo_path:
-        raise ValueError(f"Not a git repository: {path}")
+        raise ValueError(f"Not a git repository: {to_posix(path)}")
     return pygit2.Repository(repo_path)
 
 
@@ -815,7 +820,7 @@ def run_architecture_diff(
     """
     spelling = path
     path = path.resolve()
-    repo = _open_repo(path)
+    repo = _open_repo(spelling)
     subpath = _repo_relpath(repo, path)
 
     base_commit = _resolve_commit(repo, base_ref)
