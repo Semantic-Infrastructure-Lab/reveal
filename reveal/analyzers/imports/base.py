@@ -382,9 +382,17 @@ class LanguageExtractor(ABC):
             # Consumers that must not act on an incomplete parse (I001, I002,
             # I008, ...) already skip on ``parse_failed``; the rest get the
             # imports tree-sitter did recover.
-            if hasattr(analyzer, 'has_parse_errors') and analyzer.has_parse_errors():
+            #
+            # BACK-2497: the same recovery test as get_structure()'s ``_has_errors``
+            # (check's "did not parse cleanly"), not ERROR nodes alone. ``def f(:``
+            # and ``const x = (1;`` recover with a MISSING token and no ERROR node;
+            # an ERROR-only test took them as complete, so I002 beside one exited 0
+            # while check counted the same file as degraded. The benign end-of-file
+            # MISSING quirk is filtered by the shared predicate.
+            if hasattr(analyzer, '_has_recovery_artifacts') and analyzer._has_recovery_artifacts():
                 self.parse_failed = True
-                self.analysis.diagnostics['parse'] = {'status': 'partial', 'reason': 'tree-sitter recovered with ERROR nodes'}
+                shape = 'ERROR nodes' if analyzer.has_parse_errors() else 'MISSING tokens'
+                self.analysis.diagnostics['parse'] = {'status': 'partial', 'reason': f'tree-sitter recovered with {shape}'}
                 # BACK-1598: debug, not warning. parse_failed is the disclosure;
                 # each command that builds a graph states the failed set once
                 # (adapters/imports.parse_failure_warning, deps, I002). A warning
@@ -392,10 +400,10 @@ class LanguageExtractor(ABC):
                 # (364 on a cold `reveal overview` of Redis src/) and none on a
                 # warm run, where extraction is cached.
                 logger.debug(
-                    "Partial parse for %s -- tree-sitter recovered with ERROR "
-                    "node(s); imports/symbols for this file may be incomplete, "
+                    "Partial parse for %s -- tree-sitter recovered with %s; "
+                    "imports/symbols for this file may be incomplete, "
                     "not confirmed complete",
-                    path_str,
+                    path_str, shape,
                 )
             return analyzer
         except Exception as e:  # boundary-ok: broad-except -- one file's analyzer (tree-sitter load, file read, grammar) must not end the graph build; parse_failed + diagnostics['parse'] disclose it to every consumer
