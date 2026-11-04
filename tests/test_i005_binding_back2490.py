@@ -96,5 +96,79 @@ class TestI005Bindings(unittest.TestCase):
         self.assertEqual(result, [])
 
 
+class TestI005Scopes(unittest.TestCase):
+    """A repeat is a duplicate only where the earlier import is already in scope.
+
+    Removing an import from a second function breaks that function, and a nested Rust
+    ``mod`` does not see its parent's ``use`` (BACK-2490, part 2).
+    """
+
+    def setUp(self):
+        self.rule = I005()
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _check(self, name, code):
+        from reveal.registry import get_analyzer
+        path = self.tmp / name
+        path.write_text(code, encoding='utf-8')
+        structure = get_analyzer(str(path))(str(path)).get_structure()
+        return [d.line for d in self.rule.check(str(path), structure, code)]
+
+    def test_python_same_import_in_two_functions_is_not_a_duplicate(self):
+        self.assertEqual(self._check('mod.py', (
+            "def fn_a():\n"
+            "    import re\n"
+            "    return re\n"
+            "\n"
+            "def fn_b():\n"
+            "    import re\n"
+            "    return re\n"
+        )), [])
+
+    def test_python_repeat_inside_one_function_is_a_duplicate(self):
+        self.assertEqual(self._check('mod.py', (
+            "def fn_a():\n"
+            "    import re\n"
+            "    import re\n"
+            "    return re\n"
+        )), [3])
+
+    def test_python_function_repeating_a_module_import_is_a_duplicate(self):
+        self.assertEqual(self._check('mod.py', (
+            "import re\n"
+            "\n"
+            "def fn_a():\n"
+            "    import re\n"
+            "    return re\n"
+        )), [4])
+
+    def test_rust_nested_mod_needs_its_own_use(self):
+        self.assertEqual(self._check('lib.rs', (
+            "use std::fs::File;\n"
+            "\n"
+            "pub fn open() -> File { File::open(\"x\").unwrap() }\n"
+            "\n"
+            "#[cfg(test)]\n"
+            "mod test {\n"
+            "    use std::fs::File;\n"
+            "\n"
+            "    fn t() -> File { File::open(\"y\").unwrap() }\n"
+            "}\n"
+        )), [])
+
+    def test_rust_repeat_inside_one_nested_mod_is_a_duplicate(self):
+        self.assertEqual(self._check('lib.rs', (
+            "mod test {\n"
+            "    use std::fs::File;\n"
+            "    use std::fs::File;\n"
+            "\n"
+            "    fn t() -> File { File::open(\"y\").unwrap() }\n"
+            "}\n"
+        )), [3])
+
+
 if __name__ == '__main__':
     unittest.main()
