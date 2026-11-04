@@ -134,7 +134,7 @@ class TestAddCliContractFields(unittest.TestCase):
         enveloped = add_cli_contract_fields(
             {}, result_type='deps', source=p,
         )
-        self.assertEqual(enveloped['source'], str(p))
+        self.assertEqual(enveloped['source'], p.as_posix())  # '/' on every OS (BACK-2310)
         self.assertIsInstance(enveloped['source'], str)
 
     def test_source_type_and_contract_version_are_overridable(self):

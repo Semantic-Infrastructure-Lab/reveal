@@ -41,7 +41,7 @@ class TestResultBuilderCreate:
 
         assert result['contract_version'] == '1.0'
         assert result['type'] == 'ast_query'
-        assert result['source'] == str(test_file)
+        assert result['source'] == test_file.as_posix()  # '/' on every OS (BACK-2310)
         assert result['source_type'] == 'file'
         assert 'meta' not in result
         assert 'data' not in result
@@ -62,7 +62,7 @@ class TestResultBuilderCreate:
 
         assert result['contract_version'] == '1.0'
         assert result['type'] == 'stats_summary'
-        assert result['source'] == str(test_dir)
+        assert result['source'] == test_dir.as_posix()
         assert result['source_type'] == 'directory'
         assert result['summary'] == {'total_files': 10, 'total_lines': 500}
         assert result['files'] == ['file1.py', 'file2.py']
@@ -211,7 +211,7 @@ class TestResultBuilderCreateError:
 
         assert result['contract_version'] == '1.0'
         assert result['type'] == 'ast_query'
-        assert result['source'] == str(missing)
+        assert result['source'] == missing.as_posix()
         assert result['source_type'] == 'file'
         assert result['error'] == 'File not found'
 
