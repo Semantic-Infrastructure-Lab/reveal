@@ -810,7 +810,7 @@ class ImportsRenderer:
         print(f"Circular Dependencies: {count} cycle group{'s' if count != 1 else ''}")
         print(f"{'='*60}\n")
         ImportsRenderer._render_edge_rule(result)
-        ImportsRenderer._render_input_loss(result.get('metadata') or {})
+        ImportsRenderer._render_input_loss(result.get('metadata', {}))
 
         if count == 0:
             ImportsRenderer._render_no_cycles(result)
