@@ -22,7 +22,8 @@ Two invariants hold with no ground truth, and any violation fails the run naming
   * I002 versus ``imports://<corpus>?circular`` (BACK-2156 option B, one finding per file per cycle
     group): the files with an I002 finding are exactly the load-order-language members of the cycle
     groups, once each, except members ``check`` records as skipped or errored (generated files, which
-    no rule judges). Members in languages outside ``capabilities.LOAD_ORDER_CYCLE_LANGUAGES`` are not
+    no rule judges) and members under a scan root I002 declined over its 2000-file threshold (check
+    says so in ``scan_budgets`` and its disclosures; those members are listed as ``declined``). Members in languages outside ``capabilities.LOAD_ORDER_CYCLE_LANGUAGES`` are not
     expected to carry a finding (the language gate). Relation: findings == judged members, per file.
 
 Exit status: 0 clean; 1 an invariant violation; 2 a failed measurement (any ``check`` exit other than
@@ -44,7 +45,7 @@ import sys
 import time
 from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable
+from typing import Callable, Iterator
 
 from fetch_corpus import _load_manifest
 from recall_gate import corpus_key, implementation_identity
@@ -88,7 +89,7 @@ def report_files(report: dict) -> list[dict]:
     return [f for f in report.get('files') or [] if isinstance(f, dict)]
 
 
-def detections(report: dict):
+def detections(report: dict) -> Iterator[tuple[str, dict]]:
     """(posix file, detection dict) for every finding in a check report."""
     for record in report_files(report):
         name = to_posix(record.get('file', ''))
@@ -176,21 +177,46 @@ def is_load_order_path(path: str) -> bool:
     return load_order_cycle_extension(PurePosixPath(path).suffix)
 
 
+def i002_scan_roots(report: dict, root: str) -> list[tuple[str, bool]]:
+    """(corpus-relative scan root, declined) for each I002 scan root in check's ``scan_budgets``."""
+    base = to_posix(root).rstrip('/')
+    rows = []
+    for budget in (report.get('summary') or {}).get('scan_budgets') or []:
+        if budget.get('rule') != 'I002':
+            continue
+        path = to_posix(budget.get('root', ''))
+        if path == base or path.startswith(base + '/'):
+            rows.append((path[len(base):].lstrip('/'), bool(budget.get('skipped'))))
+    return rows
+
+
+def declined_by_i002(path: str, scan_roots: list[tuple[str, bool]]) -> bool:
+    """True when the deepest I002 scan root holding ``path`` was declined (file-count threshold)."""
+    holding = [(r, declined) for r, declined in scan_roots if not r or path == r or path.startswith(r + '/')]
+    return bool(holding) and max(holding, key=lambda row: len(row[0]))[1]
+
+
 def i002_circular_violations(report: dict, groups: list[list[str]],
-                             is_load_order: Callable[[str], bool] = is_load_order_path) -> dict:
+                             is_load_order: Callable[[str], bool] = is_load_order_path,
+                             root: str | None = None) -> dict:
     """Compare files with an I002 finding to the members of ``?circular`` cycle groups.
 
-    Expected: findings == judged load-order members, one each. A member that ``check`` marks skipped
-    or errored is unjudged (disclosed in ``unjudged``); a member with no finding, a finding off every
-    group, a finding in a language the gate excludes, or two findings on a file are violations.
+    Expected: findings == judged load-order members, one each. A member is unjudged, and disclosed
+    in ``unjudged`` / ``declined`` rather than failed, when ``check`` marks it skipped or errored
+    (generated files) or, with ``root`` given, when I002 declined the scan root that holds it
+    (``scan_budgets`` skipped=true, announced in the run's disclosures). A member with no finding, a
+    finding off every group, a finding in a language the gate excludes, or two findings on a file
+    are violations.
     """
     members = cycle_members(groups)
     expected = {p for p in members if is_load_order(p)}
     status = {to_posix(r.get('file', '')): r.get('status') for r in report_files(report)}
     unjudged = sorted(p for p in expected if status.get(p) in UNJUDGED_STATUSES)
+    scan_roots = i002_scan_roots(report, root) if root is not None else []
+    declined = sorted(p for p in expected - set(unjudged) if declined_by_i002(p, scan_roots))
     found = Counter(file for file, det in detections(report) if det['rule_code'] == 'I002')
     violations = []
-    for path in sorted(expected - set(unjudged) - set(found)):
+    for path in sorted(expected - set(unjudged) - set(declined) - set(found)):
         violations.append({'kind': 'member-without-finding', 'file': path})
     for path in sorted(set(found) - expected):
         why = 'finding-outside-groups' if path not in members else 'finding-in-gated-language'
@@ -198,7 +224,7 @@ def i002_circular_violations(report: dict, groups: list[list[str]],
     for path in sorted(p for p, n in found.items() if n > 1):
         violations.append({'kind': 'several-findings', 'file': path, 'count': found[path]})
     return {'groups': len(groups), 'members': len(members), 'load_order_members': len(expected),
-            'unjudged': unjudged, 'files_with_i002': len(found), 'violations': violations}
+            'unjudged': unjudged, 'declined': declined, 'files_with_i002': len(found), 'violations': violations}
 
 
 # ---------------------------------------------------------------- measurement
@@ -275,7 +301,7 @@ def measure_corpus(entry: dict, root: Path, timeout: int, runner: Runner) -> dic
             'check': check, 'circular': circular, 'files_checked': check['files_checked'],
             'counts': dict(rule_counts(report)),
             'self_line': self_line_violations(report),
-            'i002_circular': i002_circular_violations(report, groups)}
+            'i002_circular': i002_circular_violations(report, groups, root=to_posix(root))}
 
 
 def tracked_bytes(root: Path) -> int:
@@ -374,6 +400,12 @@ def format_table(result: dict) -> str:
         for v in inv['violations']:
             where = f"{v.get('file')}:{v['line']}" if 'line' in v else v.get('file')
             out.append(f"    {v['corpus']} {v['kind']} {v.get('rule', '')} {where}")
+    out += ['', 'I002 vs ?circular coverage (load-order members / judged by check; unjudged = skipped or errored, declined = scan root over the I002 threshold)']
+    for r in rows:
+        i = r['i002_circular']
+        if i['members']:
+            out.append(f"  {r['name']}: {i['groups']} groups, {i['members']} members, {i['load_order_members']} in load-order "
+                       f"languages, {i['files_with_i002']} with I002, {len(i['unjudged'])} unjudged, {len(i['declined'])} declined")
     if result['failures']:
         out += ['', 'Failed measurements']
         out += [f"  {f['name']}: {f['reason']}" for f in result['failures']]
