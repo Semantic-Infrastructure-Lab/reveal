@@ -473,7 +473,7 @@ def _section_line(name: str, head: Dict[str, Any], section: Dict[str, Any]) -> s
     that carries more than the shared clauses (its own resolution fields) prints in full."""
     label = f"Rule ({name.replace('_', ' ')}):"
     if 'subject' not in section or 'root' in section or section['scope'] != head['scope']:
-        return section['text'].replace('Rule:', label, 1)
+        return str(section['text']).replace('Rule:', label, 1)
     differs = []
     if section['tests'] != head['tests']:
         differs.append(_tests_phrase(section['tests'] == 'included')[2:])

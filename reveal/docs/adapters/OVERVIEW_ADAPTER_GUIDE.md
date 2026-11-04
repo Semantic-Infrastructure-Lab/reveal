@@ -68,7 +68,10 @@ when identical trees avoid analysis. See the
 
 Counting rules accompany the facts. Fan-in and components count static imports
 including function-level imports; entrypoint fan-in ignores test importers.
-Cycles use the load-time view. TYPE_CHECKING imports are excluded. The rules
+Cycles use the load-time view. The text prints the headline rule once and, for the
+entry-point and cycle sections, only what differs from it; JSON keeps the full rule
+per section. Python-only clauses (TYPE_CHECKING imports excluded; `__init__.py` not
+an active entry point) appear only when the scan holds Python files. The rules
 state the scope and test policy; use imports queries for other views.
 
 `map_status` distinguishes `complete`, `incomplete`, `failed` and `not_requested` graph
