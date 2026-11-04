@@ -36,6 +36,7 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
         prog=f'reveal {name}', parents=[_build_global_options_parser()],
         description=help_info['description'], epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter)
+    _describe_fail_on(parser, tuple(getattr(adapter, 'FINDINGS_POLICIES', ('none',))))
     add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC)
     if name == 'overview':
         parser.add_argument('--all', action='store_true',
@@ -53,6 +54,21 @@ def _has_findings_gate(args, command: str | None) -> bool:
         return True
     path = str(peek(args, 'path', '') or '')
     return command is None and bool(peek(args, 'check', False)) and bool(path) and '://' not in path
+
+
+def _describe_fail_on(parser: argparse.ArgumentParser, policies: tuple) -> None:
+    """Show only this noun's --fail-on values (BACK-2486).
+
+    The flag comes from the shared global-options parent, which lists every policy.
+    Only the displayed values narrow: rejection stays in validate_execution_policy so
+    the subcommand and URI spellings keep one message (test_declared_parity_back2053).
+    The parent is built per parser, so this action is not shared with another noun.
+    """
+    action = parser._option_string_actions['--fail-on']
+    action.metavar = '{' + ','.join(policies) + '}'
+    if 'findings' not in policies:
+        action.help = ('This command has no findings gate, so only none is accepted; '
+                       '--fail-on findings exits 2. Required analysis/output failures remain errors.')
 
 
 def validate_execution_policy(args, command: str | None = None) -> None:
