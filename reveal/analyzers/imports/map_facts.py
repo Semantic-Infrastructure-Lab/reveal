@@ -8,6 +8,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, TypedDict
 
+from .base import scanned_rule_traits
 from .service import architecture_edge_rules
 from ...utils.entry_points import is_active_entry_point, entry_point_filter
 from ...utils.path_utils import TestLayout, is_test_path, to_posix, to_relative_display
@@ -169,7 +170,8 @@ def _entrypoint_rows(entries: list[dict[str, Any]], path: Path,
     projected_entries = [_relationship(row, path) for row in entries]
     active = [projected for source, projected in zip(source_entries, projected_entries)
               if is_active_entry_point(source)]
-    predicate = entry_point_filter(source_entries)
+    _type_checking, markers = scanned_rule_traits(Path(row['file']) for row in source_entries)
+    predicate = entry_point_filter(source_entries, markers)
     predicate['path_basis'] = 'producer paths before target-relative display'
     return active, predicate
 

@@ -109,4 +109,6 @@ def test_the_filter_counts_by_rule_on_rows():
     ]
     from reveal.utils.entry_points import entry_point_filter
     assert [r['file'] for r in active_entry_points(rows)] == ['a.py', 'src/testing/util.go']
-    assert entry_point_filter(rows) == {'fan_in_zero': 6, 'active': 2, 'rule': RULE}
+    assert entry_point_filter(rows, ['__init__.py']) == {'fan_in_zero': 6, 'active': 2, 'rule': RULE}
+    # control: with no marker named the rule names none (a Rust scan does not mention Python)
+    assert entry_point_filter(rows)['rule'] == 'fan_out > 0, not a test file'

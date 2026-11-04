@@ -9,7 +9,6 @@ The rule text names a package marker only when a candidate's language has one
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-from ..analyzers.imports.base import scanned_rule_traits
 from .path_utils import is_test_path
 
 ENTRY_POINT_RULE_BASE = 'fan_out > 0, not a test file'
@@ -39,10 +38,11 @@ def active_entry_points(entries: Iterable[Dict[str, Any]]) -> List[Dict[str, Any
     return [e for e in entries if is_active_entry_point(e)]
 
 
-def entry_point_filter(entries: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
-    """How many fan-in-0 files there are, how many of them are active, and the rule between them."""
+def entry_point_filter(entries: Iterable[Dict[str, Any]], markers: Iterable[str] = ()) -> Dict[str, Any]:
+    """How many fan-in-0 files there are, how many of them are active, and the rule between them.
+    ``markers`` are the package marker names of the candidates' languages, which the caller owns
+    (``scanned_rule_traits``): this module sits below the analyzers and does not import them."""
     rows = list(entries)
-    _type_checking, markers = scanned_rule_traits(Path(str(row['file'])) for row in rows)
     return {
         'fan_in_zero': len(rows),
         'active': len(active_entry_points(rows)),
