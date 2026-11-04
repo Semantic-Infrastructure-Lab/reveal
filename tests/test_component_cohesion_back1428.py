@@ -74,8 +74,10 @@ def test_declined_components_are_not_ranked_among_measured_ones(tmp_path):
 
 def test_negative_control_python_cohesion_keeps_its_number_and_adds_no_key(py_tree):
     comps, result = _components(py_tree)
-    assert comps['pkg'] == {'component': 'pkg', 'files': 2, 'internal': 1, 'outgoing': 1,
-                            'incoming': 1, 'cohesion': 0.5, 'top_bridge': 'pkg/a.py'}
+    # pkg has no __init__.py: `from pkg import b` is also an edge to the directory pkg, which belongs
+    # to the pkg component (BACK-2289), so it is internal; other.py's edge to pkg is incoming
+    assert comps['pkg'] == {'component': 'pkg', 'files': 2, 'internal': 2, 'outgoing': 0,
+                            'incoming': 2, 'cohesion': 1.0, 'top_bridge': None}
     assert 'cohesion_rule' not in result
 
 
@@ -127,5 +129,5 @@ def test_architecture_brief_declines_too(go_tree):
 def test_python_overview_preserves_component_numbers(py_tree):
     out = run('overview', str(py_tree)).stdout
     assert 'Major components  (showing 2 of 2 observed)' in out
-    assert 'pkg  2 files; internal 1, outgoing 1, incoming 1; cohesion 0.5' in out
+    assert 'pkg  2 files; internal 2, outgoing 0, incoming 2; cohesion 1.0' in out
     assert 'n/a' not in out

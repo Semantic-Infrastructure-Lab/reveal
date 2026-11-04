@@ -1037,6 +1037,7 @@ line number. `edge_rule` states which edges were counted (abridged above).
 - `components[].internal` — import edges where both source and target are in this directory
 - `components[].outgoing` — import edges leaving this directory
 - `components[].incoming` — import edges arriving from outside this directory
+- A Go import names a package, so its edge ends at the package directory (`?rank=fan-in` lists it as a row such as `pkg/b`); so does a Python import of a namespace package (a directory without `__init__.py`). That directory node belongs to the component of the same directory, so the edge counts as `internal` or `incoming` there and agrees with fan-in
 - `components[].cohesion` — `internal / (internal + outgoing)`; 1.0 = fully self-contained; 0.0 = all imports cross boundaries. `null` (text: `n/a`) when more than half the directory's files are in Go, Java, Kotlin, C#, Scala or Swift: files of one package or module use each other without an import, so `internal` would read ~0 whatever the structure. The row then carries `cohesion_reason`, the response carries one `cohesion_rule` sentence, and declined components sort after every measured one (never as 0.00). Other languages keep their number
 - `components[].top_bridge` — file in this directory with the most outgoing cross-boundary edges (null if none)
 

@@ -106,6 +106,55 @@ def _cohesion_declined(files) -> bool:
     same = sum(1 for f in files if conventions_for_path(str(f)).same_package_visibility)
     return 2 * same > len(files)
 
+
+def _component_members(dir_files: Dict[Path, set]) -> Dict[Path, Path]:
+    """The one node-to-component map: resolved graph node -> the component directory (as spelled in
+    ``dir_files``) it belongs to. A file belongs to its parent's component; a directory node, the target a
+    package-granularity import resolves to (Go's ``import "mod/pkg/b"`` is an edge to ``pkg/b``, BACK-553),
+    belongs to the component of that same directory, so the edge counts as incoming there (BACK-2289).
+
+    Keys are resolved (BACK-1246): some resolvers return absolute targets while the scanned files keep the
+    invocation's spelling, and an unresolved comparison zeroed internal/cohesion for those languages.
+    """
+    members: Dict[Path, Path] = {}
+    for directory, file_set in dir_files.items():
+        members[directory.resolve()] = directory
+        for f in file_set:
+            members[f.resolve()] = directory
+    return members
+
+
+def _component_edges(graph: ImportGraph, dir_files: Dict[Path, set]) -> Tuple[Dict[Path, Dict[str, int]], Dict[Path, Dict[Path, int]]]:
+    """Each edge of ``graph`` counted once through ``_component_members``: internal when both ends belong
+    to one component, else outgoing at the importer's component (and a bridge count for the importer) and
+    incoming at the target's. An end outside every component (outside the path, or never scanned)
+    counts only at the other end."""
+    from collections import defaultdict
+    member_of = _component_members(dir_files)
+    resolved: Dict[Path, Path] = {}
+
+    def owner(node: Path) -> Optional[Path]:
+        if node not in resolved:
+            resolved[node] = node.resolve()
+        return member_of.get(resolved[node])
+
+    counts: Dict[Path, Dict[str, int]] = defaultdict(lambda: {'internal': 0, 'outgoing': 0, 'incoming': 0})
+    bridges: Dict[Path, Dict[Path, int]] = defaultdict(lambda: defaultdict(int))
+    for src, deps in graph.dependencies.items():
+        src_component = owner(src)
+        for dep in deps:
+            dep_component = owner(dep)
+            if src_component is not None and src_component == dep_component:
+                counts[src_component]['internal'] += 1
+                continue
+            if src_component is not None:
+                counts[src_component]['outgoing'] += 1
+                bridges[src_component][src] += 1
+            if dep_component is not None:
+                counts[dep_component]['incoming'] += 1
+    return counts, bridges
+
+
 @dataclass(frozen=True)
 class ImportView:
     """Domain rows/counts for one artifact and explicit presentation scope.
@@ -416,7 +465,8 @@ class ImportView:
     def components(self) -> Dict[str, Any]:
         """Score each directory as a component using import graph cohesion.
 
-        Groups scanned files by immediate parent directory. For each directory:
+        Groups scanned files by immediate parent directory; a directory node (a Go package import's target)
+        belongs to that directory's component (``_component_members``). For each directory:
         - internal: import edges where both source and target are in this directory
         - outgoing: import edges leaving this directory
         - incoming: import edges arriving from outside this directory
@@ -438,35 +488,11 @@ class ImportView:
             if self._in_scope(f):
                 dir_files[f.parent].add(f)
 
+        counts, bridges = _component_edges(graph, dir_files)
         components = []
         for directory, file_set in dir_files.items():
-            # BACK-1246: compare resolved (canonical, absolute) forms, not the
-            # raw Path objects in file_set. Some per-language resolvers (e.g.
-            # javascript.py's _resolve_target_path) return absolute dependency
-            # targets while _scanned_files keeps whatever path style the CLI
-            # invocation used (often relative) -- an unresolved `dep in
-            # file_set` check then never matches for that language, silently
-            # zeroing internal/cohesion for every component. Resolving both
-            # sides here (comparison-only; `directory`/`file_set` below still
-            # use the original style for display) fixes it regardless of
-            # which side happens to be absolute.
-            resolved_file_set = {f.resolve() for f in file_set}
-            internal = 0
-            outgoing = 0
-            incoming = 0
-            bridge_counts: dict = defaultdict(int)
-
-            for f in file_set:
-                for dep in graph.dependencies.get(f, set()):
-                    if dep.resolve() in resolved_file_set:
-                        internal += 1
-                    else:
-                        outgoing += 1
-                        bridge_counts[f] += 1
-                for src in graph.reverse_deps.get(f, set()):
-                    if src.resolve() not in resolved_file_set:
-                        incoming += 1
-
+            internal, outgoing, incoming = (counts[directory][k] for k in ('internal', 'outgoing', 'incoming'))
+            bridge_counts = bridges[directory]
             total_out = internal + outgoing
             cohesion = _component_cohesion(internal, total_out, file_set)
             # BACK-1243: break ties deterministically -- max() over a dict

@@ -99,3 +99,32 @@ def test_control_python_package_component_counts_are_unchanged(tmp_path):
                             'incoming': 2, 'cohesion': 1.0, 'top_bridge': None}
     assert comps['.'] == {'component': '.', 'files': 1, 'internal': 0, 'outgoing': 2,
                           'incoming': 0, 'cohesion': 0.0, 'top_bridge': 'other.py'}
+
+
+def _conservation(target: Path) -> None:
+    """Per component, the edges fan-in counts into its nodes (its files and its directory node) are its
+    internal plus incoming edges: imports://?components and ?rank=fan-in give one number per edge."""
+    comps = _components(target)
+    fan_in = _fan_in(target)
+    for name, row in comps.items():
+        prefix = '' if name == '.' else name + '/'
+        nodes = [f for f in fan_in if f == name or (
+            f not in comps and f.startswith(prefix) and '/' not in f[len(prefix):])]
+        assert sum(fan_in[f] for f in nodes) == row['internal'] + row['incoming'], (name, row, nodes)
+
+
+def test_fan_in_and_component_counts_name_the_same_edges_go(go_tree):
+    _conservation(go_tree)
+
+
+def test_python_namespace_package_import_is_internal_and_incoming_like_go(tmp_path):
+    """No __init__.py: `from pkg import b` resolves to the directory pkg (and to pkg/b.py). The edge
+    pkg/a.py -> pkg stays inside pkg; other.py -> pkg arrives at pkg (was outgoing 1 / incoming 1)."""
+    root = tmp_path / 'repo'
+    _w(root / 'pkg' / 'a.py', 'from pkg import b\n\n\ndef a():\n    return b.b()\n')
+    _w(root / 'pkg' / 'b.py', 'def b():\n    return 1\n')
+    _w(root / 'other.py', 'from pkg import a\n\n\ndef o():\n    return a.a()\n')
+    comps = _components(root.resolve())
+    assert _counts(comps['pkg']) == (2, 2, 0, 2)
+    assert _counts(comps['.']) == (1, 0, 2, 0)
+    _conservation(root.resolve())
