@@ -114,10 +114,20 @@ if [[ $PUSH -ne 1 && $CALLS_OPTIONS -eq 1 ]]; then
     echo "calls-gate options require --push" >&2; exit 2
 fi
 
+# The private-name check in check_doc_hygiene.py runs only when it has terms. Default to the
+# maintainer's terms file beside the public checkout; --push refuses to start without terms (BACK-2489).
+TERMS_DEFAULT="${REVEAL_PRIVATE_TERMS_DEFAULT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)/../private-hooks/sensitive-terms.txt}"
+if [[ -z "${REVEAL_PRIVATE_TERMS:-}" && -z "${REVEAL_PRIVATE_TERMS_FILE:-}" && -f "$TERMS_DEFAULT" ]]; then
+    export REVEAL_PRIVATE_TERMS_FILE="$TERMS_DEFAULT"
+fi
+
 # --push: the push gate is the default run (the lints run before the suite, so they fail in seconds).
 if [[ $PUSH -eq 1 ]]; then
     [[ $PY_EXPLICIT -eq 1 || -n "$LP_VERSION" || $MATRIX -eq 1 || $CHANGED -eq 1 || $RUN_TESTS -eq 0 || $EXPLICIT_TARGETS -eq 1 || $FRESH -eq 1 ]] \
         && { echo "--push takes no other options" >&2; exit 2; }
+    [[ -n "${REVEAL_PRIVATE_TERMS:-}${REVEAL_PRIVATE_TERMS_FILE:-}" ]] \
+        || { echo "--push: no private terms; set REVEAL_PRIVATE_TERMS_FILE or keep $TERMS_DEFAULT" >&2; exit 2; }
+    echo "private-name check: terms from ${REVEAL_PRIVATE_TERMS_FILE:-REVEAL_PRIVATE_TERMS}"
     CALLS_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check_calls_gate.py"
     CALLS_PY="${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/py3.12/bin/python"
     CALLS_ARGS=(--repo "$(cd "$(dirname "$CALLS_HELPER")/.." && pwd -P)" --interpreter "$CALLS_PY"

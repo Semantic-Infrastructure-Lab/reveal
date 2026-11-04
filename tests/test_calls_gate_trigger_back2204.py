@@ -269,6 +269,8 @@ def run_push_dispatch(repo, tmp_path, args, suite_body='', extra_env=None):
     env['SUITE_MARKER'] = str(marker)
     env['SUITE_SCRIPT'] = str(suite)
     env['REVEAL_CI_LOG_DIR'] = str(tmp_path / 'logs')
+    if not (env.get('REVEAL_PRIVATE_TERMS') or env.get('REVEAL_PRIVATE_TERMS_FILE')):
+        env['REVEAL_PRIVATE_TERMS'] = 'zz-gate-test-term'  # --push refuses to start without terms (BACK-2489)
     env.update(extra_env or {})
     result = subprocess.run(
         ['bash', str(script), *args], cwd=repo, env=env,

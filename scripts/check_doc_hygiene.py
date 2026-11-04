@@ -266,9 +266,7 @@ def main():
     else:
         print(f'Scanned {len(md_files)} markdown files\n')
 
-        if terms is None:
-            print('Private-name check skipped: set REVEAL_PRIVATE_TERMS or REVEAL_PRIVATE_TERMS_FILE.\n')
-        elif private:
+        if private:
             print(f'=== PRIVATE NAMES ({len(private)}) -- never allowed, not baselined ===')
             for p in private:
                 print(f"  ! {p['file']}:{p['line']}")
@@ -298,6 +296,12 @@ def main():
             print(f'{total} issue(s) found (baseline: {baseline}).')
         else:
             print(f'{total} issue(s) found. Fix before release.')
+        # Last, so ci-local.sh's three-line tail of a passing step shows whether it ran (BACK-2489).
+        if terms is None:
+            print('Private-name check: SKIPPED -- set REVEAL_PRIVATE_TERMS or REVEAL_PRIVATE_TERMS_FILE.')
+        else:
+            print(f'Private-name check: {len(terms)} term(s), {len(private)} hit(s) '
+                  f'in {len(tracked)} tracked files.')
 
     if private_paths:
         print(f"\n=== PRIVATE-TREE PATHS ({len(private_paths)}) -- never allowed, not baselined ===",
