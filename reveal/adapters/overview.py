@@ -19,7 +19,7 @@ from ..analyzers.imports.map_facts import MapFacts, project_map_facts, validate_
 from ..analyzers.imports.views import ImportView
 from ..rendering.adapters.overview import OverviewRenderer
 from ..utils.exclusions import active_exclusions, exclusion_scope
-from ..utils.entry_points import ACTIVE_ENTRY_POINT_RULE, is_active_entry_point
+from ..utils.entry_points import ENTRY_POINT_RULE_BASE, is_active_entry_point
 from ..utils.gitignore import gitignore_scope, respect_gitignore_param
 from ..utils.path_utils import (HiddenTally, as_spelled, failure_of, hidden_entries_warning,
                                traversal_failed_warning)
@@ -388,7 +388,7 @@ def _validate_map(facts: Any, status: str, limit: int) -> None:
             for path in cycle[key]['rows']:
                 _validate_path(path)
     predicate = facts.get('entry_point_filter')
-    if not isinstance(predicate, dict) or predicate.get('rule') != ACTIVE_ENTRY_POINT_RULE:
+    if not isinstance(predicate, dict) or not str(predicate.get('rule')).startswith(ENTRY_POINT_RULE_BASE):
         raise ValueError('map must retain its entrypoint predicate')
     if predicate.get('path_basis') != 'producer paths before target-relative display':
         raise ValueError('map must retain its entrypoint predicate path basis')

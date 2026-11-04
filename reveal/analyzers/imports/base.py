@@ -16,7 +16,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, List, Set, ClassVar, Optional, Tuple, Type, Dict
+from typing import Callable, Iterable, List, Set, ClassVar, Optional, Tuple, Type, Dict
 
 from .types import ImportExtraction, ImportStatement, restamp_file_path
 from ...core import disk_cache
@@ -192,6 +192,18 @@ def extension_detects_unused(ext: str) -> bool:
     return bool(extractor_cls and extractor_cls.detects_unused)
 
 
+def scanned_rule_traits(files: Iterable[Path]) -> Tuple[bool, List[str]]:
+    """Which language-specific counting-rule clauses hold for ``files`` (BACK-2494).
+
+    Returns whether any file's extractor excludes TYPE_CHECKING imports, and the sorted package
+    marker names of the extractors the files reach.
+    """
+    classes = {_EXTRACTOR_REGISTRY[suffix] for suffix in {Path(f).suffix for f in files}
+               if suffix in _EXTRACTOR_REGISTRY}
+    return (any(cls.excludes_type_checking for cls in classes),
+            sorted({cls.package_marker for cls in classes if cls.package_marker}))
+
+
 def get_supported_languages() -> List[str]:
     """Get list of all supported language names.
 
@@ -287,6 +299,12 @@ class LanguageExtractor(ABC):
     # False when extract_symbols() is not implemented and every import is
     # skip_unused: an empty unused list then means "not checked", never "clean".
     detects_unused: ClassVar[bool] = True
+    # Counting-rule clauses only this language's files make true (BACK-2494): whether imports
+    # under `if TYPE_CHECKING:` are left out of the graph, and the file name that marks a
+    # package (an entry-point filter skips it). The rule text names them only when a scanned
+    # file's extractor sets them.
+    excludes_type_checking: ClassVar[bool] = False
+    package_marker: ClassVar[Optional[str]] = None
 
     def __init__(self) -> None:
         # Set by _get_tree_analyzer() when a file this extractor claims to

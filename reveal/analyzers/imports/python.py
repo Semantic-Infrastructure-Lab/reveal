@@ -53,6 +53,8 @@ class PythonExtractor(LanguageExtractor):
 
     extensions = {'.py', '.pyi'}
     language_name = 'Python'
+    excludes_type_checking = True
+    package_marker = '__init__.py'
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all import statements from Python file using tree-sitter.

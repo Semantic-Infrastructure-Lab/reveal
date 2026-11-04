@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
-from .base import get_extractor, get_all_extensions
+from .base import get_extractor, get_all_extensions, scanned_rule_traits
 from . import build_cache, extraction as file_extraction, resolution
 from ...core import disk_cache
 from ...utils.exclusions import active_exclusions
@@ -338,6 +338,14 @@ def _resolution_fields(graph: ImportGraph, at: ResolvedAt) -> Tuple[Dict[str, An
     return fields, text
 
 
+def _where_phrase(scope: str) -> str:
+    return 'files under the scanned path' if scope == 'scanned_path' else 'files under the scan root'
+
+
+def _tests_phrase(tests_counted: bool) -> str:
+    return ', tests included' if tests_counted else ', importers under a test path not counted'
+
+
 def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str,
               scope: str, tests_counted: bool = True, hint: Optional[str] = None,
               resolved_at: Optional[ResolvedAt] = None, counted: Optional[ImportGraph] = None) -> Dict[str, Any]:
@@ -354,21 +362,27 @@ def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str
     unclassified = graph.unclassified_edges()
     languages = sorted({language_for_extension(src.suffix.lower()) or src.suffix
                         for src, _target in unclassified})
-    where = 'files under the scanned path' if scope == 'scanned_path' else 'files under the scan root'
-    tests = ', tests included' if tests_counted else ', importers under a test path not counted'
+    where = _where_phrase(scope)
+    tests = _tests_phrase(tests_counted)
     source = 'default' if lazy_default else f'&lazy={lazy}'
     if hint is None:
         hint = _RULE_HINT.get()
     if hint is None:
         hint = 'other views: ' + ', '.join(f'&lazy={mode}' for mode in LAZY_MODES if mode != lazy)
-    text = (f'Rule: {subject} {where}{tests}; TYPE_CHECKING imports excluded; '
-            f'{_LAZY_PHRASES[lazy]} ({source}); {hint}.')
+    type_checking, _markers = scanned_rule_traits(graph.files)
+    clauses = [f'{subject} {where}{tests}']
+    if type_checking:
+        clauses.append('TYPE_CHECKING imports excluded')
+    clauses.append(f'{_LAZY_PHRASES[lazy]} ({source})')
+    text = f"Rule: {'; '.join(clauses)}; {hint}."
     if unclassified:
         text += (f' Import scope is unknown for {len(unclassified)} edge(s) in {", ".join(languages)}: '
                  'retained by &lazy=include and &lazy=exclude, and omitted by &lazy=only.')
     rule = {
+        'subject': subject,
         'lazy': lazy,
         'lazy_default': lazy_default,
+        'lazy_source': source,
         'type_checking': 'excluded',
         'tests': 'included' if tests_counted else 'importers_not_counted',
         'scope': scope,
@@ -449,5 +463,21 @@ def edge_rule_lines(result: Dict[str, Any]) -> List[str]:
         return []
     lines = [rule['text']]
     for name, section in (result.get('edge_rule_sections') or {}).items():
-        lines.append(section['text'].replace('Rule:', f"Rule ({name.replace('_', ' ')}):", 1))
+        lines.append(_section_line(name, rule, section))
     return lines
+
+
+def _section_line(name: str, head: Dict[str, Any], section: Dict[str, Any]) -> str:
+    """A section's rule line: its subject, then only the clauses that differ from the headline
+    rule printed above it (the other clauses are the same sentence, stated once). A section
+    that carries more than the shared clauses (its own resolution fields) prints in full."""
+    label = f"Rule ({name.replace('_', ' ')}):"
+    if 'subject' not in section or 'root' in section or section['scope'] != head['scope']:
+        return section['text'].replace('Rule:', label, 1)
+    differs = []
+    if section['tests'] != head['tests']:
+        differs.append(_tests_phrase(section['tests'] == 'included')[2:])
+    if (section['lazy'], section['lazy_source']) != (head['lazy'], head['lazy_source']):
+        differs.append(f"{_LAZY_PHRASES[section['lazy']]} ({section['lazy_source']})")
+    line = f"{label} {section['subject']} {_where_phrase(section['scope'])}"
+    return line + (f"; differs from the rule above: {'; '.join(differs)}." if differs else '; no other difference.')

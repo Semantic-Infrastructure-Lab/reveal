@@ -184,8 +184,8 @@ def test_pack_architecture_states_its_rule(project):
     # imports://'s object for the same view; pack names its own subject and cannot take &lazy.
     # pack builds its rule from the graph alone (_pack_edge_rule): the keys it carries are imports://'s.
     imports_rule = _imports_rule(project, 'rank=fan-in')
-    assert {k: v for k, v in data['edge_rule'].items() if k != 'text'} == {
-        k: imports_rule[k] for k in data['edge_rule'] if k != 'text'}
+    assert {k: v for k, v in data['edge_rule'].items() if k not in ('text', 'subject')} == {
+        k: imports_rule[k] for k in data['edge_rule'] if k not in ('text', 'subject')}
     _assert_rule(data['edge_rule'], HEADLINE)
     assert 'fan-in' in data['edge_rule']['text'] and 'pack takes no &lazy' in data['edge_rule']['text']
     text = _run('pack', to_posix(project), '--architecture')

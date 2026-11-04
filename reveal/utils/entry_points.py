@@ -2,14 +2,22 @@
 
 ``imports://?entrypoints`` lists every file nothing but tests imports (fan-in 0).
 Most of those are not places execution starts, so the briefs report only the
-*active* ones: fan_out > 0, not a test file, not an ``__init__.py``.
+*active* ones: fan_out > 0, not a test file, not a package marker (``__init__.py``).
+The rule text names a package marker only when a candidate's language has one
+(``LanguageExtractor.package_marker``), so a Rust scan does not mention Python.
 """
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+from ..analyzers.imports.base import scanned_rule_traits
 from .path_utils import is_test_path
 
-ACTIVE_ENTRY_POINT_RULE = 'fan_out > 0, not a test file, not __init__.py'
+ENTRY_POINT_RULE_BASE = 'fan_out > 0, not a test file'
+
+
+def active_entry_point_rule(markers: Iterable[str] = ()) -> str:
+    """The predicate's text; ``markers`` are the package marker file names of the candidates' languages."""
+    return ''.join([ENTRY_POINT_RULE_BASE, *(f', not {marker}' for marker in sorted(set(markers)))])
 
 
 def is_active_entry_point(entry: Dict[str, Any]) -> bool:
@@ -34,12 +42,9 @@ def active_entry_points(entries: Iterable[Dict[str, Any]]) -> List[Dict[str, Any
 def entry_point_filter(entries: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     """How many fan-in-0 files there are, how many of them are active, and the rule between them."""
     rows = list(entries)
+    _type_checking, markers = scanned_rule_traits(Path(str(row['file'])) for row in rows)
     return {
         'fan_in_zero': len(rows),
         'active': len(active_entry_points(rows)),
-        'rule': ACTIVE_ENTRY_POINT_RULE,
+        'rule': active_entry_point_rule(markers),
     }
-
-
-def entry_point_rule_line(indent: str = '') -> str:
-    return f'{indent}active = {ACTIVE_ENTRY_POINT_RULE}'
