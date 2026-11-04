@@ -2233,13 +2233,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         prefix = self.spec.project_relative_prefix
 
         if prefix and module.startswith(prefix):
-            # Project-root-relative virtual path (GDScript `res://...`) — never
-            # file-relative, so skip the base_path-relative attempt. The root is
-            # the importing file's own project (BACK-2155), else the scan root.
-            target = module[len(prefix):]
-            project = self._project_root(base_path, search_paths)
-            return self._resolve_path_target(
-                target, None, [project] if project else search_paths, exts)
+            return self._resolve_project_relative(module[len(prefix):], base_path, search_paths, exts)
 
         scheme = self.spec.package_uri_scheme
         if scheme and module.startswith(scheme):
@@ -2544,6 +2538,19 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
     _CLASS_NAME_CACHE_KEY = '\x00class_name_index'
     _CLASS_NAME_RE = re.compile(r'^\s*class_name\s+(\w+)', re.MULTILINE)
+
+    def _resolve_project_relative(
+        self,
+        target: str,
+        base_path: Path,
+        search_paths: Optional[List[Path]],
+        exts: FrozenSet[str],
+    ) -> Optional[Path]:
+        """A project-root-relative virtual path (GDScript ``res://...``), never file-relative, so
+        the ``base_path``-relative attempt is skipped. The root is the importing file's own
+        project (BACK-2155), else the search roots (the scan root)."""
+        project = self._project_root(base_path, search_paths)
+        return self._resolve_path_target(target, None, [project] if project else search_paths, exts)
 
     def _project_root(self, base_path: Path, search_paths: Optional[List[Path]]) -> Optional[Path]:
         """The project root of a file in ``base_path`` (BACK-2155): the nearest ancestor directory,
