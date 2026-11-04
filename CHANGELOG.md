@@ -18,6 +18,12 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- `check`'s I002 now reports each file in an import cycle group once, naming "group k of N (S files)" as `imports://?circular` counts groups, with a shortest cycle through the file; it used to repeat files per search path and miss members (a TypeScript repository: 5,297 findings on 320 files, now 362 on 362). It reads the same graph as `?circular`, so a PHP cycle through a `define()` constant is now found. It judges only Python, JavaScript/TypeScript, PHP, Lua and Ruby, where a load-time cycle breaks the program; files in other languages get a W-CAP-3 note naming `?circular`. (BACK-2156)
+
+- Two rules no longer flag correct code outside Python. I005 (duplicate import) compares the imported names case-sensitively, never reports a grouped Rust `use std::{a, b}` as its own duplicate, and ignores repeats in a different function or nested module (Rust 4,229 findings to 16). D001 (duplicate function) compares bodies only within one type, so the same trait method on two structs or sibling nested classes is no longer copy-paste, and a bare `false`/`None` body is a no-op hook. (BACK-2490, BACK-2491)
+
+- A missing path, a file no analyzer reads and an element that is not in the file now exit 2 (invalid resource), as `reveal check` already did; they exited 1, the findings code. This includes element misses with `--effects`, `--boundary`, `--exits` or `--outline`. The unsupported-file error no longer suggests a "similar" extension of another language (`.rs` for `.rst`). (BACK-2492)
+
 - Function provenance (`test`/`vendor`/`minified`) in `ast://` and `hotspots` no longer depends on how the target is spelled. A relative target whose own path contained `tests/` or `vendor/` (such as `reveal hotspots tests/fixtures/app`) tagged every function with it; the relative and absolute spellings now agree. `hotspots` function entries now use the same target-relative paths as its file entries instead of repeating the target's spelling. (BACK-2487)
 
 - A direct library `find_callers`, `find_uncalled` or `rank_by_callers` call now sees an in-place file edit; it used to reuse an earlier callers index in the same process, whose directory-time key misses an overwrite. Outside an MCP or `reveal.api` request these indexes are now rebuilt per call, and a `--stdin` batch runs as one request so its lines still share them (three `calls://` lines over one tree build the index once). (BACK-2474)

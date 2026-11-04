@@ -208,7 +208,6 @@
  "reveal/rules/bugs/B007.py::attr-defined": 1,
  "reveal/rules/bugs/B007.py::no-any-return": 2,
  "reveal/rules/coverage.py::no-any-return": 1,
- "reveal/rules/imports/I002.py::no-any-return": 1,
  "reveal/rules/imports/I008.py::attr-defined": 1,
  "reveal/rules/maintainability/M104.py::arg-type": 2,
  "reveal/rules/maintainability/M104.py::var-annotated": 1,
