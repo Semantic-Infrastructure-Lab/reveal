@@ -21,8 +21,8 @@ Scope (honest about what this delivers):
     whose imports name an *in-tree file* structurally (BACK-487/488):
       - C/C++ — ``#include "header.h"`` → sibling/searched file. Angle-bracket
         system includes (``<stdio.h>``) are intentionally not resolved.
-      - Java — ``import com.pkg.Type`` → ``com/pkg/Type.java`` (package==dir is
-        guaranteed by javac, so the full path-suffix match is reliable).
+      - Java — ``import com.pkg.Type`` → ``com/pkg/Type.java`` (the package is
+        the directory, so only the full path suffix matches; BACK-1712).
       - PHP — ``use App\\Models\\User`` → ``.../Models/User.php`` (longest unique
         path-suffix, tolerant of the PSR-4 vendor-root prefix); ``require``/
         ``include`` string-literal paths → file relative to the including file.
@@ -547,6 +547,19 @@ class _ImportSpec:
             :meth:`resolve_member_targets`'s split-on-last-separator lookup
             with Kotlin/Scala's member-symbol fallback (harmless overlap: the
             two flags gate mutually exclusive index keys).
+        package_is_directory: True when a qualified import's package is, by
+            the language's source layout, the target file's directory path, so
+            ``import a.b.C`` names exactly the file whose path ends in
+            ``a/b/C.ext`` — Java, whose compiler looks a type up at that path
+            (BACK-1712). :meth:`_longest_unique_suffix` then requires the whole
+            qualified name to match; a shorter suffix (``b/C.ext``) is another
+            package's class of the same simple name, never the import's target.
+            Elasticsearch's server tree had 25 such false edges
+            (``org.apache.lucene.geo.GeoUtils`` onto
+            ``org/elasticsearch/common/geo/GeoUtils.java``). Off for Kotlin and
+            Scala, whose layouts may drop the root package from the path, for
+            PHP (PSR-4 maps a vendor prefix onto ``src/``) and for every other
+            language.
         combinator_clause: When set, ``_build`` truncates the parsed remainder
             at the closing quote of its leading quoted literal before
             extracting ``module_name`` — Dart's ``show``/``hide``/``deferred
@@ -608,6 +621,7 @@ class _ImportSpec:
     class_name_convention: bool = False
     namespaced_type_node_types: FrozenSet[str] = field(default_factory=frozenset)
     namespaced_type_fallback: bool = False
+    package_is_directory: bool = False
     combinator_clause: bool = False
 
 
@@ -2432,7 +2446,10 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         ``resty.openssl.rand``, an external module, wrongly resolving onto
         ``kong/tools/rand.lua`` because it was the tree's only ``rand.lua``).
         If even the most specific available suffix is ambiguous, resolution
-        is skipped.
+        is skipped. A language whose package is its directory
+        (``spec.package_is_directory``, Java) accepts only the full suffix:
+        the whole qualified name, never a same-named class in another package
+        that shares the last package segment (BACK-1712).
         """
         basename = target_parts[-1]
         candidates = self._index_lookup(basename, search_paths, file_index)
@@ -2440,6 +2457,8 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             return None
         n = len(target_parts)
         min_k = 1 if (n == 1 and len(candidates) == 1) else 2
+        if self.spec.package_is_directory:
+            min_k = max(min_k, n)
         for k in range(n, min_k - 1, -1):
             suffix = tuple(target_parts[-k:])
             matches = [c for c in candidates if c.parts[-k:] == suffix]
@@ -2684,6 +2703,9 @@ _JAVA_SPEC = _ImportSpec(
     # precise True (intra-project, a real resolver miss) or False (external, e.g.
     # `java.util.List`).
     package_node_types=frozenset({'package_declaration'}),
+    # BACK-1712: `import a.b.C` names a/b/C.java and nothing shorter; a match on
+    # `b/C.java` alone is a same-named class in another package.
+    package_is_directory=True,
 )
 
 _CSHARP_SPEC = _ImportSpec(

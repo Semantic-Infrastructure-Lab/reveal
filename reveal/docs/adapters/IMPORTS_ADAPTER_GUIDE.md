@@ -632,7 +632,7 @@ Support comes in tiers — be aware of which query modes actually work per langu
 | Rust | `.rs` | ✅ Full | use statements |
 | C | `.c`, `.h` | 📦 Listing + graph | `#include` (quoted resolves to files; `<system>` listed, not resolved) |
 | C++ | `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hxx` | 📦 Listing + graph | `#include` directives (same resolution rules as C) |
-| Java | `.java` | 📦 Listing + graph | `import com.pkg.Type` → `com/pkg/Type.java` (package==dir, reliable); wildcards/`static`/JDK classes skip |
+| Java | `.java` | 📦 Listing + graph | `import com.pkg.Type` → `com/pkg/Type.java`: the whole package path must match, so an outside class never lands on an in-tree namesake in another package; `import static com.pkg.Type.member` and nested types resolve to `Type.java`; wildcards and JDK classes skip |
 | PHP | `.php` | 📦 Listing + graph | `use App\Models\User` → `.../Models/User.php` (longest-unique suffix, tolerant of PSR-4 prefix); `require`/`include` file literals resolve relative to the file |
 | Ruby | `.rb` | 📦 Listing + graph | `require_relative './x'` → `x.rb`; `load`/`require` of a real in-tree `.rb`; bare `require 'gem'` skips |
 | Kotlin | `.kt`, `.kts` | 📦 Listing + graph | `import com.pkg.Bar` → `com/pkg/Bar.kt` when the file is named for the class (best-effort; Kotlin doesn't enforce filename==class) |
