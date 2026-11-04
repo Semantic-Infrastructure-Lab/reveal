@@ -310,9 +310,9 @@
     "targets": 3382,
     "oracle_edges": 32590,
     "hit_edges": 32590,
-    "extra_edges": 25,
+    "extra_edges": 0,
     "recall": 1.0,
-    "precision": 0.9992334815269048,
+    "precision": 1.0,
     "coverage": {
       "files": 4837,
       "indexed_types": 4837,
@@ -320,93 +320,35 @@
       "resolved_statements": 33803
     },
     "partial_files": 0,
-    "differences": [
-      {
-        "target": "server/src/main/java/org/elasticsearch/common/geo/GeoUtils.java",
-        "missed": [],
-        "extra": [
-          "server/src/main/java/org/elasticsearch/search/runtime/GeoPointScriptFieldDistanceFeatureQuery.java"
-        ]
-      },
-      {
-        "target": "server/src/main/java/org/elasticsearch/common/lucene/search/function/FunctionScoreQuery.java",
-        "missed": [],
-        "extra": [
-          "server/src/main/java/org/elasticsearch/index/query/BoostingQueryBuilder.java",
-          "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java"
-        ]
-      },
-      {
-        "target": "server/src/main/java/org/elasticsearch/common/util/BytesRefHash.java",
-        "missed": [],
-        "extra": [
-          "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/PlainHighlighter.java"
-        ]
-      },
-      {
-        "target": "server/src/main/java/org/elasticsearch/index/IndexNotFoundException.java",
-        "missed": [],
-        "extra": [
-          "server/src/main/java/org/elasticsearch/gateway/PersistedClusterStateService.java",
-          "server/src/main/java/org/elasticsearch/index/store/Store.java",
-          "server/src/main/java/org/elasticsearch/indices/store/TransportNodesListShardStoreMetadata.java"
-        ]
-      },
-      {
-        "target": "server/src/main/java/org/elasticsearch/index/analysis/AnalysisMode.java",
-        "missed": [],
-        "extra": [
-          "server/src/main/java/org/elasticsearch/indices/analysis/wrappers/StableApiWrappers.java"
-        ]
-      },
-      {
-        "target": "server/src/main/java/org/elasticsearch/index/analysis/CharFilterFactory.java",
-        "missed": [],
-        "extra": [
-          "server/src/main/java/org/elasticsearch/indices/analysis/wrappers/StableApiWrappers.java"
-        ]
-      },
-      {
-        "target": "server/src/main/java/org/elasticsearch/index/analysis/TokenFilterFactory.java",
-        "missed": [],
-        "extra": [
-          "server/src/main/java/org/elasticsearch/indices/analysis/wrappers/StableApiWrappers.java"
-        ]
-      },
-      {
-        "target": "server/src/main/java/org/elasticsearch/index/analysis/TokenizerFactory.java",
-        "missed": [],
-        "extra": [
-          "server/src/main/java/org/elasticsearch/indices/analysis/wrappers/StableApiWrappers.java"
-        ]
-      },
-      {
-        "target": "server/src/main/java/org/elasticsearch/injection/guice/internal/Strings.java",
-        "missed": [],
-        "extra": [
-          "server/src/main/java/org/elasticsearch/common/blobstore/support/TenaciousRetryBlobContainer.java"
-        ]
-      },
-      {
-        "target": "server/src/main/java/org/elasticsearch/plugins/Plugin.java",
-        "missed": [],
-        "extra": [
-          "server/src/main/java/org/elasticsearch/common/logging/ClusterIdConverter.java",
-          "server/src/main/java/org/elasticsearch/common/logging/ClusterNamePatternConverter.java",
-          "server/src/main/java/org/elasticsearch/common/logging/ConsoleThrowablePatternConverter.java",
-          "server/src/main/java/org/elasticsearch/common/logging/CustomMapFieldsConverter.java",
-          "server/src/main/java/org/elasticsearch/common/logging/ECSJsonLayout.java",
-          "server/src/main/java/org/elasticsearch/common/logging/ESJsonLayout.java",
-          "server/src/main/java/org/elasticsearch/common/logging/HeaderWarningAppender.java",
-          "server/src/main/java/org/elasticsearch/common/logging/JsonThrowablePatternConverter.java",
-          "server/src/main/java/org/elasticsearch/common/logging/NodeAndClusterIdConverter.java",
-          "server/src/main/java/org/elasticsearch/common/logging/NodeIdConverter.java",
-          "server/src/main/java/org/elasticsearch/common/logging/NodeNamePatternConverter.java",
-          "server/src/main/java/org/elasticsearch/common/logging/RateLimitingFilter.java",
-          "server/src/main/java/org/elasticsearch/common/logging/TraceIdConverter.java"
-        ]
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [
+        "java"
+      ],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
       }
-    ]
+    },
+    "differences": [],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 3382,
+      "observed_targets": 3382,
+      "observed_pairs": 32590,
+      "scored_pairs": 32590,
+      "unscored_targets": 0,
+      "unscored_pairs": 0,
+      "unscored_target_paths": [],
+      "unscored_target_paths_unavailable": 0
+    }
   },
   "rust": {
     "oracle": "rust-use",
