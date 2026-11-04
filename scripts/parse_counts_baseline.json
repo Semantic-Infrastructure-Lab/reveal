@@ -1199,9 +1199,9 @@
         "second.ts"
       ],
       "parser_versions": {
-        "python.ast": "3.12.15",
+        "python.ast": "3.12.16",
         "tree-sitter": "0.25.2",
-        "tree-sitter-language-pack": "1.22.1"
+        "tree-sitter-language-pack": "1.23.1"
       },
       "runtime": {
         "implementation": "CPython",
@@ -1336,9 +1336,9 @@
         "second.ts"
       ],
       "parser_versions": {
-        "python.ast": "3.12.15",
+        "python.ast": "3.12.16",
         "tree-sitter": "0.25.2",
-        "tree-sitter-language-pack": "1.22.1"
+        "tree-sitter-language-pack": "1.23.1"
       },
       "runtime": {
         "implementation": "CPython",
@@ -1440,7 +1440,9 @@
               "edge_rule": {
                 "lazy": "include",
                 "lazy_default": true,
+                "lazy_source": "default",
                 "scope": "scanned_path",
+                "subject": "fan-in and fan-out count static imports between",
                 "test_scope": {
                   "anchor": ".",
                   "basis": "scan-root name and relative paths; project boundary unknown",
@@ -1458,7 +1460,9 @@
                 "cycles": {
                   "lazy": "exclude",
                   "lazy_default": true,
+                  "lazy_source": "default",
                   "scope": "scanned_path",
+                  "subject": "cycles use static imports between",
                   "test_scope": {
                     "anchor": ".",
                     "basis": "scan-root name and relative paths; project boundary unknown",
@@ -1475,7 +1479,9 @@
                 "entry_points": {
                   "lazy": "include",
                   "lazy_default": true,
+                  "lazy_source": "default",
                   "scope": "scanned_path",
+                  "subject": "fan-in counts static imports between",
                   "test_scope": {
                     "anchor": ".",
                     "basis": "scan-root name and relative paths; project boundary unknown",
@@ -1575,7 +1581,7 @@
       "parser_versions": {
         "python.ast": "3.12.16",
         "tree-sitter": "0.25.2",
-        "tree-sitter-language-pack": "1.22.1"
+        "tree-sitter-language-pack": "1.23.1"
       },
       "runtime": {
         "implementation": "CPython",
@@ -1704,9 +1710,9 @@
         "second.ts"
       ],
       "parser_versions": {
-        "python.ast": "3.12.15",
+        "python.ast": "3.12.16",
         "tree-sitter": "0.25.2",
-        "tree-sitter-language-pack": "1.22.1"
+        "tree-sitter-language-pack": "1.23.1"
       },
       "runtime": {
         "implementation": "CPython",
