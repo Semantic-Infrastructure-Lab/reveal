@@ -3809,6 +3809,8 @@ def process():
 - Module A imports B which imports A (directly or transitively)
 - Can cause `ImportError` or subtle initialization bugs
 - Reads the same graph and default edge rule as `imports://<path>?circular` (load-time imports; `TYPE_CHECKING` and function-level imports are no cycle edge), so the files it flags are the members of `?circular`'s cycle groups
+- One finding per file per cycle group, naming "group k of N (S files)" and a shortest cycle through the file
+- Checks only languages where a load-time cycle breaks the program (Python, JavaScript/TypeScript, PHP, Lua, Ruby); elsewhere (Rust, Zig, Java, Kotlin, C#, ...) a cycle is legal, `check` adds a W-CAP-3 note and `imports://<path>?circular` still lists the cycles
 
 **I003: Architectural layer violation**
 - Import crosses a forbidden layer boundary (e.g., data layer importing presentation)

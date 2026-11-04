@@ -1753,7 +1753,9 @@ in a required resolution subtree is distinct from an intentional omission.
 
 The I002 check rule builds its project root through the same analysis service and
 reads the default `?circular` view (load-time edges to files under the scan root), so
-the files it flags are the members of `?circular`'s groups at that root. It also
+the files it flags are the members of `?circular`'s groups at that root, one finding per
+file per group, in the languages where a load-time cycle breaks the program (Python,
+JavaScript/TypeScript, PHP, Lua, Ruby; W-CAP-3 names the rest). It also
 discloses required source or resolution-target directory
 loss, so an empty observed cycle list remains a scan-incomplete result. Known
 discovery loss disables its disk backing. Partial graphs remain available within
