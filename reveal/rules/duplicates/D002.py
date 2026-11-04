@@ -21,7 +21,7 @@ import math
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
-from ._bodies import extract_function_body, is_trivial_hook_body
+from ._bodies import extract_function_body, is_trivial_hook_body, one_per_line_span
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -135,7 +135,7 @@ class D002(BaseRule):
         """(function, vector, line count, tokens, vector magnitude) per function large
         enough to compare; each is computed once here, not once per pair."""
         func_vectors = []
-        for func in functions:
+        for func in one_per_line_span(functions):
             func_body = extract_function_body(func, content)
 
             if not func_body or len(func_body.strip()) < 20:

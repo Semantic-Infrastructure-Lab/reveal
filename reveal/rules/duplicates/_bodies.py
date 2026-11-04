@@ -13,6 +13,24 @@ def _file_lines(content: str) -> List[str]:
     return split_lines(content)
 
 
+def one_per_line_span(functions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The first function record of each (line, line_end) span, in order.
+
+    Bodies are read by line range, so two records on the same lines (minified code:
+    ``function T(a){function g(b){...`` across two lines) get the same text by construction,
+    which says nothing about whether the functions are duplicates (BACK-2500).
+    """
+    seen = set()
+    kept = []
+    for func in functions:
+        span = (func.get('line', 0), func.get('line_end', func.get('line', 0)))
+        if span in seen:
+            continue
+        seen.add(span)
+        kept.append(func)
+    return kept
+
+
 def extract_function_body(func: Dict[str, Any], content: str) -> str:
     """Extract a function body from ``content`` using the structure's line numbers.
 
