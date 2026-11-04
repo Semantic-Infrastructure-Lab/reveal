@@ -16,6 +16,8 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct
+from reveal.core.treesitter_compat import tree_has_recovery_artifacts
+from reveal.registry import get_analyzer
 from reveal.rules.imports.I002 import _graph_cache
 
 
@@ -80,8 +82,6 @@ def _i002_parse_disclosures(disclosures):
 
 @pytest.mark.parametrize('lang', sorted(MISSING_ONLY))
 def test_the_fixture_recovers_with_a_missing_token_and_no_error_node(tmp_path, lang):
-    from reveal.core.treesitter_compat import tree_has_recovery_artifacts
-    from reveal.registry import get_analyzer
     root = _tree(tmp_path / lang, MISSING_ONLY[lang])
     bad = str(root / MISSING_ONLY[lang][0][0])
     analyzer = get_analyzer(bad)(bad)
