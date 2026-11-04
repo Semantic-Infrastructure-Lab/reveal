@@ -121,8 +121,23 @@ def test_a_cycle_through_a_php_define_constant_is_a_check_finding(tmp_path):
     assert code == 1
 
 
-@pytest.mark.xfail(strict=True, reason='BACK-2156: I002 reports one finding per file per DFS cycle, '
-                   '?circular one per cycle group; the unit check should report is a pending decision')
+def test_one_finding_per_file_per_group_names_its_group(tmp_path):
+    """Option B (BACK-2156): a file in a cycle group reports once, whatever number of
+    elementary cycles run through it, and the message states the group and the rule."""
+    root = _tree(tmp_path / 'p', TWO_GROUPS)
+    _code, found = _check(root)
+    data, groups = _circular(root)
+    assert {name: len(hits) for name, hits in found.items()} == {n: 1 for n in _members(groups)}
+    size = {name: len(group) for group in groups for name in group}
+    for name, (hit,) in found.items():
+        assert f'of {data["count"]} ({size[name]} files; one finding per file per group' in hit['message']
+        cycle = hit['context'].removeprefix('Import cycle: ').split(' -> ')
+        assert cycle[0] == cycle[-1] == name and len(set(cycle[:-1])) == len(cycle) - 1
+
+
+@pytest.mark.xfail(strict=True, reason='BACK-2156: check reports one finding per file per cycle group '
+                   '(Scott chose option B, 2026-11-03); one finding per group in every invocation form '
+                   'needs the run\'s file set in the rules (option C, follow-up)')
 def test_check_counts_what_circular_counts(tmp_path):
     root = _tree(tmp_path / 'p', TWO_GROUPS)
     _code, found = _check(root)
