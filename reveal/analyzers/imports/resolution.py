@@ -77,6 +77,16 @@ def path_is_under(path: Path, directory: Path) -> bool:
         return False
 
 
+def importer_nodes(graph: ImportGraph, target: Path) -> Set[Path]:
+    """The files that import ``target``: edges that end at the file, plus edges that end at its directory
+    node (a package-granularity language, Go, resolves an import to the package directory, so the package's
+    files have no edge of their own; BACK-553, BACK-2498). A file is never its own importer."""
+    sources = set(graph.reverse_deps.get(target, ()))
+    sources |= graph.reverse_deps.get(target.parent, set())
+    sources.discard(target)
+    return sources
+
+
 def file_importers(graph: ImportGraph, statements: Dict[Tuple[Path, Path], ImportStatement],
                    target: Path) -> List[Tuple[Path, Tuple[Path, Path], Optional[ImportStatement]]]:
     """Who imports the file ``target``, sorted: each importer, the edge that names it and the statement
@@ -84,9 +94,7 @@ def file_importers(graph: ImportGraph, statements: Dict[Tuple[Path, Path], Impor
     language (Go) resolves an import to the package directory, so importers of ``target``'s directory
     count too (BACK-553); a file is never its own importer. The one listing imports://?importers=FILE
     and depends://FILE present (BACK-1054 S6)."""
-    sources = set(graph.reverse_deps.get(target, ()))
-    sources |= graph.reverse_deps.get(target.parent, set())
-    sources.discard(target)
+    sources = importer_nodes(graph, target)
     rows = []
     for src in sorted(sources):
         key = (src, target) if (src, target) in graph.edge_scopes else (src, target.parent)

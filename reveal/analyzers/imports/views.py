@@ -415,11 +415,17 @@ class ImportView:
 
         graph = self._edges(LAZY_INCLUDE)
 
+        scanned = self.analysis.scanned_files
+
+        def _importers(f) -> set:
+            # A scanned file is also imported by an edge to its directory node (Go package imports,
+            # BACK-2498); a directory node or an outside target has only the edges that end at it.
+            if f in scanned:
+                return resolution.importer_nodes(graph, f)
+            return set(graph.reverse_deps.get(f, set()))
+
         def _non_test_fan_in(f) -> int:
-            return sum(
-                1 for importer in graph.reverse_deps.get(f, set())
-                if not self.is_test(importer)
-            )
+            return sum(1 for importer in _importers(f) if not self.is_test(importer))
 
         all_files = self._row_files(graph)
         candidates = [f for f in all_files if _non_test_fan_in(f) == 0]
@@ -432,9 +438,7 @@ class ImportView:
                     # no importers genuinely has fan-in 0, and dropping it
                     # silently would trade one wrong answer for another.
                     'is_test': self.is_test(f),
-                    'test_only_importers': len(
-                        graph.reverse_deps.get(f, set())
-                    ),
+                    'test_only_importers': len(_importers(f)),
                 }
                 for f in candidates
             ],
