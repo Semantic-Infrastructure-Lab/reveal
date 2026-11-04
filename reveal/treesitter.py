@@ -1516,9 +1516,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         _find_nodes_by_type lookup, so this is near-zero marginal cost after
         the first call on a given tree.
 
-        Deliberately narrower than `_has_recovery_artifacts()` below: an
-        ERROR node means the parser genuinely lost its place, which is what
-        makes derived imports/symbols unreliable enough to skip outright.
+        Narrower than `_has_recovery_artifacts()` below, which is the test
+        imports/base.py's parse_failed guard uses since BACK-2497; this one
+        only names the recovery shape (ERROR nodes vs MISSING tokens).
         """
         return bool(self._find_nodes_by_type('ERROR'))
 
@@ -1535,20 +1535,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
         input silently produced a plausible-looking `foo` function with no
         error signal.
 
-        NOT used for `has_parse_errors()` itself: `has_error()` also fires
-        on at least one confirmed-benign grammar quirk (a C/C++
-        translation unit consisting only of #include lines with nothing
-        after the last one trips a trailing MISSING token in
-        tree-sitter-c, with no actual problem for import extraction --
-        caught live as a regression across tests/test_imports_generic.py
-        when this was first wired into has_parse_errors() directly). That
-        makes it too trigger-happy for imports/base.py's parse_failed
-        guard, where a false positive silently drops real results. It's
-        fine as an advisory-only signal for get_structure()'s additive
-        `_has_errors` flag, where a false positive just means an
-        occasional unnecessary "the structure might be incomplete" note
-        on an actually-fine file -- a strictly better failure mode than
-        BACK-1084's original bug (fabricated structure, no signal at all).
+        It drives both get_structure()'s `_has_errors` flag (check's "did
+        not parse cleanly") and imports/base.py's parse_failed guard
+        (BACK-2497), so the two agree on which files are incomplete. The
+        benign end-of-file MISSING quirk (a C file ending in an #include,
+        a Go interface, a Dockerfile's last instruction, each with no final
+        newline) is filtered in `tree_has_recovery_artifacts` (BACK-2501).
         """
         if not self.tree:
             return False

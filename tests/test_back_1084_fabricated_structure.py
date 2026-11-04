@@ -98,11 +98,11 @@ class TestGetStructureSurfacesHasErrors:
 
 
 class TestHasParseErrorsUnaffectedByWiderCheck:
-    """has_parse_errors() (the imports/base.py consumer) must NOT pick up
-    the wider _has_recovery_artifacts() detection -- confirmed live that
-    an include-only C file trips has_error() on a benign trailing MISSING
-    token in tree-sitter-c's grammar, which must not make I001-style
-    consumers drop real #include results (tests/test_imports_generic.py)."""
+    """An include-only C file is clean under both checks. imports/base.py's
+    parse_failed guard uses the wider _has_recovery_artifacts() since
+    BACK-2497, so a false positive there would mark the file failed; the
+    trailing-#include quirk is filtered (BACK-2501,
+    tests/test_c_include_eof_quirk_back2501.py)."""
 
     def test_include_only_c_file_not_flagged_by_narrow_check(self, tmp_path):
         from reveal.analyzers.c import CAnalyzer

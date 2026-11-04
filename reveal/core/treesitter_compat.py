@@ -408,9 +408,12 @@ def tree_has_recovery_artifacts(tree) -> bool:
     # in an interface type; C: an #include-only unit) or a bare newline
     # (Dockerfile: last instruction with no final newline), is the same benign
     # end-of-file grammar quirk -- the structure is complete, so don't alarm.
+    # It may close any number of nodes after it: C puts it inside the last
+    # preproc_include, one level below the root (BACK-2501). A MISSING with a
+    # real token's name (")", "}") at the end is still a recovery.
     # (A file that does end in a newline is parsed with it since BACK-1500.)
     # Zero-width MISSING nodes are not reachable through child(), so read the
     # s-expression (only ever built for an already-flagged tree).
     sexp = node_sexp(root).strip()
     missing = re.findall(r'\(MISSING\b', sexp)
-    return not (len(missing) == 1 and re.search(r'\(MISSING (?:"?\w*_token\d+"?|"\n")\)\)$', sexp))
+    return not (len(missing) == 1 and re.search(r'\(MISSING (?:"?\w*_token\d+"?|"\n")\)\)+$', sexp))
