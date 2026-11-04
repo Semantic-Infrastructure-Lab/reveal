@@ -3,7 +3,9 @@
 Detects load-time import cycles between files, in every language with an import extractor,
 from the analysis service's import graph: the graph and default edge rule ``imports://?circular``
 uses (TYPE_CHECKING imports never an edge, function-level imports left out, module and
-convention edges never close a cycle; BACK-2077, BACK-2156).
+convention edges never close a cycle; BACK-2077, BACK-2156). Counting rule: one finding per file
+per cycle group (strongly connected component), so a file reports at most one; the message names
+the group and its size, the context a shortest cycle through the file.
 """
 
 from dataclasses import asdict, replace
@@ -11,7 +13,7 @@ import logging
 import os
 from ...utils.request_cache import register_request_cache, register_validated_cache
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...analyzers.imports import ImportGraph
@@ -163,6 +165,20 @@ def _cycle_view(graph: ImportGraph, root: Path) -> ImportGraph:
     return graph.edge_view(LAZY_EXCLUDE).within_root(root)
 
 
+def _groups_by_file(view: ImportGraph) -> Dict[Path, Tuple[List[Path], int, int]]:
+    """Each file in a cycle group of *view* -> ``(group, group number, group count)``: the
+    groups ``find_cycle_groups`` returns (``imports://?circular``'s groups), numbered in its
+    order, computed once per view (BACK-1873; not a dataclass field, so never pickled stale:
+    the views are rebuilt from the graph's fields)."""
+    index = view.__dict__.get('_groups_by_file')
+    if index is None:
+        groups = view.find_cycle_groups()
+        index = {member: (group, number, len(groups))
+                 for number, group in enumerate(groups, 1) for member in group}
+        view.__dict__['_groups_by_file'] = index
+    return index
+
+
 def _rule_graph(built: 'import_analysis.ImportBuild', scan_budget: Dict[str, Any]) -> ImportGraph:
     """The service's graph with the scan's disclosures on it, for the per-root memo and the pool
     workers. A copy: the service's build may be shared through its own caches."""
@@ -238,28 +254,26 @@ class I002(BaseRule):
                 return detections
             graph = self._build_import_graph(scan_root)
 
-            # Cycles involving this specific file; the graph-wide search runs
-            # once per graph, not once per file (BACK-1873). The view ?circular counts by
-            # default: load-time edges only (the graph keeps function-level imports, which
-            # cannot close an import-time cycle; BACK-445, BACK-2077) to files under the scan
-            # root (BACK-2251).
-            relevant_cycles = _cycle_view(graph, scan_root).cycles_by_file().get(target_path, [])
-
-            # Create detection for each relevant cycle
-            for cycle in relevant_cycles:
-                # Format the cycle for display
-                cycle_str = self._format_cycle(cycle)
-
-                # Determine where to suggest breaking the cycle
-                suggestion = self._suggest_break_point(cycle, target_path)
-
-                detections.append(self.create_detection(
-                    file_path=file_path,
-                    line=1,  # Circular deps are file-level, not line-specific
-                    column=1,
-                    suggestion=suggestion,
-                    context=f"Import cycle: {cycle_str}"
-                ))
+            # One finding per file per cycle group (strongly connected component), the groups
+            # ``imports://?circular`` counts, with a shortest witness cycle through this file; the
+            # group search runs once per graph (BACK-1873, BACK-2156). Load-time edges to files
+            # under the scan root only, ?circular's default view (BACK-445, BACK-2077, BACK-2251).
+            view = _cycle_view(graph, scan_root)
+            located = _groups_by_file(view).get(target_path)
+            if located is None:
+                return detections
+            group, number, total = located
+            witness = view.find_cycle_path([target_path, *(m for m in group if m != target_path)])
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=1,  # Circular deps are file-level, not line-specific
+                column=1,
+                message=(f"Circular dependency detected: in import cycle group {number} of {total} "
+                         f"({len(group)} files; one finding per file per group, "
+                         "the groups imports://?circular counts)"),
+                suggestion=self._suggest_break_point(witness, target_path),
+                context=f"Import cycle: {self._format_cycle(witness)}",
+            ))
 
         except Exception as e:  # boundary-ok: broad-except -- graph building runs the extractors over arbitrary user source (native tree-sitter, no enumerable error set); one file must not end the run, and it is recorded as this rule's unavailable outcome with the file as subject
             logger.warning(f"I002: failed to analyze {file_path}: {e}")
