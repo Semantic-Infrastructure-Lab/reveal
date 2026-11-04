@@ -3826,7 +3826,7 @@ from module import Class  # first import
 from other import Thing
 from module import Class  # I005 - duplicate
 ```
-- Detects duplicate top-level imports across languages
+- Flags a later import of the same binding (case-sensitive) that is already visible in its scope; a repeat in a second function or a nested module is not a duplicate
 
 **I006: Import inside function body** *(Python only)*
 ```python
