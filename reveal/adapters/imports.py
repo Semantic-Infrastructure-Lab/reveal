@@ -788,7 +788,7 @@ class ImportsRenderer:
         regime = result.get('metadata', {}).get('autoload_regime')
         total_imports = result.get('metadata', {}).get('total_imports', 0)
         scanned_files = result.get('metadata', {}).get('scanned_files', 0)
-        if _discovery_incomplete(result):
+        if _discovery_incomplete(result) or _incomplete(result):
             print("  No circular dependencies observed in the available graph; analysis is incomplete.\n")
         elif regime:
             # BACK-1245: an unqualified green check reads as "verified
@@ -810,6 +810,7 @@ class ImportsRenderer:
         print(f"Circular Dependencies: {count} cycle group{'s' if count != 1 else ''}")
         print(f"{'='*60}\n")
         ImportsRenderer._render_edge_rule(result)
+        ImportsRenderer._render_input_loss(result.get('metadata') or {})
 
         if count == 0:
             ImportsRenderer._render_no_cycles(result)
@@ -889,34 +890,9 @@ class ImportsRenderer:
             print(f"  Cycles Found:  {'❌ Yes' if has_cycles else '✅ No'}")
 
     @staticmethod
-    def _render_import_summary(result: dict, resource: str) -> None:
-        """Render import analysis summary."""
-        metadata = result.get('metadata', {})
-        total_files = metadata.get('total_files', 0)
-        total_imports = metadata.get('total_imports', 0)
-
-        display_path = result.get('source', resource)
-
-        print(f"\n{'='*60}")
-        print(f"Import Analysis: {display_path}")
-        print(f"{'='*60}\n")
-        print(f"  Total Files:   {total_files}")
-        print(f"  Total Imports: {total_imports}")
-        ImportsRenderer._render_cycle_summary(result, display_path)
-        print()
-        ImportsRenderer._render_edge_rule(result)
-
-        # Honesty note: recognized code files whose language has no import
-        # extractor were scanned but contribute nothing — say so instead of
-        # letting a low/zero count read as "clean".
-        unsupported = metadata.get('unsupported_extensions') or {}
-        if unsupported:
-            skipped_total = sum(unsupported.values())
-            exts = ', '.join(f"{ext} ({n})" for ext, n in unsupported.items())
-            print(f"  ⚠️  {skipped_total} code file(s) skipped — no import support for: {exts}")
-            print("      (these are not counted above; import graph excludes them)")
-            print()
-
+    def _render_input_loss(metadata: dict) -> None:
+        """Files the graph is short of: parse failures (named) and pool-worker losses. Shared by the
+        base view and ?circular, whose text said 'No circular dependencies found!' beside them (BACK-2502)."""
         # Honesty note (BACK-982): a supported file that tree-sitter could not
         # parse silently contributed zero imports/symbols above -- indistinguishable
         # from a genuinely empty file without this. Also means Cycles Found can
@@ -949,6 +925,37 @@ class ImportsRenderer:
             if files_lost_count > 10:
                 print(f"      ... and {files_lost_count - 10} more")
             print()
+
+    @staticmethod
+    def _render_import_summary(result: dict, resource: str) -> None:
+        """Render import analysis summary."""
+        metadata = result.get('metadata', {})
+        total_files = metadata.get('total_files', 0)
+        total_imports = metadata.get('total_imports', 0)
+
+        display_path = result.get('source', resource)
+
+        print(f"\n{'='*60}")
+        print(f"Import Analysis: {display_path}")
+        print(f"{'='*60}\n")
+        print(f"  Total Files:   {total_files}")
+        print(f"  Total Imports: {total_imports}")
+        ImportsRenderer._render_cycle_summary(result, display_path)
+        print()
+        ImportsRenderer._render_edge_rule(result)
+
+        # Honesty note: recognized code files whose language has no import
+        # extractor were scanned but contribute nothing — say so instead of
+        # letting a low/zero count read as "clean".
+        unsupported = metadata.get('unsupported_extensions') or {}
+        if unsupported:
+            skipped_total = sum(unsupported.values())
+            exts = ', '.join(f"{ext} ({n})" for ext, n in unsupported.items())
+            print(f"  ⚠️  {skipped_total} code file(s) skipped — no import support for: {exts}")
+            print("      (these are not counted above; import graph excludes them)")
+            print()
+
+        ImportsRenderer._render_input_loss(metadata)
         # The scanned path, not the renderer's `resource` argument, which reaches
         # here as '.' and widened a copy-pasted query to the whole cwd (BACK-1508).
         scope = cwd_path('', str(display_path))
