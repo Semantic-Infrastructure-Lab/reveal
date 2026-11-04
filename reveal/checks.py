@@ -76,13 +76,41 @@ def _i001_not_checked_disclosures(files, select, ignore) -> List[str]:
     ]
 
 
+def _i002_not_applicable_disclosures(files, select, ignore) -> List[str]:
+    """BACK-2156: I002 judges load-time import cycles only where one breaks the program; say
+    which files it left out and where their cycles are reported instead."""
+    from .rules.scan_caches import rule_will_run
+    if not rule_will_run("I002", select, ignore):
+        return []
+    from .analyzers.imports.base import get_all_extensions
+    from .capabilities import (LOAD_ORDER_CYCLE_LANGUAGES, W_CAP_RULE_NOT_APPLICABLE,
+                               load_order_cycle_extension)
+    from .utils.path_utils import tally_files_by_language
+    extractable = get_all_extensions()
+    skipped = [Path(f) for f in files
+               if Path(f).suffix in extractable and not load_order_cycle_extension(Path(f).suffix)]
+    tally = tally_files_by_language(skipped)
+    if not tally:
+        return []
+    ranked = sorted(((lang, v["count"]) for lang, v in tally.items()), key=lambda kv: (-kv[1], kv[0]))
+    listing = ", ".join(f"{lang} ({n})" for lang, n in ranked[:5])
+    more = f", +{len(ranked) - 5} more" if len(ranked) > 5 else ""
+    languages = ", ".join(sorted(LOAD_ORDER_CYCLE_LANGUAGES))
+    return [
+        f"{W_CAP_RULE_NOT_APPLICABLE}: I002 judges import cycles only where a load-time cycle breaks "
+        f"the program ({languages}); {sum(n for _, n in ranked)} file(s) in other languages were "
+        f"not checked by it: {listing}{more}. Their cycles: reveal 'imports://<path>?circular'."
+    ]
+
+
 def capability_disclosures(files, select, ignore) -> List[str]:
     """Rules in the effective set that did not look at some of *files* because
-    of their language (W-CAP-1 T006, W-CAP-2 I001). Shared by single-file and
+    of their language (W-CAP-1 T006, W-CAP-2 I001, W-CAP-3 I002). Shared by single-file and
     recursive ``check`` and by the MCP tool, so none of them can print a bare
     "no issues" the others already know is unearned (BACK-1466)."""
     return (_python_only_rule_disclosures(files, select, ignore)
             + _i001_not_checked_disclosures(files, select, ignore)
+            + _i002_not_applicable_disclosures(files, select, ignore)
             + _config_load_disclosures(files))
 
 

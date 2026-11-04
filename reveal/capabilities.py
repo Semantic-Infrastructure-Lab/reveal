@@ -100,6 +100,30 @@ W_CAP_PYTHON_ONLY = "W-CAP-1"
 # Unused-import detection (I001, imports://?unused) not implemented for a
 # language that does have an import extractor (BACK-1398).
 W_CAP_UNUSED_NOT_CHECKED = "W-CAP-2"
+# A rule that judges a language property some languages do not have skipped those files
+# (I002 load-time import cycles, BACK-2156).
+W_CAP_RULE_NOT_APPLICABLE = "W-CAP-3"
+
+# Languages where importing a file runs its top level in order, so a load-time import cycle
+# leaves a module half-initialized or raises: Python (partly initialized module), JavaScript
+# and TypeScript (CommonJS partial exports, ES module temporal dead zone), PHP (require and
+# include run the file's top level: a require_once cycle sees a half-run file), Lua ("loop or
+# previous error loading module"), Ruby ("circular require"). Elsewhere a cycle is legal
+# (Rust modules, Zig @import, Java/Kotlin/C#/Scala/Dart/Swift packages, guarded C/C++
+# headers) or a compile error (Go); `imports ?circular` reports it as an architecture fact.
+# Python stubs (.pyi) never run, so a cycle through them breaks nothing (BACK-2156).
+LOAD_ORDER_CYCLE_LANGUAGES = frozenset({"python", "javascript", "typescript", "tsx", "php", "lua", "ruby"})
+_TYPE_ONLY_EXTENSIONS = frozenset({".pyi"})
+
+
+def load_order_cycle_extension(ext: str) -> bool:
+    """True when a load-time import cycle through a file with extension `ext` can break
+    the program (see LOAD_ORDER_CYCLE_LANGUAGES)."""
+    ext = ext.lower()
+    if ext in _TYPE_ONLY_EXTENSIONS:
+        return False
+    cap = get_capability_for_extension(ext)
+    return cap is not None and cap.language in LOAD_ORDER_CYCLE_LANGUAGES
 
 
 @dataclass(frozen=True)

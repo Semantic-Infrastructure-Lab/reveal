@@ -206,8 +206,11 @@ def _rule_graph(built: 'import_analysis.ImportBuild', scan_budget: Dict[str, Any
 
 # Initialize file patterns from all registered extractors at module load time
 def _initialize_file_patterns():
-    """Get all supported file extensions from registered extractors."""
-    return list(get_all_extensions())
+    """Extensions with an import extractor in languages where a load-time import cycle can
+    break the program; other languages' cycles are legal and are an `imports ?circular`
+    fact, disclosed as W-CAP-3 by `check` (BACK-2156)."""
+    from ...capabilities import load_order_cycle_extension
+    return sorted(ext for ext in get_all_extensions() if load_order_cycle_extension(ext))
 
 
 class I002(BaseRule):

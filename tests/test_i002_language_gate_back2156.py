@@ -1,7 +1,7 @@
 """I002 judges a load-time import cycle only where one breaks the program (BACK-2156).
 
-Importing runs the imported file's top level in order in Python, JavaScript/TypeScript, Lua and
-Ruby, so a cycle there leaves a module half-initialized (or raises). In Rust, Zig, Java, Kotlin,
+Importing runs the imported file's top level in order in Python, JavaScript/TypeScript, PHP, Lua
+and Ruby, so a cycle there leaves a module half-initialized (or raises). In Rust, Zig, Java, Kotlin,
 C#, Scala, Dart and Swift a cycle is legal, and Go rejects one at compile time: I002 does not
 report those files, and the run says so (W-CAP-3) and names the command that shows the cycles
 as an architecture fact. Scott chose this narrowing on 2026-11-03.
