@@ -160,8 +160,15 @@ class _ImportSpec:
         project_relative_prefix: A URI-style prefix (GDScript ``'res://'``)
             that names a path relative to the *project root*, not the
             importing file. When set and a module starts with this prefix,
-            resolution strips it and tries only ``search_paths`` (never
+            resolution strips it and tries only the project root (never
             ``base_path``-relative) — see :meth:`_resolve_module`.
+        project_root_marker: The filename that marks a project root
+            (GDScript ``'project.godot'``, BACK-2155). The project root of an
+            importing file is the nearest ancestor directory, no higher than a
+            search root, holding that file; ``project_relative_prefix`` paths
+            and ``class_name`` lookups resolve inside it. No marker found
+            above the file → the search roots, as before. See
+            :meth:`_project_root`.
         resolve_namespaces: True when a qualified import names a *namespace*
             (a directory's worth of files) rather than one type, so
             filename-suffix matching alone under-resolves (C# ``using X.Y``,
@@ -459,7 +466,8 @@ class _ImportSpec:
             cached on ``file_index`` the same way. A bareword ``extends Node``
             naming an engine builtin (the overwhelming majority — 410 of 438
             in the same corpus) correctly finds no entry and stays ``None``.
-            Off for every other language.
+            Inside a ``project_root_marker`` project only that project's
+            declarers count (BACK-2155). Off for every other language.
         load_path_manifest_glob: Filename glob identifying a per-package
             manifest that registers its own directory as an *additional* bare-
             import search root, alongside the project root — RubyGems'
@@ -573,6 +581,7 @@ class _ImportSpec:
     module_separator: Optional[str] = None
     source_extensions: FrozenSet[str] = field(default_factory=frozenset)
     project_relative_prefix: Optional[str] = None
+    project_root_marker: Optional[str] = None
     resolve_namespaces: bool = False
     package_node_types: FrozenSet[str] = field(default_factory=frozenset)
     nested_member_fallback: bool = False
@@ -2225,10 +2234,12 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
         if prefix and module.startswith(prefix):
             # Project-root-relative virtual path (GDScript `res://...`) — never
-            # file-relative, so resolve only against search_paths (the scan
-            # root), skipping the base_path-relative attempt entirely.
+            # file-relative, so skip the base_path-relative attempt. The root is
+            # the importing file's own project (BACK-2155), else the scan root.
             target = module[len(prefix):]
-            return self._resolve_path_target(target, None, search_paths, exts)
+            project = self._project_root(base_path, search_paths)
+            return self._resolve_path_target(
+                target, None, [project] if project else search_paths, exts)
 
         scheme = self.spec.package_uri_scheme
         if scheme and module.startswith(scheme):
@@ -2268,7 +2279,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             if resolved is not None:
                 return resolved
             if self.spec.class_name_convention:
-                return self._resolve_class_name(module, search_paths, file_index)
+                return self._resolve_class_name(module, base_path, search_paths, file_index)
             return None
 
         return None
@@ -2534,26 +2545,50 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
     _CLASS_NAME_CACHE_KEY = '\x00class_name_index'
     _CLASS_NAME_RE = re.compile(r'^\s*class_name\s+(\w+)', re.MULTILINE)
 
+    def _project_root(self, base_path: Path, search_paths: Optional[List[Path]]) -> Optional[Path]:
+        """The project root of a file in ``base_path`` (BACK-2155): the nearest ancestor directory,
+        up to and including a search root, holding ``spec.project_root_marker``. ``None`` when the
+        language has no marker, none exists on that path, or ``base_path`` is under no search root."""
+        marker = self.spec.project_root_marker
+        ceilings = {p.resolve() for p in search_paths or ()}
+        if not marker or not ceilings:
+            return None
+        start = base_path.resolve()
+        chain = (start, *start.parents)
+        if not ceilings.intersection(chain):
+            return None
+        for directory in chain:
+            if (directory / marker).is_file():
+                return directory
+            if directory in ceilings:
+                return None
+        return None
+
     def _resolve_class_name(
         self,
         name: str,
+        base_path: Path,
         search_paths: Optional[List[Path]],
         file_index: Optional[Dict[str, List[Path]]],
     ) -> Optional[Path]:
         """Resolve a bareword identifier (GDScript ``extends Foo``) against
-        the project-wide ``class_name`` index (BACK-621). ``None`` when
-        ``name`` isn't a declared ``class_name`` anywhere in-tree — an
-        engine builtin (``Node``, ``Control``, ...), correctly left
-        unresolved rather than guessed."""
-        index = self._class_name_project_index(search_paths, file_index)
-        return index.get(name)
+        the ``class_name`` index (BACK-621). Godot's registry is per project, so
+        inside a project (:meth:`_project_root`) only its own declarers count
+        (BACK-2155); with no project the whole scan is searched. ``None`` when
+        ``name`` isn't declared there: an engine builtin (``Node``,
+        ``Control``, ...), correctly left unresolved rather than guessed."""
+        declarers = self._class_name_project_index(search_paths, file_index).get(name, [])
+        project = self._project_root(base_path, search_paths)
+        if project is not None:
+            declarers = [f for f in declarers if project in f.parents]
+        return declarers[0] if declarers else None
 
     def _class_name_project_index(
         self,
         search_paths: Optional[List[Path]],
         file_index: Optional[Dict[str, List[Path]]],
-    ) -> Dict[str, Path]:
-        """``class_name`` -> declaring file, across every in-tree source file.
+    ) -> Dict[str, List[Path]]:
+        """``class_name`` -> declaring files (sorted), across every in-tree source file.
 
         Built once per scan and cached on ``file_index`` under a sentinel key
         (same convention as :meth:`_package_manifest_map`) so a scan with many
@@ -2579,15 +2614,15 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 if p.suffix in exts:
                     candidates.add(p)
 
-        index: Dict[str, Path] = {}
-        for f in candidates:
+        index: Dict[str, List[Path]] = {}
+        for f in sorted(candidates):
             try:
                 text = f.read_text(encoding='utf-8', errors='replace')
             except OSError:
                 continue
             m = self._CLASS_NAME_RE.search(text)
             if m:
-                index.setdefault(m.group(1), f.resolve())
+                index.setdefault(m.group(1), []).append(f.resolve())
 
         if file_index is not None:
             file_index[cache_key] = index  # type: ignore[assignment]
@@ -2869,6 +2904,7 @@ _GDSCRIPT_SPEC = _ImportSpec(
     # `res://` is Godot's project-root-relative virtual filesystem, not
     # file-relative — resolved only against search_paths (see _resolve_module).
     project_relative_prefix='res://',
+    project_root_marker='project.godot',
     # BACK-621: `extends Foo` where Foo is declared `class_name Foo` in some
     # other in-tree file — Godot's global class-registration convention, the
     # dominant edge shape in the real godot-demo-projects corpus (27 of 41).
