@@ -18,6 +18,12 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- A file that tree-sitter recovers with a missing token only (`def f(:`, `const x = (1;`), which `check` already called "did not parse cleanly", now counts as import-graph loss in every language: I002 beside it exits 3 with its incomplete-scan disclosure and `imports://` lists it in `files_failed` and exits 3. Before, only recoveries with an ERROR node did, so I002 exited 0 beside a broken Python file. C files whose macro calls recover with a missing `;` are now disclosed too (BACK-2497).
+
+- Import components (`architecture`, `overview`, `imports://?components`) now count an edge that ends at a directory, a Go package import or a Python namespace package, as internal or incoming at that directory's component. Every Go package showed incoming 0 and its own external test package as outgoing, and the counts disagreed with `?rank=fan-in` (BACK-2289).
+
+- The `overview` first screen states the import counting rule once; the entry-point and cycle lines name only what differs from it, and the TYPE_CHECKING and `__init__.py` clauses appear only when the scan holds Python files. It repeated a 400-character rule three times and used Python terms on Rust and Go repositories. JSON keeps the full rule per section and adds `subject` and `lazy_source` (BACK-2494).
+
 - `check`'s I002 now reports each file in an import cycle group once, naming "group k of N (S files)" as `imports://?circular` counts groups, with a shortest cycle through the file; it used to repeat files per search path and miss members (a TypeScript repository: 5,297 findings on 320 files, now 362 on 362). It reads the same graph as `?circular`, so a PHP cycle through a `define()` constant is now found. It judges only Python, JavaScript/TypeScript, PHP, Lua and Ruby, where a load-time cycle breaks the program; files in other languages get a W-CAP-3 note naming `?circular`. (BACK-2156)
 
 - Two rules no longer flag correct code outside Python. I005 (duplicate import) compares the imported names case-sensitively, never reports a grouped Rust `use std::{a, b}` as its own duplicate, and ignores repeats in a different function or nested module (Rust 4,229 findings to 16). D001 (duplicate function) compares bodies only within one type, so the same trait method on two structs or sibling nested classes is no longer copy-paste, and a bare `false`/`None` body is a no-op hook. (BACK-2490, BACK-2491)

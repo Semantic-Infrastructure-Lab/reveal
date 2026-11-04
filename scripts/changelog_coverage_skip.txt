@@ -3,3 +3,4 @@
 # covered by a grouped entry. One per line: id, then why (name the grouped entry).
 # Clear this list in the first commit after each release: it only names work since the last tag.
 BACK-2489 maintainer push gate only (ci-local.sh / check_doc_hygiene.py private-name check)
+BACK-2493 maintainer measurement script (scripts/rule_census.py), no user-visible change
