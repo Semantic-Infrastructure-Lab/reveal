@@ -1,4 +1,5 @@
 """Deterministic per-file import extraction and optional structure collection."""
+import logging
 import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -8,9 +9,14 @@ from . import resolution
 from .base import get_extractor
 from .types import ImportExtraction
 
+logger = logging.getLogger(__name__)
+
 StructureReader = Callable[[str], Tuple[Optional[Dict[str, Any]], Optional[str]]]
 _PARALLEL_MIN_FILES = 200
 _PARALLEL_MAX_WORKERS = 16
+# What starting a process pool raises where the platform cannot run one (no sem_open, a sandbox
+# that forbids fork or spawn): the files the pool did not deliver are extracted in this process.
+_POOL_START_ERRORS = (OSError, NotImplementedError, RuntimeError, ImportError)
 
 def worker_count(n_files: int) -> int:
     """Workers to use for `n_files`. 1 = run serially (no pool).
@@ -121,14 +127,25 @@ def extract_files(candidates: List[Path], structure_reader: Optional[StructureRe
     # A few chunks per worker balances load without excessive IPC round-trips.
     chunksize = max(1, n // (workers * 8))
     chunks = [[str(fp) for fp in candidates[i:i + chunksize]] for i in range(0, n, chunksize)]
-    with ProcessPoolExecutor(
-        max_workers=workers, initializer=worker_bootstrap,
-    ) as executor:
-        futures = submit_each(executor, extract_chunk, [(chunk, structure_reader, inputs) for chunk in chunks])
-        for chunk, future in zip(chunks, futures):
-            try:
-                rows = future.result()
-            except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever the worker raised: BrokenProcessPool when it died, or any exception an extractor threw on one file of the chunk; the chunk's files are recorded as failed extractions (lost_extraction carries the cause) and reach files_failed and the partial-parse warning
-                rows = [(fp_str, None, None, None, lost_extraction(e), None, None) for fp_str in chunk]
-            for fp_str, *rest in rows:
-                yield (Path(fp_str), *rest)
+    delivered = 0
+    try:
+        with ProcessPoolExecutor(
+            max_workers=workers, initializer=worker_bootstrap,
+        ) as executor:
+            futures = submit_each(executor, extract_chunk, [(chunk, structure_reader, inputs) for chunk in chunks])
+            for chunk, future in zip(chunks, futures):
+                try:
+                    rows = future.result()
+                except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever the worker raised: BrokenProcessPool when it died, or any exception an extractor threw on one file of the chunk; the chunk's files are recorded as failed extractions (lost_extraction carries the cause) and reach files_failed and the partial-parse warning
+                    rows = [(fp_str, None, None, None, lost_extraction(e), None, None) for fp_str in chunk]
+                delivered += 1
+                for fp_str, *rest in rows:
+                    yield (Path(fp_str), *rest)
+    except _POOL_START_ERRORS as e:
+        # The pool itself could not run; a worker that dies inside a running pool is a lost
+        # file above and never lands here. Only the chunks the pool did not deliver run here.
+        logger.warning("parallel import extraction failed (%s: %s); extracting the rest serially",
+                       type(e).__name__, e)
+        for chunk in chunks[delivered:]:
+            for fp_str in chunk:
+                yield (Path(fp_str), *extract_one_file(fp_str, structure_reader, inputs)[1:])
