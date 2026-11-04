@@ -320,13 +320,14 @@ JAVA_ANONYMOUS = '''class CacheTest {
     }
 
     void testB() {
-        CacheLoader<Object, Object> loader =
+        CacheLoader<Object, Object> other =
             new CacheLoader<Object, Object>() {
                 @Override
                 public Object load(Object key) {
                     throw new AssertionError();
                 }
             };
+        assertNull(other);
     }
 }
 '''
