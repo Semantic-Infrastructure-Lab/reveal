@@ -1804,6 +1804,28 @@ curl second-corpus guard at 100%, BACK-710; see the Results table.):
 - **Scala's selector-list imports** (`import a.b.helpers.{x, y}`) — a known,
   explicitly out-of-scope gap in the current measurement, flagged for a
   future loop.
+- **Package-wildcard imports** (Java `import a.b.*;`, Kotlin `import a.b.*`, Scala
+  `import a.b._`) — no edge is recorded for them and no recall figure above counts
+  them. The Scala oracle skips `.*` wildcards and selector lists by design, so the
+  Scala import figures describe explicit imports only (BACK-2509). The Java oracle
+  fans a wildcard out to every file of the package, but the Elasticsearch scope
+  (`server/src/main/java`) and guava contain no wildcard imports, and the Kotlin
+  corpus contains none, so that path is exercised only by fixtures. Wildcard
+  counts on the pinned corpora (2026-11-04): the whole Elasticsearch tree has 2
+  package wildcards that name a package declared in the tree (a line scan finds
+  19, but most are import text inside Java text-block strings in tests); a source
+  line scan finds 413 wildcards among 1,450 imports in GitBucket (57 in-tree
+  packages) and 487 among 1,502 in cats-effect (32 in-tree packages), not yet
+  re-checked for string-literal text. A file imported only through a wildcard
+  therefore shows fan-in 0 today (disclosure: BACK-2506; oracle population:
+  BACK-2507).
+- **Kotlin and Scala top-level types declared in a file not named after them**
+  (Kotlin `object DiscoverScreen` inside `Screens.kt`) — no edge is recorded for
+  an import of such a type, so `?importers=` on that file can print "No importers
+  found" while other files import it (BACK-2510). The Kotlin and Scala rows in the
+  Results table measured member-import populations (233, 1 and 24 edges) and do
+  not cover this shape; neither language is in `scripts/recall_gate.py`, so the
+  answer labels their edges as not gated.
 - **Ruby's classic `autoload` calls** (distinct from the Zeitwerk convention
   measured above) — checked directly against Discourse's real source (10,458
   files) and found to occur zero times; declined as a candidate because the
