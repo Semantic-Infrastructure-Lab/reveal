@@ -68,6 +68,12 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- A C file whose last line is an `#include` with no final newline parses cleanly: `check` exited 3 ("did not parse cleanly") on it, even a single `#include <stdio.h>`, and `imports://` would have listed it as failed (BACK-2501).
+
+- D001 and D002 no longer report a function declared on its parent's lines (minified JavaScript) as the parent's duplicate, pointing at the finding's own line; both read bodies by line range, so the pair had the same text by construction (BACK-2500).
+
+- `imports://DIR?circular` text names the files that failed to parse and says the analysis is incomplete, instead of printing "No circular dependencies found!" while exiting 3 (BACK-2502).
+
 - `--help` for `metrics`, `overview`, `surface`, `trace`, `contracts`, `testability`, `pack`, `calls`, `patches` and `architecture` no longer offers `--fail-on findings`, which those commands reject with exit 2; it lists `{none}` and says the command has no findings gate. (BACK-2486)
 
 - `reveal overview DIR --against REF` outside a Git repository now names the target as you typed it (`Not a git repository: proj`) instead of printing your absolute host path. Every JSON envelope's `source` also uses `/` on Windows for nested relative targets, as it already did on Linux and macOS. (BACK-2310)
