@@ -14,6 +14,7 @@ from reveal.utils.path_utils import (
     detect_non_python_language,
     to_posix,
     to_relative_display,
+    provenance_for_display_path,
     as_spelled,
     is_unsafe_scan_root,
     is_noise_dir,
@@ -918,6 +919,43 @@ class TestToRelativeDisplay:
 
     def test_no_base_path_returns_original(self):
         assert to_relative_display("/abs/file.py", None) == "/abs/file.py"
+
+    def test_cwd_relative_spelling_under_relative_base(self, tmp_path, monkeypatch):
+        # BACK-2487: results echo the user's spelling (BACK-1366), so a scan of
+        # `tests/proj` reports `tests/proj/vendor/lib.py`. Joining that under the
+        # base gave `tests/proj/vendor/lib.py` again, and its leading `tests/`
+        # tagged every file 'test'.
+        (tmp_path / "tests" / "proj" / "vendor").mkdir(parents=True)
+        (tmp_path / "tests" / "proj" / "vendor" / "lib.py").write_text("x = 1\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        for base in ("tests/proj", "./tests/proj", Path("tests/proj")):
+            assert to_relative_display("tests/proj/vendor/lib.py", base) == "vendor/lib.py"
+            assert to_relative_display("./tests/proj/vendor/lib.py", base) == "vendor/lib.py"
+
+    def test_base_relative_file_still_joins_under_base(self, tmp_path, monkeypatch):
+        # Metrics file entries arrive already base-relative; they must not move.
+        (tmp_path / "proj" / "app").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+        assert to_relative_display("app/core.py", "proj") == "app/core.py"
+
+    def test_base_relative_file_repeating_base_name_prefers_what_exists(self, tmp_path, monkeypatch):
+        # Lexically ambiguous: `src/x.py` under base `src` could be cwd-relative
+        # (src/x.py) or base-relative (src/src/x.py). Only the base-relative one
+        # exists, so that reading wins.
+        (tmp_path / "src" / "src").mkdir(parents=True)
+        (tmp_path / "src" / "src" / "x.py").write_text("x = 1\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        assert to_relative_display("src/x.py", "src") == "src/x.py"
+
+    def test_provenance_ignores_the_targets_own_spelled_ancestors(self, tmp_path, monkeypatch):
+        # BACK-2487 end to end through the provenance helper.
+        for sub in ("app", "vendor", "tests"):
+            (tmp_path / "tests" / "proj" / sub).mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+        base = Path("tests/proj")
+        assert provenance_for_display_path("tests/proj/app/core.py", base) is None
+        assert provenance_for_display_path("tests/proj/vendor/lib.py", base) == "vendor"
+        assert provenance_for_display_path("tests/proj/tests/test_lib.py", base) == "test"
 
     def test_windows_style_result_normalized_to_posix(self, tmp_path, monkeypatch):
         (tmp_path / "sub").mkdir()

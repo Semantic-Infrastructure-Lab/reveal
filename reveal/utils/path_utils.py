@@ -501,6 +501,35 @@ def looks_vendored_by_banner(file_path: Path, max_lines: int = 5) -> bool:
     return bool(_VENDOR_BANNER_RE.search(head) and _VERSION_TOKEN_RE.search(head))
 
 
+def _anchor_relative_file(file_path: Path, base_path: Path, resolved_base: Path) -> Path:
+    """Absolute form of *file_path* for to_relative_display().
+
+    A relative file path has two meanings. Results echo the user's spelling of
+    the target (BACK-1366), so a scan of `tests/proj` reports
+    `tests/proj/vendor/lib.py`, relative to the working directory. Other
+    producers hand over paths already relative to the base (`vendor/lib.py`).
+    Joining the first kind under the base doubled the target's own components,
+    which then leaked into provenance (BACK-2487: every file under a target
+    spelled `tests/...` was tagged 'test').
+
+    The user's spelling starts with the relative base's own components, so the
+    test is lexical. The only ambiguity, a base-relative path that repeats the
+    base's name (`src/x.py` under `src`), is settled by which reading exists.
+    """
+    if file_path.is_absolute():
+        return file_path
+    joined = resolved_base / file_path
+    base_parts = Path(os.path.normpath(base_path)).parts
+    if base_path.is_absolute() or base_parts in ((), ('.',)):
+        return joined
+    if Path(os.path.normpath(file_path)).parts[:len(base_parts)] != base_parts:
+        return joined
+    spelled = file_path.absolute()
+    if joined.exists() and not spelled.exists():
+        return joined
+    return spelled
+
+
 def to_relative_display(file_str: Union[str, PurePath], base_path: Union[str, Path, None]) -> str:
     """Render `file_str` relative to `base_path` for display/JSON output,
     falling back to the original string when that's not possible.
@@ -524,9 +553,7 @@ def to_relative_display(file_str: Union[str, PurePath], base_path: Union[str, Pa
         return to_posix(file_str)
     try:
         resolved_base = Path(base_path).expanduser().resolve()
-        resolved_file = Path(file_str).expanduser()
-        if not resolved_file.is_absolute():
-            resolved_file = (resolved_base / resolved_file)
+        resolved_file = _anchor_relative_file(Path(file_str).expanduser(), Path(base_path), resolved_base)
         resolved_file = resolved_file.resolve()
         rel = to_posix(resolved_file.relative_to(resolved_base))
         # A single-file target is its own base: "relative to itself" is '.',
