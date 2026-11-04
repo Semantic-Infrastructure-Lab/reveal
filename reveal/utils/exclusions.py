@@ -121,6 +121,21 @@ def exclusion_scope(root: Optional[Path], patterns: Optional[List[str]]):
         _ACTIVE_ROOT, _ACTIVE_PATTERNS = prev
 
 
+@contextmanager
+def suspended_exclusions():
+    """No active scope for the duration of the block, then the previous scope again, including
+    whether a walk consulted it (the flag ledger reads that). For project-wide evidence built
+    through a walk purpose that honors the scope: narrowing the report with ``--exclude`` must
+    not shrink the facts that judge it (BACK-1259; I002's import graph, BACK-2156)."""
+    global _ACTIVE_ROOT, _ACTIVE_PATTERNS, _CONSULTED
+    prev = (_ACTIVE_ROOT, _ACTIVE_PATTERNS, _CONSULTED)
+    _ACTIVE_ROOT, _ACTIVE_PATTERNS = None, ()
+    try:
+        yield
+    finally:
+        _ACTIVE_ROOT, _ACTIVE_PATTERNS, _CONSULTED = prev
+
+
 def scope_matcher(root: Path) -> Optional[Callable[[str, bool], bool]]:
     """The active scope as a matcher on posix paths relative to *root*, a walk's root, which
     is resolved once rather than every path the walk visits (BACK-1581). None when no scope
