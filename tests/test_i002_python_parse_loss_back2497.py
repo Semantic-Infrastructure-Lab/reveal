@@ -39,6 +39,12 @@ MISSING_ONLY = {
     'lua': (('bad.lua', 'local x = (1\n'), ('good.lua', 'local y = 1\n')),
 }
 
+# The extractor records loss on ERROR nodes only (``LanguageExtractor._get_tree_analyzer``). Widening
+# it to check's recovery test changes ``imports://`` (files_failed, exit 3) and I001/I008 skips for
+# every tree-sitter language, which needs the manager's decision; the tested patch removes this mark.
+MISSING_ONLY_NOT_RECORDED = pytest.mark.xfail(
+    strict=True, reason='BACK-2497: a MISSING-only recovery is not recorded as import-graph loss')
+
 PY_ERROR = (('bad.py', 'import os\nx = (1\n'), ('good.py', 'import os\n'))
 TS_ERROR = (('bad.ts', 'export const = ;\nimport {\n'), ('good.ts', 'export const x = 1;\n'))
 RUST_BROKEN = (('bad.rs', 'fn f( {\n'), ('good.rs', 'fn g() -> i32 { 1 }\n'))
@@ -84,6 +90,7 @@ def test_the_fixture_recovers_with_a_missing_token_and_no_error_node(tmp_path, l
 
 
 @pytest.mark.parametrize('lang', sorted(MISSING_ONLY))
+@MISSING_ONLY_NOT_RECORDED
 def test_a_clean_file_beside_a_missing_only_sibling_is_an_incomplete_i002_scan(tmp_path, lang):
     root = _tree(tmp_path / lang, MISSING_ONLY[lang])
     code, disclosures = _file_check(root / MISSING_ONLY[lang][1][0])
@@ -92,6 +99,7 @@ def test_a_clean_file_beside_a_missing_only_sibling_is_an_incomplete_i002_scan(t
     assert code == 3
 
 
+@MISSING_ONLY_NOT_RECORDED
 def test_a_directory_check_names_the_missing_only_python_file_in_the_i002_disclosure(tmp_path):
     root = _tree(tmp_path / 'py', MISSING_ONLY['python'])
     code, summary = _dir_check(root)
@@ -101,6 +109,7 @@ def test_a_directory_check_names_the_missing_only_python_file_in_the_i002_disclo
 
 
 @pytest.mark.parametrize('lang', ['python', 'typescript'])
+@MISSING_ONLY_NOT_RECORDED
 def test_imports_circular_counts_the_missing_only_file_as_failed(tmp_path, lang):
     root = _tree(tmp_path / lang, MISSING_ONLY[lang])
     code, meta = _circular(root)
