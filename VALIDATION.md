@@ -1718,7 +1718,8 @@ recurses into function bodies). Each answer prints its rule, a `Rule:` line in t
 resolve importers from the project scan root and `<dir>` only limits which files are listed as rows. `imports://<dir>?rank=fan-in&lazy=exclude`
 is the architecture view (load-time edges only); `?circular` uses it by default, because a
 function-level import runs after every module has loaded and cannot close an import-time
-cycle. Python, PHP, JavaScript, TypeScript and TSX record where an import sits. Ruby has the
+cycle. Python, PHP, JavaScript, TypeScript, TSX and Rust record where an import sits (Rust's
+`rust-use` oracle does not label scope, so Rust `&lazy=exclude`/`only` are not scored). Ruby has the
 bounded literal-loader subset described below; remaining unclassified edges are disclosed,
 retained by `exclude` and omitted by `only`.
 

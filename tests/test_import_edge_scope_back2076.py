@@ -184,6 +184,8 @@ SNIPPETS = {
 # tests/test_grammar_coverage.py LOCAL_SCOPE_GAPS.
 GAPS = {
     ('gdscript', 'gap_a'): 'BACK-2079: a GDScript 4 property get_body is not in LOCAL_SCOPE_NODES',
+    # The Rust extractor reads this closure as unknown, not module (unclassified_kinds;
+    # tests/test_rust_import_scope_back2079.py); the shared walk still has no closure kind.
     ('rust', 'gap_a'): 'BACK-2079: closure_expression is not in LOCAL_SCOPE_NODES',
     ('cpp', 'gap_a'): 'BACK-2079: lambda_expression is not in LOCAL_SCOPE_NODES',
     ('ruby', 'gap_a'): 'BACK-2079: do_block is not in LOCAL_SCOPE_NODES',

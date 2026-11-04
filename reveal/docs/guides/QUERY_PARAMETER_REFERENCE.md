@@ -84,7 +84,8 @@ Every adapter that walks a directory also takes `respect_gitignore=false` (the s
   Default: `circular` (and `metadata.has_cycles`) exclude them, since a function-level import runs after
   every module has loaded and is the usual way to break a cycle; fan-in, entrypoints, components and
   violations include them. Every answer prints its rule (`Rule: ...`, `edge_rule` in JSON). Python,
-  PHP, JavaScript, TypeScript and TSX record import scope. Ruby has a bounded
+  PHP, JavaScript, TypeScript, TSX and Rust record import scope (Rust: see the
+  [imports guide](../adapters/IMPORTS_ADAPTER_GUIDE.md#which-edges-count-lazy)). Ruby has a bounded
   [literal-loader subset](../adapters/IMPORTS_ADAPTER_GUIDE.md#which-edges-count-lazy);
   unsupported Ruby contexts and other unclassified edges stay in `include`/`exclude`,
   not `only`, with coverage disclosed. An unknown value is an error.

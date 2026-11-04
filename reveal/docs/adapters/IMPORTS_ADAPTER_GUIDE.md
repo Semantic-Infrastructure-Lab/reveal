@@ -461,7 +461,7 @@ counted by, as a `Rule:` line in text and an `edge_rule` object in JSON (`lazy`,
 two. Importers anywhere under the scan root count, tests included unless `&tests=exclude`
 (`?entrypoints` never counts importers under a test path); `&scope=path` makes the requested path
 the scan root. Python, PHP,
-JavaScript, TypeScript and TSX record import scope (positionally: an import, `import()` or
+JavaScript, TypeScript, TSX and Rust record import scope (positionally: an import, `import()` or
 `require()` in a function, method, arrow or function expression is function-level; a class field
 initializer or static block is module level). Unclassified edges stay in `include` and
 `exclude`, and are omitted by `only`; the rule names their languages and counts. An unknown
@@ -475,6 +475,15 @@ both module and local contributions counts under `exclude`, not `only`. These ar
 lexical positions, not a claim that an include executes or that its path is known.
 PHP loader expressions have `ImportStatement.dynamic=True`; namespace `use`
 declarations have `False`. This flag does not describe static path resolvability.
+
+A Rust `use` inside a `fn` body is local: a free function, an `impl` or `trait` method, a
+nested block, an inline `mod` declared inside a `fn`, or a closure inside a `fn`. File level,
+an inline `mod` at module level and a `const`/`static` initializer block are module level. A
+closure outside every `fn` (a `static` or `const` initializer) confers no scope, so that edge
+is unclassified. A `use` binds names at compile time and never runs, so local is a lexical
+position, not deferred loading. As in the other languages, the default `?circular` view
+leaves out a pair made only by fn-local `use` declarations. A `use` inside a macro body is a token
+tree and is not extracted at all. Rust `use` declarations have `dynamic=False`.
 
 Ruby's bounded subset is an implicit `require`, `require_relative` or `load` call
 with exactly one plain quoted ASCII path literal matching `[A-Za-z0-9_./-]+`.

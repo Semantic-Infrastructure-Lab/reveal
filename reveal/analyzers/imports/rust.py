@@ -14,6 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import FrozenSet, List, Set, Optional, Tuple
 from ...core import node_children as _children, node_prev_sibling as _prev_sibling
+from ...core.node_taxonomy import edge_scope
 from ...core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,12 @@ _METHOD_SYNTAX_TRAITS = frozenset({
     'ParallelExtend', 'ParallelSlice', 'ParallelSliceMut',
     'Itertools', 'Context', 'Rng', 'RngCore', 'SeedableRng', 'Digest', 'Instrument',
 })
+
+
+# BACK-2079: a closure is not a qualified scope on its own. Inside a fn the fn makes the
+# `use` local; a closure outside every fn (a `static`/`const` initializer) leaves the scope
+# unknown rather than module.
+_UNQUALIFIED_SCOPE_KINDS = frozenset({'closure_expression'})
 
 
 def _is_method_syntax_trait(name: str) -> bool:
@@ -148,10 +155,15 @@ class RustExtractor(LanguageExtractor):
 
         imports = []
 
-        # Find all use_declaration nodes
+        # Find all use_declaration nodes. A `use` is a declaration (dynamic False); its scope
+        # is positional (edge_scope), not a load-order claim: a Rust `use` never runs.
         use_nodes = analyzer._find_nodes_by_type('use_declaration')
         for node in use_nodes:
-            imports.extend(self._parse_use_declaration(node, file_path, analyzer))
+            scope = edge_scope(node, unclassified_kinds=_UNQUALIFIED_SCOPE_KINDS)
+            for statement in self._parse_use_declaration(node, file_path, analyzer):
+                statement.scope = scope
+                statement.dynamic = False
+                imports.append(statement)
 
         return imports
 
