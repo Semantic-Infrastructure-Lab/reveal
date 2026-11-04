@@ -14,6 +14,13 @@ from ...analyzers.imports.base import get_all_extensions, get_extractor
 
 logger = logging.getLogger(__name__)
 
+# Structure lists whose entries open an import scope, and what kind of scope. A function
+# sees the imports of the scopes around it; a module or namespace body may not (a nested
+# Rust `mod` does not see its parent's `use`), so a repeat across one is not a duplicate.
+_SCOPE_KINDS = (('functions', 'function'), ('modules', 'module'), ('namespaces', 'module'))
+
+Scope = Tuple[int, int, str]
+
 
 def _initialize_file_patterns():
     """Get all supported file extensions from registered extractors."""
@@ -61,7 +68,7 @@ class I005(BaseRule):
         occurrences = self._occurrences_from_extractor(file_path)
         if occurrences is None:
             occurrences = self._occurrences_from_structure(structure)
-        return self._duplicates(occurrences, file_path)
+        return self._duplicates(occurrences, _scopes(structure), file_path)
 
     def _occurrences_from_extractor(self, file_path: str) -> Optional[Dict[Any, List[Tuple[int, str]]]]:
         """Import occurrences keyed by binding, from the language's import extractor.
@@ -111,17 +118,26 @@ class I005(BaseRule):
             occurrences[statement].append((line, display))
         return occurrences
 
-    def _duplicates(self, occurrences: Dict[Any, List[Tuple[int, str]]], file_path: str) -> List[Detection]:
-        """One detection per later line that repeats an earlier line's import."""
+    def _duplicates(self, occurrences: Dict[Any, List[Tuple[int, str]]],
+                    scopes: List[Scope], file_path: str) -> List[Detection]:
+        """One detection per later line that repeats an import already in its scope.
+
+        A repeat in a second function, or inside a nested module or namespace, is not a
+        duplicate: removing it would break that scope (BACK-2490).
+        """
         detections: List[Detection] = []
         for found in occurrences.values():
             lines: Dict[int, str] = {}
             for line, display in sorted(found, key=lambda x: x[0]):
                 lines.setdefault(line, display)
-            if len(lines) <= 1:
-                continue
-            (first_line, original_statement), *later = lines.items()
-            for line, dup_statement in later:
+            seen: List[Tuple[int, str, Tuple[Scope, ...]]] = []
+            for line, display in lines.items():
+                chain = _scope_chain(line, scopes)
+                first = next((f for f in seen if _visible_from(f[2], chain)), None)
+                seen.append((line, display, chain))
+                if first is None:
+                    continue
+                first_line, original_statement, _ = first
                 detections.append(Detection(
                     file_path=file_path,
                     line=line,
@@ -130,7 +146,7 @@ class I005(BaseRule):
                     severity=self.severity,
                     category=self.category,
                     suggestion=f'Remove duplicate. Already imported at line {first_line}',
-                    context=dup_statement
+                    context=display
                 ))
         return detections
 
@@ -166,3 +182,30 @@ class I005(BaseRule):
 
 # Rule instance for registry
 rule = I005()
+
+
+def _scopes(structure: Optional[Dict[str, Any]]) -> List[Scope]:
+    """Multi-line scope bodies from the structure: (first line, last line, kind)."""
+    found: List[Scope] = []
+    for key, kind in _SCOPE_KINDS:
+        for item in (structure or {}).get(key, None) or []:
+            start, end = item.get('line') or 0, item.get('line_end') or 0
+            if start and end > start:
+                found.append((start, end, kind))
+    return found
+
+
+def _scope_chain(line: int, scopes: List[Scope]) -> Tuple[Scope, ...]:
+    """The scopes enclosing ``line``, outermost first."""
+    return tuple(sorted((sc for sc in scopes if sc[0] <= line <= sc[1]),
+                        key=lambda sc: (sc[0], -sc[1])))
+
+
+def _visible_from(earlier: Tuple[Scope, ...], later: Tuple[Scope, ...]) -> bool:
+    """True when an import in scope chain ``earlier`` is visible at ``later``.
+
+    Same scope, or ``later`` sits in functions nested inside ``earlier``'s scope.
+    """
+    if later[:len(earlier)] != earlier:
+        return False
+    return all(kind == 'function' for _, _, kind in later[len(earlier):])

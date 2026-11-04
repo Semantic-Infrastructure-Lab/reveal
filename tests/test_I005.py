@@ -252,8 +252,12 @@ class TestI005RealFileTYPECHECKING(unittest.TestCase):
         self.assertEqual(result, [],
             "TYPE_CHECKING import must not be the canonical 'first seen'")
 
-    def test_two_function_body_imports_still_flagged(self):
-        """Two identical imports both inside separate function bodies ARE duplicates."""
+    def test_without_structure_repeats_compare_file_wide(self):
+        """With no structure there are no scope ranges, so repeats compare file-wide.
+
+        With the analyzer's structure, two functions are two scopes and this is not a
+        duplicate: tests/test_i005_binding_back2490.py (BACK-2490).
+        """
         path = self._write('mod.py', (
             "def fn_a():\n"
             "    import re\n"
