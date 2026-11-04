@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- Function provenance (`test`/`vendor`/`minified`) in `ast://` and `hotspots` no longer depends on how the target is spelled. A relative target whose own path contained `tests/` or `vendor/` (such as `reveal hotspots tests/fixtures/app`) tagged every function with it; the relative and absolute spellings now agree. `hotspots` function entries now use the same target-relative paths as its file entries instead of repeating the target's spelling. (BACK-2487)
+
 - A direct library `find_callers`, `find_uncalled` or `rank_by_callers` call now sees an in-place file edit; it used to reuse an earlier callers index in the same process, whose directory-time key misses an overwrite. Outside an MCP or `reveal.api` request these indexes are now rebuilt per call, and a `--stdin` batch runs as one request so its lines still share them (three `calls://` lines over one tree build the index once). (BACK-2474)
 
 - Scala flow records (`--flow`, including `--flow=if` and the other selectors) now end a `case` clause on its last line on every supported tree-sitter-language-pack. Packs 1.8.1 and 1.12-1.14 extended it over the following line's whitespace, so the same source gave a different `line_end` per pack. (BACK-2485)
@@ -51,6 +53,12 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 ### Added
 
 - `reveal check FILE`, `FILE --check`, and `reveal --stdin --check` accept text and grep file sinks alongside JSON. Each format uses the same analysis; stdin text/grep files preserve input order and JSON files contain one aggregate report. Stdin file sinks require native file paths; URI inputs exit 2 before analysis. (BACK-2446)
+
+### Fixed
+
+- `--help` for `metrics`, `overview`, `surface`, `trace`, `contracts`, `testability`, `pack`, `calls`, `patches` and `architecture` no longer offers `--fail-on findings`, which those commands reject with exit 2; it lists `{none}` and says the command has no findings gate. (BACK-2486)
+
+- `reveal review` no longer suggests `reveal hotspots <path> --all` to see every hotspot; that command exited 2. The hint is now `--top 0`. (BACK-2488)
 
 ## [0.133.0] - 2026-11-01
 
