@@ -218,6 +218,37 @@ def test_a_member_check_skipped_is_disclosed_not_failed_but_a_clean_one_is_faile
     assert [v['file'] for v in out['violations']] == ['b.py']
 
 
+def budgets(*roots):
+    """Check's I002 scan_budgets rows: (root, skipped)."""
+    return {'scan_budgets': [{'rule': 'I002', 'root': r, 'scope': 'scan', 'skipped': skipped}
+                             for r, skipped in roots]}
+
+
+def test_members_under_a_scan_root_i002_declined_are_disclosed_not_failed():
+    """I002 declines a scan root over the 2000-file threshold and says so (summary.scan_budgets,
+    skipped=true): the relation holds only where I002 ran. mixed-dagster: 106 members, 0 findings."""
+    rep = report(**budgets(('/c/proj', True)))
+    out = census.i002_circular_violations(rep, [['ui/a.tsx', 'ui/b.tsx']], root='/c/proj')
+    assert out['violations'] == []
+    assert out['declined'] == ['ui/a.tsx', 'ui/b.tsx']
+
+
+def test_a_member_under_a_nested_root_that_ran_still_needs_its_finding():
+    """Negative control: the deepest scan root decides, so a clean-run sub-root inside a declined
+    root does not inherit the decline."""
+    rep = report(**budgets(('/c/proj', True), ('/c/proj/web', False)))
+    groups = [['web/a.ts', 'web/b.ts'], ['ui/x.ts', 'ui/y.ts']]
+    out = census.i002_circular_violations(rep, groups, root='/c/proj')
+    assert [v['file'] for v in out['violations']] == ['web/a.ts', 'web/b.ts']
+    assert out['declined'] == ['ui/x.ts', 'ui/y.ts']
+
+
+def test_without_a_declined_budget_a_member_missing_its_finding_still_fails():
+    rep = report(**budgets(('/c/proj', False)))
+    out = census.i002_circular_violations(rep, [['a.py', 'b.py']], root='/c/proj')
+    assert [v['file'] for v in out['violations']] == ['a.py', 'b.py'] and out['declined'] == []
+
+
 def test_backslash_spelled_paths_compare_equal():
     out = census.i002_circular_violations(i002_report('pkg\\a.py', 'pkg\\b.py'), [['pkg/a.py', 'pkg/b.py']])
     assert out['violations'] == []
