@@ -58,18 +58,26 @@ def test_multi_project_cap_is_partial_with_cycle_positive_control(tmp_path, monk
 
 @pytest.mark.disk_cache
 def test_i002_disk_cache_includes_active_limits(tmp_path, monkeypatch):
-    from reveal.rules.imports.I002 import I002, _graph_cache, _tree_fingerprint
+    from reveal.analyzers.imports import service as import_service
+    from reveal.rules.imports.I002 import I002, _graph_cache
     projects(tmp_path)
     root = tmp_path / 'p2'
     monkeypatch.setenv('REVEAL_DISK_CACHE', '1')
     monkeypatch.setenv('REVEAL_CACHE_DIR', str(tmp_path / 'cache'))
     monkeypatch.setenv('REVEAL_I002_MAX_FILES', '20000')
-    first = _tree_fingerprint(root)
+    builds = []
+    real = import_service._extract_and_resolve
+    monkeypatch.setattr(import_service, '_extract_and_resolve',  # noqa: V036 reviewed: the build runs in the parent
+                        lambda scope, *a, **k: builds.append(scope.cap) or real(scope, *a, **k))
     assert I002()._build_import_graph(root).scan_budget['limit'] == 20000
     _graph_cache.clear()
     monkeypatch.setenv('REVEAL_I002_MAX_FILES', '5000')
-    assert _tree_fingerprint(root) != first
     assert I002()._build_import_graph(root).scan_budget['limit'] == 5000
+    assert builds == [20000, 5000], 'the cap is part of the service build key: no shared entry'
+    _graph_cache.clear()
+    assert I002()._build_import_graph(root).scan_budget['limit'] == 5000
+    assert builds == [20000, 5000], 'an unchanged tree and cap is served from disk'
+    _graph_cache.clear()
 
 
 def test_d005_multi_root_cap_and_duplicate_positive_control(tmp_path, monkeypatch):

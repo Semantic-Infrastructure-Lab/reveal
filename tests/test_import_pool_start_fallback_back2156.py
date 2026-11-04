@@ -63,7 +63,7 @@ class _BreaksOnSubmit(_FailsOnSecondSubmit):
 def tree(tmp_path, monkeypatch):
     monkeypatch.setenv('REVEAL_MAX_WORKERS', '2')
     monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
-    monkeypatch.setattr(import_extraction, '_PARALLEL_MIN_FILES', 1)
+    monkeypatch.setattr(import_extraction, '_PARALLEL_MIN_FILES', 1)  # noqa: V036 reviewed: read in the parent; the fake executors run in this process
     root = tmp_path / 'tree'
     root.mkdir()
     (root / 'pyproject.toml').write_text('[project]\nname="probe"\n', encoding='utf-8')

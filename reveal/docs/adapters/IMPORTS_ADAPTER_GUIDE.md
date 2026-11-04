@@ -1751,7 +1751,10 @@ targets even though they are not source candidates. Explicitly excluded
 directories and hard ignore/noise policies remain omissions by policy. A failure
 in a required resolution subtree is distinct from an intentional omission.
 
-The I002 check rule also discloses required source or resolution-target directory
+The I002 check rule builds its project root through the same analysis service and
+reads the default `?circular` view (load-time edges to files under the scan root), so
+the files it flags are the members of `?circular`'s groups at that root. It also
+discloses required source or resolution-target directory
 loss, so an empty observed cycle list remains a scan-incomplete result. Known
 discovery loss disables its disk backing. Partial graphs remain available within
 the current invocation for per-file checks and disclosures; the next MCP request

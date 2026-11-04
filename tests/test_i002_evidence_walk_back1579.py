@@ -52,7 +52,9 @@ def test_exclude_narrows_the_report_not_the_graph(project):
     assert 'a.py:1:1' in out and 'b.py:1:1' not in out
 
 
-def test_fingerprint_and_pass_a_select_the_same_files(project):
-    supported = i002_module.get_all_extensions()
-    files = sorted(p.name for p in i002_module._graph_source_files(project, supported))
-    assert files == ['a.py', 'b.py']
+def test_the_limit_count_and_the_build_select_the_same_files(project):
+    """I002 counts the service's discovery for its limits and builds through the same
+    service (BACK-2156): both leave the .venv out."""
+    graph = i002_module.I002()._build_import_graph(project.resolve())
+    assert sorted(p.name for p in graph.files) == ['a.py', 'b.py']
+    assert graph.scan_budget['analyzed_files'] == 2

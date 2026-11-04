@@ -3808,6 +3808,7 @@ def process():
 **I002: Circular dependency**
 - Module A imports B which imports A (directly or transitively)
 - Can cause `ImportError` or subtle initialization bugs
+- Reads the same graph and default edge rule as `imports://<path>?circular` (load-time imports; `TYPE_CHECKING` and function-level imports are no cycle edge), so the files it flags are the members of `?circular`'s cycle groups
 
 **I003: Architectural layer violation**
 - Import crosses a forbidden layer boundary (e.g., data layer importing presentation)

@@ -211,7 +211,8 @@ def test_imports_graph_layer_does_not_store_a_transient_failure(proj, disk_on, l
 
 @pytest.mark.parametrize('failure', ['lookup_fails', 'grammar_fails'])
 def test_i002_graph_layer_does_not_store_a_transient_failure(proj, disk_on, failure, request):
-    """import_graph_v4: with both per-file layers emptied, the I002 graph entry alone served
+    """The I002 graph layer (``import_graph_v4``; the service's ``adapter_import_graph`` since
+    BACK-2156): with both per-file layers emptied, the I002 graph entry alone served
     the failure (the CI symptom: 'I002: 8 file(s) ... parsed with errors')."""
     shot = request.getfixturevalue(failure)
     shot.armed.add(proj / 'b.py')

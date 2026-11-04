@@ -7,6 +7,9 @@ run still reported 0, because ``chmod`` moves only ctime and the ``import_graph_
 entry is keyed on mtime and size. A long-lived host kept the same graph in ``_graph_cache``
 across requests, since its tree stamp is stat-based too. A genuine syntax error of
 unchanged content is still cached in both layers: the same bytes fail the same way.
+
+Since BACK-2156 I002 builds through the analysis service, so the disk layer is the service's
+(``adapter_import_graph``) and a "build" below is one uncached service build.
 """
 
 import json
@@ -19,6 +22,8 @@ import pytest
 from conftest import _clear_module_caches, _run_reveal_direct
 from reveal import base as reveal_base
 from reveal import mcp_server
+from reveal.analyzers.imports import extraction as import_extraction
+from reveal.analyzers.imports import service as import_service
 from reveal.rules.imports import I002 as i002
 from reveal.utils import request_cache
 
@@ -54,23 +59,23 @@ def deny(monkeypatch):
             raise PermissionError(13, 'Permission denied', str(self.path))
         return real(self)
 
-    # Reaches extraction under every start method: I002 extracts serially below
-    # _GRAPH_PARALLEL_MIN_FILES and the suite sets REVEAL_MAX_WORKERS=1.
+    # Reaches extraction under every start method: the service extracts serially below
+    # extraction._PARALLEL_MIN_FILES and the suite sets REVEAL_MAX_WORKERS=1.
     monkeypatch.setattr(reveal_base.FileAnalyzer, '_read_file', read)  # noqa: V036 reviewed: serial
     return denied
 
 
 @pytest.fixture
 def builds(monkeypatch):
-    """Graph builds from extraction, i.e. misses of both I002 graph caches."""
+    """Graph builds from extraction, i.e. misses of I002's memo and of the service's caches."""
     calls = []
-    real = i002.I002._collect_raw_imports
+    real = import_service._extract_and_resolve
 
-    def counting(self, directory, **kwargs):
-        calls.append(directory)
-        return real(self, directory, **kwargs)
+    def counting(scope, *args, **kwargs):
+        calls.append(scope.root)
+        return real(scope, *args, **kwargs)
 
-    monkeypatch.setattr(i002.I002, '_collect_raw_imports', counting)
+    monkeypatch.setattr(import_service, '_extract_and_resolve', counting)
     return calls
 
 
@@ -123,7 +128,7 @@ def test_lost_file_is_not_stored(proj, monkeypatch, builds):
         (proj / f'c{i}.py').write_text('import os\n', encoding='utf-8')
     with monkeypatch.context() as pool:
         pool.setenv('REVEAL_MAX_WORKERS', '2')
-        pool.setattr(i002, '_GRAPH_PARALLEL_MIN_FILES', 1)
+        pool.setattr(import_extraction, '_PARALLEL_MIN_FILES', 1)
         pool.setattr('concurrent.futures.ProcessPoolExecutor', _BreaksOnSubmit)
         lost = i002.I002()._build_import_graph(proj).lost_files
         assert lost, 'fixture: the broken pool should lose at least one file'
@@ -156,7 +161,7 @@ def test_request_reset_drops_a_graph_with_a_lost_file(proj, monkeypatch):
     started = request_cache.request_started_ns()
     with monkeypatch.context() as pool:
         pool.setenv('REVEAL_MAX_WORKERS', '2')
-        pool.setattr(i002, '_GRAPH_PARALLEL_MIN_FILES', 1)
+        pool.setattr(import_extraction, '_PARALLEL_MIN_FILES', 1)
         pool.setattr('concurrent.futures.ProcessPoolExecutor', _BreaksOnSubmit)
         assert i002.I002()._build_import_graph(proj).lost_files
     request_cache.seal_request_caches(started)

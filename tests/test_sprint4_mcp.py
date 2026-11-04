@@ -137,7 +137,6 @@ def test_path_resolution_refreshes_on_next_request(tmp_path):
 def _count_builds(monkeypatch):
     """Count index builds of the four validated owners (D005, T006, M102, I002)."""
     from reveal.rules.duplicates import D005
-    from reveal.rules.imports.I002 import I002
     from reveal.rules.maintainability.M102 import M102
     from reveal.rules.types import T006
     calls = {'D005': 0, 'T006': 0, 'M102': 0, 'I002': 0}
@@ -150,7 +149,8 @@ def _count_builds(monkeypatch):
             return real(*args, **kwargs)
         monkeypatch.setattr(owner, name, counted)
     wrap(D005, '_build_index', 'D005'); wrap(T006, '_build_index', 'T006')
-    wrap(I002, '_collect_raw_imports', 'I002')
+    from reveal.analyzers.imports import service as import_service
+    wrap(import_service, '_extract_and_resolve', 'I002')  # I002 builds through the service (BACK-2156)
     real = M102._collect_all_imports
 
     def counted(self, package_root):      # M102 has no separate build step: count cache misses

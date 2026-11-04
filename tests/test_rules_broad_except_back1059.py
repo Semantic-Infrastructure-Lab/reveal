@@ -236,13 +236,27 @@ def test_i002_healthy_check_has_no_outcome(tmp_path, monkeypatch):
     assert rule.outcomes == []
 
 
-def test_i002_unextractable_file_is_a_failed_file_not_an_exception(tmp_path, monkeypatch):
-    """The failed flag is the channel get_scan_disclosures reports (tag-only site pin)."""
+def test_i002_extractor_failure_is_one_disclosed_skip_per_root_not_an_exception(tmp_path, monkeypatch):
+    """I002 builds through the analysis service (BACK-2156), whose serial extraction lets an
+    extractor's error propagate: the graph is recorded as skipped with the error, once for the
+    root, and get_scan_disclosures reports it (so the run is incomplete, never a clean zero)."""
+    from reveal.analyzers.imports import extraction
     from reveal.rules.imports import I002 as module
-    src = tmp_path / 'a.py'
-    src.write_text('import b\n', encoding='utf-8')
-    monkeypatch.setattr(module, 'get_extractor', lambda p: _Boom())
-    assert module._extract_imports_for_file(str(src)) == ([], True, None, None)  # content failure: cacheable, no read error (BACK-2084), not transient (BACK-2136)
+    for name in ('a.py', 'b.py'):
+        (tmp_path / name).write_text('import os\n', encoding='utf-8')
+    monkeypatch.setattr(module, '_find_project_root', lambda p: tmp_path)
+    monkeypatch.setattr(extraction, 'get_extractor', lambda p: _Boom())
+    module._graph_cache.clear()
+    rule = module.I002()
+    assert rule.check(str(tmp_path / 'a.py'), None, '') == []
+    graph = module._graph_cache[tmp_path]
+    assert rule.check(str(tmp_path / 'b.py'), None, '') == []
+    assert module._graph_cache[tmp_path] is graph, 'the failed build ran once for the root'
+    assert graph.scan_budget['exact'] is False and graph.scan_budget['analyzed_files'] == 0
+    assert module.get_scan_disclosures() == [
+        f'I002: import-graph build of {tmp_path} failed (RuntimeError: {BOOM}); '
+        'skipping circular-dependency analysis']
+    module._graph_cache.clear()
 
 
 # --- I003 ---------------------------------------------------------------------------

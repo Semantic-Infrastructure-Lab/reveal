@@ -267,7 +267,7 @@ def _count_aggregate_value(counts: Counter, value: Any) -> int:
 def _link_graph_fingerprint(base_path: Path, all_files: List[Path]) -> Optional[str]:
     """Disk-cache key for a markdown tree's link graph, or None to skip caching.
 
-    Mirrors I002's ``_tree_fingerprint`` (BACK-536 pattern): digest each
+    Mirrors the import graph's fingerprint (BACK-536 pattern): digest each
     file's ``(relpath, mtime_ns, size)`` rather than content, so the key is a
     cheap stat walk instead of a re-read. A content edit bumps mtime_ns; an
     add/delete/rename changes the file set — either changes the digest, so a

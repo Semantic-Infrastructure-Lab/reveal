@@ -4,7 +4,8 @@ import pytest
 from reveal.adapters.imports import ImportsAdapter
 from reveal.analyzers.imports.base import _EXTRACTOR_REGISTRY, get_extractor
 from reveal.registry import get_analyzer
-from reveal.rules.imports.I002 import I002, _extract_imports_for_file, _graph_cache
+from reveal.analyzers.imports.extraction import extract_one_file
+from reveal.rules.imports.I002 import I002, _graph_cache
 
 pytestmark = [pytest.mark.component, pytest.mark.disk_cache]
 
@@ -73,9 +74,10 @@ def test_imports_survive_unrelated_error_copy_and_comment(tmp_path, suffix):
             assert statement.module_name in lines[statement.line_number - 1]
         analyzer = get_analyzer(str(path))(str(path))
         assert analyzer.tree and analyzer.has_parse_errors() is partial
-        worker_imports, failed, read_error, transient_error = _extract_imports_for_file(str(path))
-        assert claims(worker_imports) == expected and failed is partial and read_error is None
-        assert transient_error is None
+        # The pool worker's unit, which imports:// and I002 both build through (BACK-2156).
+        _fp, worker_imports, _symbols, _structure, extraction, _failure, _entry = extract_one_file(str(path), None)
+        assert claims(worker_imports) == expected and extraction.parse_failed is partial
+        assert extraction.read_error is None and extraction.transient_error is None
         adapter = ImportsAdapter(resource=str(path))
         adapter._build_graph(path)
         assert claims(adapter.analysis.graph.files[path]) == expected

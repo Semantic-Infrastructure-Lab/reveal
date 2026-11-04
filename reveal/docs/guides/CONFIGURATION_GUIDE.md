@@ -428,8 +428,7 @@ the values, and `<namespace>` names the kind of artifact.
 | `structure` | a file's parsed structure: imports, functions, classes, declarations, plus (once a full scan has collected them) the file's module-level call sites and JSX references, so a warm scan re-parses nothing for them |
 | `structure-outline` | the lighter outline-only structure `--grep` uses to name each hit's enclosing function |
 | `surface-file` | one source file's complete `surface` scanner result, before the type filter and the cross-file route passes, so a repeat run, or a run for another type, scans only the files that changed. A file the scanner could not parse is not stored |
-| `adapter_import_graph` | the project import graph behind `imports://` |
-| `import_graph_v4` | the project import graph behind the `I002` rule, including source-scan accounting |
+| `adapter_import_graph` | the project import graph behind `imports://` and the `I002` rule (one build per scan root, file cap and extension set) |
 | `python_imports`, `javascript_imports`, `go_imports`, `rust_imports`, `zig_imports`, `generic_imports` | per-language import extraction feeding those graphs |
 | `markdown-headings` | a Markdown file's heading index |
 | `markdown_link_graph` | the link graph behind `markdown://` link queries |

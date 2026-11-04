@@ -11,13 +11,10 @@ from .base import get_all_extensions
 from .file_index import resolution_fingerprint
 from .types import ImportAnalysis
 
-# Disk-cache namespace for this adapter's resolved import graph (BACK-834).
-# Mirrors rules/imports/I002.py's own import-graph disk cache (_tree_fingerprint
-# / _IMPORT_GRAPH_NAMESPACE) — same fingerprint recipe (path + mtime_ns + size
-# per source and indexed target file), but this adapter builds a graph rooted at whatever
-# `path` argument the caller gave it (imports://<path>, pack --architecture,
-# pack --focus), not I002's resolved *project* root, so it gets its own
-# namespace rather than sharing I002's cache entries.
+# Disk-cache namespace for the resolved import graph of one scan root (BACK-834): the build
+# behind imports://<path>, pack --architecture, pack --focus and, since BACK-2156, the I002
+# rule (which builds its project root through service.analyze). Keyed on path + mtime_ns +
+# size per source and indexed target file, the root, the file cap and the parsed extensions.
 _ADAPTER_IMPORT_GRAPH_NAMESPACE = "adapter_import_graph"
 
 def _candidate_set_fingerprint(candidates: List[Path],

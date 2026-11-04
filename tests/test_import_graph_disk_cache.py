@@ -10,6 +10,8 @@ import pickle
 
 import pytest
 
+from reveal.analyzers.imports import service as import_service
+from reveal.analyzers.imports.build_cache import _ADAPTER_IMPORT_GRAPH_NAMESPACE as GRAPH_NAMESPACE
 from reveal.core import disk_cache
 from reveal.rules.imports import I002 as i002_mod
 
@@ -131,106 +133,96 @@ def test_version_keyed_path_isolates_reveal_versions(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# I002 integration — the correctness-critical part
+# I002 integration — the correctness-critical part. Since BACK-2156 I002 builds
+# through the analysis service, so the disk layer is the service's
+# (``adapter_import_graph``), keyed on the source and resolution-target stats.
 # --------------------------------------------------------------------------- #
 
-def test_second_build_served_from_disk(tmp_path, monkeypatch):
-    root = _project(tmp_path / "proj")
-    rule = i002_mod.I002()
+@pytest.fixture
+def builds(monkeypatch):
+    """Uncached service builds (extraction and resolution), i.e. disk-cache misses."""
+    calls = []
+    real = import_service._extract_and_resolve
 
-    fresh = rule._build_import_graph(root)
+    def counting(scope, *args, **kwargs):
+        calls.append(scope.root)
+        return real(scope, *args, **kwargs)
+
+    monkeypatch.setattr(import_service, '_extract_and_resolve', counting)
+    return calls
+
+
+def _fresh_process_graph(root):
+    """The graph a new process would build: the in-process memo forgotten, the disk kept."""
+    i002_mod._graph_cache.clear()
+    return i002_mod.I002()._build_import_graph(root)
+
+
+def test_second_build_served_from_disk(tmp_path, builds):
+    root = _project(tmp_path / "proj")
+    fresh = i002_mod.I002()._build_import_graph(root)
     fresh_groups = fresh.find_cycle_groups()
     assert fresh_groups, "fixture should contain a cycle"
-
-    # Second invocation in a *new* process is simulated by clearing the
-    # in-process cache. If disk caching works, the graph never re-scans.
-    i002_mod._graph_cache.clear()
-
-    def _boom(*a, **k):
-        raise AssertionError("disk cache miss: _collect_raw_imports was re-run")
-
-    monkeypatch.setattr(rule, "_collect_raw_imports", _boom)
-    cached = rule._build_import_graph(root)
-
+    cached = _fresh_process_graph(root)
+    assert len(builds) == 1, "disk cache miss: the graph was extracted again"
     assert cached.find_cycle_groups() == fresh_groups
-    assert cached == fresh          # dataclass equality: files/deps/reverse_deps
+    assert cached == fresh          # dataclass equality: files/deps/reverse_deps and disclosures
 
 
-def test_disk_graph_equals_fresh_scan(tmp_path):
-    """A from-disk graph must be indistinguishable from a from-scan graph."""
+def test_disk_graph_is_the_one_imports_reads(tmp_path, builds):
+    """One owner, one entry: imports:// over the same root is served by the build I002 stored."""
+    from reveal.adapters.imports import ImportsAdapter
     root = _project(tmp_path / "proj")
-    rule = i002_mod.I002()
-
-    scanned = rule._build_import_graph(root)          # populates disk
-    i002_mod._graph_cache.clear()
-
-    # Read straight from disk via the same fingerprint and compare.
-    fp = i002_mod._tree_fingerprint(root)
-    from_disk = disk_cache.get(i002_mod._IMPORT_GRAPH_NAMESPACE, fp)
-    assert from_disk is not None
-    assert from_disk == scanned
-    assert from_disk.find_cycle_groups() == scanned.find_cycle_groups()
+    scanned = i002_mod.I002()._build_import_graph(root)
+    adapter = ImportsAdapter(resource=str(root))
+    adapter._build_graph(root)
+    assert len(builds) == 1
+    assert adapter.analysis.graph.dependencies == scanned.dependencies
+    assert adapter.analysis.graph.find_cycle_groups() == scanned.find_cycle_groups()
 
 
-def test_edit_invalidates_cache(tmp_path, monkeypatch):
+def test_edit_invalidates_cache(tmp_path, builds):
     root = _project(tmp_path / "proj")
-    rule = i002_mod.I002()
-    rule._build_import_graph(root)                    # populate
-    fp_before = i002_mod._tree_fingerprint(root)
-
+    i002_mod.I002()._build_import_graph(root)                    # populate
     # Break the cycle: c.py no longer imports a. mtime + size change.
     (root / "c.py").write_text("def gamma():\n    return 42\n")
-    fp_after = i002_mod._tree_fingerprint(root)
-    assert fp_after != fp_before, "edited tree must fingerprint differently"
-
-    i002_mod._graph_cache.clear()
-    rebuilt = rule._build_import_graph(root)
+    rebuilt = _fresh_process_graph(root)
+    assert len(builds) == 2
     assert rebuilt.find_cycle_groups() == [], "rebuilt graph must reflect the edit"
 
 
-def test_added_file_invalidates_fingerprint(tmp_path):
+@pytest.mark.parametrize('change', ['add_source', 'delete_source', 'add_target', 'none'])
+def test_tree_changes_invalidate_and_an_unchanged_tree_hits(tmp_path, builds, change):
+    """Added and deleted sources and a non-source file (a resolution target) each miss;
+    an unchanged tree is served from disk (the negative control)."""
     root = _project(tmp_path / "proj")
-    fp_before = i002_mod._tree_fingerprint(root)
-    (root / "d.py").write_text("x = 1\n")
-    assert i002_mod._tree_fingerprint(root) != fp_before
+    i002_mod.I002()._build_import_graph(root)
+    if change == 'add_source':
+        (root / "d.py").write_text("x = 1\n")
+    elif change == 'delete_source':
+        (root / "c.py").unlink()
+    elif change == 'add_target':
+        (root / "notes.txt").write_text("not source\n")
+    _fresh_process_graph(root)
+    assert len(builds) == (1 if change == 'none' else 2)
 
 
-def test_deleted_file_invalidates_fingerprint(tmp_path):
-    root = _project(tmp_path / "proj")
-    fp_before = i002_mod._tree_fingerprint(root)
-    (root / "c.py").unlink()
-    assert i002_mod._tree_fingerprint(root) != fp_before
-
-
-def test_unchanged_tree_fingerprint_is_stable(tmp_path):
-    root = _project(tmp_path / "proj")
-    assert i002_mod._tree_fingerprint(root) == i002_mod._tree_fingerprint(root)
-
-
-def test_fingerprint_none_over_ceiling(tmp_path, monkeypatch):
+def test_over_the_ceiling_nothing_is_built_or_stored(tmp_path, builds, monkeypatch):
     root = _project(tmp_path / "proj")
     monkeypatch.setenv("REVEAL_I002_MAX_FILES", "1")   # 3 .py files > 1
-    assert i002_mod._tree_fingerprint(root) is None
+    graph = i002_mod.I002()._build_import_graph(root)
+    assert graph.scan_skipped_reason and not graph.dependencies
+    assert builds == []
+    assert not list(disk_cache._namespace_dir(GRAPH_NAMESPACE).glob("*.pkl"))
 
 
-def test_kill_switch_writes_nothing(tmp_path, monkeypatch):
+def test_kill_switch_writes_nothing(tmp_path, monkeypatch, builds):
     root = _project(tmp_path / "proj")
     monkeypatch.setenv("REVEAL_DISK_CACHE", "0")
-    rule = i002_mod.I002()
-    rule._build_import_graph(root)
-    fp = i002_mod._tree_fingerprint(root)
-    assert disk_cache.get(i002_mod._IMPORT_GRAPH_NAMESPACE, fp) is None
-
-
-def test_fingerprint_covers_source_and_resolution_target_selections(tmp_path):
-    """Non-source targets can affect resolution and must invalidate cached answers."""
-    root = _project(tmp_path / "proj")
-    fp = i002_mod._tree_fingerprint(root)
-    (root / "notes.txt").write_text("not source\n")     # unsupported ext
-    assert i002_mod._tree_fingerprint(root) != fp
-    fp = i002_mod._tree_fingerprint(root)
-    (root / "e.py").write_text("y = 2\n")                # supported ext
-    assert i002_mod._tree_fingerprint(root) != fp
+    i002_mod.I002()._build_import_graph(root)
+    _fresh_process_graph(root)
+    assert len(builds) == 2
+    assert not list(disk_cache._namespace_dir(GRAPH_NAMESPACE).glob("*.pkl"))
 
 
 def test_graph_is_picklable():
@@ -245,13 +237,11 @@ def test_graph_is_picklable():
 def test_target_only_add_delete_changes_i002_disk_fingerprint(tmp_path):
     (tmp_path / '.gitignore').write_text('generated.py\n', encoding='utf-8')
     (tmp_path / 'use.py').write_text('import generated\n', encoding='utf-8')
-    fingerprint = i002_mod._tree_fingerprint(tmp_path)
     rule = i002_mod.I002()
     graph = rule._build_import_graph(tmp_path)
     target = tmp_path / 'generated.py'
     assert tmp_path / 'use.py' not in graph.reverse_deps.get(target, set())
     target.write_text('VALUE = 1\n', encoding='utf-8')
-    assert i002_mod._tree_fingerprint(tmp_path) != fingerprint
     i002_mod._graph_cache.clear()  # model a fresh CLI invocation, using the disk cache
     graph = rule._build_import_graph(tmp_path)
     assert tmp_path / 'use.py' in graph.reverse_deps.get(target, set())

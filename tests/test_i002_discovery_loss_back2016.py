@@ -1,4 +1,10 @@
-"""I002's real source/target loss must qualify graphs and cache reuse."""
+"""I002's real source/target loss must qualify graphs and cache reuse.
+
+Since BACK-2156 I002 builds through the analysis service: one discovery walk finds the graph
+sources and the resolution targets together (``discover_import_files``), and the service's own
+caches (``adapter_import_graph`` on disk) never store a build that lost a directory. I002's own
+count walk, which only decides the scan limits, is not the graph's evidence.
+"""
 
 import importlib
 import json
@@ -9,6 +15,8 @@ from unittest.mock import patch
 import pytest
 
 from conftest import _run_reveal_direct as run
+from reveal.analyzers.imports import service as import_service
+from reveal.analyzers.imports.build_cache import _ADAPTER_IMPORT_GRAPH_NAMESPACE as GRAPH_NAMESPACE
 from reveal.core import disk_cache
 
 mod = importlib.import_module('reveal.rules.imports.I002')
@@ -89,8 +97,9 @@ def test_real_loss_disables_graph_disk_backing(tmp_path, monkeypatch):
     with patch.object(disk_cache, 'get', wraps=disk_cache.get) as get, patch.object(disk_cache, 'put', wraps=disk_cache.put) as put:
         graph = mod.I002()._build_import_graph(root)
     assert graph.get_import_count() == 1
-    assert not [c for c in get.call_args_list if c.args[0] == mod._IMPORT_GRAPH_NAMESPACE]
-    assert not [c for c in put.call_args_list if c.args[0] == mod._IMPORT_GRAPH_NAMESPACE]
+    assert get.call_args_list, 'fixture: the disk layer is on'
+    assert not [c for c in get.call_args_list if c.args[0] == GRAPH_NAMESPACE]
+    assert not [c for c in put.call_args_list if c.args[0] == GRAPH_NAMESPACE]
 
 
 def test_actual_source_loss_budget_is_lower_bound(tmp_path, monkeypatch):
@@ -139,7 +148,7 @@ def test_clean_graph_same_invocation_reuse_and_sibling_remain_exact(tmp_path, mo
     rule = mod.I002()
     with monkeypatch.context() as context:
         deny(context, child)
-        with patch.object(rule, '_collect_raw_imports', wraps=rule._collect_raw_imports) as extract:
+        with patch.object(import_service, 'analyze', wraps=import_service.analyze) as extract:
             partial = rule._build_import_graph(root)
             assert rule._build_import_graph(root) is partial
             assert extract.call_count == 1
@@ -148,8 +157,10 @@ def test_clean_graph_same_invocation_reuse_and_sibling_remain_exact(tmp_path, mo
 
 
 @pytest.mark.disk_cache
-@pytest.mark.parametrize('stage', ['fingerprint_source', 'fingerprint_resolution', 'actual_source', 'actual_resolution'])
+@pytest.mark.parametrize('stage', ['count', 'build'])
 def test_actual_phase_loss_keeps_cache_and_source_budget_ownership(tmp_path, monkeypatch, stage):
+    """A loss in I002's count walk decides nothing the graph says; a loss in the build's own
+    walk loses the target with the source walk (one walk), qualifies the budget and is never stored."""
     root = tmp_path / 'affected'
     source = write(root / 'visible.c', '#include "hidden.inc"\nint main(void) { return 0; }\n')
     child = root / 'included_child'
@@ -157,39 +168,22 @@ def test_actual_phase_loss_keeps_cache_and_source_budget_ownership(tmp_path, mon
     monkeypatch.setenv('REVEAL_CACHE_DIR', str(tmp_path / 'cache'))
     monkeypatch.setenv('REVEAL_DISK_CACHE', '1')
     active = [None]
-    real_fp = mod._tree_fingerprint
-    real_basename = mod.basename_index
-    real_collect = mod.I002._collect_raw_imports
-    real_resolve = mod.I002._resolve_graph_dependencies
+    real_discover = import_service.discover
+    real_analyze = import_service.analyze
     real_scandir = os.scandir
 
-    def fingerprint(*args, **kwargs):
-        active[0] = 'fingerprint_source'
-        try:
-            return real_fp(*args, **kwargs)
-        finally:
-            active[0] = None
-
-    def basename(*args, **kwargs):
+    def discover(*args, **kwargs):
         previous = active[0]
-        if previous == 'fingerprint_source':
-            active[0] = 'fingerprint_resolution'
+        active[0] = previous or 'count'
         try:
-            return real_basename(*args, **kwargs)
+            return real_discover(*args, **kwargs)
         finally:
             active[0] = previous
 
-    def collect(self, *args, **kwargs):
-        active[0] = 'actual_source'
+    def analyze(*args, **kwargs):
+        active[0] = 'build'
         try:
-            return real_collect(self, *args, **kwargs)
-        finally:
-            active[0] = None
-
-    def resolve(self, *args, **kwargs):
-        active[0] = 'actual_resolution'
-        try:
-            return real_resolve(self, *args, **kwargs)
+            return real_analyze(*args, **kwargs)
         finally:
             active[0] = None
 
@@ -198,20 +192,17 @@ def test_actual_phase_loss_keeps_cache_and_source_budget_ownership(tmp_path, mon
             raise PermissionError(13, f'controlled I002 {stage} loss', str(child))
         return real_scandir(path)
 
-    monkeypatch.setattr(mod, '_tree_fingerprint', fingerprint)
-    monkeypatch.setattr(mod, 'basename_index', basename)
-    monkeypatch.setattr(mod.I002, '_collect_raw_imports', collect)
-    monkeypatch.setattr(mod.I002, '_resolve_graph_dependencies', resolve)
+    monkeypatch.setattr(import_service, 'discover', discover)
+    monkeypatch.setattr(import_service, 'analyze', analyze)
     monkeypatch.setattr(os, 'scandir', scandir)
-    with patch.object(disk_cache, 'get', wraps=disk_cache.get) as get, patch.object(disk_cache, 'put', wraps=disk_cache.put) as put:
+    with patch.object(disk_cache, 'put', wraps=disk_cache.put) as put:
         graph = mod.I002()._build_import_graph(root)
-    reads = [c for c in get.call_args_list if c.args[0] == mod._IMPORT_GRAPH_NAMESPACE]
-    assert len(reads) == (0 if stage.startswith('fingerprint') else 1)
-    assert not [c for c in put.call_args_list if c.args[0] == mod._IMPORT_GRAPH_NAMESPACE]
-    assert bool(graph.traversal_failures) == stage.startswith('actual')
+    stored = [c for c in put.call_args_list if c.args[0] == GRAPH_NAMESPACE]
+    assert len(stored) == (1 if stage == 'count' else 0)
+    assert bool(graph.traversal_failures) is (stage == 'build')
     assert graph.scan_budget['analyzed_files'] == 1
-    assert graph.scan_budget['exact'] is (stage != 'actual_source')
-    assert graph.dependencies.get(source, set()) == (set() if stage == 'actual_resolution' else {target})
+    assert graph.scan_budget['exact'] is (stage == 'count')
+    assert graph.dependencies.get(source, set()) == ({target} if stage == 'count' else set())
 
 
 def test_unknown_location_only_memo_is_pruned_but_parse_and_cap_memos_stay(tmp_path, monkeypatch):
@@ -253,7 +244,7 @@ def test_repeated_actual_directory_loss_uses_unique_display_count_and_rule_filte
 
     monkeypatch.setattr(os, 'scandir', scandir)
     graph = mod.I002()._build_import_graph(root)
-    assert len(graph.traversal_failures) == 14  # source and resolution passes keep distinct events
+    assert len(graph.traversal_failures) == 7  # one walk finds sources and resolution targets
     notes = mod.get_scan_disclosures([visible])
     assert len(notes) == 1 and '7 identified directory' in notes[0] and 'and 2 more' in notes[0]
     from reveal.rules.scan_caches import get_scan_disclosures

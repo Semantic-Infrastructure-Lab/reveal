@@ -1572,9 +1572,10 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
             (self.tmp / f'm{i}.py').write_text('import os\n')
         _graph_cache.clear()
         with mock.patch.dict(os.environ, {'REVEAL_I002_MAX_FILES': '3'}):
-            imports, failed, _lost, _skip_reason = I002()._collect_raw_imports(self.tmp)
-        self.assertEqual(imports, [],
-                         "scan should abort to empty list when ceiling exceeded")
+            graph = I002()._build_import_graph(self.tmp)
+        self.assertEqual(graph.get_import_count(), 0,
+                         "scan should abort to an empty graph when ceiling exceeded")
+        self.assertIn('exceeded 3 source files', graph.scan_skipped_reason)
 
     def test_ceiling_aborts_before_parsing_any_file(self):
         """BACK-418: over-ceiling trees must abort *before* parsing, not after.
@@ -1587,22 +1588,22 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
         """
         import os
         from unittest import mock
-        from reveal.rules.imports import I002 as i002_mod
+        from reveal.analyzers.imports import extraction as import_extraction
         from reveal.rules.imports.I002 import I002, _graph_cache
         for i in range(6):
             (self.tmp / f'm{i}.py').write_text('import os\n')
         _graph_cache.clear()
-        real_get_extractor = i002_mod.get_extractor
+        real_extract = import_extraction.extract_one_file
         parsed = []
 
-        def _tracking_get_extractor(path):
+        def _tracking_extract(path, *args):
             parsed.append(path)
-            return real_get_extractor(path)
+            return real_extract(path, *args)
 
         with mock.patch.dict(os.environ, {'REVEAL_I002_MAX_FILES': '3'}), \
-                mock.patch.object(i002_mod, 'get_extractor', _tracking_get_extractor):
-            imports, failed, _lost, _skip_reason = I002()._collect_raw_imports(self.tmp)
-        self.assertEqual(imports, [], "over-ceiling scan should return empty")
+                mock.patch.object(import_extraction, 'extract_one_file', _tracking_extract):
+            graph = I002()._build_import_graph(self.tmp)
+        self.assertEqual(graph.get_import_count(), 0, "over-ceiling scan should return empty")
         self.assertEqual(parsed, [],
                          "no file should be parsed once the ceiling is exceeded")
 
@@ -1646,9 +1647,10 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
             (self.tmp / f'm{i}.py').write_text('import os\n')
         _graph_cache.clear()
         with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '3'}):
-            imports, failed, _lost, skip_reason = I002()._collect_raw_imports(self.tmp)
-        self.assertEqual(imports, [],
-                         "scan should skip to empty list past the cycle-detection threshold")
+            graph = I002()._build_import_graph(self.tmp)
+        skip_reason = graph.scan_skipped_reason
+        self.assertEqual(graph.get_import_count(), 0,
+                         "scan should skip to an empty graph past the cycle-detection threshold")
         self.assertIsNotNone(skip_reason,
                              "BACK-1051: a capped scan must disclose why, not just return empty")
         self.assertIn('cycle-detection', skip_reason)
@@ -1679,8 +1681,8 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
             (self.tmp / f'm{i}.py').write_text('import os\n')
         _graph_cache.clear()
         with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '0'}):
-            imports, failed, _lost, _skip_reason = I002()._collect_raw_imports(self.tmp)
-        self.assertEqual(len(imports), 6,
+            graph = I002()._build_import_graph(self.tmp)
+        self.assertEqual(graph.get_import_count(), 6,
                          "REVEAL_I002_CYCLE_LIMIT=0 must disable the auto-skip")
 
     def test_cycle_detection_threshold_does_not_affect_small_tree(self):
@@ -1693,8 +1695,9 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
             (self.tmp / f'm{i}.py').write_text('import os\n')
         _graph_cache.clear()
         with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '10'}):
-            imports, failed, _lost, _skip_reason = I002()._collect_raw_imports(self.tmp)
-        self.assertEqual(len(imports), 3)
+            graph = I002()._build_import_graph(self.tmp)
+        self.assertEqual(graph.get_import_count(), 3)
+        self.assertIsNone(graph.scan_skipped_reason)
 
     def test_cycle_detection_skip_is_not_cached(self):
         """BACK-615: a skipped (empty) graph must never reach the disk cache —
@@ -1703,13 +1706,20 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
         actually running the scan the override asked for."""
         import os
         from unittest import mock
-        from reveal.rules.imports.I002 import _tree_fingerprint
+        from reveal.rules.imports.I002 import I002, _graph_cache
         for i in range(6):
             (self.tmp / f'm{i}.py').write_text('import os\n')
-        with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '3'}):
-            self.assertIsNone(_tree_fingerprint(self.tmp),
-                             "fingerprint must be None (uncacheable) when the "
-                             "cycle-detection threshold is exceeded")
+        _graph_cache.clear()
+        with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '3', 'REVEAL_DISK_CACHE': '1',
+                                          'REVEAL_CACHE_DIR': str(self.tmp / '.cache')}):
+            self.assertIsNotNone(I002()._build_import_graph(self.tmp).scan_skipped_reason)
+            _graph_cache.clear()  # a fresh process: only the disk cache could answer
+            os.environ['REVEAL_I002_CYCLE_LIMIT'] = '0'
+            graph = I002()._build_import_graph(self.tmp)
+        _graph_cache.clear()
+        self.assertIsNone(graph.scan_skipped_reason)
+        self.assertEqual(graph.get_import_count(), 6,
+                         "the skipped scan was served after the override asked for the scan")
 
     def test_cycle_detection_threshold_env_override_invalid_falls_back_to_default(self):
         """A non-integer REVEAL_I002_CYCLE_LIMIT falls back to the default threshold."""

@@ -2,7 +2,8 @@
 
 Three pools still handed their work out with ``executor.map``: imports://'s per-file
 extraction (``ImportsAdapter._extract_files``), I002's import-graph Pass B
-(``_collect_raw_imports``) and ``utils.parallel.grep_files``. Once a worker dies the
+(``_collect_raw_imports``) and ``utils.parallel.grep_files``. I002 now builds through the
+analysis service's extraction (BACK-2156), so its tests below break that one pool. Once a worker dies the
 pool is broken: ``map`` raises BrokenProcessPool for the rest, so imports:// and
 grep_files lost the whole run, and I002 swallowed it at debug level and re-ran every
 file serially in the parent, the culprit included. They now go through
@@ -98,7 +99,6 @@ def pools(monkeypatch):
     monkeypatch.setenv('REVEAL_MAX_WORKERS', '2')
     monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
     monkeypatch.setattr(import_extraction, '_PARALLEL_MIN_FILES', 1)
-    monkeypatch.setattr(i002, '_GRAPH_PARALLEL_MIN_FILES', 1)
     i002._graph_cache.clear()
     yield monkeypatch
     i002._graph_cache.clear()
@@ -141,35 +141,39 @@ def test_imports_negative_control_a_healthy_pool_fails_nothing(tmp_path, pools):
 
 def _counting_extract(pools):
     calls = []
-    real = i002._extract_imports_for_file
+    real = import_extraction.extract_one_file
 
-    def counted(fp_str):
+    def counted(fp_str, *args):
         calls.append(Path(fp_str).name)
-        return real(fp_str)
-    pools.setattr(i002, '_extract_imports_for_file', counted)
+        return real(fp_str, *args)
+    pools.setattr(import_extraction, 'extract_one_file', counted)
     return calls
 
 
-def test_i002_reports_files_the_broken_pool_refused_without_a_serial_rerun(tmp_path, pools, caplog):
+def _i002_graph(root):
+    return i002.I002()._build_import_graph(root)
+
+
+def test_i002_reports_files_the_broken_pool_refused_without_a_serial_rerun(tmp_path, pools):
     root = _tree(tmp_path)
     pools.setattr('concurrent.futures.ProcessPoolExecutor', _BreaksOnSubmit)
     calls = _counting_extract(pools)
-    with caplog.at_level(logging.WARNING, logger=i002.logger.name):
-        imports, failed, _lost, skipped = i002.I002()._collect_raw_imports(root)
-    assert skipped is None
+    graph = _i002_graph(root)
+    assert graph.scan_skipped_reason is None
     assert len(calls) == 1, f'only the in-process first item ran; nothing re-ran in the parent: {calls}'
-    assert 1 <= len(failed) <= N_FILES - 1
-    assert {Path(f).name for f in failed} == {f'm{i}.py' for i in range(N_FILES)} - set(calls)
-    assert 'lost to a dead import-extraction worker' in caplog.text
-    assert 'BrokenProcessPool' in caplog.text
+    lost = {Path(f).name for f in graph.lost_files}
+    assert 1 <= len(lost) <= N_FILES - 1
+    assert lost == {f'm{i}.py' for i in range(N_FILES)} - set(calls)
+    assert {Path(f).name for f in graph.failed_files} == lost
 
 
 def test_i002_scan_disclosure_names_the_lost_files(tmp_path, pools):
     root = _tree(tmp_path)
     pools.setattr('concurrent.futures.ProcessPoolExecutor', _BreaksOnSubmit)
-    i002.I002()._build_import_graph(root)
+    graph = _i002_graph(root)
     disclosures = i002.get_scan_disclosures()
-    assert any('circular-dependency results may be incomplete' in d for d in disclosures), disclosures
+    assert f"I002: {len(graph.lost_files)} file(s) under {root} not analyzed, a pool worker died; " \
+        "circular-dependency results may be incomplete" in disclosures, disclosures
 
 
 def test_i002_pool_that_cannot_start_runs_serially_and_says_so(tmp_path, pools, caplog):
@@ -177,21 +181,23 @@ def test_i002_pool_that_cannot_start_runs_serially_and_says_so(tmp_path, pools, 
     root = _tree(tmp_path)
     pools.setattr('concurrent.futures.ProcessPoolExecutor', _CannotStart)
     calls = _counting_extract(pools)
-    with caplog.at_level(logging.WARNING, logger=i002.logger.name):
-        imports, failed, _lost, _ = i002.I002()._collect_raw_imports(root)
+    with caplog.at_level(logging.WARNING, logger=import_extraction.logger.name):
+        graph = _i002_graph(root)
     assert sorted(calls) == sorted(f'm{i}.py' for i in range(N_FILES))
-    assert failed == []
-    assert len(imports) == N_FILES
+    assert graph.failed_files == []
+    assert len(graph.files) == N_FILES
     assert 'extracting the rest serially' in caplog.text
+    assert i002.get_scan_disclosures() == []
 
 
 def test_i002_negative_control_a_healthy_pool_fails_nothing(tmp_path, pools, caplog):
     root = _tree(tmp_path)
     pools.setattr('concurrent.futures.ProcessPoolExecutor', _Healthy)
-    with caplog.at_level(logging.WARNING, logger=i002.logger.name):
-        imports, failed, _lost, _ = i002.I002()._collect_raw_imports(root)
-    assert failed == [] and len(imports) == N_FILES
-    assert 'lost to a dead' not in caplog.text and 'serially' not in caplog.text
+    with caplog.at_level(logging.WARNING, logger=import_extraction.logger.name):
+        graph = _i002_graph(root)
+    assert graph.failed_files == [] and len(graph.files) == N_FILES
+    assert 'serially' not in caplog.text
+    assert i002.get_scan_disclosures() == []
 
 
 # ------------------------------------------------------------ grep_files
@@ -228,7 +234,6 @@ def test_grep_files_negative_control_a_healthy_pool(tmp_path, monkeypatch, caplo
 # The stand-in workers are module-level so a pool can pickle them by name, and call
 # the real worker captured here (the module attribute is the patched stand-in).
 
-_REAL_I002_EXTRACT = i002._extract_imports_for_file
 _REAL_IMPORTS_EXTRACT = import_extraction.extract_one_file
 _REAL_SCAN_ONE = parallel._scan_one
 
@@ -237,11 +242,6 @@ def _dies_on_one(path, name=DYING):
     """Ends the pool worker that reaches *name*, like a parser crashing the interpreter."""
     if Path(path).name == name and multiprocessing.parent_process() is not None:
         os._exit(1)
-
-
-def _i002_extract_dying(fp_str):
-    _dies_on_one(fp_str)
-    return _REAL_I002_EXTRACT(fp_str)
 
 
 def _imports_extract_dying(fp_str, want_structure, inputs=None):
@@ -257,13 +257,12 @@ def _scan_dying(args):
 @needs_forked_workers
 def test_i002_real_dying_worker_costs_only_lost_files(tmp_path, pools, caplog):
     root = _tree(tmp_path)
-    pools.setattr(i002, '_extract_imports_for_file', _i002_extract_dying)
-    with caplog.at_level(logging.WARNING, logger=i002.logger.name):
-        imports, failed, _lost, _ = i002.I002()._collect_raw_imports(root)
-    lost = {Path(f).name for f in failed}
+    pools.setattr(import_extraction, 'extract_one_file', _imports_extract_dying)
+    with caplog.at_level(logging.WARNING, logger=import_extraction.logger.name):
+        graph = _i002_graph(root)
+    lost = {Path(f).name for f in graph.lost_files}
     assert DYING in lost and len(lost) <= N_FILES
-    assert 'lost to a dead import-extraction worker' in caplog.text
-    assert 'BrokenProcessPool' in caplog.text
+    assert any('a pool worker died' in d for d in i002.get_scan_disclosures())
     assert 'serially' not in caplog.text
 
 

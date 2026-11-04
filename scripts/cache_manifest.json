@@ -16,9 +16,6 @@
   "disk:go_imports": {
    "owner": "disk"
   },
-  "disk:import_graph_v4": {
-   "owner": "disk"
-  },
   "disk:javascript_imports": {
    "owner": "disk"
   },

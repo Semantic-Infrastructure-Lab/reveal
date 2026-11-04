@@ -47,7 +47,8 @@ def test_i002_disclosures_survive_graph_cache(tmp_path, monkeypatch):
     assert rule._build_import_graph(tmp_path) == cold
     assert mod.get_scan_disclosures() == expected
     mod._graph_cache.clear()
-    monkeypatch.setattr(rule, '_collect_raw_imports', lambda path: pytest.fail('disk hit recomputed'))
+    from reveal.analyzers.imports import service as import_service
+    monkeypatch.setattr(import_service, '_extract_and_resolve', lambda *a, **k: pytest.fail('disk hit recomputed'))
     assert rule._build_import_graph(tmp_path) == cold
     assert mod.get_scan_disclosures() == expected
     mod._graph_cache.clear()
