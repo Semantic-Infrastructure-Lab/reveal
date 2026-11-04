@@ -53,3 +53,10 @@ def test_present_element_still_exits_0(tmp_path):
     result = _run_reveal_in(tmp_path, 'mod.py', 'present')
     assert result.returncode == 0
     assert 'return 1' in result.stdout
+
+
+def test_missing_element_with_a_nav_flag_exits_2_like_without(tmp_path):
+    _write(tmp_path, 'mod.py', 'def present():\n    return 1\n')
+    codes = {flag: _run_reveal_in(tmp_path, 'mod.py', 'absent', *flag).returncode
+             for flag in [(), ('--effects',), ('--boundary',), ('--exits',)]}
+    assert set(codes.values()) == {2}, codes
