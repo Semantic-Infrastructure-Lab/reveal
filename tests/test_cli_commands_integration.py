@@ -316,7 +316,7 @@ class TestCLIWithFilesIntegration(unittest.TestCase):
             temp_file = f.name
         try:
             result = self.run_reveal_on_file(temp_file, 'Foo.missing', '--outline')
-            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.returncode, 2)
             self.assertIn('Class.method', result.stderr)
         finally:
             os.unlink(temp_file)

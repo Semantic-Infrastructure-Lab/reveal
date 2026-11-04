@@ -50,7 +50,7 @@ def test_outline_context_is_resolved_before_correction(source, tmp_path):
         assert run.returncode == 0, run.stderr
         assert 'deprecated' not in run.stderr
     missing = _run_reveal_direct(source, 'absent', '--outline')
-    assert missing.returncode == 1
+    assert missing.returncode == 2
     assert 'deprecated' not in missing.stderr
 
 
