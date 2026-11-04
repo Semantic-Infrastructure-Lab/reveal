@@ -264,8 +264,8 @@ return M
 
 
 @pytest.mark.parametrize('name,source,expected', [
-    ('svc.rb', RUBY_DUP, [('second', 'first')]),
-    ('m.lua', LUA_DUP, [('second', 'first')]),
+    pytest.param('svc.rb', RUBY_DUP, [('second', 'first')], id='ruby'),
+    pytest.param('m.lua', LUA_DUP, [('second', 'first')], id='lua'),
 ])
 def test_languages_d001_is_not_aimed_at_keep_their_claims(tmp_path, name, source, expected):
     assert _pairs(_detect(tmp_path, source, name)) == expected
@@ -335,7 +335,9 @@ JAVA_ANONYMOUS = '''class CacheTest {
 
 @pytest.mark.xfail(strict=True, reason='BACK-2491: enum-constant and anonymous class bodies have no '
                    'owner in the structure, so D001 cannot tell them apart (analyzer change proposed)')
-@pytest.mark.parametrize('name,source', [('CaseFormat.java', JAVA_ENUM_CONSTANTS),
-                                         ('CacheTest.java', JAVA_ANONYMOUS)])
+@pytest.mark.parametrize('name,source', [
+    pytest.param('CaseFormat.java', JAVA_ENUM_CONSTANTS, id='enum-constants'),
+    pytest.param('CacheTest.java', JAVA_ANONYMOUS, id='anonymous-classes'),
+])
 def test_java_bodies_without_their_own_owner_are_not_compared(tmp_path, name, source):
     assert _detect(tmp_path, source, name) == []
