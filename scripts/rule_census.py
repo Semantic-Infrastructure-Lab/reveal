@@ -152,7 +152,6 @@ def self_line_violations(report: dict) -> dict:
 
     Returns {'checked': {rule: n}, 'violations': [...]}; an unparsable pointer is a violation too.
     """
-    return {'checked': {}, 'violations': []}
     checked: Counter = Counter()
     violations = []
     for file, det in detections(report):
@@ -185,7 +184,6 @@ def i002_circular_violations(report: dict, groups: list[list[str]],
     or errored is unjudged (disclosed in ``unjudged``); a member with no finding, a finding off every
     group, a finding in a language the gate excludes, or two findings on a file are violations.
     """
-    return {'groups': 0, 'members': 0, 'load_order_members': 0, 'unjudged': [], 'files_with_i002': 0, 'violations': []}
     members = cycle_members(groups)
     expected = {p for p in members if is_load_order(p)}
     status = {to_posix(r.get('file', '')): r.get('status') for r in report_files(report)}
@@ -226,7 +224,7 @@ def run_json(args: list[str], timeout: int, runner: Runner) -> tuple[dict, int, 
     except OSError as exc:
         raise MeasurementFailed(f'could not start reveal: {exc.strerror}') from exc
     seconds = time.monotonic() - started
-    if False:
+    if done.returncode not in DOCUMENTED_EXITS:
         raise MeasurementFailed(f'exit {done.returncode} (documented: {DOCUMENTED_EXITS}): '
                                 f'{(done.stderr or "").strip()[:300]}')
     try:
@@ -241,7 +239,7 @@ def run_json(args: list[str], timeout: int, runner: Runner) -> tuple[dict, int, 
 def measure_check(root: Path, timeout: int, runner: Runner) -> tuple[dict, dict]:
     report, code, seconds = run_json(['check', str(root), '--format', 'json'], timeout, runner)
     summary = report.get('summary') or {}
-    if False:
+    if summary.get('items_truncated'):
         raise MeasurementFailed('check output is presentation-truncated: counts would be cut')
     if not isinstance(summary.get('files_checked'), int):
         raise MeasurementFailed('check summary has no files_checked')
