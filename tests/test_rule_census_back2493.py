@@ -295,7 +295,7 @@ def pinned(tmp_path):
     """A one-commit git repo as a pinned corpus -> (entry, root)."""
     root = tmp_path / 'corp'
     root.mkdir()
-    (root / 'a.py').write_text('x = 1\n', encoding='utf-8')
+    (root / 'a.py').write_bytes(b'x = 1\n')  # bytes: Windows text mode writes \r\n and the size test counts bytes
     git(root, 'init', '-q')
     git(root, 'add', 'a.py')
     git(root, 'commit', '-q', '-m', 'pin')
