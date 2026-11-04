@@ -20,6 +20,9 @@ from reveal.errors import TestLayoutValidationError, TestLayoutConfigError
 
 logger = logging.getLogger(__name__)
 
+# RulePrefix member by value, for the category match in RuleRegistry._matches_patterns (BACK-2134).
+_RULE_PREFIX_BY_VALUE: Dict[str, RulePrefix] = {p.value: p for p in RulePrefix}
+
 
 def _as_checked(file_path: str) -> str:
     """The path rules are handed: an existing file resolved, as a directory check hands it
@@ -595,13 +598,13 @@ class RuleRegistry:
             # Prefix match (e.g., "B" matches "B001")
             if code.startswith(pattern):
                 return True
-            # Category match (e.g., if pattern is a RulePrefix enum value)
-            try:
-                prefix = RulePrefix(pattern)
-                if rule_class.category == prefix:
-                    return True
-            except (ValueError, AttributeError):
-                pass
+            # Category match: the pattern names a RulePrefix value. The lookup is a dict
+            # read, not RulePrefix(pattern), which raised and swallowed a ValueError for
+            # every non-prefix pattern on every rule (BACK-2134). A pattern that is no
+            # prefix matches by code only; unknown_patterns() is where it is disclosed.
+            prefix = _RULE_PREFIX_BY_VALUE.get(pattern)
+            if prefix is not None and getattr(rule_class, 'category', None) == prefix:
+                return True
 
         return False
 
