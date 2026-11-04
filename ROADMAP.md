@@ -83,24 +83,24 @@ Two problems shape the current work.
    table and fails the build if one comes back); `--adapters` marks retired schemes from the
    same table.
 2. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
-   through `imports`; finish per-language parity before the old names stop working (BACK-2063,
-   BACK-2064, BACK-2061), measure through the public request path (BACK-2062), and keep the
-   oracle-free graph invariants green in every language (BACK-1096).
-3. **One quality family.** `metrics` absorbs `hotspots` (BACK-2069, BACK-2149);
+   through `imports`; finish per-language parity before the old names stop working (BACK-2079, BACK-2063);
+   the public-path recall gate and the oracle-free graph invariants run in CI and stay green
+   in every language.
+3. **One quality family.** `metrics` absorbs `hotspots` (BACK-2149);
    commands share their requested parses instead of repeating them
    (BACK-1889, BACK-1885). Compact overview already uses one import analysis;
    the old dashboard assessment passes were removed.
 4. **The rest of the result contract.** Typed outcomes at the remaining adapter and analyzer
-   boundaries (BACK-1059, BACK-1857), one rendering layer (BACK-916), one scan-budget policy
+   boundaries (BACK-2325, BACK-1857), one rendering layer (BACK-916), one scan-budget policy
    (BACK-1052).
 5. **A smaller core and a public adapter framework.** The hosting-operations adapters move
    to a separate `reveal-ops` package installed through pip entry points, and a "write your
    own adapter" guide with one contract test every adapter passes (BACK-2162, BACK-2165).
    Help discovery folds into `help://` (BACK-1055).
 6. **Measure what is still judgment.** Decide per heuristic output whether to measure,
-   narrow or retire it (BACK-2202); precision oracles for the element flags from
+   narrow or retire it (BACK-2353); precision oracles for the element flags from
    independent tools (BACK-2203); rule precision beyond Python (BACK-1095); more languages
-   in the recall gate (BACK-1518); a language scorecard generated from data (BACK-1900).
+   in the recall gate (BACK-2079); a language scorecard generated from data (BACK-1900).
 7. **Docs that cannot drift.** Every example in the README, the agent guide and
    `help://examples` runs in CI (BACK-1365); consumers move to the new names before the cut
    (BACK-2071).
