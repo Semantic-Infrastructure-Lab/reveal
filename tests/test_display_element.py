@@ -457,7 +457,7 @@ class TestErrorHandling:
         with pytest.raises(SystemExit) as exc_info:
             extract_element(analyzer, 'nonexistent', 'human')
 
-        assert exc_info.value.code == 1
+        assert exc_info.value.code == 2
 
 
 # ============================================================================
@@ -1293,17 +1293,17 @@ def _run_extract(path, element, capsys):
 class TestLinePastEof:
     def test_bare_line_past_eof_is_an_error(self, py_file, capsys):
         code, out, err = _run_extract(py_file, ':50', capsys)
-        assert code == 1
+        assert code == 2
         assert out == ''
         assert 'past the end' in err and '(10 lines)' in err
 
     def test_bare_integer_past_eof_is_an_error(self, py_file, capsys):
         code, out, err = _run_extract(py_file, '50', capsys)
-        assert code == 1 and 'past the end' in err
+        assert code == 2 and 'past the end' in err
 
     def test_range_entirely_past_eof_is_an_error(self, py_file, capsys):
         code, _, err = _run_extract(py_file, ':50-60', capsys)
-        assert code == 1 and 'past the end' in err
+        assert code == 2 and 'past the end' in err
 
     def test_range_straddling_eof_still_clamps(self, py_file, capsys):
         code, out, _ = _run_extract(py_file, ':9-60', capsys)

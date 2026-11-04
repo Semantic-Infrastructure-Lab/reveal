@@ -969,7 +969,7 @@ class TestHandleFileOrDirectory(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 handle_file_or_directory('/nonexistent/path', mock_args)
 
-            mock_exit.assert_called_once_with(1)
+            mock_exit.assert_called_once_with(2)
 
     def test_directory_tree_view(self):
         """Verify directory shows tree view."""
@@ -1123,7 +1123,7 @@ class TestHandleFile(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     handle_file(temp_path, None, False, 'text', None)
 
-                mock_exit.assert_called_once_with(1)
+                mock_exit.assert_called_once_with(2)
         finally:
             os.unlink(temp_path)
 

@@ -27,7 +27,7 @@ def pages(tmp_path):
 def _assert_clean_not_found(r):
     assert 'Traceback' not in r.stderr
     assert 'SelectorSyntaxError' not in r.stderr
-    assert r.returncode == 1
+    assert r.returncode == 2
     assert 'not found' in r.stderr
 
 
@@ -53,7 +53,7 @@ def test_invalid_selector_json_has_no_traceback(pages):
     a, _ = pages
     r = _run_reveal_direct(a, '.box /x', '--format', 'json')
     assert 'Traceback' not in r.stderr
-    assert r.returncode == 1
+    assert r.returncode == 2
 
 
 # Negative controls: valid selectors still extract, a missing one is still not found.

@@ -137,10 +137,10 @@ def test_disappearance_after_cli_preflight_retains_numeric_one(source, monkeypat
     assert run.returncode == 1 and run.stdout == '' and run.stderr.count('cannot read') == 1
 
 
-def test_cli_missing_and_absent_keep_existing_exit_and_stderr(source):
+def test_cli_missing_and_absent_exit_2_with_stderr(source):
     for path, element in [(source.parent / 'missing.py', 'empty'), (source, 'absent')]:
         result = _run_reveal_direct(path, element, '--effects', '--format', 'json')
-        assert result.returncode == 1 and result.stdout == ''
+        assert result.returncode == 2 and result.stdout == ''
         assert result.stderr
 
 

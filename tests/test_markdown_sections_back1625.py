@@ -137,18 +137,18 @@ class TestCLIRouting:
 
     def test_explicit_line_past_end_is_an_error(self, doc):
         result = _run_reveal_direct(str(doc), ":500")
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "past the end" in result.stderr
         assert "Last body." not in result.stdout
 
     def test_bare_number_past_end_is_an_error(self, doc):
         result = _run_reveal_direct(str(doc), "500")
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "past the end" in result.stderr
 
     def test_miss_suggests_headings_not_code_names(self, doc):
         result = _run_reveal_direct(str(doc), "Instal1")
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "Code extraction" not in result.stderr
         assert "substring" in result.stderr
         assert "Did you mean: Install?" in result.stderr
@@ -167,7 +167,7 @@ class TestCLIRouting:
 
     def test_outline_on_a_missing_section_errors(self, doc):
         result = _run_reveal_direct(str(doc), "Nope", "--outline")
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "not found" in result.stderr
 
     def test_short_section_with_body_is_not_called_a_label(self, doc):

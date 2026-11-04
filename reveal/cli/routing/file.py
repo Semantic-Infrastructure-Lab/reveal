@@ -65,7 +65,8 @@ def _validate_path_exists(path: Path, path_str: str) -> None:
             print(f"Hint: Running from {cwd}", file=sys.stderr)
             if abs_suggestion != path_str and os.path.exists(abs_suggestion):
                 print(f"      Try: reveal {abs_suggestion}", file=sys.stderr)
-        sys.exit(1)
+        # D6: a missing path is an invalid resource (2), as in `reveal check` (BACK-2492).
+        sys.exit(2)
 
 
 def _stat_one_file(fpath: Path, ext_counts: dict) -> Optional[tuple]:

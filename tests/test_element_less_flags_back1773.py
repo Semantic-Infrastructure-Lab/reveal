@@ -66,10 +66,12 @@ def test_a_named_element_still_answers_and_the_flag_is_noted(files, kind, flag):
     unused flag; only an "element" that is an existing file (a second path) is refused."""
     element = {'html': '#x', 'md': 'S', 'py': 'f', 'conf': 'server'}[kind]
     proc = _reveal(files, f'a.{kind}', element, *flag)
-    assert proc.returncode != 2 and 'reads no element' not in proc.stderr, proc.stdout + proc.stderr
+    assert 'reads no element' not in proc.stderr, proc.stdout + proc.stderr
     if kind != 'conf':  # the nginx fixture has no extractable element by that name
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert f'{flag[0]} has no effect' in proc.stderr
+    else:  # a lookup miss (exit 2, BACK-2492), not a refused flag
+        assert "Element 'server' not found" in proc.stderr
 
 
 @pytest.mark.parametrize('kind,flag', CASES, ids=_ids(CASES))
@@ -107,7 +109,7 @@ def test_an_html_element_alone_still_extracts(files):
 
 def test_a_second_path_without_a_flag_is_still_an_element_lookup(files):
     proc = _reveal(files, 'a.html', 'b.html')
-    assert proc.returncode == 1
+    assert proc.returncode == 2
     assert "Element 'b.html' not found" in proc.stderr
 
 

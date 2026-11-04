@@ -104,7 +104,7 @@ def test_no_analyzer_is_explicitly_outside_this_adoption(tmp_path, monkeypatch):
     monkeypatch.setattr(registry, 'get_analyzer', lambda *args, **kwargs: None)
     with pytest.raises(SystemExit) as caught:
         _get_analyzer_or_exit(str(tmp_path / 'requested.unknown'), True, nav_source=True)
-    assert type(caught.value) is SystemExit and caught.value.code == 1
+    assert type(caught.value) is SystemExit and caught.value.code == 2
 
 
 @pytest.mark.parametrize('flags', [{'effects': True}, {'sideeffects': True}, {'boundary': True},
@@ -190,7 +190,7 @@ def test_definitive_selection_absence_authors_invalid_request_facts(tmp_path):
     analyzer = get_analyzer(str(path))(str(path))
     with pytest.raises(NavSourceFailure) as caught:
         _resolve_func_node(analyzer, 'absent')
-    assert caught.value.code == 1
+    assert caught.value.code == 2
     assert caught.value.execution_facts == failure_execution_facts(FailureCause.INVALID_REQUEST)
     assert caught.value.public_diagnostic.count('list available elements') == 1
     node, first, last = _resolve_func_node(analyzer, ':1-2')

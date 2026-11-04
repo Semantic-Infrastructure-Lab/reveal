@@ -529,7 +529,8 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
     # Handle extraction failure
     if not result:
         _handle_extraction_error(analyzer, element, syntax)
-        sys.exit(1)
+        # D6 / plan rule 9: a named element that matches nothing exits 2 (BACK-2492).
+        sys.exit(2)
 
     # Output result in requested format
     if section_outline:

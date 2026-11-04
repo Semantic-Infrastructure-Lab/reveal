@@ -124,28 +124,17 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code:
     Exits:
         With error code 1 if no analyzer found, *unreadable_exit_code* if unreadable
     """
-    from .registry import get_analyzer, get_all_analyzers  # noqa: I006 — circular avoidance
+    from .registry import get_analyzer  # noqa: I006 — circular avoidance
     from .errors import AnalyzerNotFoundError  # noqa: I006 — circular avoidance
 
     analyzer_class = get_analyzer(path, allow_fallback=allow_fallback)
     if not analyzer_class:
-        # Find similar extensions for suggestions
-        ext = Path(path).suffix
-        similar_exts = None
-        if ext:
-            analyzers = get_all_analyzers()
-            similar_exts = [e for e in analyzers.keys()
-                          if ext.lower() in e.lower() or e.lower() in ext.lower()]
-
-        # Create detailed error with suggestions
-        error = AnalyzerNotFoundError(
-            path=path,
-            allow_fallback=allow_fallback,
-            similar_extensions=similar_exts
-        )
-
+        # No "similar extensions" hint: a substring match named another language
+        # ('.rs' for '.rst') and the reader cannot act on it (BACK-2492).
+        error = AnalyzerNotFoundError(path=path, allow_fallback=allow_fallback)
         print(str(error), file=sys.stderr)
-        sys.exit(1)
+        # D6: a file no analyzer reads is an invalid resource (2), not findings (1).
+        sys.exit(2)
 
     try:
         return analyzer_class(path)  # reads the file
@@ -274,7 +263,8 @@ def _resolve_func_node(analyzer, element: str):
                 '  For methods, use Class.method syntax (e.g., MyClass.my_method).'
             )
             print(diagnostic, file=sys.stderr)
-            raise NavSourceFailure(1, execution_facts=failure_execution_facts(FailureCause.INVALID_REQUEST),
+            # Same code as the plain element miss: a named target that matches nothing (BACK-2492).
+            raise NavSourceFailure(2, execution_facts=failure_execution_facts(FailureCause.INVALID_REQUEST),
                                    public_diagnostic=diagnostic)
     else:
         func_start = _zero_arg(func_node, 'start_position').row + 1
