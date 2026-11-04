@@ -30,11 +30,13 @@ def _initialize_file_patterns():
 class I005(BaseRule):
     """Detect duplicate import statements in supported languages.
 
-    Identifies when the same import appears multiple times at the top level
-    of a file.
-
-    Note: Currently only detects duplicate top-level imports. Does not detect
-    imports inside functions/methods (requires deeper AST analysis).
+    Identifies a later import that binds the same thing (kind, module, names,
+    alias, relative level; case-sensitive) as an import already visible in its
+    scope: the same scope, or a function nested inside it. A repeat in a second
+    function, or inside a nested module or namespace (a Rust ``mod`` does not see
+    its parent's ``use``), is not a duplicate. Scopes come from the structure's
+    function, module and namespace ranges; anonymous closures and class bodies
+    are not scopes yet.
 
     Example (Python):
         # Bad - same import twice at top level
