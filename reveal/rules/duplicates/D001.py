@@ -4,6 +4,7 @@ Abusively lean approach:
 - Normalize function body (strip whitespace, comments)
 - Skip no-op hook bodies (a lone ``return []``/``return None``/``pass``): base
   implementations of extension points are identical by design (BACK-1049)
+- Compare within one type only (the function's ``owner``; BACK-2491)
 - Hash normalized content
 - O(n) time, O(n) space where n = number of functions
 - Zero new dependencies (stdlib only)
@@ -68,7 +69,14 @@ class D001(BaseRule):
     def _build_scope_hashes(
         self, functions: list, classes: list, content: str, *, python: bool = False
     ) -> Dict[str, Dict[str, list]]:
-        """Hash each function body grouped by containing class scope."""
+        """Hash each function body grouped by the type it belongs to.
+
+        The scope is the function's ``owner``, which the analyzer reads from the tree: a
+        Rust impl method's Self type, a nested class as ``Outer.Inner``, a Go receiver.
+        Bodies of the same trait method on different types, or of sibling nested classes,
+        are separate implementations, not copy-paste (BACK-2491). A record without an
+        owner falls back to the first class whose line range holds it, else the module.
+        """
         from collections import defaultdict
 
         def class_for(line: int) -> Optional[str]:
@@ -86,7 +94,7 @@ class D001(BaseRule):
             if not normalized or is_trivial_hook_body(normalized):
                 continue
             func_hash = sha256(normalized.encode('utf-8')).hexdigest()[:16]
-            scope = class_for(func.get('line', 0)) or '__module__'
+            scope = func.get('owner') or class_for(func.get('line', 0)) or '__module__'
             scope_hashes[scope][func_hash].append((
                 func.get('name', '<unknown>'), func.get('line', 0), len(func_body)
             ))

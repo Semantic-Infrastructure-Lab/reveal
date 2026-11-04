@@ -93,17 +93,21 @@ def _definition_line(lines: List[str], first: int, last: int) -> int:
 
 # One statement that does nothing but hand back (or be) an empty value. Case-insensitive
 # literals cover the None/null/nil/undefined, empty-collection, zero and boolean spellings
-# of Python, JS/TS, Go, Ruby, Java and PHP.
+# of Python, JS/TS, Go, Ruby, Java and PHP. The value may stand alone: a body's tail
+# expression is its return value in Rust, Ruby and Scala (`fn is_switch(&self) -> bool {
+# false }`), so it is the same hook as `return false` (BACK-2491).
 _TRIVIAL_STATEMENT = re.compile(
-    r"""^(?:pass|\.\.\.|return(?:\s+(?:none|null|nil|undefined|true|false|0|0\.0|""|''|\[\]|\{\}|\(\)))?)\s*;?$""",
+    r"""^(?:pass|\.\.\.|return|(?:return\s+)?"""
+    r"""(?:none|null|nil|undefined|true|false|0|0\.0|""|''|\[\]|\{\}|\(\)))\s*;?$""",
     re.IGNORECASE,
 )
 _BLOCK_PUNCTUATION = frozenset({'{', '}', '};', 'end'})
 
 
 def is_trivial_hook_body(body: str) -> bool:
-    """True when ``body`` is a single no-op statement: ``pass``, a bare ``return`` or a
-    ``return`` of None/null/empty collection/zero/boolean (BACK-1049).
+    """True when ``body`` is a single no-op statement: ``pass``, a bare ``return``, or
+    None/null/empty collection/zero/boolean with or without ``return`` (BACK-1049,
+    BACK-2491).
 
     Such bodies are the base implementation of an extension-point hook: every hook
     is identical by design and each is its own override point, so equal (or merely

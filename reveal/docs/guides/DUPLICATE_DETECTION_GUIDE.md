@@ -53,10 +53,17 @@ Defaults, decorators, independent interfaces and deliberately separate test obje
 make consolidation inappropriate even when the bodies match.
 
 Within one file, D001 compares functions only inside the same scope: top-level functions
-with each other, and each class's methods with each other. Identical methods in two
-different top-level classes, or a method and a module-level function, are not reported.
-Grouping uses the first containing class in analyzer order; nested classes can therefore
-share an outer group. A finding does not prove nearest-class scope equivalence.
+with each other, and each type's methods with each other. The type is the one the
+analyzer records as the function's owner: a class, a nested class (`Outer.Inner` is its
+own scope), a Rust impl's Self type (every `impl Trait for T` and `impl T` block of one
+`T` together) or a Go receiver. Identical methods in two different types, such as the
+same trait method implemented on two structs, or a method and a module-level function,
+are not reported. Java enum-constant bodies and anonymous classes have no owner of their
+own and still share the enclosing type's scope.
+
+A body that is a single empty value is a no-op hook and is never reported: `pass`, a bare
+`return`, or None/null/nil, `true`/`false`, `0`, `""`, `[]`, `{}` or `()` with or without
+`return` (a tail expression such as Rust's `false` counts).
 
 **Example:**
 ```bash
