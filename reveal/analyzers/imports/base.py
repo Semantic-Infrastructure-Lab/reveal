@@ -521,6 +521,14 @@ class LanguageExtractor(ABC):
         primary = self.resolve_import(stmt, base_path, search_paths=search_paths)
         return [primary] if primary is not None else []
 
+    def package_wildcard_prefix(self, stmt: ImportStatement) -> Optional[str]:
+        """The package a wildcard import names (``a.b`` for Java/Kotlin ``import a.b.*``, Scala
+        ``import a.b._``), or None when ``stmt`` is not that shape. Whether the package is in the
+        tree is the caller's question (BACK-2506). A language whose wildcard is an edge to one module
+        (Python ``from m import *``, a Rust glob) keeps this default.
+        """
+        return None
+
     def is_intra_project_import(
         self,
         stmt: ImportStatement,

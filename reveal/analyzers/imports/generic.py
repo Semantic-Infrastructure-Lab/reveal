@@ -1312,6 +1312,15 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             return grandparent is not None and _zero_arg(grandparent, 'kind') in cls._NAMESPACE_BODY_KINDS
         return False
 
+    def package_wildcard_prefix(self, stmt: ImportStatement) -> Optional[str]:
+        """``a.b`` for ``a.b.*`` / ``a.b._`` in a language with a dotted ``module_separator``."""
+        sep = self.spec.module_separator
+        module = stmt.module_name or ''
+        if not sep or sep not in module:
+            return None
+        head, _, last = module.rpartition(sep)
+        return head if last in _WILDCARD_SELECTORS and head else None
+
     def resolve_member_targets(
         self,
         stmt: ImportStatement,

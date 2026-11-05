@@ -348,6 +348,21 @@ _EDGE_RULE_SCHEMA = {
         'ungated_languages': {'type': 'array', 'items': {'type': 'string'}},
         'ungated_edges': {'type': 'integer'},
         'outside_root_edges': {'type': 'integer', 'description': 'edges whose target lies outside the scan root, not counted'},
+        # BACK-2506: present only when the scan has an in-tree package wildcard.
+        'package_wildcards': {
+            'type': 'object',
+            'description': ('in-tree package wildcard imports (`import a.b.*`, Scala `import a.b._`), never '
+                            'expanded into edges: importers and fan-in are lower bounds for files of these packages'),
+            'properties': {
+                'statements': {'type': 'integer'},
+                'importers': {'type': 'integer', 'description': 'distinct files with such an import'},
+                'packages': {'type': 'object', 'additionalProperties': {'type': 'integer'},
+                             'description': 'package -> wildcard importer files'},
+                'requested_file': {'type': 'object', 'additionalProperties': {'type': 'integer'},
+                                   'description': "the requested file's own packages among them"},
+                'rule': {'type': 'string'},
+            },
+        },
         'text': {'type': 'string'},
     },
 }

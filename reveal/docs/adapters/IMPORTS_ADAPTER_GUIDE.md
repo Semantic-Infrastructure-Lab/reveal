@@ -764,6 +764,11 @@ anywhere under the root, so `imports://pkg?rank=fan-in` counts `tests/` and `scr
 the overview comparison use). `edge_rule` adds `root` (relative to the path), `root_source`, `scope_param`,
 `tests_param`, `via` (counted edges by stage) and `ungated_languages`/`ungated_edges` (languages no recall
 oracle measures). Swift module and Zeitwerk convention edges count as importers but never close a cycle.
+A package wildcard (`import a.b.*`, Scala `import a.b._`) names a package, not a file, and is never an edge;
+when the scan holds one whose package some scanned file declares, `edge_rule.package_wildcards` and the
+`Rule:` line say how many statements and files, under which packages, and whether the requested file's
+own package is one of them: importers and fan-in are then lower bounds for those files (BACK-2506).
+External wildcards (`java.util.*`) are not counted.
 
 **How paths are spelled**: every path in an answer (rows, `resolved`, cycle members, components,
 `metadata.files_failed`, `files_lost` and `extraction_diagnostics`, failed-directory warnings) is relative to

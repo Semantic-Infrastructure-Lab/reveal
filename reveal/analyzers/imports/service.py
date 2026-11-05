@@ -289,7 +289,10 @@ class ResolvedAt:
     root), ``tests`` its ``&tests``. ``gated`` names the languages a recall oracle scores; edges
     from any other language are named as not gated. ``cycles`` marks a cycle view, which leaves
     module and convention edges out. ``outside_root`` counts the edges whose target lies outside
-    the scan root, which no count includes (BACK-2251).
+    the scan root, which no count includes (BACK-2251). ``package_wildcards`` maps each in-tree
+    package a wildcard import names to its importer count, ``wildcard_statements`` and
+    ``wildcard_importers`` count those statements and their distinct files, and ``requested_packages`` names the packages the requested file declares
+    (BACK-2506): no count includes a wildcard importer.
     """
     root: str
     root_source: str
@@ -298,6 +301,10 @@ class ResolvedAt:
     gated: frozenset
     cycles: bool = False
     outside_root: int = 0
+    package_wildcards: Tuple[Tuple[str, int], ...] = ()
+    wildcard_statements: int = 0
+    wildcard_importers: int = 0
+    requested_packages: Tuple[str, ...] = ()
 
 
 _VIA_ORDER = ('direct', 'constant', 'namespace', 'member', 'module', 'convention')
@@ -332,10 +339,38 @@ def _resolution_fields(graph: ImportGraph, at: ResolvedAt) -> Tuple[Dict[str, An
     if at.cycles:
         text += '; module and convention edges never close a cycle'
     text += '.' + _outside_root_note(at)
+    text += _package_wildcard_disclosure(at, fields)
     if ungated:
         text += (f' Not gated by default recall checks: {", ".join(sorted(ungated))}, '
                  f'{sum(ungated.values())} edge(s); treat those counts as unmeasured.')
     return fields, text
+
+
+_WILDCARD_PACKAGES_SHOWN = 5
+_PACKAGE_WILDCARD_RULE = ('a wildcard import whose prefix is a package some scanned file declares; '
+                          'never expanded into edges (BACK-1711)')
+
+
+def _package_wildcard_disclosure(at: ResolvedAt, fields: Dict[str, Any]) -> str:
+    """What an answer left out by not expanding in-tree package wildcards (BACK-2506): sets
+    ``fields['package_wildcards']`` and returns the sentence, or does nothing when there were none.
+    Packages are listed by importer count, the first few by name."""
+    if not at.package_wildcards:
+        return ''
+    packages = dict(at.package_wildcards)
+    requested = {pkg: packages[pkg] for pkg in at.requested_packages if pkg in packages}
+    fields['package_wildcards'] = {'statements': at.wildcard_statements, 'importers': at.wildcard_importers, 'packages': packages,
+                 'requested_file': requested, 'rule': _PACKAGE_WILDCARD_RULE}
+    shown = ', '.join(f'{pkg} ({n})' for pkg, n in at.package_wildcards[:_WILDCARD_PACKAGES_SHOWN])
+    rest = len(packages) - _WILDCARD_PACKAGES_SHOWN
+    if rest > 0:
+        shown += f' and {rest} more'
+    text = (f' {at.wildcard_statements} in-tree package wildcard import(s) in {at.wildcard_importers} file(s) name a '
+            f'package, not a file, and are not counted: importers, fan-in and cycles are lower bounds for '
+            f'files in package(s) {shown} (wildcard importer files each).')
+    for pkg, n in requested.items():
+        text += f' This file\'s package {pkg} is wildcard-imported by {n} file(s) that no count here includes.'
+    return text
 
 
 def _where_phrase(scope: str) -> str:

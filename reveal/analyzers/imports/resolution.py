@@ -177,6 +177,10 @@ class ProjectResolution:
     # edge -- the false-negative risk a blast-radius negative must disclose rather than
     # assert a confident "nothing here".
     unresolved_intra: int = 0
+    # BACK-2506: in-tree package wildcards (`import a.b.*`, Scala `import a.b._`, where a scanned file
+    # declares package `a.b` exactly). A wildcard is never expanded into edges (BACK-1711), so a file
+    # of such a package can have importers no count includes. package -> importer -> statements.
+    package_wildcards: Dict[str, Dict[Path, int]] = field(default_factory=dict)
     unresolved_examples: List[Tuple[Path, ImportStatement]] = field(default_factory=list)
     # BACK-1093: languages seen among unresolved imports whose extractor has no real
     # True/False intra-project classification at all (always None) -- for these,
@@ -634,7 +638,18 @@ class ProjectResolver:
             # Deliberately NOT gated on `not added` — see _add_module_edges.
             added = self._add_module_edges(stmt, file_path, extractor, indices) or added
         if not added:
+            self._record_package_wildcard(stmt, file_path, extractor, indices)
             self._record_unresolved_if_intra(stmt, file_path, extractor, base_path, extra_paths, indices)
+
+    def _record_package_wildcard(
+        self, stmt: ImportStatement, file_path: Path, extractor: Any, indices: _ResolutionIndices,
+    ) -> None:
+        """BACK-2506: remember an in-tree package wildcard, so every answer can say what it left out.
+        Recorded beside the honest-decline count, which keeps its own rule (depends://)."""
+        package = extractor.package_wildcard_prefix(stmt)
+        if package is not None and package in indices.project_namespaces:
+            importers = self.result.package_wildcards.setdefault(package, {})
+            importers[file_path] = importers.get(file_path, 0) + 1
 
     def _add_direct_edges(
         self, stmt: ImportStatement, file_path: Path, extractor: Any,

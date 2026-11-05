@@ -1881,8 +1881,12 @@ curl second-corpus guard at 100%, BACK-710; see the Results table.):
   is that library's style); GitBucket has 57 and cats-effect 26. The gate rows'
   `in_tree_package_wildcards` coverage counts a little higher (2,010, 52, 33) because
   it also counts a prefix of a declared package. A file imported only through a wildcard
-  therefore shows fan-in 0 today (disclosure: BACK-2506; oracle population:
-  BACK-2507).
+  still has no importer edge, but every `imports://` answer now says so: `edge_rule.package_wildcards`
+  and the `Rule:` line count the wildcards whose prefix is exactly a declared package (BACK-2506).
+  Measured 2026-11-04: Elasticsearch whole tree 2 statements in 1 file (`BlockReadBenchmark.java`),
+  kotlinx.coroutines 1,755 in 867 files, GitBucket `src/main/scala` 52 in 30, cats-effect 32 in 25
+  (including `import cats._`: the tree declares `package cats` through package objects), tivi none;
+  no gate row moved.
 - **Kotlin and Scala top-level types declared in a file not named after them**
   (Kotlin `object DiscoverScreen` inside `Screens.kt`) — an import of such a type
   now resolves through the declared-type index C# already used: top-level

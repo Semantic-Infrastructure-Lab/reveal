@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import resolution, service
-from .base import extension_detects_unused
+from .base import extension_detects_unused, get_extractor
 from .types import ImportAnalysis, ImportGraph, LAZY_INCLUDE, LAZY_EXCLUDE
 from ...conventions import conventions_for_path, same_package_families
 from ...utils.path_utils import TestLayout, to_posix, to_relative_display
@@ -230,11 +230,36 @@ class ImportView:
 
     def _resolved_at(self, cycles: bool = False) -> service.ResolvedAt:
         scan = self.scan or resolution.ScanRoot(self.target or Path('.').resolve(), 'path')
+        wildcards, statements, importers = self._package_wildcards()
         return service.ResolvedAt(
             root=to_posix(os.path.relpath(scan.root, self._base_dir())), root_source=scan.source,
             scope=self.scope, tests=self.tests,
             gated=resolution.IMPORT_RECALL_GATED, cycles=cycles,
-            outside_root=self._graph().outside_root_edges(scan.root))
+            outside_root=self._graph().outside_root_edges(scan.root),
+            package_wildcards=wildcards, wildcard_statements=statements, wildcard_importers=importers,
+            requested_packages=self._requested_packages() if wildcards else ())
+
+    def _package_wildcards(self) -> Tuple[Tuple[Tuple[str, int], ...], int, int]:
+        """The in-tree package wildcards the cascade recorded (BACK-2506): (package, importer files)
+        most-imported first, the statement count and the distinct importer files. Importers under a
+        test path are dropped when the answer drops test importers."""
+        recorded = getattr(self.analysis.resolution, 'package_wildcards', None) or {}
+        counted: Dict[str, Dict[Path, int]] = {}
+        for package, importers in recorded.items():
+            kept = {path: n for path, n in importers.items() if not (self._tests_excluded() and self.is_test(path))}
+            if kept:
+                counted[package] = kept
+        ranked = tuple(sorted(((pkg, len(files)) for pkg, files in counted.items()), key=lambda row: (-row[1], row[0])))
+        distinct = {path for files in counted.values() for path in files}
+        return ranked, sum(sum(files.values()) for files in counted.values()), len(distinct)
+
+    def _requested_packages(self) -> Tuple[str, ...]:
+        """The packages the requested file declares, when the request names one file."""
+        target = self.target
+        if target is None or not target.is_file():
+            return ()
+        declared = getattr(get_extractor(target), 'extract_namespaces', None)
+        return tuple(declared(target)) if declared is not None else ()
 
     def _edge_rule(self, default: str, subject: str, *, tests_counted: bool = True,
                    cycles: bool = False) -> Dict[str, Any]:
