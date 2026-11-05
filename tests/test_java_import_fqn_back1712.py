@@ -87,7 +87,8 @@ def test_java_import_resolves_through_a_scan_root_inside_the_package_path(tmp_pa
 
 # Kotlin and Scala share the resolver and the bug, but not Java's layout rule: Kotlin's own convention
 # drops the common root package from the directory path, and the Scala corpora declare packages that
-# are not their directory tail (cats-effect: 142 of 404 files). The Java fix leaves them unchanged.
+# are not their directory tail (cats-effect: 142 of 404 files). They check the target's DECLARED package
+# instead (BACK-2505): a path match stands only when the file declares the import's package.
 KOTLIN = {
     'src/org/es/common/geo/GeoUtils.kt': 'package org.es.common.geo\nclass GeoUtils\n',
     'src/org/es/search/Helper.kt': 'package org.es.search\nclass Helper\n',
@@ -95,28 +96,31 @@ KOTLIN = {
     'src/org/es/search/CrossPackage.kt': 'package org.es.search\nimport org.es.common.geo.GeoUtils\nclass CrossPackage\n',
     'src/org/es/search/SamePackage.kt': 'package org.es.search\nimport org.es.search.Helper\nclass SamePackage\n',
     # Kotlin's recommended layout: root package org.example omitted from the directory path.
-    'src/network/Socket.kt': 'package org.example.network\nclass Socket\n',
+    'src/network/Socket.kt': 'package org.example.network\nclass Socket {\n  class Options\n}\n',
     'src/network/Client.kt': 'package org.example.network\nimport org.example.network.Socket\nclass Client\n',
+    # A nested type reached through its declaring file's top-level class keeps resolving.
+    'src/network/Tuned.kt': 'package org.example.network\nimport org.example.network.Socket.Options\nclass Tuned\n',
+    # A file with no package clause is in the default package, which `import legacy.Old` cannot name.
+    'src/legacy/Old.kt': 'class Old\n',
+    'src/network/UsesOld.kt': 'package org.example.network\nimport legacy.Old\nclass UsesOld\n',
 }
 
 KOTLIN_RIGHT = {
     ('org/es/search/CrossPackage.kt', 'org/es/common/geo/GeoUtils.kt', 2),
     ('org/es/search/SamePackage.kt', 'org/es/search/Helper.kt', 2),
     ('network/Client.kt', 'network/Socket.kt', 2),
+    ('network/Tuned.kt', 'network/Socket.kt', 2),
 }
-KOTLIN_WRONG = ('org/es/search/ExternalLucene.kt', 'org/es/common/geo/GeoUtils.kt', 2)
 
 
-def test_kotlin_resolution_is_unchanged_by_the_java_rule(tmp_path):
-    # Negative control: the same shape in Kotlin keeps today's answer, the false edge included, and the
-    # root-omitted layout keeps resolving (a whole-name rule would lose it).
+def test_kotlin_drops_the_other_package_class_and_keeps_the_root_omitted_layout(tmp_path):
+    # ExternalLucene's import names org.apache.lucene.geo.GeoUtils; the in-tree GeoUtils.kt declares
+    # org.es.common.geo, so the path match is not its target. The root-omitted layout keeps resolving
+    # (a whole-name path rule, Java's, would lose it).
     root = _write(tmp_path, KOTLIN)
-    assert _edges(root, root / 'src', '.kt') == KOTLIN_RIGHT | {KOTLIN_WRONG}
+    assert _edges(root, root / 'src', '.kt') == KOTLIN_RIGHT
 
 
-@pytest.mark.xfail(strict=True, reason='BACK-1712 follow-up: Kotlin and Scala resolve an external import onto '
-                   'an in-tree class with the same last package segment and simple name; their layouts do not '
-                   'spell the package, so the fix needs the declared package, not the Java path rule')
 @pytest.mark.parametrize('suffix', ['.kt', '.scala'])
 def test_kotlin_and_scala_external_import_is_not_an_edge(tmp_path, suffix):
     files = {
@@ -126,3 +130,15 @@ def test_kotlin_and_scala_external_import_is_not_an_edge(tmp_path, suffix):
     }
     root = _write(tmp_path, files)
     assert _edges(root, root / 'src', suffix) == set()
+
+
+@pytest.mark.parametrize('suffix', ['.kt', '.scala'])
+def test_kotlin_and_scala_cross_package_import_still_resolves(tmp_path, suffix):
+    # Positive control for the declared-package check: the import's package is the one declared.
+    files = {
+        f'src/org/es/common/geo/GeoUtils{suffix}': 'package org.es.common.geo\nclass GeoUtils\n',
+        f'src/org/es/search/Cross{suffix}': 'package org.es.search\nimport org.es.common.geo.GeoUtils\nclass Cross\n',
+    }
+    root = _write(tmp_path, files)
+    assert _edges(root, root / 'src', suffix) == {
+        (f'org/es/search/Cross{suffix}', f'org/es/common/geo/GeoUtils{suffix}', 2)}
