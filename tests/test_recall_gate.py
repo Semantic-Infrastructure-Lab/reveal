@@ -931,10 +931,12 @@ def _committed_baseline() -> dict:
     return json.loads((Path(__file__).resolve().parent / 'corpus' / 'recall_baseline.json').read_text(encoding='utf-8'))
 
 
-@pytest.mark.parametrize('key,raised', [('c', 310), ('go-client_golang', 5)])
-def test_more_partial_files_than_baseline_is_a_regression(key, raised):
+# Perturbations are relative to the committed baseline, so a reviewed re-baseline of partial_files (BACK-2503)
+# does not turn an increase into a decrease.
+@pytest.mark.parametrize('key,rise', [('c', 6), ('go-client_golang', 5)])
+def test_more_partial_files_than_baseline_is_a_regression(key, rise):
     baseline = _committed_baseline()
-    assert baseline[key]['partial_files'] < raised  # perturbation really is an increase
+    raised = baseline[key]['partial_files'] + rise
     current = json.loads(json.dumps(baseline))
     assert gate.regressions(current, baseline) == []  # unperturbed control: the committed baseline passes
     current[key]['partial_files'] = raised
@@ -942,10 +944,11 @@ def test_more_partial_files_than_baseline_is_a_regression(key, raised):
     assert any(f.startswith(f'{key}: partial_files') for f in failures), failures
 
 
-@pytest.mark.parametrize('key,lowered', [('c', 0), ('c-curl', 217)])
-def test_fewer_partial_files_than_baseline_is_not_a_regression(key, lowered):
+@pytest.mark.parametrize('key,drop', [('c', None), ('c-curl', 1)])  # None: all the way to 0
+def test_fewer_partial_files_than_baseline_is_not_a_regression(key, drop):
     baseline = _committed_baseline()
-    assert lowered < baseline[key]['partial_files']
+    lowered = 0 if drop is None else baseline[key]['partial_files'] - drop
+    assert lowered < baseline[key]['partial_files']  # perturbation really is a decrease
     current = json.loads(json.dumps(baseline))
     current[key]['partial_files'] = lowered
     assert gate.regressions(current, baseline) == []
