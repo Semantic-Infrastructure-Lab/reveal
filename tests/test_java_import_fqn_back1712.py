@@ -89,7 +89,7 @@ def test_java_import_resolves_through_a_scan_root_inside_the_package_path(tmp_pa
 # drops the common root package from the directory path, and the Scala corpora declare packages that
 # are not their directory tail (cats-effect: 142 of 404 files). Kotlin checks the target's DECLARED
 # package instead (BACK-2505): a path match stands only when the file declares the import's package.
-# Scala waits for package-object declarations (BACK-2515).
+# Scala does the same since its package-object members became declarations (BACK-2515).
 KOTLIN = {
     'src/org/es/common/geo/GeoUtils.kt': 'package org.es.common.geo\nclass GeoUtils\n',
     'src/org/es/search/Helper.kt': 'package org.es.search\nclass Helper\n',

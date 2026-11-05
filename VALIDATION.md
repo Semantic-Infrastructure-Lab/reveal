@@ -1633,6 +1633,32 @@ every sample matched the published target and edge counts.
   match must now declare the import's package (BACK-2505) and a Scala one not yet: on these rows the Kotlin check
   changes no edge, and the Scala check's only effect was to drop three of those alias imports. The oracle-free
   graph invariants stay green on all four corpora.
+- **Scala package-object members are declarations (BACK-2515, 2026-11-05):** `package cats` + `package object effect
+  { val Resource = ... }` declares `Resource` in `cats.effect`, so `import cats.effect.Resource` is a dependency on
+  that `package.scala`, whatever it aliases. Reveal keys each member of a top-level package object `(P.X, member)`
+  and counts `P.X` as a declared package; the oracle reads the same members independently from the source lines
+  (a body written on one line is not read), and no longer treats `package object X` as a symbol of `P`. A Scala
+  path match now has to declare the import's package (BACK-2505's check, enabled) and its next name (a file named
+  `ParallelF.scala` that declares `object Par` is not where `kernel.ParallelF` lives); a name declared in several
+  files, such as the JS `ref/ReferenceQueue.scala` and the JVM `package object ref { type ReferenceQueue }`, is an
+  edge to each. Same four rows, Reveal `ee7932a5` (before) against the change (after); Kotlin is unchanged:
+
+  | Corpus (pin) | Before | After |
+  |---|---|---|
+  | Kotlin/tivi `a0c62c2c` | 1,631/1,631 (100%) | 1,631/1,631 (100%) |
+  | Kotlin/kotlinx.coroutines `5f890047` | 217/217 (100%) | 217/217 (100%) |
+  | Scala/GitBucket `f55982e8` | 676/676 (100%), 1 extra | 678/678 (100%), 1 extra |
+  | Scala/cats-effect `4fc56284` | 441/445 (99.10%), 4 extra | **506/506 (100%)**, 0 extra |
+
+  The 4 old extras (`testkit.TestContext` twice, `Resource.ExitCase`, `kernel.ParallelF`) are the only edges
+  removed over the whole edge set of the four corpora; cats-effect gains 65 edges (all onto `package.scala` files:
+  `cats.effect.Async`, `kernel.syntax.all._`, `kernel.testkit.TimeT`, `unsafe.ref.WeakReference`, ...) and GitBucket
+  5 (onto `model/package.scala`). The 4 old misses are no longer misses because the oracle changed, which is a
+  reading, not a Reveal fix: `catseffect.examples._` is a package wildcard (the package also has a package object),
+  counted and not scored under BACK-2506, and `import cats.effect.{kernel => cekernel}` renames a package and names
+  no declaration, so neither is an edge to the package object's file on either side. The one GitBucket extra is
+  the operator-named member `SyntaxSugars.~`, which the oracle cannot see. The oracle-free graph invariants stay
+  green (738 and 506 edges; package wildcards 60 and 33 unchanged).
 - **Historical import figures that cannot currently be re-run (BACK-1461):**
   - Original corpus clone not preserved: Python/celery, Rust/ripgrep, Java/guava,
     Go/client_golang, Ruby/solidus,
