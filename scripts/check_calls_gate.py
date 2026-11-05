@@ -31,16 +31,41 @@ def changed_paths(repo, base):
     return sorted(set(filter(None, tracked.split('\0') + new.split('\0'))))
 
 
+# Infrastructure every analyzer reads (parsing, discovery, paths, config). The imports gate trigger
+# (check_imports_gate.py, BACK-2516) re-measures every row on these too.
+SHARED_PATHS = frozenset({
+    'reveal/base.py', 'reveal/treesitter.py', 'reveal/structure.py',
+    'reveal/conventions.py', 'reveal/registry.py', 'reveal/defaults.py', 'reveal/config.py',
+    'reveal/utils/parallel.py', 'reveal/utils/pyparse.py',
+    'reveal/utils/path_utils.py', 'reveal/utils/gitignore.py',
+    'reveal/utils/exclusions.py', 'reveal/utils/lines.py',
+})
+
+
+def analyzer_languages(name):
+    """Languages one analyzer module (by file stem) serves; None for a shared ``_helper``."""
+    if name in {'javascript', 'typescript', 'js'} or name.startswith('_js'):
+        return {'javascript', 'typescript'}
+    if name.startswith('_python'):
+        return {'python'}
+    if name in {'c', 'cpp'}:
+        return {'c', 'cpp'}
+    return {name} if not name.startswith('_') else None
+
+
+def unpushed_base(repo):
+    """The checkout's top level and the merge base of HEAD with its upstream (origin/master if none)."""
+    repo = Path(git(repo, 'rev-parse', '--show-toplevel')).resolve()
+    try:
+        upstream = git(repo, 'rev-parse', '--symbolic-full-name', '@{upstream}')
+    except subprocess.CalledProcessError:
+        upstream = 'refs/remotes/origin/master'
+    return repo, git(repo, 'merge-base', 'HEAD', upstream)
+
+
 def path_languages(path):
     """None requires every baseline row; an empty set is unrelated to calls."""
-    shared = {
-        'reveal/base.py', 'reveal/treesitter.py', 'reveal/structure.py',
-        'reveal/conventions.py', 'reveal/registry.py', 'reveal/defaults.py', 'reveal/config.py',
-        'reveal/utils/parallel.py', 'reveal/utils/pyparse.py',
-        'reveal/utils/path_utils.py', 'reveal/utils/gitignore.py',
-        'reveal/utils/exclusions.py', 'reveal/utils/lines.py',
-    }
-    if path in shared or path.startswith('reveal/adapters/calls/'):
+    if path in SHARED_PATHS or path.startswith('reveal/adapters/calls/'):
         return None
     # calls.index consumes analysis.collect_structures and call_graph's alias resolution;
     # the AST taxonomy shim also defines which declarations/calls those owners see.
@@ -55,14 +80,7 @@ def path_languages(path):
     if not path.endswith('.py'):
         return set()
     if path.startswith(('reveal/analyzers/', 'reveal/core/callees/')):
-        name = Path(path).stem
-        if name in {'javascript', 'typescript', 'js'} or name.startswith('_js'):
-            return {'javascript', 'typescript'}
-        if name.startswith('_python'):
-            return {'python'}
-        if name in {'c', 'cpp'}:
-            return {'c', 'cpp'}
-        return {name} if not name.startswith('_') else None
+        return analyzer_languages(Path(path).stem)
     return None if path.startswith('reveal/core/') else set()
 
 
@@ -97,12 +115,7 @@ def toolchain(interpreter):
 
 def build_request(repo, baseline_path, interpreter, rows=None):
     """Describe the clean checkout and exact external rows required for this run."""
-    repo = Path(git(repo, 'rev-parse', '--show-toplevel')).resolve()
-    try:
-        upstream = git(repo, 'rev-parse', '--symbolic-full-name', '@{upstream}')
-    except subprocess.CalledProcessError:
-        upstream = 'refs/remotes/origin/master'
-    base = git(repo, 'merge-base', 'HEAD', upstream)
+    repo, base = unpushed_base(repo)
     paths = changed_paths(repo, base)
     request = {
         'schema_version': 1, 'checkout': str(repo),

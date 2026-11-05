@@ -38,12 +38,18 @@
 #   scripts/ci-local.sh --matrix --changed  # optional quick check (~1 min): only the test files you added/edited
 #                                           # vs upstream, on every leg incl. the language-pack floor
 #   scripts/ci-local.sh --no-tests          # only the non-pytest CI steps
-#   scripts/ci-local.sh --push              # the push gate (~6 min, see below)
+#   scripts/ci-local.sh --push              # the push gate (~6 min, +~5 min when imports rows run; see below)
 #   scripts/ci-local.sh --push --calls-evidence FILE  # external calls measurement record
 #   scripts/ci-local.sh --push --skip-calls-gate REASON # visible, persistently logged override
+#   scripts/ci-local.sh --push --skip-imports-gate REASON # logged override of the imports recall gate
 #   scripts/ci-local.sh --skip-cpu-gate REASON          # logged override of the pytest-CPU verdict (never fails)
 # Set REVEAL_CALLS_GATE_BASELINE to the external calls runner's baseline JSON.
 # Evidence is bound to this clean checkout, HEAD/tree and the primary CI interpreter.
+# After the suite, --push runs the public imports recall gate (scripts/recall_gate.py) on the rows whose
+# languages the unpushed range touches (scripts/check_imports_gate.py, BACK-2516): every row, about
+# 5 min, for the import engine or shared infrastructure; nothing for an unrelated range. It needs the
+# pinned corpora in $REVEAL_CORPUS_DIR (default ~/.cache/reveal-corpus; scripts/fetch_corpus.py --recall),
+# node, and go for the Go row.
 #   scripts/ci-local.sh --fresh             # rebuild the venv from scratch
 #
 # --push is the gate before a push: the default run (lints, ratchets, reveal:// self-validation, then
@@ -89,6 +95,7 @@ PUSH=0
 CALLS_EVIDENCE="${REVEAL_CALLS_GATE_EVIDENCE:-}"
 CALLS_SKIP=""
 CALLS_OPTIONS=0
+IMPORTS_SKIP=""
 # Exported so the --push gate's inner default run (`"$0"`) sees the same logged override.
 CPU_SKIP="${REVEAL_CPU_GATE_SKIP:-}"
 PYTEST_TARGETS=(tests/)
@@ -104,6 +111,7 @@ while [[ $# -gt 0 ]]; do
         --push) PUSH=1; shift ;;
         --calls-evidence) [[ $# -ge 2 && -n "$2" ]] || { echo "--calls-evidence needs a path" >&2; exit 2; }; CALLS_EVIDENCE="$2"; CALLS_OPTIONS=1; shift 2 ;;
         --skip-calls-gate) [[ $# -ge 2 && -n "$2" ]] || { echo "--skip-calls-gate needs a reason" >&2; exit 2; }; CALLS_SKIP="$2"; CALLS_OPTIONS=1; shift 2 ;;
+        --skip-imports-gate) [[ $# -ge 2 && -n "${2//[[:space:]]/}" ]] || { echo "--skip-imports-gate needs a reason" >&2; exit 2; }; IMPORTS_SKIP="$2"; CALLS_OPTIONS=1; shift 2 ;;
         --skip-cpu-gate) [[ $# -ge 2 && -n "$2" ]] || { echo "--skip-cpu-gate needs a reason" >&2; exit 2; }; CPU_SKIP="$2"; export REVEAL_CPU_GATE_SKIP="$2"; shift 2 ;;
         --) shift; [[ $# -gt 0 ]] && { PYTEST_TARGETS=("$@"); EXPLICIT_TARGETS=1; }; break ;;
         -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
@@ -111,7 +119,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 if [[ $PUSH -ne 1 && $CALLS_OPTIONS -eq 1 ]]; then
-    echo "calls-gate options require --push" >&2; exit 2
+    echo "calls-gate and imports-gate options require --push" >&2; exit 2
 fi
 
 # The private-name check in check_doc_hygiene.py runs only when it has terms. Default to the
@@ -130,13 +138,20 @@ if [[ $PUSH -eq 1 ]]; then
     echo "private-name check: terms from ${REVEAL_PRIVATE_TERMS_FILE:-REVEAL_PRIVATE_TERMS}"
     CALLS_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check_calls_gate.py"
     CALLS_PY="${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/py3.12/bin/python"
-    CALLS_ARGS=(--repo "$(cd "$(dirname "$CALLS_HELPER")/.." && pwd -P)" --interpreter "$CALLS_PY"
+    GATE_REPO="$(cd "$(dirname "$CALLS_HELPER")/.." && pwd -P)"
+    CALLS_ARGS=(--repo "$GATE_REPO" --interpreter "$CALLS_PY"
         --log "${REVEAL_CI_LOG_DIR:-${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/logs}/calls-gate.jsonl")
     [[ -n "$CALLS_EVIDENCE" ]] && CALLS_ARGS+=(--evidence "$CALLS_EVIDENCE")
     [[ -n "$CALLS_SKIP" ]] && CALLS_ARGS+=(--skip-reason "$CALLS_SKIP")
+    IMPORTS_HELPER="$(dirname "$CALLS_HELPER")/check_imports_gate.py"
+    IMPORTS_ARGS=(--repo "$GATE_REPO" --interpreter "$CALLS_PY"
+        --log "${REVEAL_CI_LOG_DIR:-${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/logs}/imports-gate.jsonl"
+        --output "${REVEAL_CI_LOG_DIR:-${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/logs}/imports-gate-report.json")
+    [[ -n "$IMPORTS_SKIP" ]] && IMPORTS_ARGS+=(--skip-reason "$IMPORTS_SKIP")
     python3 "$CALLS_HELPER" "${CALLS_ARGS[@]}" || exit 1
     "$0" || { echo "push gate FAILED (ci-local.sh default run)" >&2; exit 1; }
     python3 "$CALLS_HELPER" "${CALLS_ARGS[@]}" || exit 1
+    python3 "$IMPORTS_HELPER" "${IMPORTS_ARGS[@]}" || { echo "push gate FAILED (imports recall gate)" >&2; exit 1; }
     printf '\nPush gate passed. Push, then: scripts/ci-watch.sh (macOS, Windows and the floor run only on GitHub).\n'
     exit 0
 fi

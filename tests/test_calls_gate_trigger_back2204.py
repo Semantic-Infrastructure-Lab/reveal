@@ -251,15 +251,16 @@ def test_relevant_push_fails_before_suite_when_evidence_is_missing(repo, tmp_pat
 
 def run_push_dispatch(repo, tmp_path, args, suite_body='', extra_env=None):
     scripts = repo / 'scripts'
-    scripts.mkdir(parents=True)
+    scripts.mkdir(parents=True, exist_ok=True)
     source = (ROOT / 'scripts' / 'ci-local.sh').read_text(encoding='utf-8')
     prefix = source.split('# --changed: pytest targets')[0]
     prefix = prefix.replace('"$0" ||', 'bash "$SUITE_SCRIPT" ||')
     script = scripts / 'ci-local.sh'
     script.write_text(prefix, encoding='utf-8')
     script.chmod(0o755)
-    if HELPER.exists():
-        shutil.copy2(HELPER, scripts / HELPER.name)
+    for helper in (HELPER, HELPER.with_name('check_imports_gate.py')):  # the imports gate imports the calls one
+        if helper.exists():
+            shutil.copy2(helper, scripts / helper.name)
     git(repo, 'add', 'scripts')
     git(repo, 'commit', '-qm', 'stage push dispatcher')
     marker = tmp_path / 'suite.marker'
@@ -294,8 +295,8 @@ def test_unrelated_push_retains_default_suite(repo, tmp_path):
 @shell_only
 def test_explicit_push_skip_logs_reason_and_still_runs_suite(repo, tmp_path):
     commit_file(repo, 'reveal/treesitter.py')
-    result, marker, log = run_push_dispatch(repo, tmp_path,
-                                           ['--push', '--skip-calls-gate', 'reviewed exception'])
+    result, marker, log = run_push_dispatch(repo, tmp_path, ['--push', '--skip-calls-gate', 'reviewed exception',
+                                                             '--skip-imports-gate', 'calls gate under test'])
     assert result.returncode == 0 and marker.exists(), (result.stdout, result.stderr)
     records = [json.loads(line) for line in log.read_text(encoding='utf-8').splitlines()]
     assert len(records) == 2 and all(row['decision'] == 'skip' for row in records)
