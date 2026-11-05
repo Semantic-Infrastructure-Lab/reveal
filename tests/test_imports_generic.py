@@ -219,6 +219,18 @@ class TestCSharp:
         extractor = get_extractor(f)
         assert extractor.extract_namespaces(f) == ['a.b.c']
 
+    def test_extract_namespaces_scala_braced_package_nests_in_the_chain(self, tmp_path):
+        """BACK-2507: a braced `package examples { }` after `package catseffect` declares
+        ``catseffect.examples``, not a bare ``examples`` (cats-effect's test app package); a braced clause
+        inside a braced one nests too. Controls: sibling blocks stay separate, and a braceless clause
+        after a braced block still chains."""
+        nested = tmp_path / 'N.scala'
+        nested.write_text('package catseffect\n\npackage examples {\n  object A\n}\n', encoding='utf-8')
+        assert set(get_extractor(nested).extract_namespaces(nested)) == {'catseffect', 'catseffect.examples'}
+        deep = tmp_path / 'D.scala'
+        deep.write_text('package a { package b { class B }\n package c { class C } }\n', encoding='utf-8')
+        assert set(get_extractor(deep).extract_namespaces(deep)) == {'a', 'a.b', 'a.c'}
+
     def test_extract_namespaces_scala_single_and_block_package_unchanged(self, tmp_path):
         """Controls: one `package a.b.c` stays itself, and the packaging-block
         form `package a { }` keeps one entry per block (no chain to join)."""

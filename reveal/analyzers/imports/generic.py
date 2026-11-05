@@ -812,18 +812,27 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             return []
         namespaces: List[str] = []
         chain: List[str] = []
+        open_blocks: List[Tuple[int, str]] = []  # (end byte, qualified name) of the braced clauses around a node
         for node_type in self.spec.package_node_types:
             for node in analyzer._find_nodes_by_type(node_type):
                 for child in _children(node):
                     if _zero_arg(child, 'kind') in self._PACKAGE_NAME_CHILD_KINDS:
                         name = analyzer._get_node_text(child)
-                        if self.spec.chained_package_clauses and not any(
-                            _zero_arg(c, 'kind') == 'template_body'
-                            for c in _children(node)
-                        ):
+                        if not self.spec.chained_package_clauses:
+                            namespaces.append(name)
+                        elif not any(_zero_arg(c, 'kind') == 'template_body' for c in _children(node)):
                             chain.append(name)  # braceless: nests in the previous
                         else:
-                            namespaces.append(name)
+                            # braced (BACK-2507): nests in the braceless chain before it and in any braced
+                            # clause around it, so `package catseffect` + `package examples { }` is
+                            # ``catseffect.examples``, not a bare ``examples``
+                            start = _zero_arg(node, 'start_byte')
+                            while open_blocks and open_blocks[-1][0] <= start:
+                                open_blocks.pop()
+                            base = open_blocks[-1][1] if open_blocks else '.'.join(chain)
+                            qualified = f'{base}.{name}' if base else name
+                            namespaces.append(qualified)
+                            open_blocks.append((_zero_arg(node, 'end_byte'), qualified))
                         break
         if chain:
             namespaces.insert(0, '.'.join(chain))

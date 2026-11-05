@@ -25,6 +25,11 @@ edges stay under that scan; the default view also retains resolved outside-scan 
                       as the directory view, and every row cites a real import: a statement
                       of the default view at that line and module, or (a convention edge) a
                       line of the file naming the constant
+  package_wildcards   JVM corpora (java, kotlin, scala): every unresolved wildcard statement of the default
+                      view whose prefix is a package some scanned file declares is counted in the answer's
+                      ``edge_rule.package_wildcards`` (statements, importer files, per package), and the
+                      disclosure counts nothing else (BACK-2506/2507). The declared packages are read from
+                      the sources' ``package`` clauses, not from Reveal
   calls_inverse       calls ?rank=callers (every callee name with its callers) against
                       ?callees=FILE:NAME for sampled callers: every call a caller is indexed
                       under is in its callee list, and every callee-list call is indexed
@@ -73,9 +78,9 @@ from imports_fold_snapshot import (UNGATED, _git_head, _representative_file, cor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FORMAT_VERSION = 2
-INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations', 'calls_inverse', 'callers_view',
-              'no_match')
-IMPORT_INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations')
+INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations', 'package_wildcards', 'calls_inverse',
+              'callers_view', 'no_match')
+IMPORT_INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations', 'package_wildcards')
 CALLS_INVARIANTS = ('calls_inverse', 'callers_view')
 DEFAULT_TIMEOUT = 1800
 EXAMPLES = 5
@@ -435,6 +440,83 @@ def partial_reason(answer: Optional[Dict[str, Any]]) -> Optional[str]:
     return '; '.join(reasons) or None
 
 
+# ── package wildcards: the disclosure against the per-file listing ────────────
+
+JVM_SUFFIXES = frozenset({'.java', '.kt', '.kts', '.scala', '.sc'})
+_PACKAGE_CLAUSE = re.compile(r'^[ \t]*package[ \t]+(object[ \t]+)?([\w.`]+)', re.MULTILINE)
+_WILDCARD_LAST = frozenset({'*', '_'})
+
+
+def declared_packages(text: str) -> Set[str]:
+    """Packages one JVM source file declares: each ``package`` clause, chained clauses cumulatively
+    (Scala ``package a`` then ``package b`` declares ``a`` and ``a.b``), and a ``package object X`` inside
+    package ``P`` declares ``P.X``. ``text`` has its comments and literals blanked by the caller."""
+    found: Set[str] = set()
+    current = ''
+    for is_object, name in _PACKAGE_CLAUSE.findall(text):
+        name = name.replace('`', '')
+        current = f'{current}.{name}' if current else name
+        found.add(current)
+        if is_object:
+            current = current.rpartition('.')[0]
+    return found
+
+
+def scan_declared_packages(scan_dir: Path) -> Set[str]:
+    """Every package the JVM sources under ``scan_dir`` declare (literals and comments blanked)."""
+    from recall_oracles import jvm_strip_noise  # beside this script; only the literal blanker is shared
+    packages: Set[str] = set()
+    for path in sorted(scan_dir.rglob('*')):
+        if path.suffix in JVM_SUFFIXES and path.is_file():
+            try:
+                text = path.read_text(encoding='utf-8', errors='replace')
+            except OSError:
+                continue
+            packages |= declared_packages(jvm_strip_noise(text))
+    return packages
+
+
+def has_jvm_wildcards(default_view: Dict[str, Any]) -> bool:
+    """Whether the default view lists a wildcard statement (``a.b.*``, ``a.b._``) in a JVM file at all."""
+    return any(Path(file).suffix in JVM_SUFFIXES and str(row.get('module') or '').rpartition('.')[2] in _WILDCARD_LAST
+               for file, rows in (default_view.get('files') or {}).items() for row in rows)
+
+
+def wildcard_statements(default_view: Dict[str, Any], packages: Set[str]) -> Dict[str, Dict[str, int]]:
+    """package -> {file: statements} for the default view's unresolved wildcard rows (``a.b.*``, ``a.b._``)
+    in a JVM file whose prefix is one of ``packages``."""
+    found: Dict[str, Dict[str, int]] = {}
+    for file, rows in (default_view.get('files') or {}).items():
+        if Path(file).suffix not in JVM_SUFFIXES:
+            continue
+        for row in rows:
+            head, _, last = str(row.get('module') or '').rpartition('.')
+            if last in _WILDCARD_LAST and head in packages and row.get('resolved') is None:
+                per_file = found.setdefault(head, {})
+                per_file[file] = per_file.get(file, 0) + 1
+    return found
+
+
+def check_package_wildcards(default_view: Dict[str, Any], packages: Set[str]) -> Dict[str, Any]:
+    """The answer's disclosure equals the wildcard statements its own per-file listing shows for a declared
+    package: total statements, importer files, and the importer files of each package."""
+    expected = wildcard_statements(default_view, packages)
+    rule = (default_view.get('edge_rule') or {}).get('package_wildcards') or {}
+    disclosed = rule.get('packages') or {}
+    want = {pkg: len(files) for pkg, files in expected.items()}
+    statements = sum(sum(files.values()) for files in expected.values())
+    importers = len({file for files in expected.values() for file in files})
+    violations: List[Any] = []
+    if statements != (rule.get('statements') or 0):
+        violations.append({'statements': {'listing': statements, 'disclosed': rule.get('statements') or 0}})
+    if importers != (rule.get('importers') or 0):
+        violations.append({'importer_files': {'listing': importers, 'disclosed': rule.get('importers') or 0}})
+    for pkg in sorted(set(want) | set(disclosed)):
+        if want.get(pkg, 0) != disclosed.get(pkg, 0):
+            violations.append({'package': pkg, 'listing': want.get(pkg, 0), 'disclosed': disclosed.get(pkg, 0)})
+    return make_row('package_wildcards', statements, violations, packages=len(want), importer_files=importers)
+
+
 class Requests:
     """Serial public requests for one corpus; keeps a short record of each."""
 
@@ -475,7 +557,7 @@ def run_imports(req: Requests, scan: str, scan_dir: Path, only: Tuple[str, ...],
     fan_in, err2 = req.answer([f'imports://{scan}?rank=fan-in&{pinned}', '--format', 'json'])
     default_view: Optional[Dict[str, Any]] = None
     err3 = None
-    if {'importers_resolved', 'importer_citations'} & set(wanted):
+    if {'importers_resolved', 'importer_citations', 'package_wildcards'} & set(wanted):
         default_view, err3 = req.answer([f'imports://{scan}?{pinned}', '--format', 'json'])
     rows: List[Dict[str, Any]] = []
     if 'fan_in_total' in wanted:
@@ -490,6 +572,10 @@ def run_imports(req: Requests, scan: str, scan_dir: Path, only: Tuple[str, ...],
             rows.append(error_row('importer_citations', err1 or err3 or ''))
         else:
             rows.append(run_citations(req, scan, scan_dir, importers, default_view, citations))
+    if 'package_wildcards' in wanted:
+        rows.append(error_row('package_wildcards', err3 or '') if err3 or default_view is None
+                    else check_package_wildcards(default_view, scan_declared_packages(scan_dir)
+                                                     if has_jvm_wildcards(default_view) else set()))
     label = _partial_label(req.log[start:])
     for row in rows:
         row['partial'] = label

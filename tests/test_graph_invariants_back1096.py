@@ -31,6 +31,7 @@ def _load(name):
 
 
 _load('imports_fold_snapshot')  # the runner imports it by name, as when run from scripts/
+_load('recall_oracles')  # the package_wildcards invariant blanks literals with its jvm_strip_noise
 inv = _load('graph_invariants')
 
 
@@ -371,6 +372,74 @@ def test_an_engine_that_loses_one_reverse_edge_turns_both_import_invariants_red(
     row = inv.check_importers_resolved(views['importers'], views['default'], views['fan_in'])
     assert row['status'] == 'red'
     assert {'resolved_not_an_importer': ['pkg/b.py', 'pkg/a.py']} in row['examples']
+
+
+# ── package_wildcards (BACK-2507) ─────────────────────────────────────────────
+
+JVM_TREE = {
+    'src/a/Base.scala': 'package cats\npackage effect\n\nclass Base\n',
+    'src/a/Obj.scala': 'package catseffect\n\npackage examples {\n  object Shutdown\n}\n',
+    # statements inside a comment or a string are no statement; the real wildcard sits on line 6
+    'src/b/Use.scala': ('package app\n\n// import cats.effect._\nobject Use {\n  val s = "import cats.effect._"\n'
+                        '  import cats.effect._\n  import catseffect.examples._\n  import scala.util._\n}\n'),
+    'src/b/Use2.scala': 'package app\n\nimport cats.effect._\nobject Use2\n',
+    'src/k/Decl.kt': 'package kt.decl\n\nclass Decl\n',
+    'src/k/Use.kt': 'package kt.use\n\nimport kt.decl.*\nimport kotlin.collections.*\n\nclass Use\n',
+    'src/j/Decl.java': 'package jv.decl;\n\npublic class Decl {}\n',
+    'src/j/Use.java': 'package jv.use;\n\nimport jv.decl.*;\nimport static jv.decl.Decl.*;\nimport java.util.*;\n\npublic class Use {}\n',
+}
+
+
+@pytest.fixture
+def jvm_default(tmp_path):
+    scan = tmp_path / 'jvm'
+    for name, text in JVM_TREE.items():
+        (scan / name).parent.mkdir(parents=True, exist_ok=True)
+        (scan / name).write_text(text, encoding='utf-8')
+    return scan, _answer(tmp_path, 'imports://jvm?root=jvm', expect=(0, 3))
+
+
+def test_declared_packages_nest_chained_clauses_and_package_objects():
+    assert inv.declared_packages('package a.b\npackage c\nclass X\n') == {'a.b', 'a.b.c'}
+    assert inv.declared_packages('package a\npackage object b\n') == {'a', 'a.b'}
+    assert inv.declared_packages('class NoPackage\n') == set()
+
+
+def test_package_wildcards_hold_on_the_real_answer_and_ignore_literals_and_comments(jvm_default):
+    scan, view = jvm_default
+    packages = inv.scan_declared_packages(scan)
+    assert {'cats.effect', 'catseffect.examples', 'kt.decl', 'jv.decl'} <= packages
+    row = inv.check_package_wildcards(view, packages)
+    # Use.scala:6 and Use2.scala:3 (cats.effect._), Use.scala:7 (catseffect.examples._), Use.kt, Use.java;
+    # scala.util._, kotlin.collections.* and java.util.* name no scanned package, and the Java static
+    # wildcard `jv.decl.Decl.*` names a class (still unresolved in Reveal), so the disclosure leaves it out
+    assert (row['status'], row['population'], row['packages'], row['importer_files']) == ('green', 5, 4, 4), row
+    assert view['edge_rule']['package_wildcards']['packages'] == {
+        'cats.effect': 2, 'catseffect.examples': 1, 'kt.decl': 1, 'jv.decl': 1}
+
+
+@pytest.mark.parametrize('damage', ['dropped', 'overstated', 'wrong_package'])
+def test_package_wildcards_red_when_the_disclosure_disagrees_with_the_listing(jvm_default, damage):
+    scan, view = jvm_default
+    view = copy.deepcopy(view)
+    rule = view['edge_rule']['package_wildcards']
+    if damage == 'dropped':
+        del view['edge_rule']['package_wildcards']  # what an engine without BACK-2506 answers
+    elif damage == 'overstated':
+        rule['statements'] += 1
+    else:
+        rule['packages']['cats.effect'] -= 1
+        rule['packages']['other.pkg'] = 1
+    row = inv.check_package_wildcards(view, inv.scan_declared_packages(scan))
+    assert row['status'] == 'red', row
+
+
+def test_package_wildcards_empty_when_no_wildcard_names_a_scanned_package(tmp_path):
+    scan = tmp_path / 'p'
+    scan.mkdir()
+    (scan / 'A.java').write_text('package a;\nimport java.util.*;\npublic class A {}\n', encoding='utf-8')
+    view = _answer(tmp_path, 'imports://p?root=p', expect=(0, 3))
+    assert inv.check_package_wildcards(view, inv.scan_declared_packages(scan))['status'] == 'empty'
 
 
 # ── calls_inverse and callers_view ────────────────────────────────────────────
