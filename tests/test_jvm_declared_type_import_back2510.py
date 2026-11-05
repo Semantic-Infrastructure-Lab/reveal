@@ -51,7 +51,7 @@ KOTLIN = {
         'class AccountScreen\n'
         'interface Navigator\n'
         'typealias Route = String\n'
-        'class Outer { class Inner }\n'),
+        'class Outer {\n    class Inner\n}\n'),
     'src/app/ui/UsesObject.kt': 'package app.ui\nimport app.screens.DiscoverScreen\nclass UsesObject\n',
     'src/app/ui/UsesClass.kt': 'package app.ui\nimport app.screens.AccountScreen\nclass UsesClass\n',
     'src/app/ui/UsesInterface.kt': 'package app.ui\nimport app.screens.Navigator\nclass UsesInterface\n',
@@ -110,7 +110,7 @@ SCALA = {
         'case class Context(name: String)\n'
         'trait Helper\n'
         'object Registry\n'
-        'class Outer { class Inner }\n'),
+        'class Outer {\n    class Inner\n}\n'),
     'src/gb/web/UsesCase.scala': 'package gb.web\nimport gb.core.Context\nclass UsesCase\n',
     'src/gb/web/UsesTrait.scala': 'package gb.web\nimport gb.core.Helper\nclass UsesTrait\n',
     'src/gb/web/UsesObject.scala': 'package gb.web\nimport gb.core.Registry\nclass UsesObject\n',

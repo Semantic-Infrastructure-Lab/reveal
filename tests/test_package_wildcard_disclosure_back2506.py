@@ -90,7 +90,7 @@ def test_a_file_wildcard_importing_two_packages_is_one_file(tmp_path):
 
 def test_external_and_type_member_wildcards_are_not_counted(tmp_path):
     scan = _write(tmp_path, {
-        'src/a/b/Obj.kt': 'package a.b\nobject Obj { val x = 1 }\n',
+        'src/a/b/Obj.kt': 'package a.b\nobject Obj {\n    val x = 1\n}\n',
         'src/u/U.kt': 'package u\nimport java.util.*\nimport kotlinx.coroutines.*\nimport a.b.Obj.*\nclass U\n',
     })
     answer = _answer(scan, 'src/a/b/Obj.kt', 'importers')
