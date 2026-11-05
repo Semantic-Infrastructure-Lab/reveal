@@ -122,3 +122,13 @@ def test_relative_reading_shadows_a_root_package_of_the_same_name(tmp_path):
              'src/c/Thing.scala': 'package c\nclass Thing\n',
              'src/a/b/User.scala': 'package a.b\nimport c.Thing\nclass User\n'}
     assert _edges(_write(tmp_path, files) / 'src') == {('a/b/User.scala', 'a/b/c/Thing.scala', 2)}
+
+
+def test_own_companion_import_in_each_platform_copy_is_no_edge(tmp_path):
+    # cats-effect core/js and core/jvm-native both declare `object CallbackStack` in cats.effect, and each
+    # runs `import CallbackStack.Handle` on its own: the name is the importer's own declaration.
+    files = {
+        'src/js/a/Stack.scala': 'package a\nimport Stack.Handle\nobject Stack {\n  class Handle\n}\n',
+        'src/jvm/a/Stack.scala': 'package a\nimport Stack.Handle\nobject Stack {\n  class Handle\n}\n',
+    }
+    assert _edges(_write(tmp_path, files) / 'src') == set()

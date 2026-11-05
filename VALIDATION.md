@@ -1584,7 +1584,7 @@ every sample matched the published target and edge counts.
   alias that Reveal resolves to the aliased declaration (`kernel.ParallelF`, `Resource`, and `testkit.TestContext`
   twice). The 50 misses fall into three classes. 23 go through a member of a declared symbol
   (`Profile.profile.blockingApi._` 16 times, `Par.ParallelF`, `pure.PureConc`, members `object helpers` inherits,
-  `ChannelResult.Companion.closed`; BACK-2512). 23 are relative to an enclosing package or an earlier import
+  `ChannelResult.Companion.closed`; BACK-2512). 23 are relative to a package the file's own clauses open
   (`import Directory._`, `import TracingConstants._`, `import IO.{println => _, _}`; BACK-2514). 4 import a
   package that also has a package object (`catseffect.examples._`, a package wildcard, three times;
   `cats.effect.{kernel => cekernel}`), which the oracle reads as an object. The oracle-free graph invariants
@@ -1605,6 +1605,34 @@ every sample matched the published target and edge counts.
 
   The 27 misses left are the 23 relative imports (BACK-2514) and the 4 package-object cases of the entry above.
   The oracle-free graph invariants stay green on all four corpora.
+- **Scala imports relative to an opened package (BACK-2514, 2026-11-05):** inside `package gitbucket.core.util`,
+  `import Directory._` names `object Directory` of that package: Scala reads an import's first segment against
+  the packages the file's own clauses open before the root. An import that resolves to nothing as absolute is
+  now read again relative to each of them, innermost first. A single clause `package a.b.c` opens `a.b.c` only;
+  chained clauses `package a.b` / `package c` open `a.b.c` and `a.b`; a braced `package d { }` is not used (it
+  opens `d` only inside its block). The absolute reading still wins when it resolves, where Scala would prefer
+  the relative one (a strict xfail), and an importer that declares the name itself (each platform copy of
+  `object CallbackStack` running `import CallbackStack.Handle`) gets no edge. Same four rows and oracle,
+  Reveal `17c58d3a` (before) against the change (after):
+
+  | Corpus (pin) | Before | After |
+  |---|---|---|
+  | Kotlin/tivi `a0c62c2c` | 1,631/1,631 (100%) | 1,631/1,631 (100%) |
+  | Kotlin/kotlinx.coroutines `5f890047` | 217/217 (100%) | 217/217 (100%) |
+  | Scala/GitBucket `f55982e8` | 671/676 (99.26%), 1 extra | **676/676 (100%)**, 1 extra |
+  | Scala/cats-effect `4fc56284` | 423/445 (95.06%), 4 extra | **441/445 (99.10%)**, 4 extra |
+
+  Each of the 23 misses was read in source: every one names a symbol of the importer's own package or, through
+  chained clauses, of an enclosing one (none is relative to an earlier import). Over the whole edge set of the
+  four corpora, not only the scored targets, no edge is removed; GitBucket gains 9 (the 5 scored and 4 test files
+  with the same imports) and cats-effect 18. The oracle tries every prefix of the importer's package, a looser
+  reading than Scala's; no import on these corpora tells the two apart. The 4 misses and 4 extras left are package
+  objects, which neither Reveal nor the oracle reads as declarations (BACK-2515): `catseffect.examples._` three
+  times and `cats.effect.{kernel => cekernel}`; the extras are alias imports (`testkit.TestContext` twice,
+  `Resource`, `kernel.ParallelF`) whose path match lands on the aliased class. For the same reason a Kotlin path
+  match must now declare the import's package (BACK-2505) and a Scala one not yet: on these rows the Kotlin check
+  changes no edge, and the Scala check's only effect was to drop three of those alias imports. The oracle-free
+  graph invariants stay green on all four corpora.
 - **Historical import figures that cannot currently be re-run (BACK-1461):**
   - Original corpus clone not preserved: Python/celery, Rust/ripgrep, Java/guava,
     Go/client_golang, Ruby/solidus,

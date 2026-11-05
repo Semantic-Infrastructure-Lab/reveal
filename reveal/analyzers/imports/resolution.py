@@ -210,6 +210,10 @@ class _ResolutionIndices(NamedTuple):
     zeitwerk_index: Dict[str, Path]     # BACK-557: constant-path → declaring file
     module_index: Dict[str, List[Path]]  # BACK-567: Swift module → member files
     load_path_roots: List[Path]         # BACK-669: extra gemspec-registered lib/ search roots
+    # BACK-2505: the packages each file declares, for every file whose package clauses were read (a
+    # parse failure is absent: no evidence either way)
+    declared_by_file: Dict[Path, Tuple[str, ...]]
+    opened_by_file: Dict[Path, Tuple[str, ...]]  # BACK-2514: packages its clauses open, innermost first
 
 
 class ResolutionInputs(NamedTuple):
@@ -236,6 +240,8 @@ class FileEntry:
     declared: Tuple[str, ...] = ()               # namespaces/packages it declares (honest-decline)
     namespace_keys: Tuple[str, ...] = ()         # BACK-554: the namespaces it joins the fan-out under
     member_keys: Tuple[Tuple[str, str], ...] = ()  # BACK-547/557/669: (package, symbol) keys, in order
+    package_read: bool = False                   # BACK-2505: ``declared`` was read (the spec has package nodes)
+    opened: Tuple[str, ...] = ()                 # BACK-2514: packages its clauses open, innermost first
 
 
 def extract_file(file_path: Path, extractor: Any, constant_index: Dict[str, Tuple[str, str]]) -> List[ImportStatement]:
@@ -267,6 +273,25 @@ def _member_keys(file_path: Path, extractor: Any, spec: Any, declared: List[str]
     return keys
 
 
+def _declares_import_package(stmt: ImportStatement, extractor: Any, target: Path,
+                             indices: _ResolutionIndices) -> bool:
+    """Whether ``target`` declares the package ``stmt`` imports from (BACK-2505): the longest in-tree
+    declared package that prefixes the import (``a.b`` for ``a.b.Outer.Inner``). With no such prefix the
+    import names a top-level symbol of the default package (kotlinx.coroutines buildSrc:
+    ``import CacheRedirector.configure``), so the target must declare no package and be that symbol's
+    file. A file whose package clauses were not read (a parse failure) is no evidence and stands."""
+    declared = indices.declared_by_file.get(target)
+    if declared is None:
+        return True
+    sep = extractor.spec.module_separator
+    parts = [p for p in stmt.module_name.split(sep) if p]
+    for keep in range(len(parts) - 1, 0, -1):
+        package = sep.join(parts[:keep])
+        if package in indices.project_namespaces:
+            return package in declared
+    return not declared and bool(parts) and target.stem == parts[0]
+
+
 def index_file(file_path: Path, extractor: Any, imports: List[ImportStatement],
                manifest_dirs: List[Tuple[Path, str]]) -> FileEntry:
     """One file's contribution to every cascade index (BACK-919's per-file loop body, as data):
@@ -284,6 +309,9 @@ def index_file(file_path: Path, extractor: Any, imports: List[ImportStatement],
     if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
         declared = list(extractor.extract_namespaces(file_path))
         entry.declared = tuple(declared)
+        entry.package_read = True
+        if getattr(spec, 'relative_package_imports', False):
+            entry.opened = tuple(extractor.extract_opened_packages(file_path))
         if getattr(spec, 'resolve_namespaces', False):
             entry.namespace_keys = tuple(declared)
         entry.member_keys = tuple(_member_keys(file_path, extractor, spec, declared))
@@ -432,7 +460,8 @@ class ProjectResolver:
         self.result.constants_ambiguous = inputs.constants_ambiguous
         indices = _ResolutionIndices(
             all_imports=[], project_namespaces=set(inputs.manifest_target_names), namespace_index={},
-            member_index={}, zeitwerk_index={}, module_index={}, load_path_roots=inputs.load_path_roots)
+            member_index={}, zeitwerk_index={}, module_index={}, load_path_roots=inputs.load_path_roots,
+            declared_by_file={}, opened_by_file={})
         for file_path in files:
             entry = entries.get(file_path)
             if entry is None:
@@ -454,6 +483,10 @@ class ProjectResolver:
                 indices.namespace_index.setdefault(ns, []).append(file_path)
             for key in entry.member_keys:
                 indices.member_index.setdefault(key, []).append(file_path)
+            if entry.package_read and not entry.parse_failed:
+                indices.declared_by_file[file_path] = entry.declared
+            if entry.opened:
+                indices.opened_by_file[file_path] = entry.opened
             if entry.parse_failed:
                 self.result.files_failed.append(str(file_path))  # BACK-1598
         return indices
@@ -625,7 +658,7 @@ class ProjectResolver:
         direct resolution → namespace index (BACK-554) → member index
         (BACK-547/557) → honest-decline classification (BACK-547)."""
         added = self._add_direct_edges(
-            stmt, file_path, extractor, base_path, extra_paths, file_index)
+            stmt, file_path, extractor, base_path, extra_paths, file_index, indices)
         spec = getattr(extractor, 'spec', None)
         if not added and indices.namespace_index and getattr(spec, 'resolve_namespaces', False):
             added = self._add_namespace_edges(stmt, file_path, extractor, indices) or added
@@ -654,11 +687,16 @@ class ProjectResolver:
     def _add_direct_edges(
         self, stmt: ImportStatement, file_path: Path, extractor: Any,
         base_path: Path, extra_paths: List[Path],
-        file_index: Dict[str, List[Path]],
+        file_index: Dict[str, List[Path]], indices: _ResolutionIndices,
     ) -> bool:
-        """Stage 1: direct dotted-name resolution."""
+        """Stage 1: direct dotted-name resolution. For a language whose path does not spell the package
+        (``spec.check_declared_package``, Kotlin and Scala, BACK-2505) a path match stands only when the
+        file declares the import's package; otherwise it is another package's same-named class and the
+        later stages, which read declarations, decide."""
         targets = analysis_inputs.resolve_targets(
             stmt, extractor, analysis_inputs.ResolutionContext(base_path, tuple(extra_paths), file_index))
+        if getattr(getattr(extractor, 'spec', None), 'check_declared_package', False):
+            targets = [t for t in targets if t is None or _declares_import_package(stmt, extractor, t, indices)]
         added = False
         via = VIA_CONSTANT if stmt.through_constant else VIA_DIRECT
         for resolved in targets:
@@ -686,6 +724,29 @@ class ProjectResolver:
                 added = True
         return added
 
+    @staticmethod
+    def _member_targets(stmt: ImportStatement, file_path: Path, extractor: Any,
+                        indices: _ResolutionIndices) -> List[Path]:
+        """The member-index targets of ``stmt`` read as absolute; failing that (Scala,
+        ``spec.relative_package_imports``, BACK-2514), read relative to each package the importer's own
+        clauses open, innermost first, so ``import Directory._`` inside ``package gitbucket.core.util``
+        names ``gitbucket.core.util.Directory``. The absolute reading wins when it resolves, so no existing
+        edge moves; Scala would prefer the relative one (a strict xfail in the BACK-2514 tests)."""
+        targets: List[Path] = list(extractor.resolve_member_targets(
+            stmt, indices.member_index, declared_packages=indices.project_namespaces))
+        if targets or not getattr(getattr(extractor, 'spec', None), 'relative_package_imports', False):
+            return targets
+        sep = extractor.spec.module_separator
+        for base in indices.opened_by_file.get(file_path, ()):
+            relative = replace(stmt, module_name=f'{base}{sep}{stmt.module_name}')
+            targets = list(extractor.resolve_member_targets(
+                relative, indices.member_index, declared_packages=indices.project_namespaces))
+            if targets:
+                # The importer declares the name itself (each platform copy of `object CallbackStack`
+                # running `import CallbackStack.Handle`): its own declaration, no other file's.
+                return [] if file_path in targets else targets
+        return []
+
     def _add_member_edges(
         self, stmt: ImportStatement, file_path: Path, extractor: Any, indices: _ResolutionIndices,
     ) -> bool:
@@ -701,8 +762,7 @@ class ProjectResolver:
         past any namespace the tree declares. Fall back to the
         content-scanned member index."""
         added = False
-        for resolved in extractor.resolve_member_targets(
-                stmt, indices.member_index, declared_packages=indices.project_namespaces):
+        for resolved in self._member_targets(stmt, file_path, extractor, indices):
             if resolved != file_path:
                 self._add_edge(stmt, extractor, file_path, resolved, VIA_MEMBER)
                 self.result.edge_statements[(file_path, resolved)] = stmt

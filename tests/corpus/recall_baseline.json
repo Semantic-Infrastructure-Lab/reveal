@@ -692,10 +692,10 @@
     "sha": "f55982e8a5262d841f29489f5954616967b3504b",
     "targets": 121,
     "oracle_edges": 676,
-    "hit_edges": 671,
+    "hit_edges": 676,
     "extra_edges": 1,
-    "recall": 0.992603550295858,
-    "precision": 0.9985119047619048,
+    "recall": 1.0,
+    "precision": 0.9985228951255539,
     "coverage": {
       "files": 213,
       "indexed_symbols": 347,
@@ -725,35 +725,6 @@
     },
     "differences": [
       {
-        "target": "src/main/scala/gitbucket/core/util/ConfigUtil.scala",
-        "missed": [
-          "src/main/scala/gitbucket/core/util/DatabaseConfig.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "src/main/scala/gitbucket/core/util/Directory.scala",
-        "missed": [
-          "src/main/scala/gitbucket/core/util/DatabaseConfig.scala",
-          "src/main/scala/gitbucket/core/util/JGitUtil.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "src/main/scala/gitbucket/core/util/Implicits.scala",
-        "missed": [
-          "src/main/scala/gitbucket/core/util/Authenticator.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "src/main/scala/gitbucket/core/util/StringUtil.scala",
-        "missed": [
-          "src/main/scala/gitbucket/core/util/JGitUtil.scala"
-        ],
-        "extra": []
-      },
-      {
         "target": "src/main/scala/gitbucket/core/util/SyntaxSugars.scala",
         "missed": [],
         "extra": [
@@ -766,8 +737,8 @@
       "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
       "oracle_targets": 121,
       "observed_targets": 121,
-      "observed_pairs": 672,
-      "scored_pairs": 672,
+      "observed_pairs": 677,
+      "scored_pairs": 677,
       "unscored_targets": 0,
       "unscored_pairs": 0,
       "unscored_target_paths": [],
@@ -779,10 +750,10 @@
     "sha": "4fc56284b005ad8f00788780443ea1e9717cf9a8",
     "targets": 86,
     "oracle_edges": 445,
-    "hit_edges": 423,
+    "hit_edges": 441,
     "extra_edges": 4,
-    "recall": 0.950561797752809,
-    "precision": 0.990632318501171,
+    "recall": 0.9910112359550561,
+    "precision": 0.9910112359550561,
     "coverage": {
       "files": 404,
       "indexed_symbols": 493,
@@ -812,56 +783,6 @@
     },
     "differences": [
       {
-        "target": "core/js/src/main/scala/cats/effect/tracing/TracingConstants.scala",
-        "missed": [
-          "core/js/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
-          "core/jvm/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
-          "core/native/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
-          "core/shared/src/main/scala/cats/effect/tracing/Tracing.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "core/js-native/src/main/scala/cats/effect/IOFiberConstants.scala",
-        "missed": [
-          "core/shared/src/main/scala/cats/effect/IOFiber.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "core/js-native/src/main/scala/cats/effect/SyncIOConstants.scala",
-        "missed": [
-          "core/shared/src/main/scala/cats/effect/SyncIO.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "core/native/src/main/scala/cats/effect/tracing/TracingConstants.scala",
-        "missed": [
-          "core/js/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
-          "core/jvm/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
-          "core/native/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
-          "core/shared/src/main/scala/cats/effect/tracing/Tracing.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "core/shared/src/main/scala/cats/effect/IO.scala",
-        "missed": [
-          "core/shared/src/main/scala/cats/effect/IOFiber.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "kernel/shared/src/main/scala/cats/effect/kernel/Outcome.scala",
-        "missed": [
-          "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/pure.scala",
-          "kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala",
-          "tests/shared/src/test/scala/cats/effect/kernel/ParallelFSpec.scala"
-        ],
-        "extra": []
-      },
-      {
         "target": "kernel/shared/src/main/scala/cats/effect/kernel/ParallelF.scala",
         "missed": [],
         "extra": [
@@ -876,31 +797,9 @@
         ]
       },
       {
-        "target": "kernel/shared/src/main/scala/cats/effect/kernel/Sync.scala",
-        "missed": [
-          "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/Generators.scala"
-        ],
-        "extra": []
-      },
-      {
         "target": "kernel/shared/src/main/scala/cats/effect/kernel/package.scala",
         "missed": [
           "core/shared/src/main/scala/cats/effect/package.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/Generators.scala",
-        "missed": [
-          "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/PureConcGenerators.scala",
-          "laws/shared/src/test/scala/cats/effect/testkit/TimeTSpec.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/PureConcGenerators.scala",
-        "missed": [
-          "laws/shared/src/test/scala/cats/effect/testkit/TimeTSpec.scala"
         ],
         "extra": []
       },
@@ -938,9 +837,9 @@
       "status": "observed",
       "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
       "oracle_targets": 86,
-      "observed_targets": 80,
-      "observed_pairs": 427,
-      "scored_pairs": 427,
+      "observed_targets": 82,
+      "observed_pairs": 445,
+      "scored_pairs": 445,
       "unscored_targets": 0,
       "unscored_pairs": 0,
       "unscored_target_paths": [],

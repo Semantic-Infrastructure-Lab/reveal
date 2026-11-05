@@ -701,6 +701,13 @@ class _ImportSpec:
     selector_imports: bool = False
     # BACK-2512: ``a.b.Outer.Inner`` falls back to the file declaring ``(a.b, Outer)`` (Kotlin, Scala)
     peel_nested_members: bool = False
+    # BACK-2505: a dotted path match onto a file that does not declare the import's package (the longest
+    # in-tree package prefix of the import) is another package's same-named class, not the target
+    # (Kotlin, Scala; Java's layout rule is ``package_is_directory``)
+    check_declared_package: bool = False
+    # BACK-2514: an import that resolves to nothing absolute is read again relative to each package the
+    # file's own clauses open, innermost first (Scala; ``extract_opened_packages``)
+    relative_package_imports: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -807,11 +814,31 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         avoids a pointless extra parse pass over every file of those
         languages.
         """
-        if not self.spec.package_node_types:
+        chain, namespaces = self._package_clauses(file_path)
+        if chain:
+            namespaces.insert(0, '.'.join(chain))
+        return namespaces
+
+    def extract_opened_packages(self, file_path: Path) -> List[str]:
+        """The packages whose members a file's own braceless package clauses bring into scope, innermost
+        first (BACK-2514). A single clause ``package a.b.c`` opens ``a.b.c`` only; chained clauses
+        ``package a.b`` / ``package c`` open ``a.b.c`` and ``a.b``. A braced packaging ``package d { }``
+        opens its package only inside its block, which a whole-file list cannot say, so it is left out.
+        ``[]`` unless ``spec.relative_package_imports`` is set."""
+        if not self.spec.relative_package_imports:
             return []
+        chain, _ = self._package_clauses(file_path)
+        return ['.'.join(chain[:keep]) for keep in range(len(chain), 0, -1)]
+
+    def _package_clauses(self, file_path: Path) -> Tuple[List[str], List[str]]:
+        """``(chain, namespaces)``: the names of the braceless clauses that nest into one package
+        (``spec.chained_package_clauses``; otherwise empty), and every other declared package, each braced
+        clause qualified by the chain or braced clause around it."""
+        if not self.spec.package_node_types:
+            return [], []
         analyzer = self._get_analyzer(file_path)
         if analyzer is None:
-            return []
+            return [], []
         namespaces: List[str] = []
         chain: List[str] = []
         open_blocks: List[Tuple[int, str]] = []  # (end byte, qualified name) of the braced clauses around a node
@@ -825,20 +852,22 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                         elif not any(_zero_arg(c, 'kind') == 'template_body' for c in _children(node)):
                             chain.append(name)  # braceless: nests in the previous
                         else:
-                            # braced (BACK-2507): nests in the braceless chain before it and in any braced
-                            # clause around it, so `package catseffect` + `package examples { }` is
-                            # ``catseffect.examples``, not a bare ``examples``
-                            start = _zero_arg(node, 'start_byte')
-                            while open_blocks and open_blocks[-1][0] <= start:
-                                open_blocks.pop()
-                            base = open_blocks[-1][1] if open_blocks else '.'.join(chain)
-                            qualified = f'{base}.{name}' if base else name
-                            namespaces.append(qualified)
-                            open_blocks.append((_zero_arg(node, 'end_byte'), qualified))
+                            namespaces.append(self._braced_package(node, name, chain, open_blocks))
                         break
-        if chain:
-            namespaces.insert(0, '.'.join(chain))
-        return namespaces
+        return chain, namespaces
+
+    @staticmethod
+    def _braced_package(node: Any, name: str, chain: List[str], open_blocks: List[Tuple[int, str]]) -> str:
+        """A braced clause (BACK-2507) nests in the braceless chain before it and in any braced clause
+        around it, so ``package catseffect`` + ``package examples { }`` is ``catseffect.examples``, not a
+        bare ``examples``. Updates ``open_blocks`` (end byte, qualified name) for the clauses after it."""
+        start = _zero_arg(node, 'start_byte')
+        while open_blocks and open_blocks[-1][0] <= start:
+            open_blocks.pop()
+        base = open_blocks[-1][1] if open_blocks else '.'.join(chain)
+        qualified = f'{base}.{name}' if base else name
+        open_blocks.append((_zero_arg(node, 'end_byte'), qualified))
+        return qualified
 
     def resolve_namespace_targets(
         self,
@@ -3026,6 +3055,9 @@ _KOTLIN_SPEC = _ImportSpec(
     member_node_types=frozenset({'function_declaration', 'property_declaration'}),
     member_symbol_fallback=True,
     peel_nested_members=True,
+    # BACK-2505: a path match must declare the import's package (the layout may drop the root
+    # package from the path, so Java's whole-path rule does not apply). No relative imports.
+    check_declared_package=True,
     # BACK-2510: `import a.b.DiscoverScreen` for an `object DiscoverScreen` declared in
     # `Screens.kt` names no file by path; index the top-level types under (package, name).
     namespaced_type_node_types=frozenset({
@@ -3057,6 +3089,11 @@ _SCALA_SPEC = _ImportSpec(
     # BACK-1237: `import a.{X, Y}` and `import a.X, b.Y` name one target each.
     selector_imports=True,
     peel_nested_members=True,
+    # BACK-2514: `import Directory._` inside `package gitbucket.core.util` is read relative to the
+    # packages the clauses open. No check_declared_package (BACK-2505) yet: a package object's members
+    # (`type TestContext = kernel.testkit.TestContext`) are not indexed declarations, and on cats-effect
+    # the check's only effect was to drop three such alias imports that the path match got right.
+    relative_package_imports=True,
     # BACK-557 Scala measurement loop (real corpus: samples/scala, GitBucket):
     # confirmed real Scala 2/3 code has NO bare top-level def/val outside any
     # object (Scala forbids it outside a `package object`; unlike Kotlin,

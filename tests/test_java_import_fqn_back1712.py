@@ -87,8 +87,9 @@ def test_java_import_resolves_through_a_scan_root_inside_the_package_path(tmp_pa
 
 # Kotlin and Scala share the resolver and the bug, but not Java's layout rule: Kotlin's own convention
 # drops the common root package from the directory path, and the Scala corpora declare packages that
-# are not their directory tail (cats-effect: 142 of 404 files). They check the target's DECLARED package
-# instead (BACK-2505): a path match stands only when the file declares the import's package.
+# are not their directory tail (cats-effect: 142 of 404 files). Kotlin checks the target's DECLARED
+# package instead (BACK-2505): a path match stands only when the file declares the import's package.
+# Scala waits for package-object declarations (BACK-2515).
 KOTLIN = {
     'src/org/es/common/geo/GeoUtils.kt': 'package org.es.common.geo\nclass GeoUtils\n',
     'src/org/es/search/Helper.kt': 'package org.es.search\nclass Helper\n',
@@ -121,7 +122,12 @@ def test_kotlin_drops_the_other_package_class_and_keeps_the_root_omitted_layout(
     assert _edges(root, root / 'src', '.kt') == KOTLIN_RIGHT
 
 
-@pytest.mark.parametrize('suffix', ['.kt', '.scala'])
+@pytest.mark.parametrize('suffix', [
+    '.kt',
+    pytest.param('.scala', marks=pytest.mark.xfail(strict=True, reason=(
+        'BACK-2515: Scala keeps the path answer until package-object members are indexed declarations; '
+        'the declared-package check alone drops alias imports the path match gets right'))),
+])
 def test_kotlin_and_scala_external_import_is_not_an_edge(tmp_path, suffix):
     files = {
         f'src/org/es/common/geo/GeoUtils{suffix}': 'package org.es.common.geo\nclass GeoUtils\n',
@@ -142,3 +148,15 @@ def test_kotlin_and_scala_cross_package_import_still_resolves(tmp_path, suffix):
     root = _write(tmp_path, files)
     assert _edges(root, root / 'src', suffix) == {
         (f'org/es/search/Cross{suffix}', f'org/es/common/geo/GeoUtils{suffix}', 2)}
+
+
+def test_kotlin_default_package_member_import_still_resolves(tmp_path):
+    # kotlinx.coroutines buildSrc: no package clause in either file, `import CacheRedirector.configure`
+    # names the default package's object CacheRedirector, declared in CacheRedirector.kt.
+    files = {
+        'buildSrc/src/main/kotlin/CacheRedirector.kt': 'object CacheRedirector {\n  fun configure() {}\n}\n',
+        'buildSrc/src/main/kotlin/Aux.kt': 'import CacheRedirector.configure\nfun aux() = configure()\n',
+    }
+    root = _write(tmp_path, files)
+    assert _edges(root, root / 'buildSrc', '.kt') == {
+        ('src/main/kotlin/Aux.kt', 'src/main/kotlin/CacheRedirector.kt', 1)}
