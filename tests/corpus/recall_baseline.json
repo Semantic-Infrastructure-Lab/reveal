@@ -14,8 +14,37 @@
       "unresolved_directives": 7,
       "gcc_probes": 112
     },
-    "partial_files": 304,
-    "differences": []
+    "partial_files": 348,
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [
+        "c",
+        "cpp"
+      ],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
+    "differences": [],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 101,
+      "observed_targets": 101,
+      "observed_pairs": 603,
+      "scored_pairs": 603,
+      "unscored_targets": 0,
+      "unscored_pairs": 0,
+      "unscored_target_paths": [],
+      "unscored_target_paths_unavailable": 0
+    }
   },
   "c-curl": {
     "oracle": "gcc-c",
@@ -32,8 +61,38 @@
       "unresolved_directives": 3,
       "gcc_probes": 399
     },
-    "partial_files": 218,
-    "differences": []
+    "partial_files": 267,
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [
+        "c"
+      ],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
+    "differences": [],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 232,
+      "observed_targets": 233,
+      "observed_pairs": 2332,
+      "scored_pairs": 2331,
+      "unscored_targets": 1,
+      "unscored_pairs": 1,
+      "unscored_target_paths": [
+        "projects/vms/curlmsg_vms.h"
+      ],
+      "unscored_target_paths_unavailable": 0
+    }
   },
   "python-celery": {
     "oracle": "python-ast",
@@ -293,7 +352,26 @@
       "unresolved_directives": 21,
       "gcc_probes": 423
     },
-    "partial_files": 458,
+    "partial_files": 509,
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [
+        "c",
+        "cpp",
+        "csharp",
+        "objc"
+      ],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
     "differences": [
       {
         "target": "code/AssetLib/Step/STEPFile.h",
@@ -302,7 +380,23 @@
           "code/AssetLib/IFC/IFCReaderGen_4.h"
         ]
       }
-    ]
+    ],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 250,
+      "observed_targets": 253,
+      "observed_pairs": 716,
+      "scored_pairs": 708,
+      "unscored_targets": 3,
+      "unscored_pairs": 8,
+      "unscored_target_paths": [
+        "contrib/stb/stb_image.h",
+        "contrib/utf8cpp/source/utf8.h",
+        "contrib/zlib/zlib.h"
+      ],
+      "unscored_target_paths_unavailable": 0
+    }
   },
   "java": {
     "oracle": "java-jls",
@@ -450,8 +544,74 @@
       "node_version": "22.14.0",
       "scan_file_cap": 20000
     },
-    "partial_files": 10,
+    "partial_files": 12,
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
     "differences": [],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 264,
+      "observed_targets": 303,
+      "observed_pairs": 1935,
+      "scored_pairs": 1889,
+      "unscored_targets": 39,
+      "unscored_pairs": 46,
+      "unscored_target_paths": [
+        "src/vs/base/browser/dompurify/dompurify.js",
+        "src/vs/base/browser/ui/actionbar/actionbar.css",
+        "src/vs/base/browser/ui/aria/aria.css",
+        "src/vs/base/browser/ui/breadcrumbs/breadcrumbsWidget.css",
+        "src/vs/base/browser/ui/button/button.css",
+        "src/vs/base/browser/ui/codicons/codicon/codicon-modifiers.css",
+        "src/vs/base/browser/ui/codicons/codicon/codicon.css",
+        "src/vs/base/browser/ui/contextview/contextview.css",
+        "src/vs/base/browser/ui/countBadge/countBadge.css",
+        "src/vs/base/browser/ui/dialog/dialog.css",
+        "src/vs/base/browser/ui/dnd/dnd.css",
+        "src/vs/base/browser/ui/dropdown/dropdown.css",
+        "src/vs/base/browser/ui/findinput/findInput.css",
+        "src/vs/base/browser/ui/grid/gridview.css",
+        "src/vs/base/browser/ui/hover/hoverWidget.css",
+        "src/vs/base/browser/ui/iconLabel/iconlabel.css",
+        "src/vs/base/browser/ui/icons/iconSelectBox.css",
+        "src/vs/base/browser/ui/inputbox/inputBox.css",
+        "src/vs/base/browser/ui/keybindingLabel/keybindingLabel.css",
+        "src/vs/base/browser/ui/list/list.css",
+        "src/vs/base/browser/ui/menu/menubar.css",
+        "src/vs/base/browser/ui/mouseCursor/mouseCursor.css",
+        "src/vs/base/browser/ui/pixelSpinner/pixelSpinner.css",
+        "src/vs/base/browser/ui/progressbar/progressbar.css",
+        "src/vs/base/browser/ui/radio/radio.css",
+        "src/vs/base/browser/ui/sash/sash.css",
+        "src/vs/base/browser/ui/scrollbar/media/scrollbars.css",
+        "src/vs/base/browser/ui/selectBox/selectBox.css",
+        "src/vs/base/browser/ui/selectBox/selectBoxCustom.css",
+        "src/vs/base/browser/ui/severityIcon/media/severityIcon.css",
+        "src/vs/base/browser/ui/splitview/paneview.css",
+        "src/vs/base/browser/ui/splitview/splitview.css",
+        "src/vs/base/browser/ui/table/table.css",
+        "src/vs/base/browser/ui/toggle/toggle.css",
+        "src/vs/base/browser/ui/toolbar/toolbar.css",
+        "src/vs/base/browser/ui/tree/media/tree.css",
+        "src/vs/base/common/marked/marked.js",
+        "src/vs/base/common/observableInternal/logging/debugger/debuggerApi.d.ts",
+        "src/vs/base/test/common/filters.perf.data.js"
+      ],
+      "unscored_target_paths_unavailable": 0
+    },
     "lazy": {
       "exclude": {
         "targets": 263,
@@ -460,15 +620,73 @@
         "extra_edges": 0,
         "recall": 1.0,
         "precision": 1.0,
-        "partial_files": 10,
+        "partial_files": 12,
         "edge_rule": {
           "lazy": "exclude",
           "tests": "included",
           "type_checking": "excluded",
           "scope": "scan_root",
-          "unclassified_languages": []
+          "unclassified_languages": [],
+          "test_scope": {
+            "anchor": ".",
+            "source": "explicit_root",
+            "include_anchor_name": false,
+            "rule": "is_test_path",
+            "basis": "paths relative to the selected project"
+          }
         },
-        "differences": []
+        "differences": [],
+        "target_population": {
+          "status": "observed",
+          "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+          "oracle_targets": 264,
+          "observed_targets": 301,
+          "observed_pairs": 1932,
+          "scored_pairs": 1887,
+          "unscored_targets": 38,
+          "unscored_pairs": 45,
+          "unscored_target_paths": [
+            "src/vs/base/browser/dompurify/dompurify.js",
+            "src/vs/base/browser/ui/actionbar/actionbar.css",
+            "src/vs/base/browser/ui/aria/aria.css",
+            "src/vs/base/browser/ui/breadcrumbs/breadcrumbsWidget.css",
+            "src/vs/base/browser/ui/button/button.css",
+            "src/vs/base/browser/ui/codicons/codicon/codicon-modifiers.css",
+            "src/vs/base/browser/ui/codicons/codicon/codicon.css",
+            "src/vs/base/browser/ui/contextview/contextview.css",
+            "src/vs/base/browser/ui/countBadge/countBadge.css",
+            "src/vs/base/browser/ui/dialog/dialog.css",
+            "src/vs/base/browser/ui/dnd/dnd.css",
+            "src/vs/base/browser/ui/dropdown/dropdown.css",
+            "src/vs/base/browser/ui/findinput/findInput.css",
+            "src/vs/base/browser/ui/grid/gridview.css",
+            "src/vs/base/browser/ui/hover/hoverWidget.css",
+            "src/vs/base/browser/ui/iconLabel/iconlabel.css",
+            "src/vs/base/browser/ui/icons/iconSelectBox.css",
+            "src/vs/base/browser/ui/inputbox/inputBox.css",
+            "src/vs/base/browser/ui/keybindingLabel/keybindingLabel.css",
+            "src/vs/base/browser/ui/list/list.css",
+            "src/vs/base/browser/ui/menu/menubar.css",
+            "src/vs/base/browser/ui/mouseCursor/mouseCursor.css",
+            "src/vs/base/browser/ui/pixelSpinner/pixelSpinner.css",
+            "src/vs/base/browser/ui/progressbar/progressbar.css",
+            "src/vs/base/browser/ui/radio/radio.css",
+            "src/vs/base/browser/ui/sash/sash.css",
+            "src/vs/base/browser/ui/scrollbar/media/scrollbars.css",
+            "src/vs/base/browser/ui/selectBox/selectBox.css",
+            "src/vs/base/browser/ui/selectBox/selectBoxCustom.css",
+            "src/vs/base/browser/ui/severityIcon/media/severityIcon.css",
+            "src/vs/base/browser/ui/splitview/paneview.css",
+            "src/vs/base/browser/ui/splitview/splitview.css",
+            "src/vs/base/browser/ui/table/table.css",
+            "src/vs/base/browser/ui/toggle/toggle.css",
+            "src/vs/base/browser/ui/toolbar/toolbar.css",
+            "src/vs/base/browser/ui/tree/media/tree.css",
+            "src/vs/base/common/marked/marked.js",
+            "src/vs/base/common/observableInternal/logging/debugger/debuggerApi.d.ts"
+          ],
+          "unscored_target_paths_unavailable": 0
+        }
       },
       "only": {
         "targets": 2,
@@ -477,15 +695,36 @@
         "extra_edges": 0,
         "recall": 1.0,
         "precision": 1.0,
-        "partial_files": 10,
+        "partial_files": 12,
         "edge_rule": {
           "lazy": "only",
           "tests": "included",
           "type_checking": "excluded",
           "scope": "scan_root",
-          "unclassified_languages": []
+          "unclassified_languages": [],
+          "test_scope": {
+            "anchor": ".",
+            "source": "explicit_root",
+            "include_anchor_name": false,
+            "rule": "is_test_path",
+            "basis": "paths relative to the selected project"
+          }
         },
-        "differences": []
+        "differences": [],
+        "target_population": {
+          "status": "observed",
+          "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+          "oracle_targets": 264,
+          "observed_targets": 3,
+          "observed_pairs": 3,
+          "scored_pairs": 2,
+          "unscored_targets": 1,
+          "unscored_pairs": 1,
+          "unscored_target_paths": [
+            "src/vs/base/test/common/filters.perf.data.js"
+          ],
+          "unscored_target_paths_unavailable": 0
+        }
       }
     }
   },

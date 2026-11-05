@@ -5,3 +5,4 @@
 BACK-2489 maintainer push gate only (ci-local.sh / check_doc_hygiene.py private-name check)
 BACK-2493 maintainer measurement script (scripts/rule_census.py), no user-visible change
 BACK-2134 internal speedup of the rule ignore filter (about 0.2 ms per call), identical answers, no user-visible change
+BACK-2503 scheduled recall workflow pin (recall.yml) and re-recorded partial_files baselines, no user-visible change
