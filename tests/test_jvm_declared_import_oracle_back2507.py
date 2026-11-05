@@ -2,7 +2,8 @@
 
 The oracle must not share a bug with Reveal's resolver, so it is exercised on its own here, including the
 shapes that fool a line scan: declarations and imports that only appear in comments or string literals,
-nested types, chained Scala package clauses, and wildcard or selector imports that are counted, never scored.
+nested types, chained Scala package clauses, selector lists read name by name, type-member wildcards scored
+through the symbol they name, and package wildcards that are counted, never scored (BACK-1237).
 """
 import pytest
 
@@ -97,6 +98,14 @@ def test_kotlin_wildcards_are_counted_never_scored(tmp_path):
     edges, coverage = _edges(tmp_path, 'kotlin-declared', files, ['src/U.kt'])
     assert edges == {}
     assert coverage['wildcard_statements'] == 1 and coverage['import_statements'] == 0
+    assert coverage['in_tree_package_wildcards'] == 1 and coverage['type_member_wildcards'] == 0
+
+
+def test_kotlin_type_member_wildcard_depends_on_the_declaring_file(tmp_path):
+    files = {'src/Select.kt': 'package s\nenum class Result { A, B }\n', 'src/U.kt': 'package u\nimport s.Result.*\n'}
+    edges, coverage = _edges(tmp_path, 'kotlin-declared', files, ['src/U.kt'])
+    assert edges == {'src/Select.kt': ['src/U.kt']}
+    assert coverage['type_member_wildcards'] == 1 and coverage['in_tree_package_wildcards'] == 0
 
 
 SCALA = {
@@ -139,27 +148,42 @@ def test_scala_wrong_chain_prefix_does_not_resolve(tmp_path):
     assert coverage['import_statements'] == 1
 
 
-def test_scala_selector_lists_and_wildcards_are_counted_never_scored_by_default(tmp_path):
-    files = {
-        'src/A.scala': 'package a\nclass X\nclass Y\nclass Z\n',
-        'src/U.scala': 'package u\nimport a.{X, Y => Why, Z => _, _}\nimport a._\nimport a.X, a.Y\n',
-    }
-    edges, coverage = _edges(tmp_path, 'scala-declared', files, ['src/U.scala'])
-    assert edges == {'src/A.scala': ['src/U.scala']}
-    assert coverage['selector_lists'] == 1 and coverage['wildcard_statements'] == 1
-    assert coverage['import_statements'] == 2  # only the comma-separated explicit imports
-
-
-def test_scala_selector_lists_are_read_name_by_name_when_the_manifest_asks(tmp_path):
+def test_scala_selector_lists_are_read_name_by_name_and_package_wildcards_are_counted(tmp_path):
     files = {
         'src/A.scala': 'package a\nclass X\nclass Y\nclass Z\n',
         'src/B.scala': 'package a\nclass W\n',
-        'src/U.scala': 'package u\nimport a.{X, W => Why, Z => _, _}\n',
+        'src/U.scala': 'package u\nimport a.{X, W => Why, Z => _, _}\nimport a._\nimport a.X, a.Y\n',
     }
-    edges, coverage = _edges(tmp_path, 'scala-declared', files, ['src/U.scala'], score_selector_lists=True)
+    edges, coverage = _edges(tmp_path, 'scala-declared', files, ['src/U.scala'])
     assert edges == {'src/A.scala': ['src/U.scala'], 'src/B.scala': ['src/U.scala']}  # Z is hidden
-    assert coverage['selector_lists'] == 1 and coverage['wildcard_statements'] == 1
-    assert coverage['import_statements'] == 2
+    assert coverage['selector_lists'] == 1 and coverage['wildcard_statements'] == 2
+    assert coverage['in_tree_package_wildcards'] == 2 and coverage['type_member_wildcards'] == 0
+    assert coverage['import_statements'] == 4  # X, W from the selector list; X, Y comma-separated
+
+
+def test_scala_selector_list_over_several_lines(tmp_path):
+    files = {
+        'src/A.scala': 'package a\nclass X\nclass Y\n',
+        'src/U.scala': 'package u\nimport a.{\n  X,\n  Y\n}\nimport a.X\n',
+    }
+    edges, coverage = _edges(tmp_path, 'scala-declared', files, ['src/U.scala'])
+    assert edges == {'src/A.scala': ['src/U.scala']}
+    assert coverage['selector_lists'] == 1 and coverage['import_statements'] == 3
+
+
+def test_scala_type_member_wildcard_and_package_named_like_a_symbol(tmp_path):
+    """``a.Implicits._`` depends on the file declaring ``object Implicits``. ``a.b._`` is a package wildcard
+    when the tree declares package ``a.b``, even though package ``a`` also declares ``object b``."""
+    files = {
+        'src/Implicits.scala': 'package a\nobject Implicits { def f: Int = 1 }\n',
+        'src/BObject.scala': 'package a\nobject b\n',
+        'src/Q.scala': 'package a.b\nclass Q\n',
+        'src/U.scala': 'package u\nimport a.Implicits._\nimport a.b._\nimport scala.collection._\n',
+    }
+    edges, coverage = _edges(tmp_path, 'scala-declared', files, ['src/U.scala'])
+    assert edges == {'src/Implicits.scala': ['src/U.scala']}
+    assert coverage['wildcard_statements'] == 3 and coverage['type_member_wildcards'] == 1
+    assert coverage['in_tree_package_wildcards'] == 1 and coverage['import_statements'] == 0
 
 
 def test_scala_import_relative_to_an_enclosing_package(tmp_path):

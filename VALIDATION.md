@@ -1538,8 +1538,8 @@ every sample matched the published target and edge counts.
   declaring `Outer`, even when the member is inherited), a name declared in several files of one package is an
   edge to each (the same fan-out policy Reveal documents, so this row does not test that policy), and a file
   that declares the name itself has no edge to another copy. Wildcard imports are counted, never scored
-  (BACK-2506, BACK-2508). Scala selector lists (`import a.{X, Y}`) are not part of the gated row; the manifest
-  option `score_selector_lists` scores them as a separate population (below). Four rows, each measured with
+  (BACK-2506, BACK-2508). At this measurement Scala selector lists (`import a.{X, Y}`) were not part of the
+  gated row (the next entry, BACK-1237, adds them). Four rows, each measured with
   BACK-2510 reverted and in place (Reveal `8f36b7e6`, full importer population, 2026-11-04):
 
   | Corpus (pin) | Files | Targets | Before BACK-2510 | After BACK-2510 |
@@ -1559,10 +1559,36 @@ every sample matched the published target and edge counts.
   `kernel.Resource`; a bare `import RepositoryService.RepositoryInfo` after a selector-list import of
   `RepositoryService`). Scala selector lists are the large open population: scored with
   `score_selector_lists`, Reveal finds 270 of 507 edges on GitBucket (53.25%) and 181 of 384 on cats-effect
-  (47.14%), because it resolves no edge from an `import a.{X, Y}` statement (BACK-1237). The gate
-  rows record the explicit-import figure only; the answer's "not gated" label for Kotlin and Scala is gone.
+  (47.14%), because it resolves no edge from an `import a.{X, Y}` statement (BACK-1237, next entry). The answer's
+  "not gated" label for Kotlin and Scala is gone.
   Re-run: `python scripts/fetch_corpus.py kotlin-coroutines`, then
   `python scripts/recall_gate.py --corpus-root ~/.cache/reveal-corpus --output r.json --corpus kotlin --corpus kotlin-coroutines --corpus scala --corpus scala-cats-effect`.
+- **Scala selector lists and type-member wildcards (BACK-1237, 2026-11-04):** the same four rows now score
+  every import that names a symbol: explicit imports, each name of a selector list (`import a.{X, Y => Z}`
+  names X and Y; `W => _` hides W), comma-separated imports (`import a.X, b.Y`), and a type-member wildcard
+  (`import a.Implicits._`, Kotlin `import a.Result.*`) through the symbol it names. Selector lists may span
+  several lines. A package wildcard still names no file: the coverage counts it (`in_tree_package_wildcards`
+  when the tree declares the package), and nothing scores it (BACK-1711, BACK-2506). The optional manifest
+  key `score_selector_lists` is gone. Measured with the new oracle against Reveal `c322ebe2` (before) and the
+  BACK-1237 change (after); no edge Reveal found before is lost:
+
+  | Corpus (pin) | Before | After | Type-member wildcards scored | In-tree package wildcards (unscored) |
+  |---|---|---|---|---|
+  | Kotlin/tivi `a0c62c2c` | 1,631/1,631 (100%), 0 extra | 1,631/1,631 (100%), 0 extra | 0 | 0 |
+  | Kotlin/kotlinx.coroutines `5f890047` | 207/217 (95.39%), 0 extra | **215/217 (99.08%)**, 0 extra | 8 | 2,010 |
+  | Scala/GitBucket `f55982e8` | 270/676 (39.94%), 1 extra | **653/676 (96.60%)**, 1 extra | 153 | 52 |
+  | Scala/cats-effect `4fc56284` | 181/445 (40.67%), 1 extra | **420/445 (94.38%)**, 4 extra | 52 | 33 |
+
+  Every difference was read in source. The 5 extras are correct Reveal edges the oracle cannot see: an
+  operator-named member (`import gitbucket.core.util.SyntaxSugars.~`) and four imports of a package-object
+  alias that Reveal resolves to the aliased declaration (`kernel.ParallelF`, `Resource`, and `testkit.TestContext`
+  twice). The 50 misses fall into three classes. 23 go through a member of a declared symbol
+  (`Profile.profile.blockingApi._` 16 times, `Par.ParallelF`, `pure.PureConc`, members `object helpers` inherits,
+  `ChannelResult.Companion.closed`; BACK-2512). 23 are relative to an enclosing package or an earlier import
+  (`import Directory._`, `import TracingConstants._`, `import IO.{println => _, _}`; BACK-2514). 4 import a
+  package that also has a package object (`catseffect.examples._`, a package wildcard, three times;
+  `cats.effect.{kernel => cekernel}`), which the oracle reads as an object. The oracle-free graph invariants
+  stay green on all four corpora.
 - **Historical import figures that cannot currently be re-run (BACK-1461):**
   - Original corpus clone not preserved: Python/celery, Rust/ripgrep, Java/guava,
     Go/client_golang, Ruby/solidus,
@@ -1837,22 +1863,24 @@ BACK-675, and BACK-676; **C graduated out** via a per-directive isolated
 `gcc -H` oracle loop on Redis, BACK-611 — 100% recall, no bug found, plus a
 curl second-corpus guard at 100%, BACK-710; see the Results table.):
 
-- **Scala's selector-list imports** (`import a.b.helpers.{x, y}`) — a known,
-  explicitly out-of-scope gap in the current measurement, flagged for a
-  future loop.
+- **Scala imports relative to an enclosing package or an earlier import**
+  (`import Directory._` inside `package gitbucket.core.util`) — no edge; 23 of the
+  differences in the BACK-1237 entry above (BACK-2514). Selector-list imports, the
+  gap that used to sit here, resolve since BACK-1237.
 - **Package-wildcard imports** (Java `import a.b.*;`, Kotlin `import a.b.*`, Scala
   `import a.b._`) — no edge is recorded for them and no recall figure above counts
-  them. The Scala oracle skips `.*` wildcards and selector lists by design, so the
-  Scala import figures describe explicit imports only (BACK-2509). The Java oracle
+  them. The Kotlin and Scala oracles count them and never score them, so those
+  figures describe imports that name a symbol (BACK-2509, BACK-1237). The Java oracle
   fans a wildcard out to every file of the package, but the Elasticsearch scope
-  (`server/src/main/java`) and guava contain no wildcard imports, and the Kotlin
-  corpus contains none, so that path is exercised only by fixtures. Wildcard
-  counts on the pinned corpora (2026-11-04): the whole Elasticsearch tree has 2
+  (`server/src/main/java`) and guava contain no wildcard imports, so that path is
+  exercised only by fixtures. Wildcard counts on the pinned corpora (2026-11-04,
+  comments and string literals blanked): the whole Elasticsearch tree has 2
   package wildcards that name a package declared in the tree (a line scan finds
-  19, but most are import text inside Java text-block strings in tests); a source
-  line scan finds 413 wildcards among 1,450 imports in GitBucket (57 in-tree
-  packages) and 487 among 1,502 in cats-effect (32 in-tree packages), not yet
-  re-checked for string-literal text. A file imported only through a wildcard
+  19, but most are import text inside Java text-block strings in tests);
+  kotlinx.coroutines has 1,754 in 866 of its 1,034 files (`import kotlinx.coroutines.*`
+  is that library's style); GitBucket has 57 and cats-effect 26. The gate rows'
+  `in_tree_package_wildcards` coverage counts a little higher (2,010, 52, 33) because
+  it also counts a prefix of a declared package. A file imported only through a wildcard
   therefore shows fan-in 0 today (disclosure: BACK-2506; oracle population:
   BACK-2507).
 - **Kotlin and Scala top-level types declared in a file not named after them**
@@ -1869,8 +1897,8 @@ curl second-corpus guard at 100%, BACK-710; see the Results table.):
   with no edge removed; 288 of 288 added tivi edges and 58 of 58 GitBucket edges
   checked by hand were correct. A type declared in more than one file of one package
   (Kotlin multiplatform source sets) fans out to every declaring file, and a nested
-  type, generated code with no file in the tree, wildcards and Scala selector lists
-  still get no edge.
+  type, generated code with no file in the tree and package wildcards still get no
+  edge (Scala selector lists resolve since BACK-1237).
 - **Ruby's classic `autoload` calls** (distinct from the Zeitwerk convention
   measured above) — checked directly against Discourse's real source (10,458
   files) and found to occur zero times; declined as a candidate because the
@@ -2375,7 +2403,7 @@ manifest entry with a `recall:` block names an independent oracle from
 | `rust-use` | Deepest real module file for `crate::`/`super::`/`self::` use paths | Meilisearch, ripgrep |
 | `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java` | Elasticsearch `server/src/main/java`, guava |
 | `kotlin-declared` | Text rule: a top-level declaration is indexed under its package whatever the file is named; an explicit import resolves to the declaring file | tivi, kotlinx.coroutines |
-| `scala-declared` | The same rule with chained `package` clauses joined and imports read relative to enclosing packages; selector lists opt-in | GitBucket `src/main/scala`, cats-effect |
+| `scala-declared` | The same rule with chained `package` clauses joined and imports read relative to enclosing packages; each selector-list name and type-member wildcard scored, package wildcards counted | GitBucket `src/main/scala`, cats-effect |
 | `typescript-compiler` | TypeScript parser plus `ts.resolveModuleName`, including aliases, re-exports, dynamic and type-query imports | VS Code base, Excalidraw workspace, three.js src |
 | `go-toolchain` | Go standard parser and `go list` decide package imports; file fan-out is a separate buildless projection | client_golang |
 | `python-ast-callers` | Python AST derives scoped function/method caller relationships; selected with `--signal calls` | celery `celery/utils/` |

@@ -107,6 +107,65 @@ class _RecordedLookups(dict):
         return super().get(key, default)
 
 
+_WILDCARD_SELECTORS = frozenset({'_', '*'})
+_IMPORT_COMMENT = re.compile(r'/\*.*?\*/|//[^\n]*', re.DOTALL)
+
+
+def _named_import_targets(text: str, keywords: FrozenSet[str]) -> List[Tuple[str, Optional[str]]]:
+    """``(dotted name, alias)`` for each target one Scala import declaration names (BACK-1237).
+
+    ``import a.X, b.Y`` is two expressions; ``import a.{X, Y => Z, W => _, _}`` names ``a.X``,
+    ``a.Y`` (bound as ``Z``: a rename still loads Y's file), nothing for the hidden ``W``, and the
+    package wildcard ``a._``. ``given`` selectors (Scala 3) bind an unknown set of instances, so they
+    are kept as the package wildcard too, never guessed. ``X as Y`` is the Scala 3 rename spelling.
+    """
+    # A comment may sit inside the braces (`import a.{X /*, Y*/}`, cats-effect); it names nothing.
+    tokens = ' '.join(_IMPORT_COMMENT.sub(' ', text).split()).rstrip(';').strip().split(' ')
+    while tokens and tokens[0] in keywords:
+        tokens.pop(0)
+    targets: List[Tuple[str, Optional[str]]] = []
+    for piece in _top_level_pieces(' '.join(tokens)):
+        if '{' in piece:
+            prefix, _, selectors = piece.partition('{')
+            targets += _selector_targets(prefix.strip().replace('`', ''), selectors.rsplit('}', 1)[0])
+        else:
+            name, _, alias = piece.partition(' as ')
+            targets.append((name.strip().replace('`', ''), alias.strip() or None))
+    return targets
+
+
+def _top_level_pieces(body: str) -> List[str]:
+    """``body`` split at the commas outside braces, each piece stripped, empty ones dropped."""
+    pieces, depth, current = [], 0, ''
+    for ch in body:
+        if ch == ',' and depth == 0:
+            pieces.append(current)
+            current = ''
+            continue
+        depth += (ch == '{') - (ch == '}')
+        current += ch
+    pieces.append(current)
+    return [piece.strip() for piece in pieces if piece.strip()]
+
+
+def _selector_targets(prefix: str, selectors: str) -> List[Tuple[str, Optional[str]]]:
+    """The targets of one selector list ``prefix{selectors}``: renames keep the original name, hides
+    (``X => _``) name nothing, and ``_``/``*``/``given`` become the package wildcard ``prefix_``."""
+    targets: List[Tuple[str, Optional[str]]] = []
+    for item in (part.strip() for part in selectors.split(',')):
+        if not item:
+            continue
+        arrow = '=>' if '=>' in item else ' as '
+        name, _, new = (part.strip().replace('`', '') for part in item.partition(arrow))
+        if new == '_':
+            continue  # `X => _` hides X: it names nothing
+        if name in _WILDCARD_SELECTORS or name == 'given' or name.startswith('given '):
+            targets.append((prefix + '_', None))
+        else:
+            targets.append((prefix + name, new or None))
+    return targets
+
+
 def _include_ancestors(base_path: Path, search_paths: Optional[List[Path]]) -> List[Path]:
     """Directories from the including file's directory up to the first search
     root that contains it, nearest first (BACK-1469). Empty when the includer
@@ -554,6 +613,14 @@ class _ImportSpec:
             :meth:`extract_namespaces` then returns the joined dotted name
             instead of one entry per clause. A packaging block
             ``package a { ... }`` is not a chain link and keeps one entry.
+        selector_imports: True when one import declaration can name several
+            targets (Scala, BACK-1237): comma-separated expressions
+            (``import a.X, b.Y``) and selector lists (``import a.{X, Y => Z,
+            W => _}``). :meth:`_node_to_imports` emits one statement per named
+            target, so each resolves through the full cascade like an explicit
+            ``import a.X``. A rename keeps the original name (the file is the
+            same) and records the new one as the alias; a hide names nothing; a
+            ``_``/``*`` inside the braces becomes the package wildcard ``a._``.
         package_is_directory: True when a qualified import's package is, by
             the language's source layout, the target file's directory path, so
             ``import a.b.C`` names exactly the file whose path ends in
@@ -631,6 +698,7 @@ class _ImportSpec:
     package_is_directory: bool = False
     combinator_clause: bool = False
     chained_package_clauses: bool = False
+    selector_imports: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -691,9 +759,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
         for node_type in self.spec.import_node_types:
             for node in analyzer._find_nodes_by_type(node_type):
-                stmt = self._node_to_import(node, analyzer, file_path, constant_index)
-                if stmt is not None:
-                    imports.append(stmt)
+                imports.extend(self._node_to_imports(node, analyzer, file_path, constant_index))
 
         # Call-style imports (Ruby require/require_relative/load; Lua require;
         # GDScript preload/load).
@@ -1250,6 +1316,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         self,
         stmt: ImportStatement,
         member_index: Dict[Tuple[str, str], List[Path]],
+        declared_packages: Optional[Set[str]] = None,
     ) -> List[Path]:
         """Every in-tree file declaring the top-level symbol ``stmt`` imports.
 
@@ -1272,6 +1339,12 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         and without type inference there is no principled way to pick one, so
         this reports all of them rather than guessing or skipping. Honest-skip
         contract holds: an unindexed ``(package, symbol)`` returns ``[]``.
+
+        A type-member wildcard (Scala ``import a.b.Implicits._``, Kotlin ``import a.b.Obj.*``,
+        BACK-1237) names the members of one declared symbol, so it resolves to the file
+        declaring ``(a.b, Implicits)``. A wildcard whose prefix is a declared package
+        (``declared_packages``) is a package wildcard and names no file (BACK-1711), even if a
+        same-named symbol also exists.
         """
         if not (
             self.spec.member_symbol_fallback
@@ -1284,6 +1357,10 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if not sep or not module or sep not in module:
             return []
         parts = [p for p in module.split(sep) if p]
+        if parts and parts[-1] in _WILDCARD_SELECTORS:
+            parts = parts[:-1]
+            if declared_packages is not None and sep.join(parts) in declared_packages:
+                return []
         if len(parts) < 2:
             return []
         symbol = parts[-1]
@@ -1362,6 +1439,26 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         (BACK-982).
         """
         return self._get_tree_analyzer(file_path)
+
+    def _node_to_imports(
+        self, node, analyzer, file_path: Path,
+        constant_index: Optional[Dict[str, Tuple[str, str]]] = None,
+    ) -> List[ImportStatement]:
+        """Every statement one import node names: one, or one per named target when
+        ``spec.selector_imports`` is set (BACK-1237). Each keeps the node's line and full
+        source text, so the importers view cites the declaration as written."""
+        if not self.spec.selector_imports:
+            stmt = self._node_to_import(node, analyzer, file_path, constant_index)
+            return [stmt] if stmt is not None else []
+        raw = analyzer._get_node_text(node)
+        statements: List[ImportStatement] = []
+        for dotted, alias in _named_import_targets(raw, self.spec.keywords):
+            stmt = self._build(dotted, node, file_path)
+            if stmt is not None:
+                stmt.alias = alias
+                stmt.source_line = raw.strip()
+                statements.append(stmt)
+        return statements
 
     def _node_to_import(
         self, node, analyzer, file_path: Path,
@@ -2300,9 +2397,9 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
         if sep and sep in module:
             parts = [p for p in module.split(sep) if p]
-            # Scala selector `{C, D}` / wildcard `_` name multiple targets or a
-            # whole package, not one file — skip rather than leak `{...}`/`_`
-            # into a bogus path.
+            # A wildcard `_` names a package or one type's members, never a file
+            # path (the member index takes the type-member case, BACK-1237);
+            # `{` is defensive: Scala selector lists are split at extraction.
             if parts and (parts[-1] == '_' or '{' in parts[-1]):
                 return None
             return self._resolve_dotted(parts, exts, search_paths, file_index)
@@ -2906,9 +3003,7 @@ _KOTLIN_SPEC = _ImportSpec(
 # picture from zero files of these five languages. Node kinds verified against
 # real parses (2026-07-09, session apricot-tapestry-0709); BACK-514.
 _SCALA_SPEC = _ImportSpec(
-    # `import a.b.C` / `import a.b.{C, D}` / `import a.b._` are all one node
-    # kind; selector/wildcard forms are recognised and skipped in
-    # _resolve_module (they name multiple targets, not one file).
+    # `import a.b.C` / `import a.b.{C, D}` / `import a.b._` are all one node kind.
     import_node_types=frozenset({'import_declaration'}),
     keywords=frozenset({'import'}),
     module_separator='.',
@@ -2923,6 +3018,8 @@ _SCALA_SPEC = _ImportSpec(
     package_node_types=frozenset({'package_clause'}),
     # BACK-2510: `package cats` / `package effect` nest into `cats.effect`.
     chained_package_clauses=True,
+    # BACK-1237: `import a.{X, Y}` and `import a.X, b.Y` name one target each.
+    selector_imports=True,
     # BACK-557 Scala measurement loop (real corpus: samples/scala, GitBucket):
     # confirmed real Scala 2/3 code has NO bare top-level def/val outside any
     # object (Scala forbids it outside a `package object`; unlike Kotlin,

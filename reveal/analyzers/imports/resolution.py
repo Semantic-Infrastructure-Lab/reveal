@@ -686,7 +686,8 @@ class ProjectResolver:
         past any namespace the tree declares. Fall back to the
         content-scanned member index."""
         added = False
-        for resolved in extractor.resolve_member_targets(stmt, indices.member_index):
+        for resolved in extractor.resolve_member_targets(
+                stmt, indices.member_index, declared_packages=indices.project_namespaces):
             if resolved != file_path:
                 self._add_edge(stmt, extractor, file_path, resolved, VIA_MEMBER)
                 self.result.edge_statements[(file_path, resolved)] = stmt

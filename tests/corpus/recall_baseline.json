@@ -652,7 +652,9 @@
       "import_statements": 5367,
       "resolved_statements": 1727,
       "wildcard_statements": 0,
-      "selector_lists": 0
+      "selector_lists": 0,
+      "in_tree_package_wildcards": 0,
+      "type_member_wildcards": 0
     },
     "partial_files": 0,
     "edge_rule": {
@@ -688,19 +690,21 @@
   "scala": {
     "oracle": "scala-declared",
     "sha": "f55982e8a5262d841f29489f5954616967b3504b",
-    "targets": 54,
-    "oracle_edges": 270,
-    "hit_edges": 269,
+    "targets": 121,
+    "oracle_edges": 676,
+    "hit_edges": 653,
     "extra_edges": 1,
-    "recall": 0.9962962962962963,
-    "precision": 0.9962962962962963,
+    "recall": 0.9659763313609467,
+    "precision": 0.9984709480122325,
     "coverage": {
       "files": 213,
       "indexed_symbols": 347,
-      "import_statements": 670,
-      "resolved_statements": 274,
-      "wildcard_statements": 365,
-      "selector_lists": 219
+      "import_statements": 1246,
+      "resolved_statements": 625,
+      "wildcard_statements": 371,
+      "selector_lists": 219,
+      "in_tree_package_wildcards": 52,
+      "type_member_wildcards": 153
     },
     "partial_files": 0,
     "edge_rule": {
@@ -721,15 +725,67 @@
     },
     "differences": [
       {
-        "target": "src/main/scala/gitbucket/core/service/RepositoryService.scala",
+        "target": "src/main/scala/gitbucket/core/model/Profile.scala",
+        "missed": [
+          "src/main/scala/gitbucket/core/controller/api/ApiRepositoryControllerBase.scala",
+          "src/main/scala/gitbucket/core/plugin/PluginRegistry.scala",
+          "src/main/scala/gitbucket/core/service/HandleCommentService.scala",
+          "src/main/scala/gitbucket/core/service/IssueCreationService.scala",
+          "src/main/scala/gitbucket/core/service/MergeService.scala",
+          "src/main/scala/gitbucket/core/service/OpenIDConnectService.scala",
+          "src/main/scala/gitbucket/core/service/RepositoryCommitFileService.scala",
+          "src/main/scala/gitbucket/core/service/RepositoryCreationService.scala",
+          "src/main/scala/gitbucket/core/service/RepositorySearchService.scala",
+          "src/main/scala/gitbucket/core/servlet/ApiAuthenticationFilter.scala",
+          "src/main/scala/gitbucket/core/servlet/GitAuthenticationFilter.scala",
+          "src/main/scala/gitbucket/core/servlet/GitRepositoryServlet.scala",
+          "src/main/scala/gitbucket/core/servlet/InitializeListener.scala",
+          "src/main/scala/gitbucket/core/servlet/TransactionFilter.scala",
+          "src/main/scala/gitbucket/core/ssh/GitCommand.scala",
+          "src/main/scala/gitbucket/core/ssh/PublicKeyAuthenticator.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "src/main/scala/gitbucket/core/util/ConfigUtil.scala",
+        "missed": [
+          "src/main/scala/gitbucket/core/util/DatabaseConfig.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "src/main/scala/gitbucket/core/util/Directory.scala",
+        "missed": [
+          "src/main/scala/gitbucket/core/util/DatabaseConfig.scala",
+          "src/main/scala/gitbucket/core/util/JGitUtil.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "src/main/scala/gitbucket/core/util/Implicits.scala",
+        "missed": [
+          "src/main/scala/gitbucket/core/util/Authenticator.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "src/main/scala/gitbucket/core/util/StringUtil.scala",
+        "missed": [
+          "src/main/scala/gitbucket/core/util/JGitUtil.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "src/main/scala/gitbucket/core/util/SyntaxSugars.scala",
         "missed": [],
         "extra": [
-          "src/main/scala/gitbucket/core/util/Authenticator.scala"
+          "src/main/scala/gitbucket/core/service/AccountFederationService.scala"
         ]
       },
       {
         "target": "src/main/scala/gitbucket/core/view/helpers.scala",
         "missed": [
+          "src/main/scala/gitbucket/core/controller/MilestonesController.scala",
           "src/main/scala/gitbucket/core/service/WebHookService.scala"
         ],
         "extra": []
@@ -738,34 +794,34 @@
     "target_population": {
       "status": "observed",
       "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
-      "oracle_targets": 54,
-      "observed_targets": 55,
-      "observed_pairs": 271,
-      "scored_pairs": 270,
-      "unscored_targets": 1,
-      "unscored_pairs": 1,
-      "unscored_target_paths": [
-        "src/main/scala/gitbucket/core/util/SyntaxSugars.scala"
-      ],
+      "oracle_targets": 121,
+      "observed_targets": 121,
+      "observed_pairs": 654,
+      "scored_pairs": 654,
+      "unscored_targets": 0,
+      "unscored_pairs": 0,
+      "unscored_target_paths": [],
       "unscored_target_paths_unavailable": 0
     }
   },
   "scala-cats-effect": {
     "oracle": "scala-declared",
     "sha": "4fc56284b005ad8f00788780443ea1e9717cf9a8",
-    "targets": 49,
-    "oracle_edges": 184,
-    "hit_edges": 181,
-    "extra_edges": 1,
-    "recall": 0.9836956521739131,
-    "precision": 0.9945054945054945,
+    "targets": 86,
+    "oracle_edges": 445,
+    "hit_edges": 418,
+    "extra_edges": 4,
+    "recall": 0.9393258426966292,
+    "precision": 0.990521327014218,
     "coverage": {
       "files": 404,
       "indexed_symbols": 493,
-      "import_statements": 727,
-      "resolved_statements": 174,
-      "wildcard_statements": 490,
-      "selector_lists": 281
+      "import_statements": 1501,
+      "resolved_statements": 384,
+      "wildcard_statements": 498,
+      "selector_lists": 281,
+      "in_tree_package_wildcards": 33,
+      "type_member_wildcards": 52
     },
     "partial_files": 0,
     "edge_rule": {
@@ -786,12 +842,64 @@
     },
     "differences": [
       {
+        "target": "core/js/src/main/scala/cats/effect/tracing/TracingConstants.scala",
+        "missed": [
+          "core/js/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
+          "core/jvm/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
+          "core/native/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
+          "core/shared/src/main/scala/cats/effect/tracing/Tracing.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "core/js-native/src/main/scala/cats/effect/IOFiberConstants.scala",
+        "missed": [
+          "core/shared/src/main/scala/cats/effect/IOFiber.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "core/js-native/src/main/scala/cats/effect/SyncIOConstants.scala",
+        "missed": [
+          "core/shared/src/main/scala/cats/effect/SyncIO.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "core/native/src/main/scala/cats/effect/tracing/TracingConstants.scala",
+        "missed": [
+          "core/js/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
+          "core/jvm/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
+          "core/native/src/main/scala/cats/effect/tracing/TracingPlatform.scala",
+          "core/shared/src/main/scala/cats/effect/tracing/Tracing.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "core/shared/src/main/scala/cats/effect/IO.scala",
+        "missed": [
+          "core/shared/src/main/scala/cats/effect/IOFiber.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "kernel/shared/src/main/scala/cats/effect/kernel/Outcome.scala",
+        "missed": [
+          "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/pure.scala",
+          "kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala",
+          "tests/shared/src/test/scala/cats/effect/kernel/ParallelFSpec.scala"
+        ],
+        "extra": []
+      },
+      {
         "target": "kernel/shared/src/main/scala/cats/effect/kernel/ParallelF.scala",
         "missed": [
           "laws/shared/src/test/scala/cats/effect/laws/PureConcSpec.scala",
           "tests/shared/src/test/scala/cats/effect/IOSpec.scala"
         ],
-        "extra": []
+        "extra": [
+          "kernel/shared/src/main/scala/cats/effect/kernel/instances/GenSpawnInstances.scala"
+        ]
       },
       {
         "target": "kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala",
@@ -801,9 +909,81 @@
         ]
       },
       {
+        "target": "kernel/shared/src/main/scala/cats/effect/kernel/Sync.scala",
+        "missed": [
+          "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/Generators.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "kernel/shared/src/main/scala/cats/effect/kernel/package.scala",
+        "missed": [
+          "core/shared/src/main/scala/cats/effect/package.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/Generators.scala",
+        "missed": [
+          "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/PureConcGenerators.scala",
+          "laws/shared/src/test/scala/cats/effect/testkit/TimeTSpec.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/PureConcGenerators.scala",
+        "missed": [
+          "laws/shared/src/test/scala/cats/effect/testkit/TimeTSpec.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/TestContext.scala",
+        "missed": [],
+        "extra": [
+          "tests/shared/src/test/scala/cats/effect/IOSpec.scala",
+          "tests/shared/src/test/scala/cats/effect/Runners.scala"
+        ]
+      },
+      {
         "target": "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/pure.scala",
         "missed": [
           "laws/shared/src/test/scala/cats/effect/testkit/TimeTSpec.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "laws/shared/src/test/scala/cats/effect/BaseSpec.scala",
+        "missed": [
+          "tests/jvm/src/test/scala/cats/effect/unsafe/WorkerThreadNameSpec.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "tests/js/src/main/scala/catseffect/examplesplatform.scala",
+        "missed": [
+          "tests/jvm/src/test/scala/cats/effect/IOAppSpec.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "tests/jvm/src/main/scala/catseffect/examplesplatform.scala",
+        "missed": [
+          "tests/jvm/src/test/scala/cats/effect/IOAppSpec.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "tests/native/src/main/scala/catseffect/examplesplatform.scala",
+        "missed": [
+          "tests/jvm/src/test/scala/cats/effect/IOAppSpec.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "tests/shared/src/test/scala/cats/effect/BaseSpec.scala",
+        "missed": [
+          "tests/jvm/src/test/scala/cats/effect/unsafe/WorkerThreadNameSpec.scala"
         ],
         "extra": []
       }
@@ -811,10 +991,10 @@
     "target_population": {
       "status": "observed",
       "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
-      "oracle_targets": 49,
-      "observed_targets": 47,
-      "observed_pairs": 182,
-      "scored_pairs": 182,
+      "oracle_targets": 86,
+      "observed_targets": 80,
+      "observed_pairs": 422,
+      "scored_pairs": 422,
       "unscored_targets": 0,
       "unscored_pairs": 0,
       "unscored_target_paths": [],
@@ -824,11 +1004,11 @@
   "kotlin-coroutines": {
     "oracle": "kotlin-declared",
     "sha": "5f8900478a8e20c073145b1608fbc71fe3d7378b",
-    "targets": 77,
-    "oracle_edges": 209,
-    "hit_edges": 207,
+    "targets": 81,
+    "oracle_edges": 217,
+    "hit_edges": 215,
     "extra_edges": 0,
-    "recall": 0.9904306220095693,
+    "recall": 0.9907834101382489,
     "precision": 1.0,
     "coverage": {
       "files": 1034,
@@ -836,7 +1016,9 @@
       "import_statements": 737,
       "resolved_statements": 127,
       "wildcard_statements": 3569,
-      "selector_lists": 0
+      "selector_lists": 0,
+      "in_tree_package_wildcards": 2010,
+      "type_member_wildcards": 8
     },
     "partial_files": 0,
     "edge_rule": {
@@ -868,10 +1050,10 @@
     "target_population": {
       "status": "observed",
       "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
-      "oracle_targets": 77,
-      "observed_targets": 78,
-      "observed_pairs": 208,
-      "scored_pairs": 207,
+      "oracle_targets": 81,
+      "observed_targets": 82,
+      "observed_pairs": 216,
+      "scored_pairs": 215,
       "unscored_targets": 1,
       "unscored_pairs": 1,
       "unscored_target_paths": [

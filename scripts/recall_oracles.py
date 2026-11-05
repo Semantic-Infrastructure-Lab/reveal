@@ -408,9 +408,11 @@ def build_java_oracle(scope: Scope) -> tuple[Edges, Coverage]:
 # extractor and resolver (BACK-2507): comments and string literals are blanked, braces are counted, and a
 # declaration keyword at brace depth 0 declares its name. One shared policy with Reveal's documented
 # member-index behaviour, not an independent check of it: a name declared in several files of one package
-# (Kotlin multiplatform source sets) is an edge to each. Explicit imports only; wildcards are counted in
-# the coverage, never scored (BACK-2506/2508), and Scala selector lists are scored only when the manifest
-# sets ``score_selector_lists: true`` (BACK-1237 is a separate population, never mixed into the gated row).
+# (Kotlin multiplatform source sets) is an edge to each. Every import that names a symbol is scored: an
+# explicit import, each name of a Scala selector list, and a type-member wildcard (``a.Implicits._``,
+# ``a.Obj.*``) through the symbol it names (BACK-1237). A package wildcard names no file: it is counted in
+# the coverage (``in_tree_package_wildcards`` when the tree declares the package), never scored
+# (BACK-1711/2506).
 
 def _blank(text: str, start: int, end: int) -> str:
     """Spaces for ``text[start:end]``, keeping newlines so line numbers and brace lines survive."""
@@ -499,7 +501,9 @@ _SC_MODS = (r'(?:(?:private(?:\[\w+\])?|protected(?:\[\w+\])?|sealed|abstract|fi
 _SC_DECL = re.compile(r'^(?:@[\w.]+(?:\([^)]*\))?\s*)*' + _SC_MODS +
                       r'(?:package\s+object|class|trait|object|enum|type|def|val|var|given)\s+(\w+)')
 _JVM_PACKAGE = re.compile(r'^\s*package\s+([\w.]+)\s*(\{)?\s*$')
-_JVM_IMPORT = re.compile(r'^[ \t]*import\s+(.+?)\s*;?\s*$', re.MULTILINE)
+# One import statement: the rest of the line, where a brace group may run over several lines (Scala
+# `import a.{\n  X,\n  Y\n}`); comments and literals are already blanked, so a brace is syntax.
+_JVM_IMPORT = re.compile(r'^[ \t]*import\s+((?:[^\n{]|\{[^}]*\})+?)\s*;?\s*$', re.MULTILINE)
 
 
 def _kotlin_declared_name(line: str) -> str | None:
@@ -562,10 +566,14 @@ def _top_level_lines(clean: str, language: str) -> tuple[list[str], list[str]]:
     return packages, lines
 
 
-def _jvm_import_paths(clean: str, language: str, counts: dict[str, int], score_selectors: bool) -> list[str]:
-    """Dotted names an explicit import statement names; wildcard and wildcard forms are only counted; a selector list is read name by name only when ``score_selectors``."""
-    paths: list[str] = []
-    for statement in _JVM_IMPORT.findall(clean):
+def _jvm_import_paths(clean: str, language: str, counts: dict[str, int]) -> list[tuple[str, bool]]:
+    """``(dotted name, is_wildcard)`` for every name an import statement names; a wildcard's name is its prefix.
+
+    Scala ``import a.B, c.D`` is two names; a selector list ``a.{X, Y => Z, W => _, _}`` names ``a.X``, ``a.Y``
+    and the wildcard ``a`` (``W`` is hidden). Selector lists and wildcards are also counted in ``counts``.
+    """
+    names: list[tuple[str, bool]] = []
+    for statement in (' '.join(found.split()) for found in _JVM_IMPORT.findall(clean)):
         pieces, depth, current = [], 0, ''
         for ch in statement:  # Scala allows `import a.B, c.D`
             if ch == ',' and depth == 0 and language == 'scala':
@@ -581,8 +589,6 @@ def _jvm_import_paths(clean: str, language: str, counts: dict[str, int], score_s
                 continue
             if '{' in piece:
                 counts['selector_lists'] += 1
-                if not score_selectors:
-                    continue
                 prefix, _, body = piece.partition('{')
                 for item in body.rstrip('} \t').split(','):
                     name = item.split('=>')[0].split(' as ')[0].strip()
@@ -590,13 +596,15 @@ def _jvm_import_paths(clean: str, language: str, counts: dict[str, int], score_s
                         continue  # `X => _` hides X
                     if name in ('_', '*'):
                         counts['wildcard_statements'] += 1
+                        names.append((prefix.strip().rstrip('.'), True))
                     elif re.fullmatch(r'\w+', name):
-                        paths.append(prefix.strip() + name)
+                        names.append((prefix.strip() + name, False))
             elif piece.endswith(('.*', '._')):
                 counts['wildcard_statements'] += 1
+                names.append((piece[:-2].replace('`', ''), True))
             elif re.fullmatch(r'[\w.`]+', piece):
-                paths.append(piece.replace('`', ''))
-    return paths
+                names.append((piece.replace('`', ''), False))
+    return names
 
 
 def _build_jvm_declared_oracle(scope: Scope, language: str, suffix: str,
@@ -613,7 +621,8 @@ def _build_jvm_declared_oracle(scope: Scope, language: str, suffix: str,
             name = declared_name(line)
             if name:
                 declared[(package, name)].add(path)
-    counts = {'wildcard_statements': 0, 'selector_lists': 0}
+    counts = {'wildcard_statements': 0, 'selector_lists': 0, 'in_tree_package_wildcards': 0,
+              'type_member_wildcards': 0}
     edges: dict[Path, set[Path]] = defaultdict(set)
     statements = resolved = 0
 
@@ -639,18 +648,26 @@ def _build_jvm_declared_oracle(scope: Scope, language: str, suffix: str,
         if clean is None:  # an importer outside the scan root
             clean = jvm_strip_noise(importer.read_text(encoding='utf-8', errors='replace'))
         own = file_packages.get(importer) or '.'.join(_top_level_lines(clean, language)[0])
-        for dotted in _jvm_import_paths(clean, language, counts, bool(scope.config.get('score_selector_lists'))):
-            statements += 1
-            targets = resolve(dotted)
-            if not targets and language == 'scala' and own:  # an import relative to an enclosing package
-                parts = own.split('.')
-                for keep in range(len(parts), 0, -1):
-                    targets = resolve('.'.join(parts[:keep]) + '.' + dotted)
-                    if targets:
-                        break
+        # Scala reads an import relative to each enclosing package too, innermost first.
+        bases = [''] + (['.'.join(own.split('.')[:keep]) + '.' for keep in range(len(own.split('.')), 0, -1)]
+                        if language == 'scala' and own else [])
+        for dotted, wildcard in _jvm_import_paths(clean, language, counts):
+            if wildcard and any(base + dotted in packages for base in bases):
+                counts['in_tree_package_wildcards'] += 1  # a package wildcard names no file
+                continue
+            targets: set[Path] = set()
+            for base in bases:
+                targets = resolve(base + dotted)
+                if targets:
+                    break
+            if not wildcard:
+                statements += 1
             if importer in targets:  # the file declares the name itself: its own declaration, no other file
                 continue
-            resolved += bool(targets)
+            if wildcard:
+                counts['type_member_wildcards'] += bool(targets)
+            else:
+                resolved += bool(targets)
             for target in targets:
                 edges[target].add(importer)
     return _finish(scope, edges), {'files': len(scope.importers), 'indexed_symbols': len(declared),

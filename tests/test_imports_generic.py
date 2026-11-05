@@ -520,9 +520,11 @@ class TestScala:
         )
         imports, _ = _extract(code, '.scala')
         mods = {i.module_name for i in imports}
+        # BACK-1237: a selector list names one target per selector.
         assert mods == {
             'scala.collection.mutable.Map',
-            'scala.util.{Try, Success}',
+            'scala.util.Try',
+            'scala.util.Success',
             'scala.util._',
         }
 
@@ -1187,7 +1189,8 @@ class TestModuleResolution:
         )
         res = self._resolve(tmp_path, 'Main.scala', '.')
         assert res['a.b.Helper'] == (tmp_path / 'a/b/Helper.scala').resolve()
-        assert res['a.b.{Foo, Bar}'] is None  # selector import — skip, not fabricate
+        # BACK-1237: each selector is its own statement; names with no file stay unresolved.
+        assert res['a.b.Foo'] is None and res['a.b.Bar'] is None
         assert res['a.b._'] is None           # wildcard import — skip
 
     def test_dart_relative_import_resolves_package_import_skips(self, tmp_path):

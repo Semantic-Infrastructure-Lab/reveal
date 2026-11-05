@@ -707,7 +707,7 @@ _SMOKE: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_SMOKE_TESTED,
         imports_unused=False,
         import_resolution=(
-            "Generic extractor (imports/generic.py), added BACK-514. `import a.b.C` -> a/b/C.scala, peeling nested (BACK-551) and object members (BACK-557); selector/wildcard imports are skipped, never fabricated."
+            "Generic extractor (imports/generic.py), added BACK-514. `import a.b.C` -> a/b/C.scala, peeling nested (BACK-551) and object members (BACK-557); each name of a selector list `import a.{X, Y => Z}` and a type-member wildcard `import a.Obj._` resolve like an explicit import (BACK-1237); a package wildcard `import a.b._` names no file and is skipped, never fabricated."
         ),
         known_limitations=[
             "val/var_definition WRITE-as-READ mislabeling and "

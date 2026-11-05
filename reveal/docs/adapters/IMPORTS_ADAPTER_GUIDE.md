@@ -637,7 +637,7 @@ Support comes in tiers — be aware of which query modes actually work per langu
 | Ruby | `.rb` | 📦 Listing + graph | `require_relative './x'` → `x.rb`; `load`/`require` of a real in-tree `.rb`; bare `require 'gem'` skips |
 | Kotlin | `.kt`, `.kts` | 📦 Listing + graph | `import com.pkg.Bar` → `com/pkg/Bar.kt` when the file is named for the class (best-effort; Kotlin doesn't enforce filename==class) |
 | Swift | `.swift` | 📦 Listing + graph | `import Foo` → `Foo.swift` where a module maps 1:1 to a lone file; system frameworks skip (sparse fan-in by nature) |
-| Scala | `.scala` | 📦 Listing + graph | `import a.b.C` → `a/b/C.scala` (package==dir); selector `import a.b.{C, D}` and wildcard `import a.b._` list but skip file resolution (name multiple targets) |
+| Scala | `.scala` | 📦 Listing + graph | `import a.b.C` → `a/b/C.scala` (package==dir); each name in a selector list `import a.b.{C, D => E}` and a type-member wildcard `import a.b.Obj._` resolve like `import a.b.C`; a package wildcard `import a.b._` lists but resolves to no file (it names a package) |
 | Dart | `.dart` | 📦 Listing + graph | relative `import './x.dart'` resolves; `package:x/y.dart` names a pub package (skipped unless it maps into the tree). `export`/`part` are out of scope for v1 |
 | Lua | `.lua` | 📦 Listing + graph | `require("a.b")` → `a/b.lua` (`.`-separated path); bare stdlib/rock names with no in-tree file skip |
 | Zig | `.zig` | 📦 Listing + graph | `@import("foo.zig")` → relative to the importing file; `@import("std")`/`"builtin"` and other non-`.zig` names skip |
