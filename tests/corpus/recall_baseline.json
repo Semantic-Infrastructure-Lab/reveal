@@ -929,17 +929,17 @@
   "scala": {
     "oracle": "scala-declared",
     "sha": "f55982e8a5262d841f29489f5954616967b3504b",
-    "targets": 121,
-    "oracle_edges": 676,
-    "hit_edges": 676,
+    "targets": 122,
+    "oracle_edges": 678,
+    "hit_edges": 678,
     "extra_edges": 1,
     "recall": 1.0,
-    "precision": 0.9985228951255539,
+    "precision": 0.9985272459499264,
     "coverage": {
       "files": 213,
       "indexed_symbols": 347,
       "import_statements": 1246,
-      "resolved_statements": 625,
+      "resolved_statements": 627,
       "wildcard_statements": 371,
       "selector_lists": 219,
       "in_tree_package_wildcards": 52,
@@ -974,10 +974,10 @@
     "target_population": {
       "status": "observed",
       "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
-      "oracle_targets": 121,
-      "observed_targets": 121,
-      "observed_pairs": 677,
-      "scored_pairs": 677,
+      "oracle_targets": 122,
+      "observed_targets": 122,
+      "observed_pairs": 679,
+      "scored_pairs": 679,
       "unscored_targets": 0,
       "unscored_pairs": 0,
       "unscored_target_paths": [],
@@ -987,21 +987,21 @@
   "scala-cats-effect": {
     "oracle": "scala-declared",
     "sha": "4fc56284b005ad8f00788780443ea1e9717cf9a8",
-    "targets": 86,
-    "oracle_edges": 445,
-    "hit_edges": 441,
-    "extra_edges": 4,
-    "recall": 0.9910112359550561,
-    "precision": 0.9910112359550561,
+    "targets": 91,
+    "oracle_edges": 506,
+    "hit_edges": 506,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
     "coverage": {
       "files": 404,
-      "indexed_symbols": 493,
+      "indexed_symbols": 537,
       "import_statements": 1501,
-      "resolved_statements": 384,
+      "resolved_statements": 428,
       "wildcard_statements": 498,
       "selector_lists": 281,
-      "in_tree_package_wildcards": 33,
-      "type_member_wildcards": 52
+      "in_tree_package_wildcards": 34,
+      "type_member_wildcards": 82
     },
     "partial_files": 0,
     "edge_rule": {
@@ -1020,65 +1020,14 @@
         "basis": "paths relative to the selected project"
       }
     },
-    "differences": [
-      {
-        "target": "kernel/shared/src/main/scala/cats/effect/kernel/ParallelF.scala",
-        "missed": [],
-        "extra": [
-          "kernel/shared/src/main/scala/cats/effect/kernel/instances/GenSpawnInstances.scala"
-        ]
-      },
-      {
-        "target": "kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala",
-        "missed": [],
-        "extra": [
-          "tests/shared/src/test/scala/cats/effect/ResourceSpec.scala"
-        ]
-      },
-      {
-        "target": "kernel/shared/src/main/scala/cats/effect/kernel/package.scala",
-        "missed": [
-          "core/shared/src/main/scala/cats/effect/package.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/TestContext.scala",
-        "missed": [],
-        "extra": [
-          "tests/shared/src/test/scala/cats/effect/IOSpec.scala",
-          "tests/shared/src/test/scala/cats/effect/Runners.scala"
-        ]
-      },
-      {
-        "target": "tests/js/src/main/scala/catseffect/examplesplatform.scala",
-        "missed": [
-          "tests/jvm/src/test/scala/cats/effect/IOAppSpec.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "tests/jvm/src/main/scala/catseffect/examplesplatform.scala",
-        "missed": [
-          "tests/jvm/src/test/scala/cats/effect/IOAppSpec.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "tests/native/src/main/scala/catseffect/examplesplatform.scala",
-        "missed": [
-          "tests/jvm/src/test/scala/cats/effect/IOAppSpec.scala"
-        ],
-        "extra": []
-      }
-    ],
+    "differences": [],
     "target_population": {
       "status": "observed",
       "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
-      "oracle_targets": 86,
-      "observed_targets": 82,
-      "observed_pairs": 445,
-      "scored_pairs": 445,
+      "oracle_targets": 91,
+      "observed_targets": 91,
+      "observed_pairs": 506,
+      "scored_pairs": 506,
       "unscored_targets": 0,
       "unscored_pairs": 0,
       "unscored_target_paths": [],
