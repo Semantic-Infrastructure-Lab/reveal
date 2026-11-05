@@ -91,14 +91,14 @@ def test_relative_import_of_a_package_object_alias(tmp_path):
     assert _scan(tmp_path, files) == {('spec/ResourceSpec.scala', 'effect/package.scala', 4)}
 
 
-def test_every_kind_of_package_object_member_is_a_declaration(tmp_path):
+@pytest.mark.parametrize('member', ['Box', 'Tool', 'Shape', 'go', 'K', 'T'])
+def test_every_kind_of_package_object_member_is_a_declaration(tmp_path, member):
     files = {
         'src/util/package.scala': ('package a\npackage object util {\n  class Box\n  object Tool\n'
                                    '  trait Shape\n  def go = 1\n  val K = 2\n  type T = Int\n}\n'),
-        'src/use/Use.scala': ('package a.use\nimport a.util.Box\nimport a.util.Tool\nimport a.util.Shape\n'
-                              'import a.util.go\nimport a.util.K\nimport a.util.T\nclass Use\n'),
+        'src/use/Use.scala': f'package a.use\nimport a.util.{member}\nclass Use\n',
     }
-    assert _scan(tmp_path, files) == {('use/Use.scala', 'util/package.scala', line) for line in range(2, 8)}
+    assert _scan(tmp_path, files) == {('use/Use.scala', 'util/package.scala', 2)}
 
 
 def test_package_that_is_only_a_package_object_is_a_declared_package(tmp_path):

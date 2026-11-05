@@ -270,6 +270,8 @@ def _member_keys(file_path: Path, extractor: Any, spec: Any, declared: List[str]
                  for container, symbol in extractor.extract_container_members(file_path) for ns in declared]
     if getattr(spec, 'namespaced_type_fallback', False):
         keys += [(ns, typename) for typename in extractor.extract_namespaced_type_names(file_path) for ns in declared]
+    if getattr(spec, 'package_object_node_types', None):
+        keys += list(extractor.extract_package_object_members(file_path))  # BACK-2515: already qualified
     return keys
 
 
@@ -288,7 +290,14 @@ def _declares_import_package(stmt: ImportStatement, extractor: Any, target: Path
     for keep in range(len(parts) - 1, 0, -1):
         package = sep.join(parts[:keep])
         if package in indices.project_namespaces:
-            return package in declared
+            if package not in declared:
+                return False
+            # BACK-2515 (Scala): past the package the file must declare the next segment; a file named for
+            # an alias (``ParallelF.scala`` declaring ``object Par``) is not where the name lives
+            name = parts[keep]
+            if getattr(extractor.spec, 'check_declared_name', False) and name not in ('_', '*'):
+                return target in indices.member_index.get((package, name), ())
+            return True
     return not declared and bool(parts) and target.stem == parts[0]
 
 
@@ -662,10 +671,7 @@ class ProjectResolver:
         spec = getattr(extractor, 'spec', None)
         if not added and indices.namespace_index and getattr(spec, 'resolve_namespaces', False):
             added = self._add_namespace_edges(stmt, file_path, extractor, indices) or added
-        if not added and indices.member_index and (
-                getattr(spec, 'member_symbol_fallback', False)
-                or getattr(spec, 'container_member_fallback', False)
-                or getattr(spec, 'namespaced_type_fallback', False)):
+        if self._wants_member_edges(spec, indices, added):
             added = self._add_member_edges(stmt, file_path, extractor, indices) or added
         if indices.module_index and getattr(spec, 'module_dir_convention', None):
             # Deliberately NOT gated on `not added` — see _add_module_edges.
@@ -673,6 +679,19 @@ class ProjectResolver:
         if not added:
             self._record_package_wildcard(stmt, file_path, extractor, indices)
             self._record_unresolved_if_intra(stmt, file_path, extractor, base_path, extra_paths, indices)
+
+    @staticmethod
+    def _wants_member_edges(spec: Any, indices: _ResolutionIndices, added: bool) -> bool:
+        """Whether stage 3 (the member index) runs: when nothing resolved before it, or (Scala,
+        ``spec.check_declared_name``, BACK-2515) always, because a name declared in several files is a
+        dependency on each (the JS platform copy ``ref/ReferenceQueue.scala`` and the JVM
+        ``package object ref { type ReferenceQueue }``), so the path match does not end the search."""
+        if added and not getattr(spec, 'check_declared_name', False):
+            return False
+        return bool(indices.member_index) and bool(
+            getattr(spec, 'member_symbol_fallback', False)
+            or getattr(spec, 'container_member_fallback', False)
+            or getattr(spec, 'namespaced_type_fallback', False))
 
     def _record_package_wildcard(
         self, stmt: ImportStatement, file_path: Path, extractor: Any, indices: _ResolutionIndices,

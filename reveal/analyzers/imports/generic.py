@@ -705,6 +705,13 @@ class _ImportSpec:
     # in-tree package prefix of the import) is another package's same-named class, not the target
     # (Kotlin, Scala; Java's layout rule is ``package_is_directory``)
     check_declared_package: bool = False
+    # BACK-2515: ... and, past the package, the file must declare the import's next segment (Scala: a file
+    # named ``ParallelF.scala`` that declares ``object Par`` is not where ``kernel.ParallelF`` lives)
+    check_declared_name: bool = False
+    # BACK-2515: a Scala ``package object X`` in package ``P`` declares package ``P.X`` and its members
+    # (``package_object_member_node_types``) as declarations in it, keyed ``(P.X, member)``
+    package_object_node_types: FrozenSet[str] = field(default_factory=frozenset)
+    package_object_member_node_types: FrozenSet[str] = field(default_factory=frozenset)
     # BACK-2514: an import that resolves to nothing absolute is read again relative to each package the
     # file's own clauses open, innermost first (Scala; ``extract_opened_packages``)
     relative_package_imports: bool = False
@@ -817,7 +824,52 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         chain, namespaces = self._package_clauses(file_path)
         if chain:
             namespaces.insert(0, '.'.join(chain))
+        namespaces.extend(package for package, _ in self._package_objects(file_path, chain))
         return namespaces
+
+    def _package_objects(self, file_path: Path, chain: List[str]) -> List[Tuple[str, Any]]:
+        """``(package, node)`` for each top-level ``package object X`` (BACK-2515): X nests in the braceless
+        clauses before it, so ``package cats`` + ``package object effect`` declares ``cats.effect``. A package
+        object inside a braced packaging is left out (none on the pinned corpora)."""
+        if not self.spec.package_object_node_types:
+            return []
+        analyzer = self._get_analyzer(file_path)
+        if analyzer is None:
+            return []
+        found: List[Tuple[str, Any]] = []
+        for node_type in self.spec.package_object_node_types:
+            for node in analyzer._find_nodes_by_type(node_type):
+                parent = _zero_arg(node, 'parent')
+                if parent is None or _zero_arg(parent, 'parent') is not None:
+                    continue
+                name = self._direct_identifier_name(node, analyzer)
+                if name:
+                    found.append(('.'.join([*chain, name]), node))
+        return found
+
+    def extract_package_object_members(self, file_path: Path) -> List[Tuple[str, str]]:
+        """``(package, member)`` for every declaration directly inside a top-level ``package object``
+        (BACK-2515): ``package cats`` + ``package object effect { val Resource = ... }`` declares
+        ``Resource`` in ``cats.effect``, so ``import cats.effect.Resource`` is a dependency on this file,
+        whatever the aliased class is. ``[]`` unless ``spec.package_object_node_types`` is set."""
+        if not self.spec.package_object_node_types:
+            return []
+        analyzer = self._get_analyzer(file_path)
+        if analyzer is None:
+            return []
+        chain, _ = self._package_clauses(file_path)
+        pairs: List[Tuple[str, str]] = []
+        for package, node in self._package_objects(file_path, chain):
+            body = self._container_body(node)
+            if body is None:
+                continue
+            for member in _children(body):
+                if _zero_arg(member, 'kind') not in self.spec.package_object_member_node_types:
+                    continue
+                name = self._direct_identifier_name(member, analyzer, self._MEMBER_NAME_KINDS)
+                if name:
+                    pairs.append((package, name))
+        return pairs
 
     def extract_opened_packages(self, file_path: Path) -> List[str]:
         """The packages whose members a file's own braceless package clauses bring into scope, innermost
@@ -1263,6 +1315,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         return pairs
 
     _IDENTIFIER_KINDS: ClassVar[FrozenSet[str]] = frozenset({'identifier', 'simple_identifier'})
+    _MEMBER_NAME_KINDS: ClassVar[FrozenSet[str]] = frozenset({'identifier', 'simple_identifier', 'type_identifier'})
 
     @classmethod
     def _direct_identifier_name(cls, node, analyzer, kinds=None) -> Optional[str]:
@@ -3090,10 +3143,17 @@ _SCALA_SPEC = _ImportSpec(
     selector_imports=True,
     peel_nested_members=True,
     # BACK-2514: `import Directory._` inside `package gitbucket.core.util` is read relative to the
-    # packages the clauses open. No check_declared_package (BACK-2505) yet: a package object's members
-    # (`type TestContext = kernel.testkit.TestContext`) are not indexed declarations, and on cats-effect
-    # the check's only effect was to drop three such alias imports that the path match got right.
+    # packages the clauses open.
     relative_package_imports=True,
+    # BACK-2515: package-object members are declarations (``type TestContext = ...``), so the package check
+    # and the name check can drop a path guess that lands on the aliased class
+    package_object_node_types=frozenset({'package_object'}),
+    package_object_member_node_types=frozenset({
+        'type_definition', 'val_definition', 'var_definition', 'function_definition', 'class_definition',
+        'object_definition', 'trait_definition', 'enum_definition',
+    }),
+    check_declared_package=True,
+    check_declared_name=True,
     # BACK-557 Scala measurement loop (real corpus: samples/scala, GitBucket):
     # confirmed real Scala 2/3 code has NO bare top-level def/val outside any
     # object (Scala forbids it outside a `package object`; unlike Kotlin,

@@ -499,7 +499,9 @@ _KT_DECL = re.compile(r'^(?:@[\w.:]+(?:\([^)]*\))?\s*)*' + _KT_MODS +
 _SC_MODS = (r'(?:(?:private(?:\[\w+\])?|protected(?:\[\w+\])?|sealed|abstract|final|implicit|case|lazy|override|open|'
             r'inline|transparent|opaque|infix)\s+)*')
 _SC_DECL = re.compile(r'^(?:@[\w.]+(?:\([^)]*\))?\s*)*' + _SC_MODS +
-                      r'(?:package\s+object|class|trait|object|enum|type|def|val|var|given)\s+(\w+)')
+                      r'(?:class|trait|object|enum|type|def|val|var|given)\s+(\w+)')
+# BACK-2515: `package object X` is not a top-level symbol; it declares package P.X and its members are declarations in it
+_SC_PACKAGE_OBJECT = re.compile(r'^(?:@[\w.]+\s*)*(?:(?:private(?:\[\w+\])?|protected(?:\[\w+\])?)\s+)*package\s+object\s+(\w+)')
 _JVM_PACKAGE = re.compile(r'^\s*package\s+([\w.]+)\s*(\{)?\s*$')
 # One import statement: the rest of the line, where a brace group may run over several lines (Scala
 # `import a.{\n  X,\n  Y\n}`); comments and literals are already blanked, so a brace is syntax.
@@ -566,6 +568,35 @@ def _top_level_lines(clean: str, language: str) -> tuple[list[str], list[str]]:
     return packages, lines
 
 
+def _scala_package_object_members(clean: str) -> list[tuple[str, str]]:
+    """``(package object name, member name)`` for each declaration directly inside a top-level
+    ``package object X { ... }`` (BACK-2515). A member starts a line at brace depth 1 of the object's body; a
+    body written on one line is not read (none on the pinned corpora)."""
+    members: list[tuple[str, str]] = []
+    current: str | None = None
+    pending: str | None = None
+    depth = 0
+    for line in clean.split('\n'):
+        stripped = line.strip()
+        if depth == 0 and stripped and not stripped.startswith('{'):
+            found = _SC_PACKAGE_OBJECT.match(stripped)
+            pending = found.group(1) if found else None
+        elif depth == 1 and current:
+            name = _scala_declared_name(stripped)
+            if name:
+                members.append((current, name))
+        for ch in line:
+            if ch == '{':
+                depth += 1
+                if depth == 1 and pending:
+                    current, pending = pending, None
+            elif ch == '}' and depth:
+                depth -= 1
+                if depth == 0:
+                    current = None
+    return members
+
+
 def _jvm_import_paths(clean: str, language: str, counts: dict[str, int]) -> list[tuple[str, bool]]:
     """``(dotted name, is_wildcard)`` for every name an import statement names; a wildcard's name is its prefix.
 
@@ -613,6 +644,7 @@ def _build_jvm_declared_oracle(scope: Scope, language: str, suffix: str,
                for p in tracked_files(scope.root, [_relative(scope, scope.scan)], frozenset({suffix}))}
     declared: dict[tuple[str, str], set[Path]] = defaultdict(set)
     file_packages: dict[Path, str] = {}
+    package_objects: set[str] = set()  # BACK-2515: packages a `package object` declares members of
     for path, clean in sources.items():
         packages, lines = _top_level_lines(clean, language)
         package = '.'.join(packages) if language == 'scala' else (packages[0] if packages else '')
@@ -621,13 +653,17 @@ def _build_jvm_declared_oracle(scope: Scope, language: str, suffix: str,
             name = declared_name(line)
             if name:
                 declared[(package, name)].add(path)
+        if language == 'scala':
+            for container, member in _scala_package_object_members(clean):
+                declared[(f'{package}.{container}' if package else container, member)].add(path)
+                package_objects.add(f'{package}.{container}' if package else container)
     counts = {'wildcard_statements': 0, 'selector_lists': 0, 'in_tree_package_wildcards': 0,
               'type_member_wildcards': 0}
     edges: dict[Path, set[Path]] = defaultdict(set)
     statements = resolved = 0
 
     packages: set[str] = set()
-    for package in file_packages.values():
+    for package in [*file_packages.values(), *package_objects]:
         parts = package.split('.') if package else []
         packages.update('.'.join(parts[:k]) for k in range(1, len(parts) + 1))
 

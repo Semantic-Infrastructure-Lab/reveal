@@ -209,17 +209,28 @@ def test_scala_text_in_comments_and_interpolated_strings_declares_nothing(tmp_pa
 
 def test_scala_import_does_not_peel_past_a_package_onto_a_package_object(tmp_path):
     # `cats.effect.unsafe.implicits.global`: `effect` is a package object of `cats` AND the package `cats.effect`.
-    # The longest package prefix wins; a name that package does not declare at top level resolves to nothing.
+    # The longest package prefix wins; a name that package does not declare resolves to nothing. A member of the
+    # package object IS a declaration in `cats.effect` (BACK-2515): `cats.effect.x` is a dependency on its file.
     files = {
-        'src/effect.scala': 'package cats\npackage object effect { val x = 1 }\n',
+        'src/effect.scala': 'package cats\npackage object effect {\n  val x = 1\n}\n',
         'src/Unsafe.scala': 'package cats.effect.unsafe\nobject Other\n',
         'src/U.scala': 'package app\nimport cats.effect.unsafe.implicits.global\nimport cats.effect.x\n',
     }
     edges, coverage = _edges(tmp_path, 'scala-declared', files, ['src/U.scala'])
-    assert edges == {}  # a member of a package object is not a top-level name; the oracle does not guess it
-    assert coverage['import_statements'] == 2 and coverage['resolved_statements'] == 0
+    assert edges == {'src/effect.scala': ['src/U.scala']}
+    assert coverage['import_statements'] == 2 and coverage['resolved_statements'] == 1
 
 
+def test_scala_package_object_is_a_package_not_a_symbol(tmp_path):
+    # BACK-2515: `import a.ex._` (a package wildcard, `ex` is also a package object) and `import a.{ex => e}`
+    # name no declaration; neither is an edge to the package object's file.
+    files = {
+        'src/ex.scala': 'package a\npackage object ex {\n  def shared = 1\n}\n',
+        'src/U.scala': 'package app\nimport a.ex._\nimport a.{ex => e}\nimport a.ex.shared\n',
+    }
+    edges, coverage = _edges(tmp_path, 'scala-declared', files, ['src/U.scala'])
+    assert edges == {'src/ex.scala': ['src/U.scala']}  # only the member import, `a.ex.shared`
+    assert coverage['in_tree_package_wildcards'] == 1 and coverage['resolved_statements'] == 1  # the rename is unresolved
 
 def test_kotlin_names_are_read_past_type_parameters_arrows_and_receivers(tmp_path):
     # `-> Unit` closes no type-parameter list, and a receiver's type is not a declared name.

@@ -122,12 +122,7 @@ def test_kotlin_drops_the_other_package_class_and_keeps_the_root_omitted_layout(
     assert _edges(root, root / 'src', '.kt') == KOTLIN_RIGHT
 
 
-@pytest.mark.parametrize('suffix', [
-    '.kt',
-    pytest.param('.scala', marks=pytest.mark.xfail(strict=True, reason=(
-        'BACK-2515: Scala keeps the path answer until package-object members are indexed declarations; '
-        'the declared-package check alone drops alias imports the path match gets right'))),
-])
+@pytest.mark.parametrize('suffix', ['.kt', '.scala'])
 def test_kotlin_and_scala_external_import_is_not_an_edge(tmp_path, suffix):
     files = {
         f'src/org/es/common/geo/GeoUtils{suffix}': 'package org.es.common.geo\nclass GeoUtils\n',
