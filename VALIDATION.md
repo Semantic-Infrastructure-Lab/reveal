@@ -1933,17 +1933,15 @@ BACK-675, and BACK-676; **C graduated out** via a per-directive isolated
 `gcc -H` oracle loop on Redis, BACK-611 — 100% recall, no bug found, plus a
 curl second-corpus guard at 100%, BACK-710; see the Results table.):
 
-- **Scala imports relative to an enclosing package or an earlier import**
-  (`import Directory._` inside `package gitbucket.core.util`) — no edge; 23 of the
-  differences in the BACK-1237 entry above (BACK-2514). Selector-list imports, the
-  gap that used to sit here, resolve since BACK-1237.
 - **Package-wildcard imports** (Java `import a.b.*;`, Kotlin `import a.b.*`, Scala
   `import a.b._`) — no edge is recorded for them and no recall figure above counts
   them. The Kotlin and Scala oracles count them and never score them, so those
-  figures describe imports that name a symbol (BACK-2509, BACK-1237). The Java oracle
-  fans a wildcard out to every file of the package, but the Elasticsearch scope
-  (`server/src/main/java`) and guava contain no wildcard imports, so that path is
-  exercised only by fixtures. Wildcard counts on the pinned corpora (2026-11-04,
+  figures describe imports that name a symbol (BACK-2509, BACK-1237). Since 2026-11-05 the
+  Java oracle follows the same rule (BACK-1711: one rule for the three languages, wildcards
+  excluded by default and disclosed): it counts a package wildcard in
+  `in_tree_package_wildcards` and scores no edge; it used to fan one out to every file of the
+  package. The Elasticsearch scope (`server/src/main/java`) and guava hold none, so no Java
+  edge moved; the two rows were re-recorded for the new coverage counters only. Wildcard counts on the pinned corpora (2026-11-04,
   comments and string literals blanked): the whole Elasticsearch tree has 2
   package wildcards that name a package declared in the tree (a line scan finds
   19, but most are import text inside Java text-block strings in tests);
@@ -1957,6 +1955,11 @@ curl second-corpus guard at 100%, BACK-710; see the Results table.):
   kotlinx.coroutines 1,755 in 867 files, GitBucket `src/main/scala` 52 in 30, cats-effect 32 in 25
   (including `import cats._`: the tree declares `package cats` through package objects), tivi none;
   no gate row moved.
+- **Java type-member wildcards** (`import a.b.C.*;`, `import static a.b.C.*;`) — no edge to
+  `C`'s file, although Kotlin `a.Obj.*` and Scala `a.Obj._` get one (BACK-2517). The Java
+  oracle now resolves both to `C` (it used to look them up as packages and found nothing,
+  which hid the gap); neither gated Java population contains one (`type_member_wildcards`
+  0), so this is a fixture-only finding.
 - **Kotlin and Scala top-level types declared in a file not named after them**
   (Kotlin `object DiscoverScreen` inside `Screens.kt`) — an import of such a type
   now resolves through the declared-type index C# already used: top-level

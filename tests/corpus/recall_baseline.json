@@ -332,10 +332,40 @@
       "files": 611,
       "indexed_types": 611,
       "import_statements": 6501,
-      "resolved_statements": 2520
+      "resolved_statements": 2520,
+      "in_tree_package_wildcards": 0,
+      "type_member_wildcards": 0
     },
     "partial_files": 5,
-    "differences": []
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [
+        "java"
+      ],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
+    "differences": [],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 159,
+      "observed_targets": 159,
+      "observed_pairs": 2081,
+      "scored_pairs": 2081,
+      "unscored_targets": 0,
+      "unscored_pairs": 0,
+      "unscored_target_paths": [],
+      "unscored_target_paths_unavailable": 0
+    }
   },
   "cpp-assimp": {
     "oracle": "gcc-cpp",
@@ -411,7 +441,9 @@
       "files": 4837,
       "indexed_types": 4837,
       "import_statements": 62604,
-      "resolved_statements": 33803
+      "resolved_statements": 33803,
+      "in_tree_package_wildcards": 0,
+      "type_member_wildcards": 0
     },
     "partial_files": 0,
     "edge_rule": {

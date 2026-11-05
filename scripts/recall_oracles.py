@@ -373,9 +373,7 @@ def build_java_oracle(scope: Scope) -> tuple[Edges, Coverage]:
         raise RuntimeError(f'Java oracle found {len(duplicates)} duplicate type(s) under the scan root, '
                            f'e.g. {duplicates[:3]}; measurement unavailable')
 
-    def resolve(dotted: str, wildcard: bool) -> list[Path]:
-        if wildcard:
-            return packages.get(dotted, [])
+    def resolve(dotted: str) -> list[Path]:
         parts = dotted.split('.')
         # a.b.C, then a.b.Outer for a.b.Outer.Nested, a.b.Outer.Mid.Nested, ...
         for cut in range(1, len(parts)):
@@ -384,7 +382,7 @@ def build_java_oracle(scope: Scope) -> tuple[Edges, Coverage]:
         return []
 
     edges: dict[Path, set[Path]] = defaultdict(set)
-    statements = resolved = 0
+    statements = resolved = package_wildcards = member_wildcards = 0
     for importer in scope.importers:
         text = sources.get(importer)
         if text is None:  # an importer outside the scan root
@@ -393,12 +391,22 @@ def build_java_oracle(scope: Scope) -> tuple[Edges, Coverage]:
             if static and not wildcard:
                 dotted = dotted.rsplit('.', 1)[0]  # import static a.b.C.member -> a.b.C
             statements += 1
-            targets = [t for t in resolve(dotted, bool(wildcard)) if t != importer]
+            if wildcard and not static and dotted in packages:
+                # One rule with Kotlin and Scala (BACK-1711 D-W1/D-W2): a package wildcard names no file.
+                # It is counted, never scored; Reveal discloses it instead of guessing edges (BACK-2506).
+                package_wildcards += 1
+                continue
+            # a.b.C.* and static a.b.C.* import C's members: an explicit import of the file declaring C
+            # (resolve peels the last segment, so a '.*' placeholder makes it start at C itself).
+            targets = [t for t in resolve(dotted + '.*' if wildcard else dotted) if t != importer]
+            member_wildcards += bool(wildcard and targets)
             resolved += bool(targets)
             for target in targets:
                 edges[target].add(importer)
     return _finish(scope, edges), {'files': len(scope.importers), 'indexed_types': len(types),
-                                   'import_statements': statements, 'resolved_statements': resolved}
+                                   'import_statements': statements, 'resolved_statements': resolved,
+                                   'in_tree_package_wildcards': package_wildcards,
+                                   'type_member_wildcards': member_wildcards}
 
 
 # ---- Kotlin and Scala: a declaration is indexed under its package, whatever the file is named ----

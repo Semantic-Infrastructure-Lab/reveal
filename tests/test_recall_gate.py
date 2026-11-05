@@ -343,16 +343,38 @@ def _java_wildcard(tmp_path):
                  {'oracle': 'java-jls', 'scan_root': 'lib', 'importer_dirs': ['lib/src']})
 
 
-def test_java_oracle_fans_a_wildcard_out_to_the_whole_package(tmp_path):
-    edges = _build(*_java_wildcard(tmp_path))[0]
-    assert edges['lib/src/com/ex/A.java'] == edges['lib/src/com/ex/D.java'] == ['lib/src/com/ex/util/B.java']
+def test_java_oracle_counts_a_package_wildcard_and_scores_no_edge(tmp_path):
+    """One rule with Kotlin and Scala (BACK-1711 D-W1/D-W2): a package wildcard names no file."""
+    edges, coverage = _build(*_java_wildcard(tmp_path))
+    assert not any('lib/src/com/ex/util/B.java' in importers for importers in edges.values())
+    assert edges  # the fixture's explicit imports still score, so the empty result is not a dead oracle
+    assert coverage['in_tree_package_wildcards'] == 1 and coverage['type_member_wildcards'] == 0
 
 
-@pytest.mark.xfail(strict=True, reason='reveal gap found by this gate: Java import a.b.*; resolves to no file '
-                   '(resolve_namespace_targets rejects wildcards), while Kotlin wildcards fan out')
-def test_java_wildcard_import_is_an_edge_to_each_package_file(tmp_path):
+def test_java_package_wildcard_agrees_with_reveal_and_the_gate_is_exact(tmp_path):
     root, entry = _java_wildcard(tmp_path)
-    assert gate.measure(entry, root)['recall'] == 1
+    measured = gate.measure(entry, root)
+    assert measured['recall'] == measured['precision'] == 1 and measured['extra_edges'] == 0
+
+
+def _java_member_wildcards(tmp_path):
+    files = {**JAVA, 'lib/src/com/ex/F.java': ('package com.ex;\nimport com.ex.util.C.*;\n'
+                                                'import static com.ex.util.C.*;\npublic class F {}\n')}
+    return _repo(tmp_path, files, {'oracle': 'java-jls', 'scan_root': 'lib', 'importer_dirs': ['lib/src']})
+
+
+def test_java_oracle_type_member_wildcards_name_the_file_declaring_the_type(tmp_path):
+    edges, coverage = _build(*_java_member_wildcards(tmp_path))
+    assert 'lib/src/com/ex/F.java' in edges['lib/src/com/ex/util/C.java']
+    assert coverage['type_member_wildcards'] == 2 and coverage['in_tree_package_wildcards'] == 0
+
+
+@pytest.mark.xfail(strict=True, reason='BACK-2517: Reveal gives a Java type-member wildcard (a.b.C.*, static '
+                   'a.b.C.*) no edge; Kotlin and Scala resolve theirs through the member index')
+def test_java_type_member_wildcards_are_edges_in_reveal(tmp_path):
+    root, entry = _java_member_wildcards(tmp_path)
+    measured = gate.measure(entry, root)
+    assert measured['recall'] == measured['precision'] == 1
 
 
 def test_java_duplicate_types_in_scope_are_ambiguous_not_guessed(tmp_path):
