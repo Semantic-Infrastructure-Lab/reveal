@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- Kotlin and Scala are now recall-gated: `imports://...?importers` no longer names them as not gated. The gate scores explicit imports against a declaration-based oracle on four pinned corpora (Kotlin 100% and 99.04%, Scala 99.63% and 98.37% after the change above; 82.34%, 77.03%, 81.11% and 82.61% before it). Wildcard imports are not scored, and Reveal finds none of the edges behind Scala selector lists (`import a.{X, Y}`): scored separately it reaches 53.25% on GitBucket and 47.14% on cats-effect (BACK-2507, BACK-1237).
+
 - A Kotlin or Scala import of a top-level class, object, interface, trait or type alias now resolves to the file that declares it, even when the file is named for something else. `imports://FILE?importers` on a Kotlin `Screens.kt` holding `object DiscoverScreen` printed "No importers found" while 42 files imported it. Scala files with chained `package a` / `package b` clauses now declare one package, `a.b`, not two. On a Kotlin app 1,346 → 1,634 import edges, on two Scala projects 238 → 296 and 153 → 182; no edge was removed. A type declared in several files of one package gets an edge to each (BACK-2510).
 
 - A file that tree-sitter recovers with a missing token only (`def f(:`, `const x = (1;`), which `check` already called "did not parse cleanly", now counts as import-graph loss in every language: I002 beside it exits 3 with its incomplete-scan disclosure and `imports://` lists it in `files_failed` and exits 3. Before, only recoveries with an ERROR node did, so I002 exited 0 beside a broken Python file. C files whose macro calls recover with a missing `;` are now disclosed too (BACK-2497).

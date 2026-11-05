@@ -50,7 +50,10 @@ VIAS = (VIA_DIRECT, VIA_CONSTANT, VIA_NAMESPACE, VIA_MEMBER, VIA_MODULE, VIA_CON
 # entries; tests/test_imports_importers_back1054.py pins this set to the manifest). An answer
 # with edges from any other language names it as not gated: its counts are unmeasured, whatever
 # the cascade stage that found them (plan rule 8).
-IMPORT_RECALL_GATED = frozenset({'c', 'cpp', 'go', 'java', 'javascript', 'python', 'rust', 'typescript', 'tsx'})
+# Kotlin and Scala joined with their declaration-based oracles (BACK-2507); their gated figure scores
+# explicit imports, not wildcards or Scala selector lists (VALIDATION.md states the population).
+IMPORT_RECALL_GATED = frozenset({'c', 'cpp', 'go', 'java', 'javascript', 'kotlin', 'python', 'rust', 'scala',
+                                 'typescript', 'tsx'})
 
 
 @dataclass(frozen=True)

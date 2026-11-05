@@ -1524,9 +1524,45 @@ every sample matched the published target and edge counts.
   Restore the source with `python scripts/fetch_corpus.py scala-cats-effect`. The
   oracle builder and diff script that ran against it were maintainer-internal and
   have since been retired, so this figure cannot be re-run from the published
-  tooling; this corpus is not yet part of the scheduled recall gate. The measurement used Python 3.12.15,
+  tooling; the corpus has since become a gate row with a new declaration-based oracle (next entry), which
+  measures a different population than this member-import scan. The measurement used Python 3.12.15,
   tree-sitter 0.25.2 and tree-sitter-language-pack 1.22.1. Missing/unreadable source,
   an empty oracle and nonzero Reveal query exits fail the measurement.
+- **Kotlin and Scala declaration oracle and gate rows (BACK-2507, 2026-11-04):** `kotlin-declared` and
+  `scala-declared` in [scripts/recall_oracles.py](scripts/recall_oracles.py) score explicit imports
+  against a from-scratch rule that shares nothing with Reveal's extractor or resolver. Comments and string
+  literals are blanked, braces are counted, and a top-level `class`, `object`, `interface`, `trait`, `enum`,
+  `typealias`, `type`, `fun`, `val` or `var` is indexed under its package whatever the file is named; chained
+  Scala `package a` / `package b` clauses are one package `a.b`. An import resolves to the file declaring the
+  symbol after the longest in-tree package prefix (so `a.b.Outer.Inner` and an object's member depend on the file
+  declaring `Outer`, even when the member is inherited), a name declared in several files of one package is an
+  edge to each (the same fan-out policy Reveal documents, so this row does not test that policy), and a file
+  that declares the name itself has no edge to another copy. Wildcard imports are counted, never scored
+  (BACK-2506, BACK-2508). Scala selector lists (`import a.{X, Y}`) are not part of the gated row; the manifest
+  option `score_selector_lists` scores them as a separate population (below). Four rows, each measured with
+  BACK-2510 reverted and in place (Reveal `8f36b7e6`, full importer population, 2026-11-04):
+
+  | Corpus (pin) | Files | Targets | Before BACK-2510 | After BACK-2510 |
+  |---|---|---|---|---|
+  | Kotlin/tivi `a0c62c2c` | 629 | 359 | 1,343/1,631 edges (82.34%), 0 extra | **1,631/1,631 (100%)**, 0 extra |
+  | Kotlin/kotlinx.coroutines `5f890047` (1.10.2) | 1,034 | 77 | 161/209 (77.03%), 0 extra | **207/209 (99.04%)**, 0 extra |
+  | Scala/GitBucket `f55982e8` (`src/main/scala`) | 213 | 54 | 219/270 (81.11%), 1 extra | **269/270 (99.63%)**, 1 extra |
+  | Scala/cats-effect `4fc56284` (v3.5.4) | 404 | 49 | 152/184 (82.61%), 1 extra | **181/184 (98.37%)**, 1 extra |
+
+  The kotlinx.coroutines row is a new measurement at a new pin; it does not restore the historical 100% on that
+  corpus, which used a member-import population. The nine remaining differences were each read in source. Six
+  are real misses: an import that goes through a top-level symbol to a nested name Reveal cannot peel
+  (`ChannelResult.Companion.closed` with `ChannelResult` declared in `Channel.kt`, twice; `Par.ParallelF` with
+  `Par` declared in `ParallelF.scala`, twice; `pure.PureConc`, a type inside a lowerCamelCase object;
+  `helpers.getApiMilestone`, a member `object helpers` inherits from another file). Two are correct Reveal
+  edges the oracle cannot see (a bare `import Resource.ExitCase` that names a package-object alias of
+  `kernel.Resource`; a bare `import RepositoryService.RepositoryInfo` after a selector-list import of
+  `RepositoryService`). Scala selector lists are the large open population: scored with
+  `score_selector_lists`, Reveal finds 270 of 507 edges on GitBucket (53.25%) and 181 of 384 on cats-effect
+  (47.14%), because it resolves no edge from an `import a.{X, Y}` statement (BACK-1237). The gate
+  rows record the explicit-import figure only; the answer's "not gated" label for Kotlin and Scala is gone.
+  Re-run: `python scripts/fetch_corpus.py kotlin-coroutines`, then
+  `python scripts/recall_gate.py --corpus-root ~/.cache/reveal-corpus --output r.json --corpus kotlin --corpus kotlin-coroutines --corpus scala --corpus scala-cats-effect`.
 - **Historical import figures that cannot currently be re-run (BACK-1461):**
   - Original corpus clone not preserved: Python/celery, Rust/ripgrep, Java/guava,
     Go/client_golang, Ruby/solidus,
@@ -1828,9 +1864,8 @@ curl second-corpus guard at 100%, BACK-710; see the Results table.):
   Before this, `?importers=` on such a file printed "No importers found" while 42
   files imported it. The Kotlin and Scala rows in the Results table measured
   member-import populations (233, 1 and 24 edges) and do not cover this shape;
-  the new edges are not yet covered by an independent oracle or `scripts/recall_gate.py`
-  (BACK-2507), so the answer labels them as not gated. Measured on the pinned corpora
-  (2026-11-04): tivi 1,346 → 1,634 edges, GitBucket 238 → 296, cats-effect 153 → 182,
+  the declaration oracle and gate rows of BACK-2507 (see the Kotlin and Scala entry above)
+  now cover them. Measured on the pinned corpora (2026-11-04): tivi 1,346 → 1,634 edges, GitBucket 238 → 296, cats-effect 153 → 182,
   with no edge removed; 288 of 288 added tivi edges and 58 of 58 GitBucket edges
   checked by hand were correct. A type declared in more than one file of one package
   (Kotlin multiplatform source sets) fans out to every declaring file, and a nested
@@ -2339,6 +2374,8 @@ manifest entry with a `recall:` block names an independent oracle from
 | `python-ast` | `ast.parse` plus filesystem module resolution; `TYPE_CHECKING` imports skipped | celery, reveal's own tree |
 | `rust-use` | Deepest real module file for `crate::`/`super::`/`self::` use paths | Meilisearch, ripgrep |
 | `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java` | Elasticsearch `server/src/main/java`, guava |
+| `kotlin-declared` | Text rule: a top-level declaration is indexed under its package whatever the file is named; an explicit import resolves to the declaring file | tivi, kotlinx.coroutines |
+| `scala-declared` | The same rule with chained `package` clauses joined and imports read relative to enclosing packages; selector lists opt-in | GitBucket `src/main/scala`, cats-effect |
 | `typescript-compiler` | TypeScript parser plus `ts.resolveModuleName`, including aliases, re-exports, dynamic and type-query imports | VS Code base, Excalidraw workspace, three.js src |
 | `go-toolchain` | Go standard parser and `go list` decide package imports; file fan-out is a separate buildless projection | client_golang |
 | `python-ast-callers` | Python AST derives scoped function/method caller relationships; selected with `--signal calls` | celery `celery/utils/` |

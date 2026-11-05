@@ -636,5 +636,248 @@
         "differences": []
       }
     }
+  },
+  "kotlin": {
+    "oracle": "kotlin-declared",
+    "sha": "a0c62c2c763c83e3a0ecf79b283224374bb06c4a",
+    "targets": 359,
+    "oracle_edges": 1631,
+    "hit_edges": 1631,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "coverage": {
+      "files": 629,
+      "indexed_symbols": 1559,
+      "import_statements": 5367,
+      "resolved_statements": 1727,
+      "wildcard_statements": 0,
+      "selector_lists": 0
+    },
+    "partial_files": 0,
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [
+        "kotlin"
+      ],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
+    "differences": [],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 359,
+      "observed_targets": 359,
+      "observed_pairs": 1631,
+      "scored_pairs": 1631,
+      "unscored_targets": 0,
+      "unscored_pairs": 0,
+      "unscored_target_paths": [],
+      "unscored_target_paths_unavailable": 0
+    }
+  },
+  "scala": {
+    "oracle": "scala-declared",
+    "sha": "f55982e8a5262d841f29489f5954616967b3504b",
+    "targets": 54,
+    "oracle_edges": 270,
+    "hit_edges": 269,
+    "extra_edges": 1,
+    "recall": 0.9962962962962963,
+    "precision": 0.9962962962962963,
+    "coverage": {
+      "files": 213,
+      "indexed_symbols": 347,
+      "import_statements": 670,
+      "resolved_statements": 274,
+      "wildcard_statements": 365,
+      "selector_lists": 219
+    },
+    "partial_files": 0,
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [
+        "scala"
+      ],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
+    "differences": [
+      {
+        "target": "src/main/scala/gitbucket/core/service/RepositoryService.scala",
+        "missed": [],
+        "extra": [
+          "src/main/scala/gitbucket/core/util/Authenticator.scala"
+        ]
+      },
+      {
+        "target": "src/main/scala/gitbucket/core/view/helpers.scala",
+        "missed": [
+          "src/main/scala/gitbucket/core/service/WebHookService.scala"
+        ],
+        "extra": []
+      }
+    ],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 54,
+      "observed_targets": 55,
+      "observed_pairs": 271,
+      "scored_pairs": 270,
+      "unscored_targets": 1,
+      "unscored_pairs": 1,
+      "unscored_target_paths": [
+        "src/main/scala/gitbucket/core/util/SyntaxSugars.scala"
+      ],
+      "unscored_target_paths_unavailable": 0
+    }
+  },
+  "scala-cats-effect": {
+    "oracle": "scala-declared",
+    "sha": "4fc56284b005ad8f00788780443ea1e9717cf9a8",
+    "targets": 49,
+    "oracle_edges": 184,
+    "hit_edges": 181,
+    "extra_edges": 1,
+    "recall": 0.9836956521739131,
+    "precision": 0.9945054945054945,
+    "coverage": {
+      "files": 404,
+      "indexed_symbols": 493,
+      "import_statements": 727,
+      "resolved_statements": 174,
+      "wildcard_statements": 490,
+      "selector_lists": 281
+    },
+    "partial_files": 0,
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [
+        "scala"
+      ],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
+    "differences": [
+      {
+        "target": "kernel/shared/src/main/scala/cats/effect/kernel/ParallelF.scala",
+        "missed": [
+          "laws/shared/src/test/scala/cats/effect/laws/PureConcSpec.scala",
+          "tests/shared/src/test/scala/cats/effect/IOSpec.scala"
+        ],
+        "extra": []
+      },
+      {
+        "target": "kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala",
+        "missed": [],
+        "extra": [
+          "tests/shared/src/test/scala/cats/effect/ResourceSpec.scala"
+        ]
+      },
+      {
+        "target": "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/pure.scala",
+        "missed": [
+          "laws/shared/src/test/scala/cats/effect/testkit/TimeTSpec.scala"
+        ],
+        "extra": []
+      }
+    ],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 49,
+      "observed_targets": 47,
+      "observed_pairs": 182,
+      "scored_pairs": 182,
+      "unscored_targets": 0,
+      "unscored_pairs": 0,
+      "unscored_target_paths": [],
+      "unscored_target_paths_unavailable": 0
+    }
+  },
+  "kotlin-coroutines": {
+    "oracle": "kotlin-declared",
+    "sha": "5f8900478a8e20c073145b1608fbc71fe3d7378b",
+    "targets": 77,
+    "oracle_edges": 209,
+    "hit_edges": 207,
+    "extra_edges": 0,
+    "recall": 0.9904306220095693,
+    "precision": 1.0,
+    "coverage": {
+      "files": 1034,
+      "indexed_symbols": 2496,
+      "import_statements": 737,
+      "resolved_statements": 127,
+      "wildcard_statements": 3569,
+      "selector_lists": 0
+    },
+    "partial_files": 0,
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [
+        "kotlin"
+      ],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
+    "differences": [
+      {
+        "target": "kotlinx-coroutines-core/common/src/channels/Channel.kt",
+        "missed": [
+          "kotlinx-coroutines-core/common/src/channels/BufferedChannel.kt",
+          "kotlinx-coroutines-core/common/src/channels/ConflatedBufferedChannel.kt"
+        ],
+        "extra": []
+      }
+    ],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 77,
+      "observed_targets": 78,
+      "observed_pairs": 208,
+      "scored_pairs": 207,
+      "unscored_targets": 1,
+      "unscored_pairs": 1,
+      "unscored_target_paths": [
+        "buildSrc/src/main/kotlin/CacheRedirector.kt"
+      ],
+      "unscored_target_paths_unavailable": 0
+    }
   }
 }

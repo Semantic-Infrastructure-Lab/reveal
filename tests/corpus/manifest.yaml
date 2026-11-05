@@ -161,6 +161,10 @@ corpora:
     sha: a0c62c2c763c83e3a0ecf79b283224374bb06c4a
     license: Apache-2.0
     role: Real Android/Kotlin app
+    recall:
+      # Explicit imports of a type, function or property by the file that declares it (BACK-2507).
+      oracle: kotlin-declared
+      importer_dirs: [.]
   - language: php
     repo: https://github.com/WordPress/WordPress.git
     sha: 5a57baa3352953e1f9cef97fc480ed14a8135335
@@ -176,6 +180,10 @@ corpora:
     sha: f55982e8a5262d841f29489f5954616967b3504b
     license: Apache-2.0
     role: Real product (git platform), idiomatic Scala
+    recall:
+      oracle: scala-declared
+      scan_root: src/main/scala
+      importer_dirs: [src/main/scala]
   - language: swift
     repo: https://github.com/kickstarter/ios-oss.git
     sha: 749793d48d5d39342608106397fea6debe11a382
@@ -238,6 +246,19 @@ corpora:
     sha: 4fc56284b005ad8f00788780443ea1e9717cf9a8  # v3.5.4
     license: Apache-2.0
     role: Second Scala corpus; scoped lowerCamelCase-object member-import oracle
+    recall:
+      # Chained package clauses; platform copies (jvm/js/native) of one type fan out.
+      oracle: scala-declared
+      importer_dirs: [.]
+  - id: kotlin-coroutines
+    language: kotlin
+    repo: https://github.com/Kotlin/kotlinx.coroutines.git
+    sha: 5f8900478a8e20c073145b1608fbc71fe3d7378b  # 1.10.2
+    license: Apache-2.0
+    role: Second Kotlin corpus; pure library, multiplatform source sets (overfit guard for tivi's app shape)
+    recall:
+      oracle: kotlin-declared
+      importer_dirs: [.]
   - id: cpp-assimp
     language: cpp
     repo: https://github.com/assimp/assimp.git

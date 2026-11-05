@@ -401,6 +401,270 @@ def build_java_oracle(scope: Scope) -> tuple[Edges, Coverage]:
                                    'import_statements': statements, 'resolved_statements': resolved}
 
 
+# ---- Kotlin and Scala: a declaration is indexed under its package, whatever the file is named ----
+#
+# Neither language ties a file name to its types (Kotlin: any file; Scala: any file), so ``import a.b.C``
+# names the file that DECLARES ``C`` in package ``a.b``. The rule here is independent of Reveal's
+# extractor and resolver (BACK-2507): comments and string literals are blanked, braces are counted, and a
+# declaration keyword at brace depth 0 declares its name. One shared policy with Reveal's documented
+# member-index behaviour, not an independent check of it: a name declared in several files of one package
+# (Kotlin multiplatform source sets) is an edge to each. Explicit imports only; wildcards are counted in
+# the coverage, never scored (BACK-2506/2508), and Scala selector lists are scored only when the manifest
+# sets ``score_selector_lists: true`` (BACK-1237 is a separate population, never mixed into the gated row).
+
+def _blank(text: str, start: int, end: int) -> str:
+    """Spaces for ``text[start:end]``, keeping newlines so line numbers and brace lines survive."""
+    return ''.join(c if c in '\r\n' else ' ' for c in text[start:end])
+
+
+def jvm_strip_noise(text: str) -> str:
+    """``text`` with comments, string and character literals replaced by spaces (newlines kept), so a
+    declaration or import that only appears inside a literal or comment is invisible. Block comments nest
+    (both languages); a ``${ ... }`` template inside a string is blanked with the string."""
+    out: list[str] = []
+    n = len(text)
+    i = 0
+
+    def skip_braces(j: int) -> int:  # j points just past '${'; return the index past the matching '}'
+        depth = 1
+        while j < n and depth:
+            if text.startswith('"""', j):
+                j = skip_string(j, True)
+                continue
+            c = text[j]
+            if c == '"':
+                j = skip_string(j, False)
+                continue
+            depth += (c == '{') - (c == '}')
+            j += 1
+        return j
+
+    def skip_string(j: int, triple: bool) -> int:  # j at the opening quote(s); return the index past the close
+        j += 3 if triple else 1
+        while j < n:
+            if triple:
+                if text.startswith('"""', j):
+                    j += 3
+                    while j < n and text[j] == '"':  # a closing run of 4+ quotes ends at the last
+                        j += 1
+                    return j
+            elif text[j] == '"':
+                return j + 1
+            elif text[j] == '\n':
+                return j  # an unterminated single-line string ends at the line
+            if text[j] == '\\' and not triple:
+                j += 2
+                continue
+            if text.startswith('${', j):
+                j = skip_braces(j + 2)
+                continue
+            j += 1
+        return j
+
+    while i < n:
+        two = text[i:i + 2]
+        if two == '//':
+            j = text.find('\n', i)
+            j = n if j < 0 else j
+        elif two == '/*':
+            depth, j = 1, i + 2
+            while j < n and depth:
+                if text.startswith('/*', j):
+                    depth, j = depth + 1, j + 2
+                elif text.startswith('*/', j):
+                    depth, j = depth - 1, j + 2
+                else:
+                    j += 1
+        elif text.startswith('"""', i):
+            j = skip_string(i, True)
+        elif text[i] == '"':
+            j = skip_string(i, False)
+        elif text[i] == "'" and re.match(r"'(?:\\.[^']{0,6}|[^\\'\n])'", text[i:i + 10]):
+            j = i + re.match(r"'(?:\\.[^']{0,6}|[^\\'\n])'", text[i:i + 10]).end()
+        else:
+            out.append(text[i])
+            i += 1
+            continue
+        out.append(_blank(text, i, j))
+        i = j
+    return ''.join(out)
+
+
+_KT_MODS = (r'(?:(?:public|private|internal|protected|open|abstract|final|sealed|data|enum|annotation|inner|value|'
+            r'inline|expect|actual|external|const|lateinit|tailrec|suspend|operator|infix|override|fun)\s+)*')
+_KT_DECL = re.compile(r'^(?:@[\w.:]+(?:\([^)]*\))?\s*)*' + _KT_MODS +
+                      r'(class|interface|object|typealias|fun|val|var)\s+(.*)$')
+_SC_MODS = (r'(?:(?:private(?:\[\w+\])?|protected(?:\[\w+\])?|sealed|abstract|final|implicit|case|lazy|override|open|'
+            r'inline|transparent|opaque|infix)\s+)*')
+_SC_DECL = re.compile(r'^(?:@[\w.]+(?:\([^)]*\))?\s*)*' + _SC_MODS +
+                      r'(?:package\s+object|class|trait|object|enum|type|def|val|var|given)\s+(\w+)')
+_JVM_PACKAGE = re.compile(r'^\s*package\s+([\w.]+)\s*(\{)?\s*$')
+_JVM_IMPORT = re.compile(r'^[ \t]*import\s+(.+?)\s*;?\s*$', re.MULTILINE)
+
+
+def _kotlin_declared_name(line: str) -> str | None:
+    """The name a top-level Kotlin declaration line declares: ``fun <T> Flow<T>.observeOn(...)`` declares
+    ``observeOn`` (the receiver and the type parameters are not names), ``class Foo<T>(...)`` declares ``Foo``."""
+    match = _KT_DECL.match(line)
+    if not match:
+        return None
+    keyword, rest = match.groups()
+    rest = rest.lstrip()
+    if keyword in ('fun', 'val', 'var') and rest.startswith('<'):
+        depth = 0
+        for index, ch in enumerate(rest):  # skip the type parameters; `->` is an arrow, not a closing bracket
+            if ch == '<':
+                depth += 1
+            elif ch == '>' and rest[index - 1] != '-':
+                depth -= 1
+                if not depth:
+                    rest = rest[index + 1:].lstrip()
+                    break
+    header = re.match(r'[^(:={;]*', rest).group(0)
+    while True:  # drop the receiver's type arguments: Flow<T>.name -> Flow.name
+        reduced = re.sub(r'<[^<>]*>', '', header)
+        if reduced == header:
+            break
+        header = reduced
+    names = re.findall(r'[\w`]+', header)
+    if not names:
+        return None
+    return names[-1].strip('`') if keyword in ('fun', 'val', 'var') else names[0].strip('`')
+
+
+def _scala_declared_name(line: str) -> str | None:
+    match = _SC_DECL.match(line)
+    return match.group(1) if match else None
+
+
+def _top_level_lines(clean: str, language: str) -> tuple[list[str], list[str]]:
+    """``(packages, declaration-lines)``: the braceless package clauses of the file in order, and each line
+    that starts at brace depth 0 (a braced ``package a { ... }`` body counts as depth 0, as the language does)."""
+    packages: list[str] = []
+    lines: list[str] = []
+    stack: list[bool] = []  # True: a package-body brace (not a nesting level)
+    depth = 0
+    for line in clean.split('\n'):
+        stripped = line.strip()
+        if depth == 0 and stripped:
+            header = _JVM_PACKAGE.match(stripped) if not stripped.startswith('package object') else None
+            if header and not header.group(2):
+                packages.append(header.group(1))
+            lines.append(stripped)
+        header = _JVM_PACKAGE.match(stripped)
+        for ch in line:
+            if ch == '{':
+                is_package = bool(header and header.group(2)) and language == 'scala'
+                stack.append(is_package)
+                depth += 0 if is_package else 1
+            elif ch == '}' and stack:
+                depth -= 0 if stack.pop() else 1
+    return packages, lines
+
+
+def _jvm_import_paths(clean: str, language: str, counts: dict[str, int], score_selectors: bool) -> list[str]:
+    """Dotted names an explicit import statement names; wildcard and wildcard forms are only counted; a selector list is read name by name only when ``score_selectors``."""
+    paths: list[str] = []
+    for statement in _JVM_IMPORT.findall(clean):
+        pieces, depth, current = [], 0, ''
+        for ch in statement:  # Scala allows `import a.B, c.D`
+            if ch == ',' and depth == 0 and language == 'scala':
+                pieces.append(current)
+                current = ''
+                continue
+            depth += (ch == '{') - (ch == '}')
+            current += ch
+        pieces.append(current)
+        for piece in pieces:
+            piece = re.sub(r'\s+as\s+\w+\s*$', '', piece.strip())
+            if not piece:
+                continue
+            if '{' in piece:
+                counts['selector_lists'] += 1
+                if not score_selectors:
+                    continue
+                prefix, _, body = piece.partition('{')
+                for item in body.rstrip('} \t').split(','):
+                    name = item.split('=>')[0].split(' as ')[0].strip()
+                    if '=>' in item and item.split('=>')[1].strip() == '_':
+                        continue  # `X => _` hides X
+                    if name in ('_', '*'):
+                        counts['wildcard_statements'] += 1
+                    elif re.fullmatch(r'\w+', name):
+                        paths.append(prefix.strip() + name)
+            elif piece.endswith(('.*', '._')):
+                counts['wildcard_statements'] += 1
+            elif re.fullmatch(r'[\w.`]+', piece):
+                paths.append(piece.replace('`', ''))
+    return paths
+
+
+def _build_jvm_declared_oracle(scope: Scope, language: str, suffix: str,
+                               declared_name: 'Callable[[str], str | None]') -> tuple[Edges, Coverage]:
+    sources = {p: jvm_strip_noise(p.read_text(encoding='utf-8', errors='replace'))
+               for p in tracked_files(scope.root, [_relative(scope, scope.scan)], frozenset({suffix}))}
+    declared: dict[tuple[str, str], set[Path]] = defaultdict(set)
+    file_packages: dict[Path, str] = {}
+    for path, clean in sources.items():
+        packages, lines = _top_level_lines(clean, language)
+        package = '.'.join(packages) if language == 'scala' else (packages[0] if packages else '')
+        file_packages[path] = package
+        for line in lines:
+            name = declared_name(line)
+            if name:
+                declared[(package, name)].add(path)
+    counts = {'wildcard_statements': 0, 'selector_lists': 0}
+    edges: dict[Path, set[Path]] = defaultdict(set)
+    statements = resolved = 0
+
+    packages: set[str] = set()
+    for package in file_packages.values():
+        parts = package.split('.') if package else []
+        packages.update('.'.join(parts[:k]) for k in range(1, len(parts) + 1))
+
+    def resolve(dotted: str) -> set[Path]:
+        # The longest in-tree package prefix is the package; the next segment must be a top-level symbol
+        # declared in it, and anything after that is a member or nested type of that symbol. A prefix that is
+        # not a package is never peeled further (``cats.effect.X.y`` must not land on ``package object effect``).
+        parts = dotted.split('.')
+        for k in range(len(parts) - 1, 0, -1):
+            if '.'.join(parts[:k]) in packages:
+                # Anything after the symbol is a member or nested type reached THROUGH it: the file declaring
+                # the symbol is a dependency even when the member itself is inherited from another file.
+                return declared.get(('.'.join(parts[:k]), parts[k]), set())
+        return set()
+
+    for importer in scope.importers:
+        clean = sources.get(importer)
+        if clean is None:  # an importer outside the scan root
+            clean = jvm_strip_noise(importer.read_text(encoding='utf-8', errors='replace'))
+        own = file_packages.get(importer) or '.'.join(_top_level_lines(clean, language)[0])
+        for dotted in _jvm_import_paths(clean, language, counts, bool(scope.config.get('score_selector_lists'))):
+            statements += 1
+            targets = resolve(dotted)
+            if not targets and language == 'scala' and own:  # an import relative to an enclosing package
+                parts = own.split('.')
+                for keep in range(len(parts), 0, -1):
+                    targets = resolve('.'.join(parts[:keep]) + '.' + dotted)
+                    if targets:
+                        break
+            if importer in targets:  # the file declares the name itself: its own declaration, no other file
+                continue
+            resolved += bool(targets)
+            for target in targets:
+                edges[target].add(importer)
+    return _finish(scope, edges), {'files': len(scope.importers), 'indexed_symbols': len(declared),
+                                   'import_statements': statements, 'resolved_statements': resolved, **counts}
+
+
+def build_kotlin_declared_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+    return _build_jvm_declared_oracle(scope, 'kotlin', '.kt', _kotlin_declared_name)
+
+
+def build_scala_declared_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+    return _build_jvm_declared_oracle(scope, 'scala', '.scala', _scala_declared_name)
+
+
 C_SUFFIXES = frozenset({'.c', '.h'})
 CPP_SUFFIXES = frozenset({'.cpp', '.cc', '.cxx', '.h', '.hpp', '.hh', '.hxx'})
 
@@ -650,4 +914,6 @@ ORACLES: dict[str, Oracle] = {
     'rust-use': Oracle(frozenset({'.rs'}), build_rust_oracle),
     'typescript-compiler': Oracle(frozenset({'.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'}), build_typescript_oracle, typescript_lazy_only_edges),
     'java-jls': Oracle(frozenset({'.java'}), build_java_oracle),
+    'kotlin-declared': Oracle(frozenset({'.kt'}), build_kotlin_declared_oracle),
+    'scala-declared': Oracle(frozenset({'.scala'}), build_scala_declared_oracle),
 }
