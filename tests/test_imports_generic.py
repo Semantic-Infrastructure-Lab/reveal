@@ -202,6 +202,33 @@ class TestCSharp:
         extractor = get_extractor(f)
         assert extractor.extract_namespaces(f) == ['foo.bar']
 
+    def test_extract_namespaces_scala_chained_package_clauses(self, tmp_path):
+        """BACK-2510: Scala `package cats` / `package effect` / `package std`
+        nest, so the file declares ONE package ``cats.effect.std`` — not three
+        (``cats``, ``effect``, ``std``), which built member keys under the
+        wrong packages and put a bare ``cats`` in the project inventory."""
+        f = tmp_path / 'Semaphore.scala'
+        f.write_text('package cats\npackage effect\npackage std\n\nclass Semaphore\n', encoding='utf-8')
+        extractor = get_extractor(f)
+        assert extractor.extract_namespaces(f) == ['cats.effect.std']
+
+    def test_extract_namespaces_scala_chain_extends_dotted_clause(self, tmp_path):
+        """A dotted first clause followed by a bare one still joins."""
+        f = tmp_path / 'A.scala'
+        f.write_text('package a.b\npackage c\n\nclass A\n', encoding='utf-8')
+        extractor = get_extractor(f)
+        assert extractor.extract_namespaces(f) == ['a.b.c']
+
+    def test_extract_namespaces_scala_single_and_block_package_unchanged(self, tmp_path):
+        """Controls: one `package a.b.c` stays itself, and the packaging-block
+        form `package a { }` keeps one entry per block (no chain to join)."""
+        single = tmp_path / 'S.scala'
+        single.write_text('package a.b.c\n\nclass S\n', encoding='utf-8')
+        assert get_extractor(single).extract_namespaces(single) == ['a.b.c']
+        block = tmp_path / 'B.scala'
+        block.write_text('package a { class A }\npackage b { class B }\n', encoding='utf-8')
+        assert set(get_extractor(block).extract_namespaces(block)) == {'a', 'b'}
+
 
 class TestSwiftModuleConvention:
     """BACK-567: Swift `import Foo` names a whole SwiftPM target. These cover the

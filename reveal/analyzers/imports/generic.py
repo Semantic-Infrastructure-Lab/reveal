@@ -543,10 +543,17 @@ class _ImportSpec:
             Java's ``nested_member_fallback`` which C# doesn't opt into).
         namespaced_type_fallback: True to use the ``(namespace, type)``
             member-index fallback above as a last resort when the direct
-            dotted match and namespace fan-out both fail — C#-only. Shares
+            dotted match and namespace fan-out both fail — C#, Kotlin and Scala
+            (BACK-2510). Shares
             :meth:`resolve_member_targets`'s split-on-last-separator lookup
             with Kotlin/Scala's member-symbol fallback (harmless overlap: the
             two flags gate mutually exclusive index keys).
+        chained_package_clauses: True when consecutive braceless package
+            clauses nest into ONE package (Scala: ``package cats`` /
+            ``package effect`` declares ``cats.effect``, BACK-2510).
+            :meth:`extract_namespaces` then returns the joined dotted name
+            instead of one entry per clause. A packaging block
+            ``package a { ... }`` is not a chain link and keeps one entry.
         package_is_directory: True when a qualified import's package is, by
             the language's source layout, the target file's directory path, so
             ``import a.b.C`` names exactly the file whose path ends in
@@ -623,6 +630,7 @@ class _ImportSpec:
     namespaced_type_fallback: bool = False
     package_is_directory: bool = False
     combinator_clause: bool = False
+    chained_package_clauses: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -737,12 +745,22 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if analyzer is None:
             return []
         namespaces: List[str] = []
+        chain: List[str] = []
         for node_type in self.spec.package_node_types:
             for node in analyzer._find_nodes_by_type(node_type):
                 for child in _children(node):
                     if _zero_arg(child, 'kind') in self._PACKAGE_NAME_CHILD_KINDS:
-                        namespaces.append(analyzer._get_node_text(child))
+                        name = analyzer._get_node_text(child)
+                        if self.spec.chained_package_clauses and not any(
+                            _zero_arg(c, 'kind') == 'template_body'
+                            for c in _children(node)
+                        ):
+                            chain.append(name)  # braceless: nests in the previous
+                        else:
+                            namespaces.append(name)
                         break
+        if chain:
+            namespaces.insert(0, '.'.join(chain))
         return namespaces
 
     def resolve_namespace_targets(
@@ -1141,13 +1159,15 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
     _IDENTIFIER_KINDS: ClassVar[FrozenSet[str]] = frozenset({'identifier', 'simple_identifier'})
 
     @classmethod
-    def _direct_identifier_name(cls, node, analyzer) -> Optional[str]:
+    def _direct_identifier_name(cls, node, analyzer, kinds=None) -> Optional[str]:
         """First direct child whose kind is a plain identifier — the declared
         name for a Scala ``object``/``def``/``val`` node, all of which expose
         their name as a direct child (unlike Kotlin's nested property shape,
-        see :meth:`_top_level_member_name`)."""
+        see :meth:`_top_level_member_name`). *kinds* overrides the accepted
+        kinds: a Kotlin type declaration names itself with a
+        ``type_identifier`` (see :data:`_TYPE_NAME_KINDS`)."""
         for child in _children(node):
-            if _zero_arg(child, 'kind') in cls._IDENTIFIER_KINDS:
+            if _zero_arg(child, 'kind') in (kinds or cls._IDENTIFIER_KINDS):
                 return analyzer._get_node_text(child)
         return None
 
@@ -1164,7 +1184,10 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
     def extract_namespaced_type_names(self, file_path: Path) -> List[str]:
         """Names of genuinely top-level ``class``/``interface``/``struct``/
         ``record``/``enum`` declarations in this file — C#'s
-        ``namespaced_type_fallback`` idiom (BACK-669 C# recall loop).
+        ``namespaced_type_fallback`` idiom (BACK-669 C# recall loop), also
+        Kotlin's ``class``/``object``/``typealias`` and Scala's
+        ``class``/``object``/``trait``/``enum``/``type`` (BACK-2510): both let
+        a file declare a type its name does not spell.
 
         Paired by the caller with :meth:`extract_namespaces` into the same
         ``member_index[(namespace, type_name)] -> [files]`` shape Kotlin's
@@ -1194,14 +1217,19 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             for node in analyzer._find_nodes_by_type(node_type):
                 if not self._is_top_level_namespaced_type(node):
                     continue
-                name = self._direct_identifier_name(node, analyzer)
+                name = self._direct_identifier_name(node, analyzer, self._TYPE_NAME_KINDS)
                 if name:
                     names.append(name)
         return names
 
+    # A type declaration's name: C#/Scala ``identifier``, Kotlin ``type_identifier``.
+    _TYPE_NAME_KINDS: ClassVar[FrozenSet[str]] = _IDENTIFIER_KINDS | {'type_identifier'}
+
     _NAMESPACE_BODY_KINDS: ClassVar[FrozenSet[str]] = frozenset({
         'namespace_declaration', 'file_scoped_namespace_declaration',
     })
+    # C#/Scala root: ``compilation_unit``; Kotlin root: ``source_file`` (BACK-2510).
+    _FILE_ROOT_KINDS: ClassVar[FrozenSet[str]] = frozenset({'compilation_unit', 'source_file'})
 
     @classmethod
     def _is_top_level_namespaced_type(cls, node) -> bool:
@@ -1211,7 +1239,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         parent = _zero_arg(node, 'parent')
         if parent is None:
             return False
-        if _zero_arg(parent, 'kind') == 'compilation_unit':
+        if _zero_arg(parent, 'kind') in cls._FILE_ROOT_KINDS:
             return True
         if _zero_arg(parent, 'kind') == 'declaration_list':
             grandparent = _zero_arg(parent, 'parent')
@@ -2865,6 +2893,12 @@ _KOTLIN_SPEC = _ImportSpec(
     # (package, symbol) index can find the declaring file.
     member_node_types=frozenset({'function_declaration', 'property_declaration'}),
     member_symbol_fallback=True,
+    # BACK-2510: `import a.b.DiscoverScreen` for an `object DiscoverScreen` declared in
+    # `Screens.kt` names no file by path; index the top-level types under (package, name).
+    namespaced_type_node_types=frozenset({
+        'class_declaration', 'object_declaration', 'type_alias',
+    }),
+    namespaced_type_fallback=True,
 )
 
 # BACK-514: Lua/Scala/Dart/Zig/GDScript were absent from the table entirely —
@@ -2887,6 +2921,8 @@ _SCALA_SPEC = _ImportSpec(
     # with `extract_container_members`' (containerName, memberName) pairs
     # below.
     package_node_types=frozenset({'package_clause'}),
+    # BACK-2510: `package cats` / `package effect` nest into `cats.effect`.
+    chained_package_clauses=True,
     # BACK-557 Scala measurement loop (real corpus: samples/scala, GitBucket):
     # confirmed real Scala 2/3 code has NO bare top-level def/val outside any
     # object (Scala forbids it outside a `package object`; unlike Kotlin,
@@ -2899,6 +2935,13 @@ _SCALA_SPEC = _ImportSpec(
     member_container_node_types=frozenset({'object_definition'}),
     container_member_node_types=frozenset({'function_definition', 'val_definition'}),
     container_member_fallback=True,
+    # BACK-2510: a top-level class/object/trait in a file not named after it (GitBucket
+    # `Context` in `ControllerBase.scala`) is in no path-based edge; index it (package, name).
+    namespaced_type_node_types=frozenset({
+        'class_definition', 'object_definition', 'trait_definition',
+        'enum_definition', 'type_definition',
+    }),
+    namespaced_type_fallback=True,
 )
 
 _DART_SPEC = _ImportSpec(

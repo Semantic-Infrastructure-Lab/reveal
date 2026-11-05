@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- A Kotlin or Scala import of a top-level class, object, interface, trait or type alias now resolves to the file that declares it, even when the file is named for something else. `imports://FILE?importers` on a Kotlin `Screens.kt` holding `object DiscoverScreen` printed "No importers found" while 42 files imported it. Scala files with chained `package a` / `package b` clauses now declare one package, `a.b`, not two. On a Kotlin app 1,346 → 1,634 import edges, on two Scala projects 238 → 296 and 153 → 182; no edge was removed. A type declared in several files of one package gets an edge to each (BACK-2510).
+
 - A file that tree-sitter recovers with a missing token only (`def f(:`, `const x = (1;`), which `check` already called "did not parse cleanly", now counts as import-graph loss in every language: I002 beside it exits 3 with its incomplete-scan disclosure and `imports://` lists it in `files_failed` and exits 3. Before, only recoveries with an ERROR node did, so I002 exited 0 beside a broken Python file. C files whose macro calls recover with a missing `;` are now disclosed too (BACK-2497).
 
 - Import components (`architecture`, `overview`, `imports://?components`) now count an edge that ends at a directory, a Go package import or a Python namespace package, as internal or incoming at that directory's component. Every Go package showed incoming 0 and its own external test package as outgoing, and the counts disagreed with `?rank=fan-in` (BACK-2289).

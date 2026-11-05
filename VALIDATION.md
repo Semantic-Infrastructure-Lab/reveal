@@ -1820,12 +1820,22 @@ curl second-corpus guard at 100%, BACK-710; see the Results table.):
   therefore shows fan-in 0 today (disclosure: BACK-2506; oracle population:
   BACK-2507).
 - **Kotlin and Scala top-level types declared in a file not named after them**
-  (Kotlin `object DiscoverScreen` inside `Screens.kt`) — no edge is recorded for
-  an import of such a type, so `?importers=` on that file can print "No importers
-  found" while other files import it (BACK-2510). The Kotlin and Scala rows in the
-  Results table measured member-import populations (233, 1 and 24 edges) and do
-  not cover this shape; neither language is in `scripts/recall_gate.py`, so the
-  answer labels their edges as not gated.
+  (Kotlin `object DiscoverScreen` inside `Screens.kt`) — an import of such a type
+  now resolves through the declared-type index C# already used: top-level
+  `class`/`object`/`interface`/`typealias` (Kotlin) and `class`/`object`/`trait`/
+  `enum`/`type` (Scala) are keyed under their declared package, and a Scala file's
+  chained `package a` / `package b` clauses count as one package `a.b` (BACK-2510).
+  Before this, `?importers=` on such a file printed "No importers found" while 42
+  files imported it. The Kotlin and Scala rows in the Results table measured
+  member-import populations (233, 1 and 24 edges) and do not cover this shape;
+  the new edges are not yet covered by an independent oracle or `scripts/recall_gate.py`
+  (BACK-2507), so the answer labels them as not gated. Measured on the pinned corpora
+  (2026-11-04): tivi 1,346 → 1,634 edges, GitBucket 238 → 296, cats-effect 153 → 182,
+  with no edge removed; 288 of 288 added tivi edges and 58 of 58 GitBucket edges
+  checked by hand were correct. A type declared in more than one file of one package
+  (Kotlin multiplatform source sets) fans out to every declaring file, and a nested
+  type, generated code with no file in the tree, wildcards and Scala selector lists
+  still get no edge.
 - **Ruby's classic `autoload` calls** (distinct from the Zeitwerk convention
   measured above) — checked directly against Discourse's real source (10,458
   files) and found to occur zero times; declined as a candidate because the
