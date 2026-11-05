@@ -1589,6 +1589,22 @@ every sample matched the published target and edge counts.
   package that also has a package object (`catseffect.examples._`, a package wildcard, three times;
   `cats.effect.{kernel => cekernel}`), which the oracle reads as an object. The oracle-free graph invariants
   stay green on all four corpora.
+- **Kotlin and Scala imports through a declared symbol (BACK-2512, 2026-11-05):** `import a.b.Outer.Inner`,
+  `Outer.Companion.f`, `Obj.profile.Api._` name a member reached through a top-level symbol, so the file that
+  declares `(a.b, Outer)` is the dependency. The resolver now peels trailing segments, longest declared package
+  first (never a prefix that is not a declared package), when the exact `(package, symbol)` finds nothing.
+  Same four rows and oracle as the BACK-1237 entry, Reveal `be1cf189`+`96cfdb84` (before) against the change
+  (after); no edge Reveal found before is lost and the 5 extras are the ones read above:
+
+  | Corpus (pin) | Before | After |
+  |---|---|---|
+  | Kotlin/tivi `a0c62c2c` | 1,631/1,631 (100%) | 1,631/1,631 (100%) |
+  | Kotlin/kotlinx.coroutines `5f890047` | 215/217 (99.08%) | **217/217 (100%)** |
+  | Scala/GitBucket `f55982e8` | 653/676 (96.60%) | **671/676 (99.26%)** |
+  | Scala/cats-effect `4fc56284` | 420/445 (94.38%) | **423/445 (95.06%)** |
+
+  The 27 misses left are the 23 relative imports (BACK-2514) and the 4 package-object cases of the entry above.
+  The oracle-free graph invariants stay green on all four corpora.
 - **Historical import figures that cannot currently be re-run (BACK-1461):**
   - Original corpus clone not preserved: Python/celery, Rust/ripgrep, Java/guava,
     Go/client_golang, Ruby/solidus,

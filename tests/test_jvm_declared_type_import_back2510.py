@@ -71,6 +71,8 @@ KOTLIN_EDGES = {
     ('app/ui/UsesClass.kt', 'app/screens/Screens.kt', 2),
     ('app/ui/UsesInterface.kt', 'app/screens/Screens.kt', 2),
     ('app/ui/UsesAlias.kt', 'app/screens/Screens.kt', 2),
+    # `Outer.Inner` is reached through Outer, declared in Screens.kt (BACK-2512; it had no edge before)
+    ('app/ui/UsesNestedQualified.kt', 'app/screens/Screens.kt', 2),
     ('app/ui/UsesRepo.kt', 'app/data/Repo.kt', 2),
 }
 

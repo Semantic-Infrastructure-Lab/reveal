@@ -699,6 +699,8 @@ class _ImportSpec:
     combinator_clause: bool = False
     chained_package_clauses: bool = False
     selector_imports: bool = False
+    # BACK-2512: ``a.b.Outer.Inner`` falls back to the file declaring ``(a.b, Outer)`` (Kotlin, Scala)
+    peel_nested_members: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -1381,9 +1383,24 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 return []
         if len(parts) < 2:
             return []
-        symbol = parts[-1]
-        package = sep.join(parts[:-1])
-        return list(member_index.get((package, symbol), ()))
+        return self._lookup_member(sep, parts, member_index, declared_packages)
+
+    def _lookup_member(
+        self, sep: str, parts: List[str], member_index: Dict[Tuple[str, str], List[Path]],
+        declared_packages: Optional[Set[str]],
+    ) -> List[Path]:
+        """The files declaring ``parts[-1]`` in package ``parts[:-1]``. Failing that (Kotlin, Scala; BACK-2512),
+        ``a.b.Outer.Inner``, ``a.b.Outer.Companion.f`` and ``a.b.Obj.Type`` name a member reached THROUGH a
+        top-level symbol, so the file declaring ``(a.b, Outer)`` is the dependency: peel trailing segments,
+        longest declared package first; a prefix that is not a declared package is never peeled."""
+        found = member_index.get((sep.join(parts[:-1]), parts[-1]), ())
+        if found or not self.spec.peel_nested_members or declared_packages is None:
+            return list(found)
+        for keep in range(len(parts) - 2, 0, -1):
+            package = sep.join(parts[:keep])
+            if package in declared_packages:
+                return list(member_index.get((package, parts[keep]), ()))
+        return []
 
     _CONSTANT_KINDS: ClassVar[FrozenSet[str]] = frozenset({'constant', 'scope_resolution'})
 
@@ -3008,6 +3025,7 @@ _KOTLIN_SPEC = _ImportSpec(
     # (package, symbol) index can find the declaring file.
     member_node_types=frozenset({'function_declaration', 'property_declaration'}),
     member_symbol_fallback=True,
+    peel_nested_members=True,
     # BACK-2510: `import a.b.DiscoverScreen` for an `object DiscoverScreen` declared in
     # `Screens.kt` names no file by path; index the top-level types under (package, name).
     namespaced_type_node_types=frozenset({
@@ -3038,6 +3056,7 @@ _SCALA_SPEC = _ImportSpec(
     chained_package_clauses=True,
     # BACK-1237: `import a.{X, Y}` and `import a.X, b.Y` name one target each.
     selector_imports=True,
+    peel_nested_members=True,
     # BACK-557 Scala measurement loop (real corpus: samples/scala, GitBucket):
     # confirmed real Scala 2/3 code has NO bare top-level def/val outside any
     # object (Scala forbids it outside a `package object`; unlike Kotlin,

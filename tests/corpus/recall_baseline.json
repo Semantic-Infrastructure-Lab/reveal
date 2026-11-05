@@ -692,10 +692,10 @@
     "sha": "f55982e8a5262d841f29489f5954616967b3504b",
     "targets": 121,
     "oracle_edges": 676,
-    "hit_edges": 653,
+    "hit_edges": 671,
     "extra_edges": 1,
-    "recall": 0.9659763313609467,
-    "precision": 0.9984709480122325,
+    "recall": 0.992603550295858,
+    "precision": 0.9985119047619048,
     "coverage": {
       "files": 213,
       "indexed_symbols": 347,
@@ -724,28 +724,6 @@
       }
     },
     "differences": [
-      {
-        "target": "src/main/scala/gitbucket/core/model/Profile.scala",
-        "missed": [
-          "src/main/scala/gitbucket/core/controller/api/ApiRepositoryControllerBase.scala",
-          "src/main/scala/gitbucket/core/plugin/PluginRegistry.scala",
-          "src/main/scala/gitbucket/core/service/HandleCommentService.scala",
-          "src/main/scala/gitbucket/core/service/IssueCreationService.scala",
-          "src/main/scala/gitbucket/core/service/MergeService.scala",
-          "src/main/scala/gitbucket/core/service/OpenIDConnectService.scala",
-          "src/main/scala/gitbucket/core/service/RepositoryCommitFileService.scala",
-          "src/main/scala/gitbucket/core/service/RepositoryCreationService.scala",
-          "src/main/scala/gitbucket/core/service/RepositorySearchService.scala",
-          "src/main/scala/gitbucket/core/servlet/ApiAuthenticationFilter.scala",
-          "src/main/scala/gitbucket/core/servlet/GitAuthenticationFilter.scala",
-          "src/main/scala/gitbucket/core/servlet/GitRepositoryServlet.scala",
-          "src/main/scala/gitbucket/core/servlet/InitializeListener.scala",
-          "src/main/scala/gitbucket/core/servlet/TransactionFilter.scala",
-          "src/main/scala/gitbucket/core/ssh/GitCommand.scala",
-          "src/main/scala/gitbucket/core/ssh/PublicKeyAuthenticator.scala"
-        ],
-        "extra": []
-      },
       {
         "target": "src/main/scala/gitbucket/core/util/ConfigUtil.scala",
         "missed": [
@@ -781,14 +759,6 @@
         "extra": [
           "src/main/scala/gitbucket/core/service/AccountFederationService.scala"
         ]
-      },
-      {
-        "target": "src/main/scala/gitbucket/core/view/helpers.scala",
-        "missed": [
-          "src/main/scala/gitbucket/core/controller/MilestonesController.scala",
-          "src/main/scala/gitbucket/core/service/WebHookService.scala"
-        ],
-        "extra": []
       }
     ],
     "target_population": {
@@ -796,8 +766,8 @@
       "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
       "oracle_targets": 121,
       "observed_targets": 121,
-      "observed_pairs": 654,
-      "scored_pairs": 654,
+      "observed_pairs": 672,
+      "scored_pairs": 672,
       "unscored_targets": 0,
       "unscored_pairs": 0,
       "unscored_target_paths": [],
@@ -809,10 +779,10 @@
     "sha": "4fc56284b005ad8f00788780443ea1e9717cf9a8",
     "targets": 86,
     "oracle_edges": 445,
-    "hit_edges": 418,
+    "hit_edges": 423,
     "extra_edges": 4,
-    "recall": 0.9393258426966292,
-    "precision": 0.990521327014218,
+    "recall": 0.950561797752809,
+    "precision": 0.990632318501171,
     "coverage": {
       "files": 404,
       "indexed_symbols": 493,
@@ -893,10 +863,7 @@
       },
       {
         "target": "kernel/shared/src/main/scala/cats/effect/kernel/ParallelF.scala",
-        "missed": [
-          "laws/shared/src/test/scala/cats/effect/laws/PureConcSpec.scala",
-          "tests/shared/src/test/scala/cats/effect/IOSpec.scala"
-        ],
+        "missed": [],
         "extra": [
           "kernel/shared/src/main/scala/cats/effect/kernel/instances/GenSpawnInstances.scala"
         ]
@@ -946,20 +913,6 @@
         ]
       },
       {
-        "target": "kernel-testkit/shared/src/main/scala/cats/effect/kernel/testkit/pure.scala",
-        "missed": [
-          "laws/shared/src/test/scala/cats/effect/testkit/TimeTSpec.scala"
-        ],
-        "extra": []
-      },
-      {
-        "target": "laws/shared/src/test/scala/cats/effect/BaseSpec.scala",
-        "missed": [
-          "tests/jvm/src/test/scala/cats/effect/unsafe/WorkerThreadNameSpec.scala"
-        ],
-        "extra": []
-      },
-      {
         "target": "tests/js/src/main/scala/catseffect/examplesplatform.scala",
         "missed": [
           "tests/jvm/src/test/scala/cats/effect/IOAppSpec.scala"
@@ -979,13 +932,6 @@
           "tests/jvm/src/test/scala/cats/effect/IOAppSpec.scala"
         ],
         "extra": []
-      },
-      {
-        "target": "tests/shared/src/test/scala/cats/effect/BaseSpec.scala",
-        "missed": [
-          "tests/jvm/src/test/scala/cats/effect/unsafe/WorkerThreadNameSpec.scala"
-        ],
-        "extra": []
       }
     ],
     "target_population": {
@@ -993,8 +939,8 @@
       "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
       "oracle_targets": 86,
       "observed_targets": 80,
-      "observed_pairs": 422,
-      "scored_pairs": 422,
+      "observed_pairs": 427,
+      "scored_pairs": 427,
       "unscored_targets": 0,
       "unscored_pairs": 0,
       "unscored_target_paths": [],
@@ -1006,9 +952,9 @@
     "sha": "5f8900478a8e20c073145b1608fbc71fe3d7378b",
     "targets": 81,
     "oracle_edges": 217,
-    "hit_edges": 215,
+    "hit_edges": 217,
     "extra_edges": 0,
-    "recall": 0.9907834101382489,
+    "recall": 1.0,
     "precision": 1.0,
     "coverage": {
       "files": 1034,
@@ -1037,23 +983,14 @@
         "basis": "paths relative to the selected project"
       }
     },
-    "differences": [
-      {
-        "target": "kotlinx-coroutines-core/common/src/channels/Channel.kt",
-        "missed": [
-          "kotlinx-coroutines-core/common/src/channels/BufferedChannel.kt",
-          "kotlinx-coroutines-core/common/src/channels/ConflatedBufferedChannel.kt"
-        ],
-        "extra": []
-      }
-    ],
+    "differences": [],
     "target_population": {
       "status": "observed",
       "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
       "oracle_targets": 81,
       "observed_targets": 82,
-      "observed_pairs": 216,
-      "scored_pairs": 215,
+      "observed_pairs": 218,
+      "scored_pairs": 217,
       "unscored_targets": 1,
       "unscored_pairs": 1,
       "unscored_target_paths": [
