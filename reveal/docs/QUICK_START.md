@@ -199,7 +199,7 @@ reveal check ./src                # Check current work
 
 # Ops health (SSL, databases, DNS, nginx); code quality is `reveal check`
 reveal health ssl://example.com
-reveal health --all               # Targets from .reveal.yaml `health.targets`
+# reveal health --all checks the `health.targets` list in .reveal.yaml
 
 # Token-budgeted snapshot for LLM context
 reveal pack src/ --budget 8000

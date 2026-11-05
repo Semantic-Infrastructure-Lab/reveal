@@ -126,8 +126,8 @@ reveal pack src/ --budget 8000 --format json
 One command. SSL certificates + MySQL replication + domain DNS + nginx configs — all in the same invocation, all exit-code-governed. Code quality is `reveal check`.
 
 ```bash
-# Targets from .reveal.yaml `health.targets`
-reveal health --all
+# `reveal health --all` checks the `health.targets` list in .reveal.yaml; with no list it
+# falls back to the detected source dir, a code path, and points you at `reveal check`.
 
 # Check specific resources (SSL + domain in one pass)
 reveal health ssl://api.example.com domain://example.com
@@ -181,8 +181,8 @@ reveal 'markdown://docs/?beth_topics~=authentication'
 # Which docs link to auth.md?
 reveal 'markdown://docs/?link-graph' | grep 'auth.md'
 
-# Find orphaned docs (nothing links to them)
-reveal 'markdown://docs/?link-graph' | grep 'backlinks: 0'
+# Find isolated docs (no links in or out)
+reveal 'markdown://docs/?link-graph' | grep -A 20 'Isolated'
 
 # Full-text search combining with frontmatter filters
 reveal 'markdown://docs/?body-contains=retry&type=procedure'

@@ -50,8 +50,8 @@ reveal 'imports://src?violations'
 # 5. Single file import inspection
 reveal imports://src/main.py
 
-# 6. Verbose output (detailed information)
-reveal imports://src --verbose
+# 6. Verbose output: every file of each cycle group, plus the cycle edges
+reveal 'imports://src?circular' --verbose
 
 # 7. JSON output for CI/CD
 reveal 'imports://src?unused' --format=json
@@ -795,7 +795,7 @@ reveal 'imports://src?unused=true'
 | Flag | Description | Example |
 |------|-------------|---------|
 | `--format=<type>` | Output format (text, json) | `reveal imports://src --format=json` |
-| `--verbose` | Show detailed results | `reveal imports://src --verbose` |
+| `--verbose` | Full cycle groups and their edges (`?circular`; other views ignore it and say so) | `reveal 'imports://src?circular' --verbose` |
 
 ### Examples
 
