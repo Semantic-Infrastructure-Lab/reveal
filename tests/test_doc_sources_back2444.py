@@ -10,7 +10,7 @@ import pytest
 
 from doc_command_fixture import build_navigation_cohort_tree
 from test_example_recipes_run import (
-    DOC_SOURCE_COHORT, DOC_NAMED_SOURCE_COHORT,
+    DOC_SOURCE_COHORT, DOC_NAMED_SOURCE_COHORT, RUN_SOURCES,
     _documented_commands, _documented_sources, _source_cohort_reason,
     _assert_text_as_written,
 )
@@ -114,11 +114,23 @@ def test_new_source_exclusions_are_explicit_and_legacy_sources_still_run():
     reasons = [_source_cohort_reason(source, tokens) for source, _, tokens, _ in rows]
     assert any(reason and 'adapters/' in reason for reason in reasons)
     assert all(reason is None for (source, _, _, _), reason in zip(rows, reasons)
-               if source == 'AGENT_HELP.md' or source.startswith('guides/'))
-    sources = {name for name, _ in _documented_sources(Path(__file__).parents[1] / 'reveal' / 'docs')}
+               if source in RUN_SOURCES or source.startswith('guides/'))
+    sources ={name for name, _ in _documented_sources(Path(__file__).parents[1] / 'reveal' / 'docs')}
     assert {'../../README.md', 'QUICK_START.md', 'WHY_REVEAL.md', 'INDEX.md',
             'adapters/IMPORTS_ADAPTER_GUIDE.md', 'adapters/OVERVIEW_ADAPTER_GUIDE.md',
             'adapters/MARKDOWN_GUIDE.md'} <= sources
+
+
+def test_first_contact_sources_run_their_own_commands():
+    """QUICK_START and WHY_REVEAL commands are executed, not only inventoried (BACK-1365):
+    a collector or cohort change that skips them again fails here, not silently."""
+    from test_example_recipes_run import _named_fixture_commands
+    for source in ('QUICK_START.md', 'WHY_REVEAL.md'):
+        params = [p for p in _named_fixture_commands() if p.id.startswith(source + ':')]
+        run = [p for p in params if not any(m.name == 'skip' for m in p.marks)]
+        assert len(run) >= 10, (source, len(params), len(run))
+        assert not any('not yet qualified' in m.kwargs.get('reason', '')
+                       for p in params for m in p.marks), source
 
 
 def test_neutral_go_edit_preserves_advertised_comparison(navigation_harness):

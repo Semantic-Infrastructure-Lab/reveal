@@ -569,6 +569,11 @@ def _documented_sources(docs):
             yield os.path.relpath(source, docs).replace(os.sep, '/'), source
 
 
+# Whole sources whose every command runs, like guides/*.md. QUICK_START and WHY_REVEAL are the
+# first pages a new user reads; run unqualified, 5 of their 34 commands failed (BACK-1365).
+RUN_SOURCES = frozenset({'AGENT_HELP.md', 'QUICK_START.md', 'WHY_REVEAL.md'})
+
+
 # Exact source-command identities accepted by BACK-2444. Other newly inventoried
 # examples stay visible exclusions until their fixture and answer are qualified.
 DOC_SOURCE_COHORT = {
@@ -596,7 +601,7 @@ DOC_NAMED_SOURCE_COHORT = {
 def _source_cohort_reason(source, tokens):
     if source.endswith('#embedded-md'):
         return f'embedded Markdown not yet qualified: {source} (BACK-1365)'
-    if source == 'AGENT_HELP.md' or source.startswith('guides/'):
+    if source in RUN_SOURCES or source.startswith('guides/'):
         return None
     if (source, shlex.join(tokens)) in DOC_SOURCE_COHORT | DOC_NAMED_SOURCE_COHORT:
         return None

@@ -255,6 +255,7 @@ _SRC_APP_PY = (
     '    return handle_request({})\n'
     '\n\n'
     + 'def build_routes(app):\n' + _pad('route', 150) + '    return route_149\n'
+    + '\n\ndef load_config(path):\n    """QUICK_START and the git:// blame examples read this."""\n    return {"path": path}\n'
 )
 
 _VALIDATORS_PY = (
@@ -394,6 +395,10 @@ import reveal
 ```bash
 pip install reveal-cli
 ```
+
+## Usage
+
+Run `reveal src/` for the structure.
 '''
 
 
@@ -653,7 +658,7 @@ def binary_paths():
 
 
 # Recorded sessions under the names the docs use, beyond tests/claude_session_fixture.py's own.
-CLAUDE_SESSIONS = ('my-session-name', 'my-session-0302')
+CLAUDE_SESSIONS = ('my-session-name', 'my-session-0302', 'my-session-0316')
 
 
 def build_session_extras(home: Path) -> None:
