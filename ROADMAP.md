@@ -101,9 +101,9 @@ Two problems shape the current work.
    narrow or retire it (BACK-2353); precision oracles for the element flags from
    independent tools (BACK-2203); rule precision beyond Python (BACK-1095); more languages
    in the recall gate (BACK-2079); a language scorecard generated from data (BACK-1900).
-7. **Docs that cannot drift.** Every example in the README, the agent guide and
-   `help://examples` runs in CI (BACK-1365); consumers move to the new names before the cut
-   (BACK-2071).
+7. **Docs that cannot drift.** Every example in the README, the agent guide, the guides and
+   `help://examples` now runs in CI; the ones that need a live host still skip until recorded
+   host fixtures exist (BACK-1615). Consumers move to the new names before the cut (BACK-2071).
 
 Not on this list: new adapters, new languages and new flags, which wait until the work
 above lands.
