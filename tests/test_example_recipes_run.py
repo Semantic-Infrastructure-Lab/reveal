@@ -578,8 +578,10 @@ def _documented_sources(docs):
 # Whole sources whose every command runs, like guides/*.md and adapters/*.md. QUICK_START and
 # WHY_REVEAL are the first pages a new user reads; run unqualified, 5 of their 34 commands failed
 # (BACK-1365). The adapter guides came next: 82 of ~500 failed, and each was a harness read, a fixture
-# name or a tutorial example (BACK-2518).
-RUN_SOURCES = frozenset({'AGENT_HELP.md', 'QUICK_START.md', 'WHY_REVEAL.md'})
+# name or a tutorial example (BACK-2518). The README and its embedded Markdown table last: 1 of its 12
+# newly run commands failed, a fixture name; INDEX.md has no fenced commands today (BACK-1365).
+# A source's embedded Markdown commands run when the source does.
+RUN_SOURCES = frozenset({'AGENT_HELP.md', 'QUICK_START.md', 'WHY_REVEAL.md', '../../README.md', 'INDEX.md'})
 
 
 # Commands a guide prints on purpose to teach something other than a working call: a made-up
@@ -595,8 +597,8 @@ TUTORIAL_COMMANDS = {
 TUTORIAL_PREFIXES = ('mything://', 'help://mything')
 
 
-# Exact source-command identities accepted by BACK-2444. Other newly inventoried
-# examples stay visible exclusions until their fixture and answer are qualified.
+# Exact source-command identities whose answers a dedicated navigation fixture asserts (BACK-2444);
+# the named fixture skips them. A source not in RUN_SOURCES runs only the identities listed here.
 DOC_SOURCE_COHORT = {
     ('../../README.md', 'reveal overview .'),
     ('../../README.md', 'reveal overview . --against HEAD'),
@@ -620,10 +622,11 @@ DOC_NAMED_SOURCE_COHORT = {
 
 
 def _source_cohort_reason(source, tokens):
-    if source.endswith('#embedded-md'):
-        return f'embedded Markdown not yet qualified: {source} (BACK-1365)'
-    if source in RUN_SOURCES or source.startswith(('guides/', 'adapters/')):
+    base = source.removesuffix('#embedded-md')
+    if base in RUN_SOURCES or base.startswith(('guides/', 'adapters/')):
         return None
+    if base != source:  # an embedded copy never borrows a shell example's qualification
+        return f'embedded Markdown not yet qualified: {source} (BACK-1365)'
     if (source, shlex.join(tokens)) in DOC_SOURCE_COHORT | DOC_NAMED_SOURCE_COHORT:
         return None
     return f'source cohort not yet qualified: {source} (BACK-1365)'

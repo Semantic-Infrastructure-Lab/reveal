@@ -1,4 +1,4 @@
-"""Inventory embedded Markdown commands without qualifying them for execution."""
+"""Inventory embedded Markdown commands; they run when their source does (BACK-1365)."""
 import shlex
 from pathlib import Path
 
@@ -38,11 +38,12 @@ def test_readme_embedded_examples_keep_text_tokens_and_distinct_provenance(comma
     assert f'`{command}`' in readme.read_text(encoding='utf-8')
     rows = [row for row in recipes._documented_commands() if row[0] == README]
     assert (README, command, shlex.split(command), False) in rows
-    assert 'embedded Markdown' in recipes._source_cohort_reason(README, shlex.split(command))
+    assert recipes._source_cohort_reason(README, shlex.split(command)) is None  # README runs
 
 
 @pytest.mark.parametrize('fence', ['md', 'markdown'])
-def test_embedded_table_and_list_examples_are_bounded_and_unqualified(tmp_path, fence):
+def test_embedded_table_and_list_examples_are_bounded_and_follow_their_source(tmp_path, fence,
+                                                                              monkeypatch):
     _write(tmp_path, 'AGENT_HELP.md', f'''```{fence}
 | Need | Examples |
 |------|----------|
@@ -62,6 +63,9 @@ def test_embedded_table_and_list_examples_are_bounded_and_unqualified(tmp_path, 
         ('AGENT_HELP.md' + EMBEDDED, 'reveal src/ --top 1', False),
         ('AGENT_HELP.md' + EMBEDDED, 'reveal app.py ghost', True),
     ]
+    assert not any(recipes._source_cohort_reason(source, tokens)
+                   for source, _, tokens, _ in rows)  # AGENT_HELP runs, so its table does
+    monkeypatch.setattr(recipes, 'RUN_SOURCES', frozenset())
     assert all(recipes._source_cohort_reason(source, tokens)
                for source, _, tokens, _ in rows)
     params = recipes._named_fixture_commands(tmp_path)
@@ -108,7 +112,9 @@ def test_unclosed_inline_command_quote_fails_clearly_without_partial_tokens(tmp_
         list(recipes._documented_commands(tmp_path))
 
 
-def test_embedded_identity_cannot_borrow_shell_qualification(tmp_path):
+def test_embedded_identity_cannot_borrow_shell_qualification(tmp_path, monkeypatch):
+    # With the README out of RUN_SOURCES, only its cohort-listed shell identities run.
+    monkeypatch.setattr(recipes, 'RUN_SOURCES', frozenset())
     docs = tmp_path / 'reveal' / 'docs'
     _write(docs, '../../README.md', '''```md
 1. `reveal overview .`
@@ -142,6 +148,10 @@ def test_existing_shell_inventory_and_execution_eligibility_remain_identical(mon
     by_query = {p.values: p for p in named}
     assert all(by_query[p.values] == p for p in prior_named)
     assert discovery[:len(prior_discovery)] == prior_discovery
-    assert {p.values for p in named if not p.marks} == {p.values for p in prior_named if not p.marks}
-    assert {p.values for p in discovery if not p.marks} == {p.values for p in prior_discovery if not p.marks}
-    assert all(p.marks for p in discovery[len(prior_discovery):])
+    # Embedded rows only add: every shell-eligible command stays eligible, and an added
+    # embedded command is eligible exactly when its source runs (BACK-1365).
+    assert {p.values for p in prior_named if not p.marks} <= {p.values for p in named if not p.marks}
+    assert {p.values for p in prior_discovery if not p.marks} <= {p.values for p in discovery if not p.marks}
+    assert all(not any(m.name == 'skip' and 'not yet qualified' in m.kwargs.get('reason', '')
+                       for m in p.marks)
+               for p in discovery[len(prior_discovery):])

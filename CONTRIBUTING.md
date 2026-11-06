@@ -306,11 +306,12 @@ on its own, and they disagreed (BACK-1372).
 **Executable documentation:** `tests/test_example_recipes_run.py` runs offline
 help recipes in JSON and their written text format. It preserves supported pipelines
 and uses positive fixtures for claimed findings. The same harness runs every command
-in AGENT_HELP, QUICK_START, WHY_REVEAL, `docs/guides/` and `docs/adapters/` against a named fixture
+in the README, AGENT_HELP, QUICK_START, WHY_REVEAL, INDEX, `docs/guides/` and `docs/adapters/`
+(including single-backtick examples in tables inside their `md` fences) against a named fixture
 (`tests/doc_command_fixture.py`) holding the files, names and sessions those docs use;
 a command that needs a live host, a tool such as `jq`, or a name the fixture lacks is an
 explicit skip that says why (`TUTORIAL_COMMANDS` lists the examples a guide prints on purpose to
-teach something else). The README is inventoried, and only listed commands from it run so far. A successful empty query is not evidence for a
+teach something else). A new doc source starts inventoried only, until it is added to `RUN_SOURCES`. A successful empty query is not evidence for a
 recipe that promises a match.
 
 **Text rendering:** put new renderer implementations in `reveal/rendering/`. Extend

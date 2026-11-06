@@ -541,7 +541,10 @@ FILES = {
                           'def process_input(text):\n    return eval(text)\n\n\n'
                           'def entry_point():\n    return initialize_app({})\n\n\n'
                           'def old_parse_config(path):\n    return path\n\n\n'
-                          'def parse_config(path):\n    return old_parse_config(path)\n',
+                          'def parse_config(path):\n    return old_parse_config(path)\n\n\n'
+                          # README's adapter table (BACK-1365).
+                          'def my_fn(x):\n    return x\n\n\n'
+                          'def use_my_fn():\n    return my_fn(1)\n',
     'src/auth/checks.py': 'from ..validators import validate_item\n\n\n'
                           'def validate_token(token):\n    return validate_item(token)\n\n\n'
                           'def guard(token):\n    return validate_token(token)\n',

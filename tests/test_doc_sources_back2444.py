@@ -112,9 +112,9 @@ def test_new_source_exclusions_are_explicit_and_legacy_sources_still_run():
     identities = {(source, shlex.join(tokens)) for source, _, tokens, _ in rows}
     assert DOC_NAMED_SOURCE_COHORT <= identities
     reasons = [_source_cohort_reason(source, tokens) for source, _, tokens, _ in rows]
-    assert any(reason and 'README.md' in reason for reason in reasons)  # README stays inventory-only
-    assert all(reason is None for (source, _, _, _), reason in zip(rows, reasons)
-               if source in RUN_SOURCES or source.startswith(('guides/', 'adapters/')))
+    # Every inventoried source now runs whole, its embedded Markdown included (BACK-1365).
+    assert [(source, reason) for (source, _, _, _), reason in zip(rows, reasons) if reason] == []
+    assert any(source == '../../README.md#embedded-md' for source, _, _, _ in rows)
     sources ={name for name, _ in _documented_sources(Path(__file__).parents[1] / 'reveal' / 'docs')}
     assert {'../../README.md', 'QUICK_START.md', 'WHY_REVEAL.md', 'INDEX.md',
             'adapters/IMPORTS_ADAPTER_GUIDE.md', 'adapters/OVERVIEW_ADAPTER_GUIDE.md',
@@ -122,13 +122,15 @@ def test_new_source_exclusions_are_explicit_and_legacy_sources_still_run():
 
 
 def test_first_contact_sources_run_their_own_commands():
-    """QUICK_START and WHY_REVEAL commands are executed, not only inventoried (BACK-1365):
-    a collector or cohort change that skips them again fails here, not silently."""
+    """QUICK_START, WHY_REVEAL and the README (its embedded table too) are executed, not only
+    inventoried (BACK-1365): a collector or cohort change that skips them again fails here."""
     from test_example_recipes_run import _named_fixture_commands
-    for source in ('QUICK_START.md', 'WHY_REVEAL.md'):
+    floors = {'QUICK_START.md': 10, 'WHY_REVEAL.md': 10, '../../README.md': 4,
+              '../../README.md#embedded-md': 5}
+    for source, floor in floors.items():
         params = [p for p in _named_fixture_commands() if p.id.startswith(source + ':')]
         run = [p for p in params if not any(m.name == 'skip' for m in p.marks)]
-        assert len(run) >= 10, (source, len(params), len(run))
+        assert len(run) >= floor, (source, len(params), len(run))
         assert not any('not yet qualified' in m.kwargs.get('reason', '')
                        for p in params for m in p.marks), source
 
