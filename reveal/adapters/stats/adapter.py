@@ -38,7 +38,7 @@ from .analysis import find_analyzable_files, analyze_file, get_file_display_path
 from .issue_count import note_issue_count_basis, renamed_field
 from .metrics import calculate_file_stats
 from .queries import SORT_FIELDS, get_quality_config, field_value, compare, matches_filters
-from .aggregation import aggregate_stats, identify_hotspots
+from .aggregation import aggregate_stats, has_findings, identify_hotspots
 from .provenance import PROVENANCE_RESULT_TYPE, provenance_report
 from ...reveal_types import PathFailure
 
@@ -197,6 +197,7 @@ _SCHEMA_OUTPUT_TYPES = [
                 'total_code_lines': {'type': 'integer'}, 'total_functions': {'type': 'integer'},
                 'total_classes': {'type': 'integer'}, 'avg_complexity': {'type': 'number'},
                 'avg_quality_score': {'type': 'number'},
+                'has_findings': {'type': 'boolean', 'description': 'Present with hotspots=true: an analysed file has quality below 70 or a function with complexity above 20, over every analysed file before filters and cuts; --fail-on findings exits 1 on it'},
             }},
             'hotspots': {'type': 'array', 'items': {'type': 'object', 'properties': {
                 'file': {'type': 'string'}, 'quality_score': {'type': 'number'},
@@ -268,6 +269,7 @@ _SCHEMA_NOTES = [
     'quality_score is 0-100: 100 = no issues; weighted by severity (error/warning/info)',
     'Complexity is cyclomatic, from the tree-sitter AST: 1 plus one per decision node (if/elif, loops, except/catch arms, case arms, and/or, ternaries); languages without a tree-sitter complexity fall back to a text heuristic',
     'hotspots=true adds a ranked list of files most in need of refactoring',
+    'hotspots=true adds summary.has_findings: an analysed file with quality below 70 or a function with complexity above 20 (fixed thresholds), over every analysed file before the file filters, tests= and the top/limit/offset cuts; --fail-on findings exits 1 on it (default none). The other views have no findings and exit 0 under --fail-on findings',
     'tests=exclude leaves conventional and project-declared test/support files out of the hotspots=true ranking only; test_scope records the selected policy and files_excluded. The default includes them. Ordinary overview does not request this ranking',
     'quality.local_check_issues counts the findings of file-local check rules only, so a file has one count whatever else is in the tree; meta.issue_count names the rule and the rule set. Cross-file rules (import cycles, duplicate literals, ...) run under reveal check.',
     'Both files and directories are supported; directories show aggregate + per-file breakdown',
@@ -286,7 +288,9 @@ class MetricsAdapter(ResourceAdapter):
     BUDGET_LIST_FIELD = 'files'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESULT_TYPE = 'stats_summary'
-    FINDINGS_POLICIES = ('none',)  # metrics reports a count; it has no findings gate
+    # --fail-on findings gates the hotspots=true view only (imports' findings views are the precedent): its
+    # summary.has_findings is the serious-hotspot predicate over the analysed population (BACK-2149).
+    FINDINGS_POLICIES = ('none', 'findings')
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     PARAM_SPECS = PARAM_SPECS
@@ -353,8 +357,10 @@ class MetricsAdapter(ResourceAdapter):
         if result.get('error') or meta.get('errors'):
             return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
         lost = any(warning.get('type') in REQUIRED_WARNINGS for warning in meta.get('warnings', []))
+        summary = result.get('summary')
         return result_execution_facts(
-            result, completeness=AnalysisCompleteness.INCOMPLETE if lost else AnalysisCompleteness.COMPLETE)
+            result, completeness=AnalysisCompleteness.INCOMPLETE if lost else AnalysisCompleteness.COMPLETE,
+            findings=isinstance(summary, dict) and summary.get('has_findings') is True)
 
     def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
         """Initialize the metrics adapter.
@@ -410,6 +416,7 @@ class MetricsAdapter(ResourceAdapter):
             raise ValueError(f"view={self.view!r} is not a metrics view; the one view is "
                              f"{', '.join(VIEWS)} (omit view for per-file metrics)")
         self._analysis_failures: list = []
+        self._population_findings = False
         self._excluded_by_extension: Dict[str, int] = {}
         self._unknown_filter_fields: List[str] = []
         self._sort_failure: Optional[Dict[str, Any]] = None
@@ -516,10 +523,17 @@ class MetricsAdapter(ResourceAdapter):
         return matched
 
     def _record_analysis_results(self, all_stats: list) -> None:
-        """Capture raw rule facts before filters, paging, and presentation cuts."""
+        """Capture raw rule facts before filters, paging, and presentation cuts.
+
+        The findings verdict is taken here too, over every analysed file: no file filter
+        (min_complexity is an average), ?tests= ranking scope, page or top cut moves it (BACK-2149).
+        """
         self._analysis_failures = [s for s in all_stats
                                    if is_failure(s) or s and (s.get('parse_degraded')
                                                               or s.get('check_rules_failed'))]
+        analysed = [s for s in all_stats if s and not is_failure(s)]
+        self._population_findings = has_findings((s['quality']['score'] for s in analysed),
+                                                 (s['complexity']['max'] for s in analysed))
 
     def _disclose_issue_count(self, result: dict) -> None:
         """Say what the issue count counts, and flag a renamed spelling the query used.
@@ -736,6 +750,7 @@ class MetricsAdapter(ResourceAdapter):
                 })
         result['hotspots'] = self._top_hotspots(
             result, identify_hotspots(file_stats, churn_counts=churn_counts))
+        result['summary']['has_findings'] = self._population_findings
 
     def _rank_population(self, result: dict, file_stats: list, layout: Optional[TestLayout]) -> list:
         """Narrow only the ranking, using the policy selected before analysis.

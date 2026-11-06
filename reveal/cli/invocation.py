@@ -178,6 +178,8 @@ EXIT_CODE_WORDING: Dict[str, Dict[int, str]] = {
                    '(default: none)'},
     'hotspots': {1: 'file quality below 70 or function complexity above 20 matched '
                     '--fail-on findings (default: none)'},
+    'metrics': {1: 'with --hotspots, an analysed file with quality below 70 or a function with complexity '
+                   'above 20 matched --fail-on findings (default: none)'},
 }
 # Commands whose findings gate is on unless --fail-on none says otherwise.
 FINDINGS_BY_DEFAULT = ('check', 'review', 'health')

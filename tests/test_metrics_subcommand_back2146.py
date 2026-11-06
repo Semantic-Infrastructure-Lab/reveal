@@ -134,12 +134,18 @@ def test_a_missing_path_is_rejected_alike(project):
     assert a.stdout == b.stdout and a.stderr == b.stderr
 
 
-def test_the_findings_gate_is_not_declared_for_metrics(project):
-    """metrics reports a count; it has no findings gate, so --fail-on findings is a usage error in both spellings."""
+def test_the_findings_gate_belongs_to_the_hotspots_view(project):
+    """--fail-on findings gates the hotspots ranking (BACK-2149; the full expected-answer set is
+    tests/test_metrics_findings_gate_back2149.py). The default view has nothing to gate: the policy is
+    accepted and exits 0 in both spellings, and pkg/busy.py (complexity 15) is no finding either."""
     a = run('metrics', 'proj', '--fail-on', 'findings')
     b = run('metrics://proj', '--fail-on', 'findings')
-    assert a.returncode == b.returncode == 2
-    assert a.stderr == b.stderr and 'not supported' in a.stderr
+    assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
+    assert a.stderr == b.stderr and 'not supported' not in a.stderr
+    a = run('metrics', 'proj', '--hotspots', '--fail-on', 'findings', '--format', 'json')
+    b = run('metrics://proj?hotspots=true', '--fail-on', 'findings', '--format', 'json')
+    assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
+    assert json.loads(a.stdout)['summary']['has_findings'] is False
 
 
 def test_operator_filters_still_answer_on_the_uri(project):

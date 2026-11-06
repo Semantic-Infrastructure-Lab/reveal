@@ -117,6 +117,10 @@ class StatsRenderer:
                     print(f"\n{i}. {h['file']}")
                     print(f"   Quality: {h['quality_score']:.1f}/100 | Score: {h['hotspot_score']:.1f}")
                     print(f"   Issues: {', '.join(h['issues'])}")
+            if 'has_findings' in s:
+                verdict = 'yes' if s['has_findings'] else 'none'
+                print(f"\nFindings:   {verdict} (a file below quality 70 or a function above complexity 20, "
+                      "over every analysed file before filters and cuts)")
             _print_test_scope(result)
             _print_issue_count_line(result)
             render_meta_warnings(result)

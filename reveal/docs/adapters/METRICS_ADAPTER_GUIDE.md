@@ -315,8 +315,9 @@ The operator filters (`lines>50`, `complexity=5..15`) have no flag; they stay a 
 `limit` and `offset` page the `files` list only: `hotspots=true` ranks the whole filtered
 population, whatever the page.
 
-Exit codes: 0 when every file was counted, 2 for a rejected request (an unknown `view`, a negative
-`top`, a missing path, `--fail-on findings`: metrics has no findings gate), 3 when files were lost
+Exit codes: 0 when every file was counted, 1 with `--hotspots --fail-on findings` when
+`summary.has_findings` is true (see [Findings gate](#findings-gate)), 2 for a rejected request (an unknown
+`view`, a negative `top`, a missing path), 3 when files were lost
 or not analyzed (an `analysis_failed`, `parse_degraded`, `check_rules_failed` or unreadable-directory
 warning in `meta.warnings`). The retired `stats://` spelling keeps its older exit 0 on those until the cut.
 
@@ -511,7 +512,8 @@ The summary aggregates only the files shown.
     "avg_complexity": 4.2,
     "avg_quality_score": 78.5,
     "excluded": 0,
-    "excluded_by_extension": {}
+    "excluded_by_extension": {},
+    "has_findings": false  // Only if ?hotspots=true: see Findings gate
   },
   "files": [
     {
@@ -730,6 +732,24 @@ Starting hotspot score: **0**
 ### Hotspot Ranking
 
 Hotspots are sorted by **hotspot score** (descending) and limited to **top 10**.
+
+### Findings gate
+
+`hotspots=true` adds `summary.has_findings`: true when an analysed file has a quality score below 70
+or a function with complexity above 20 (`complexity.max > 20`; exactly 20 is not a finding). The
+thresholds are fixed. The verdict is taken over every analysed file, before the file filters
+(`--min-complexity` is an average-complexity filter), `tests=` and the `top`, `limit` and `offset`
+cuts, so a cut or a filter never hides a finding from the gate. `--fail-on findings` exits 1 on it;
+the default `--fail-on none` reports it with exit 0. The default and `view=provenance` answers have
+no findings, so `--fail-on findings` exits 0 there.
+
+```bash
+reveal metrics ./src --hotspots --fail-on findings          # CI gate: exit 1 on a finding
+reveal 'metrics://./src?hotspots=true' --fail-on findings   # the same answer and exit
+```
+
+This is the gate `reveal hotspots --fail-on findings` had. The functions themselves are ranked by
+`reveal 'ast://./src?complexity>=10&sort=-complexity&limit=10' --format json`.
 
 ### Example
 
@@ -1934,7 +1954,7 @@ jq -s '.[0].summary as $a | .[1].summary as $b | {
 
 **A**: Yes! The metrics adapter is designed for CI/CD:
 - **JSON output**: `--format=json` for machine parsing
-- **Exit codes**: 0 when every file was counted, 2 for a rejected request (unknown view, bad `top`, missing path, `--fail-on`), 3 when files were lost or not analyzed. There is no findings gate: a low score never fails the run.
+- **Exit codes**: 0 when every file was counted, 1 with `--hotspots --fail-on findings` when an analysed file has quality below 70 or a function with complexity above 20 ([Findings gate](#findings-gate)), 2 for a rejected request (unknown view, bad `top`, missing path), 3 when files were lost or not analyzed. Without `--fail-on findings` a low score never fails the run.
 - **Deterministic**: Same code → same stats
 - **Fast**: 1000 files analyzed in ~5 seconds
 

@@ -33,8 +33,9 @@ CASES = {
     'trace': (['--from', 'serve'], '?from=serve'),
 }
 NOUNS = sorted(CASES)
-# A noun whose default answer is not a findings view gates the view that is (imports: BACK-1054 S4).
-FINDINGS_VIEWS = {'imports': (['--unused'], '?unused')}
+# A noun whose default answer is not a findings view gates the view that is (imports: BACK-1054 S4;
+# metrics: the hotspots ranking, BACK-2149).
+FINDINGS_VIEWS = {'imports': (['--unused'], '?unused'), 'metrics': (['--hotspots'], '?hotspots=true')}
 
 APP = '''\
 import os

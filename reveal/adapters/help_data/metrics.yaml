@@ -90,7 +90,11 @@ workflows:
       - 'metrics://./src --hotspots              # See worst files'
       - 'metrics://./src?min_complexity=15      # High complexity files'
       - 'reveal <hotspot-file> --check        # Analyze specific issues'
-  - name: 'CI/CD Quality Gate'
+  - name: 'CI/CD Findings Gate'
+    scenario: 'Fail the build on a file below quality 70 or a function above complexity 20'
+    steps:
+      - 'reveal metrics ./src --hotspots --fail-on findings   # exit 1 when summary.has_findings is true'
+  - name: 'CI/CD Quality Trend'
     scenario: 'Fail build if complexity increases'
     steps:
       - 'metrics://./src --format=json > before.json'
@@ -125,7 +129,8 @@ notes:
   - 'Operator filters (lines>50, complexity=5..15) are URI-only; the subcommand takes the named parameters (--min-lines, --max-complexity, ...)'
   - 'hotspots=true ranks the whole filtered population; limit and offset page the files list only'
   - 'Explicit tests=include|exclude reports test_scope with the selected policy basis, anchor/source and ranking-only files_excluded. Ordinary overview does not request this ranking'
-  - 'Exit codes: 0 complete, 2 rejected request, 3 files lost or not analyzed (analysis_failed, parse_degraded, check_rules_failed, an unreadable directory); metrics has no findings gate (--fail-on findings exits 2)'
+  - 'Exit codes: 0 complete, 1 with hotspots=true and --fail-on findings when summary.has_findings is true, 2 rejected request, 3 files lost or not analyzed (analysis_failed, parse_degraded, check_rules_failed, an unreadable directory)'
+  - 'hotspots=true adds summary.has_findings: some analysed file has quality below 70 or a function with complexity above 20 (fixed thresholds). It is taken over every analysed file, before the file filters, tests= and the top/limit/offset cuts. --fail-on findings (default none) exits 1 on it; the other views have no findings and exit 0 under it'
   - 'Combine filters and result control: ?lines>100&sort=-complexity&limit=10'
   - 'stats:// and classify:// are retired spellings: they answer the same as metrics:// and metrics://?view=provenance and print a replaced-by note'
 
