@@ -100,6 +100,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- A Go method on a generic receiver (`func (s St[K]) Len()`, `func (s *St[K]) Put()`) now belongs to its type: the outline nests it under `St`, `ast://` gives it `owner: St`, and `reveal FILE St.Len` finds it. It was listed as a free function (BACK-1682).
+
 - `reveal FILE --grep P --format grep` and `reveal DIR --grep P --format grep` print one `path:line:text` row per hit, with warnings on stderr; they printed the text view. `--format typed` with `--grep` exits 2 naming `text`, `json` and `grep` instead of printing text (BACK-2530).
 
 - `--boundary`, `--inputs`, `--outputs`, `--varflow` and `--flow` on deeply nested code (a few hundred nested calls, as in generated parsers) printed a Python `RecursionError` traceback and exited 1. They now exit 3 with one line naming the flag and the element, print no partial answer, and `reveal_nav` reports the same message as a tool error (BACK-2529).

@@ -239,7 +239,8 @@ def _member_nodes(analyzer, container, child_name: str, direct: bool) -> List[An
 
 
 def go_receiver_type_name(analyzer, method_node) -> Optional[str]:
-    """The receiver's type identifier of a Go method_declaration (`*Batch` -> Batch)."""
+    """The receiver's type identifier of a Go method_declaration (`*Batch` -> Batch,
+    `St[K]` and `*St[K]` -> St)."""
     for child in _children(method_node):
         if _zero_arg(child, 'kind') != 'parameter_list':
             continue
@@ -247,15 +248,27 @@ def go_receiver_type_name(analyzer, method_node) -> Optional[str]:
             if _zero_arg(param, 'kind') != 'parameter_declaration':
                 continue
             for part in _children(param):
-                kind = _zero_arg(part, 'kind')
-                if kind == 'type_identifier':
-                    return str(analyzer._get_node_text(part))
-                if kind == 'pointer_type':
-                    for inner in _children(part):
-                        if _zero_arg(inner, 'kind') == 'type_identifier':
-                            return str(analyzer._get_node_text(inner))
+                name = _go_receiver_type(analyzer, part)
+                if name is not None:
+                    return name
         # Only the first parameter_list is the receiver.
         break
+    return None
+
+
+# A receiver type wraps its name in a pointer (`*T`), type arguments (`T[K]`, BACK-1682) or both.
+_GO_RECEIVER_WRAPPERS = frozenset({'pointer_type', 'generic_type'})
+
+
+def _go_receiver_type(analyzer, node) -> Optional[str]:
+    kind = _zero_arg(node, 'kind')
+    if kind == 'type_identifier':
+        return str(analyzer._get_node_text(node))
+    if kind in _GO_RECEIVER_WRAPPERS:
+        for inner in _children(node):  # the name comes before generic_type's type_arguments
+            name = _go_receiver_type(analyzer, inner)
+            if name is not None:
+                return name
     return None
 
 
