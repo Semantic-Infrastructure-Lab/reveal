@@ -305,10 +305,13 @@ on its own, and they disagreed (BACK-1372).
 
 **Executable documentation:** `tests/test_example_recipes_run.py` runs offline
 help recipes in JSON and their written text format. It preserves supported pipelines
-and uses positive fixtures for claimed findings. The same harness inventories
-AGENT_HELP and guide commands; discovery commands run now, while examples requiring
-named target/session/host fixtures remain explicit skips. A successful empty query
-is not evidence for a recipe that promises a match.
+and uses positive fixtures for claimed findings. The same harness runs every command
+in AGENT_HELP, QUICK_START, WHY_REVEAL and `docs/guides/` against a named fixture
+(`tests/doc_command_fixture.py`) holding the files, names and sessions those docs use;
+a command that needs a live host, a tool such as `jq`, or a name the fixture lacks is an
+explicit skip that says why. The README and adapter guides are inventoried, and only
+listed commands from them run so far. A successful empty query is not evidence for a
+recipe that promises a match.
 
 **Text rendering:** put new renderer implementations in `reveal/rendering/`. Extend
 `BaseRenderer` and return a text body from `_render_text`; URI emission calls
