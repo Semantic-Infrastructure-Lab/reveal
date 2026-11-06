@@ -386,13 +386,12 @@ class HotspotsAdapter(ResourceAdapter):
             'features': [
                 'File-level hotspots via MetricsAdapter (quality score, complexity, issues)',
                 'Function-level hotspots via AstAdapter (cyclomatic complexity ranking)',
-                'Heuristic test-coverage hint per function (has a matching test_* found?)',
                 "Each hotspot entry carries a 'provenance' field: 'test'/'vendor'/'minified'/null "
                 '(first-party) — BACK-1195, cheap path-only classification, no ranking-order '
                 'change (yet).',
             ],
             'notes': [
-                'Test-coverage hint is a name-matching heuristic, not real coverage data.',
+                'has_test_hint is retired (BACK-2149): it was an unmeasured test-name heuristic (a test whose name resembles the function, not coverage) and no field replaces it in metrics or ast; use the language\'s coverage tool (coverage.py, go test -cover, cargo llvm-cov, Istanbul/c8, JaCoCo). It answers unchanged until the hotspots noun is removed.',
                 'File quality counts file-local check rules only, so a scan cap on a cross-file rule '
                 'cannot change a score or the exit code; the text footer and meta.issue_count name the rule set.',
                 'Default --fail-on none reports findings without failing; --fail-on findings exits 1 '
@@ -441,6 +440,7 @@ class HotspotsAdapter(ResourceAdapter):
             'notes': [
                 'Composes MetricsAdapter (file quality) and AstAdapter (function complexity) — not an independent scan.',
                 'File quality counts file-local rules only; meta.issue_count names the rule and the rule set. Cross-file rules run under reveal check.',
+                'has_test_hint is retired (BACK-2149): it was an unmeasured test-name heuristic (a test whose name resembles the function, not coverage) and no field replaces it in metrics or ast; use the language\'s coverage tool (coverage.py, go test -cover, cargo llvm-cov, Istanbul/c8, JaCoCo). It answers unchanged until the hotspots noun is removed.',
             ],
         }
 

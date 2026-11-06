@@ -54,8 +54,13 @@ when no explicit `top` is present; explicit `top` wins. The subcommand rejects
 `file_hotspots` is a ranked list from `metrics://` (`quality_score`,
 `hotspot_score`, `issues`, and `details` with `lines`, `functions`, `complexity`,
 `commit_count`). `function_hotspots` is a ranked list from
-`ast://`'s complexity filter, each annotated with a heuristic
-`has_test_hint` — a name-matching guess (does a test for this name exist,
+`ast://`'s complexity filter, each annotated with `has_test_hint`.
+
+**`has_test_hint` is retired** (BACK-2149): it was an unmeasured test-name heuristic
+(a test whose name resembles the function, not coverage), and no field replaces it
+in `metrics` or `ast`. Use the language's coverage tool (coverage.py,
+`go test -cover`, `cargo llvm-cov`, Istanbul/c8, JaCoCo). It answers unchanged until
+the hotspots noun is removed. What it was: a name-matching guess (does a test for this name exist,
 by the language's own convention: Python `test_<name>`, Go `TestName` in
 `_test.go`, Rust `#[test] fn`, `*.test.ts`/`*.spec.ts` files, JUnit
 `FooTest`/`testBar`?), not real coverage data. It is `null` (unknown, not
@@ -119,8 +124,9 @@ Mixed URI batches retain their legacy execution policy and reject `--fail-on`.
 
 - Composed, not independent: results are exactly as good as `metrics://`'s
   quality scoring and `ast://`'s complexity metric for each language.
-- `has_test_hint` is a naming heuristic (does a plausibly-named test exist?)
-  — it does not run coverage tooling and can both over- and under-count.
+- `has_test_hint` (retired, see above) is a naming heuristic (does a plausibly-named
+  test exist?) — it does not run coverage tooling and can both over- and under-count;
+  its precision was never measured.
 - The test index covers the scanned path plus the project root's own test
   directories (`tests/`, `test/`, `spec/`, ...), so `reveal hotspots src/pkg`
   in a src layout still sees `<root>/tests`.

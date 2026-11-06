@@ -28,7 +28,7 @@ def project(tmp_path, monkeypatch):
 
 
 def _says_retired(text):
-    text = ' '.join(text.split())
+    text = ' '.join(text.replace('`', '').replace('*', '').split())  # a guide's Markdown emphasis is not wording
     return ('has_test_hint is retired' in text and 'unmeasured test-name heuristic' in text
             and 'no field replaces it' in text)
 
