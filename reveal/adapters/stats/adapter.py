@@ -27,7 +27,7 @@ from ...utils.query_parser import (
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.gitignore import respect_gitignore_param
-from ...utils.path_utils import TestLayout, failure_of, to_relative_display
+from ...utils.path_utils import TestLayout, failure_of, provenance_for_display_path, to_relative_display
 from ...utils.results import AnalysisCompleteness, ResultBuilder, note_truncation, note_warning, result_execution_facts
 from ...utils.validation import require_path_exists
 from ...utils.parallel import pool_worker_count, submit_each
@@ -202,6 +202,8 @@ _SCHEMA_OUTPUT_TYPES = [
             'hotspots': {'type': 'array', 'items': {'type': 'object', 'properties': {
                 'file': {'type': 'string'}, 'quality_score': {'type': 'number'},
                 'hotspot_score': {'type': 'number'}, 'issues': {'type': 'array', 'items': {'type': 'string'}},
+                'provenance': {'type': ['string', 'null'], 'enum': ['test', 'vendor', 'minified', None],
+                               'description': 'Path-only tag of the file under the scan root; null is first party (view=provenance spells it first_party)'},
             }}},
             'test_scope': {'type': 'object', 'description': 'Present when ?tests= was given with hotspots=true: the selected project policy, the mode and how many analyzed files the ranking left out',
                            'properties': {'rule': {'type': 'string', 'const': 'is_test_path'},
@@ -268,7 +270,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
 _SCHEMA_NOTES = [
     'quality_score is 0-100: 100 = no issues; weighted by severity (error/warning/info)',
     'Complexity is cyclomatic, from the tree-sitter AST: 1 plus one per decision node (if/elif, loops, except/catch arms, case arms, and/or, ternaries); languages without a tree-sitter complexity fall back to a text heuristic',
-    'hotspots=true adds a ranked list of files most in need of refactoring',
+    'hotspots=true adds a ranked list of files most in need of refactoring; each entry carries provenance, the path-only test/vendor/minified tag of its file under the scan root (null = first party)',
     'hotspots=true adds summary.has_findings: an analysed file with quality below 70 or a function with complexity above 20 (fixed thresholds), over every analysed file before the file filters, tests= and the top/limit/offset cuts; --fail-on findings exits 1 on it (default none). The other views have no findings and exit 0 under --fail-on findings',
     'tests=exclude leaves conventional and project-declared test/support files out of the hotspots=true ranking only; test_scope records the selected policy and files_excluded. The default includes them. Ordinary overview does not request this ranking',
     'quality.local_check_issues counts the findings of file-local check rules only, so a file has one count whatever else is in the tree; meta.issue_count names the rule and the rule set. Cross-file rules (import cycles, duplicate literals, ...) run under reveal check.',
@@ -750,6 +752,11 @@ class MetricsAdapter(ResourceAdapter):
                 })
         result['hotspots'] = self._top_hotspots(
             result, identify_hotspots(file_stats, churn_counts=churn_counts))
+        # The path-only tag the hotspots noun put on its file entries (test/vendor/minified, None for first
+        # party), from the display path under the scan root, never the target's spelling (BACK-2149, BACK-2487).
+        base = self.path if self.path.is_dir() else self.path.parent
+        for entry in result['hotspots']:
+            entry['provenance'] = provenance_for_display_path(entry['file'], base)
         result['summary']['has_findings'] = self._population_findings
 
     def _rank_population(self, result: dict, file_stats: list, layout: Optional[TestLayout]) -> list:

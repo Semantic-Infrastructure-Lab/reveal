@@ -114,7 +114,8 @@ class StatsRenderer:
             if 'hotspots' in result and result['hotspots']:
                 print(f"\nTop Hotspots ({len(result['hotspots'])}):")
                 for i, h in enumerate(result['hotspots'], 1):
-                    print(f"\n{i}. {h['file']}")
+                    tag = f"  [{h['provenance']}]" if h.get('provenance') else ''
+                    print(f"\n{i}. {h['file']}{tag}")
                     print(f"   Quality: {h['quality_score']:.1f}/100 | Score: {h['hotspot_score']:.1f}")
                     print(f"   Issues: {', '.join(h['issues'])}")
             if 'has_findings' in s:

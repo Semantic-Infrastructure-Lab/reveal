@@ -551,7 +551,8 @@ The summary aggregates only the files shown.
         "functions": 23,
         "complexity": 4.87,
         "commit_count": 52
-      }
+      },
+      "provenance": null  // path-only tag under the scan root: "test", "vendor", "minified", or null (first party)
     }
   ],
   "meta": {
@@ -731,7 +732,12 @@ Starting hotspot score: **0**
 
 ### Hotspot Ranking
 
-Hotspots are sorted by **hotspot score** (descending) and limited to **top 10**.
+Hotspots are sorted by **hotspot score** (descending) and limited to **top 10**. Each entry carries
+`provenance`, the path-only tag of its file under the scan root: `"test"`, `"vendor"`, `"minified"`, or
+`null` for first party (text output appends `[test]`, `[vendor]` or `[minified]`). It is the tag
+`reveal hotspots` put on its file entries; `view=provenance` answers for every file, adds banner and
+locale heuristics and spells first party `first_party`. The tag reads only the path under the target,
+so `tests/proj`, `./tests/proj`, `.` from inside it and the absolute path give the same tags.
 
 ### Findings gate
 
