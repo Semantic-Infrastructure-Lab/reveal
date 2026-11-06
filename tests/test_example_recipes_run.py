@@ -883,6 +883,9 @@ def named_harness(tmp_path_factory):
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv('DATABASE_URL', 'postgres://fixture')  # env://DATABASE_URL
         mp.setenv('VIRTUAL_ENV', '/fixture/venv')  # env://VIRTUAL_ENV
+        # env://PYTHONPATH: append, never replace -- a worktree run puts its checkout there.
+        mp.setenv('PYTHONPATH', os.pathsep.join(filter(None, (os.environ.get('PYTHONPATH'),
+                                                                '/fixture/pythonpath'))))
         yield _Harness(root)
 
 
