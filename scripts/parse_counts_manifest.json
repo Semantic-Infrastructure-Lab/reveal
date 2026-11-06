@@ -70,18 +70,17 @@
       "type": "overview",
       "allowed_warning_types": []
     },
-    "hotspots": {
+    "metrics": {
       "args": [
-        "hotspots",
+        "metrics",
         "{corpus}",
+        "--hotspots",
         "--format",
         "json"
       ],
       "exit_code": 0,
-      "type": "hotspots_scan",
-      "allowed_warning_types": [
-        "complexity_is_unweighted"
-      ]
+      "type": "stats_summary",
+      "allowed_warning_types": []
     },
     "check": {
       "args": [

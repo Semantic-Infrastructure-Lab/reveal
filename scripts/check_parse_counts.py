@@ -320,7 +320,7 @@ def _outcome_summary(result: dict, target_count: int) -> dict:
                                                  'files_degraded', 'exit_code', 'scan_disclosures')}
     if kind == 'overview':
         return _overview_outcome(result, target_count)
-    if kind in ('hotspots', 'hotspots_scan'):
+    if kind in ('hotspots', 'hotspots_scan', 'stats_summary'):  # metrics --hotspots replaced hotspots (BACK-2149)
         _require_values(summary, {'total_files': target_count, 'excluded': 0})
         return {'total_files': target_count, 'excluded': 0}
     _require_values(result.get('scope', {}), {'total_code_files': target_count})

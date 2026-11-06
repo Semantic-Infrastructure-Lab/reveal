@@ -178,7 +178,7 @@ def test_manifest_hashes_and_variants_must_match_real_text(ledger):
         _verify_corpus(root, targets)
 
 
-@pytest.mark.parametrize('kind', ['overview', 'hotspots', 'hotspots_scan'])
+@pytest.mark.parametrize('kind', ['overview', 'hotspots', 'hotspots_scan', 'stats_summary'])
 @pytest.mark.parametrize('failure', ['parse_degraded', 'check_rules_failed', 'analysis_failed', 'truncated'])
 def test_partial_command_results_cannot_qualify(kind, failure):
     result = {'type': kind, 'summary': {'total_files': 3, 'excluded': 0},
@@ -484,7 +484,7 @@ def test_real_child_launch_cannot_hide_unreported_worker_parses(tmp_path, monkey
         gate.run_once(manifest['commands']['surface'], corpus, manifest['targets'], run)
 
 
-@pytest.mark.parametrize('kind', ['hotspots', 'hotspots_scan'])
+@pytest.mark.parametrize('kind', ['hotspots', 'hotspots_scan', 'stats_summary'])  # stats_summary: metrics --hotspots (BACK-2149)
 def test_hotspots_identity_uses_owned_summary_coverage(kind):
     result = {'type': kind, 'summary': {'total_files': 3, 'excluded': 0}, 'meta': {}}
     spec = {'type': kind, 'exit_code': 0}
