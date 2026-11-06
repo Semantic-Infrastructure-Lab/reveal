@@ -100,6 +100,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- `contracts://` lists a class's decorators by name, as `ast://` and `calls://` do: C# `[ApiController, Route("api/x")]` gives `ApiController` and `Route` (it gave the raw `[ApiController, Route("api/x")]`), and TypeScript and Java decorators give their name instead of source text (`@Component({...})` -> `Component`). Python names are unchanged (BACK-2263).
+
 - A Go method on a generic receiver (`func (s St[K]) Len()`, `func (s *St[K]) Put()`) now belongs to its type: the outline nests it under `St`, `ast://` gives it `owner: St`, and `reveal FILE St.Len` finds it. It was listed as a free function (BACK-1682).
 
 - `reveal FILE --grep P --format grep` and `reveal DIR --grep P --format grep` print one `path:line:text` row per hit, with warnings on stderr; they printed the text view. `--format typed` with `--grep` exits 2 naming `text`, `json` and `grep` instead of printing text (BACK-2530).

@@ -16,6 +16,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .surface import _supported_coverage_languages, _unparsed_note
 from .ast.analysis import analysis_skipped_warning
 from .ast.surface_matrix import RECOVERED_KEY, UNPARSED_KEY
+from ..conventions import decorator_attributes, decorator_name
 from ..registry import JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages
 from ..utils.path_utils import (
     _language_for_path,
@@ -409,7 +410,7 @@ def _extract_ts_elements(structures: List[Dict[str, Any]]) -> List[Dict[str, Any
                 'file': file_path,
                 'line': elem.get('line', 0),
                 'bases': elem.get('bases', []),
-                'decorators': elem.get('decorators', []),
+                'decorators': _decorator_names(elem.get('decorators', [])),
                 'abstract_methods': [],
                 'implementations': [],
                 'category': cat,
@@ -761,6 +762,13 @@ def _scan_contracts_cpp(
     }, skipped, recovered=recovered)
 
 
+def _decorator_names(raw: List[str]) -> List[str]:
+    """One qualified name per attribute, through the shared conventions owner that ast:// and
+    calls:// use (BACK-1777): `@dataclasses.dataclass(frozen=True)` -> `dataclasses.dataclass`,
+    C# `[ApiController, Route("x")]` -> `ApiController`, `Route` (BACK-2263)."""
+    return [decorator_name(attribute) for text in raw for attribute in decorator_attributes(text)]
+
+
 def _extract_all_classes(structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Extract class dicts from collect_structures output.
 
@@ -779,9 +787,7 @@ def _extract_all_classes(structures: List[Dict[str, Any]]) -> List[Dict[str, Any
 
         for cls_elem in cls_elems:
             abstract_methods = _find_abstract_methods(cls_elem, func_elems)
-            # Normalise decorator strings — strip leading '@'
-            raw_decos = cls_elem.get('decorators', [])
-            decorators = [d.lstrip('@').split('(')[0] for d in raw_decos]
+            decorators = _decorator_names(cls_elem.get('decorators', []))
             classes.append({
                 'name': cls_elem['name'],
                 'file': file_path,

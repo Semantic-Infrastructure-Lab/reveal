@@ -30,3 +30,9 @@ def test_python_dataclass_still_classified(tmp_path):
     (tmp_path / 'p.py').write_text(source, encoding='utf-8')
     data = json.loads(_run_reveal_direct(f'contracts://{tmp_path}', '--format', 'json').stdout)
     assert [row['decorators'] for row in data['dataclasses'] if row['name'] == 'P'] == [['dataclasses.dataclass']]
+
+
+def test_typescript_decorator_with_object_argument(tmp_path):
+    # Not exported: a decorator before `export class` is not extracted at all (separate task).
+    source = '@Component({selector: "x"})\nclass Widget implements OnInit {}\n'
+    assert _decorators(tmp_path, 'w.ts', source, 'Widget') == ['Component']
