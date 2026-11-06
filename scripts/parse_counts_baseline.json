@@ -1221,16 +1221,105 @@
         "request": 9
       }
     },
-    "hotspots": {
+    "metrics": {
       "command_outcome": {
         "excluded": 0,
         "result": {
           "contract_version": "1.1",
-          "file_hotspots": [],
-          "function_hotspots": [],
+          "files": [
+            {
+              "complexity": {
+                "average": 2.0,
+                "max": 2,
+                "min": 2
+              },
+              "elements": {
+                "classes": 0,
+                "functions": 1,
+                "imports": 0
+              },
+              "file": "second.ts",
+              "issues": {
+                "deep_nesting": [],
+                "long_functions": []
+              },
+              "lines": {
+                "code": 3,
+                "comments": 0,
+                "empty": 0,
+                "total": 3
+              },
+              "quality": {
+                "avg_function_length": 3.0,
+                "deep_nesting": 0,
+                "local_check_issues": 0,
+                "long_functions": 0,
+                "score": 100.0
+              }
+            },
+            {
+              "complexity": {
+                "average": 1.0,
+                "max": 1,
+                "min": 1
+              },
+              "elements": {
+                "classes": 0,
+                "functions": 1,
+                "imports": 1
+              },
+              "file": "config.py",
+              "issues": {
+                "deep_nesting": [],
+                "long_functions": []
+              },
+              "lines": {
+                "code": 5,
+                "comments": 0,
+                "empty": 2,
+                "total": 7
+              },
+              "quality": {
+                "avg_function_length": 3.0,
+                "deep_nesting": 0,
+                "local_check_issues": 0,
+                "long_functions": 0,
+                "score": 100.0
+              }
+            },
+            {
+              "complexity": {
+                "average": 2.0,
+                "max": 2,
+                "min": 2
+              },
+              "elements": {
+                "classes": 0,
+                "functions": 1,
+                "imports": 0
+              },
+              "file": "first.ts",
+              "issues": {
+                "deep_nesting": [],
+                "long_functions": []
+              },
+              "lines": {
+                "code": 3,
+                "comments": 0,
+                "empty": 0,
+                "total": 3
+              },
+              "quality": {
+                "avg_function_length": 3.0,
+                "deep_nesting": 0,
+                "local_check_issues": 0,
+                "long_functions": 0,
+                "score": 100.0
+              }
+            }
+          ],
+          "hotspots": [],
           "meta": {
-            "confidence": 1.0,
-            "errors": [],
             "issue_count": {
               "field": "local_check_issues",
               "rule": "file-local rules only",
@@ -1274,15 +1363,8 @@
                 "V016",
                 "V023"
               ]
-            },
-            "warnings": [
-              {
-                "message": "complexity is McCabe cyclomatic complexity (a count of decision points), not weighted by nesting depth -- ~40 flat, sequential branches at the same level score identically to one branch nested 40 levels deep. Two functions with the same score can have very different actual structure.",
-                "type": "complexity_is_unweighted"
-              }
-            ]
+            }
           },
-          "path": "<corpus>",
           "source": "<corpus>",
           "source_type": "directory",
           "summary": {
@@ -1297,15 +1379,10 @@
             "total_functions": 3,
             "total_lines": 13
           },
-          "type": "hotspots_scan"
+          "type": "stats_summary"
         },
         "total_files": 3,
-        "warnings": [
-          {
-            "message": "complexity is McCabe cyclomatic complexity (a count of decision points), not weighted by nesting depth -- ~40 flat, sequential branches at the same level score identically to one branch nested 40 levels deep. Two functions with the same score can have very different actual structure.",
-            "type": "complexity_is_unweighted"
-          }
-        ]
+        "warnings": []
       },
       "counts": {
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
@@ -1749,18 +1826,17 @@
         "exit_code": 0,
         "type": "check"
       },
-      "hotspots": {
-        "allowed_warning_types": [
-          "complexity_is_unweighted"
-        ],
+      "metrics": {
+        "allowed_warning_types": [],
         "args": [
-          "hotspots",
+          "metrics",
           "{corpus}",
+          "--hotspots",
           "--format",
           "json"
         ],
         "exit_code": 0,
-        "type": "hotspots_scan"
+        "type": "stats_summary"
       },
       "overview": {
         "allowed_warning_types": [],
