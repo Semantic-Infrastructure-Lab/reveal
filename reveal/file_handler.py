@@ -11,7 +11,7 @@ test imports.
 import os
 import sys
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import NoReturn, Optional, TYPE_CHECKING
 
 from .core import tree_root
 from .core.treesitter_compat import _zero_arg
@@ -266,10 +266,8 @@ def _resolve_func_node(analyzer, element: str):
                 '  Use `reveal <file>` to list available elements.\n'
                 '  For methods, use Class.method syntax (e.g., MyClass.my_method).'
             )
-            print(diagnostic, file=sys.stderr)
             # Same code as the plain element miss: a named target that matches nothing (BACK-2492).
-            raise NavSourceFailure(2, execution_facts=failure_execution_facts(FailureCause.INVALID_REQUEST),
-                                   public_diagnostic=diagnostic)
+            _fail_nav(2, FailureCause.INVALID_REQUEST, diagnostic)
     else:
         func_start = _zero_arg(func_node, 'start_position').row + 1
         # Dart's grammar splits a function into sibling `function_signature`
@@ -363,7 +361,56 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
     )
 
     if handler is not None:
+        _run_nav_handler(handler, ctx)
+
+
+def _fail_nav(code: int, cause: 'FailureCause', diagnostic: str) -> 'NoReturn':
+    """Print a nav diagnostic and raise the authored failure CLI and MCP both report."""
+    print(diagnostic, file=sys.stderr)
+    raise NavSourceFailure(code, execution_facts=failure_execution_facts(cause), public_diagnostic=diagnostic)
+
+
+def _run_nav_handler(handler, ctx) -> None:
+    """Run one element-flag handler; an analysis too deeply nested to follow fails with exit 3."""
+    try:
         handler(ctx)
+    except RecursionError:
+        # BACK-2529: the variable-flow walkers recurse once per syntax level, so a few hundred
+        # nested calls (generated parsers) exhaust the interpreter's limit. D6: the request was
+        # valid and the required analysis failed; say so instead of printing a traceback.
+        from .utils.path_utils import to_posix
+        diagnostic = (
+            f'Error: {_requested_nav_flag(ctx.args)} could not analyze {ctx.element!r} in '
+            f'{to_posix(ctx.analyzer.path)}: its code is nested deeper than the analysis can follow '
+            "(the interpreter's recursion limit).\n"
+            '  No answer is printed because it would be incomplete.'
+        )
+        _fail_nav(3, FailureCause.ANALYSIS, diagnostic)
+
+
+def _requested_nav_flag(args) -> str:
+    """The element flag as the user spelled it, for a diagnostic (BACK-2529).
+
+    Aliases share a destination (--inputs sets ``deps``), so the typed spelling comes from the
+    invocation; a caller with no argv (MCP) falls back to the parsed destination."""
+    from .cli.invocation import current_invocation
+    from .nav_handlers import NAV_BOOLEAN_FLAG_NAMES
+    names = NAV_BOOLEAN_FLAG_NAMES | {'flow', 'varflow', 'narrow', 'calls', 'keys'}
+    invocation = current_invocation()
+    for token in invocation.argv if invocation is not None else ():
+        if token == '--':
+            break
+        option = token.partition('=')[0]
+        # argparse accepts unique abbreviations (--bound); echo what was typed.
+        if option.startswith('--') and any(name.startswith(option[2:]) for name in names):
+            return option
+    for name in ('flow', 'varflow', 'narrow', 'calls', 'keys'):
+        if getattr(args, name, None) is not None and getattr(args, name, None) is not False:
+            return f'--{name}'
+    for name in sorted(NAV_BOOLEAN_FLAG_NAMES):
+        if getattr(args, name, False):
+            return f'--{name}'
+    return 'the element flag'
 
 
 def _validate_nav_request(analyzer, handler, args) -> None:
