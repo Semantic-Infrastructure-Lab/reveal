@@ -49,11 +49,22 @@ class _TypeScriptBase(
                 decorators.insert(0, self._get_node_text(sib))
                 sib = _prev_sibling(sib)
             return decorators
-        return [
+        own = [
             self._get_node_text(child)
             for child in _children(node)
             if _zero_arg(child, 'kind') == 'decorator'
         ]
+        # `@Component(...) export class Widget`: the decorator is a child of the export_statement,
+        # the class's parent, not of the class (BACK-2535; also `export default`/`export abstract`).
+        parent = _zero_arg(node, 'parent')
+        if parent is None or _zero_arg(parent, 'kind') != 'export_statement':
+            return own
+        exported = [
+            self._get_node_text(child)
+            for child in _children(parent)
+            if _zero_arg(child, 'kind') == 'decorator'
+        ]
+        return exported + own
 
     # ── TypeScript type declarations ──────────────────────────────────────────
     # Built into the cached structure by the base (BACK-1409); this used to be

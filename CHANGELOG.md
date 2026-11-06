@@ -100,6 +100,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- A TypeScript decorator written before `export class`, `export default class` or `export abstract class` now belongs to the class: `@Component({...}) export class Widget` had no decorators in `ast://`, `contracts://` and `?decorator=Component` found nothing, which is how Angular and NestJS declare components and controllers (BACK-2535).
+
 - `contracts://` lists a class's decorators by name, as `ast://` and `calls://` do: C# `[ApiController, Route("api/x")]` gives `ApiController` and `Route` (it gave the raw `[ApiController, Route("api/x")]`), and TypeScript and Java decorators give their name instead of source text (`@Component({...})` -> `Component`). Python names are unchanged (BACK-2263).
 
 - A Go method on a generic receiver (`func (s St[K]) Len()`, `func (s *St[K]) Put()`) now belongs to its type: the outline nests it under `St`, `ast://` gives it `owner: St`, and `reveal FILE St.Len` finds it. It was listed as a free function (BACK-1682).
