@@ -949,15 +949,20 @@ def _print_help_not_found_hints(adapter, element_name: str, section: Optional[st
     )
 
 
-def _fail_unread_element(adapter_class: Any, scheme: str, resource: str, element: str) -> NoReturn:
-    """Refuse a positional element on an adapter with no element view, naming the URI form.
-
-    ``reveal sqlite://x.db users`` printed the whole database, exit 0, even for a table that exists:
-    the element was never read (BACK-2522). Declared nouns refuse one the same way (exit 2)."""
+def unread_element_message(adapter_class: Any, scheme: str, element: str) -> str:
+    """The refusal of a positional element no view reads, naming the URI form (BACK-2522, BACK-2526)."""
     schema = adapter_class.get_schema() if hasattr(adapter_class, 'get_schema') else None
     syntax = schema.get('uri_syntax') if isinstance(schema, dict) else None
     form = f'; name it in the URI: {syntax}' if syntax else ''
-    _fail(scheme, resource, f"{scheme}:// takes no positional element ('{element}'){form}",
+    return f"{scheme}:// takes no positional element ('{element}'){form}"
+
+
+def _fail_unread_element(adapter_class: Any, scheme: str, resource: str, element: str) -> NoReturn:
+    """Refuse a positional element on an adapter with no element view.
+
+    ``reveal sqlite://x.db users`` printed the whole database, exit 0, even for a table that exists:
+    the element was never read (BACK-2522). Declared nouns refuse one with the same answer."""
+    _fail(scheme, resource, unread_element_message(adapter_class, scheme, element),
           adapter_class=adapter_class, code='invalid_request', failure_cause=FailureCause.INVALID_REQUEST)
 
 
