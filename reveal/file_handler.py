@@ -15,7 +15,8 @@ from typing import Optional, TYPE_CHECKING
 
 from .core import tree_root
 from .core.treesitter_compat import _zero_arg
-from .utils.results import FailureCause, NavSourceFailure, failure_execution_facts, outcome_of
+from .utils.results import (FailureCause, NavSourceFailure, execution_exit_code, failure_execution_facts,
+                            outcome_of)
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -107,22 +108,23 @@ from .nav_handlers import (  # noqa: F401
 from reveal.utils.lines import split_lines
 
 
-def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code: int = 1, *,
+def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code: Optional[int] = None, *,
                           nav_source: bool = False):
     """Get analyzer for path or exit with error.
 
     Args:
         path: File path
         allow_fallback: Whether to allow fallback analyzers
-        unreadable_exit_code: Exit code when the file exists but cannot be read
-            (`check` passes 3, its "could not be checked" code)
+        unreadable_exit_code: Exit code when the file exists but cannot be read; by default
+            the D6 code of the read's cause (`check` passes 3, or 0 under --exit-zero)
         nav_source: Adopt authored source failure facts for a navigation request
 
     Returns:
         Analyzer instance
 
     Exits:
-        With error code 1 if no analyzer found, *unreadable_exit_code* if unreadable
+        2 if no analyzer reads the path or the file vanished before the read, 3 if it
+        exists but cannot be read (BACK-2527), unless *unreadable_exit_code* is given
     """
     from .registry import get_analyzer  # noqa: I006 — circular avoidance
     from .errors import AnalyzerNotFoundError  # noqa: I006 — circular avoidance
@@ -143,11 +145,13 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code:
         # traceback, while a missing path got a clean error (BACK-1424).
         diagnostic = _source_read_diagnostic(e, path, nav_source)
         print(diagnostic, file=sys.stderr)
+        facts = failure_execution_facts(_read_failure_cause(e, path))
+        # D6: a required source that could not be read is 3, a vanished one 2; exit 1 is
+        # a findings gate (BACK-2527).
+        code = execution_exit_code(facts) if unreadable_exit_code is None else unreadable_exit_code
         if nav_source:
-            raise NavSourceFailure(unreadable_exit_code,
-                                   execution_facts=failure_execution_facts(_nav_read_failure_cause(e, path)),
-                                   public_diagnostic=diagnostic) from e
-        sys.exit(unreadable_exit_code)
+            raise NavSourceFailure(code, execution_facts=facts, public_diagnostic=diagnostic) from e
+        sys.exit(code)
 
 
 def _source_read_diagnostic(error: OSError, path: str, nav_source: bool) -> str:
@@ -159,7 +163,7 @@ def _source_read_diagnostic(error: OSError, path: str, nav_source: bool) -> str:
     return f"Error: cannot read {path}: {error.strerror or error}"
 
 
-def _nav_read_failure_cause(error: OSError, path: str) -> FailureCause:
+def _read_failure_cause(error: OSError, path: str) -> FailureCause:
     """Only a missing requested filename establishes invalid source selection."""
     filename = error.filename
     if (isinstance(error, FileNotFoundError)

@@ -4,13 +4,15 @@
 pattern under ``--format json`` printed plain text, and a cut could not be disclosed the
 shared way. It now returns a result; this emits it: a failed result's error on stderr then
 exit 1 (JSON still prints its envelope), a cut list's ``⚠ Truncated`` line after the body,
-and exit 3 for a directory search that could not read every file (D6, BACK-2520).
+and exit 3 for a search that could not read every file it had to: a directory (D6,
+BACK-2520) or the one file asked for (BACK-2527).
 """
 
 import sys
 from argparse import Namespace
 from typing import Any, Dict, List, Optional
 
+from ...display.formatting import print_result_control_notes
 from ...display.grep import render_grep
 from ...grep_handler import grep_directory, grep_execution_facts, grep_file
 from ...utils.results import execution_exit_code
@@ -21,10 +23,11 @@ def _emit(result: Dict[str, Any], args: Namespace, label: str) -> None:
     output_format = getattr(args, 'format', 'text')
     outcome = announce_outcome(result, label)
     render_grep(result, output_format)
-    conclude_outcome(result, outcome, output_format)
     code = execution_exit_code(grep_execution_facts(result))
-    if code:
+    if code:  # a lost source outranks a failed result's legacy exit 1 (BACK-2527)
+        print_result_control_notes(result, output_format)
         sys.exit(code)
+    conclude_outcome(result, outcome, output_format)
 
 
 def handle_grep(path: str, pattern: str, args: Namespace) -> None:

@@ -236,7 +236,7 @@ class TestUnreadableFile:
 
     def test_file_view_is_a_clean_error(self, unreadable_py):
         result = _run_reveal_direct(str(unreadable_py))
-        assert result.returncode == 1
+        assert result.returncode == 3  # D6: required source unread (BACK-2527, was 1)
         assert "cannot read" in result.stderr and "Traceback" not in result.stderr
 
     def test_single_file_check_exits_3(self, unreadable_py):

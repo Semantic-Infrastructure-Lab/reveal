@@ -78,7 +78,8 @@ def test_actual_constructor_failure_authors_facts_without_precheck(tmp_path, mon
     with pytest.raises(NavSourceFailure) as caught:
         _get_analyzer_or_exit(str(path), True, nav_source=True)
     assert reads == [str(path)]
-    assert caught.value.code == 1
+    # D6 code of the recorded cause: 2 for a vanished file, 3 for a denied read (BACK-2527, was 1).
+    assert caught.value.code == (2 if cause is FailureCause.INVALID_REQUEST else 3)
     assert caught.value.execution_facts == failure_execution_facts(cause)
 
 

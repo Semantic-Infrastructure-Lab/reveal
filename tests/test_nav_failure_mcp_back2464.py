@@ -116,7 +116,8 @@ def test_ambiguity_and_file_loss_warnings_remain_successful(source, fault):
     assert 'could not be analyzed' in _text(partial)
 
 
-def test_disappearance_after_cli_preflight_retains_numeric_one(source, monkeypatch):
+def test_disappearance_after_cli_preflight_exits_2(source, monkeypatch):
+    # The facts say INVALID_REQUEST (the requested file is gone); D6 exits 2 (BACK-2527, was 1).
     import reveal.registry as registry
 
     real_get = registry.get_analyzer
@@ -134,7 +135,7 @@ def test_disappearance_after_cli_preflight_retains_numeric_one(source, monkeypat
     monkeypatch.setattr(registry, 'get_analyzer', get)
     run = _run_reveal_direct(source, 'empty', '--effects', '--format', 'json')
     assert constructions == [str(source)]
-    assert run.returncode == 1 and run.stdout == '' and run.stderr.count('cannot read') == 1
+    assert run.returncode == 2 and run.stdout == '' and run.stderr.count('cannot read') == 1
 
 
 def test_cli_missing_and_absent_exit_2_with_stderr(source):

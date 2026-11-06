@@ -265,7 +265,11 @@ def grep_file(path: str, pattern: str, args: Namespace) -> Dict[str, Any]:
     try:
         lines = _read_lines(file_path)
     except OSError as e:
-        result['error'] = f"cannot read {path}: {failure_of(e).cause}"
+        cause = failure_of(e).cause
+        result['error'] = f"cannot read {path}: {cause}"
+        # The one file the search had to read is lost: exit 3 like the directory form (BACK-2527).
+        result['meta'] = {'warnings': [analysis_skipped_warning([(path, cause)], None,
+                                                                'the search did not run')]}
         return result
 
     hit_lines = _hit_lines(lines, compiled)
@@ -339,10 +343,11 @@ def _collect_dir_results(
 
 
 def grep_execution_facts(result: Dict[str, Any]) -> ExecutionFacts:
-    """A returned (not failed) search is complete unless it lost files it had to read.
+    """A search is complete unless it lost files it had to read (BACK-2520).
 
-    A failed result keeps its legacy exit 1 through ``conclude_outcome``; this is read only
-    for an answer that was produced (BACK-2520).
+    An unreadable single file is a failed result that carries the same ``analysis_failed``
+    warning, so it exits 3 too (BACK-2527); any other failed result (an invalid pattern) keeps
+    its legacy exit 1 through ``conclude_outcome``.
     """
     lost = any(w.get('type') == 'analysis_failed'
                for w in (result.get('meta') or {}).get('warnings', []))

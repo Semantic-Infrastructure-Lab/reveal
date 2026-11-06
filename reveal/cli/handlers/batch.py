@@ -86,8 +86,9 @@ def _process_stdin_file(
             (BACK-2095) instead of once per file here.
 
     Returns:
-        (violation count, degraded, artifact_failed) when is_check_mode is True, else
-        (0, False, False).
+        (violation count, degraded, artifact_failed). violations and artifact_failed are 0/False
+        outside check mode; degraded is also True there for an unreadable file, which leaves the
+        batch's answer incomplete (exit 3, BACK-2527).
         degraded mirrors run_pattern_detection()'s BACK-1099 signal: the file
         didn't parse cleanly or a rule raised, so `violations` on its own
         isn't a trustworthy signal for this file. artifact_failed is run_pattern_detection()'s
@@ -109,11 +110,12 @@ def _process_stdin_file(
     if not path.is_file():
         return 0, False, False
 
-    # An unreadable file is skipped like a missing one; in check mode it
-    # degrades the run (exit 3) rather than ending the whole batch (BACK-1424).
+    # An unreadable file is skipped, but unlike a missing one (a deleted path from
+    # `git diff --name-only`, BACK-1426) it is required input the answer lacks: the run
+    # is degraded (exit 3) without ending the whole batch (BACK-1424, BACK-2527).
     if not os.access(path, os.R_OK):
         print(f"Warning: {target} is not readable, skipping", file=sys.stderr)
-        return 0, is_check_mode, False
+        return 0, True, False
 
     if is_check_mode:
         from reveal.file_handler import _get_analyzer_or_exit, _build_file_cli_overrides
@@ -151,6 +153,17 @@ def _stdin_check_exit(args: 'Namespace', violations: int, degraded: bool, artifa
         output_failed=artifact_failed,
     )
     return 0 if exit_zero and not artifact_failed else max(file_exit, ssl_exit, uri_exit)
+
+
+def _stdin_answer_exit(degraded: bool, uri_exit: int) -> int:
+    """The exit code of ``--stdin`` without ``--check``.
+
+    An unreadable file left the batch answer incomplete: 3, which outranks a failed URI's
+    1 (D6, BACK-2527). A missing file is not counted (BACK-1426).
+    """
+    if degraded:
+        return 3
+    return 1 if uri_exit else 0
 
 
 def _write_stdin_check_artifact(args: 'Namespace', results: Optional['CheckSinkCollection'], failed: bool) -> bool:
@@ -284,7 +297,7 @@ def _run_stdin_mode(args: 'Namespace', handle_file_func):
         sys.exit(_stdin_check_exit(args, total_file_violations, any_file_degraded,
                                    any_artifact_failed, ssl_exit, uri_exit))
 
-    sys.exit(1 if total_file_violations > 0 or uri_exit else 0)
+    sys.exit(_stdin_answer_exit(any_file_degraded, uri_exit))
 
 
 def _collect_ssl_check_result(uri: str, args: 'Namespace') -> Dict[str, Any]:

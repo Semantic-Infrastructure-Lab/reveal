@@ -136,12 +136,12 @@ class ExecutionFacts:
 
 
 class NavSourceFailure(SystemExit):
-    """Authored nav source/selection failure with an unchanged legacy shell exit."""
+    """Authored nav source/selection failure carrying its shell exit (D6: 2 invalid selection, 3 unread source)."""
 
-    def __init__(self, legacy_exit_code: int, *, execution_facts: 'ExecutionFacts',
+    def __init__(self, exit_code: int, *, execution_facts: 'ExecutionFacts',
                  public_diagnostic: str) -> None:
-        if type(legacy_exit_code) is not int:
-            raise TypeError('legacy_exit_code must be an integer')
+        if type(exit_code) is not int:
+            raise TypeError('exit_code must be an integer')
         if not isinstance(execution_facts, ExecutionFacts):
             raise TypeError('execution_facts must be ExecutionFacts')
         if (execution_facts.completeness not in (AnalysisCompleteness.FAILED, AnalysisCompleteness.NOT_STARTED)
@@ -152,7 +152,7 @@ class NavSourceFailure(SystemExit):
             raise TypeError('public_diagnostic must be a string')
         if not public_diagnostic.strip():
             raise ValueError('public_diagnostic must not be empty')
-        super().__init__(legacy_exit_code)
+        super().__init__(exit_code)
         self.execution_facts = execution_facts
         self.public_diagnostic = public_diagnostic
 
