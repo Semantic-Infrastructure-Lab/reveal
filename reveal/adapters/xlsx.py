@@ -12,13 +12,16 @@ import xml.etree.ElementTree as ET
 import zlib as _zlib
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Set, Tuple, Type
+from typing import Callable, Dict, Any, Optional, List, Set, Tuple, Type
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.office.openxml import XlsxAnalyzer
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
 from ..utils.path_utils import to_posix
-from ..utils.results import ResultBuilder, note_truncation
+from ..errors import RequestValidationError
+from ..utils.results import (
+    AnalysisCompleteness, ExecutionFacts, FailureCause, ResultBuilder, note_truncation, result_execution_facts,
+)
 from ..utils.warning_render import render_meta_warnings
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
@@ -53,6 +56,32 @@ _PART_ERRORS: Tuple[Type[Exception], ...] = (
 _ARCHIVE_ERRORS: Tuple[Type[Exception], ...] = _PART_ERRORS
 # The DataMashup blob is base64 around a streaming zip that is walked with struct.unpack_from.
 _POWERQUERY_ERRORS: Tuple[Type[Exception], ...] = _ARCHIVE_ERRORS + (binascii.Error, struct.error)
+
+# The view each query parameter selects, in the order a request is matched, with its result type:
+# _get_structure dispatches on it and the router expects its type (BACK-2325). No match is the
+# workbook overview. ?search= selects only with a value.
+_VIEWS: Tuple[Tuple[str, str], ...] = (
+    ('powerpivot', 'xlsx_powerpivot'), ('powerquery', 'xlsx_powerquery'), ('names', 'xlsx_names'),
+    ('connections', 'xlsx_connections'), ('sheet', 'xlsx_sheet'), ('search', 'xlsx_search'),
+)
+_WORKBOOK = 'xlsx_workbook'
+
+# The warnings that mean an answer is missing a part it is built from (D6 exit 3). The overview's
+# Power Pivot banner is optional decoration, so its unreadable part is disclosed but not required.
+_REQUIRED_PARTS: Dict[str, frozenset] = {
+    'xlsx_workbook': frozenset({'sheet_parse_failed'}),
+    'xlsx_search': frozenset({'sheets_unsearched'}),
+    'xlsx_powerpivot': frozenset({'part_unreadable'}),
+    'xlsx_powerquery': frozenset({'part_unreadable'}),
+}
+
+
+def _view_of(params: Dict[str, Any]) -> Optional[str]:
+    """The ``_VIEWS`` key a request's parameters select, or None for the workbook overview."""
+    for key, _result_type in _VIEWS:
+        if params.get(key) is not None and (key != 'search' or params[key]):
+            return key
+    return None
 
 
 class XlsxRenderer:
@@ -642,6 +671,33 @@ class XlsxAdapter(ResourceAdapter):
     HELP_CLUSTER = 'Data & Config'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    RESOURCE_IS_PATH = True  # a missing workbook is an invalid resource (D6 exit 2), not an adapter error
+    RESULT_TYPE = _WORKBOOK
+    DEFAULT_FAIL_ON = 'none'
+
+    @classmethod
+    def uri_execution_facts(cls, resource: str):
+        """Every xlsx:// view shares D6 (BACK-2325); element, --check and batch modes stay legacy."""
+        return cls.execution_facts
+
+    @staticmethod
+    def uri_result_type(resource: str) -> str:
+        view = _view_of(parse_query_params(resource.partition('?')[2]))
+        return dict(_VIEWS)[view] if view else _WORKBOOK
+
+    @staticmethod
+    def execution_facts(result: Any) -> ExecutionFacts:
+        """A workbook, sheet or range that is not there, or a file that is not a workbook, is a
+        request failure (exit 2); a failed read is a failed analysis and an answer missing a part
+        it is built from (``_REQUIRED_PARTS``) is incomplete (exit 3)."""
+        meta = result.get('meta', {}) if isinstance(result, dict) else {}
+        codes = {entry.get('code') for entry in meta.get('errors', [])}
+        cause = FailureCause.INVALID_REQUEST if 'invalid_request' in codes else FailureCause.ANALYSIS
+        required = _REQUIRED_PARTS.get(result.get('type', '') if isinstance(result, dict) else '', frozenset())
+        lost = any(warning.get('type') in required for warning in meta.get('warnings', []))
+        return result_execution_facts(
+            result, completeness=AnalysisCompleteness.INCOMPLETE if lost else AnalysisCompleteness.COMPLETE,
+            failure_cause=cause)
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -705,7 +761,7 @@ class XlsxAdapter(ResourceAdapter):
             ValueError: If URI format is invalid
         """
         if not uri:
-            raise ValueError("xlsx:// URI required: xlsx:///path/to/file.xlsx")
+            raise RequestValidationError("xlsx:// URI required: xlsx:///path/to/file.xlsx")
 
         # Remove xlsx:// prefix
         if uri.startswith("xlsx://"):
@@ -720,6 +776,9 @@ class XlsxAdapter(ResourceAdapter):
             path_part = uri
             self.query_params = {}
 
+        if not path_part:
+            # An empty path read the cwd and named it absolutely in "Invalid Excel format" (BACK-2325).
+            raise RequestValidationError("xlsx:// URI requires a workbook path: xlsx:///path/to/file.xlsx")
         # Handle absolute vs relative paths
         if path_part.startswith('/'):
             self.file_path = Path(path_part)
@@ -729,20 +788,38 @@ class XlsxAdapter(ResourceAdapter):
         self.file_display = to_posix(path_part)
 
         if not self.file_path.exists():
-            raise ValueError(
-                f"Invalid file path (file not found): {self.file_path}\n"
+            raise RequestValidationError(
+                f"Invalid file path (file not found): {self.file_display}\n"
                 f"Example: reveal xlsx:///path/to/existing/file.xlsx"
             )
 
         if not self.file_path.suffix.lower() in ('.xlsx', '.xlsm'):
-            raise ValueError(
-                f"Invalid Excel format: {self.file_path}\n"
+            raise RequestValidationError(
+                f"Invalid Excel format: {self.file_display}\n"
                 f"Supported formats: .xlsx, .xlsm\n"
                 f"Example: reveal xlsx:///data/sales.xlsx"
             )
-        # A corrupt or renamed file read as an empty workbook, exit 0 (BACK-2213).
-        if self.file_path.is_file() and not zipfile.is_zipfile(self.file_path):
-            raise ValueError(f"{self.file_display} is not a valid .xlsx workbook (not a zip archive)")
+        if self.file_path.is_file():
+            self._check_workbook_file()
+
+    def _check_workbook_file(self) -> None:
+        """Reject a file that is not an Excel workbook (D6 exit 2); an unreadable one is a failed read
+        (exit 3). ``zipfile.is_zipfile`` returns False on an OSError, so an unreadable workbook was
+        reported as "not a zip archive" (BACK-2325); a corrupt or renamed file read as an empty
+        workbook, exit 0 (BACK-2213), and so did a zip with no workbook part."""
+        assert self.file_path is not None
+        try:
+            with open(self.file_path, 'rb'):
+                pass
+        except OSError as exc:
+            raise OSError(f"{self.file_display} could not be read ({type(exc).__name__}: {exc.strerror})") from exc
+        if not zipfile.is_zipfile(self.file_path):
+            raise RequestValidationError(f"{self.file_display} is not a valid .xlsx workbook (not a zip archive)")
+        with zipfile.ZipFile(self.file_path) as archive:
+            names = set(archive.namelist())
+        if XlsxAnalyzer.CONTENT_PATH not in names:
+            raise RequestValidationError(
+                f"{self.file_display} is not an Excel workbook: the zip has no {XlsxAnalyzer.CONTENT_PATH}")
 
     def _init_analyzer(self) -> None:
         """Initialize XlsxAnalyzer for the file."""
@@ -761,38 +838,19 @@ class XlsxAdapter(ResourceAdapter):
     def _get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         if not self.analyzer:
             raise ValueError("No file loaded")
-
-        # Check for powerpivot parameter
-        powerpivot_param = self.query_params.get('powerpivot')
-        if powerpivot_param is not None:
-            return self._get_powerpivot(powerpivot_param)
-
-        # Check for powerquery parameter
-        powerquery_param = self.query_params.get('powerquery')
-        if powerquery_param is not None:
-            return self._get_powerquery(powerquery_param if powerquery_param else 'list')
-
-        # Check for names parameter (named ranges)
-        if 'names' in self.query_params:
-            return self._get_named_ranges()
-
-        # Check for connections parameter
-        connections_param = self.query_params.get('connections')
-        if connections_param is not None:
-            return self._get_connections(connections_param if connections_param else 'list')
-
-        # Check for sheet parameter - if present, extract sheet data
-        sheet_param = self.query_params.get('sheet')
-        if sheet_param is not None:
-            return self._get_sheet_data(sheet_param)
-
-        # Check for search parameter
-        search_param = self.query_params.get('search')
-        if search_param:
-            return self._search_sheets(search_param)
-
-        # Default: return workbook overview
-        return self._get_workbook_overview()
+        view = _view_of(self.query_params)
+        if view is None:
+            return self._get_workbook_overview()
+        value = self.query_params[view]
+        handlers: Dict[str, Callable[[], Dict[str, Any]]] = {
+            'powerpivot': lambda: self._get_powerpivot(value),
+            'powerquery': lambda: self._get_powerquery(value or 'list'),
+            'names': self._get_named_ranges,
+            'connections': lambda: self._get_connections(value or 'list'),
+            'sheet': lambda: self._get_sheet_data(value),
+            'search': lambda: self._search_sheets(value),
+        }
+        return handlers[view]()
 
     def _get_workbook_overview(self) -> Dict[str, Any]:
         """Get overview of all sheets in workbook."""
@@ -954,9 +1012,9 @@ class XlsxAdapter(ResourceAdapter):
         if len(partial) == 1:
             return partial[0]
         if partial:
-            raise ValueError(f"Sheet '{identifier}' is ambiguous: matches {', '.join(partial)}")
+            raise RequestValidationError(f"Sheet '{identifier}' is ambiguous: matches {', '.join(partial)}")
         listing = ', '.join(f'{i}={n}' for i, n in enumerate(names))
-        raise ValueError(
+        raise RequestValidationError(
             f"Sheet not found: {identifier}. ?sheet= takes a name or a 0-based index: {listing}")
 
     @staticmethod
@@ -984,7 +1042,7 @@ class XlsxAdapter(ResourceAdapter):
         has_cols, has_rows = bool(start_col and end_col), bool(start_row and end_row)
         if (not (has_cols or has_rows) or bool(start_col) != bool(end_col)
                 or bool(start_row) != bool(end_row) or (has_rows and int(start_row) < 1)):
-            raise ValueError(
+            raise RequestValidationError(
                 f"Invalid range: {cell_range} -- use A1:C10, B:D (columns), 5:7 (rows) or B2 (one cell)")
         first_row, last_row = (int(start_row) - 1, int(end_row)) if has_rows else (0, len(rows))
         if has_cols:

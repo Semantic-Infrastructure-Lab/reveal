@@ -719,12 +719,16 @@ reveal 'xlsx://file.xlsx?sheet=Sales&format=csv' | tail -11
 
 ## Error Messages
 
-Each prints `Error (xlsx://): ...` and exits 1.
+Each prints `Error (xlsx://): ...` once. A wrong target (a missing file, a file that is not an Excel
+workbook, a sheet or range that names nothing) exits 2; a workbook that could not be read exits 3.
+An answer missing a part it is built from also exits 3, beside its warning: an overview with a corrupt
+sheet (`sheet_parse_failed`), a search that could not read a sheet (`sheets_unsearched`), and a
+`?powerpivot` or `?powerquery` view with an unreadable part (`part_unreadable`). The overview's Power
+Pivot banner is optional: its unreadable part is a warning and the overview exits 0.
 
 **File not found:**
 ```
-Error (xlsx://): Invalid file path (file not found): /path/to/file.xlsx
-Example: reveal xlsx:///path/to/existing/file.xlsx
+Error (xlsx://): Path not found: /path/to/file.xlsx
 ```
 
 **Sheet not found:**
@@ -739,9 +743,15 @@ Error (xlsx://): Invalid range: A1-C3 -- use A1:C10, B:D (columns), 5:7 (rows) o
 
 Any column letters work (`A1:XFD10`); only the shape of the range is checked.
 
-**Corrupted file** (not a zip archive):
+**Corrupted file** (not a zip archive, or a zip with no workbook inside):
 ```
 Error (xlsx://): bad.xlsx is not a valid .xlsx workbook (not a zip archive)
+Error (xlsx://): other.xlsx is not an Excel workbook: the zip has no xl/workbook.xml
+```
+
+**Unreadable file** (exit 3):
+```
+Error (xlsx://): locked.xlsx could not be read (PermissionError: Permission denied)
 ```
 
 ---

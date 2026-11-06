@@ -517,6 +517,13 @@ Direct `sqlite://DB` overviews and `sqlite://DB/TABLE` views use owner execution
 corruption) is a failed analysis and exits `3`. The answers keep the `sqlite_database` and
 `sqlite_table` identities. `--check` keeps its own 0/1/2 integrity gate.
 
+Direct `xlsx://FILE` views use owner execution facts the same way (BACK-2325): a missing file,
+a file that is not an Excel workbook, and a sheet or range that names nothing are
+`invalid_request` and exit `2`; an unreadable workbook or requested sheet exits `3`, and so
+does an answer missing a part it is built from (a corrupt sheet in the overview, an unsearched
+sheet, an unreadable Power Pivot or Power Query part), beside its warning. Each view keeps its
+`xlsx_*` identity.
+
 Direct `json://FILE` roots, ordinary filters/controls and navigation/index/slice
 requests use owner execution facts. Complete values, including empty and null,
 no-match results, warnings and presentation cuts remain `0`; rejected requests,

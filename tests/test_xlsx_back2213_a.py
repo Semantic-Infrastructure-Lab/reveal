@@ -3,7 +3,7 @@
 F63: ``?range=A3:C5`` printed its rows numbered 1-3; the guide promises Excel's own row
 numbers, and the full-sheet view already numbers them that way.
 F69: a file named .xlsx that is not a zip archive exited 0 with "No sheets found" and
-warnings that named reveal's internal functions; it is now one error, exit 1.
+warnings that named reveal's internal functions; it is now one error (exit 2 since BACK-2325).
 """
 
 import contextlib
