@@ -283,7 +283,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'claude://session/infernal-earth-0118/timeline', 'description': 'Chronological message timeline with timestamps and turn types', 'element': 'timeline', 'output_type': 'claude_timeline'},
     {'uri': 'claude://session/infernal-earth-0118/context', 'description': 'Working-directory and git-branch changes over the session', 'element': 'context', 'output_type': 'claude_context'},
     {
-        'uri': 'claude://session/infernal-earth-0118?search=path traversal',
+        'uri': 'claude://session/infernal-earth-0118?search=validate_token',
         'description': 'Search all content (text, thinking, tool inputs, tool results) for a term',
         'query_param': '?search=<term>',
         'output_type': 'claude_search_results'

@@ -659,6 +659,9 @@ def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resour
     # not a real type (e.g. a Mock callable in tests) or lacks from_uri.
     from ...adapters.base import _default_from_uri
     _reject_missing_path(adapter_class, scheme, resource, classify_validation=facts_of is not None)
+    # Canonical construction ignores the element; the legacy try-chain may still read it (BACK-948).
+    if element and not hasattr(renderer_class, 'render_element') and not getattr(adapter_class, 'LEGACY_INIT', True):
+        _fail_unread_element(adapter_class, scheme, resource, element)
     if isinstance(adapter_class, type) and hasattr(adapter_class, 'from_uri'):
         adapter = _call_adapter(lambda: adapter_class.from_uri(scheme, resource, element),
                                 scheme, resource, adapter_class, classify_validation=facts_of is not None)
@@ -944,6 +947,18 @@ def _print_help_not_found_hints(adapter, element_name: str, section: Optional[st
         "Lost? reveal 'help://quick' for orientation, or reveal 'help://' for the full index.",
         file=sys.stderr,
     )
+
+
+def _fail_unread_element(adapter_class: Any, scheme: str, resource: str, element: str) -> NoReturn:
+    """Refuse a positional element on an adapter with no element view, naming the URI form.
+
+    ``reveal sqlite://x.db users`` printed the whole database, exit 0, even for a table that exists:
+    the element was never read (BACK-2522). Declared nouns refuse one the same way (exit 2)."""
+    schema = adapter_class.get_schema() if hasattr(adapter_class, 'get_schema') else None
+    syntax = schema.get('uri_syntax') if isinstance(schema, dict) else None
+    form = f'; name it in the URI: {syntax}' if syntax else ''
+    _fail(scheme, resource, f"{scheme}:// takes no positional element ('{element}'){form}",
+          adapter_class=adapter_class, code='invalid_request', failure_cause=FailureCause.INVALID_REQUEST)
 
 
 def _fail_element_not_found(adapter, element_name: str, section: Optional[str], resource: str,

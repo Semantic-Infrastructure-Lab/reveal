@@ -594,6 +594,32 @@ def _validate_effects_file_view(args, *, is_directory=False):
                               preempting=selected[0][1] if selected else None)
 
 
+# The flags that turn the file view into a whole-file answer: an ast:// query or a text search.
+_WHOLE_FILE_FLAGS = (('grep', '--grep'), ('name', '--name'), ('type', '--type'), ('sort', '--sort'))
+
+
+def _reject_unread_element(path: Path, path_str: str, element: Optional[str], args: 'Namespace') -> None:
+    """A positional element the chosen view never reads is an invalid request (D6 exit 2).
+
+    ``reveal DIR NAME`` printed the tree and ``reveal FILE NAME --grep X`` (or ``--name``, ``--type``,
+    ``--sort``) answered for the whole file, exit 0, without a word (BACK-2522). Runs on the untracked
+    args, before the flag ledger: reading a flag here is not applying it."""
+    if not element:
+        return
+    if path.is_dir():
+        print(f"Error: {path_str} is a directory; it has no element '{element}'", file=sys.stderr)
+        print(f"Hint: name a file (reveal {path_str.rstrip('/')}/FILE {element}) or filter by name "
+              f"(reveal {path_str} --name {element})", file=sys.stderr)
+        sys.exit(2)
+    flag = next((spelling for dest, spelling in _WHOLE_FILE_FLAGS if getattr(args, dest, None)), None)
+    if flag:
+        print(f"Error: {flag} answers for the whole of {path_str}; it does not select '{element}'",
+              file=sys.stderr)
+        print(f"Hint: drop '{element}' to search or query the file, or drop {flag} to show '{element}'",
+              file=sys.stderr)
+        sys.exit(2)
+
+
 def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     """Handle regular file or directory path.
 
@@ -623,6 +649,7 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     if not path.is_dir() and not path.is_file():
         print(f"Error: {path_str} is neither file nor directory", file=sys.stderr)
         sys.exit(1)
+    _reject_unread_element(path, path_str, element_from_path or getattr(args, 'element', None), args)
 
     # BACK-1634: a flag the file or directory view never reads gets one note, as on the URI
     # form. The guards above run on the untracked args: they only reject a flag that belongs

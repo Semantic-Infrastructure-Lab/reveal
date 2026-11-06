@@ -406,7 +406,10 @@ apply after this legacy outcome handling:
   it as above: the error once on stderr, text stdout empty, the envelope in JSON,
   `--output json=PATH` written, exit 1 (BACK-1553). An element lookup that returns `None` fails the
   same way, with the adapter's `available_elements`, but exits 2: a name that matches nothing is
-  an invalid request (D6, BACK-2521), and MCP reports it as a tool error with that message. Such a
+  an invalid request (D6, BACK-2521), and MCP reports it as a tool error with that message. A
+  positional element on an adapter with no element view is refused before the adapter is built
+  (`invalid_request`, exit 2, naming the adapter's `uri_syntax`; BACK-2522), as declared nouns
+  already refuse one; it used to be dropped and the whole resource answered. Such a
   result has `type` = the scheme,
   `source_type` `unknown` unless the source is an existing file or directory, and one
   `meta.errors` entry whose `code` (`adapter_error`, `element_not_found`) says the router

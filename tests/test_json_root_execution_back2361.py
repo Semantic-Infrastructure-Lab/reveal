@@ -160,8 +160,9 @@ def test_element_stdin_and_batch_remain_legacy(files, monkeypatch):
     from reveal.cli.routing.uri import resolve_adapter
     element = resolve_adapter(JsonAdapter, JsonRenderer, 'json',
                               (files / 'object.json').as_posix(), 'scalar', _default_args())
-    # The existing JSON renderer has no element route; the resolver keeps the root.
-    assert element.execution_facts is None and element.result['value'] == {'items': [1, 2], 'scalar': 7}
+    # The JSON renderer has no element route: the element is refused, not dropped (BACK-2522).
+    assert element.result['meta']['errors'][0]['code'] == 'invalid_request'
+    assert "json://<file>[/path/to/key]" in element.result['error']
     assert api.query(uri(files / 'object.json'), 'scalar')['value'] == 7
     for options, code in ((['--stdin'], 1), (['--stdin', '--batch'], 2)):
         with monkeypatch.context() as context:

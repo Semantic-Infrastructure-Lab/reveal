@@ -183,14 +183,14 @@ def test_element_check_and_stdin_batch_keep_legacy_policy(tmp_path):
     assert checked_text.returncode == 0
     assert checked_text.stderr.count('--check has no effect') == 1
     path.write_text('{INVALID', encoding='utf-8')
-    for tail in [('answer',), ('--check',)]:
-        failed = run(uri, *tail, '--format', 'json')
-        assert failed.returncode == 1
+    # A positional element on json:// was never read; it is refused before the file is (BACK-2522).
+    assert run(uri, 'answer', '--format', 'json').returncode == 2
+    failed = run(uri, '--check', '--format', 'json')
+    assert failed.returncode == 1
     batch = _run_reveal_in(tmp_path, '--stdin', '--format', 'json', stdin=uri + '\n')
     assert batch.returncode == 1
     assert json.loads(batch.stdout)['error']
     path.unlink()
-    for tail in [('answer',), ('--check',)]:
-        missing = run(uri, *tail, '--format', 'json')
-        assert missing.returncode == 1
-        assert 'excluded.json' in missing.stdout + missing.stderr
+    missing = run(uri, '--check', '--format', 'json')
+    assert missing.returncode == 1
+    assert 'excluded.json' in missing.stdout + missing.stderr
