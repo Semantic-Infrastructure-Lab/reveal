@@ -155,14 +155,19 @@ reveal 'xlsx://file.xlsx?search=revenue'
 |-----------|------|-------------|---------|
 | `sheet` | string\|int | Sheet name (case-insensitive; an exact name wins, then a unique part of one) or 0-based index | `?sheet=Sales` or `?sheet=0` |
 | `range` | string | `A1:C10`, whole columns `B:D`, whole rows `5:7`, or one cell `B2` | `?range=A1:C10` |
-| `format` | string | Output format: `text` (default), `json`, `csv` | `?format=csv` |
+| `format` | string | Output override: `csv` or `json`; `text` follows `--format` | `?format=csv` |
 | `search` | string | Search term (case-insensitive) | `?search=revenue` |
-| `limit` | int | Max rows to return (default: 100 in the sheet view; a CSV export has every row) | `?limit=500` |
-| `powerpivot` | string | Power Pivot data model mode (see below) | `?powerpivot=schema` |
-| `powerquery` | string | Power Query M code mode: `list`, `show`, or query name | `?powerquery=list` |
-| `names` | string | Show named ranges / defined names | `?names=list` |
-| `connections` | string | External connections mode: `list` or `show` | `?connections=list` |
-| `formulas` | boolean | Show formulas instead of computed values | `?formulas=true` |
+| `limit` | int, 0 or more | Max rows (sheet view) or matches (search); 0 or absent: 100 in the sheet view, every row in a CSV export, every match in a search | `?limit=500` |
+| `powerpivot` | string | Power Pivot data model mode (see below; bare means `schema`) | `?powerpivot=schema` |
+| `powerquery` | string | Power Query M code mode: `list` (bare), `show`, or one query by name | `?powerquery=list` |
+| `names` | string | Show named ranges / defined names: `list` (bare) | `?names=list` |
+| `connections` | string | External connections mode: `list` (bare) or `show` | `?connections=list` |
+| `formulas` | boolean | Show formulas instead of computed values (`true`/`false`) | `?formulas=true` |
+
+A value a parameter cannot apply exits 2 and names what it accepts: an unknown mode, a `limit` that is
+not a whole number or is negative, a `formulas` that is not true or false, a bare or empty `search`,
+`sheet` or `range`, and a `?powerquery=NAME` that matches no query (the message lists the queries).
+Each was read as its default before (BACK-2525).
 
 **Parameter combinations:**
 ```bash

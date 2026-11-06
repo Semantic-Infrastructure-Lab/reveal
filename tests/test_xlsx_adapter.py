@@ -5,6 +5,7 @@ import sys
 import pytest
 from pathlib import Path
 from reveal.adapters.xlsx import XlsxAdapter, XlsxRenderer
+from reveal.errors import RequestValidationError
 from io import StringIO
 
 
@@ -464,11 +465,9 @@ class TestXlsxAdapterEdgeCases:
     def test_invalid_limit_value(self):
         """Test with non-numeric limit value."""
         uri = f"xlsx://{SAMPLE_XLSX}?sheet=0&limit=invalid"
-        adapter = XlsxAdapter(uri)
-        result = adapter.get_structure()
-
-        # Should handle gracefully (ignore limit)
-        assert result is not None
+        # It read as no limit, exit 0 (BACK-2525): a value it cannot apply is an invalid request.
+        with pytest.raises(RequestValidationError, match='limit must be a whole number'):
+            XlsxAdapter(uri)
 
     def test_sheet_name_case_insensitive(self):
         """Test sheet name matching is case insensitive."""
@@ -1001,18 +1000,18 @@ class TestPowerPivotGetStructure:
         return XlsxAdapter(f"xlsx://{p}")
 
     def test_powerpivot_tables_returns_powerpivot_type(self, pp_adapter):
-        pp_adapter.query_params['powerpivot'] = 'tables'
+        pp_adapter = XlsxAdapter(f"xlsx://{pp_adapter.file_path}?powerpivot=tables")
         result = pp_adapter.get_structure()
         assert result['type'] == 'xlsx_powerpivot'
 
     def test_powerpivot_schema_has_tables(self, pp_adapter):
-        pp_adapter.query_params['powerpivot'] = 'schema'
+        pp_adapter = XlsxAdapter(f"xlsx://{pp_adapter.file_path}?powerpivot=schema")
         result = pp_adapter.get_structure()
         assert result['has_model'] is True
         assert len(result['tables']) == 2
 
     def test_powerpivot_dax_has_measures(self, pp_adapter):
-        pp_adapter.query_params['powerpivot'] = 'dax'
+        pp_adapter = XlsxAdapter(f"xlsx://{pp_adapter.file_path}?powerpivot=dax")
         result = pp_adapter.get_structure()
         assert len(result['measures']) == 1
         assert result['measures'][0]['name'] == 'TotalRevenue'
@@ -1050,7 +1049,7 @@ class TestPowerPivotGetStructure:
     def test_no_model_returns_has_model_false(self, tmp_path):
         p = _make_minimal_xlsx(tmp_path)
         adapter = XlsxAdapter(f"xlsx://{p}")
-        adapter.query_params['powerpivot'] = 'schema'
+        adapter = XlsxAdapter(f"xlsx://{adapter.file_path}?powerpivot=schema")
         result = adapter.get_structure()
         assert result['type'] == 'xlsx_powerpivot'
         assert result['has_model'] is False
@@ -1303,17 +1302,17 @@ class TestPowerPivotRelationships:
         return XlsxAdapter(f"xlsx://{p}")
 
     def test_relationships_mode_returns_powerpivot_type(self, rel_adapter):
-        rel_adapter.query_params['powerpivot'] = 'relationships'
+        rel_adapter = XlsxAdapter(f"xlsx://{rel_adapter.file_path}?powerpivot=relationships")
         result = rel_adapter.get_structure()
         assert result['type'] == 'xlsx_powerpivot'
 
     def test_relationships_extracted_count(self, rel_adapter):
-        rel_adapter.query_params['powerpivot'] = 'relationships'
+        rel_adapter = XlsxAdapter(f"xlsx://{rel_adapter.file_path}?powerpivot=relationships")
         result = rel_adapter.get_structure()
         assert len(result['relationships']) == 2
 
     def test_relationship_from_fields(self, rel_adapter):
-        rel_adapter.query_params['powerpivot'] = 'relationships'
+        rel_adapter = XlsxAdapter(f"xlsx://{rel_adapter.file_path}?powerpivot=relationships")
         result = rel_adapter.get_structure()
         rel = next(r for r in result['relationships'] if r['from']['table'] == 'Orders'
                    and r['to']['table'] == 'Customers')
@@ -1321,14 +1320,14 @@ class TestPowerPivotRelationships:
         assert rel['from']['multiplicity'] == 'Many'
 
     def test_relationship_to_fields(self, rel_adapter):
-        rel_adapter.query_params['powerpivot'] = 'relationships'
+        rel_adapter = XlsxAdapter(f"xlsx://{rel_adapter.file_path}?powerpivot=relationships")
         result = rel_adapter.get_structure()
         rel = next(r for r in result['relationships'] if r['to']['table'] == 'Customers')
         assert rel['to']['columns'] == ['CustID']
         assert rel['to']['multiplicity'] == 'One'
 
     def test_schema_result_includes_relationships(self, rel_adapter):
-        rel_adapter.query_params['powerpivot'] = 'schema'
+        rel_adapter = XlsxAdapter(f"xlsx://{rel_adapter.file_path}?powerpivot=schema")
         result = rel_adapter.get_structure()
         assert 'relationships' in result
         assert len(result['relationships']) == 2
@@ -1349,7 +1348,7 @@ class TestPowerPivotRelationships:
         old_stdout = sys.stdout
         sys.stdout = StringIO()
         try:
-            rel_adapter.query_params['powerpivot'] = 'relationships'
+            rel_adapter = XlsxAdapter(f"xlsx://{rel_adapter.file_path}?powerpivot=relationships")
             result = rel_adapter.get_structure()
             XlsxRenderer.render_structure(result, 'text')
             output = sys.stdout.getvalue()

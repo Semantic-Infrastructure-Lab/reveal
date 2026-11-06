@@ -565,7 +565,8 @@ reveal 'imports://src?importers=utils.py'   # one file's importers, each with it
 
 **Purpose**: Extract data, structure, and embedded models from Excel files
 
-**Query Parameters**:
+**Query Parameters** (a value a parameter cannot apply, such as an unknown mode, a limit that is not a
+whole number or a bare `search`, exits 2 and names what the parameter accepts):
 
 - **`sheet=<name|index>`** (string|integer) - Sheet to extract (name or 0-based index)
   ```bash
@@ -583,39 +584,39 @@ reveal 'imports://src?importers=utils.py'   # one file's importers, each with it
   reveal 'xlsx://model.xlsx?search=revenue'
   ```
 
-- **`format=<format>`** (string) - Output format (`text`, `json`, `csv`)
+- **`format=<format>`** (string) - Output override: `csv` (the sheet view as CSV, every row) or `json`; `text` follows `--format`
   ```bash
   reveal 'xlsx://model.xlsx?sheet=Sales&format=csv'
   ```
 
-- **`limit=N`** (integer) - Maximum number of rows to return
+- **`limit=N`** (integer, 0 or more) - Rows (sheet view) or matches (search) to return; 0 or absent: the sheet view shows 100 and says so
   ```bash
   reveal 'xlsx://model.xlsx?sheet=Sales&limit=100'
   ```
 
-- **`formulas=true`** (boolean) - Show formulas instead of computed values
+- **`formulas=true`** (boolean: `true`/`false`) - Show formulas instead of computed values
   ```bash
   reveal 'xlsx://model.xlsx?sheet=Budget&formulas=true'
   ```
 
-- **`powerpivot=<mode>`** (string) - Extract Power Pivot data model (`tables`, `schema`, `measures`, `dax`)
+- **`powerpivot=<mode>`** (string) - Extract Power Pivot data model (`tables`, `schema` (bare), `measures`, `dax`, `relationships`)
   ```bash
   reveal 'xlsx://model.xlsx?powerpivot=schema'
   reveal 'xlsx://model.xlsx?powerpivot=dax'
   ```
 
-- **`powerquery=<mode>`** (string) - Extract Power Query M code (`list`, `show`, or query name)
+- **`powerquery=<mode>`** (string) - Extract Power Query M code (`list` (bare), `show`, or one query by name; a name that matches nothing exits 2 and lists the queries)
   ```bash
   reveal 'xlsx://model.xlsx?powerquery=list'
   reveal 'xlsx://model.xlsx?powerquery=SalesData'
   ```
 
-- **`names`** (flag) - List named ranges defined in the workbook
+- **`names`** (`list`, or bare) - List named ranges defined in the workbook
   ```bash
   reveal 'xlsx://model.xlsx?names'
   ```
 
-- **`connections`** (string/flag) - List external data connections
+- **`connections`** (`list` (bare) or `show`) - List external data connections
   ```bash
   reveal 'xlsx://model.xlsx?connections=list'
   ```

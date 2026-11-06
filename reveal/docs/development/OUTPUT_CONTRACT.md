@@ -518,7 +518,8 @@ corruption) is a failed analysis and exits `3`. The answers keep the `sqlite_dat
 `sqlite_table` identities. `--check` keeps its own 0/1/2 integrity gate.
 
 Direct `xlsx://FILE` views use owner execution facts the same way (BACK-2325): a missing file,
-a file that is not an Excel workbook, and a sheet or range that names nothing are
+a file that is not an Excel workbook, a sheet, range or Power Query name that names nothing, and a
+query value a parameter cannot apply (an unknown mode, a non-number limit, BACK-2525) are
 `invalid_request` and exit `2`; an unreadable workbook or requested sheet exits `3`, and so
 does an answer missing a part it is built from (a corrupt sheet in the overview, an unsearched
 sheet, an unreadable Power Pivot or Power Query part), beside its warning. Each view keeps its

@@ -17,6 +17,10 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.office.openxml import XlsxAnalyzer
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
+from ..utils.query_binding import boolean_value
+from ..utils.query_parser import (
+    ParamSpec, ParamValueError, mark_query_keys, param_schema, peek_query_items, whole_number,
+)
 from ..utils.path_utils import to_posix
 from ..errors import RequestValidationError
 from ..utils.results import (
@@ -76,12 +80,24 @@ _REQUIRED_PARTS: Dict[str, frozenset] = {
 }
 
 
-def _view_of(params: Dict[str, Any]) -> Optional[str]:
-    """The ``_VIEWS`` key a request's parameters select, or None for the workbook overview."""
+def _view_of(values: Dict[str, Any]) -> Optional[str]:
+    """The ``_VIEWS`` key a request's checked values (``_request_values``) select, or None for the
+    workbook overview. Every view key that is present carries a value."""
     for key, _result_type in _VIEWS:
-        if params.get(key) is not None and (key != 'search' or params[key]):
+        if values.get(key):
             return key
     return None
+
+
+def _request_values(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Every declared parameter's checked value, its default when absent, before any work is done.
+    A value a parameter cannot apply was read as its default or as no limit, exit 0 (BACK-2525).
+    Checking is not applying: no key counts as used here; a view marks what it applies (``_value``)."""
+    raw = dict(peek_query_items(params))
+    try:
+        return {spec.name: spec.validate(raw.get(spec.name)) for spec in _PARAM_SPECS}
+    except ValueError as exc:
+        raise RequestValidationError(str(exc)) from exc
 
 
 class XlsxRenderer:
@@ -408,16 +424,10 @@ class XlsxRenderer:
                 print(q.get('expression', ''))
                 print()
         else:
-            # Specific query name lookup
-            matches = [q for q in queries if q['name'].lower() == mode.lower()]
-            if matches:
-                q = matches[0]
+            # One query by name: the adapter kept only it (a name that matches nothing exits 2).
+            for q in queries:
                 print(f"// {q['name']}")
                 print(q.get('expression', ''))
-            else:
-                print(f"Query '{mode}' not found in {filename}")
-                if queries:
-                    print(f"Available: {', '.join(q['name'] for q in queries)}")
 
     @staticmethod
     def _render_named_ranges(result: dict, format: str) -> None:
@@ -492,18 +502,72 @@ class XlsxRenderer:
         XlsxRenderer.render_structure(result, format)
 
 
-_SCHEMA_QUERY_PARAMS = {
-    'sheet': {'type': 'string|integer', 'description': 'Sheet to extract (name or 0-based index)', 'examples': ['sheet=Sales', 'sheet=0']},
-    'range': {'type': 'string', 'description': 'Cells A1:C10, whole columns B:D, whole rows 5:7, or one cell B2', 'examples': ['range=A1:C10', 'range=B:D', 'range=5:7']},
-    'search': {'type': 'string', 'description': 'Search for text across all sheets', 'examples': ['search=revenue', 'search=total']},
-    'format': {'type': 'string', 'description': 'Output format (text, json, csv)', 'examples': ['format=csv', 'format=json']},
-    'limit': {'type': 'integer', 'description': 'Maximum number of rows to return (sheet view default 100; format=csv returns every row)', 'examples': ['limit=500', 'limit=50']},
-    'formulas': {'type': 'boolean', 'description': 'Show formulas instead of values', 'examples': ['formulas=true']},
-    'powerpivot': {'type': 'string', 'description': 'Extract Power Pivot model (tables|schema|measures|dax)', 'examples': ['powerpivot=schema', 'powerpivot=dax', 'powerpivot=tables', 'powerpivot=measures']},
-    'powerquery': {'type': 'string', 'description': 'Extract Power Query M code (list|show|<name>)', 'examples': ['powerquery=list', 'powerquery=show', 'powerquery=SalesData']},
-    'names': {'type': 'flag', 'description': 'List named ranges defined in the workbook', 'examples': ['names']},
-    'connections': {'type': 'string', 'description': 'List external data connections (list or omit value)', 'examples': ['connections=list', 'connections']},
-}
+def _text_value(name: str, example: str) -> Callable[[Any], str]:
+    """A value that names something (a sheet, a range, a search term): a bare or blank key names
+    nothing. A bare ``?search`` crashed on ``True.lower()`` (exit 3, BACK-2525)."""
+    def convert(value: Any) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ParamValueError(f'{name} needs a value: ?{example}')
+        return value
+    return convert
+
+
+def _mode_value(bare: str) -> Callable[[Any], str]:
+    """A view's mode: the bare (or empty) key is ``bare``, by name; the spec's choices check the rest.
+    Bare ``?powerquery`` and ``?connections`` reported ``mode: true`` (BACK-2525)."""
+    def convert(value: Any) -> str:
+        if value is True or value == '':
+            return bare
+        if not isinstance(value, str):
+            raise TypeError(value)
+        return value
+    return convert
+
+
+def _limit_value(value: Any) -> int:
+    if isinstance(value, bool):  # a bare ?limit
+        raise TypeError(value)
+    return whole_number(value)
+
+
+def _format_value(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TypeError(value)
+    return value
+
+
+_POWERPIVOT_MODES = ('tables', 'schema', 'measures', 'dax', 'relationships')
+_POWERQUERY_LIST_MODES = ('list', 'show')
+# Each query parameter, declared once: the schema is built from these, and every value is checked
+# before any work (_request_values). Unknown modes, booleans and limits were read as their default.
+_PARAM_SPECS: Tuple[ParamSpec, ...] = (
+    ParamSpec('sheet', 'string|integer', 'Sheet to extract (name or 0-based index)', None,
+              _text_value('sheet', 'sheet=NAME'), ('sheet=Sales', 'sheet=0')),
+    ParamSpec('range', 'string', 'Cells A1:C10, whole columns B:D, whole rows 5:7, or one cell B2', None,
+              _text_value('range', 'range=A1:C10'), ('range=A1:C10', 'range=B:D', 'range=5:7')),
+    ParamSpec('search', 'string', 'Search for text across all sheets (case-insensitive)', None,
+              _text_value('search', 'search=TEXT'), ('search=revenue', 'search=total')),
+    ParamSpec('format', 'string', 'Output override: csv (the sheet view as CSV, every row) or json; '
+              'text follows --format', None, _format_value, ('format=csv', 'format=json'),
+              choices=('text', 'json', 'csv'), role='presentation'),
+    ParamSpec('limit', 'integer', 'Rows (sheet view) or matches (search) to return; 0 or absent: the sheet '
+              'view shows 100 and says so, format=csv and search return all', 0, _limit_value,
+              ('limit=500', 'limit=50'), minimum=0, zero_policy='default'),
+    ParamSpec('formulas', 'boolean', 'Show formulas instead of values', False, boolean_value,
+              ('formulas=true',)),
+    ParamSpec('powerpivot', 'string', 'Extract the Power Pivot model; bare means schema', None,
+              _mode_value('schema'), ('powerpivot=schema', 'powerpivot=dax', 'powerpivot=tables',
+                                      'powerpivot=measures'), choices=_POWERPIVOT_MODES),
+    ParamSpec('powerquery', 'string', 'Extract Power Query M code: list (bare), show (all M code) or one '
+              'query by name (case-insensitive; a name that matches nothing exits 2)', None,
+              _mode_value('list'), ('powerquery=list', 'powerquery=show', 'powerquery=SalesData')),
+    ParamSpec('names', 'string', 'List named ranges defined in the workbook: list (bare)', None,
+              _mode_value('list'), ('names=list', 'names'), choices=('list',)),
+    ParamSpec('connections', 'string', 'List external data connections: list (bare) or show (full '
+              'connection strings and commands)', None, _mode_value('list'),
+              ('connections=list', 'connections'), choices=('list', 'show')),
+)
+_SCHEMA_QUERY_PARAMS = param_schema(_PARAM_SPECS)
 
 _SCHEMA_OUTPUT_TYPES = [
     {
@@ -682,7 +746,10 @@ class XlsxAdapter(ResourceAdapter):
 
     @staticmethod
     def uri_result_type(resource: str) -> str:
-        view = _view_of(parse_query_params(resource.partition('?')[2]))
+        try:
+            view = _view_of(_request_values(parse_query_params(resource.partition('?')[2])))
+        except RequestValidationError:  # construction rejects the request (exit 2) before any view runs
+            view = None
         return dict(_VIEWS)[view] if view else _WORKBOOK
 
     @staticmethod
@@ -746,6 +813,7 @@ class XlsxAdapter(ResourceAdapter):
         self.connection_string = connection_string
         self.file_path: Optional[Path] = None
         self.query_params: Dict[str, str] = {}
+        self.values: Dict[str, Any] = {}  # the checked query values (_request_values); views read these
         self.analyzer: Optional[XlsxAnalyzer] = None
 
         self._parse_uri(connection_string)
@@ -775,6 +843,7 @@ class XlsxAdapter(ResourceAdapter):
         else:
             path_part = uri
             self.query_params = {}
+        self.values = _request_values(self.query_params)
 
         if not path_part:
             # An empty path read the cwd and named it absolutely in "Invalid Excel format" (BACK-2325).
@@ -838,15 +907,15 @@ class XlsxAdapter(ResourceAdapter):
     def _get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         if not self.analyzer:
             raise ValueError("No file loaded")
-        view = _view_of(self.query_params)
+        view = _view_of(self.values)
         if view is None:
             return self._get_workbook_overview()
-        value = self.query_params[view]
+        value = self._value(view)
         handlers: Dict[str, Callable[[], Dict[str, Any]]] = {
             'powerpivot': lambda: self._get_powerpivot(value),
-            'powerquery': lambda: self._get_powerquery(value or 'list'),
+            'powerquery': lambda: self._get_powerquery(value),
             'names': self._get_named_ranges,
-            'connections': lambda: self._get_connections(value or 'list'),
+            'connections': lambda: self._get_connections(value),
             'sheet': lambda: self._get_sheet_data(value),
             'search': lambda: self._search_sheets(value),
         }
@@ -904,8 +973,7 @@ class XlsxAdapter(ResourceAdapter):
             'sheets': enhanced_sheets
         }
 
-        # Add preferred format if specified in query params
-        format_param = self.query_params.get('format')
+        format_param = self._preferred_format()
         if format_param:
             result_data['preferred_format'] = format_param
 
@@ -934,7 +1002,7 @@ class XlsxAdapter(ResourceAdapter):
         if self.analyzer is None:
             raise ValueError("Analyzer not initialized")
         sheet_name = self._resolve_sheet_name(sheet_identifier)
-        formulas = str(self.query_params.get('formulas', False)).lower() in ('true', '1', 'yes')
+        formulas = self._value('formulas')
         sheet = self.analyzer.sheet_rows(sheet_name, formulas=formulas)
         if sheet is None:
             raise ValueError(f"Failed to extract sheet: {sheet_name}")
@@ -945,14 +1013,14 @@ class XlsxAdapter(ResourceAdapter):
         rows_data = sheet['rows_data']
 
         # Apply cell range if specified
-        range_param = self.query_params.get('range')
+        range_param = self._value('range')
         first_row = 1
         if range_param:
             rows_data, first_row = self._apply_cell_range(rows_data, range_param)
 
         all_rows = rows_data = self._pad_rows(rows_data)
-        format_param = self.query_params.get('format')
-        limit, cause, hint = self._limit_param(), 'limit', 'raise ?limit=N'
+        format_param = self._preferred_format()
+        limit, cause, hint = self._value('limit'), 'limit', 'raise ?limit=N'
         if not limit and format_param != 'csv':
             # BACK-1608: the view showed 20 rows of any sheet and said nothing; a CSV
             # export is every row, and the table view caps at a disclosed default.
@@ -987,12 +1055,16 @@ class XlsxAdapter(ResourceAdapter):
         note_truncation(result, 'rows', len(rows_data), len(all_rows), cause, hint=hint)
         return result
 
-    def _limit_param(self) -> int:
-        """``?limit=N`` as a positive cap, else 0 (none). A negative slice dropped the tail."""
-        try:
-            return max(int(self.query_params.get('limit') or 0), 0)
-        except (TypeError, ValueError):
-            return 0
+    def _preferred_format(self) -> Optional[str]:
+        """The ``?format=`` that overrides ``--format`` (csv, json); text follows ``--format``.
+        A ``?format=text`` under ``--format json`` put the text cut note after the JSON (BACK-2525)."""
+        value = self._value('format')
+        return value if value != 'text' else None
+
+    def _value(self, name: str) -> Any:
+        """A checked query value, counted as used: the flag ledger names a flag no view applied."""
+        mark_query_keys(self.query_params, name)
+        return self.values[name]
 
     def _resolve_sheet_name(self, identifier: str) -> str:
         """The sheet ``?sheet=`` names: an exact name, a 0-based index, then a unique part of a name.
@@ -1080,7 +1152,7 @@ class XlsxAdapter(ResourceAdapter):
 
         # BACK-1543: total_matches was counted after this cut, so ?limit=3 reported 3 of
         # 684 as the total. A negative limit dropped the tail instead of capping.
-        limit = self._limit_param()
+        limit = self._value('limit')
         matches = found[:limit] if limit > 0 else found
 
         # Group by sheet
@@ -1619,17 +1691,19 @@ class XlsxAdapter(ResourceAdapter):
             show  — full M code for all queries
             <name> — M code for a specific named query
         """
-        if not mode:
-            mode = 'list'
         if not self.file_path:
             return ResultBuilder.create_error(
                 result_type='xlsx_powerquery',
                 source=Path('unknown'),
                 error="No file loaded",
             )
+        named = mode not in _POWERQUERY_LIST_MODES
         try:
             with zipfile.ZipFile(self.file_path) as zf:
                 pq_item = self._find_datamashup_item(zf)
+                if not pq_item and named:  # plan rule 9: a name that matches nothing is not a clean answer
+                    raise RequestValidationError(
+                        f"Power Query not found: {mode} (no Power Query in {self.file_display})")
                 if not pq_item:
                     return ResultBuilder.create(
                         contract_version=CONTRACT_VERSION,
@@ -1644,6 +1718,8 @@ class XlsxAdapter(ResourceAdapter):
                         **self._meta_fields(),
                     )
                 data = self._parse_powerquery_stdlib(zf, pq_item)
+                if named:
+                    data['queries'] = self._named_query(data.get('queries', []), mode)
                 data['file'] = str(self.file_path)
                 data['mode'] = mode
                 return ResultBuilder.create(
@@ -1659,6 +1735,17 @@ class XlsxAdapter(ResourceAdapter):
                 source=self.file_path,
                 error=str(e),
             )
+
+    def _named_query(self, queries: List[Dict[str, Any]], name: str) -> List[Dict[str, Any]]:
+        """The query ``?powerquery=NAME`` names (case-insensitive). JSON listed every query and text
+        said "not found", exit 0 (BACK-2525). With a query part unreadable the name may be in it: the
+        answer is then empty and incomplete (exit 3), not a request that names nothing."""
+        matches = [q for q in queries if q['name'].lower() == name.lower()]
+        recorded = self.__dict__.get('_composed_warnings', [])
+        if matches or any(w.get('type') == 'part_unreadable' for w in recorded):
+            return matches
+        available = ', '.join(sorted(q['name'] for q in queries)) or 'none'
+        raise RequestValidationError(f"Power Query not found: {name}; available: {available}")
 
     def _get_named_ranges(self) -> Dict[str, Any]:
         """Extract named ranges (defined names) from the workbook.
@@ -1772,11 +1859,7 @@ class XlsxAdapter(ResourceAdapter):
             )
 
     def _get_powerpivot(self, mode: str) -> Dict[str, Any]:
-        """Extract Power Pivot model for a ?powerpivot=<mode> request."""
-        valid_modes = ('tables', 'schema', 'measures', 'dax', 'relationships')
-        if mode not in valid_modes:
-            mode = 'schema'
-
+        """Extract Power Pivot model for a ?powerpivot=<mode> request (a mode in _POWERPIVOT_MODES)."""
         if not self.file_path:
             return ResultBuilder.create_error(
                 result_type='xlsx_powerpivot',
@@ -1850,7 +1933,7 @@ class XlsxAdapter(ResourceAdapter):
             Dict with sheet data
         """
         # Set sheet parameter and get sheet data
-        self.query_params['sheet'] = element_name
+        self.query_params['sheet'] = self.values['sheet'] = element_name
         return self._get_sheet_data(element_name)
 
     def get_metadata(self) -> Dict[str, Any]:

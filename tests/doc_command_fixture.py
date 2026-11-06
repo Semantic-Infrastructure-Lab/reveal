@@ -684,6 +684,26 @@ def _write_binary_fixtures(root):
         wb.create_sheet('Sheet1').append(['a', 'b'])  # the XLSX guide's generic sheet names
         wb.create_sheet('Data').append(['a', 'b'])
         wb.save(str(root / name))
+        _add_power_queries(root / name, ('SalesData', 'Sales Data'))
+
+
+def _add_power_queries(path, names):
+    """A DataMashup part holding one M query per name, so ``?powerquery=NAME`` examples name a real
+    query (a name that matches nothing exits 2, BACK-2525)."""
+    import base64
+    import struct
+    import zipfile
+    import zlib
+    inner = b''
+    for query in names:
+        deflater = zlib.compressobj(wbits=-15)
+        body = deflater.compress(b'let\n    Source = 1\nin\n    Source') + deflater.flush()
+        member = f'Formulas/{query}.m'.encode('utf-8')
+        inner += (b'PK\x03\x04' + struct.pack('<HHHHHIIIHH', 20, 0, 8, 0, 0, 0, len(body), 0, len(member), 0)
+                  + member + body)
+    blob = base64.b64encode(inner + b'\x00' * 100).decode('ascii')
+    with zipfile.ZipFile(path, 'a') as zf:
+        zf.writestr('customXml/item1.xml', f'<?xml version="1.0" encoding="utf-8"?><DataMashup>{blob}</DataMashup>')
 
 
 def binary_paths():
