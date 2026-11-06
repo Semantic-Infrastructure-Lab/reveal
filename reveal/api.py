@@ -199,7 +199,7 @@ def query(
         nginx_result = query("nginx:///etc/nginx/nginx.conf")
     """
     from . import adapters as _adapters  # noqa: F401 — triggers adapter registrations
-    from .adapters.base import _default_from_uri, get_adapter_class, list_supported_schemes
+    from .adapters.base import _default_from_uri, get_adapter_class
 
     if "://" not in uri:
         raise ValueError(
@@ -214,7 +214,8 @@ def query(
     resource, respect_gitignore = split_respect_gitignore(resource)
     adapter_class = get_adapter_class(scheme)
     if adapter_class is None:
-        supported = ", ".join(f"{s}://" for s in list_supported_schemes())
+        from .cli.invocation import current_schemes
+        supported = ", ".join(f"{s}://" for s in current_schemes())
         raise ValueError(
             f"Unsupported URI scheme: {scheme}://\n"
             f"Supported schemes: {supported}"

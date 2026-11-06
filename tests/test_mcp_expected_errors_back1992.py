@@ -206,7 +206,7 @@ def test_unknown_adapter_remains_nonerror_stdio_result(tmp_path):
     async def scenario(session):
         result = await session.call_tool('reveal_query', {'uri': 'no-such-adapter://x'})
         assert not result.is_error
-        assert '[reveal exited with code 1]' in _text(result)
+        assert '[reveal exited with code 2]' in _text(result)  # D6 invalid invocation (BACK-2532)
         assert 'Unsupported URI scheme' in _text(result)
 
     _run(tmp_path, scenario)

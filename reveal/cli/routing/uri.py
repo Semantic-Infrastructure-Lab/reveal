@@ -67,11 +67,11 @@ class _Answered(Exception):
 
 class UriUsageError(Exception):
     """The query is malformed before any adapter is chosen: no ``://``, an unknown scheme.
-    handle_uri prints it on stderr and exits 1 by default; input values with a
-    declared CLI usage contract may use exit 2. resolve_uri raises it so a batch
-    records the error and goes on."""
+    handle_uri prints it on stderr and exits 2, an invalid invocation (D6; it exited 1, the
+    findings code, until BACK-2532). resolve_uri raises it so a batch records the error and
+    goes on."""
 
-    def __init__(self, message: str, hint: str = '', exit_code: int = 1):
+    def __init__(self, message: str, hint: str = '', exit_code: int = 2):
         super().__init__(message)
         self.message = message
         self.hint = hint
@@ -458,13 +458,14 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
     # a value already in the URI wins over the flag.
     # Resolve the adapter before preparing its filesystem scope. Resource codecs
     # bind paths without serializing decoded '?' characters back into the URI.
-    from ...adapters.base import get_adapter_class, list_supported_schemes
+    from ...adapters.base import get_adapter_class
+    from ..invocation import current_schemes
     # Import adapters package to trigger all registrations (single source of truth)
     from ... import adapters as _adapters  # noqa: F401
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:
-        schemes = ', '.join(f"{s}://" for s in list_supported_schemes())
+        schemes = ', '.join(f"{s}://" for s in current_schemes())
         raise UriUsageError(f"Unsupported URI scheme: {scheme}://",
                             f"Supported schemes: {schemes}")
     from ...utils.exclusions import clear_active_exclusions

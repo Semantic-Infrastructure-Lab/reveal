@@ -336,6 +336,16 @@ RETIREMENTS: Dict[str, Retirement] = {
 }
 
 
+def current_schemes() -> list:
+    """Registered schemes to teach a reader: every one the RETIREMENTS table does not retire.
+
+    Retired schemes stay registered (they answer with a note until the cut), so registry
+    consumers that check adapters keep the full list; hints and listings use this one (BACK-2532).
+    """
+    from ..adapters.registry import list_supported_schemes
+    return [scheme for scheme in list_supported_schemes() if f'scheme:{scheme}' not in RETIREMENTS]
+
+
 class RetiredSpellingError(Exception):
     """A spelling at the ``error`` stage was used: the caller exits 2 with its text."""
 

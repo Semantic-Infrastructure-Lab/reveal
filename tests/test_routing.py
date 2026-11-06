@@ -395,22 +395,22 @@ class TestHandleUri(unittest.TestCase):
         mock_args = Namespace(format='text')
 
         with patch('sys.stderr') as mock_stderr, \
-             patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+             patch('sys.exit', side_effect=SystemExit(2)) as mock_exit:
             with self.assertRaises(SystemExit):
                 handle_uri('invalid_uri', None, mock_args)
 
-            mock_exit.assert_called_once_with(1)
+            mock_exit.assert_called_once_with(2)  # D6 invalid invocation (BACK-2532)
 
     def test_unsupported_uri_scheme(self):
         """Verify error handling for unsupported URI scheme."""
         mock_args = Namespace(format='text')
 
         with patch('sys.stderr') as mock_stderr, \
-             patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+             patch('sys.exit', side_effect=SystemExit(2)) as mock_exit:
             with self.assertRaises(SystemExit):
                 handle_uri('foobar://resource', None, mock_args)
 
-            mock_exit.assert_called_once_with(1)
+            mock_exit.assert_called_once_with(2)  # D6 invalid invocation (BACK-2532)
 
     def test_sort_injection_skipped_when_uri_has_sort(self):
         """URI ?sort= takes precedence — --sort flag must NOT be injected when URI already has sort=."""
