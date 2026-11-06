@@ -1652,8 +1652,8 @@ class TestPowerQueryIntegration:
         result = adapter.get_structure()
         assert result['type'] == 'xlsx_powerquery'
         assert result['has_powerquery'] is True
-        # The Customer query has exactly one entry
-        assert len(result['queries']) == 7  # all queries loaded; renderer filters
+        # The answer is the named query only; it listed all 7 and left the pick to the renderer (BACK-2525)
+        assert [q['name'] for q in result['queries']] == ['Customer']
 
     def test_show_mode(self):
         adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?powerquery=show")
