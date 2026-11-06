@@ -88,8 +88,9 @@ def test_env_missing_variable_exits_2(tmp_path, argv):
     assert [e['code'] for e in answer['meta']['errors']] == ['element_not_found']
 
 
-def test_env_present_variable_still_exits_0(tmp_path):
-    result = _run_reveal_in(tmp_path, 'env://HOME' if sys.platform != 'win32' else 'env://PATH')
+def test_env_present_variable_still_exits_0(tmp_path, monkeypatch):
+    monkeypatch.setenv('REVEAL_BACK2521_PRESENT', 'yes')
+    result = _run_reveal_in(tmp_path, 'env://REVEAL_BACK2521_PRESENT')
     assert result.returncode == 0, result.stderr
 
 

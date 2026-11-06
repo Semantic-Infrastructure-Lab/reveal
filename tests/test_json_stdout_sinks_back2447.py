@@ -114,7 +114,9 @@ def test_legacy_uri_failed_source_keeps_existing_exit_when_no_write_fails(tmp_pa
     destination = tmp_path / 'out.json'
     sink = ['--output', f'json={destination}'] if with_sink else []
     result = _run_reveal_direct(f'env://{key}', '--format', 'json', *sink)
-    assert result.returncode == 1, result.stderr
+    # The source's own failure code (2 since BACK-2521: an element miss is an invalid request),
+    # not a write failure's 3: a sink that wrote changes nothing.
+    assert result.returncode == 2, result.stderr
     primary = json.loads(result.stdout)
     assert primary['error']
     assert 'output_errors' not in primary.get('meta', {})

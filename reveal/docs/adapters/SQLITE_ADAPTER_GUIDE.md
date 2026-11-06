@@ -782,7 +782,10 @@ Shows WAL mode, but not WAL file details:
 
 ### Common errors and solutions:
 
-Each error prints `Error (sqlite://): ...` and exits 1.
+Each error prints `Error (sqlite://): ...` once. A wrong target (a missing file, a file that is not
+a database, a table that does not exist) exits 2; a database that could not be read (locked,
+unreadable, corrupt) exits 3. `--check` keeps its own codes (0 clean, 1 foreign-key violations,
+2 integrity failure).
 
 **1. Database file not found**
 
@@ -799,7 +802,7 @@ Error (sqlite://): Database file not found: ./missing.db
 **2. Not a valid SQLite database**
 
 ```
-Error (sqlite://): Database error during query: file is not a database
+Error (sqlite://): ./app.db is not a SQLite database (or it is encrypted)
 ```
 
 **Cause**: File exists but isn't a SQLite database.

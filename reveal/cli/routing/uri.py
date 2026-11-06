@@ -172,6 +172,10 @@ def _decline(scheme: str, resource: str, reason: str, adapter_class: Any = None)
     raise _Answered(result)
 
 
+# Router-authored rejections whose message is safe to show an SDK/MCP caller: it names only what the caller sent.
+_PUBLIC_REJECTION_CODES = frozenset({'invalid_request', 'element_not_found'})
+
+
 def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
             result_type: Optional[str] = None, source_path: Optional[str] = None,
             facts_of: Optional[Callable] = None, default_fail_on=None) -> Answer:
@@ -189,8 +193,9 @@ def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
         result['source_type'] = ('directory' if os.path.isdir(source_path) else
                                  'file' if os.path.isfile(source_path) else 'unknown')
     facts = facts or (facts_of(result) if facts_of is not None else None)
-    if test_layout_failure and default_fail_on is None:
-        default_fail_on = 'none'  # explicit policy failure on a legacy operation has no findings policy
+    if facts is not None and facts_of is None and default_fail_on is None:
+        # A router-classified failure (test layout, element miss) on a legacy operation has no findings policy.
+        default_fail_on = 'none'
     answer = Answer(result, 'router',
                     lambda *, announce_error=True: _emit_result(
                         result, args, scheme, _render_router_result, execution_facts=facts,
@@ -198,7 +203,8 @@ def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
                         default_fail_on=default_fail_on),
                     execution_facts=facts, exception=exception,
                     public_diagnostic=(result.get('error') if facts is not None and
-                                       any(e.get('code') == 'invalid_request' for e in result['meta']['errors']) else None))
+                                       any(e.get('code') in _PUBLIC_REJECTION_CODES
+                                           for e in result['meta']['errors']) else None))
     return answer
 
 
@@ -945,7 +951,11 @@ def _fail_element_not_found(adapter, element_name: str, section: Optional[str], 
     """Fail an element lookup that found nothing. The adapter's element names go in the
     result (``available_elements``) and, in text, on stderr after the error; help:// adds its
     way back into discovery. This exit used to print on stderr only, so ``--format json``
-    got 0 bytes on stdout and --also-json was never written (BACK-1553)."""
+    got 0 bytes on stdout and --also-json was never written (BACK-1553).
+
+    A name that matches nothing is an invalid request (D6 exit 2, plan rule 9), here for
+    every URI adapter as for a bare-path element (BACK-2492); it exited 1, the findings
+    code (BACK-2521)."""
     elements = list(adapter.list_elements()) if hasattr(adapter, 'list_elements') else []
 
     def detail() -> None:
@@ -956,7 +966,8 @@ def _fail_element_not_found(adapter, element_name: str, section: Optional[str], 
 
     extra: dict[str, Any] = {'available_elements': elements} if elements else {}
     _fail(scheme or 'unknown', resource, f"Element '{element_name}' not found",
-          adapter_class=type(adapter), code='element_not_found', detail=detail, **extra)
+          adapter_class=type(adapter), code='element_not_found', detail=detail,
+          failure_cause=FailureCause.INVALID_REQUEST, **extra)
 
 
 def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
@@ -1327,8 +1338,9 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
 
     # Get structure from adapter
     scheme_name, source = scheme or 'unknown', resource or ''
+    # A qualified owner may reject the request only once it reads (sqlite: no such table, BACK-2521).
     result = _call_adapter(lambda: adapter.get_structure(**structure_kwargs),
-                           scheme_name, source, type(adapter))
+                           scheme_name, source, type(adapter), classify_validation=facts_of is not None)
 
     if facts_of is not None:
         from .declared import qualify_declared_answer

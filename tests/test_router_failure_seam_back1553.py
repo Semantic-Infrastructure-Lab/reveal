@@ -87,6 +87,9 @@ def _run(adapter_class, *, resource='x', element=None, fmt='text', tmp_path=None
 
 
 # Each way a query can fail in the router: (id, adapter class, run kwargs, meta.errors code).
+# All exit 1 (a failed legacy result) except an element lookup that finds nothing, an invalid
+# request that exits 2 (D6, plan rule 9; BACK-2521).
+_EXIT_CODE = {'element_none': 2}
 EXITS = [
     ('construct', _adapter('construct'), {}, 'adapter_error'),
     ('base_path', _adapter('reconfigure_base_path'), {'base_path': '/tmp'}, 'adapter_error'),
@@ -100,9 +103,9 @@ EXITS = [
 
 
 @pytest.mark.parametrize('adapter_class,kwargs,code', [e[1:] for e in EXITS], ids=[e[0] for e in EXITS])
-def test_text_prints_the_error_once_on_stderr(adapter_class, kwargs, code, tmp_path):
+def test_text_prints_the_error_once_on_stderr(adapter_class, kwargs, code, tmp_path, request):
     exit_code, out, err, also = _run(adapter_class, tmp_path=tmp_path, **kwargs)
-    assert exit_code == 1
+    assert exit_code == _EXIT_CODE.get(request.node.callspec.id, 1)
     assert out == '', 'a failure prints nothing on stdout in text'
     assert err.startswith('Error (fake://): ')
     assert err.count('Error') == 1, err
@@ -110,9 +113,9 @@ def test_text_prints_the_error_once_on_stderr(adapter_class, kwargs, code, tmp_p
 
 
 @pytest.mark.parametrize('adapter_class,kwargs,code', [e[1:] for e in EXITS], ids=[e[0] for e in EXITS])
-def test_json_gets_one_current_envelope(adapter_class, kwargs, code):
+def test_json_gets_one_current_envelope(adapter_class, kwargs, code, request):
     exit_code, out, err, _ = _run(adapter_class, fmt='json', **kwargs)
-    assert exit_code == 1
+    assert exit_code == _EXIT_CODE.get(request.node.callspec.id, 1)
     envelope = json.loads(out)
     assert envelope['contract_version'] == CONTRACT_VERSION
     assert envelope['type'] == 'fake'

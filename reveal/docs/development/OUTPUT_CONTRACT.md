@@ -405,7 +405,9 @@ apply after this legacy outcome handling:
   `cli/routing/uri._call_adapter`, which turns an exception into an error result and handles
   it as above: the error once on stderr, text stdout empty, the envelope in JSON,
   `--output json=PATH` written, exit 1 (BACK-1553). An element lookup that returns `None` fails the
-  same way, with the adapter's `available_elements`. Such a result has `type` = the scheme,
+  same way, with the adapter's `available_elements`, but exits 2: a name that matches nothing is
+  an invalid request (D6, BACK-2521), and MCP reports it as a tool error with that message. Such a
+  result has `type` = the scheme,
   `source_type` `unknown` unless the source is an existing file or directory, and one
   `meta.errors` entry whose `code` (`adapter_error`, `element_not_found`) says the router
   built it. A `NotApplicableError` becomes a `not_applicable` result the same way.
@@ -508,6 +510,12 @@ even when no observations remain. Healthy empty answers and advisory language-ce
 failures stay complete. Required loss omits full confidence and carries bounded source
 diagnostics. Element/check operations, stdin and mixed batches retain their legacy policy.
 This adoption adds no findings gate or generated AST subcommand.
+
+Direct `sqlite://DB` overviews and `sqlite://DB/TABLE` views use owner execution facts
+(BACK-2521): a missing file, a file that is not a SQLite database and a missing table are
+`invalid_request` and exit `2`; a database that could not be read (permissions, lock,
+corruption) is a failed analysis and exits `3`. The answers keep the `sqlite_database` and
+`sqlite_table` identities. `--check` keeps its own 0/1/2 integrity gate.
 
 Direct `json://FILE` roots, ordinary filters/controls and navigation/index/slice
 requests use owner execution facts. Complete values, including empty and null,

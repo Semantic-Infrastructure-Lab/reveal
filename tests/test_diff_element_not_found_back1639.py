@@ -45,7 +45,7 @@ def test_compute_element_diff_refuses_neither_side():
 
 def test_cli_json_fails_with_available_elements(pair):
     proc = _reveal(pair, 'diff://a.py:b.py/nope', '--format', 'json')
-    assert proc.returncode == 1
+    assert proc.returncode == 2  # an element miss is an invalid request (BACK-2521)
     result = json.loads(proc.stdout)
     assert result['error'] == "Element 'nope' not found"
     assert result['available_elements'] == ['foo', 'only_left', 'only_right']
@@ -54,6 +54,6 @@ def test_cli_json_fails_with_available_elements(pair):
 
 def test_cli_text_fails_on_stderr(pair):
     proc = _reveal(pair, 'diff://a.py:b.py/nope')
-    assert proc.returncode == 1
+    assert proc.returncode == 2  # an element miss is an invalid request (BACK-2521)
     assert "Element 'nope' not found" in proc.stderr
     assert 'Available elements: foo, only_left, only_right' in proc.stderr

@@ -1073,7 +1073,7 @@ reveal env://VIRTUAL_ENV
 **Symptom**:
 ```bash
 reveal env://MY_VAR
-# Error (env://): Element 'MY_VAR' not found   (exit 1)
+# Error (env://): Element 'MY_VAR' not found   (exit 2)
 ```
 
 **Cause**: Variable not set in current environment

@@ -2,12 +2,37 @@
 
 import os
 import sqlite3
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, NoReturn, Optional
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
-from ...utils.results import ResultBuilder
+from ...errors import RequestValidationError
+from ...utils.results import AnalysisCompleteness, FailureCause, ResultBuilder, result_execution_facts
 from .renderer import SqliteRenderer
 from reveal.reveal_types import CONTRACT_VERSION, RevealResult
+
+
+class MissingDatabaseError(RequestValidationError, FileNotFoundError):
+    """The database path does not exist: an invalid resource (D6 exit 2), still a FileNotFoundError."""
+
+
+class NotADatabaseError(RequestValidationError, OSError):
+    """The file is not a SQLite database (or is encrypted): an invalid resource (D6 exit 2), still an OSError."""
+
+
+def _split_connection_string(uri: str) -> tuple[str, Optional[str]]:
+    """``[sqlite://]path/to/db.db[/table]`` -> (database path, table or None).
+
+    The first segment ending in .db/.sqlite/.sqlite3 is the database; the rest is the table.
+    """
+    if not uri or uri == "sqlite://":
+        raise RequestValidationError("SQLite URI requires database path: sqlite:///path/to/db.db")
+    if uri.startswith("sqlite://"):
+        uri = uri[9:]
+    parts = uri.split('/')
+    for i, part in enumerate(parts):
+        if part.endswith(('.db', '.sqlite', '.sqlite3')):
+            return '/'.join(parts[:i + 1]), ('/'.join(parts[i + 1:]) or None)
+    return uri, None
 
 _SCHEMA_OUTPUT_TYPES = [
     {
@@ -132,6 +157,29 @@ class SQLiteAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     CANONICAL_EMPTY_RESOURCE = ''  # bare sqlite:// must stay empty, not '.'
+    RESULT_TYPE = 'sqlite_database'
+    DEFAULT_FAIL_ON = 'none'
+
+    @classmethod
+    def uri_execution_facts(cls, resource):
+        """The overview and table views share D6 (BACK-2521); --check keeps its own 0/1/2 gate."""
+        return cls.execution_facts
+
+    @staticmethod
+    def uri_result_type(resource):
+        try:
+            table = _split_connection_string(resource.partition('?')[0])[1]
+        except RequestValidationError:
+            table = None
+        return 'sqlite_table' if table else 'sqlite_database'
+
+    @staticmethod
+    def execution_facts(result):
+        """A missing database or table, or a non-database file, is a request failure (exit 2);
+        any other failed read (permissions, corruption) is a failed analysis (exit 3)."""
+        codes = {entry.get('code') for entry in result.get('meta', {}).get('errors', [])} if isinstance(result, dict) else set()
+        cause = FailureCause.INVALID_REQUEST if 'invalid_request' in codes else FailureCause.ANALYSIS
+        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE, failure_cause=cause)
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -170,72 +218,28 @@ class SQLiteAdapter(ResourceAdapter):
 
         Args:
             resource: sqlite:///path/to/db.db[/table] — accepted with or
-                without the sqlite:// prefix; _parse_connection_string
+                without the sqlite:// prefix; _split_connection_string
                 strips it if present, so both direct construction
                 (SQLiteAdapter("sqlite:///x.db")) and router construction
                 (bare "/x.db") work unchanged.
             query: Unused — sqlite:// supports no query parameters
 
         Raises:
-            ValueError: When no path is given or the format is invalid
+            RequestValidationError (a ValueError): When no path is given
         """
         connection_string = resource
 
         # Validate connection string is not empty (after required check)
         if not connection_string:
-            raise ValueError(
+            raise RequestValidationError(
                 "SQLiteAdapter requires a non-empty connection string. "
                 "Use SQLiteAdapter('sqlite:///path/to/db.db')"
             )
 
         self.connection_string = connection_string
-        self.db_path: Optional[str] = None
-        self.table: Optional[str] = None
         self._connection: Optional[sqlite3.Connection] = None
-        self._parse_connection_string(connection_string)
-
-    def _parse_connection_string(self, uri: str):
-        """Parse sqlite:// URI into components.
-
-        Args:
-            uri: Connection URI (sqlite:///path/to/db.db[/table])
-        """
-        if not uri or uri == "sqlite://":
-            raise ValueError("SQLite URI requires database path: sqlite:///path/to/db.db")
-
-        # Remove sqlite:// prefix
-        if uri.startswith("sqlite://"):
-            uri = uri[9:]
-
-        # Handle absolute vs relative paths
-        # sqlite:///absolute/path (three slashes = absolute)
-        # sqlite://./relative/path (two slashes = relative)
-        if uri.startswith('/'):
-            # Absolute path
-            path_part = uri
-        else:
-            # Relative path
-            path_part = uri
-
-        # Parse path/table
-        parts = path_part.split('/')
-
-        # Find the .db file in the path
-        db_parts = []
-        table_found = False
-        for i, part in enumerate(parts):
-            if table_found:
-                break
-            db_parts.append(part)
-            is_db = part.endswith('.db') or part.endswith('.sqlite') or part.endswith('.sqlite3')
-            if not is_db:
-                continue
-            if i + 1 < len(parts):
-                self.table = '/'.join(parts[i+1:])
-                table_found = True
-            break
-
-        self.db_path = '/'.join(db_parts) if db_parts else path_part
+        db_path, self.table = _split_connection_string(connection_string)
+        self.db_path: Optional[str] = db_path
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get or create SQLite connection.
@@ -253,7 +257,7 @@ class SQLiteAdapter(ResourceAdapter):
                 raise ValueError("No database path specified")
 
             if not os.path.exists(self.db_path):
-                raise FileNotFoundError(f"Database file not found: {self.db_path}")
+                raise MissingDatabaseError(f"Database file not found: {self.db_path}")
 
             if not os.access(self.db_path, os.R_OK):
                 raise PermissionError(f"Database file is not readable: {self.db_path}")
@@ -266,10 +270,7 @@ class SQLiteAdapter(ResourceAdapter):
                 # Verify the file is actually a valid SQLite database
                 self._connection.execute("SELECT sqlite_version()")
             except sqlite3.DatabaseError as e:
-                raise IOError(
-                    f"Cannot open '{self.db_path}': file is not a valid SQLite database "
-                    f"(corrupt or encrypted): {e}"
-                ) from e
+                self._raise_database_error(e, f"Cannot open '{self.db_path}'")
             except sqlite3.OperationalError as e:
                 raise IOError(f"Cannot open database '{self.db_path}': {e}") from e
 
@@ -297,9 +298,17 @@ class SQLiteAdapter(ResourceAdapter):
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
         except sqlite3.DatabaseError as e:
-            raise IOError(f"Database error during query: {e}") from e
+            self._raise_database_error(e, "Database error during query")
         except sqlite3.OperationalError as e:
             raise RuntimeError(f"Query failed: {e}") from e
+
+    def _raise_database_error(self, error: sqlite3.DatabaseError, context: str) -> NoReturn:
+        """A file that is not a database is the wrong resource (exit 2); corruption and other
+        database errors are a failed read (IOError, exit 3). SQLite reports a non-database
+        file only on the first read, not at connect (BACK-2521)."""
+        if getattr(error, 'sqlite_errorcode', None) == sqlite3.SQLITE_NOTADB:
+            raise NotADatabaseError(f"{self.db_path} is not a SQLite database (or it is encrypted)") from error
+        raise IOError(f"{context}: {error}") from error
 
     def _execute_single(self, query: str, params: tuple = ()) -> Optional[Dict[str, Any]]:
         """Execute a query and return single result as dict.
@@ -451,12 +460,12 @@ class SQLiteAdapter(ResourceAdapter):
             element_data = self.get_element(self.table)
             if element_data:
                 return element_data
-            raise ValueError(f"Table not found: {self.table}")
+            raise RequestValidationError(f"Table not found: {self.table}")  # plan rule 9: exit 2, not a zero
 
         # Validate connection first (checks file existence, permissions, and validity)
         self._get_connection()
 
-        # db_path is guaranteed non-None after successful _parse_connection_string
+        # db_path is guaranteed non-None after successful _split_connection_string
         if not self.db_path:
             raise ValueError("No database path available after connection")
 

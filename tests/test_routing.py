@@ -845,7 +845,7 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
         )
 
         with patch('sys.stderr'), \
-             patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+             patch('sys.exit', side_effect=SystemExit(2)) as mock_exit:
             with self.assertRaises(SystemExit):
                 generic_adapter_handler(
                     ElementAdapter,
@@ -856,7 +856,7 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
                     mock_args
                 )
 
-            mock_exit.assert_called_once_with(1)
+            mock_exit.assert_called_once_with(2)  # invalid request, BACK-2521
 
     def test_file_not_found_error_handling(self):
         """Verify FileNotFoundError is caught gracefully in adapter init.
