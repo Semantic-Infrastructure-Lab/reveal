@@ -13,11 +13,15 @@ hit; when the hits shown were cut, the router prints the ``⚠ Truncated hits: .
 this (``print_result_control_notes``), so no renderer here says it.
 """
 
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
 from ..utils import safe_json_dumps
-from ..utils.warning_render import render_meta_warnings
+from ..utils.warning_render import meta_warning_lines, render_meta_warnings
+
+
+FORMATS = ('text', 'json', 'grep')
 
 
 def render_grep(result: Dict[str, Any], output_format: str) -> None:
@@ -25,11 +29,25 @@ def render_grep(result: Dict[str, Any], output_format: str) -> None:
         print(safe_json_dumps(_json_view(result)))
     elif result.get('error'):
         return  # the router has reported it
+    elif output_format == 'grep':
+        _render_rows(result)
     elif 'files' in result:
         _render_dir_text(result)
         render_meta_warnings(result)  # files the search could not read (BACK-2520)
     else:
         _render_file_text(result)
+
+
+def _render_rows(result: Dict[str, Any]) -> None:
+    """``path:line:text`` per hit, as ``ast://`` and ``check`` render grep (BACK-2530). Warnings go to
+    stderr so every stdout line stays a row."""
+    files = result['files'] if 'files' in result else [result]
+    for entry in files:
+        for group in entry.get('groups', []):
+            for hit in group['hits']:
+                print(f"{entry['path']}:{hit['line']}:{hit['text']}")
+    for line in meta_warning_lines(result):
+        print(line, file=sys.stderr)
 
 
 def _json_groups(groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

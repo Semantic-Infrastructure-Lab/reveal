@@ -2851,7 +2851,7 @@ reveal file.py --format text         # an explicit --format always wins
 
 `REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal metrics`, `reveal check`, …). An explicit `--format` on the command line overrides it.
 
-**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for single-file structure and element views. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note).
+**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `--grep` on a file or directory (one `path:line:text` row per hit), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for single-file structure and element views. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note).
 
 `--output FORMAT=PATH` writes a file with supported URI requests, `reveal check`, and adapter-backed commands. It repeats for several destinations; FORMAT alone selects stdout. A requested JSON file is written even with JSON stdout. The retired `--also-json PATH` spelling follows the same rule. Unsupported formats and two stdout destinations exit 2 before analysis; a failed file write exits 3 while the primary answer and other successful files survive. Ordinary file/directory views reject file sinks rather than silently ignoring them.
 

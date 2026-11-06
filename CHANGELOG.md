@@ -100,6 +100,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- `reveal FILE --grep P --format grep` and `reveal DIR --grep P --format grep` print one `path:line:text` row per hit, with warnings on stderr; they printed the text view. `--format typed` with `--grep` exits 2 naming `text`, `json` and `grep` instead of printing text (BACK-2530).
+
 - `--boundary`, `--inputs`, `--outputs`, `--varflow` and `--flow` on deeply nested code (a few hundred nested calls, as in generated parsers) printed a Python `RecursionError` traceback and exited 1. They now exit 3 with one line naming the flag and the element, print no partial answer, and `reveal_nav` reports the same message as a tool error (BACK-2529).
 
 - A C file whose last line is an `#include` with no final newline parses cleanly: `check` exited 3 ("did not parse cleanly") on it, even a single `#include <stdio.h>`, and `imports://` would have listed it as failed (BACK-2501).
