@@ -37,6 +37,51 @@ def parse_equality_value(key: str, value: str) -> Dict[str, Any]:
 ALL_OP = 'all'
 
 
+# Filter keys whose element value is a count (``lines`` reads ``line_count``, ``callers`` counts
+# ``called_by``); a comparison of one with a non-number can never match.
+NUMERIC_FILTER_KEYS = frozenset({'lines', 'line_count', 'complexity', 'depth', 'callers', 'line'})
+_ORDERING_OPS = frozenset({'>', '<', '>=', '<='})
+_TEXT_OPS = frozenset({'~=', '!~', 'glob'})
+
+
+def _is_number(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    try:
+        float(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _non_numbers(condition: Dict[str, Any]) -> List[str]:
+    """The parts of one condition's value that are not numbers."""
+    op, value = condition.get('op'), condition.get('value')
+    if op == '..':
+        return [end for end in str(value).split('..') if end and not _is_number(end)]
+    if op == 'in':
+        return [str(part) for part in value or () if not _is_number(part)]
+    return [] if _is_number(value) else [str(value)]
+
+
+def validate_filter_values(query: Dict[str, Any]) -> None:
+    """Reject a filter value that can never match (BACK-2531): a numeric field, or an ordering
+    comparison of any field, given a non-number (``complexity>abc``, ``complexity>>3``,
+    ``name>a``). Raises ValueError, which the adapter reports as an invalid request (exit 2)."""
+    for key, condition in condition_pairs(query):
+        op = condition.get('op')
+        if op in _TEXT_OPS or not (key in NUMERIC_FILTER_KEYS or op in _ORDERING_OPS):
+            continue
+        bad = _non_numbers(condition)
+        if bad:
+            what = f'{key} is a number' if key in NUMERIC_FILTER_KEYS else f"'{op}' compares numbers"
+            raise ValueError(
+                f"filter on {key!r}: {what}, and {', '.join(repr(b) for b in bad)} is not, "
+                "so it would match nothing. See: reveal help://ast")
+
+
 def condition_pairs(query: Dict[str, Any]) -> Iterator[Tuple[str, Dict[str, Any]]]:
     """Each ``(key, condition)`` of *query*, one pair per condition of a repeated key."""
     for key, condition in query.items():

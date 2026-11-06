@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, cast
 
 from .queries import (
-    parse_query, format_query,
+    condition_pairs, parse_query, format_query, validate_filter_values,
     extract_show_param as _extract_show_param,
     extract_builtins_param as _extract_builtins_param,
     extract_reveal_type_param as _extract_reveal_type_param,
@@ -19,7 +19,8 @@ from .analysis import (
     traversal_failed_warning,
     StructureList, try_add_file_structure,
 )
-from .filtering import apply_filters, matches_decorator, find_unknown_filter_keys, outline_plan
+from .filtering import (apply_filters, matches_decorator, find_unknown_filter_keys, normalize_type_condition,
+                        outline_plan)
 from .help import get_help as _get_help, get_schema as _get_schema
 from .renderer import AstRenderer
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
@@ -180,6 +181,51 @@ def _unknown_filter_key_warning(structures: List[Dict[str, Any]], filtered: List
 _DECORATORS_NOT_EXTRACTED = frozenset({'javascript', 'cpp', 'dart', 'gdscript'})
 
 
+def _requested_types(query: Dict[str, Any]) -> List[str]:
+    """The categories a query's ``type=`` / ``type=a|b`` conditions name, normalized."""
+    wanted: List[str] = []
+    for key, condition in condition_pairs(query):
+        normalized = normalize_type_condition(condition) if key == 'type' else {}
+        if normalized.get('op') == '==':
+            wanted.append(str(normalized['value']))
+        elif normalized.get('op') == 'in':
+            wanted.extend(str(v) for v in normalized['value'])
+    return list(dict.fromkeys(wanted))
+
+
+def _types_present(structures: List[Dict[str, Any]]) -> set:
+    """Every category ``type=`` can match in the scan, ``methods`` included (see _type_value)."""
+    present: set = set()
+    for structure in structures:
+        for element in structure.get('elements', []):
+            present.add(str(element.get('category', '')))
+            if element.get('category') == 'functions' and element.get('owner') and element.get('method') is not False:
+                present.add('methods')
+    present.discard('')
+    return present
+
+
+def _unknown_type_value_warning(structures: List[Dict[str, Any]], filtered: List[Dict[str, Any]],
+                                query: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """A zero-result ``type=`` naming no category any scanned element has: likely a misspelling
+    (``type=functoin``), not a genuine zero. Types differ by language, so this names the ones
+    present rather than rejecting the value (BACK-2531)."""
+    if filtered or 'type' not in query:
+        return None
+    present = _types_present(structures)
+    missing = [w for w in _requested_types(query) if w not in present]
+    if not missing or not present:
+        return None
+    return {
+        'type': 'unknown_type_value',
+        'message': (
+            f"No scanned element has type {', '.join(repr(m) for m in missing)} "
+            f"(types here: {', '.join(sorted(present))}); a misspelled type reads as a genuine zero. "
+            "See: reveal help://ast"
+        ),
+    }
+
+
 def _decorator_not_extracted_warning(structures: List[Dict[str, Any]], filtered: List[Dict[str, Any]],
                                      query: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """A zero-result decorator= query over files whose language never extracts decorators:
@@ -249,6 +295,7 @@ def _query_warnings(structures: List[Dict[str, Any]], filtered: List[Dict[str, A
         _degraded_conformance_warning(controlled),
         unknown_sort_field_warning(control.sort_field, filtered),  # BACK-1423
         _unknown_filter_key_warning(structures, filtered, query),
+        _unknown_type_value_warning(structures, filtered, query),  # BACK-2531
         _decorator_not_extracted_warning(structures, filtered, query),  # BACK-2265
         _unfiltered_ranking_warning(controlled),
         dict(_COMPLEXITY_IS_UNWEIGHTED) if 'complexity' in query else None,
@@ -398,7 +445,9 @@ class AstAdapter(ResourceAdapter):
             cleaned_query, self.show_mode = _extract_show_param(cleaned_query)
             cleaned_query, self.include_builtins = _extract_builtins_param(cleaned_query)
             cleaned_query, self.reveal_type_var = _extract_reveal_type_param(cleaned_query)
-            self.query = parse_query(cleaned_query)
+            query = parse_query(cleaned_query)
+            validate_filter_values(query)  # BACK-2531: exit 2 before any scan
+            self.query = query
         else:
             self.query = {}
             self.result_control = ResultControl()
