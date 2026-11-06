@@ -15,6 +15,22 @@ def _print_issue_count_line(result: dict) -> None:
         print(f"\n{line}")
 
 
+def _print_hotspots(result: Dict[str, Any]) -> None:
+    """The hotspots=true ranking, each file with its provenance tag, and the findings verdict (BACK-2149)."""
+    if result.get('hotspots'):
+        print(f"\nTop Hotspots ({len(result['hotspots'])}):")
+        for i, h in enumerate(result['hotspots'], 1):
+            tag = f"  [{h['provenance']}]" if h.get('provenance') else ''
+            print(f"\n{i}. {h['file']}{tag}")
+            print(f"   Quality: {h['quality_score']:.1f}/100 | Score: {h['hotspot_score']:.1f}")
+            print(f"   Issues: {', '.join(h['issues'])}")
+    summary = result.get('summary', {})
+    if 'has_findings' in summary:
+        verdict = 'yes' if summary['has_findings'] else 'none'
+        print(f"\nFindings:   {verdict} (a file below quality 70 or a function above complexity 20, "
+              "over every analysed file before filters and cuts)")
+
+
 def _print_test_scope(result: dict) -> None:
     """Describe the ranking policy without relabelling aggregate totals."""
     scope = result.get('test_scope')
@@ -110,18 +126,7 @@ class StatsRenderer:
             print(f"Complexity: {s['avg_complexity']:.2f} (avg)")
             print(f"Quality:    {s['avg_quality_score']:.1f}/100")
 
-            # Show hotspots if present
-            if 'hotspots' in result and result['hotspots']:
-                print(f"\nTop Hotspots ({len(result['hotspots'])}):")
-                for i, h in enumerate(result['hotspots'], 1):
-                    tag = f"  [{h['provenance']}]" if h.get('provenance') else ''
-                    print(f"\n{i}. {h['file']}{tag}")
-                    print(f"   Quality: {h['quality_score']:.1f}/100 | Score: {h['hotspot_score']:.1f}")
-                    print(f"   Issues: {', '.join(h['issues'])}")
-            if 'has_findings' in s:
-                verdict = 'yes' if s['has_findings'] else 'none'
-                print(f"\nFindings:   {verdict} (a file below quality 70 or a function above complexity 20, "
-                      "over every analysed file before filters and cuts)")
+            _print_hotspots(result)
             _print_test_scope(result)
             _print_issue_count_line(result)
             render_meta_warnings(result)
