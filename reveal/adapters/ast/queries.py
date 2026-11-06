@@ -99,6 +99,10 @@ def _split_alternatives(value: Any) -> List[str]:
 
 def _condition(op: str, value: Any) -> Dict[str, Any]:
     """The filter condition of one parsed ``key op value``."""
+    if op == '=' and isinstance(value, str) and value.startswith('='):
+        # ``complexity==5``: the shared parser reads '=' and leaves '=5' as the value, which
+        # matched nothing; '==' is equality, as it reads (BACK-2531).
+        value = value[1:]
     if isinstance(value, str) and op not in ('~=', '!~'):
         # Keep numeric literals distinct from actual true/false predicates.
         value = int(value) if value in ('0', '1') else coerce_value(value)

@@ -64,3 +64,14 @@ def test_matching_type_has_no_type_warning(tree, query):
     data = json.loads(_run_reveal_direct(f'ast://{tree}?{query}', '--format', 'json').stdout)
     assert data['results']
     assert not [w for w in data['meta']['warnings'] if w['type'] == 'unknown_type_value']
+
+
+@pytest.mark.parametrize('doubled, single', [('complexity==2', 'complexity=2'), ('name==f', 'name=f'),
+                                             ('type==function', 'type=function')])
+def test_double_equals_is_equality(tree, doubled, single):
+    # '==' left its second '=' in the value, so it matched nothing (exit 0, no warning).
+    def names(query):
+        result = _run_reveal_direct(f'ast://{tree}?{query}', '--format', 'json')
+        assert result.returncode == 0, result.stderr
+        return sorted(r['name'] for r in json.loads(result.stdout)['results'])
+    assert names(single) and names(doubled) == names(single)
