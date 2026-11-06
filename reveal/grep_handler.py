@@ -21,8 +21,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .defaults import DisplayDefaults
 from .utils.lines import split_lines
-from .utils.results import note_truncation, slice_items
-from .utils.path_utils import failure_of
+from .utils.results import AnalysisCompleteness, ExecutionFacts, note_truncation, slice_items
+from .utils.path_utils import analysis_skipped_warning, failure_of
 
 logger = logging.getLogger(__name__)
 
@@ -298,16 +298,19 @@ def _collect_dir_results(
     Each file result is ``{'path', 'file', 'hits'}``: the POSIX path, the ``Path``, and the
     hit line numbers. Text and structure are read later, for the hits shown.
 
-    ``scope`` is what the walk searched and what it left out: ``files_searched``, and
-    ``hidden``, the entries (files and pruned directories) skipped by ``.gitignore``,
-    ``--exclude`` or REVEAL_IGNORE, tallied as the directory view does. A search of a
-    gitignored directory said "No matches found" as if it had looked (BACK-1546).
+    ``scope`` is what the walk searched and what it left out: ``files_searched``, the files
+    read; ``hidden``, the entries (files and pruned directories) skipped by ``.gitignore``,
+    ``--exclude`` or REVEAL_IGNORE, tallied as the directory view does; and ``unreadable``,
+    ``(path, cause)`` for each file it could not read. A search of a gitignored directory
+    said "No matches found" as if it had looked (BACK-1546); an unreadable file was skipped,
+    counted as searched and never named (BACK-2520).
     """
     from .utils.path_utils import DISPLAY, HiddenTally, to_posix, walk_tree
     hidden = HiddenTally()  # what the user can act on: gitignore, --exclude, REVEAL_IGNORE
     exts = {e.lower().lstrip('.') for e in include_extensions} if include_extensions else None
 
     file_results: List[Dict[str, Any]] = []
+    unreadable: List[Tuple[str, str]] = []
     total_hits = 0
     searched = 0
     for root_path, _dirs, files in walk_tree(dir_path, DISPLAY, exclude_patterns=exclude_patterns,
@@ -321,16 +324,29 @@ def _collect_dir_results(
                 continue
             if fpath.suffix == '' and _looks_binary(fpath):
                 continue
-            searched += 1
             try:
                 hit_lines = _hit_lines(_read_lines(fpath), compiled)
-            except (OSError, UnicodeDecodeError):
+            except (OSError, UnicodeDecodeError) as e:
+                unreadable.append((to_posix(fpath), failure_of(e).cause))
                 continue
+            searched += 1
             if not hit_lines:
                 continue
             total_hits += len(hit_lines)
             file_results.append({'path': to_posix(fpath), 'file': fpath, 'hits': hit_lines})
-    return file_results, total_hits, {'files_searched': searched, 'hidden': dict(hidden)}
+    return file_results, total_hits, {'files_searched': searched, 'hidden': dict(hidden),
+                                      'unreadable': unreadable}
+
+
+def grep_execution_facts(result: Dict[str, Any]) -> ExecutionFacts:
+    """A returned (not failed) search is complete unless it lost files it had to read.
+
+    A failed result keeps its legacy exit 1 through ``conclude_outcome``; this is read only
+    for an answer that was produced (BACK-2520).
+    """
+    lost = any(w.get('type') == 'analysis_failed'
+               for w in (result.get('meta') or {}).get('warnings', []))
+    return ExecutionFacts(AnalysisCompleteness.INCOMPLETE if lost else AnalysisCompleteness.COMPLETE)
 
 
 def grep_directory(path: str, pattern: str, args: Namespace,
@@ -348,7 +364,11 @@ def grep_directory(path: str, pattern: str, args: Namespace,
         getattr(args, 'exclude', None) or [], include_extensions)
     result['total_hits'] = total_hits
     result['files_matched'] = len(file_results)
+    lost = analysis_skipped_warning(scope.pop('unreadable'), Path(path),
+                                    'the search is incomplete; their matches are missing')
     result.update(scope)
+    if lost:
+        result['meta'] = {'warnings': [lost]}
 
     # One cut over every hit in walk order, then text + structure for the shown files only.
     pairs = [(i, n) for i, r in enumerate(file_results) for n in r['hits']]

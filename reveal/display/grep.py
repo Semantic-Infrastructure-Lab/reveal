@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ..utils import safe_json_dumps
+from ..utils.warning_render import render_meta_warnings
 
 
 def render_grep(result: Dict[str, Any], output_format: str) -> None:
@@ -26,6 +27,7 @@ def render_grep(result: Dict[str, Any], output_format: str) -> None:
         return  # the router has reported it
     elif 'files' in result:
         _render_dir_text(result)
+        render_meta_warnings(result)  # files the search could not read (BACK-2520)
     else:
         _render_file_text(result)
 
