@@ -39,38 +39,52 @@ def parse_failure_warning(failed_files: List[str], base: Optional[Path] = None) 
 
 
 def file_loss_warnings(analysis: ImportAnalysis, base: Optional[Path] = None, *,
-                       spell: Optional[Callable[[Optional[str]], Optional[str]]] = None) -> List[WarningEntry]:
+                       spell: Optional[Callable[[Optional[str]], Optional[str]]] = None,
+                       within: Optional[Callable[[Path], bool]] = None) -> List[WarningEntry]:
     """The per-file facts of one import build, each under its own cause (BACK-2190).
 
     ``files_failed`` holds three different things, and the user's next step differs: a file
     tree-sitter recovered with ERROR nodes (``partial_parse``: its recovered imports are edges), a
     file never parsed because it could not be read (``analysis_failed``, named by the OSError type:
     no tree, its imports are missing) and a file a dead pool worker took (``worker_lost``).
-    ``spell`` names each file as the answer does (imports' ``_path_display``) instead of ``base``."""
+    ``spell`` names each file as the answer does (imports' ``_path_display``) instead of ``base``.
+    ``within`` keeps only the files an answer counts as its own loss: an imports view that lists the
+    files under its path counts a failure outside it apart (``files_failed_outside_target_count``,
+    BACK-2438), so that failure is no warning there (BACK-2524)."""
     from ...utils.path_utils import analysis_skipped_warning
     name = _spelled(spell)
     if spell is not None:
         base = None
-    lost = set(analysis.files_lost)
+    counted = (lambda path: True) if within is None else within
+    lost = {path for path in analysis.files_lost if counted(path)}
     partial: List[str] = []
     unread: List[Tuple[str, str]] = []
     for path in analysis.files_failed:
-        if path in lost:
+        if path in lost or not counted(path):
             continue
-        extraction = analysis.extractions.get(path)
-        parse = (extraction.diagnostics.get('parse') or {}) if extraction is not None else {}
-        read_error = extraction.read_error if extraction is not None else None
-        # Only a file whose tree was never built is unreadable (status 'unavailable', or an OSError);
-        # a failed file with no such record is a parse failure, as it was before BACK-2190.
-        if read_error or parse.get('status') == 'unavailable':
-            unread.append((name(path), f'{read_error}: {parse.get("reason", "")}' if read_error
-                           else str(parse.get('reason') or 'not parsed')))
-        else:
+        cause = _unread_cause(analysis, path)
+        if cause is None:
             partial.append(name(path))
+        else:
+            unread.append((name(path), cause))
     warnings = [parse_failure_warning(partial, base), worker_lost_warning([name(p) for p in lost], base),
                 analysis_skipped_warning(unread, base, 'analysis is incomplete; its imports are missing from the '
                                                        'import graph')]
     return [w for w in warnings if w]
+
+
+def _unread_cause(analysis: ImportAnalysis, path: Any) -> Optional[str]:
+    """Why a failed file has no tree, or None for a parse failure. Only a file whose tree was never
+    built is unreadable (status 'unavailable', or an OSError); a failed file with no such record is a
+    parse failure, as it was before BACK-2190."""
+    extraction = analysis.extractions.get(path)
+    parse = (extraction.diagnostics.get('parse') or {}) if extraction is not None else {}
+    read_error = extraction.read_error if extraction is not None else None
+    if read_error:
+        return f'{read_error}: {parse.get("reason", "")}'
+    if parse.get('status') == 'unavailable':
+        return str(parse.get('reason') or 'not parsed')
+    return None
 
 
 def _spelled(spell: Optional[Callable[[Optional[str]], Optional[str]]]) -> Callable[[Any], str]:

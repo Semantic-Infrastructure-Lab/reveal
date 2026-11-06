@@ -62,7 +62,7 @@ def test_external_text_names_the_failed_file_under_the_path_and_counts_the_outsi
     (project / 'c.ts').write_text(BROKEN, encoding='utf-8')
     response = _run_reveal_direct(f'imports://{project}?external')
     assert response.returncode == 3
-    assert '1 file(s) under this path could not be fully analyzed' in response.stdout
+    assert response.stdout.count('1 file(s) parsed with errors') == 1  # the meta warning (BACK-2524)
     assert 'c.ts' in response.stdout
     assert '1 file(s) outside this path could not be fully analyzed' in response.stdout
 
@@ -71,4 +71,4 @@ def test_external_text_says_outside_failures_do_not_make_it_incomplete(project):
     response = _run_reveal_direct(f'imports://{project}?external')
     assert response.returncode == 0
     assert '1 file(s) outside this path could not be fully analyzed' in response.stdout
-    assert 'file(s) under this path could not be fully analyzed' not in response.stdout
+    assert 'parsed with errors' not in response.stdout

@@ -750,7 +750,7 @@ class ImportsRenderer:
         print(f"Unused Imports: {count}")
         print(f"{'='*60}\n")
 
-        ImportsRenderer._render_external_failures(result.get('metadata', {}))
+        ImportsRenderer._render_outside_failures(result.get('metadata', {}), 'these unused imports')
 
         # A language with no import extractor (e.g. Kotlin, Swift, Scala) was
         # never analyzed at all — count == 0 in that case means "not checked,"
@@ -826,7 +826,6 @@ class ImportsRenderer:
         print(f"Circular Dependencies: {count} cycle group{'s' if count != 1 else ''}")
         print(f"{'='*60}\n")
         ImportsRenderer._render_edge_rule(result)
-        ImportsRenderer._render_input_loss(result.get('metadata', {}))
 
         if count == 0:
             ImportsRenderer._render_no_cycles(result)
@@ -872,7 +871,7 @@ class ImportsRenderer:
             print(f"  ℹ️  {note}\n")
             print(f"  Add layer rules to .reveal.yaml to enable this check.\n")
         elif count == 0:
-            if _discovery_incomplete(result):
+            if _discovery_incomplete(result) or _incomplete(result):
                 print("  No layer violations observed in the available graph; analysis is incomplete.\n")
             else:
                 print(f"  ✅ {note or 'No violations found'}\n")
@@ -906,40 +905,14 @@ class ImportsRenderer:
             print(f"  Cycles Found:  {'❌ Yes' if has_cycles else '✅ No'}")
 
     @staticmethod
-    def _render_input_loss(metadata: dict) -> None:
-        """Files the graph is short of: parse failures (named) and pool-worker losses. Shared by the
-        base view and ?circular, whose text said 'No circular dependencies found!' beside them (BACK-2502)."""
-        # Honesty note (BACK-982): a supported file that tree-sitter could not
-        # parse silently contributed zero imports/symbols above -- indistinguishable
-        # from a genuinely empty file without this. Also means Cycles Found can
-        # under-report: a real cycle running through one of these is invisible.
-        files_lost_count = metadata.get('files_lost_count', 0)
-        lost = set(metadata.get('files_lost', []))
-        files_failed_count = metadata.get('files_failed_count', 0) - files_lost_count
+    def _render_outside_failures(metadata: dict, subject: str) -> None:
+        """The failures a path-scoped answer counts apart (BACK-2438): not a loss of this answer, so
+        not a warning. The files it does count as lost are its meta warnings, which render_structure
+        prints once for every view (BACK-2524)."""
         outside = metadata.get('files_failed_outside_target_count')
         if outside:
-            print(f"  {outside} file(s) outside this path failed to parse; they cannot change these imports, "
-                  "so they do not make the listing incomplete")
-            print()
-        if files_failed_count:
-            # Their recovered imports ARE in the graph (BACK-1460); only what sat
-            # inside the error region is missing (BACK-1598 wording).
-            print(f"  ⚠️  {files_failed_count} file(s) parsed with errors — their imports may be incomplete")
-            print("      (import/cycle results can under-report; unused imports not checked in them)")
-            parse_failed = [fp for fp in metadata.get('files_failed', []) if fp not in lost]
-            for fp in parse_failed[:10]:
-                print(f"      - {fp}")
-            if files_failed_count > 10:
-                print(f"      ... and {files_failed_count - 10} more")
-            print()
-        # A file lost to a dead pool worker was never parsed (BACK-1753).
-        if files_lost_count:
-            print(f"  ⚠️  {files_lost_count} file(s) not analyzed — a pool worker died")
-            print("      (their imports and structure are missing; results can under-report)")
-            for fp in sorted(lost)[:10]:
-                print(f"      - {fp}")
-            if files_lost_count > 10:
-                print(f"      ... and {files_lost_count - 10} more")
+            print(f"  {outside} file(s) outside this path could not be fully analyzed; they cannot change "
+                  f"{subject}, so they do not make it incomplete")
             print()
 
     @staticmethod
@@ -971,7 +944,7 @@ class ImportsRenderer:
             print("      (these are not counted above; import graph excludes them)")
             print()
 
-        ImportsRenderer._render_input_loss(metadata)
+        ImportsRenderer._render_outside_failures(metadata, 'these imports')
         # The scanned path, not the renderer's `resource` argument, which reaches
         # here as '.' and widened a copy-pasted query to the whole cwd (BACK-1508).
         scope = cwd_path('', str(display_path))
@@ -1072,25 +1045,6 @@ class ImportsRenderer:
         print('}')
 
     @staticmethod
-    def _render_external_failures(metadata: dict) -> None:
-        """Disclose failed target inputs and separately counted outside loss for local tables."""
-        lost = set(metadata.get('files_lost', []))
-        failed = [fp for fp in metadata.get('files_failed', []) if fp not in lost]
-        failed_count = metadata.get('files_failed_count', 0) - metadata.get('files_lost_count', 0)
-        if failed_count:
-            print(f"  ⚠️  {failed_count} file(s) under this path could not be fully analyzed — their imports may be incomplete")
-            for fp in failed[:10]:
-                print(f"      - {fp}")
-            if failed_count > 10:
-                print(f"      ... and {failed_count - 10} more")
-        if metadata.get('files_lost_count'):
-            print(f"  ⚠️  {metadata['files_lost_count']} file(s) not analyzed — a pool worker died")
-        outside = metadata.get('files_failed_outside_target_count')
-        if outside:
-            print(f"  {outside} file(s) outside this path could not be fully analyzed; they cannot change this table, "
-                  "so they do not make it incomplete")
-
-    @staticmethod
     def _render_external(result: dict, resource: str, verbose: bool) -> None:
         """Render ?external: the package table, most used first (20 per list unless --verbose)."""
         external, stdlib = result.get('external_packages', []), result.get('stdlib_packages', [])
@@ -1100,7 +1054,7 @@ class ImportsRenderer:
         print(f"  {result.get('total_imports', 0)} import(s) in {result.get('total_files', 0)} file(s): "
               f"{result.get('internal_imports', 0)} internal, {len(external)} unresolved package(s), "
               f"{len(stdlib)} stdlib package(s){scope_note}")
-        ImportsRenderer._render_external_failures(result.get('metadata', {}))
+        ImportsRenderer._render_outside_failures(result.get('metadata', {}), 'this table')
         multi_stack = len({lang for entry in external for lang in entry.get('languages', [])}) > 1
         for title, entries in (('Unresolved packages (third-party or unresolved-local)', external),
                                ('Stdlib packages', stdlib)):
@@ -1130,7 +1084,7 @@ class ImportsRenderer:
         ImportsRenderer._render_edge_rule(result)
 
         if not entries:
-            if _discovery_incomplete(result):
+            if _discovery_incomplete(result) or _incomplete(result):
                 print("  No entry points observed in the available graph; analysis is incomplete.")
             else:
                 print("  No entry points found (every file is imported by at least one other).")
@@ -1792,9 +1746,12 @@ class ImportsAdapter(ResourceAdapter):
             Standardized response dict with contract_version, type, source, etc.
         """
         display = self._display()
-        # Keep legacy file/worker diagnostics in their existing metadata and text paths.
+        # A lost directory, then the files this answer counts as failed (files_failed_count), each
+        # under its cause: every view discloses the loss its exit 3 reports, once (BACK-2524).
         warnings = [warning for warning in self.integrity_warnings(spell=display)
                     if warning.get('type') == 'analysis_incomplete']
+        within = self._analysis_view()._in_scope if failures == 'target' else None
+        warnings.extend(file_loss_warnings(self.analysis, spell=display, within=within))
         if self._scope_hidden:
             warnings.append(self._scope_hidden)
         warnings.extend(self._scan_warnings())

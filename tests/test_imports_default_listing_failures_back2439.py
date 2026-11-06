@@ -87,7 +87,8 @@ def test_text_says_cycles_are_not_determined_and_why(project):
     response = _run_reveal_direct(f'imports://{project}')
     assert response.returncode == 0
     assert 'Cycles Found:  Unknown' in response.stdout
-    assert '1 file(s) outside this path failed to parse' in response.stdout
+    assert '1 file(s) outside this path could not be fully analyzed' in response.stdout
+    assert 'parsed with errors' not in response.stdout  # outside loss is no warning here (BACK-2524)
     assert 'No' not in [line.split(':')[-1].strip() for line in response.stdout.splitlines() if 'Cycles Found' in line]
 
 

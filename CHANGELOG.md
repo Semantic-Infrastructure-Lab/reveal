@@ -95,7 +95,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - D001 and D002 no longer report a function declared on its parent's lines (minified JavaScript) as the parent's duplicate, pointing at the finding's own line; both read bodies by line range, so the pair had the same text by construction (BACK-2500).
 
-- `imports://DIR?circular` text names the files that failed to parse and says the analysis is incomplete, instead of printing "No circular dependencies found!" while exiting 3 (BACK-2502).
+- Every `imports://` view that exits 3 because files failed now names them once, in its text and in JSON `meta.warnings` (`partial_parse`, `analysis_failed` for an unreadable file, `worker_lost`). `?components`, `?entrypoints`, `?rank=fan-in` and `?importers` said nothing, and no view filled `meta.warnings`: only `metadata.files_failed_count` carried the loss. `?circular`, `?entrypoints` and `?violations` with no rows say the analysis is incomplete instead of printing a clean result. A failure outside the path that cannot change `?external`, `?unused` or the default listing is still only counted (BACK-2524, BACK-2502).
 
 - `--help` for `metrics`, `overview`, `surface`, `trace`, `contracts`, `testability`, `pack`, `calls`, `patches` and `architecture` no longer offers `--fail-on findings`, which those commands reject with exit 2; it lists `{none}` and says the command has no findings gate. (BACK-2486)
 

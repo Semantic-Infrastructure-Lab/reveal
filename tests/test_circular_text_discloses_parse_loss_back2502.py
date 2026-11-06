@@ -3,7 +3,7 @@
 With a sibling that failed to parse, ``?circular`` exited 3 and its JSON listed ``files_failed``, but
 the text printed "✅ No circular dependencies found!" and named no file: the green line the BACK-1245
 class was about. The base ``imports://`` view already listed the failed files; both now print the
-same block.
+same block: since BACK-2524 the answer's one ``partial_parse`` meta warning, which names the files.
 """
 from conftest import _run_reveal_direct
 
@@ -11,6 +11,10 @@ from conftest import _run_reveal_direct
 def write(root, files):
     for name, text in files.items():
         (root / name).write_bytes(text.encode('utf-8'))
+
+
+def names_bad_once(stdout):
+    return stdout.count('parsed with errors') == 1 and 'under-report: bad.ts' in stdout
 
 
 def circular(root):
@@ -25,7 +29,7 @@ def test_no_cycles_beside_a_broken_file_is_not_a_green_verdict(tmp_path):
     assert result.returncode == 3, (result.stdout, result.stderr)
     assert 'No circular dependencies found' not in result.stdout
     assert 'analysis is incomplete' in result.stdout
-    assert '- bad.ts' in result.stdout and 'parsed with errors' in result.stdout
+    assert names_bad_once(result.stdout)
 
 
 def test_a_cycle_beside_a_broken_file_names_the_file_too(tmp_path):
@@ -34,7 +38,7 @@ def test_a_cycle_beside_a_broken_file_names_the_file_too(tmp_path):
                      'bad.ts': 'export const = ;\nimport {\n'})
     result = circular(tmp_path)
     assert 'Circular Dependencies: 1 cycle group' in result.stdout
-    assert '- bad.ts' in result.stdout, result.stdout
+    assert names_bad_once(result.stdout), result.stdout
 
 
 def test_a_clean_acyclic_directory_keeps_its_green_line(tmp_path):
@@ -49,4 +53,4 @@ def test_a_clean_acyclic_directory_keeps_its_green_line(tmp_path):
 def test_the_base_view_still_lists_the_failed_file(tmp_path):
     write(tmp_path, {'a.ts': 'export const a = 1;\n', 'bad.ts': 'export const = ;\nimport {\n'})
     result = _run_reveal_direct(f'imports://{tmp_path.as_posix()}')
-    assert 'parsed with errors' in result.stdout and '- bad.ts' in result.stdout, result.stdout
+    assert names_bad_once(result.stdout), result.stdout

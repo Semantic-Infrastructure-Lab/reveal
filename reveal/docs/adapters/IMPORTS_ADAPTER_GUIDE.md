@@ -856,7 +856,10 @@ Failures elsewhere in the scan are counted in `metadata.files_failed_outside_tar
 not make these local answers incomplete. They can hide a cycle, so when any file failed and no cycle was seen,
 `has_cycles` is `null` and the default listing's text says `Cycles Found:  Unknown`;
 a cycle that was found stays `true`.
-`?importers`, `?circular` and fan-in keep exit 3 on any failed file in the scan.
+`?importers`, `?circular`, fan-in, `?entrypoints` and `?components` keep exit 3 on any failed file in the scan.
+Every view names the files it counts as failed in `meta.warnings`, one entry per cause (`partial_parse`
+for a file parsed with errors, `analysis_failed` for one that could not be read, `worker_lost` for one a
+dead pool worker took), and its text prints each warning once; a failure the view counts apart is not a warning.
 Import/file/scanned counts describe the target; unsupported-language and
 unused-not-checked extension counts retain their scan-wide census. Output field
 selection and list caps do not change the execution decision.

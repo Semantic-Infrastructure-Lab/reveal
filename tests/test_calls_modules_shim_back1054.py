@@ -328,10 +328,11 @@ def test_dot_names_nodes_relative_to_the_path_with_slashes(monkeypatch, capsys):
 # --- what the imports build loses, told apart (each guard mutation-checked) ------------------
 
 def test_the_three_kinds_of_failed_file_are_told_apart(tmp_path):
-    """imports puts every failed file in files_failed; ?modules discloses a partial parse, and names a
-    file never parsed (analysis_failed) and one a dead worker took (worker_lost) as lost evidence."""
+    """imports puts every failed file in files_failed; its answer's warnings (which ?modules composes,
+    BACK-2524) disclose a partial parse, and name a file never parsed (analysis_failed) and one a dead
+    worker took (worker_lost), which ?modules counts as lost evidence."""
     from types import SimpleNamespace
-    from reveal.adapters.calls.adapter import _import_file_warnings
+    from reveal.analyzers.imports.diagnostics import file_loss_warnings
     from reveal.analyzers.imports.types import ImportExtraction
     lost, partial, unread = tmp_path / 'lost.py', tmp_path / 'partial.js', tmp_path / 'unread.py'
     analysis = SimpleNamespace(files_lost=[lost], files_failed=[lost, partial, unread], extractions={
@@ -340,7 +341,7 @@ def test_the_three_kinds_of_failed_file_are_told_apart(tmp_path):
         partial: ImportExtraction(parse_failed=True, diagnostics={'parse': {'status': 'partial', 'reason': 'ERROR'}}),
         unread: ImportExtraction(parse_failed=True, read_error='PermissionError',
                                  diagnostics={'parse': {'status': 'unavailable', 'reason': 'denied'}})})
-    warnings = {w['type']: w for w in _import_file_warnings(SimpleNamespace(analysis=analysis), tmp_path)}
+    warnings = {w['type']: w for w in file_loss_warnings(analysis, tmp_path)}
     assert set(warnings) == {'partial_parse', 'worker_lost', 'analysis_failed'}
     assert warnings['partial_parse']['files'] == ['partial.js']
     assert warnings['worker_lost']['files'] == ['lost.py']

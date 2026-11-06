@@ -144,7 +144,7 @@ def test_zero_unused_text_does_not_claim_clean_for_in_target_parse_loss(project)
     assert 'No unused imports observed' in response.stdout
     assert 'analysis is incomplete' in response.stdout
     assert '✅ No unused imports found' not in response.stdout
-    assert 'could not be fully analyzed' in response.stdout
+    assert response.stdout.count('1 file(s) parsed with errors') == 1 and 'broken.py' in response.stdout
 
 
 def test_zero_unused_text_discloses_outside_loss_without_marking_target_incomplete(project):

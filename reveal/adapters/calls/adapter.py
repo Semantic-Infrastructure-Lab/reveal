@@ -469,16 +469,6 @@ _ANSWER_FIELDS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], Tuple[str, ...
 _LOSS_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete', 'worker_lost', 'scan_capped'})
 
 
-def _import_file_warnings(child: Any, base: Path) -> List[WarningEntry]:
-    """The per-file facts of the imports build ?modules read (its answer's meta already names the lost
-    directories). imports counts every such file as failed and exits 3; calls ?modules exited 3 only
-    for a file it could not read, so the three kinds are told apart: a file tree-sitter recovered with
-    ERROR nodes (``partial_parse``, a disclosure: its recovered imports are edges), a file never parsed
-    (unreadable, no tree: ``analysis_failed``) and a file a dead pool worker took (``worker_lost``)."""
-    from ..imports import file_loss_warnings
-    return file_loss_warnings(child.analysis, base)
-
-
 # A name answer that can prove absence: the field it names and its observation count.
 _ABSENCE_TYPES = frozenset({'calls_query', 'calls_callees', 'calls_callees_recursive'})
 _WALK_TOTALS = ('total_edges', 'total_resolved', 'total_unresolved', 'total_ambiguous')
@@ -842,9 +832,12 @@ class CallsAdapter(ResourceAdapter):
         query_format = _FORMAT.read(params) or ''
         if query_format:
             data['_query_format'] = query_format
+        # The imports answer's warnings name its lost directories and each failed file under its cause
+        # (BACK-2524): a file tree-sitter recovered with ERROR nodes is a disclosure (``partial_parse``:
+        # its recovered imports are edges), so only an unreadable file, a lost worker or directory, or a
+        # capped walk is lost evidence here (_LOSS_WARNINGS), where imports exits 3 on all of them.
         composed = self.composed_meta()
-        warnings: List[WarningEntry] = [*(composed.get('warnings', []) if composed else []),
-                                        *_import_file_warnings(child, Path(directory))]
+        warnings: List[WarningEntry] = list(composed.get('warnings', [])) if composed else []
         errors: List[ErrorEntry] = list(composed.get('errors', [])) if composed else []
         lost = bool(errors) or any(w.get('type') in _LOSS_WARNINGS for w in warnings)
         return ResultBuilder.create(

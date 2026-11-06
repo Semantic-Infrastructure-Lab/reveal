@@ -479,6 +479,15 @@ class ResourceAdapter(ABC):
         self._composed_errors = []
         self._composed_confidences = []
 
+        # Several views of one child build (deps:// reads three of one imports:// build) carry the same
+        # disclosure; one loss is one warning (BACK-2524). Only an identical entry is dropped.
+        if warnings_list:
+            distinct: List[Any] = []
+            for warning in warnings_list:
+                if warning not in distinct:
+                    distinct.append(warning)
+            warnings_list = distinct
+
         from reveal.utils.results import ResultBuilder
         return ResultBuilder.create_meta(
             warnings=warnings_list or None,

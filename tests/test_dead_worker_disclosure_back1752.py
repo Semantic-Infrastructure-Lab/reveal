@@ -83,9 +83,9 @@ def test_imports_text_render_says_lost_not_parsed_with_errors(tmp_path, pools, c
     root = _tree(tmp_path)
     adapter = _build(root, pools, _BreaksOnSubmit)
     result = adapter.get_structure()
-    imports_adapter.ImportsRenderer._render_import_summary(result, str(root))
+    imports_adapter.ImportsRenderer.render_structure(result, resource=str(root))
     out = capsys.readouterr().out
-    assert 'pool worker died' in out
+    assert out.count('pool worker died') == 1
     assert 'parsed with errors' not in out
 
 

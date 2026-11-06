@@ -69,8 +69,9 @@ def test_a_file_target_spells_failed_files_from_its_directory(tmp_path):
 def test_the_text_summary_lists_the_same_spelling(tmp_path):
     _project(tmp_path)
     stdout = _run(tmp_path, 'imports://proj/src')
-    assert '      - bad.js' in stdout and '      - ../other/bad.js' not in stdout
-    assert '1 file(s) outside this path failed to parse' in stdout
+    # The meta warning (BACK-2524) names the file as the JSON does.
+    assert 'under-report: bad.js' in stdout and '../other/bad.js' not in stdout
+    assert '1 file(s) outside this path could not be fully analyzed' in stdout
 
 
 def test_files_lost_and_a_windows_spelling_reach_the_answer_with_forward_slashes(tmp_path, monkeypatch):
