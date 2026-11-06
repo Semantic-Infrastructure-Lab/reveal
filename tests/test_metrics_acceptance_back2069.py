@@ -21,6 +21,7 @@ import pytest
 from conftest import _run_reveal_direct as run
 from reveal.adapters.stats.issue_count import COUNTING_RULE, COUNT_FIELD, issue_count_line
 from reveal.rules import RuleRegistry
+from reveal.cli.invocation import RETIREMENTS
 
 pytestmark = pytest.mark.component
 
@@ -227,14 +228,16 @@ def test_a_retired_spelling_prints_its_replacement_and_answers_like_metrics(proj
     assert text.returncode == 0 and text.stderr.count(note) == 1
 
 
-def test_the_hotspots_noun_prints_no_retirement_note(project):
-    """Negative control on a sibling: the hotspots noun composes metrics in-process and is not
-    a retired spelling, so it says nothing about stats://."""
+def test_the_hotspots_noun_prints_only_its_own_retirement_note(project):
+    """Negative control on a sibling: the hotspots noun composes metrics in-process, so it says nothing
+    about stats://. It is retired itself since BACK-2149, so its one note is its own."""
     result = run('hotspots', str(project), '--format', 'json')
     assert result.returncode == 0, result.stderr
-    assert 'deprecated' not in result.stderr
-    assert not [w for w in json.loads(result.stdout).get('meta', {}).get('warnings', [])
-                if w.get('code') == 'retired_spelling']
+    assert 'stats://' not in result.stderr
+    assert [line for line in result.stderr.splitlines() if 'deprecated' in line] == [
+        f"note: {RETIREMENTS['subcommand:hotspots'].text}"]
+    assert [w['field'] for w in json.loads(result.stdout).get('meta', {}).get('warnings', [])
+            if w.get('code') == 'retired_spelling'] == ['subcommand:hotspots']
 
 
 @pytest.mark.parametrize('argv', [lambda d: [f'metrics://{d}?view=everything'],
