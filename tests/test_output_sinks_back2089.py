@@ -34,7 +34,7 @@ def _artifact(path):
 @pytest.mark.parametrize('argv', [
     lambda p, out: ['check', str(p), '--output', f'json={out}'],
     lambda p, out: ['check', str(p / 'a.py'), '--output', f'json={out}'],
-    lambda p, out: ['hotspots', str(p), '--output', f'json={out}'],
+    lambda p, out: ['metrics', str(p), '--hotspots', '--output', f'json={out}'],  # hotspots retired (BACK-2149)
     lambda p, out: [f'ast://{p}', '--output', f'json={out}'],
 ], ids=['check-dir', 'check-file', 'declared-noun', 'uri'])
 def test_a_json_file_sink_writes_what_also_json_wrote(project, tmp_path_factory, argv):

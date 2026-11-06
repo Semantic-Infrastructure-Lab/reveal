@@ -252,7 +252,7 @@ Reveal is useful before deep investigation because it can give you a concise pic
 
 ```bash
 reveal overview .
-reveal hotspots src/
+reveal metrics src/ --hotspots
 reveal 'imports://.?external'
 reveal 'imports://src?circular'
 reveal 'imports://src?violations'
@@ -262,7 +262,7 @@ reveal metrics://src/
 Why it is good for this:
 
 - `overview` gives a compact project map with coverage and drill-down commands
-- `hotspots` points to concentrated complexity and churn
+- `metrics --hotspots` points to concentrated complexity and churn (`--fail-on findings` gates on it)
 - `reveal imports --circular` / `--unused` surface circular and unused imports
 - `imports://` adds lower-level graph queries and layer checks
 - `metrics://` provides project metrics and quality signals

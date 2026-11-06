@@ -5,31 +5,34 @@ category: guide
 
 # hotspots:// Adapter Guide
 
+> **Retired (BACK-2149).** `reveal hotspots` and `hotspots://` answer as before until the cut release,
+> with one note on stderr and a `retired_spelling` entry in JSON `meta.warnings`. Use two commands
+> instead: `reveal metrics <path> --hotspots` for the file ranking and its `--fail-on findings` gate,
+> and `reveal 'ast://<path>?complexity>=10&sort=-complexity&limit=10' --format json` for the function
+> ranking. `has_test_hint` has no replacement field (see [Reading The Output](#reading-the-output)).
+
 `hotspots://` identifies the files and functions most likely to need
 attention: low-quality/high-complexity files (via `metrics://`) and
 high-cyclomatic-complexity functions (via `ast://`). It composes those two
 existing adapters rather than running an independent scan.
 
-## Quick Start
+## Quick Start (the replacements)
 
 ```bash
-reveal hotspots ./src
-reveal hotspots .
-reveal hotspots ./src --top 20
-reveal hotspots . --functions-only
-reveal hotspots . --files-only
-
-reveal 'hotspots://src'
-reveal 'hotspots://.?top=20'
-reveal 'hotspots://.?functions_only=true'
+reveal metrics ./src --hotspots                    # was: reveal hotspots ./src (files), --files-only
+reveal metrics ./src --hotspots --top 20           # was: --top 20 (files)
+reveal metrics . --hotspots --fail-on findings     # was: reveal hotspots . --fail-on findings
+reveal 'ast://.?complexity>=10&sort=-complexity&limit=10' --format json   # was: --functions-only
+reveal 'ast://.?complexity>=15&sort=-complexity&limit=20' --format json   # was: --min-complexity 15 --top 20
 ```
 
-Use JSON when another tool or agent will rank, filter, or store the result:
+The file entries are the same (`hotspot_score`, `quality_score`, `issues`, `details`, the path-only
+`provenance` tag) and `summary.has_findings` is the same predicate, taken over every analysed file
+before any cut, so it no longer depends on `--min-complexity`, `--files-only` or `--functions-only`.
+The function entries are `ast://` rows (`name`, `file`, `line`, `complexity`, ...); text output groups
+them by file, JSON keeps the ranked order.
 
-```bash
-reveal hotspots . --format json
-reveal 'hotspots://.?top=20' --format json
-```
+The rest of this guide describes the retired answer.
 
 ## Query Parameters
 

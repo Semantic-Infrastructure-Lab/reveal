@@ -121,7 +121,9 @@ regressions of existing code, select `.type == "modified" and .complexity_delta 
 
 ### Hotspot Tracking
 
-Reports the top 10 most complex functions on every push to main.
+Reports the 10 worst files and the 10 most complex functions on every push to main; add
+`--fail-on findings` to the first step to fail the job on a file below quality 70 or a function above
+complexity 20.
 
 ```yaml
 # .github/workflows/hotspots.yml
@@ -138,9 +140,12 @@ jobs:
       - uses: actions/checkout@v4
       - run: pip install reveal-cli
 
-      - name: Top 10 complexity hotspots
-        run: reveal hotspots src/ --top 10
-        # Always exits 0 — informational only
+      - name: Top 10 hotspot files
+        run: reveal metrics src/ --hotspots --top 10
+        # Exits 0 unless incomplete (3); --fail-on findings makes it a gate
+
+      - name: Top 10 complex functions
+        run: reveal 'ast://src/?complexity>=10&sort=-complexity&limit=10' --format json
 ```
 
 ### Quality Score Tracking
@@ -262,9 +267,9 @@ review:
 check:
 	reveal check src/
 
-# Complexity hotspots (informational)
+# Complexity hotspots (informational; add --fail-on findings to gate)
 hotspots:
-	reveal hotspots src/ --top 20
+	reveal metrics src/ --hotspots --top 20
 
 # Health dashboard (code, then certificates and DNS)
 health:
@@ -290,9 +295,10 @@ pack:
 
 `ssl:// --check` uses 0 pass / 1 warning / 2 failure, so an expired cert exits 2 there, while `reveal health`
 reports the same cert as a failed check (a finding) and exits 1; `--fail-on none` keeps it advisory. A critical rule violation under `check` is still 1.
-`check` and `health` fail on findings by default. `hotspots` and `pack` are informational:
-they exit 0 unless the request is rejected (2) or the run is incomplete (3), and `hotspots`
-exits 1 only with `--fail-on findings`. Treat 3 as a failure too: it means the finding count
+`check` and `health` fail on findings by default. `metrics --hotspots` and `pack` are informational:
+they exit 0 unless the request is rejected (2) or the run is incomplete (3), and `metrics --hotspots`
+exits 1 only with `--fail-on findings` (a file below quality 70 or a function above complexity 20; the
+retired `hotspots` gates the same way). Treat 3 as a failure too: it means the finding count
 may be wrong. Each command's `--help` ends with its own exit-code block.
 
 ---
@@ -301,7 +307,7 @@ may be wrong. Each command's `--help` ends with its own exit-code block.
 
 **Speed up CI**: `reveal check` and `reveal check --changed` are fast (typically < 5 seconds for medium codebases). No indexing required.
 
-**Baseline first**: Run `reveal hotspots src/` on your main branch before adding the complexity gate — this lets you set a realistic threshold rather than failing immediately.
+**Baseline first**: Run `reveal metrics src/ --hotspots` on your main branch before adding the complexity gate — this lets you set a realistic threshold rather than failing immediately.
 
 **Advisory vs blocking**: add `--fail-on none` for first-time adoption (findings are reported but the run exits 0; an incomplete scan still exits 3), then drop it once the team is used to the output.
 
@@ -312,5 +318,5 @@ may be wrong. Each command's `--help` ends with its own exit-code block.
 ## See Also
 
 - [RECIPES.md](RECIPES.md) — General task recipes (CI is one application of these).
-- [SUBCOMMANDS_GUIDE.md](SUBCOMMANDS_GUIDE.md) — Reference for `check`, `health`, `pack`, `hotspots`.
+- [SUBCOMMANDS_GUIDE.md](SUBCOMMANDS_GUIDE.md) — Reference for `check`, `health`, `pack`, `metrics`.
 - [../QUICK_START.md](../QUICK_START.md) — First-run orientation before wiring into CI.

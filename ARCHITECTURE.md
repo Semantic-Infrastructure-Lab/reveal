@@ -280,7 +280,7 @@ Several subcommands compose adapters into higher-level workflows. The full list 
 | `reveal review <diff>` | `cli/commands/review.py` | diff + check + hotspots + complexity delta |
 | `reveal health <dir>` | `cli/commands/health.py` | CI-oriented: exit 0 pass, 1 findings, 2 usage, 3 a check failed or was incomplete (`--fail-on none` skips 1) |
 | `reveal pack <dir>` | `adapters/pack.py` (declared) | Token-budgeted context snapshots for LLMs |
-| `reveal hotspots <dir>` | `adapters/hotspots.py` (declared) | Complexity + coupling ranking |
+| `reveal hotspots <dir>` | `adapters/hotspots.py` (declared) | Retired (BACK-2149): `reveal metrics <dir> --hotspots` and `ast://<dir>?complexity>=10&sort=-complexity` replace it; it answers until the cut |
 | `reveal dev <cmd>` | `cli/commands/dev.py` | Developer tooling (new-adapter scaffold, etc.) |
 
 `main()` parses the command line once, into an `Invocation`, which names the subcommand. `main._dispatch_and_run` runs a subcommand and the path/URI form the same way: parse with the command's own parser, apply the global flags and `--copy`, and run. A subcommand runs through `cli/routing/subcommand.py`, which applies the flag ledger and the `--exclude`/REVEAL_IGNORE walk scope (BACK-1058, BACK-1539). Subcommands call adapters programmatically (not via URI routing) and compose their outputs.
@@ -292,7 +292,7 @@ reveal review main..feature
       │
       ├─ diff://git://main/.:git://HEAD/.    → changed functions + complexity delta
       ├─ reveal check <changed files>        → rule violations
-      └─ reveal hotspots <changed files>     → complexity spikes
+      └─ metrics:// ?hotspots=true on changed files → complexity spikes
              │
              ▼
          Unified review report (text or JSON)

@@ -122,7 +122,7 @@ def run_review(args: Namespace) -> None:
     print("  Analyzing hotspots…", file=sys.stderr)
     hotspot_warnings: List[Dict[str, Any]] = []
     _add_top_section(report, 'hotspots', _run_hotspots(path, files=changed_files, warnings=hotspot_warnings),
-                     'see all: reveal hotspots <path> --top 0')
+                     'see all: reveal metrics <path> --hotspots --top 0')
     if hotspot_warnings:
         report.setdefault('meta', {}).setdefault('warnings', []).extend(hotspot_warnings)
 

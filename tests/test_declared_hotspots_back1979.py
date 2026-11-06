@@ -8,6 +8,7 @@ from urllib.parse import quote
 import pytest
 
 from conftest import _run_reveal_direct as run
+from reveal.cli.invocation import RETIREMENTS
 from reveal.adapters.hotspots import HotspotsAdapter
 from reveal.adapters.ast import AstAdapter
 from reveal.adapters.stats import MetricsAdapter
@@ -15,6 +16,10 @@ from reveal.adapters.stats import MetricsAdapter
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):
+    # The retirement note names the spelling used, so it differs between the two by design; the rows and their
+    # notes are tests/test_hotspots_retirement_back2149.py. Lifted here so the answers compare byte for byte.
+    for key in [k for k in RETIREMENTS if k.startswith(('subcommand:hotspots', 'scheme:hotspots', 'param:hotspots.'))]:
+        monkeypatch.delitem(RETIREMENTS, key)
     monkeypatch.chdir(tmp_path)
     root = tmp_path/'proj'
     root.mkdir()

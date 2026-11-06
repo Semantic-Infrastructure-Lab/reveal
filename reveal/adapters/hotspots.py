@@ -403,7 +403,8 @@ class HotspotsAdapter(ResourceAdapter):
                 'the subcommand does not accept --all.',
             ],
             'see_also': [
-                'reveal hotspots <path> - CLI subcommand form',
+                'reveal metrics <path> --hotspots - the file ranking and --fail-on findings gate (reveal hotspots is retired)',
+                "reveal 'ast://<path>?complexity>=10&sort=-complexity&limit=10' - the function ranking",
             ],
             'output_formats': ['text', 'json'],
         }

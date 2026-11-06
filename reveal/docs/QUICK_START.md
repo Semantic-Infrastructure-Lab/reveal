@@ -206,9 +206,10 @@ reveal pack src/ --budget 8000
 reveal pack src/ --focus authentication --budget 4000
 reveal pack src/ --architecture   # + entry points and core abstractions brief
 
-# Complexity hotspots — ✅/⚪ shows test coverage per function
-reveal hotspots src/
-reveal hotspots src/ --format json | jq '.function_hotspots[] | select(.has_test_hint == false)'
+# Complexity hotspots: worst files (exit 1 on a finding with --fail-on findings), then the most complex functions
+reveal metrics src/ --hotspots
+reveal metrics src/ --hotspots --fail-on findings
+reveal 'ast://src/?complexity>=10&sort=-complexity&limit=10' --format json
 
 # Project map and architectural comparison
 reveal overview .                 # Compact project map: scope, components, imports

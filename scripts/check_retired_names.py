@@ -10,8 +10,8 @@ when a teaching surface names a retired spelling outside a sentence that says it
 - ``help://quick`` and every ``help://examples/<task>`` recipe.
 
 A new ``RETIREMENTS`` row is covered the day it lands: the patterns are derived from the key's kind
-(``subcommand:``, ``scheme:``, ``param:``, ``value:``, ``flag:``, ``target:``). Spellings that are due
-to retire but have no row yet (``hotspots``) join when their rows land (BACK-2149). tests/test_retired_names_ratchet_back2196.py holds the positive controls.
+(``subcommand:``, ``scheme:``, ``param:``, ``value:``, ``flag:``, ``target:``); the hotspots rows joined that
+way (BACK-2149). tests/test_retired_names_ratchet_back2196.py holds the positive controls.
 
 Code-element outline examples are classified with the real argument parser. The
 static check covers explicit element positionals; inline ``file.py:2`` binding

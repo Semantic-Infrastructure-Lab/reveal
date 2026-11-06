@@ -366,7 +366,7 @@ branch, variable, or range that matters.
 
 ```bash
 # Quality hotspots (worst files first)
-reveal hotspots ./src
+reveal metrics ./src --hotspots
 
 # Complex functions across codebase
 reveal 'ast://./src?complexity>10'
@@ -1498,7 +1498,7 @@ reveal analysis.ipynb --format=json
 
 ```bash
 # 1. Find hotspots
-reveal hotspots ./src
+reveal metrics ./src --hotspots
 
 # 2. Identify complex functions in hotspot
 reveal 'ast://src/hotspot.py?complexity>10'
@@ -1582,7 +1582,7 @@ reveal src/
 reveal metrics://./src
 
 # Layer 3: Hotspots (~500 tokens)
-reveal hotspots ./src
+reveal metrics ./src --hotspots
 
 # Layer 4: Specific file outline (~150 tokens)
 reveal src/hotspot.py --outline
@@ -1645,7 +1645,7 @@ reveal app.py --format=json | \
 
 ```bash
 reveal metrics://./src > due_diligence/stats.txt
-reveal hotspots ./src > due_diligence/hotspots.txt
+reveal metrics ./src --hotspots > due_diligence/hotspots.txt
 reveal 'ast://./src?complexity>20' > due_diligence/complex_functions.txt
 reveal 'imports://src?circular' > due_diligence/circular_deps.txt
 find src/ -name "*.py" | reveal --stdin --check --select=B,S > due_diligence/security.txt
@@ -1693,7 +1693,7 @@ reveal src/                              # Explore subdirectory
 reveal 'ast://./src?name=*pattern*'      # Find by name
 reveal 'ast://./src?complexity>10'       # Find by complexity
 reveal 'imports://src?circular'          # Find circular imports
-reveal hotspots ./src                    # Find technical debt
+reveal metrics ./src --hotspots         # Find technical debt
 reveal 'calls://src/?callers=fn'          # Who calls fn? (cross-file reverse)
 reveal 'calls://src/file.py:fn'          # Shorthand for ?callers=fn
 reveal 'calls://src/?callees=fn'         # What does fn call? (cross-file forward)

@@ -2011,7 +2011,7 @@ For detailed merge analysis, use `git show <merge_commit>`.
 **A**:
 
 ```bash
-# History entries carry no per-file data; use git, or `reveal hotspots` for ranked files
+# History entries carry no per-file data; use git, or `reveal metrics <dir> --hotspots` for ranked files
 git log main -n 1000 --name-only --pretty=format: | sed '/^$/d' | sort | uniq -c | sort -rn | head -20
 ```
 

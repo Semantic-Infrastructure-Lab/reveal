@@ -48,7 +48,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Orient in an unfamiliar repo | `reveal overview://src/` |
 | Outline a file | `reveal src/app.py` |
 | Read one function or class | `reveal src/app.py load_config` (also `Class.method`, `:120-160`) |
-| Riskiest code | `reveal 'hotspots://src/?functions_only=true&top=10'` |
+| Riskiest code | `reveal metrics src/ --hotspots` (files) and `reveal 'ast://src/?complexity>=10&sort=-complexity&limit=10'` (functions) |
 | Query functions by complexity/size/type | `reveal 'ast://src/?type=function&complexity>10&sort=-complexity&limit=10'` |
 | Who calls a function | `reveal 'calls://src/?callers=my_fn'` |
 | What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
@@ -241,7 +241,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal architecture [path] [--against REF]` | Deprecated alias for overview; use reveal overview [path] [--against REF] | `reveal architecture --help` |
 | `reveal imports [path]` | Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations | `reveal imports --help` |
 | `reveal deps [path]` | Retired: use reveal imports <path> --external, --circular or --unused (one graph build); dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
-| `reveal hotspots [path]` | High-complexity files and functions that need attention | `reveal hotspots --help` |
+| `reveal hotspots [path]` | Retired: use reveal metrics <path> --hotspots (files, --fail-on findings) and the ast:// complexity sort (functions); high-complexity files and functions | `reveal hotspots --help` |
 | `reveal metrics [path]` | Per-file lines, complexity and quality; --hotspots ranks files; --view provenance tags every file | `reveal metrics --help` |
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal contracts --help` |
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
@@ -1140,7 +1140,7 @@ reveal check src/changed_file.py
 reveal src/changed_file.py changed_function
 ```
 
-**`reveal check --changed RANGE` output:** the same report as `reveal check <dir>`, over the files the range changed under PATH (default `.`). `scope.changed` in JSON, and a `Scope:` line in text, name the range and how many files git listed, so a clean result cannot be read as a whole-tree pass. Hotspots and complexity: `reveal hotspots <path>` and `reveal 'ast://<path>?complexity>10&sort=-complexity'`.
+**`reveal check --changed RANGE` output:** the same report as `reveal check <dir>`, over the files the range changed under PATH (default `.`). `scope.changed` in JSON, and a `Scope:` line in text, name the range and how many files git listed, so a clean result cannot be read as a whole-tree pass. Hotspots and complexity: `reveal metrics <path> --hotspots` and `reveal 'ast://<path>?complexity>10&sort=-complexity'`.
 
 **`reveal check --changed` is a CI gate.** Exit codes are `check`'s: `0` no findings, `1` findings, `2` an unusable range (unknown revision such as `main..nosuchbranch`, not inside a git repository), `3` a file could not be checked, so an empty result is not proof of a clean change. `--fail-on none` reports findings without failing.
 ```bash
@@ -1460,33 +1460,28 @@ Output: one line per violation with file, line, and direction. Clean output = �
 
 **Pattern:**
 ```bash
-# Subcommand form (preferred)
-reveal hotspots .                  # Worst 10 files + complex functions
-reveal hotspots ./src --top 20     # Top 20 files
-reveal hotspots . --functions-only # Only complex functions
-reveal hotspots . --files-only     # Only file-level hotspots
-reveal hotspots . --min-complexity 15  # Raise complexity threshold
-reveal hotspots . --format json    # JSON for CI/scripting
-
+reveal metrics . --hotspots                         # Worst 10 files by hotspot score
+reveal metrics ./src --hotspots --top 20            # Top 20 files
+reveal metrics . --hotspots --fail-on findings      # CI gate: exit 1 on quality <70 or complexity >20
+reveal 'ast://.?complexity>=10&sort=-complexity&limit=10' --format json   # Most complex functions
+reveal 'ast://.?complexity>=15&sort=-complexity&limit=10' --format json   # Raise the threshold
 ```
 
-**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores. Each function shows a test-name-match hint (not measured coverage): ✅ (a `test_<func>` function exists in `tests/`/`test/`/`spec/`, or a `test_<module>.py` file matches the module name) or ⚪ (no test match found), or ❔ (no known test convention for the language — not a claim either way). Test matching follows each language's conventions (Go `_test.go` + `TestXxx`, Rust `#[test]`, JS/TS `*.test.*`/`*.spec.*`, JUnit `FooTest`/`testBar`). JSON output adds `has_test_hint: true/false/null` per function (`null` = no test convention known for that language).
+**Output:** `metrics --hotspots` ranks files by hotspot score (low quality, high average complexity,
+long or deeply nested functions, churn), each with its quality score, issues and a path-only
+`provenance` tag (`test`/`vendor`/`minified`, `null` = first party). `summary.has_findings` is true when
+any analysed file has quality below 70 or a function with complexity above 20, taken over every analysed
+file before filters and cuts; `--fail-on findings` exits 1 on it, the default `--fail-on none` reports it.
+The `ast://` query ranks functions by cyclomatic complexity across the tree (text groups them by file;
+JSON keeps the global order).
 
-Both transports return `hotspots_scan`, default to `--fail-on none`, and support
-`--fail-on findings` using pre-cap evidence (quality <70 or complexity >20).
-`top` caps JSON and text rankings: 0 means all, negative values reject; signed
-`min_complexity` remains valid. Whole decimal/scientific values normalize; fractions
-and booleans reject. `--verbose` lifts caps in either form. URI `--all` preserves
-explicit `top`; the subcommand rejects `--all`. Required Stats/AST failures exit 3,
-including when `--fields` omits the evidence. See the
-[hotspots guide](adapters/HOTSPOTS_ADAPTER_GUIDE.md).
+`reveal hotspots` (and `hotspots://`) is retired: it answers as before until the cut and prints a note
+naming these two commands; `--files-only` is `metrics --hotspots`, `--functions-only` the `ast://` query
+(`--min-complexity N` is `complexity>=N`, `--top N` is `limit=N`). Its `has_test_hint` field is retired with
+no replacement: it was an unmeasured test-name heuristic, not coverage; use the language's coverage tool.
+See the [metrics guide](adapters/METRICS_ADAPTER_GUIDE.md#findings-gate).
 
 **Use case:** Identify the 10 worst files in a codebase — start technical debt work here. Output is the data behind the Hotspots section of the retired `reveal review`.
-
-**Find complex functions without tests:**
-```bash
-reveal hotspots . --format json | jq '.function_hotspots[] | select(.has_test_hint == false and .complexity > 15)'
-```
 
 ---
 
@@ -2843,7 +2838,7 @@ reveal file.py --format=typed
 # Copy to clipboard (also prints normally) — works on subcommands too
 reveal file.py --copy
 reveal file.py process_request --copy
-reveal hotspots . --copy
+reveal metrics . --hotspots --copy
 
 # Suppress breadcrumb hints (clean output for scripts / agents)
 reveal file.py -q                    # -q / --no-breadcrumbs
@@ -2854,7 +2849,7 @@ reveal file.py                       # JSON now
 reveal file.py --format text         # an explicit --format always wins
 ```
 
-`REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal hotspots`, `reveal check`, …). An explicit `--format` on the command line overrides it.
+`REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal metrics`, `reveal check`, …). An explicit `--format` on the command line overrides it.
 
 **Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for single-file structure and element views. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note).
 
@@ -3325,24 +3320,19 @@ reveal docs/setup.md --links --link-type internal
 
 ### Issue: "Nothing happens when I use --hotspots"
 
-**Problem:** You're using the old `--hotspots` flag form instead of the `reveal hotspots` subcommand.
+**Problem:** `--hotspots` is a `metrics` flag; on another command or a plain file path it does nothing
+useful.
 
-**Old (still works, but deprecated):**
+**Correct — on metrics (the subcommand or the URI):**
 ```bash
-reveal metrics://. --hotspots
-reveal 'metrics://.?hotspots=true'
+reveal metrics . --hotspots                  # Hotspots in current directory
+reveal metrics ./src --hotspots --top 20     # Show top 20 instead of default 10
+reveal 'metrics://.?hotspots=true'           # The same answer as a URI
+reveal metrics . --hotspots --format json    # JSON output for CI/scripting
 ```
 
-**Correct — use the subcommand:**
-```bash
-reveal hotspots .                  # Hotspots in current directory
-reveal hotspots ./src              # Hotspots in src/
-reveal hotspots . --top 20         # Show top 20 instead of default 10
-reveal hotspots . --functions-only # Only complex functions, skip file-level
-reveal hotspots . --format json    # JSON output for CI/scripting
-```
-
-**`reveal hotspots --help`** — full options including `--min-complexity`, `--files-only`.
+**`reveal metrics --help`** — full options. The retired `reveal hotspots` still answers and prints a note
+naming `metrics --hotspots` (files) and the `ast://` complexity sort (functions).
 
 ---
 
@@ -3742,7 +3732,7 @@ CMD ["python", "app.py"]
 - Complexity > 10 suggests function is too complex
 - Consider breaking into smaller functions
 - Default threshold 10 (override in `.reveal.yaml`: `rules: {C901: {threshold: 15}}`); `reveal --explain C901` describes the rule but does not print the threshold
-- One shared score: C901, `ast://?complexity`, `metrics://` and `reveal hotspots` report the same number for every language — `if`/loops/`catch`, `&&`/`||`/`??`/`?:`, and match/switch arms count (a catch-all `default`/`else`/`_` arm does not); Rust `?` and Zig `try` count as early exits
+- One shared score: C901, `ast://?complexity` and `metrics://` (its `--hotspots` ranking included) report the same number for every language — `if`/loops/`catch`, `&&`/`||`/`??`/`?:`, and match/switch arms count (a catch-all `default`/`else`/`_` arm does not); Rust `?` and Zig `try` count as early exits
 
 **C902: Function too long**
 - Function exceeds maximum line count
@@ -4216,7 +4206,7 @@ Measure the command on your own target; runtime and output size depend on the re
   this tree, timed in one real pass (not a diff of two runs). Use this once
   `--perf` has told you `check` is the slow step and you need to know why.
 - Neither currently breaks down time *inside* a composite command like
-  `overview`/`hotspots`/`deps` (which call
+  `overview`/`deps` (which call
   several sub-adapters internally) — `--perf` gives you the total for the
   whole call, not a per-sub-adapter split. If you need that level of detail
   today, bisect manually with `--select`/scoped sub-calls.
@@ -4345,7 +4335,7 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 | Extract 2nd function | `reveal file.py function:2` |
 | Quality check | `reveal check file.py` |
 | Security check only | `reveal check file.py --select S` |
-| Find hotspots | `reveal hotspots .` |
+| Find hotspots | `reveal metrics . --hotspots` |
 | Find by name | `reveal 'ast://./src?name=*pattern*'` |
 | Find complex code | `reveal 'ast://./src?complexity>10'` |
 | Find long functions | `reveal 'ast://./src?lines>50'` |

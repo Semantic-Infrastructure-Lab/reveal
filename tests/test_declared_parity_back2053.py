@@ -124,7 +124,7 @@ def branchy(x):
 # between the two spellings by design. The rows are lifted here so the rest of the answer is
 # compared byte for byte; test_a_retired_nouns_spellings_differ_only_by_their_own_note puts them back.
 RETIRED_NOUN_ROWS = ('subcommand:trace', 'scheme:trace', 'subcommand:testability', 'scheme:testability',
-                     'subcommand:deps', 'scheme:deps')
+                     'subcommand:deps', 'scheme:deps', 'subcommand:hotspots', 'scheme:hotspots')
 
 
 @pytest.fixture
@@ -354,9 +354,9 @@ def test_a_harmless_warning_is_shown_and_never_makes_a_complete_answer_fail(proj
     assert_equal_answers(noun, *answers)
 
 
-@pytest.mark.parametrize('noun', ['trace', 'testability', 'deps'])
+@pytest.mark.parametrize('noun', ['trace', 'testability', 'deps', 'hotspots'])
 def test_a_retired_nouns_spellings_differ_only_by_their_own_note(project, monkeypatch, noun):
-    """trace (BACK-2066 slice D), testability (BACK-2160) and deps (BACK-1054 S4): each spelling carries its own
+    """trace (BACK-2066 slice D), testability (BACK-2160), deps (BACK-1054 S4) and hotspots (BACK-2149): each spelling carries its own
     retired_spelling warning and note; without them the two answers are equal."""
     monkeypatch.undo()
     monkeypatch.chdir(project.parent)

@@ -63,7 +63,8 @@ KINDS = {
     'param': ('param:ast.name', 'ast://?name=', lambda f: [f'ast://{f}?name=auth*']),
     'value': ('value:ast.type=function', 'ast://?type=function',
               lambda f: [f'ast://{f}?type=function']),
-    'declared scheme': ('scheme:hotspots', 'hotspots://', lambda f: [f'hotspots://{f}']),
+    # hotspots:// carries a production row since BACK-2149, so the declared-noun case uses metrics://.
+    'declared scheme': ('scheme:metrics', 'metrics://', lambda f: [f'metrics://{f}']),
 }
 
 
@@ -234,7 +235,15 @@ PRODUCTION_CASES = {
     # BACK-2225: python:// was removed outright and starts at the error stage; tests/test_python_scheme_removed_back2225.py
     # covers its other spellings.
     'scheme:python': lambda f: ['python://'],
+    # BACK-2149: hotspots answers as before until the cut; tests/test_hotspots_retirement_back2149.py runs each
+    # replacement and proves it gives the same ranking. A retired parameter of the retired noun notes beside it.
+    'subcommand:hotspots': lambda f: ['hotspots', str(Path(f).parent)],
+    'scheme:hotspots': lambda f: [f'hotspots://{Path(f).parent}'],
+    'param:hotspots.functions_only': lambda f: [f'hotspots://{Path(f).parent}?functions_only=true'],
+    'param:hotspots.files_only': lambda f: ['hotspots', str(Path(f).parent), '--files-only'],
 }
+# The row a case notes beside its own: a parameter of a noun that is itself retired.
+ALSO_NOTED = {'param:hotspots.functions_only': 'scheme:hotspots', 'param:hotspots.files_only': 'subcommand:hotspots'}
 
 
 def test_every_production_row_is_well_formed():
@@ -253,7 +262,8 @@ def test_every_production_row_is_exercised_and_prints_once(source):
         result = _run_reveal_direct(*argv(str(source)), '--format', 'json')
         text = RETIREMENTS[key].text
         assert _notes(result.stderr, text) == 1, (key, result.stderr)
-        assert [w['field'] for w in _warnings(json.loads(result.stdout))] == [key]
+        expected = [ALSO_NOTED[key], key] if key in ALSO_NOTED else [key]
+        assert sorted(w['field'] for w in _warnings(json.loads(result.stdout))) == sorted(expected)
 
 
 def test_a_removed_row_says_removed_and_is_an_error_from_the_start():

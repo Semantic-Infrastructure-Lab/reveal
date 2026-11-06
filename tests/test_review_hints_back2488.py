@@ -9,7 +9,7 @@ import shlex
 
 from conftest import _run_reveal_in
 
-_SECTION_ITEMS = {'hotspots': 'file_hotspots', 'complexity': 'results'}
+_SECTION_ITEMS = {'hotspots': 'hotspots', 'complexity': 'results'}  # hotspots: metrics --hotspots (BACK-2149)
 
 
 def _branchy(name):
@@ -37,5 +37,6 @@ def test_every_see_all_hint_runs_and_returns_the_cut_total(tmp_path):
         assert argv[0] == 'reveal', hint
         result = _run_reveal_in(tmp_path, *argv[1:], '--format', 'json')
         assert result.returncode == 0, (hint, result.stderr)
+        assert 'deprecated' not in result.stderr, (hint, result.stderr)  # a hint never names a retired spelling
         items = json.loads(result.stdout)[_SECTION_ITEMS[field]]
         assert len(items) >= warning['total'], (hint, len(items), warning['total'])

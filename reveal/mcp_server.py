@@ -108,8 +108,8 @@ mcp = MCPServer(
         "(reveal_health: path or URI; reveal_review: path or git range).\n\n"
         "Core workflow:\n"
         "0. reveal_query('overview://<dir>') — orient in an unfamiliar "
-        "codebase first: quality score, ranked hotspots, git activity, one "
-        "screen. This is reveal's own best answer to \"what is this repo\" — "
+        "codebase first: a compact map of scope, components and import "
+        "relationships, one screen. This is reveal's own best answer to \"what is this repo\" — "
         "start here before structure/element/nav on unfamiliar code.\n"
         "1. reveal_structure(dir) — understand what's in a directory (~100-3,000 tokens, by size)\n"
         "2. reveal_structure(file) — see all functions/classes (~150-750 tokens; ~1,300 for a 1,000-line module)\n"
@@ -648,7 +648,7 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     '?limit=N', '?sort=field' (or '?sort=-field' for desc) and '?offset=M'
     are applied by ast://, markdown://, json://, git:// and stats:// only;
     other adapters answer "Unknown query param ... ignored" -- use their own
-    key instead (hotspots://, calls://, depends:// and patches://?view=pressure take '?top=N').
+    key instead (metrics://?hotspots=true, calls://, depends:// and patches://?view=pressure take '?top=N').
     Every other per-adapter option is that adapter's own '?key=value'
     vocabulary, not a generic CLI-flag passthrough — check
     reveal_query('help://schemas/<adapter>') for what a given scheme accepts.
