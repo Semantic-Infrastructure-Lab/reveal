@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, cast
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from .stats.aggregation import has_findings as _has_findings
 from ..conventions import LanguageConventions, conventions_for, family_for_path
 from ..defaults import TEST_DIR_NAMES, VENDOR_DIR_NAMES
 from ..rendering.adapters.hotspots import HotspotsRenderer
@@ -148,11 +149,6 @@ def _relativize_hotspots_paths(file_hotspots: List[Dict[str, Any]], fn_hotspots:
     for fn in fn_hotspots:
         if fn.get('file'):
             fn['file'] = rel(fn['file'])
-
-
-def _has_findings(qualities: Iterable[Any], complexities: Iterable[Any]) -> bool:
-    """The existing serious-hotspot predicate, independent of presentation."""
-    return any(quality < 70 for quality in qualities) or any(cx > 20 for cx in complexities)
 
 
 def _scan_has_findings(adapter: 'HotspotsAdapter', files: List[Dict[str, Any]],

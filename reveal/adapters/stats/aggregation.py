@@ -1,7 +1,7 @@
 """Aggregation and hotspot identification for stats adapter."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Iterable, List, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.results import ResultBuilder
@@ -13,6 +13,17 @@ from ...utils.results import ResultBuilder
 # simple file doesn't outrank genuinely complex files.
 CHURN_THRESHOLD = 20
 CHURN_WEIGHT = 0.2
+
+# The serious-hotspot predicate `--fail-on findings` gates on: a file quality below 70 or a function
+# complexity above 20. Fixed thresholds, not read from C901's config (BACK-2149, Scott 2026-11-06).
+FINDINGS_QUALITY_BELOW = 70
+FINDINGS_COMPLEXITY_ABOVE = 20
+
+
+def has_findings(qualities: Iterable[Any], complexities: Iterable[Any]) -> bool:
+    """The serious-hotspot predicate over file quality scores and function complexities."""
+    return (any(quality < FINDINGS_QUALITY_BELOW for quality in qualities)
+            or any(cx > FINDINGS_COMPLEXITY_ABOVE for cx in complexities))
 
 
 def aggregate_stats(file_stats: List[Dict[str, Any]], source_path: Path) -> Dict[str, Any]:
