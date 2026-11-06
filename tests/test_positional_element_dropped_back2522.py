@@ -85,3 +85,15 @@ def test_an_element_view_still_reports_a_miss_as_its_own_error(tree):
     response = _run_reveal_direct('env://', 'NO_SUCH_VARIABLE_BACK2522', '--format', 'json')
     assert response.returncode == 2
     assert [e['code'] for e in json.loads(response.stdout)['meta']['errors']] == ['element_not_found']
+
+
+@pytest.mark.parametrize('uri,syntax', [('calls://src', 'calls://'), ('imports://src', 'imports://')])
+def test_a_declared_noun_refuses_an_element_with_the_same_envelope(tree, uri, syntax):
+    """It printed one stderr line and wrote nothing on stdout, so --format json had no answer (BACK-2526)."""
+    response = _run_reveal_direct(uri, 'foo', '--format', 'json')
+    assert response.returncode == 2, response.stdout + response.stderr
+    result = json.loads(response.stdout)
+    assert [e['code'] for e in result['meta']['errors']] == ['invalid_request']
+    assert "takes no positional element ('foo')" in result['error'] and syntax in result['error']
+    text = _run_reveal_direct(uri, 'foo')
+    assert text.returncode == 2 and text.stderr.count("('foo')") == 1 and text.stdout == ''
