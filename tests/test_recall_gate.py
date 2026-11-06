@@ -1004,3 +1004,71 @@ def test_partial_parse_is_counted_and_a_lost_file_is_refused():
         gate._partial_files({'metadata': {'files_failed_count': 3, 'files_lost_count': 1}})
     with pytest.raises(RuntimeError, match='cannot qualify'):
         gate._partial_files({'metadata': {}})
+
+
+# BACK-2079: the scala-declared oracle labels function-level imports from braces and indentation alone.
+_SCALA_SCOPE_SOURCE = '''package app
+
+import pkg.TMod
+
+object Imp {
+  def f(): Int = {
+    import pkg.TFn
+    TFn.v
+  }
+  val g = (y: Int) => {
+    import pkg.TLambda
+    TLambda.v
+  }
+  implicit def exec(fb: Int): Int =
+    fb + 1
+
+  "a spec block" should {
+    import pkg.InSpecBlock
+  }
+  def start(
+      implicit
+      F: Int): Int = {
+    import pkg.WrappedHeader
+    F
+  }
+  def abs: Int
+  object Inner {
+    import pkg.NotLocal
+  }
+  def s3 =
+    import pkg.Scala3Body
+    1
+  import pkg.AfterDedent
+  def proc() {
+    import pkg.Procedure
+  }
+  def withDefault(x: Int = 1): Int = x
+  object After {
+    import pkg.AfterDefault
+  }
+}
+'''
+
+
+def test_scala_oracle_labels_only_def_body_imports_local():
+    clean = oracles.jvm_strip_noise(_SCALA_SCOPE_SOURCE)
+    local = oracles._scala_def_body_lines(clean, _SCALA_SCOPE_SOURCE)
+    lines = _SCALA_SCOPE_SOURCE.split('\n')
+    scoped = {re.search(r'import pkg\.(\w+)', line).group(1): index in local
+              for index, line in enumerate(lines) if 'import pkg.' in line}
+    assert scoped == {'TMod': False, 'TFn': True, 'TLambda': False, 'InSpecBlock': False,
+                      'WrappedHeader': True, 'NotLocal': False, 'Scala3Body': True, 'AfterDedent': False,
+                      'Procedure': True, 'AfterDefault': False}
+
+
+def test_scala_oracle_import_paths_carry_their_line():
+    counts = {'wildcard_statements': 0, 'selector_lists': 0}
+    clean = oracles.jvm_strip_noise('import a.B, c.D\nobject O {\n  import e.{F, G => H}\n}\n')
+    assert oracles._jvm_import_paths(clean, 'scala', counts) == [
+        ('a.B', False, 0), ('c.D', False, 0), ('e.F', False, 2), ('e.G', False, 2)]
+
+
+def test_scala_declared_oracle_scores_the_lazy_views():
+    assert oracles.ORACLES['scala-declared'].lazy_only is oracles.scala_lazy_only_edges
+    assert oracles.ORACLES['kotlin-declared'].lazy_only is None  # Kotlin has no function-scope import

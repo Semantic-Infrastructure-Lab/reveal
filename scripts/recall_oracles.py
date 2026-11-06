@@ -605,51 +605,122 @@ def _scala_package_object_members(clean: str) -> list[tuple[str, str]]:
     return members
 
 
-def _jvm_import_paths(clean: str, language: str, counts: dict[str, int]) -> list[tuple[str, bool]]:
-    """``(dotted name, is_wildcard)`` for every name an import statement names; a wildcard's name is its prefix.
+_SCALA_DEF = re.compile(r'(?<![\w$])def(?![\w$])')
+
+
+def _scala_def_body_lines(clean: str, raw: str) -> set[int]:
+    """Indexes of the lines that start inside a ``def`` body (BACK-2079), read from braces and indentation alone.
+
+    A ``{`` at parenthesis depth 0 after a ``def`` header (``def f(...) = {`` or procedure syntax ``def f() {``)
+    opens a body; every block nested in a body is in it. A header ending in ``=`` with no brace on its line
+    continues on the following more-indented lines (Scala 2 expression bodies, Scala 3 indentation syntax).
+    A lambda or block outside every ``def`` is not a body: Reveal leaves such an import unclassified, which
+    counts with the load-time edges, as here. ``clean`` has comments and literals blanked, with the same lines
+    as ``raw``; indentation is read from ``raw``, since a blanked string at a line start reads as indentation.
+    """
+    local: set[int] = set()
+    stack: list[bool] = []  # one per open '{': whether it is inside a def body
+    indent_bodies: list[int] = []  # the indent of each `def ... =` whose body continues on deeper lines
+    pending: dict[str, int] | None = None  # an open def header: its line indent and whether '=' was seen
+    paren = 0  # across lines: a def header may wrap its parameter list
+    for index, (line, raw_line) in enumerate(zip(clean.split('\n'), raw.split('\n'))):
+        stripped = line.strip()
+        indent = len(raw_line) - len(raw_line.lstrip())
+        if stripped:
+            while indent_bodies and indent <= indent_bodies[-1]:
+                indent_bodies.pop()
+        if (stack and stack[-1]) or indent_bodies:
+            local.add(index)
+        defs = {match.start() for match in _SCALA_DEF.finditer(line)}
+        for i, ch in enumerate(line):
+            if i in defs:
+                pending = {'indent': indent, 'eq': 0}
+            elif ch in '([':
+                paren += 1
+            elif ch in ')]':
+                paren = max(paren - 1, 0)
+            elif ch == '=' and pending is not None and paren <= 0 \
+                    and line[i + 1:i + 2] not in ('=', '>') and line[i - 1:i] not in ('=', '!', '<', '>'):
+                pending['eq'] = 1
+            elif ch == '{':
+                opens_body = pending is not None and paren <= 0
+                stack.append((stack[-1] if stack else False) or bool(indent_bodies) or opens_body)
+                if opens_body:
+                    pending = None
+            elif ch == '}' and stack:
+                stack.pop()
+        if pending is not None and paren <= 0:
+            if pending['eq']:
+                indent_bodies.append(pending['indent'])  # the body is on the following deeper lines
+            pending = None  # an abstract def, or a body already opened on this line
+    return local
+
+
+def _jvm_import_paths(clean: str, language: str, counts: dict[str, int]) -> list[tuple[str, bool, int]]:
+    """``(dotted name, is_wildcard, line index)`` for every name an import statement names; a wildcard's name
+    is its prefix.
 
     Scala ``import a.B, c.D`` is two names; a selector list ``a.{X, Y => Z, W => _, _}`` names ``a.X``, ``a.Y``
     and the wildcard ``a`` (``W`` is hidden). Selector lists and wildcards are also counted in ``counts``.
     """
+    names: list[tuple[str, bool, int]] = []
+    for match in _JVM_IMPORT.finditer(clean):
+        line = clean.count('\n', 0, match.start())
+        names.extend((dotted, wildcard, line)
+                     for dotted, wildcard in _jvm_statement_names(' '.join(match.group(1).split()), language, counts))
+    return names
+
+
+def _jvm_statement_names(statement: str, language: str, counts: dict[str, int]) -> list[tuple[str, bool]]:
+    """``(dotted name, is_wildcard)`` for each name one import statement's text names."""
     names: list[tuple[str, bool]] = []
-    for statement in (' '.join(found.split()) for found in _JVM_IMPORT.findall(clean)):
-        pieces, depth, current = [], 0, ''
-        for ch in statement:  # Scala allows `import a.B, c.D`
-            if ch == ',' and depth == 0 and language == 'scala':
-                pieces.append(current)
-                current = ''
-                continue
-            depth += (ch == '{') - (ch == '}')
-            current += ch
-        pieces.append(current)
-        for piece in pieces:
-            piece = re.sub(r'\s+as\s+\w+\s*$', '', piece.strip())
-            if not piece:
-                continue
-            if '{' in piece:
-                counts['selector_lists'] += 1
-                prefix, _, body = piece.partition('{')
-                for item in body.rstrip('} \t').split(','):
-                    name = item.split('=>')[0].split(' as ')[0].strip()
-                    if '=>' in item and item.split('=>')[1].strip() == '_':
-                        continue  # `X => _` hides X
-                    if name in ('_', '*'):
-                        counts['wildcard_statements'] += 1
-                        names.append((prefix.strip().rstrip('.'), True))
-                    elif re.fullmatch(r'\w+', name):
-                        names.append((prefix.strip() + name, False))
-            elif piece.endswith(('.*', '._')):
-                counts['wildcard_statements'] += 1
-                names.append((piece[:-2].replace('`', ''), True))
-            elif re.fullmatch(r'[\w.`]+', piece):
-                names.append((piece.replace('`', ''), False))
+    pieces, depth, current = [], 0, ''
+    for ch in statement:  # Scala allows `import a.B, c.D`
+        if ch == ',' and depth == 0 and language == 'scala':
+            pieces.append(current)
+            current = ''
+            continue
+        depth += (ch == '{') - (ch == '}')
+        current += ch
+    pieces.append(current)
+    for piece in pieces:
+        piece = re.sub(r'\s+as\s+\w+\s*$', '', piece.strip())
+        if not piece:
+            continue
+        if '{' in piece:
+            counts['selector_lists'] += 1
+            prefix, _, body = piece.partition('{')
+            for item in body.rstrip('} \t').split(','):
+                name = item.split('=>')[0].split(' as ')[0].strip()
+                if '=>' in item and item.split('=>')[1].strip() == '_':
+                    continue  # `X => _` hides X
+                if name in ('_', '*'):
+                    counts['wildcard_statements'] += 1
+                    names.append((prefix.strip().rstrip('.'), True))
+                elif re.fullmatch(r'\w+', name):
+                    names.append((prefix.strip() + name, False))
+        elif piece.endswith(('.*', '._')):
+            counts['wildcard_statements'] += 1
+            names.append((piece[:-2].replace('`', ''), True))
+        elif re.fullmatch(r'[\w.`]+', piece):
+            names.append((piece.replace('`', ''), False))
     return names
 
 
 def _build_jvm_declared_oracle(scope: Scope, language: str, suffix: str,
                                declared_name: 'Callable[[str], str | None]') -> tuple[Edges, Coverage]:
-    sources = {p: jvm_strip_noise(p.read_text(encoding='utf-8', errors='replace'))
-               for p in tracked_files(scope.root, [_relative(scope, scope.scan)], frozenset({suffix}))}
+    edges, _load_time, coverage = _jvm_declared_scoped_edges(scope, language, suffix, declared_name)
+    return _finish(scope, edges), coverage
+
+
+def _jvm_declared_scoped_edges(scope: Scope, language: str, suffix: str,
+                               declared_name: 'Callable[[str], str | None]'
+                               ) -> tuple[dict[Path, set[Path]], dict[Path, set[Path]], Coverage]:
+    """``(edges, load-time edges, coverage)``. A Scala import inside a ``def`` body is function-level
+    (``_scala_def_body_lines``); every other import, and every Kotlin import, is load-time."""
+    raw_sources = {p: p.read_text(encoding='utf-8', errors='replace')
+                   for p in tracked_files(scope.root, [_relative(scope, scope.scan)], frozenset({suffix}))}
+    sources = {p: jvm_strip_noise(text) for p, text in raw_sources.items()}
     declared: dict[tuple[str, str], set[Path]] = defaultdict(set)
     file_packages: dict[Path, str] = {}
     package_objects: set[str] = set()  # BACK-2515: packages a `package object` declares members of
@@ -668,6 +739,7 @@ def _build_jvm_declared_oracle(scope: Scope, language: str, suffix: str,
     counts = {'wildcard_statements': 0, 'selector_lists': 0, 'in_tree_package_wildcards': 0,
               'type_member_wildcards': 0}
     edges: dict[Path, set[Path]] = defaultdict(set)
+    load_time: dict[Path, set[Path]] = defaultdict(set)
     statements = resolved = 0
 
     packages: set[str] = set()
@@ -689,13 +761,16 @@ def _build_jvm_declared_oracle(scope: Scope, language: str, suffix: str,
 
     for importer in scope.importers:
         clean = sources.get(importer)
-        if clean is None:  # an importer outside the scan root
-            clean = jvm_strip_noise(importer.read_text(encoding='utf-8', errors='replace'))
+        raw = raw_sources.get(importer)
+        if clean is None or raw is None:  # an importer outside the scan root
+            raw = importer.read_text(encoding='utf-8', errors='replace')
+            clean = jvm_strip_noise(raw)
         own = file_packages.get(importer) or '.'.join(_top_level_lines(clean, language)[0])
         # Scala reads an import relative to each enclosing package too, innermost first.
         bases = [''] + (['.'.join(own.split('.')[:keep]) + '.' for keep in range(len(own.split('.')), 0, -1)]
                         if language == 'scala' and own else [])
-        for dotted, wildcard in _jvm_import_paths(clean, language, counts):
+        in_def = _scala_def_body_lines(clean, raw) if language == 'scala' else set()
+        for dotted, wildcard, line in _jvm_import_paths(clean, language, counts):
             if wildcard and any(base + dotted in packages for base in bases):
                 counts['in_tree_package_wildcards'] += 1  # a package wildcard names no file
                 continue
@@ -714,8 +789,10 @@ def _build_jvm_declared_oracle(scope: Scope, language: str, suffix: str,
                 resolved += bool(targets)
             for target in targets:
                 edges[target].add(importer)
-    return _finish(scope, edges), {'files': len(scope.importers), 'indexed_symbols': len(declared),
-                                   'import_statements': statements, 'resolved_statements': resolved, **counts}
+                if line not in in_def:
+                    load_time[target].add(importer)
+    return edges, load_time, {'files': len(scope.importers), 'indexed_symbols': len(declared),
+                              'import_statements': statements, 'resolved_statements': resolved, **counts}
 
 
 def build_kotlin_declared_oracle(scope: Scope) -> tuple[Edges, Coverage]:
@@ -724,6 +801,12 @@ def build_kotlin_declared_oracle(scope: Scope) -> tuple[Edges, Coverage]:
 
 def build_scala_declared_oracle(scope: Scope) -> tuple[Edges, Coverage]:
     return _build_jvm_declared_oracle(scope, 'scala', '.scala', _scala_declared_name)
+
+
+def scala_lazy_only_edges(scope: Scope) -> Edges:
+    """The Scala edges every import behind which sits in a ``def`` body: the engine's ``&lazy=only`` view."""
+    edges, load_time, _ = _jvm_declared_scoped_edges(scope, 'scala', '.scala', _scala_declared_name)
+    return _finish(scope, {t: importers - load_time.get(t, set()) for t, importers in edges.items()})
 
 
 C_SUFFIXES = frozenset({'.c', '.h'})
@@ -976,5 +1059,5 @@ ORACLES: dict[str, Oracle] = {
     'typescript-compiler': Oracle(frozenset({'.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'}), build_typescript_oracle, typescript_lazy_only_edges),
     'java-jls': Oracle(frozenset({'.java'}), build_java_oracle),
     'kotlin-declared': Oracle(frozenset({'.kt'}), build_kotlin_declared_oracle),
-    'scala-declared': Oracle(frozenset({'.scala'}), build_scala_declared_oracle),
+    'scala-declared': Oracle(frozenset({'.scala'}), build_scala_declared_oracle, scala_lazy_only_edges),
 }

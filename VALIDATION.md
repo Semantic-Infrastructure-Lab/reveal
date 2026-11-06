@@ -1850,8 +1850,9 @@ recurses into function bodies). Each answer prints its rule, a `Rule:` line in t
 resolve importers from the project scan root and `<dir>` only limits which files are listed as rows. `imports://<dir>?rank=fan-in&lazy=exclude`
 is the architecture view (load-time edges only); `?circular` uses it by default, because a
 function-level import runs after every module has loaded and cannot close an import-time
-cycle. Python, PHP, JavaScript, TypeScript, TSX and Rust record where an import sits (Rust's
-`rust-use` oracle does not label scope, so Rust `&lazy=exclude`/`only` are not scored). Ruby has the
+cycle. Python, PHP, JavaScript, TypeScript, TSX, Rust, Lua, Zig, GDScript and Scala record where an
+import sits (Rust's `rust-use` oracle does not label scope, so Rust `&lazy=exclude`/`only` are not
+scored; Lua, Zig and GDScript have no import oracle). Ruby has the
 bounded literal-loader subset described below; remaining unclassified edges are disclosed,
 retained by `exclude` and omitted by `only`.
 
@@ -2501,15 +2502,16 @@ a cut list (rows shown differ from `total_callers`).
 
 The gate's main row scores the oracles' rule: every static edge, function-level imports and
 tests included, `TYPE_CHECKING` excluded. For the populations whose oracle labels function-level
-imports (`python-ast` and `typescript-compiler`) it also scores `&lazy=exclude` and
+imports (the manifest's `python-ast`, `typescript-compiler` and `scala-declared` rows; the opt-in
+`php-token-static` and `ruby-ripper-relative` pilots label it too) it also scores `&lazy=exclude` and
 `&lazy=only` as rendered, under `lazy` in each row. An edge is function-level only when every
 import behind it is, so the two views split the all-edges edges exactly: celery 1,323 + 121 =
 1,444, reveal 3,760 + 1,226 = 4,986, all hit with 0 extra. Every oracle target is scored in
 each view, so an importer listed in the wrong view counts as extra. The gate records the
 `edge_rule` each answer prints and refuses an answer computed under another rule. The report's
 `declined` list names the combinations the gate cannot score everywhere, with the reason:
-`lazy=exclude` and `lazy=only` outside the Python/compiler rows (the Rust oracle is a
-regex that cannot tell a function-local `use`, BACK-2079; C, C++, Go and Java have no
+`lazy=exclude` and `lazy=only` outside the populations whose oracle labels scope (the Rust oracle
+is a regex that cannot tell a function-local `use`, BACK-2079; C, C++, Go, Java and Kotlin have no
 function-scope import). `tests=exclude` is scored by default at `lazy=include` for populations
 with independently reviewed `test_importer_dirs` in the corpus manifest. The opt-in gate
 option `--test-lazy` also scores `tests=exclude` with `lazy=exclude` and `lazy=only` when
@@ -2648,6 +2650,22 @@ and precision; it is not positive recall evidence. Existing parse-loss disclosur
 remain in every mode. Fixture mutations prove wrong-scope and omitted local-view edges
 fail mode scoring even when the default union remains unchanged. New baseline rows
 require explicit review; the gate rejects an unreviewed missing mode baseline.
+
+The `scala-declared` oracle labels scope too (BACK-2079), from braces and indentation alone, never
+Reveal's parser: an import in a `def` body (a braced body, procedure syntax, or an expression or
+Scala 3 indentation body on the following deeper lines) is function-level; a lambda or block
+outside every `def` is not. Reveal records the same position from the tree-sitter tree and leaves
+a lambda outside every `def` unclassified, which also counts with the load-time edges.
+
+| Population | Default edges | `lazy=exclude` edges | `lazy=only` edges | Scored extras |
+|---|---:|---:|---:|---:|
+| cats-effect | 506 | 493 | 13 | 0 |
+| gitbucket | 678 | 678 | 0 | 1 (the default row's extra) |
+
+The two first disagreements were oracle bugs, each checked against the source: a blanked string at
+a line start read as indentation (so a `def` expression body never ended), and a `def` header
+wrapped over several lines lost its parameter depth. The empty gitbucket `only` row has null recall
+and precision.
 
 What you can reproduce today:
 
