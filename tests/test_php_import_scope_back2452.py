@@ -8,7 +8,7 @@ import pytest
 
 from conftest import _run_reveal_direct
 from reveal.analyzers.imports import generic
-from reveal.analyzers.imports.generic import LuaImportExtractor, PhpImportExtractor
+from reveal.analyzers.imports.generic import DartImportExtractor, PhpImportExtractor
 from reveal.utils.path_utils import to_posix
 
 pytestmark = pytest.mark.component
@@ -54,9 +54,9 @@ def test_constant_concatenation_keeps_resolution_and_receives_scope(tmp_path):
 
 
 def test_unmigrated_generic_language_keeps_unknown_scope(tmp_path):
-    path = tmp_path / 'use.lua'
-    path.write_text("local x = require('target')\n", encoding='utf-8')
-    [statement] = LuaImportExtractor().extract_imports(path)
+    path = tmp_path / 'use.dart'  # Lua records scope since BACK-2079; Dart does not
+    path.write_text("import 'target.dart';\n", encoding='utf-8')
+    [statement] = DartImportExtractor().extract_imports(path)
     assert statement.scope is None and statement.dynamic is None
 
 

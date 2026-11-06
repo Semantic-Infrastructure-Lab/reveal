@@ -461,9 +461,9 @@ counted by, as a `Rule:` line in text and an `edge_rule` object in JSON (`lazy`,
 two. Importers anywhere under the scan root count, tests included unless `&tests=exclude`
 (`?entrypoints` never counts importers under a test path); `&scope=path` makes the requested path
 the scan root. Python, PHP,
-JavaScript, TypeScript, TSX and Rust record import scope (positionally: an import, `import()` or
-`require()` in a function, method, arrow or function expression is function-level; a class field
-initializer or static block is module level). Unclassified edges stay in `include` and
+JavaScript, TypeScript, TSX, Rust, Lua, Zig, GDScript and Scala record import scope (positionally:
+an import, `import()` or `require()` in a function, method, arrow or function expression is
+function-level; a class field initializer or static block is module level). Unclassified edges stay in `include` and
 `exclude`, and are omitted by `only`; the rule names their languages and counts. An unknown
 parameter value is an error.
 `overview://` and `pack` print the same rule for the numbers they take from this
@@ -484,6 +484,20 @@ is unclassified. A `use` binds names at compile time and never runs, so local is
 position, not deferred loading. As in the other languages, the default `?circular` view
 leaves out a pair made only by fn-local `use` declarations. A `use` inside a macro body is a token
 tree and is not extracted at all. Rust `use` declarations have `dynamic=False`.
+
+Lua, Zig, GDScript and Scala:
+
+- A Lua `require` in any function body (`local function`, a global or `M:method` function, an
+  anonymous function) is local and runs when the function is called, the usual way to break a
+  circular `require`; such a pair leaves the default `?circular` view. `dynamic=True`.
+- A Zig `@import` in a `fn` body is local; one in a struct's `const` is module level. Zig
+  resolves imports at compile time and allows cycles, so local is a position. `dynamic=False`.
+- A Scala `import` in a `def` body is local (it binds names in that block). An import in a
+  lambda outside every `def` is unclassified. `dynamic=False`.
+- A GDScript `load()` in a `func` or lambda is local. `preload()` is resolved when the script is
+  parsed, wherever it is written, so one inside a `func` is unclassified: it keeps counting as a
+  load-time edge and in its cycles. `extends` is module level (`dynamic=False`); an import in a
+  property getter or setter body is unclassified. `load`/`preload` have `dynamic=True`.
 
 Ruby's bounded subset is an implicit `require`, `require_relative` or `load` call
 with exactly one plain quoted ASCII path literal matching `[A-Za-z0-9_./-]+`.

@@ -43,9 +43,9 @@ class ImportStatement:
     is_type_checking: bool = False  # True if inside 'if TYPE_CHECKING:' block
     # BACK-2076: where the import sits, from node_taxonomy.edge_scope(): 'module' (file,
     # class or namespace body; runs when the file loads) or 'local' (a function or lambda
-    # body). Positional, not a runtime claim. None: the extractor does not record it yet
-    # (Python, PHP, JavaScript/TypeScript/TSX and Rust record it; Ruby a bounded subset; other
-    # languages opt in with BACK-2079).
+    # body). Positional, not a runtime claim. None: the extractor does not record it, or the
+    # position confers no scope (Python, PHP, JavaScript/TypeScript/TSX, Rust, Lua, Zig,
+    # GDScript and Scala record it; Ruby a bounded subset; the other languages do not yet).
     scope: Optional[str] = None
     # BACK-2076: True for a loader call (JS/TS `import()` and `require()`), False for a
     # declaration (Python `import`, ES `import`/`export ... from`, PHP namespace `use`).

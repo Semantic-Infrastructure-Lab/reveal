@@ -76,7 +76,7 @@ LANGS = {
     },
     'gdscript': {
         'files': {
-            'imp.gd': ('extends Node\n'
+            'imp.gd': ('extends "res://t_base.gd"\n'
                        'const M = preload("res://t_mod.gd")\n'
                        'func f():\n\tvar a = load("res://t_fn.gd")\n'
                        'func g():\n\tvar b = preload("res://t_preload_fn.gd")\n'
@@ -84,10 +84,11 @@ LANGS = {
                        'var p:\n\tget:\n\t\treturn load("res://t_getter.gd")\n'),
             't_fn.gd': 'extends Node\nconst I = preload("res://imp.gd")\n',
         },
-        'targets': ['t_mod', 't_fn', 't_preload_fn', 't_lambda', 't_getter'],
+        'targets': ['t_mod', 't_fn', 't_preload_fn', 't_lambda', 't_getter', 't_base'],
         'target_file': '{}.gd',
-        'module': {'t_mod'}, 'local': {'t_fn', 't_lambda'}, 'unknown': {'t_preload_fn', 't_getter'},
-        'importer': 'imp.gd', 'dynamic': True, 'extractor': GDScriptImportExtractor,
+        'module': {'t_mod', 't_base'}, 'local': {'t_fn', 't_lambda'}, 'unknown': {'t_preload_fn', 't_getter'},
+        # `extends` is a declaration (dynamic False); preload/load are loader calls.
+        'importer': 'imp.gd', 'dynamic': True, 'declarations': {'t_base'}, 'extractor': GDScriptImportExtractor,
     },
 }
 
@@ -153,7 +154,9 @@ def test_each_import_gets_its_lexical_scope(tmp_path, lang):
     expected = {**{n: 'module' for n in spec['module']}, **{n: 'local' for n in spec['local']},
                 **{n: None for n in spec['unknown']}}
     assert got == expected
-    assert {stmt.dynamic for stmt in statements} == {spec['dynamic']}
+    declarations = spec.get('declarations', set())
+    dynamic = {next(n for n in spec['targets'] if n in stmt.module_name): stmt.dynamic for stmt in statements}
+    assert dynamic == {n: (not spec['dynamic'] if n in declarations else spec['dynamic']) for n in got}
 
 
 @pytest.mark.parametrize('lang', sorted(LANGS))
@@ -177,6 +180,20 @@ def test_a_cycle_closed_only_by_a_local_import_leaves_the_default_cycle_view(tmp
     assert default['count'] == 0
     out, union = _query(root, 'circular&lazy=include')
     assert out.returncode == 0 and union['count'] == 1
+
+
+def test_check_i002_reads_the_same_load_time_view(tmp_path):
+    """A Lua cycle closed only by a require inside a function is not an I002 import cycle."""
+    def i002_count(name, b_source):
+        root = tmp_path / name  # a separate tree per case: no reuse of a cached graph
+        root.mkdir()
+        (root / 'a.lua').write_text("local b = require('b')\nreturn {}\n", encoding='utf-8')
+        (root / 'b.lua').write_text(b_source, encoding='utf-8')
+        out = _run_reveal_direct('check', to_posix(root), '--select', 'I002', '--format', 'json')
+        return sum(len(entry.get('detections', [])) for entry in json.loads(out.stdout)['files'])
+
+    assert i002_count('lazy', "local function f() return require('a') end\nreturn {f=f}\n") == 0
+    assert i002_count('eager', "local a = require('a')\nreturn {}\n") == 2  # control: module level
 
 
 def test_a_gdscript_preload_in_a_func_still_closes_a_load_time_cycle(tmp_path):

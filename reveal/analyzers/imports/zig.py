@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import List, Optional, Set
 
 from ...core import node_children as _children
+from ...core.node_taxonomy import edge_scope
 from ...core.treesitter_compat import _zero_arg
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .types import ImportStatement
@@ -116,6 +117,10 @@ class ZigImportExtractor(LanguageExtractor):
             alias=None,
             source_line=_line_text(analyzer, _zero_arg(node, 'start_position').row + 1),
             skip_unused=True,
+            # BACK-2079: an @import in a fn body is local, positionally. Zig evaluates it at
+            # compile time and allows import cycles, so local is not deferred loading.
+            scope=edge_scope(node),
+            dynamic=False,
         )
 
     @staticmethod

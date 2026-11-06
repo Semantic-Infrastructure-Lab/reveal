@@ -6,7 +6,7 @@ import pytest
 
 from conftest import _run_reveal_direct
 from reveal.analyzers.imports import generic
-from reveal.analyzers.imports.generic import LuaImportExtractor, RubyImportExtractor
+from reveal.analyzers.imports.generic import DartImportExtractor, RubyImportExtractor
 from reveal.utils.path_utils import to_posix
 
 pytestmark = pytest.mark.component
@@ -73,9 +73,9 @@ def test_scope_annotation_preserves_every_other_extracted_field(tmp_path, monkey
 
 
 def test_generic_sibling_keeps_unknown_metadata(tmp_path):
-    path = tmp_path / 'source.lua'
-    path.write_text("local x = require('target')\n", encoding='utf-8')
-    [statement] = LuaImportExtractor().extract_imports(path)
+    path = tmp_path / 'source.dart'  # Lua records scope since BACK-2079; Dart does not
+    path.write_text("import 'target.dart';\n", encoding='utf-8')
+    [statement] = DartImportExtractor().extract_imports(path)
     assert statement.scope is None and statement.dynamic is None
 
 

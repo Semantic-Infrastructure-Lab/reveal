@@ -2112,6 +2112,15 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             results.append((const_name, value))
         return results
 
+    @staticmethod
+    def _callee_name(node, analyzer) -> Optional[str]:
+        """The call's own identifier (its first ``identifier`` child), or None."""
+        for child in _children(node):
+            if _zero_arg(child, 'kind') == 'identifier':
+                name: str = analyzer._get_node_text(child)
+                return name
+        return None
+
     def _call_to_import(self, node, analyzer, file_path: Path) -> Optional[ImportStatement]:
         """Turn a ``require``-style call node into an ImportStatement, if it is one.
 
@@ -2120,11 +2129,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         calls like ``puts(require_relative 'x')`` are ignored unless they are the
         callee themselves.
         """
-        callee = None
-        for child in _children(node):
-            if _zero_arg(child, 'kind') == 'identifier':
-                callee = analyzer._get_node_text(child)
-                break
+        callee = self._callee_name(node, analyzer)
         if callee is None or callee not in self.spec.call_import_names:
             return None
 
@@ -3229,6 +3234,11 @@ _LUA_SPEC = _ImportSpec(
     directory_index_filenames=frozenset({'init.lua'}),
 )
 
+# Ancestors that confer no edge scope (BACK-2079): an edge under one, with no enclosing
+# function, stays unclassified rather than reading as module level.
+_SCALA_UNSCOPED_KINDS = frozenset({'lambda_expression'})
+_GDSCRIPT_UNSCOPED_KINDS = frozenset({'get_body', 'set_body'})
+
 
 @register_extractor
 class CImportExtractor(_GenericTreeSitterImportExtractor):
@@ -3498,6 +3508,20 @@ class ScalaImportExtractor(_GenericTreeSitterImportExtractor):
     language_name = 'Scala'
     spec = _SCALA_SPEC
 
+    def _node_to_imports(
+        self, node, analyzer, file_path: Path,
+        constant_index: Optional[Dict[str, Tuple[str, str]]] = None,
+    ) -> List[ImportStatement]:
+        """An ``import`` in a ``def`` body is local (BACK-2079): it binds names in that block at
+        compile time, so local is a lexical position, as for Rust. A lambda outside every
+        ``def`` confers no scope here; that edge stays unclassified."""
+        statements = super()._node_to_imports(node, analyzer, file_path, constant_index)
+        scope = edge_scope(node, unclassified_kinds=_SCALA_UNSCOPED_KINDS)
+        for statement in statements:
+            statement.scope = scope
+            statement.dynamic = False
+        return statements
+
 
 @register_extractor
 class DartImportExtractor(_GenericTreeSitterImportExtractor):
@@ -3512,12 +3536,49 @@ class GDScriptImportExtractor(_GenericTreeSitterImportExtractor):
     language_name = 'GDScript'
     spec = _GDSCRIPT_SPEC
 
+    def _call_to_import(self, node, analyzer, file_path: Path) -> Optional[ImportStatement]:
+        """``load()`` in a ``func`` or lambda is local: it runs when called (BACK-2079).
+        ``preload()`` is resolved when the script is parsed, wherever it is written, so one
+        inside a function is not local; it stays unclassified and keeps counting as a
+        load-time edge (and in its cycles). A property getter/setter body confers no scope."""
+        statement = super()._call_to_import(node, analyzer, file_path)
+        if statement is None:
+            return None
+        scope = edge_scope(node, unclassified_kinds=_GDSCRIPT_UNSCOPED_KINDS)
+        if scope == 'local' and self._callee_name(node, analyzer) == 'preload':
+            scope = None
+        statement.scope = scope
+        statement.dynamic = True
+        return statement
+
+    def _node_to_imports(
+        self, node, analyzer, file_path: Path,
+        constant_index: Optional[Dict[str, Tuple[str, str]]] = None,
+    ) -> List[ImportStatement]:
+        """``extends`` (a script's or an inner class's base) is a declaration the script needs
+        when it loads: module scope, ``dynamic=False`` (BACK-2079)."""
+        statements = super()._node_to_imports(node, analyzer, file_path, constant_index)
+        scope = edge_scope(node, unclassified_kinds=_GDSCRIPT_UNSCOPED_KINDS)
+        for statement in statements:
+            statement.scope = scope
+            statement.dynamic = False
+        return statements
+
 
 @register_extractor
 class LuaImportExtractor(_GenericTreeSitterImportExtractor):
     extensions = {'.lua'}
     language_name = 'Lua'
     spec = _LUA_SPEC
+
+    def _call_to_import(self, node, analyzer, file_path: Path) -> Optional[ImportStatement]:
+        """``require`` in any function body (local, global, method or anonymous) is local and
+        runs when the function is called (BACK-2079)."""
+        statement = super()._call_to_import(node, analyzer, file_path)
+        if statement is not None:
+            statement.scope = edge_scope(node)
+            statement.dynamic = True
+        return statement
 
 
 __all__ = [

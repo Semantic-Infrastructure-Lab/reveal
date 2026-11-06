@@ -17,10 +17,9 @@ import pytest
 
 from conftest import _run_reveal_direct
 from reveal.analyzers.imports import rust
-from reveal.analyzers.imports.generic import LuaImportExtractor
+from reveal.analyzers.imports.generic import DartImportExtractor, SwiftImportExtractor
 from reveal.analyzers.imports.rust import RustExtractor
 from reveal.analyzers.imports.types import ImportGraph
-from reveal.analyzers.imports.zig import ZigImportExtractor
 from reveal.utils.path_utils import to_posix
 
 pytestmark = pytest.mark.component
@@ -306,14 +305,15 @@ def test_a_module_scope_back_edge_is_still_a_cycle(tmp_path):
     assert default['count'] == 1
 
 
-def test_other_bespoke_and_generic_extractors_keep_unknown_scope(tmp_path):
-    """Negative control: Zig and Lua (still BACK-2079) are not classified by the Rust slice."""
-    zig = tmp_path / 'a.zig'
-    zig.write_text('pub fn f() void {\n    const a = @import("b.zig");\n    _ = a;\n}\n', encoding='utf-8')
-    lua = tmp_path / 'a.lua'
-    lua.write_text("local function f() return require('b') end\n", encoding='utf-8')
-    assert {s.scope for s in ZigImportExtractor().extract_imports(zig)} == {None}
-    assert {s.scope for s in LuaImportExtractor().extract_imports(lua)} == {None}
+def test_other_generic_extractors_keep_unknown_scope(tmp_path):
+    """Negative control: Dart and Swift are classified by no slice (Zig and Lua have their own,
+    tests/test_import_scope_lua_zig_gdscript_scala_back2079.py)."""
+    dart = tmp_path / 'a.dart'
+    dart.write_text("import 'b.dart';\nvoid f() {}\n", encoding='utf-8')
+    swift = tmp_path / 'a.swift'
+    swift.write_text('import Foundation\nfunc f() {}\n', encoding='utf-8')
+    assert {s.scope for s in DartImportExtractor().extract_imports(dart)} == {None}
+    assert {s.scope for s in SwiftImportExtractor().extract_imports(swift)} == {None}
 
 
 @pytest.mark.disk_cache
