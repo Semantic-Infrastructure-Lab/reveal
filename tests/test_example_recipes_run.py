@@ -71,7 +71,7 @@ FINDINGS_EXITS = {'review': {0, 1}, 'check': {0, 1}, 'hotspots': {0, 1}, 'deps':
                   'health': {0, 1}, 'imports': {0, 1}}
 # Flag forms with the same findings exit: --check is `reveal check` (1 = issues found);
 # --validate-schema documents 1 = validation failures (SCHEMA_VALIDATION_HELP.md "Exit Codes").
-FINDINGS_FLAGS = {'--check': {0, 1}, '--validate-schema': {0, 1}}
+FINDINGS_FLAGS = {'--check': {0, 1}, '--validate-schema': {0, 1}, '--fail-on': {0, 1}}
 
 
 def _findings_exits(argv):
@@ -255,6 +255,12 @@ def _row_matches(family, key, op, value, row, root):
         return value.lower() in _markdown_body(root, row).lower()
     actual = row.get((_AST_FIELDS if family == 'ast_query' else _MARKDOWN_FIELDS)[key])
     if key == 'type' and family == 'ast_query':
+        # ?type=a,b and ?type=a|b are OR; `method` is a function row that has an owner class.
+        wanted = re.split(r'[,|]', value)
+        if op == '=' and len(wanted) > 1:
+            return any(_row_matches(family, key, op, one, row, root) for one in wanted)
+        if value == 'method':
+            return actual == 'functions' and bool(row.get('owner'))
         value = _AST_TYPES.get(value, value)
     if op == '~=':
         return re.search(value, str(actual)) is not None
@@ -556,7 +562,7 @@ DISCOVERY_FLAGS = {'--adapters', '--languages', '--discover', '--agent-help', '-
 
 
 # A command the doc itself shows failing: `# not valid` beside it, or its `# Error:` output below.
-_DOCUMENTED_FAILURE = re.compile(r'#.*\b(not valid|invalid)\b|^\s*# Error\b', re.IGNORECASE)
+_DOCUMENTED_FAILURE = re.compile(r'#.*\b(not valid|invalid)\b|#\s*Error\b', re.IGNORECASE)
 
 
 def _documented_sources(docs):
@@ -569,9 +575,24 @@ def _documented_sources(docs):
             yield os.path.relpath(source, docs).replace(os.sep, '/'), source
 
 
-# Whole sources whose every command runs, like guides/*.md. QUICK_START and WHY_REVEAL are the
-# first pages a new user reads; run unqualified, 5 of their 34 commands failed (BACK-1365).
+# Whole sources whose every command runs, like guides/*.md and adapters/*.md. QUICK_START and
+# WHY_REVEAL are the first pages a new user reads; run unqualified, 5 of their 34 commands failed
+# (BACK-1365). The adapter guides came next: 82 of ~500 failed, and each was a harness read, a fixture
+# name or a tutorial example (BACK-2518).
 RUN_SOURCES = frozenset({'AGENT_HELP.md', 'QUICK_START.md', 'WHY_REVEAL.md'})
+
+
+# Commands a guide prints on purpose to teach something other than a working call: a made-up
+# adapter in the how-to-write-one tutorial, a limitation, an anti-pattern. Key: the words after
+# `reveal`, exactly as written (BACK-2518).
+TUTORIAL_COMMANDS = {
+    'README.md --frontmatter': 'shows the text-mode note that frontmatter data needs --format json',
+    'README.md --frontmatter --code': 'shows the text-mode note that frontmatter data needs --format json',
+    'git://.?limit=10000': 'the guide\'s own bad example (scan everything, filter later)',
+    'claude://session/infernal-earth-0118/message/334': 'index into a long real session; the fixture has 8',
+    'project:// --check --select P001,P002': 'rule codes of the tutorial\'s made-up project adapter',
+}
+TUTORIAL_PREFIXES = ('mything://', 'help://mything')
 
 
 # Exact source-command identities accepted by BACK-2444. Other newly inventoried
@@ -601,7 +622,7 @@ DOC_NAMED_SOURCE_COHORT = {
 def _source_cohort_reason(source, tokens):
     if source.endswith('#embedded-md'):
         return f'embedded Markdown not yet qualified: {source} (BACK-1365)'
-    if source in RUN_SOURCES or source.startswith('guides/'):
+    if source in RUN_SOURCES or source.startswith(('guides/', 'adapters/')):
         return None
     if (source, shlex.join(tokens)) in DOC_SOURCE_COHORT | DOC_NAMED_SOURCE_COHORT:
         return None
@@ -657,6 +678,8 @@ def _documentation_commands():
         for key, value in (('<topic>', 'ast'), ('<adapter>', 'ast'), ('<task>', 'codebase'),
                            ('<lang>', 'python'), ('<file>', 'proj/app.py')):
             query = query.replace(key, value)
+        if ' '.join(tokens[1:]).startswith(TUTORIAL_PREFIXES):
+            marks.append(pytest.mark.skip(reason='tutorial example: a made-up adapter (BACK-2518)'))
         if any(token in query for token in ('<', '$', '|')):
             marks.append(pytest.mark.skip(reason='discovery template needs explicit shell/content fixture'))
         params.append(pytest.param(query, marks=marks, id=f'{source}:{len(params)}:{line.strip()}'))
@@ -687,8 +710,15 @@ _URI = re.compile(r'^([a-z]+)://(.*)$')
 # A ref as the docs write it: a branch, a tag, HEAD~N, or a commit hash.
 _REF_PARAM = re.compile(r'(?:^|&)(?:ref|since|hash|ignore)=([^&]+)')
 # Two docs give one name two incompatible shapes; the fixture can hold only one of them.
+
 FIXTURE_CONFLICTS = {
     'data.json/users': 'data.json is a root array here, for the ?filter examples',
+    'data.json/products': 'data.json is a root array here, for the ?filter examples',
+    'data.json/orders': 'data.json is a root array here, for the ?filter examples',
+    'data.json/scores': 'data.json is a root array here, for the ?filter examples',
+    'data.json/teams': 'data.json is a root array here, for the ?filter examples',
+    'data.json/api': 'data.json is a root array here, for the ?filter examples',
+    'users.json/data/users': 'users.json is a root array here, for the ?filter examples',
     'src/processor.py MyClass.process_batch': 'a method of the same name makes the bare '
                                               'process_batch the docs use 11 times ambiguous',
 }
@@ -730,7 +760,7 @@ def _missing_in_uri(uri, paths, refs):
     if scheme == 'calls' and ':' in resource:
         resource = resource.split(':', 1)[0]
     if scheme in ('json', 'sqlite', 'xlsx'):  # file, then a path inside it
-        parts = resource.split('/')
+        parts = resource.removeprefix('./').split('/')
         for n in range(len(parts), 0, -1):
             if '/'.join(parts[:n]) in paths:
                 return None
@@ -758,6 +788,9 @@ def _named_fixture_skip(tokens, fixture_names=None):
         return 'needs a live host or server files'
     if '://' not in stage[1] and re.search(r'[*?]', stage[1]):
         return 'an unquoted glob the shell expands'
+    shown = ' '.join(stage[1:])
+    if shown in TUTORIAL_COMMANDS or shown.startswith(TUTORIAL_PREFIXES):
+        return f'tutorial example: {TUTORIAL_COMMANDS.get(shown, "a made-up adapter")}'
     conflict = next((why for key, why in FIXTURE_CONFLICTS.items() if key in ' '.join(stage)), None)
     if conflict:
         return f'fixture conflict: {conflict}'
@@ -846,6 +879,7 @@ def named_harness(tmp_path_factory):
     build_session_extras(root / 'home')
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv('DATABASE_URL', 'postgres://fixture')  # env://DATABASE_URL
+        mp.setenv('VIRTUAL_ENV', '/fixture/venv')  # env://VIRTUAL_ENV
         yield _Harness(root)
 
 

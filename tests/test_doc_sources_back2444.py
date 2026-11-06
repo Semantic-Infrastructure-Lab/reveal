@@ -112,9 +112,9 @@ def test_new_source_exclusions_are_explicit_and_legacy_sources_still_run():
     identities = {(source, shlex.join(tokens)) for source, _, tokens, _ in rows}
     assert DOC_NAMED_SOURCE_COHORT <= identities
     reasons = [_source_cohort_reason(source, tokens) for source, _, tokens, _ in rows]
-    assert any(reason and 'adapters/' in reason for reason in reasons)
+    assert any(reason and 'README.md' in reason for reason in reasons)  # README stays inventory-only
     assert all(reason is None for (source, _, _, _), reason in zip(rows, reasons)
-               if source in RUN_SOURCES or source.startswith('guides/'))
+               if source in RUN_SOURCES or source.startswith(('guides/', 'adapters/')))
     sources ={name for name, _ in _documented_sources(Path(__file__).parents[1] / 'reveal' / 'docs')}
     assert {'../../README.md', 'QUICK_START.md', 'WHY_REVEAL.md', 'INDEX.md',
             'adapters/IMPORTS_ADAPTER_GUIDE.md', 'adapters/OVERVIEW_ADAPTER_GUIDE.md',
@@ -180,3 +180,40 @@ def test_incomplete_markdown_keeps_partial_answer_and_failure(navigation_harness
     sibling_code, sibling_out, _, _ = navigation_harness.run_subcommand('imports', '.', '--external', '--format', 'json')
     assert sibling_code == 0
     _assert_navigation_answer('reveal imports . --external', json.loads(sibling_out))
+
+
+def test_adapter_guides_run_their_own_commands():
+    """Every adapter guide is a run source (BACK-2518): none of its commands is excluded as
+    unqualified, and the guides that have runnable examples run them."""
+    from test_example_recipes_run import _named_fixture_commands
+    params = _named_fixture_commands()
+    by_source = {}
+    for p in params:
+        source = p.id.split(':', 1)[0]
+        if source.startswith('adapters/'):
+            by_source.setdefault(source, []).append(p)
+    assert len(by_source) >= 12, sorted(by_source)
+    for source, group in by_source.items():
+        assert not any('not yet qualified' in m.kwargs.get('reason', '')
+                       for p in group for m in p.marks), source
+    for source, floor in (('AST', 10), ('CALLS', 10), ('JSON', 10), ('CLAUDE', 10), ('CODEX', 4), ('GIT', 10)):
+        group = by_source[f'adapters/{source}_ADAPTER_GUIDE.md']
+        run = [p for p in group if not any(m.name == 'skip' for m in p.marks)]
+        assert len(run) >= floor, (source, len(group), len(run))
+
+
+def test_harness_reads_the_guides_ast_type_spellings():
+    """?type=a,b and a|b are OR and `method` is a function row with an owner: the AST guide's own
+    examples must not be read as contradicting their query (BACK-2518)."""
+    from test_example_recipes_run import _row_matches, _findings_exits, _DOCUMENTED_FAILURE
+    function = {'category': 'functions', 'name': 'f', 'owner': None}
+    method = {'category': 'functions', 'name': 'm', 'owner': 'C'}
+    klass = {'category': 'classes', 'name': 'C'}
+    for spelling in ('class,function', 'class|function'):
+        assert all(_row_matches('ast_query', 'type', '=', spelling, r, None) for r in (function, method, klass))
+        assert not _row_matches('ast_query', 'type', '=', 'class|method', function, None)
+    assert _row_matches('ast_query', 'type', '=', 'method', method, None)
+    assert not _row_matches('ast_query', 'type', '=', 'method', function, None)
+    assert _findings_exits(['imports://src?circular', '--fail-on', 'findings']) == {0, 1}
+    assert _DOCUMENTED_FAILURE.search('reveal env://MY_VAR=value  # Error')
+    assert not _DOCUMENTED_FAILURE.search('reveal env://MY_VAR')

@@ -127,6 +127,9 @@ _APP_PY = (
     '\n\n'
     'def main():\n'
     '    return process_batch([1, 2, 3], {"limit": 2})\n'
+    '\n\n'
+    'def critical_handler(event):\n'
+    '    return event\n'
 )
 
 # file.py: >340 lines; function_name starts near the top so `--calls 1-50` covers it.
@@ -233,6 +236,7 @@ _AUTH_PY = (
     + 'def process_payment(amount: int) -> bool:\n' + _pad('fee', 60) + '    return amount > 0\n'
     + '\n\n'
     + 'def refresh(token):\n' + _pad('r', 40) + '    return validate_token(token)\n'
+    + '\n\nclass AuthHandler:\n    def handle(self, user):\n        return authenticate_user(user, "")\n'
 )
 
 _SRC_APP_PY = (
@@ -256,6 +260,7 @@ _SRC_APP_PY = (
     '\n\n'
     + 'def build_routes(app):\n' + _pad('route', 150) + '    return route_149\n'
     + '\n\ndef load_config(path):\n    """QUICK_START and the git:// blame examples read this."""\n    return {"path": path}\n'
+    + '\n\ndef function_name(x):\n    """The AST and git:// guides use this generic name."""\n    return x\n'
 )
 
 _VALIDATORS_PY = (
@@ -373,6 +378,10 @@ Run the migration.
 
 - Bug 11: social_repost_log grows without bound
 
+## Bug 11 Details
+
+The log is never rotated.
+
 ## Action Items
 
 - Rotate the config.
@@ -395,6 +404,10 @@ import reveal
 ```bash
 pip install reveal-cli
 ```
+
+## Installation
+
+Run `pip install reveal-cli`.
 
 ## Usage
 
@@ -437,7 +450,8 @@ _DATA_ROWS = [
 _JSON = {
     # A root array: the filter examples (?age>25, ?status=active) filter its rows.
     'data.json': _DATA_ROWS,
-    'config.json': {'database': {'host': 'db.local', 'password': 'x'},
+    'config.json': {'database': {'host': 'localhost', 'port': 5432, 'password': 'x'},
+                    'api': {'endpoints': {'users': {'url': '/users'}}},
                     'services': {'api': {'url': 'https://example.invalid'}}},
     'users.json': [dict(r, last_login=f'2026-01-0{i}', id=i, email=f'{r["name"]}@example.com')
                    for i, r in enumerate(_DATA_ROWS, 1)],
@@ -449,8 +463,8 @@ _JSON = {
     'customers.json': [{'name': 'big', 'lifetime_value': 20000}, {'name': 'small', 'lifetime_value': 10}],
     'orders.json': [{'total': 150, 'date': '2026-02-01'}, {'total': 50, 'date': '2026-03-01'}],
     'large-config.json': {'api': {'key': 'k', 'secret_key': 's'}},
-    'config.dev.json': {'debug': True, 'port': 8000},
-    'config.prod.json': {'debug': False, 'port': 80},
+    'config.dev.json': {'debug': True, 'port': 8000, 'database': {'host': 'dev.db.local'}},
+    'config.prod.json': {'debug': False, 'port': 80, 'database': {'host': 'prod.db.local'}},
 }
 
 _PHP_BLOCK = '''if ($row['id'] > {i}) {{
@@ -481,7 +495,7 @@ FILES = {
     'huge_file.py': 'def target_function(x):\n' + _pad('t', 80) + '    return t_79\n\n\n'
                     + 'def other(x):\n' + _pad('o', 80) + '    return o_79\n',
     'large_module.py': 'def a():\n    return 1\n\n\ndef b():\n    return 2\n',
-    'models.py': 'class User:\n    name = "x"\n\n\nclass Order:\n    total = 0\n',
+    'models.py': 'class User:\n    name = "x"\n\n    def save(self):\n        return self.name\n\n\nclass Order:\n    total = 0\n',
     'script.py': 'import sys\n\n\ndef main():\n    return sys.argv\n',
     'file1.py': 'def f():\n    return 1\n',
     'file2.py': 'def f():\n    return 2\n',
@@ -511,12 +525,26 @@ FILES = {
     'src/insecure.py': 'import subprocess\n\n\ndef bad_function(cmd):\n'
                        '    return subprocess.call(cmd, shell=True)\n',
     'src/problematic_file.py': 'def broken(x):\n    return eval(x)\n',
+    'src/api/__init__.py': '',
+    'src/api/client.py': 'import json\n\n\ndef ping():\n    return 1\n',
     'src/utils.py': 'import os\nimport sys\n\n\ndef cwd():\n    return os.getcwd()\n',
     'src/file.py': 'from .validators import validate_item\n\n\ndef fn(x):\n    return validate_item(x)\n',
     'src/models/__init__.py': '',
     'src/models/user.py': 'from ..validators import validate_item\n\n\nclass User:\n'
                           '    def check(self):\n        return validate_item(self)\n',
     'src/services/__init__.py': '',
+    # Names the Calls and AST adapter guides use in their generic examples (BACK-2518).
+    'src/guide_names.py': 'from .validators import validate_item\n\n\n'
+                          'def my_function(x):\n    return validate_item(x)\n\n\n'
+                          'def authenticate(user):\n    return validate_item(user)\n\n\n'
+                          'def initialize_app(config):\n    return authenticate(config)\n\n\n'
+                          'def process_input(text):\n    return eval(text)\n\n\n'
+                          'def entry_point():\n    return initialize_app({})\n\n\n'
+                          'def old_parse_config(path):\n    return path\n\n\n'
+                          'def parse_config(path):\n    return old_parse_config(path)\n',
+    'src/auth/checks.py': 'from ..validators import validate_item\n\n\n'
+                          'def validate_token(token):\n    return validate_item(token)\n\n\n'
+                          'def guard(token):\n    return validate_token(token)\n',
     'src/services/base.py': 'from abc import ABC, abstractmethod\n\n\nclass Service(ABC):\n'
                             '    @abstractmethod\n    def run(self):\n        pass\n',
     'src/jobs/__init__.py': '',
@@ -621,8 +649,15 @@ def named_paths():
     return paths
 
 
+# The databases the SQLite guide's examples open.
+SQLITE_FILES = ('app.db', 'db.sqlite3', 'dev.db', 'prod.db', 'data.db', 'local.db', 'data/app.db',
+                'data/test.db', 'databases/test.sqlite')
+
+
 def _write_binary_fixtures(root):
-    for name in ('app.db', 'db.sqlite3', 'dev.db', 'prod.db'):
+    (root / 'data').mkdir(exist_ok=True)
+    (root / 'databases').mkdir(exist_ok=True)
+    for name in SQLITE_FILES:
         conn = sqlite3.connect(str(root / name))
         conn.execute('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)')
         conn.execute('CREATE TABLE trades (id INTEGER PRIMARY KEY, symbol TEXT)')
@@ -643,12 +678,14 @@ def _write_binary_fixtures(root):
         budget.append(['item', 'cost', 'total'])
         budget.append(['x', 5, '=B2*2'])
         wb.create_sheet('Summary').append(['error', 'pattern'])
+        wb.create_sheet('Sheet1').append(['a', 'b'])  # the XLSX guide's generic sheet names
+        wb.create_sheet('Data').append(['a', 'b'])
         wb.save(str(root / name))
 
 
 def binary_paths():
     """The binary fixtures (written separately from FILES); xlsx only with openpyxl."""
-    paths = {'app.db', 'db.sqlite3', 'dev.db', 'prod.db'}
+    paths = set(SQLITE_FILES) | {'data', 'databases'}
     try:
         import openpyxl  # noqa: F401
         paths |= {'model.xlsx', 'file.xlsx'}
@@ -658,13 +695,24 @@ def binary_paths():
 
 
 # Recorded sessions under the names the docs use, beyond tests/claude_session_fixture.py's own.
-CLAUDE_SESSIONS = ('my-session-name', 'my-session-0302', 'my-session-0316')
+CLAUDE_SESSIONS = ('my-session-name', 'my-session-0302', 'my-session-0316', 'failed-build',
+                   'failed-session')
 
 
 def build_session_extras(home: Path) -> None:
     """The plan, Codex prompt history and Codex memory pipeline the docs' examples name."""
     (home / '.claude' / 'plans' / 'my-plan-name.md').write_text(
         '# My plan\n\nShip the token check.\n', encoding='utf-8')
+    claude = home / '.claude'
+    settings = json.loads((claude / 'settings.json').read_text(encoding='utf-8'))
+    settings['cleanupPeriodDays'] = 30
+    settings['hooks']['PreToolUse'] = [{'matcher': 'Bash', 'hooks': [
+        {'type': 'command', 'command': '~/.claude/hooks/PreToolUse'}]}]
+    (claude / 'settings.json').write_text(json.dumps(settings), encoding='utf-8')
+    (claude / 'hooks' / 'PreToolUse').write_text('#!/bin/sh\nexit 0\n', encoding='utf-8')
+    (claude / 'plans' / 'my-session-name.md').write_text('# Plan\n\nSplit the token check.\n', encoding='utf-8')
+    (claude / 'agents' / 'my-agent-name.md').write_text(
+        '---\nname: my-agent-name\ndescription: Example agent\n---\nDo the work.\n', encoding='utf-8')
     codex = home / '.codex'
     (codex / 'history.jsonl').write_text(''.join(
         json.dumps({'session_id': '019e5cc5', 'ts': 1774692000 + i, 'text': text}) + '\n'
@@ -675,6 +723,15 @@ def build_session_extras(home: Path) -> None:
                  "rollout_slug, generated_at, usage_count, last_usage, selected_for_phase2) "
                  "VALUES ('019e5cc5', 1779600000, 'raw', 'summary', 'auth-refactor', 1779600000, 2, "
                  "1779686400, 1)")
+    conn.commit()
+    conn.close()
+    conn = sqlite3.connect(str(codex / 'state_5.sqlite'))  # the thread ids the Codex guide opens
+    for thread in ('01a161bb', '019d9da3', '019e5cc8'):
+        conn.execute("INSERT INTO threads (id, rollout_path, created_at, updated_at, source, cwd, title, "
+                     "first_user_message, model, model_provider, tokens_used, archived) "
+                     "SELECT ?, rollout_path, created_at, updated_at, source, cwd, title, "
+                     "first_user_message, model, model_provider, tokens_used, archived "
+                     "FROM threads WHERE id LIKE '019e5cc5%' AND thread_source IS NULL", (thread,))
     conn.commit()
     conn.close()
 
