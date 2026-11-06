@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- `reveal hotspots`, `hotspots://` and its `--files-only`/`--functions-only` now print a one-line "replaced by" note and still answer: use `reveal metrics PATH --hotspots` for the file ranking and `reveal 'ast://PATH?complexity>=10&sort=-complexity&limit=10' --format json` for functions. `reveal metrics PATH --hotspots --fail-on findings` is the gate now (exit 1 when any analysed file has quality below 70 or a function above complexity 20, whatever the cut or filter; it exited 2), each entry carries its `provenance` tag, and `has_test_hint` is retired with no replacement (BACK-2149).
+
 - `reveal FILE`, `reveal FILE NAME`, the element flags (`--outline`, `--effects`, `--exits`, ...) and `reveal FILE --grep` on a file that exists but cannot be read (permissions) now exit `3`, like `reveal check` on the same file; they exited `1`, the findings code. A file that disappears between the check and the read exits `2`. `--stdin` given a file it cannot read still answers the other files but now exits `3` (was `0`); a listed path that no longer exists is still skipped with exit `0` (BACK-2527).
 
 - Kotlin and Scala are now recall-gated: `imports://...?importers` no longer names them as not gated. The gate scores explicit imports against a declaration-based oracle on four pinned corpora (Kotlin 100% and 99.04%, Scala 99.63% and 98.37% after the change above; 82.34%, 77.03%, 81.11% and 82.61% before it). Package wildcard imports are counted, not scored; Scala selector lists are scored since the next entry (BACK-2507).
