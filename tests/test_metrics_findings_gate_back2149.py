@@ -184,3 +184,14 @@ def test_the_exit_code_help_names_the_gate():
     text = ' '.join(result.stdout.split())
     assert '--fail-on {none,findings}' in text
     assert 'quality below 70' in text and 'complexity above 20' in text
+
+
+@pytest.mark.parametrize('names, verdict', [(('clean.py', 'complex.py'), 'yes'), (('clean.py', 'edge.py'), 'none')])
+def test_text_states_the_verdict_and_its_rule_in_both_spellings(make, names, verdict):
+    target = make(*names)
+    for argv in (['metrics', target, '--hotspots'], [f'metrics://{target}?hotspots=true']):
+        result = run(*argv, '--no-gitignore')
+        assert result.returncode == 0, result.stderr
+        assert (f'Findings:   {verdict} (a file below quality 70 or a function above complexity 20, '
+                'over every analysed file before filters and cuts)') in result.stdout, argv
+    assert 'Findings:' not in run('metrics', target, '--no-gitignore').stdout  # no ranking, no verdict

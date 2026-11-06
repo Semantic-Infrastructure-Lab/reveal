@@ -87,3 +87,10 @@ def test_the_page_and_the_view_keep_their_own_shapes(project):
     view = json.loads(run('metrics', 'tests/proj', '--view', 'provenance', '--format', 'json',
                           '--no-gitignore').stdout)
     assert {row['file']: row['provenance'] for row in view['files']}['src/core.py'] == 'first_party'
+
+
+def test_text_appends_the_tag_to_tagged_files_only(project):
+    out = run('metrics', 'tests/proj', '--hotspots', '--top', '0', '--no-gitignore').stdout
+    lines = {line.split('. ', 1)[1] for line in out.splitlines() if line[:1].isdigit() and '. ' in line}
+    assert lines == {'src/core.py', 'tests/test_core.py  [test]', 'vendor/lib.py  [vendor]',
+                     'static/app.min.js  [minified]'}
