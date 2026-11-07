@@ -2530,8 +2530,10 @@ installation and the normal test suite do not fetch them.
 
 The gate reads reveal through its public output. For the import oracles it makes one
 `imports://<scan dir>?importers&root=<scan dir>` request per corpus (the importer summary lists
-every module with an importer, with its sorted importers); Go uses the per-file form, whose
-package view expands a directory import to files. It fails on a capped scan, a cut list,
+every module with an importer, with its sorted importers). Go's summary lists a package's importers
+under its directory, so the gate gives each file of that package the row, less the file itself:
+the oracle's own fan-out, from the same single request (BACK-2557; the per-file form it replaced
+rebuilt the graph per target). It fails on a capped scan, a cut list,
 non-JSON output, a file lost from the answer or any exit but 0 and 3 (3 is a file parsed with
 errors, counted below), and never reads the adapter's private graph. `partial_files` is the count the CLI prints for the
 whole scan tree, so it includes files of other languages: cpp-assimp's 458 counts one Rust
@@ -2612,8 +2614,8 @@ are reported as `unscored_targets`, `unscored_pairs` and sorted
 do not establish complete graph coverage or change existing scores and baselines.
 Paths are relative to the corpus root, including `../` for outside-root targets;
 identities that cannot be made relative are counted as unavailable without exposing
-absolute paths. Go's per-target package view reports this population as unavailable,
-with a reason, rather than inventing zero unscored claims (BACK-2429).
+absolute paths. Go reports it from the package fan-out of the same summary (BACK-2557); the
+per-target view it replaced reported it as unavailable (BACK-2429).
 
 The `python-reveal` population is reveal's own repository at public
 `4d4116cc` (whole tree, tests included): 1,397 files, 544 targets, 4,986/4,986 edges, 0 extra.
