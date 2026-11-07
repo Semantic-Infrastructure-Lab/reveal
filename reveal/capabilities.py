@@ -354,7 +354,9 @@ _TIER1: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_VERIFIED,
         imports_unused=True,
         import_resolution=(
-            "Bespoke extractor (imports/rust.py) resolves use-paths; pub use "
+            "Bespoke extractor (imports/rust.py) resolves use-paths through "
+            "the per-scan package model (Cargo.toml crate roots, [[bin]]/"
+            "[[test]] targets, workspace path dependencies); pub use "
             "re-exports are correctly marked skip_unused so they are never "
             "falsely flagged (fixed BACK-431 Issue G, 15 false positives in "
             "one real Meilisearch file before the fix)."
@@ -378,7 +380,8 @@ _TIER1: Dict[str, LanguageCapability] = {
             "index-scheduler: 51 -> 7 flags, all 7 of that kind.",
         ],
         validation=[
-            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Meilisearch, ripgrep"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 98.1, "Meilisearch"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 96.6, "ripgrep"),
             MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 97.4, "Meilisearch"),
             MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "Meilisearch",
                             pre_fix_pct=95.27, sample_note="295 of 1,491 edges (20%), stratified by fan-in",
