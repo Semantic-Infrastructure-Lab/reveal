@@ -11,6 +11,53 @@ def _origin(result: dict) -> str:
     return result.get('host') or result.get('file_path') or '?'
 
 
+def _readable_key(key: str) -> str:
+    """An X.509 name attribute as words: `organizationName` -> `Organization Name`."""
+    return ''.join(' ' + c if c.isupper() else c for c in key).strip().title()
+
+
+def _verification_lines(result: dict) -> list:
+    verification = result.get('verification')
+    if verification is None:
+        reason = 'read from a file' if result.get('file_path') else 'not available'
+        return [f"Verification: not performed ({reason})"]
+    lines = ["Verification:",
+             f"  Verified: {'Yes' if verification.get('verified') else 'No'}",
+             f"  Hostname Match: {'Yes' if verification.get('hostname_match') else 'No'}"]
+    if verification.get('error'):
+        lines.append(f"  Error: {verification['error']}")
+    return lines
+
+
+def _full_certificate_text(result: dict) -> str:
+    """Every field of the certificate the /full element returns (BACK-2311)."""
+    cert = result.get('certificate') or {}
+    port = f":{result['port']}" if result.get('port') else ''
+    lines = [f"SSL Certificate (all fields) for {_origin(result)}{port}", '']
+    for title, names in (('Subject', cert.get('subject') or {}), ('Issuer', cert.get('issuer') or {})):
+        lines.append(f"{title}:")
+        lines.extend(f"  {_readable_key(k)}: {v}" for k, v in names.items())
+        lines.append('')
+    lines += ["Validity:",
+              f"  Not Before: {cert.get('not_before')}",
+              f"  Not After: {cert.get('not_after')}",
+              f"  Days Until Expiry: {cert.get('days_until_expiry')}",
+              f"  Expired: {'Yes' if cert.get('is_expired') else 'No'}",
+              '',
+              "Details:",
+              f"  Serial Number: {cert.get('serial_number')}",
+              f"  Version: {cert.get('version')}",
+              f"  Signature Algorithm: {cert.get('signature_algorithm')}",
+              f"  OCSP URL: {cert.get('ocsp_url') or 'none'}",
+              '']
+    sans = cert.get('san') or []
+    lines.append(f"SANs ({len(sans)}):")
+    lines.extend(f"  {san}" for san in sans)
+    lines.append('')
+    lines.extend(_verification_lines(result))
+    return '\n'.join(lines) + '\n'
+
+
 class SSLRenderer(TypeDispatchRenderer):
     """Renderer for SSL adapter results.
 
@@ -165,11 +212,7 @@ class SSLRenderer(TypeDispatchRenderer):
         issuer = result['issuer']
         print("Issuer Details:")
         for key, value in issuer.items():
-            # Convert camelCase to readable
-            readable_key = ''.join(
-                ' ' + c if c.isupper() else c for c in key
-            ).strip().title()
-            print(f"  {readable_key}: {value}")
+            print(f"  {_readable_key(key)}: {value}")
 
     @staticmethod
     def _render_ssl_subject(result: dict) -> None:
@@ -180,10 +223,12 @@ class SSLRenderer(TypeDispatchRenderer):
         subject = result['subject']
         print("Subject Details:")
         for key, value in subject.items():
-            readable_key = ''.join(
-                ' ' + c if c.isupper() else c for c in key
-            ).strip().title()
-            print(f"  {readable_key}: {value}")
+            print(f"  {_readable_key(key)}: {value}")
+
+    @staticmethod
+    def _render_ssl_full(result: dict) -> str:
+        """Render every certificate field; it printed a JSON dump (BACK-2311)."""
+        return _full_certificate_text(result)
 
     @staticmethod
     def _render_ssl_dates(result: dict) -> None:

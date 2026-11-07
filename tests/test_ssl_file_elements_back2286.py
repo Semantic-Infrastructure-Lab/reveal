@@ -102,3 +102,28 @@ def test_host_element_parsing_is_unchanged():
     """Negative control: the network form still splits host from element."""
     adapter = SSLAdapter('ssl://example.com:8443/chain')
     assert (adapter.host, adapter.port, adapter.element) == ('example.com', 8443, 'chain')
+
+
+def test_full_element_has_a_text_view(bundle):
+    """BACK-2311: /full printed a JSON dump in text mode; it now lists every field."""
+    r = _reveal(f'ssl://file://{bundle}/full')
+    assert r.returncode == 0, r.stderr
+    assert not r.stdout.lstrip().startswith('{')
+    for line in ('SSL Certificate (all fields) for', 'Subject:', '  Common Name: leaf.example.com',
+                 'Not After:', 'Serial Number:', 'Signature Algorithm: SHA256', 'SANs (1):',
+                 'Verification: not performed (read from a file)'):
+        assert line in r.stdout, line
+
+
+def test_full_text_reports_a_live_verification():
+    """The host form carries a verification dict; the text view states it, not a file reason."""
+    from reveal.adapters.ssl.renderer import _full_certificate_text
+    text = _full_certificate_text({
+        'type': 'ssl_full', 'host': 'example.com', 'port': 443,
+        'certificate': {'subject': {'commonName': 'example.com'}, 'issuer': {'organizationName': 'CA'},
+                        'san': ['example.com'], 'ocsp_url': 'http://ocsp.example'},
+        'verification': {'verified': False, 'hostname_match': True, 'error': 'self-signed'}})
+    assert 'for example.com:443' in text
+    assert 'Organization Name: CA' in text
+    assert 'Verified: No' in text and 'Error: self-signed' in text
+    assert 'OCSP URL: http://ocsp.example' in text

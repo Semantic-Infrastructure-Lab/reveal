@@ -112,6 +112,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- `reveal ssl://HOST/full` and `ssl://file://PEM/full` print the certificate as labelled sections (subject, issuer, validity, serial, signature algorithm, OCSP URL, SANs, verification) instead of a JSON dump in text mode; `--format json` is unchanged (BACK-2311).
+
 - Zig complexity counts a `for` loop used as an expression (`.flush => for (items) |x| { ... }`, `if (c) for (...) ...`): it added nothing, so 35 of Ghostty's functions scored 1 or 2 too low (BACK-2540).
 
 - Zig files read correctly on `tree-sitter-language-pack` 1.25.0, which ships a different Zig grammar: with it reveal found almost no Zig functions (383 of 6,731 on Ghostty) and printed empty outlines with exit 0. reveal now reads both the new grammar and the one older packs ship, with the same functions, tests and imports on Ghostty (BACK-2539, BACK-2540).

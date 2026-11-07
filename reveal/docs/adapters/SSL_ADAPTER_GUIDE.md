@@ -601,10 +601,11 @@ reveal ssl://example.com/dates
 
 **Command**:
 ```bash
+reveal ssl://example.com/full
 reveal ssl://example.com/full --format=json
 ```
 
-**Output**: the parsed certificate (subject, issuer, validity, serial, version, SANs, signature algorithm, OCSP URL) plus the verification result — about 65 lines of JSON including the elements list (text mode prints JSON too).
+**Output**: the parsed certificate (subject, issuer, validity, serial, version, SANs, signature algorithm, OCSP URL) plus the verification result, as labelled sections in text and as about 65 lines of JSON (including the elements list). A certificate read with `ssl://file://` has no verification: the text view says `Verification: not performed (read from a file)`.
 
 ---
 
