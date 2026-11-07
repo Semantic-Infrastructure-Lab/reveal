@@ -101,10 +101,23 @@ def _print_caveats(data: Dict[str, Any]) -> None:
             print(f"⚠ {w['message']}")
 
 
+def _print_absent_detail(data: Dict[str, Any]) -> None:
+    hint = data.get('hint')
+    if hint:
+        print(f"Hint: {hint}\n")
+    _print_caveats(data)
+
+
 def _render_text(data: Dict[str, Any]) -> None:
     if 'error' in data and 'target' not in data:  # the router reports the error (BACK-1059)
         if 'example' in data:
             print(f"Example: {data['example']}", file=__import__('sys').stderr)
+        return
+    if 'error' in data:
+        # An absent name exits 2 with the router's error line; a 'Callers of: X / Total: 0' answer
+        # under it reads as a second, contradictory answer. Keep the hint and the caveats (a tree
+        # hidden by .gitignore is why a name can be absent, BACK-2247) (BACK-2538).
+        _print_absent_detail(data)
         return
     target = data.get('target', '?')
     depth = data.get('depth', 1)

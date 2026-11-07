@@ -1008,6 +1008,10 @@ class ImportsRenderer:
         if result.get('type') == 'module_importers':
             ImportsRenderer._render_file_importers(result, resource)
             return
+        if _usage_rejection(result):
+            # The router printed why ?importers=NAME matched nothing (exit 2); the directory summary's
+            # 'No module under this path has an importer' under it contradicted the error (BACK-2538).
+            return
         entries = result.get('entries', [])
         shown = entries if verbose else entries[:20]
         print(f"\nImporters: {result.get('source', resource)}")
