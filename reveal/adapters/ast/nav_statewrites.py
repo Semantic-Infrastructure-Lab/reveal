@@ -32,7 +32,7 @@ from ...core.callees.dart import MEMBER_SELECTORS as _DART_MEMBER_SELECTORS
 from ...core.treesitter_compat import _zero_arg
 from .nav_bindings import BindingScope
 from .nav_effects import collect_effects
-from .nav_varflow import resolve_assignment_sides
+from .nav_varflow import resolve_assignment_sides, zig_assignment_target
 from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
 
 _ASSIGNMENT_NODES: frozenset = frozenset({
@@ -81,11 +81,13 @@ _SESSION_BASES = ('_session', '_cookie', 'session')
 _CALL_KINDS: frozenset = frozenset({'db', 'cache', 'file', 'env', 'session'})
 
 
-def _member_kind(full_text: str) -> str:
+def _member_kind(full_text: str) -> Optional[str]:
+    """'env', 'field', or None for a member access with no receiver: Zig 1.25's `.{ .a = 1 }`
+    initializer field (BACK-2540), the only grammar with a receiverless assignment target."""
     lower = full_text.lower()
     if lower.startswith('process.env.') or lower.startswith('os.environ.'):
         return 'env'
-    return 'field'
+    return None if lower.startswith('.') else 'field'
 
 
 def _subscript_kind(base_text: str) -> Optional[str]:
@@ -187,12 +189,14 @@ def _walk_assignments(
     end = _zero_arg(node, 'end_position').row + 1
     if start > to_line or end < from_line:
         return
-    if _zero_arg(node, 'is_named') and _zero_arg(node, 'kind') in _ASSIGNMENT_NODES:
+    zig_target = zig_assignment_target(node)
+    if zig_target is not None or (_zero_arg(node, 'is_named') and _zero_arg(node, 'kind') in _ASSIGNMENT_NODES):
         # BACK-478 Finding 2: was `node.child_by_field_name('left')` directly —
         # blind to Kotlin/Swift's fieldless `assignment` node (positional
         # children only, the same shape BACK-476 fixed for --varflow/--keys).
-        # resolve_assignment_sides is the shared fallback (BACK-456/476).
-        left, _right = resolve_assignment_sides(node, _zero_arg(node, 'kind'))
+        # resolve_assignment_sides is the shared fallback (BACK-456/476). A Zig 1.25
+        # assignment is a keyword-less variable_declaration (BACK-2540).
+        left = zig_target if zig_target is not None else resolve_assignment_sides(node, _zero_arg(node, 'kind'))[0]
         line = start
         if left is not None and from_line <= line <= to_line:
             for target in _assignment_targets(left):

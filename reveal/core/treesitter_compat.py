@@ -392,6 +392,14 @@ def first_error_position(tree) -> Optional[Tuple[int, int]]:
     return first
 
 
+# tree-sitter-language-pack 1.25's Zig grammar parses every empty container body
+# (`struct {}`, `enum {}`, `union {}`, `opaque {}`, with or without `packed`/`extern`
+# or a backing type) as one phantom field named by a MISSING `_identifier`, closing
+# the container. It is valid Zig, so it is no recovery (BACK-2540). A real
+# malformed field (`struct { : i32 }`) is an ERROR node and stays flagged.
+_ZIG_EMPTY_CONTAINER_FIELD = re.compile(r' \(container_field name: \(identifier \(MISSING _identifier\)\)\)\)')
+
+
 def tree_has_recovery_artifacts(tree) -> bool:
     """True if the parse was not fully clean: an ERROR node OR a MISSING token
     inserted during error recovery (BACK-1084; see
@@ -414,6 +422,8 @@ def tree_has_recovery_artifacts(tree) -> bool:
     # (A file that does end in a newline is parsed with it since BACK-1500.)
     # Zero-width MISSING nodes are not reachable through child(), so read the
     # s-expression (only ever built for an already-flagged tree).
-    sexp = node_sexp(root).strip()
+    sexp = _ZIG_EMPTY_CONTAINER_FIELD.sub(')', node_sexp(root).strip())
     missing = re.findall(r'\(MISSING\b', sexp)
+    if not missing:
+        return False
     return not (len(missing) == 1 and re.search(r'\(MISSING (?:"?\w*_token\d+"?|"\n")\)\)+$', sexp))

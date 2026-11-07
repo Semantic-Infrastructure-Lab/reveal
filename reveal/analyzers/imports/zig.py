@@ -12,8 +12,17 @@ Node kinds verified by direct parse (2026-07-09, session apricot-tapestry-0709):
 ``@import("std")`` parses as
 ``ErrorUnionExpr > SuffixExpr > [BUILTINIDENTIFIER '@import', FnCallArguments]``,
 with the string literal nested inside ``FnCallArguments`` as
-``ErrorUnionExpr > SuffixExpr > STRINGLITERALSINGLE``.
+``ErrorUnionExpr > SuffixExpr > STRINGLITERALSINGLE``. That is the legacy grammar
+(tree-sitter-language-pack <= 1.24). Pack 1.25 ships another grammar (BACK-2540):
+``builtin_function > [builtin_identifier '@import', arguments > string]``. Both are
+read; the legacy kinds go once the pack floor reaches 1.25.
 """
+
+# (builtin-name kind, arguments kind, string-literal kind) per grammar.
+_GRAMMAR_KINDS = (
+    ('BUILTINIDENTIFIER', 'FnCallArguments', 'STRINGLITERALSINGLE'),  # legacy, pack <= 1.24
+    ('builtin_identifier', 'arguments', 'string'),                    # pack 1.25
+)
 
 import logging
 from pathlib import Path
@@ -67,12 +76,13 @@ class ZigImportExtractor(LanguageExtractor):
             return []
 
         imports: List[ImportStatement] = []
-        for node in analyzer._find_nodes_by_type('BUILTINIDENTIFIER'):
-            if analyzer._get_node_text(node) != '@import':
-                continue
-            stmt = self._builtin_call_to_import(node, analyzer, file_path)
-            if stmt is not None:
-                imports.append(stmt)
+        for name_kind, args_kind, literal_kind in _GRAMMAR_KINDS:
+            for node in analyzer._find_nodes_by_type(name_kind):
+                if analyzer._get_node_text(node) != '@import':
+                    continue
+                stmt = self._builtin_call_to_import(node, analyzer, file_path, args_kind, literal_kind)
+                if stmt is not None:
+                    imports.append(stmt)
 
         imports.sort(key=lambda s: s.line_number)
         return imports
@@ -81,12 +91,13 @@ class ZigImportExtractor(LanguageExtractor):
         """Not implemented — imports set ``skip_unused=True``."""
         return set()
 
-    def _builtin_call_to_import(self, node, analyzer, file_path: Path) -> Optional[ImportStatement]:
-        """Turn a ``@import`` BUILTINIDENTIFIER node into an ImportStatement.
+    def _builtin_call_to_import(self, node, analyzer, file_path: Path,
+                                args_kind: str, literal_kind: str) -> Optional[ImportStatement]:
+        """Turn a ``@import`` builtin-name node into an ImportStatement.
 
-        The sibling ``FnCallArguments`` (under the shared ``SuffixExpr``
-        parent) holds the string-literal argument. Non-string-literal args
-        (impossible in valid Zig, but be defensive) are skipped.
+        The sibling arguments node (``FnCallArguments`` under the legacy ``SuffixExpr``,
+        ``arguments`` under a 1.25 ``builtin_function``) holds the string-literal argument.
+        Non-string-literal args (impossible in valid Zig, but be defensive) are skipped.
         """
         parent = _zero_arg(node, 'parent')
         if parent is None:
@@ -94,13 +105,13 @@ class ZigImportExtractor(LanguageExtractor):
 
         args_node = None
         for child in _children(parent):
-            if _zero_arg(child, 'kind') == 'FnCallArguments':
+            if _zero_arg(child, 'kind') == args_kind:
                 args_node = child
                 break
         if args_node is None:
             return None
 
-        literal = self._first_descendant_text(args_node, analyzer, ('STRINGLITERALSINGLE',))
+        literal = self._first_descendant_text(args_node, analyzer, (literal_kind,))
         if not literal:
             return None
         module = literal.strip('"')

@@ -154,6 +154,60 @@ def _positional_assignment_sides(n: Any) -> tuple:
     return None, None
 
 
+# Zig assignment operators (pack 1.25 grammar, BACK-2540). That grammar parses a plain
+# assignment (`x = y`, `self.f += 1`, `_ = y`) as a keyword-less `variable_declaration`
+# whose operator is an anonymous token, and a declaration (`const x = y`) as one with a
+# `const`/`var` token. JS/TS, C#, Kotlin and Lua use the kind too, but there the `=` sits
+# inside a variable_declarator, an assignment_statement or the parent property_declaration,
+# and no `const`/`var` token has a direct identifier sibling, so the shape below is Zig's.
+_ZIG_ASSIGNMENT_OPERATORS = frozenset({
+    '=', '+=', '-=', '*=', '/=', '%=', '<<=', '>>=', '&=', '|=', '^=',
+    '+%=', '-%=', '*%=', '+|=', '-|=', '*|=', '<<|=',
+})
+
+
+def zig_variable_declaration_role(n: Any) -> Optional[str]:
+    """'declare' or 'assign' for a Zig 1.25 `variable_declaration`, None for any other node."""
+    if _zero_arg(n, 'kind') != 'variable_declaration':
+        return None
+    kinds = [_zero_arg(child, 'kind') for child in _children(n)]
+    if ('const' in kinds or 'var' in kinds) and 'identifier' in kinds:
+        return 'declare'
+    if any(kind in _ZIG_ASSIGNMENT_OPERATORS for kind in kinds):
+        return 'assign'
+    return None
+
+
+# Zig 1.25 `variable_declaration` by role: a declaration walks as the legacy VarDecl does,
+# an assignment as the legacy AssignExpr does (_walk_zig_assignment).
+_ZIG_VARIABLE_SHAPES = {
+    'declare': _DeclShape(positional='_walk_zig_var_decl'),
+    'assign': _DeclShape(positional='_walk_zig_assignment'),
+}
+
+
+def _decl_shape(n: Any, ntype: str) -> Optional['_DeclShape']:
+    """The _DECL_SHAPES row for a node, or Zig 1.25's row for its variable_declaration role."""
+    shape = _DECL_SHAPES.get(ntype)
+    if shape is None and ntype == 'variable_declaration':
+        shape = _ZIG_VARIABLE_SHAPES.get(zig_variable_declaration_role(n) or '')
+    return shape
+
+
+def zig_assignment_target(n: Any) -> Optional[Any]:
+    """The target of a Zig 1.25 assignment (a keyword-less `variable_declaration`), else None."""
+    return _zig_assignment_parts(n)[0] if zig_variable_declaration_role(n) == 'assign' else None
+
+
+def _zig_assignment_parts(n: Any) -> tuple:
+    """(target, value, augmented) of a Zig 1.25 keyword-less `variable_declaration`."""
+    named = [child for child in _children(n) if _zero_arg(child, 'is_named')]
+    operator = next((child for child in _children(n)
+                     if _zero_arg(child, 'kind') in _ZIG_ASSIGNMENT_OPERATORS), None)
+    target, value = (named[0], named[-1]) if len(named) >= 2 else (None, None)
+    return target, value, operator is not None and _zero_arg(operator, 'kind') != '='
+
+
 @dataclass(frozen=True)
 class _AssignShape:
     """One grammar's fieldless assignment-node shape (BACK-478 move 1 step 3).
@@ -337,11 +391,11 @@ class VarFlowWalker:
             self._walk_assignment(n, ntype, c)
         elif ntype == 'named_expression':
             self._walk_named_expression(n)
-        elif ntype in _DECL_SHAPES:
+        elif (shape := _decl_shape(n, ntype)) is not None:
             # Declaration-with-initializer, table-driven across all covered
             # grammars (BACK-431 Issue C) — see _DECL_SHAPES for per-language
             # field names and fallback strategies.
-            self._walk_decl_shape(n, _DECL_SHAPES[ntype])
+            self._walk_decl_shape(n, shape)
         elif ntype == 'declaration' and n.child_by_field_name('declarator') is not None:
             self._walk_c_declaration(n)
         elif ntype in FOR_NODES:
@@ -434,6 +488,20 @@ class VarFlowWalker:
                     self.walk(right, 'READ')
             else:
                 self.walk(child, c)
+
+    def _walk_zig_assignment(self, n: Any) -> None:
+        """Zig 1.25 assignment parsed as a keyword-less `variable_declaration`: the same
+        target/value contract as _walk_assignment (the legacy `AssignExpr` path). The other
+        children are the operator token."""
+        target, value, augmented = _zig_assignment_parts(n)
+        if target is not None:
+            self._walk_assignment_target(target, augmented)
+        if value is not None:
+            self.walk(value, 'READ')
+        processed = {_start_pos(part) for part in (target, value) if part is not None}
+        for child in _children(n):
+            if _start_pos(child) not in processed:
+                self.walk(child, 'READ')
 
     def _walk_assignment(self, n: Any, ntype: str, c: str) -> None:
         left, right = resolve_assignment_sides(n, ntype)
@@ -591,10 +659,11 @@ class VarFlowWalker:
                     self.walk(child, 'READ')
 
     def _walk_zig_var_decl(self, n: Any) -> None:
-        """Zig `VarDecl` — no fields; name is the first IDENTIFIER child."""
+        """Zig declaration — the legacy `VarDecl` or a declaring 1.25 `variable_declaration`
+        (no name field in either); the name is the first identifier child."""
         name = None
         for child in _children(n):
-            if _zero_arg(child, 'kind') == 'IDENTIFIER':
+            if _zero_arg(child, 'kind') in ('IDENTIFIER', 'identifier'):
                 name = child
                 break
         processed = (

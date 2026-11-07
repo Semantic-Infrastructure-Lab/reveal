@@ -181,7 +181,6 @@
  "reveal/analyzers/xml_analyzer.py::return-value": 3,
  "reveal/analyzers/xml_analyzer.py::typeddict-unknown-key": 1,
  "reveal/analyzers/yaml_json.py::return-value": 2,
- "reveal/analyzers/zig.py::misc": 1,
  "reveal/analyzers/zig.py::return-value": 1,
  "reveal/api.py::no-any-return": 6,
  "reveal/cli/file_checker.py::operator": 1,

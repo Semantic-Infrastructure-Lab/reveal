@@ -695,17 +695,44 @@ def is_do_block(node: Any) -> bool:
 def zig_catch_parts(node: Any) -> Optional[tuple[Any, Any]]:
     """Zig catch's operator/header and handler, excluding its normal operand.
 
-    BinaryExpr also represents ordinary arithmetic: only BitwiseOp with an
-    actual catch token opens a handler. Payload, when present, is in BitwiseOp.
+    Legacy grammar (pack <= 1.24): BinaryExpr also represents ordinary arithmetic,
+    so only BitwiseOp with an actual catch token opens a handler; the payload, when
+    present, is in BitwiseOp. Pack 1.25 (BACK-2540): a dedicated `catch_expression`
+    whose header is the `catch` token, then an optional `|err|` payload, then the
+    handler (which may be an anonymous token: `catch unreachable`).
     """
-    if _zero_arg(node, 'kind') != 'BinaryExpr':
-        return None
+    kind = _zero_arg(node, 'kind')
     children = node_children(node)
+    if kind == 'catch_expression':
+        for index, child in enumerate(children):
+            if _zero_arg(child, 'kind') == 'catch':
+                rest = [c for c in children[index + 1:] if _zero_arg(c, 'kind') != 'payload']
+                return (child, rest[0]) if rest else None
+        return None
+    if kind != 'BinaryExpr':
+        return None
     for index, child in enumerate(children[:-1]):
         if (_zero_arg(child, 'kind') == 'BitwiseOp' and
                 any(_zero_arg(token, 'kind') == 'catch' for token in node_children(child))):
             return child, children[index + 1]
     return None
+
+
+# Handler clauses of a block `try` (Kotlin, Scala); a prefix `try` has none.
+_TRY_HANDLER_NODES: frozenset = CATCH_NODES | FINALLY_NODES
+
+
+def is_prefix_try(node: Any) -> bool:
+    """True for a `try_expression` that is Zig's `try x` (pack 1.25, BACK-2540): an
+    early return of the error, not a try block. Kotlin and Scala use the same kind for a
+    `try { } catch` block, which also opens with the bare `try` token but always has a
+    catch or finally clause. Swift's `try f()` starts with a `try_operator` node and
+    Rust's `x?` with its operand, so neither matches."""
+    if _zero_arg(node, 'kind') != 'try_expression':
+        return False
+    children = node_children(node)
+    return (bool(children) and _zero_arg(children[0], 'kind') == 'try'
+            and not any(_zero_arg(c, 'kind') in _TRY_HANDLER_NODES for c in children))
 
 
 def scope_label(node: Any, kind: str) -> str:
@@ -774,10 +801,11 @@ def opens_scope(node: Any, kind: str) -> bool:
     """Whether a node of ``kind`` opens an --outline/--scope scope.
 
     SCOPE_NODES, except where the kind alone does not say it is a scope:
-    - a `try_expression` that is not a try block. Four grammars use that kind:
+    - a `try_expression` that is not a try block. Five grammars use that kind:
       Kotlin and Scala for a try block, which opens with the bare `try` token,
-      and Swift (`try f()`) and Rust (`f()?`) for an operator on a throwing
-      call (BACK-1530);
+      and Swift (`try f()`), Rust (`f()?`) and Zig 1.25 (`try f()`, which also
+      opens with `try` but has no handler, is_prefix_try) for an operator on a
+      throwing call (BACK-1530, BACK-2540);
     - a `do` block with no catch (Swift `do { }`, Lua `do ... end`), which is a
       plain block like a bare `{ }` (BACK-1541)."""
     if zig_catch_parts(node) is not None:
@@ -789,7 +817,7 @@ def opens_scope(node: Any, kind: str) -> bool:
     if kind != 'try_expression':
         return True
     first = node_children(node)[:1]
-    return bool(first) and _zero_arg(first[0], 'kind') == 'try'
+    return bool(first) and _zero_arg(first[0], 'kind') == 'try' and not is_prefix_try(node)
 
 
 # ---------------------------------------------------------------------------

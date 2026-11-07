@@ -140,7 +140,31 @@ IGNORED: Dict[str, Dict[str, str]] = {
     },
     'tsx': {'switch_body': _PART},
     'typescript': {'switch_body': _PART},
+    # Pack 1.25's grammar (BACK-2540); the legacy one's PascalCase kinds never match the stem.
+    'zig': {'break_label': _PART,
+            'if_type_expression': 'a conditional type (`fn f() if (c) A else B`), evaluated at compile time'},
 }
+
+# tree-sitter-language-pack 1.25 replaced the Zig grammar (BACK-2540). reveal reads both until
+# the pack floor reaches 1.25, so each pack's run sees one of them: the central-table kinds
+# unique to each grammar are listed here, and test_table_kinds_exist_in_a_grammar tolerates the
+# set of the grammar the installed pack lacks. test_zig_grammar_sets_match_the_installed_pack
+# checks the installed one against its grammar, so a typo in either set fails on its own pack.
+# Delete the legacy set (and its kinds from the tables) once the floor reaches 1.25.
+ZIG_GRAMMAR_KINDS: Dict[str, FrozenSet[str]] = {
+    'legacy (pack <= 1.24)': frozenset({
+        'BitwiseOp', 'Decl', 'ForExpr', 'ForStatement', 'IfExpr', 'IfStatement', 'PrefixOp', 'SwitchCase',
+        'SwitchExpr', 'SwitchProng'}),
+    'pack 1.25': frozenset({
+        'builtin_function', 'catch_expression', 'error_set_declaration', 'error_union_type'}),
+}
+
+
+def _absent_zig_grammar_kinds() -> FrozenSet[str]:
+    """The ZIG_GRAMMAR_KINDS set(s) whose grammar the installed pack does not ship."""
+    installed = grammar_kinds('zig')[1]
+    return frozenset().union(*(kinds for kinds in ZIG_GRAMMAR_KINDS.values() if not kinds <= installed))
+
 
 # Control flow that no family holds yet. Each row names its task and is deleted by the
 # fix; test_no_stale_entries enforces that.
@@ -162,6 +186,7 @@ KNOWN_GAPS: Dict[str, Dict[str, str]] = {
     },
     'elixir': {'else_block': 'BACK-1531', 'rescue_block': 'BACK-1531'},
     'go': {'defer_statement': 'BACK-1531', 'goto_statement': 'BACK-1531'},
+    'zig': {'defer_statement': 'BACK-1531'},
     'java': {'switch_rule': 'BACK-1531'},
     'lua': {'goto_statement': 'BACK-1531'},
     'php': {'goto_statement': 'BACK-1531'},
@@ -266,10 +291,24 @@ def test_table_kinds_exist_in_a_grammar():
                 kinds_of[lang] = grammar_kinds(lang)[1]
             except Exception:  # the installed pack lacks it; registry.fallback_languages skips it too
                 continue
-        dead = {name: missing_kinds(table, kinds_of) for name, table in central_tables().items()}
+        absent = _absent_zig_grammar_kinds()
+        dead = {name: missing_kinds(table, kinds_of) - absent for name, table in central_tables().items()}
         dead = {name: sorted(kinds) for name, kinds in dead.items() if kinds}
     assert not dead, (
         f'node kinds that no grammar reveal can parse defines (a typo or a dead entry): {dead}')
+
+
+def test_zig_grammar_sets_match_the_installed_pack():
+    """Exactly one ZIG_GRAMMAR_KINDS set is the installed pack's Zig grammar: all of its kinds
+    exist there and none of the other set's do, so neither set can hide a typo or a kind both
+    grammars share (BACK-2540)."""
+    installed = grammar_kinds('zig')[1]
+    present = [label for label, kinds in ZIG_GRAMMAR_KINDS.items() if kinds <= installed]
+    assert len(present) == 1, f'installed Zig grammar matches {present or "none"} of {list(ZIG_GRAMMAR_KINDS)}'
+    others = frozenset().union(*(kinds for label, kinds in ZIG_GRAMMAR_KINDS.items() if label != present[0]))
+    assert not others & installed, f'kinds in both Zig grammars belong in neither set: {sorted(others & installed)}'
+    tabled = classified_kinds()
+    assert all(kinds <= tabled for kinds in ZIG_GRAMMAR_KINDS.values()), 'a set lists a kind no central table names'
 
 
 @pytest.mark.parametrize('language', LANGUAGES)
@@ -423,6 +462,8 @@ NOT_LOCAL_SCOPE: Dict[str, Dict[str, str]] = {
     },
     'lua': {'function_call': _FN_NAME_ONLY, 'method_index_expression': _FN_NAME_ONLY,
             'table_constructor': _FN_NAME_ONLY},
+    # Pack 1.25's grammar (BACK-2540): a builtin call (`@import(...)`) and a `.{ ... }` literal.
+    'zig': {'anonymous_struct_initializer': _FN_NAME_ONLY, 'builtin_function': _FN_NAME_ONLY},
     'php': {'anonymous_class': _FN_NAME_ONLY, 'anonymous_function_use_clause': _FN_PART,
             'function_call_expression': _FN_NAME_ONLY, 'function_static_declaration': _FN_PART},
     'python': {'generator_expression': _FN_NAME_ONLY, 'lambda_parameters': _FN_PART},

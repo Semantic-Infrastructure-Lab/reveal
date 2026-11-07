@@ -52,7 +52,7 @@ def test_structure_lists_exact_verified_container_names(analyzer, category, name
     ('Tuple', 'struct'), ('Open', 'enum'),
 ])
 def test_container_type_fact_reads_declared_type_wrapper(analyzer, name, kind):
-    declaration = next(node for node in analyzer._find_nodes_by_type('VarDecl')
+    declaration = next(node for node in analyzer._variable_nodes()
                        if analyzer._extract_var_name_and_container(node)[0] == name)
     _, container = analyzer._extract_var_name_and_container(declaration)
     assert container is not None
@@ -68,7 +68,7 @@ def test_container_type_fact_reads_declared_type_wrapper(analyzer, name, kind):
     ('Tuple', []), ('Open', ['first']),  # Types and nonexhaustive markers are not named fields.
 ])
 def test_members_are_direct_fields_not_nested_types_or_methods(analyzer, name, members):
-    declaration = next(node for node in analyzer._find_nodes_by_type('VarDecl')
+    declaration = next(node for node in analyzer._variable_nodes()
                        if analyzer._extract_var_name_and_container(node)[0] == name)
     _, container = analyzer._extract_var_name_and_container(declaration)
     assert analyzer._extract_container_members(container) == members
@@ -94,7 +94,7 @@ def test_structure_omits_noncontainer_call_and_anonymous_values(analyzer):
             item['name'] for item in structure.get(category, [])
         }
     for name in ('Derived', 'Selected'):
-        declaration = next(node for node in analyzer._find_nodes_by_type('VarDecl')
+        declaration = next(node for node in analyzer._variable_nodes()
                            if analyzer._extract_var_name_and_container(node)[0] == name)
         assert analyzer._extract_var_name_and_container(declaration)[1] is None
 

@@ -19,6 +19,7 @@ from typing import AbstractSet, Any, Callable, Optional, Tuple
 
 from .. import node_children as _children
 from ..node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_KINDS
+from . import zig
 from ..treesitter_compat import _zero_arg
 from reveal.utils.lines import split_lines
 
@@ -52,7 +53,7 @@ _LAST_OPERAND_KINDS = frozenset({'prefix_expression', 'additive_expression', 'mu
 
 _OPERAND_WRAPPER_KINDS = frozenset({
     'generic_function', 'parenthesized_expression', 'try_expression', 'await_expression',
-}) | _LAST_OPERAND_KINDS
+}) | _LAST_OPERAND_KINDS | zig.WRAPPER_KINDS
 
 
 def _callee_operand(callee_node: Any, kind: str) -> Tuple[Optional[Any], str]:
@@ -72,6 +73,11 @@ def _callee_operand(callee_node: Any, kind: str) -> Tuple[Optional[Any], str]:
     """
     if kind == 'generic_function':
         return callee_node.child(0), _FALL_THROUGH
+    if kind in zig.WRAPPER_KINDS:
+        # Zig on pack 1.25: `f.?(x)` names its operand (core/callees/zig.py, BACK-2540); one
+        # that names nothing (`g().?()`, a call that is its own edge) names nothing, like `try`.
+        operand = zig.unwrap_operand(callee_node)
+        return (None if operand is callee_node else operand), _DECLINE
     if kind == 'parenthesized_expression':
         return unwrap_parenthesized_callee(callee_node), _DECLINE_IF_MISSING
     if kind in _LAST_OPERAND_KINDS:
@@ -210,5 +216,12 @@ def callee_name_from_node(
             if text:
                 return text
 
-    text = get_text(callee_node).strip().lstrip('*').strip()
+    return _plain_name(callee_node, get_text)
+
+
+def _plain_name(callee_node: Any, get_text: Callable[[Any], str]) -> Optional[str]:
+    """The callee's own text; a Zig pack 1.25 member chain is read from its object/member
+    fields, with any type-operator wrapper at its base dropped (`!a.b()` -> `a.b`,
+    core/callees/zig.py, BACK-2540)."""
+    text = zig.field_callee(callee_node, get_text) or get_text(callee_node).strip().lstrip('*').strip()
     return text or None

@@ -21,6 +21,7 @@ from reveal.nav_handlers import (
 )
 from reveal.registry import get_analyzer
 from test_conformance_matrix import EXPECTED, LANGUAGES, _sample_path
+from zig_grammar import LEGACY_ZIG_GRAMMAR, by_grammar
 
 pytestmark = pytest.mark.conformance
 
@@ -138,12 +139,21 @@ ROWS = {
         ('return_statement', 'RETURN', 'RETURN  null', 15, 15, 2, True),
         ('return_statement', 'RETURN', 'RETURN  result', 19, 19, 1, True),
     ],
-    # Observed omissions: returns at L14/17/21/24 are not in the skeleton.
-    'zig': [
+    # Legacy Zig grammar (pack <= 1.24), observed omissions: returns at L14/17/21/24 are not
+    # in the skeleton. Pack 1.25's grammar has a return_expression, so they are (BACK-2540).
+    'zig': by_grammar([
         ('BinaryExpr', 'CATCH', 'CATCH', 13, 15, 1, False),
         ('BinaryExpr', 'CATCH', 'CATCH', 16, 18, 1, False),
         ('BinaryExpr', 'CATCH', 'CATCH', 20, 22, 1, False),
-    ],
+    ], [
+        ('catch_expression', 'CATCH', 'CATCH', 13, 15, 1, False),
+        ('return_expression', 'RETURN', 'RETURN  null', 14, 14, 2, True),
+        ('catch_expression', 'CATCH', 'CATCH', 16, 18, 1, False),
+        ('return_expression', 'RETURN', 'RETURN  null', 17, 17, 2, True),
+        ('catch_expression', 'CATCH', 'CATCH', 20, 22, 1, False),
+        ('return_expression', 'RETURN', 'RETURN  null', 21, 21, 2, True),
+        ('return_expression', 'RETURN', 'RETURN  result', 24, 24, 1, True),
+    ]),
     'tsx': [
         ('try_statement', 'TRY', 'TRY', 10, 19, 1, False),
         ('while_statement', 'WHILE', 'WHILE  (count < 3)', 13, 15, 2, False),
@@ -227,11 +237,12 @@ def test_cli_named_skeleton_uses_same_source_expectations(language):
     assert json.loads(result.stdout)['findings'] == _expected(language)
 
 
-@pytest.mark.parametrize('language,missing_lines', [
-    ('cpp', {20}),
-    ('rust', {14, 19}),
-    ('zig', {14, 17, 21, 24}),
-])
+# The Zig omission holds on the legacy grammar only (ROWS['zig']).
+KNOWN_OMISSIONS = [('cpp', {20}), ('rust', {14, 19})] + (
+    [('zig', {14, 17, 21, 24})] if LEGACY_ZIG_GRAMMAR else [])
+
+
+@pytest.mark.parametrize('language,missing_lines', KNOWN_OMISSIONS)
 def test_known_skeleton_omissions_are_exits_in_sibling_view(language, missing_lines):
     """Qualification records a disagreement; it does not bless missing exits."""
     ctx = _context(language, 3)
@@ -243,11 +254,7 @@ def test_known_skeleton_omissions_are_exits_in_sibling_view(language, missing_li
     )
 
 
-@pytest.mark.parametrize('language,missing_lines', [
-    ('cpp', {20}),
-    ('rust', {14, 19}),
-    ('zig', {14, 17, 21, 24}),
-])
+@pytest.mark.parametrize('language,missing_lines', KNOWN_OMISSIONS)
 @pytest.mark.xfail(strict=True, raises=AssertionError,
                    reason='BACK-2364: skeleton omits source exits recognized by sibling view')
 def test_source_exit_sites_should_also_appear_in_skeleton(language, missing_lines):

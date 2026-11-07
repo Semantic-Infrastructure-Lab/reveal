@@ -263,6 +263,8 @@ _EXIT_CLASS_KINDS = frozenset({'class_declaration', 'class_definition', 'class_s
 def _exit_callable(node: Any, language: str) -> bool:
     kind = _zero_arg(node, 'kind')
     if language == 'zig':
+        if kind == 'function_declaration':  # pack 1.25 grammar (BACK-2540); `extern fn` has no body
+            return node.child_by_field_name('body') is not None
         parts = {_zero_arg(c, 'kind') for c in _children(node)} if kind == 'Decl' else set()
         return {'FnProto', 'Block'} <= parts
     key = 'js' if language in _JS_EXIT_LANGUAGES else language

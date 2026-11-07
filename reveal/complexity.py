@@ -7,7 +7,7 @@ flow can import this without pulling the full analyzer base class into scope.
 from typing import Any, Mapping, Optional
 
 from .core import node_children as _children
-from .core.node_taxonomy import is_do_block
+from .core.node_taxonomy import is_do_block, is_prefix_try
 from .core.treesitter_compat import _zero_arg
 from .utils.lines import split_lines
 
@@ -62,6 +62,10 @@ _DECISION_TYPES = frozenset({
     'conditional_expression', 'ternary_expression',
     'conditional',  # ruby `a ? b : c`
     'IfExpr',  # zig `const x = if (c) a else b` (statements: IfStatement)
+    # zig `.a => for (xs) |x| {...}`, `if (c) for (...)`: a for loop used as an expression
+    # (legacy grammar LoopExpr > ForExpr; its `for` token is excluded by the ForPrefix pair).
+    # Uncounted until BACK-2540 found it against pack 1.25's for_expression, which counts.
+    'ForExpr',
     # Exception handling
     'except_clause', 'catch_clause', 'catch_block',  # kotlin
     'rescue',
@@ -127,8 +131,9 @@ _LOGICAL_PARENTS = frozenset({
 _OPERATOR_TOKEN_PARENTS = {
     '&&': _LOGICAL_PARENTS, '||': _LOGICAL_PARENTS,
     '??': _LOGICAL_PARENTS, '?:': _LOGICAL_PARENTS,
-    # Zig `a orelse b` / `a catch b` are `BitwiseOp` tokens.
-    'orelse': frozenset({'BitwiseOp'}), 'catch': frozenset({'BitwiseOp'}),
+    # Zig `a orelse b` / `a catch b`: `BitwiseOp` tokens in the legacy grammar (pack <= 1.24);
+    # 1.25's are under `binary_expression` / `catch_expression` (BACK-2540).
+    'orelse': frozenset({'BitwiseOp', 'binary_expression'}), 'catch': frozenset({'BitwiseOp', 'catch_expression'}),
     # Explicit early-exit-on-failure sites: Zig `try x` is a `try` token under `PrefixOp`;
     # Rust `x?` is a `?` token under `try_expression`. The node KIND `try_expression` is
     # not usable -- Kotlin/Swift/Scala use it for a plain try block / `try` keyword, which
@@ -144,7 +149,7 @@ _OPERATOR_TOKEN_PARENTS = {
 # as the catch-all -- a deliberate +/-1 approximation on Dart switch
 # expressions that match a named constant (BACK-1301).
 _DEFAULT_CAPABLE_ARMS = frozenset({
-    'SwitchProng', 'case_statement', 'case_clause', 'match_arm', 'pattern_section', 'when_entry', 'switch_entry', 'switch_expression_arm', 'switch_expression_case'})
+    'SwitchProng', 'switch_case', 'case_statement', 'case_clause', 'match_arm', 'pattern_section', 'when_entry', 'switch_entry', 'switch_expression_arm', 'switch_expression_case'})
 _DEFAULT_ARM_MARKERS = frozenset({'else', 'default_keyword', 'discard', 'default', '_', 'wildcard'})
 
 
@@ -251,6 +256,10 @@ _KEYWORD_PAIRS = frozenset({
     # Zig: `IfStatement`/`IfExpr` wrap an `IfPrefix` that holds the bare `if` token.
     ('IfPrefix', 'if'),
     ('ForPrefix', 'for'),
+    # Zig on pack 1.25: a conditional type (`var s: if (libc) c_int else u32`) is chosen at
+    # compile time, not a runtime branch; the legacy grammar's IfTypeExpr never counted either
+    # (BACK-2540). The wrapper is no decision kind, so this pair keeps the whole form at zero.
+    ('if_type_expression', 'if'),
 })
 
 
@@ -261,25 +270,127 @@ def _has_child_kind(node, kind) -> bool:
     return any(_zero_arg(c, 'kind') == kind for c in _children(node))
 
 
+# Type wrappers whose operand is a type (Zig `*T`, `?T`, `[]T`, `[N]T`, `E!T`).
+_TYPE_WRAPPER_KINDS = frozenset({'pointer_type', 'nullable_type', 'slice_type', 'array_type', 'error_union_type'})
+
+
+def _selects_a_type(node) -> bool:
+    """True for an expression in a type position, a compile-time type operation (Zig on
+    pack 1.25, BACK-2540): `status: *if (libc) c_int else u32` (an `if_expression` there,
+    as the `if_type_expression` it uses elsewhere) and `fn f() (A || B)!void` (`||`
+    merges error sets; Zig's runtime boolean operators are `and`/`or`). Nested `||`
+    operands and parentheses are climbed. JS, C and TS have no `||` in a type position.
+    In a value position (`const T = if (c) A else B;`) an if stays a decision, as the
+    legacy grammar's IfExpr is."""
+    parent = _zero_arg(node, 'parent')
+    # range_expression: 1.25 wraps `*if (c) A else B` in one inside a pointer type.
+    while parent is not None and _zero_arg(parent, 'kind') in (
+            'binary_expression', 'parenthesized_expression', 'range_expression'):
+        node, parent = parent, _zero_arg(parent, 'parent')
+    if parent is None:
+        return False
+    if _zero_arg(parent, 'kind') in _TYPE_WRAPPER_KINDS:
+        return True
+    type_field = parent.child_by_field_name('type')
+    return type_field is not None and (_zero_arg(type_field, 'start_byte'), _zero_arg(type_field, 'end_byte')) == (
+        _zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte'))
+
+
+# Operand kinds only Zig has (pack 1.25): an error set literal `error{A, B}` and a builtin
+# call such as `@TypeOf(err)`. Either one in a `||` chain makes it an error-set merge.
+_ZIG_ERROR_SET_OPERANDS = frozenset({'error_set_declaration', 'builtin_function'})
+
+
+def _merges_error_sets(binary) -> bool:
+    """True for a Zig error-set merge written in a value position inside a function,
+    `const ErrSet = @TypeOf(err) || error{Unknown};`, recognized by a Zig-only operand
+    anywhere in the `||` chain (BACK-2540). Zig's runtime boolean operators are `and`/`or`."""
+    top = binary
+    parent = _zero_arg(top, 'parent')
+    while parent is not None and _zero_arg(parent, 'kind') in ('binary_expression', 'parenthesized_expression'):
+        top, parent = parent, _zero_arg(parent, 'parent')
+    stack = [top]
+    while stack:
+        current = stack.pop()
+        for child in _children(current):
+            kind = _zero_arg(child, 'kind')
+            if kind in _ZIG_ERROR_SET_OPERANDS:
+                return True
+            if kind in ('binary_expression', 'parenthesized_expression'):
+                stack.append(child)
+    return False
+
+
+def _scala_infix_verdict(parent_kind, node, node_text) -> Optional[bool]:
+    """Scala infix `&&`/`||` is an `operator_identifier` shared with `+`."""
+    return (parent_kind == 'infix_expression' and node_text is not None
+            and node_text(node) in _SCALA_LOGICAL_OPERATORS)
+
+
+def _scala_catch_verdict(parent_kind, node, node_text) -> Optional[bool]:
+    """Scala `catch { case ... }`: the case arms carry the count."""
+    return False if _has_child_kind(node, 'case_block') else None
+
+
+def _do_block_verdict(parent_kind, node, node_text) -> Optional[bool]:
+    """Swift `do { } catch`, Lua `do ... end`: a block, not a loop (BACK-1541)."""
+    return False if is_do_block(node) else None
+
+
+def _type_choice_verdict(parent_kind, node, node_text) -> Optional[bool]:
+    """Zig 1.25 `status: *if (libc) c_int else u32` selects a type (_selects_a_type)."""
+    return False if _selects_a_type(node) else None
+
+
+def _error_set_merge_verdict(parent_kind, node, node_text) -> Optional[bool]:
+    """Zig 1.25 `(A || B)!T`, `@TypeOf(e) || error{X}`: `||` merges error sets."""
+    parent = _zero_arg(node, 'parent')
+    if parent_kind == 'binary_expression' and parent is not None and (
+            _selects_a_type(parent) or _merges_error_sets(parent)):
+        return False
+    return None
+
+
+def _prefix_try_verdict(parent_kind, node, node_text) -> Optional[bool]:
+    """Zig 1.25 `try x` exits early on error, as the legacy grammar's `try` under `PrefixOp`
+    does; a Kotlin/Scala block `try`'s keyword is not a decision (BACK-2540)."""
+    if parent_kind != 'try_expression':
+        return None
+    parent = _zero_arg(node, 'parent')
+    return parent is not None and is_prefix_try(parent)
+
+
+# Kinds whose verdict needs more than kind and parent: each returns True/False, or None to
+# fall through to the general rule. Skipped without a node (callers that pass only kinds).
+_SPECIAL_VERDICTS = {
+    'operator_identifier': _scala_infix_verdict,
+    'catch_clause': _scala_catch_verdict,
+    'do_statement': _do_block_verdict,
+    'if_expression': _type_choice_verdict,
+    '||': _error_set_merge_verdict,
+    'try': _prefix_try_verdict,
+}
+
+
 def is_decision(kind: str, parent_kind, node=None, node_text=None) -> bool:
     """True if `node` (of `kind`, under `parent_kind`) adds one decision point.
 
-    `node` is only needed to recognise a catch-all arm; omit it and default-
-    capable arm kinds count unconditionally. `node_text(node) -> str` is only
-    needed for Scala infix `&&`/`||` (an `operator_identifier` shared with `+`);
+    `node` is only needed to recognise a catch-all arm and the _SPECIAL_VERDICTS shapes;
+    omit it and default-capable arm kinds count unconditionally. `node_text(node) -> str` is
+    only needed for Scala infix `&&`/`||` (an `operator_identifier` shared with `+`);
     omit it and those undercount rather than guess.
 
     The single decision rule shared by `calculate_complexity_and_depth` and
     treesitter's merged `_complexity_depth_and_calls` walk (BACK-1303) --
     edit the rule here, never in a walker.
     """
-    if kind == 'operator_identifier':  # Scala infix operator
-        return (parent_kind == 'infix_expression' and node_text is not None
-                and node_text(node) in _SCALA_LOGICAL_OPERATORS)
-    if kind == 'catch_clause' and node is not None and _has_child_kind(node, 'case_block'):
-        return False  # Scala: `catch { case ... }` -- the case arms carry the count
-    if kind == 'do_statement' and node is not None and is_do_block(node):
-        return False  # Swift `do { } catch`, Lua `do ... end`: a block, not a loop (BACK-1541)
+    special = _SPECIAL_VERDICTS.get(kind)
+    if special is not None and node is not None:
+        verdict = special(parent_kind, node, node_text)
+        if verdict is not None:
+            return verdict
+    elif kind == 'operator_identifier':
+        return False  # no node: a Scala infix operator cannot be read (see above)
     if kind in _DECISION_TYPES:
         if parent_kind is not None and (parent_kind, kind) in _KEYWORD_PAIRS:
             return False

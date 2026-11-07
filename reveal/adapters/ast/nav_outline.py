@@ -29,6 +29,13 @@ from reveal.utils.lines import split_lines
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _between(node: Any, first: Any, stop: Any, get_text: Callable) -> str:
+    """Source of ``node`` from ``first``'s start up to ``stop``'s start (both descendants)."""
+    base = _zero_arg(node, 'start_byte')
+    source: bytes = str(get_text(node)).encode('utf-8')
+    return source[_zero_arg(first, 'start_byte') - base:_zero_arg(stop, 'start_byte') - base].decode('utf-8')
+
+
 def _node_label(node: Any, get_text: Callable, keyword: Optional[str] = None) -> str:
     """Return 'KEYWORD  condition_text' for a scope or exit node.
 
@@ -38,9 +45,10 @@ def _node_label(node: Any, get_text: Callable, keyword: Optional[str] = None) ->
     if keyword is None:
         keyword = scope_label(node, _zero_arg(node, 'kind'))
     catch = zig_catch_parts(node)
-    if catch is not None:
-        node = catch[0]
-    first_line = split_lines(get_text(node))[0].strip().rstrip(':').rstrip('{').strip()
+    # A Zig catch reads from its header up to the handler (`catch |err|`): the legacy
+    # header node holds the payload, the 1.25 grammar's payload is the header's sibling.
+    text = _between(node, catch[0], catch[1], get_text) if catch is not None else get_text(node)
+    first_line = split_lines(text)[0].strip().rstrip(':').rstrip('{').strip()
     lower = first_line.lower()
     kw_lower = keyword.lower()
     if lower.startswith(kw_lower):

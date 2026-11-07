@@ -223,6 +223,10 @@ CALL_NODE_TYPES = {
     # this node covers plain generic *function* calls too (not always
     # construction), so it emits the bare callee name with no "new" prefix.
     'constructor_expression',   # Swift
+    # Zig builtins (`@import("std")`, `@This()`, `@intCast(x)`) on pack 1.25 (BACK-2540):
+    # their own kind, child(0) the `builtin_identifier`. The legacy grammar reads them as
+    # SuffixExpr calls (core/callees/zig.py), so both grammars count them.
+    'builtin_function',         # Zig
     # C++ `new ClassName(args)` / `new NS::ClassName(args)` is a DISTINCT
     # node kind, 'new_expression', not PHP/C#'s 'object_creation_expression'
     # despite the identical source shape — found via a pre-flight grammar

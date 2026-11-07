@@ -29,6 +29,7 @@ from reveal.analyzers.imports.python import extract_python_imports
 from reveal.core import node_children, node_taxonomy
 from reveal.core.treesitter_compat import _zero_arg, ts_parse, tree_root
 from reveal.utils.path_utils import to_posix
+from zig_grammar import by_grammar
 
 # grammar -> source. Identifiers: mod_* -> 'module', loc_* -> 'local', gap_* -> GAPS.
 SNIPPETS = {
@@ -261,14 +262,16 @@ def test_local_scope_nodes_are_defs_and_lambdas_not_containers():
 
 
 def test_zig_decl_is_local_only_with_a_function_prototype():
-    """Zig wraps every top-level declaration in Decl; a const Decl is module scope."""
+    """The legacy Zig grammar wraps every top-level declaration in Decl, the function kind
+    too; a const Decl is module scope. Pack 1.25's const is a variable_declaration (BACK-2540)."""
     markers = _markers('zig')
     decl_parents = []
     node = _zero_arg(markers['mod_a'], 'parent')
     while node is not None:
         decl_parents.append(_zero_arg(node, 'kind'))
         node = _zero_arg(node, 'parent')
-    assert 'Decl' in decl_parents, 'positive control: the module-scope const sits in a Decl'
+    wrapper = by_grammar('Decl', 'variable_declaration')
+    assert wrapper in decl_parents, f'positive control: the module-scope const sits in a {wrapper}'
     assert node_taxonomy.edge_scope(markers['mod_a']) == 'module'
     assert node_taxonomy.edge_scope(markers['loc_a']) == 'local'
 
