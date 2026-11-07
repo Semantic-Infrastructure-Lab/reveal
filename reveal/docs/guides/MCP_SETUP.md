@@ -415,7 +415,7 @@ and handled from Python.
 **Fix.** Moving past the `tree-sitter-language-pack<1.12.5` pin hands reveal
 the core `tree-sitter` C binding (no thread-affinity constraint) instead of
 the vendored pyo3 parser this bug depended on. `pyproject.toml` now requires
-`tree-sitter-language-pack>=1.8.1` (no upper bound) — verified fixed:
+`tree-sitter-language-pack>=1.8.1` (its upper bound is the newest release reveal was tested on, never `<1.12.5` again) — verified fixed:
 fresh venv, `tree-sitter-language-pack==1.14.3`, the
 original concurrent-GC repro (previously ~4,900 errors + `SIGABRT`) now exits
 clean. If you still hit a crash on a current install, restart the MCP server
