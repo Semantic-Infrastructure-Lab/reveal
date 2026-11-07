@@ -90,7 +90,7 @@ def test_deps_real_missing_path_is_one_failed_answer(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
         answer.emit()
     output = capsys.readouterr()
-    assert exc.value.code == 1 and not output.out
+    assert exc.value.code == 2 and not output.out  # BACK-2533
     assert output.err.count('Error (deps://)') == 1
 
 
@@ -137,7 +137,7 @@ def test_contracts_missing_path_keeps_failure_details(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
         answer.emit()
     output = capsys.readouterr()
-    assert exc.value.code == 1 and not output.out
+    assert exc.value.code == 2 and not output.out  # BACK-2533
     assert output.err.count('Error (contracts://)') == 1
     with pytest.raises(SystemExit):
         _emit_result(answer.result, Namespace(format='text', also_json=None),

@@ -57,7 +57,7 @@ def test_real_missing_path_is_one_failed_answer(tmp_path, capsys, fmt):
     with pytest.raises(SystemExit) as exc:
         answer.emit()
     output = capsys.readouterr()
-    assert exc.value.code == 1
+    assert exc.value.code == 2  # a missing path is an invalid resource (BACK-2533)
     assert output.err.count('Error (pack://)') == 1
     if fmt == 'text':
         assert not output.out

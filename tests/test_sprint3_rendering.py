@@ -49,7 +49,7 @@ def test_real_failed_result_and_distinct_details(name, tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
         answer.emit()
     output = capsys.readouterr()
-    assert exc.value.code == 1 and not output.out
+    assert exc.value.code == 2 and not output.out  # a missing path is an invalid resource (BACK-2533)
     assert output.err.count(answer.result['error']) == 1
 
     # Router failures use a preselected generic renderer. Exercise additional

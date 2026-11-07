@@ -87,7 +87,7 @@ def test_introspection_stays_legacy_while_navigation_qualifies(tmp_path, suffix)
     assert json.loads(response.stdout) == api.query(uri)
     path.unlink()
     missing = run(uri, '--format', 'json')
-    assert missing.returncode == (2 if suffix == '/answer' else 1)
+    assert missing.returncode == 2  # a missing path is an invalid resource in every mode (BACK-2533)
 
 
 @pytest.mark.mcp
@@ -192,5 +192,5 @@ def test_element_check_and_stdin_batch_keep_legacy_policy(tmp_path):
     assert json.loads(batch.stdout)['error']
     path.unlink()
     missing = run(uri, '--check', '--format', 'json')
-    assert missing.returncode == 1
+    assert missing.returncode == 2  # BACK-2533: a missing path exits 2 before --check is considered
     assert 'excluded.json' in missing.stdout + missing.stderr
