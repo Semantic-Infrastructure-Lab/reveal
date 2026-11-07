@@ -392,12 +392,18 @@ class GoExtractor(LanguageExtractor):
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
         project_namespaces: Optional[Set[str]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> Optional[bool]:
-        """Go classification is precise: an import is intra-project iff its
-        package path is inside the module named by go.mod (the test resolve_import
-        applies to the file's own module). If there's no go.mod we can't tell (None).
-        A go.work or replace sibling still classifies as external here: classification
-        moves onto the package model in BACK-2550."""
+        """Go classification is precise: an import is intra-project iff its package path is inside an
+        in-tree module the file can name, the same units :meth:`resolve_import` searches (BACK-2550):
+        with the scan's package model, its own module, a local ``replace`` target or a go.work sibling
+        the model read; without one (or outside every manifest it read), the nearest go.mod's module.
+        No go.mod: we can't tell (None)."""
+        directory = base_path.resolve()
+        if packages is not None and packages.owns(directory):
+            units = packages.local_units(directory)
+            if units:
+                return any(module_contains(name, stmt.module_name) for name, _unit in units)
         module_root = self._find_go_module_root(base_path)
         if not module_root:
             return None

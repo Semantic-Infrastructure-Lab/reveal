@@ -486,6 +486,7 @@ class PythonExtractor(LanguageExtractor):
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
         project_namespaces: Optional[Set[str]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> Optional[bool]:
         """A *relative* Python import (`from . import x`, `from ..pkg import y`)
         is unambiguously intra-project — if it didn't resolve, that's a real

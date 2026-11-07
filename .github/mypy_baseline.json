@@ -158,7 +158,6 @@
  "reveal/analyzers/hcl.py::return-value": 1,
  "reveal/analyzers/html.py::no-any-return": 1,
  "reveal/analyzers/html.py::return-value": 2,
- "reveal/analyzers/imports/base.py::attr-defined": 1,
  "reveal/analyzers/imports/generic.py::no-any-return": 6,
  "reveal/analyzers/imports/go.py::no-any-return": 1,
  "reveal/analyzers/imports/javascript.py::no-any-return": 1,

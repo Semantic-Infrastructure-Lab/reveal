@@ -675,6 +675,8 @@ class ProjectResolver:
                 extra_paths = extra_paths + indices.load_path_roots
             for stmt in imports:
                 if stmt.is_type_checking:
+                    # No edge in any view, but its classification still comes from here (BACK-2550).
+                    self._record_intra_verdict(stmt, extractor, base_path, extra_paths, indices)
                     continue
                 self._resolve_statement_edges(
                     stmt, file_path, extractor, base_path, extra_paths,
@@ -842,15 +844,13 @@ class ProjectResolver:
                 added = True
         return added
 
-    def _record_unresolved_if_intra(
-        self, stmt: ImportStatement, file_path: Path, extractor: Any,
-        base_path: Path, extra_paths: List[Path], indices: _ResolutionIndices,
-    ) -> None:
-        """Stage 5 (BACK-547 honest-decline): an extracted import that
-        produced no edge is only a false-negative risk if it points
-        intra-project. External (stdlib/dep) imports correctly have no
-        in-tree edge; None means the extractor can't tell, and we
-        conservatively don't count it (never cry wolf)."""
+    def _record_intra_verdict(
+        self, stmt: ImportStatement, extractor: Any, base_path: Path,
+        extra_paths: List[Path], indices: _ResolutionIndices,
+    ) -> Optional[bool]:
+        """Ask the extractor whether a statement with no edge points in-tree, with the inputs resolution
+        used, and record the verdict on the statement (BACK-2550): the per-import classification reads it
+        instead of asking again from the scan root."""
         if isinstance(extractor, RubyImportExtractor):
             verdict, inventory = extractor._classify_with_inventory(stmt, base_path)
             # Replay each cached build once, retaining distinct unlocated events within it.
@@ -860,7 +860,20 @@ class ProjectResolver:
         else:
             verdict = extractor.is_intra_project_import(
                 stmt, base_path, search_paths=extra_paths,
-                project_namespaces=indices.project_namespaces)
+                project_namespaces=indices.project_namespaces, packages=indices.packages)
+        stmt.intra_verdict = verdict
+        return verdict
+
+    def _record_unresolved_if_intra(
+        self, stmt: ImportStatement, file_path: Path, extractor: Any,
+        base_path: Path, extra_paths: List[Path], indices: _ResolutionIndices,
+    ) -> None:
+        """Stage 5 (BACK-547 honest-decline): an extracted import that
+        produced no edge is only a false-negative risk if it points
+        intra-project. External (stdlib/dep) imports correctly have no
+        in-tree edge; None means the extractor can't tell, and we
+        conservatively don't count it (never cry wolf)."""
+        verdict = self._record_intra_verdict(stmt, extractor, base_path, extra_paths, indices)
         if verdict is True:
             self.result.unresolved_intra += 1
             if len(self.result.unresolved_examples) < 5:

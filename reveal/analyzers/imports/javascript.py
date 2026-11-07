@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Set, Optional, Tuple
 
 from .types import ImportStatement
+from .packages import PackageModel
 from ...utils.request_cache import register_request_cache
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from ...registry import JS_TS_LANGUAGES, extensions_for_languages
@@ -1050,6 +1051,7 @@ class JavaScriptExtractor(LanguageExtractor):
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
         project_namespaces: Optional[Set[str]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> Optional[bool]:
         """A relative specifier (`./x`, `../x`) is intra-project; a bare
         specifier (`react`, `@angular/core`) is an npm dependency (external)
@@ -1067,8 +1069,8 @@ class JavaScriptExtractor(LanguageExtractor):
             return True
         workspace_root = search_paths[0] if search_paths else None
         if workspace_root is not None:
-            packages = _find_workspace_packages(workspace_root)
-            if _match_workspace_package(module_path, packages):
+            workspace_packages = _find_workspace_packages(workspace_root)
+            if _match_workspace_package(module_path, workspace_packages):
                 return True
         # BACK-1188: a baseUrl-only tsconfig (no `paths`) leaves genuine
         # ambiguity when neither check above resolves -- reveal can't fully

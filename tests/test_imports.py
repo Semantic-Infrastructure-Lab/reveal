@@ -6,7 +6,6 @@ from pathlib import Path
 from reveal.analyzers.imports import ImportStatement, ImportGraph
 from reveal.analyzers.imports.python import extract_python_imports, extract_python_symbols
 from reveal.analyzers.imports.classify import classify_import
-from reveal.analyzers.imports.base import build_project_namespaces
 from reveal.adapters.imports import ImportsAdapter
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
@@ -1048,25 +1047,6 @@ class TestClassifyImportIsIntra:
             'anything', is_relative=True, resolved=None,
             family='', local_names=frozenset(), is_intra=False,
         ) == 'intra_project'
-
-
-class TestBuildProjectNamespaces:
-    """BACK-1234: the shared namespace-inventory builder `imports://` and
-    `depends://` both draw from."""
-
-    def test_collects_declared_java_packages(self, tmp_path):
-        (tmp_path / "Helper.java").write_text(
-            "package com.example.util;\npublic class Helper {}\n"
-        )
-        (tmp_path / "Main.java").write_text(
-            "package com.example.app;\npublic class Main {}\n"
-        )
-        namespaces = build_project_namespaces([tmp_path / "Helper.java", tmp_path / "Main.java"])
-        assert namespaces == {'com.example.util', 'com.example.app'}
-
-    def test_ignores_languages_without_namespace_declarations(self, tmp_path):
-        (tmp_path / "main.py").write_text("import os\n")
-        assert build_project_namespaces([tmp_path / "main.py"]) == set()
 
     def test_query_params_flag_style(self, tmp_path):
         """Test flag-style query params (?circular vs ?circular=true)."""

@@ -250,33 +250,6 @@ def get_package_manifests() -> Set[str]:
     return {name for cls in _EXTRACTOR_REGISTRY.values() for name in cls.package_manifests}
 
 
-def build_project_namespaces(files: List[Path]) -> Set[str]:
-    """Declared packages/namespaces across every namespace-resolved file in
-    a scan (BACK-547/BACK-1234): the inventory
-    :meth:`LanguageExtractor.is_intra_project_import` consults for the
-    ancestor/descendant namespace match that gives C#/Java/Kotlin/PHP a
-    real intra-vs-external verdict.
-
-    Shared, reusable builder: ``depends://`` (BACK-547 honest-decline)
-    builds this inline as one branch of its larger single-pass
-    resolution-index walk and is left as-is (a riskier refactor of working,
-    performance-tuned code for no behavior change); ``imports://``/``deps://``
-    (BACK-1234) call this directly as a separate, lighter pass -- they don't
-    need depends://'s other edge-resolution indices (namespace_index,
-    member_index, zeitwerk_index, module_index, load_path_roots), only the
-    flat namespace set.
-    """
-    namespaces: Set[str] = set()
-    for file_path in files:
-        extractor = get_extractor(file_path)
-        if not extractor:
-            continue
-        spec = getattr(extractor, 'spec', None)
-        if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
-            namespaces.update(extractor.extract_namespaces(file_path))
-    return namespaces
-
-
 class LanguageExtractor(ABC):
     """Abstract base class for language-specific import extractors.
 
@@ -564,6 +537,7 @@ class LanguageExtractor(ABC):
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
         project_namespaces: Optional[Set[str]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> Optional[bool]:
         """Classify an import as intra-project vs external, for honest-decline.
 
@@ -589,7 +563,12 @@ class LanguageExtractor(ABC):
         the project declares a matching namespace. Extractors that don't need it
         ignore it.
 
+        ``packages`` (optional): the scan's package model (BACK-2559), the same one
+        resolution searched; manifest languages (Go, Rust) answer from its units.
+
         Only consulted for statements that did not resolve; a resolved import is
-        by definition intra-project and never reaches here.
+        by definition intra-project and never reaches here. The resolution pass
+        asks once per such statement, from the importing file's directory, and
+        records the answer on ``stmt.intra_verdict`` (BACK-2550).
         """
         return None

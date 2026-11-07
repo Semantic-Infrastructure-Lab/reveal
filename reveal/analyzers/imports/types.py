@@ -63,6 +63,12 @@ class ImportStatement:
                                # this statement. None means "did not resolve" — may
                                # still be a real external/stdlib package, never a
                                # positive local-file claim (BACK-1193).
+    intra_verdict: Optional[bool] = None  # Set by the resolution pass for a statement with no edge
+                               # (BACK-2550): the extractor's is_intra_project_import verdict, asked
+                               # with the inputs resolution used (the importing file's directory,
+                               # the scan's declared namespaces and package model). True: in-tree
+                               # but unresolved; False: external; None: cannot tell. The
+                               # per-import 'classification' reads this, never recomputes it.
     through_constant: bool = False  # The target path was built from a project constant
                                # (PHP define(), BACK-565): the edge's via is 'constant'.
 

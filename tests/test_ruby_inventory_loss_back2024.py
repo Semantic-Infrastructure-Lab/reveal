@@ -230,9 +230,11 @@ def test_existing_import_annotations_remain_honest_and_repair_normally(tmp_path)
         result = json.loads(answer)
         return {row['module']:row['classification'] for rows in result['files'].values() for row in rows}
 
-    clean = annotations()
+    # The classification is recorded by the build (BACK-2550), so the loss is injected into the first build:
+    # a healthy build of unchanged inputs is reused by the host's graph memo, a lossy one never is.
     with inventory_fault(tmp_path, 'manifest') as (events, _, _):
         lost = annotations()
+    clean = annotations()
     assert events
     assert clean['spree/missing'] == 'intra_project' and lost['spree/missing'] == 'unresolved'
     assert clean['external_gem'] == lost['external_gem'] == 'unresolved'

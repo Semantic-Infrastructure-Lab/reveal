@@ -31,7 +31,6 @@ from ..analyzers.imports.types import (
 from ..analyzers.imports.classify import classify_import, local_package_names, package_table
 from ..analyzers.imports.unused import describe_unused
 from ..conventions import conventions_for_path, family_for_path, same_package_families
-from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, peek_query_items
@@ -1482,7 +1481,6 @@ class ImportsAdapter(ResourceAdapter):
         self._warn_unknown_query_params(self._query_params)  # BACK-507
         _validate_params(self._query_params)
         self._local_names_cache: Optional[frozenset] = None  # BACK-1190, lazy
-        self._project_namespaces_cache: Optional[set] = None  # BACK-1234, lazy
         # A walk that hid every candidate says so (BACK-2065); set by _build_graph.
         self._scope_hidden: Optional[WarningEntry] = None
         # Where _build_graph resolved and under which file cap (BACK-1054).
@@ -2040,30 +2038,9 @@ class ImportsAdapter(ResourceAdapter):
             self._local_names_cache = local_package_names(self._target_path or Path('.'))
         return self._local_names_cache
 
-    def _get_project_namespaces(self) -> set:
-        """Declared namespace/package inventory for the scanned files,
-        computed once (BACK-1234) -- consulted by ``_format_import`` via
-        each file's ``is_intra_project_import`` for languages that need it
-        (C#/Java/Kotlin/PHP); ignored by extractors that don't."""
-        if self._project_namespaces_cache is None:
-            self._project_namespaces_cache = build_project_namespaces(list(self.analysis.scanned_files))
-        return self._project_namespaces_cache
-
     def _format_import(self, stmt: ImportStatement) -> Dict[str, Any]:
         """Format single import statement for output."""
         resolved = str(stmt.resolved_path) if stmt.resolved_path else None
-        # BACK-1234: only worth asking the extractor for an is_intra_project_import
-        # verdict when resolution truth (above) hasn't already settled it --
-        # a resolved/relative import is intra-project by definition and never
-        # reaches this extra call.
-        is_intra: Optional[bool] = None
-        if not (stmt.is_relative or resolved):
-            extractor = get_extractor(stmt.file_path)
-            if extractor:
-                is_intra = extractor.is_intra_project_import(
-                    stmt, self._target_path or Path('.'),
-                    project_namespaces=self._get_project_namespaces(),
-                )
         return {
             'file': str(stmt.file_path),
             'line': stmt.line_number,
@@ -2081,10 +2058,13 @@ class ImportsAdapter(ResourceAdapter):
             # Classified on resolution truth (above) first; a 'stdlib' verdict
             # requires a language-appropriate list -- Python's list is never
             # used as a fallback classifier for another language (BACK-1193).
+            # BACK-2550: the in-tree verdict for an import without an edge is the one
+            # the resolution pass recorded from the importing file's own inputs, not
+            # a second ask from the scan root.
             'classification': classify_import(
                 stmt.module_name, stmt.is_relative, resolved,
                 family_for_path(str(stmt.file_path)), self._get_local_names(),
-                is_intra=is_intra,
+                is_intra=stmt.intra_verdict,
             ),
         }
 

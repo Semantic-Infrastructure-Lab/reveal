@@ -66,6 +66,7 @@ from ...registry import extensions_for_languages
 from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
 from .file_index import basename_index, load_path_manifests
 from .types import ImportStatement
+from .packages import PackageModel
 from ...utils.request_cache import register_request_cache
 from ...utils.path_utils import to_posix, failure_of
 from reveal.utils.lines import split_lines
@@ -2326,6 +2327,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
         project_namespaces: Optional[Set[str]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> Optional[bool]:
         """Honest-decline classification (BACK-547) by language shape:
 
@@ -3447,6 +3449,7 @@ class RubyImportExtractor(_GenericTreeSitterImportExtractor):
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
         project_namespaces: Optional[Set[str]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> Optional[bool]:
         """BACK-1189 Ruby slice: real classification from Gemfile.lock
         (external) and each gemspec's lib/ inventory (local), upgrading the

@@ -650,6 +650,7 @@ class RustExtractor(LanguageExtractor):
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
         project_namespaces: Optional[Set[str]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> Optional[bool]:
         """A `crate::`/`super::`/`self::` use path (``stmt.is_relative``) is
         unambiguously intra-project. Everything else (a bare crate name --
