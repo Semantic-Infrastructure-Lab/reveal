@@ -43,9 +43,10 @@ def _render_link_graph(data: Dict[str, Any], output_format: str) -> None:
     total = data.get('total_files', 0)
     edges = data.get('total_edges', 0)
     isolated = data.get('isolated', [])
+    orphans = data.get('orphans', [])
     source = data.get('source', '')
     print(f'Link graph: {source}')
-    print(f'{total} files  |  {edges} edges  |  {len(isolated)} isolated')
+    print(f'{total} files  |  {edges} edges  |  {len(orphans)} orphans  |  {len(isolated)} isolated')
 
     nodes = [n for n in data.get('nodes', []) if n['links_to'] or n['linked_by']]
     if nodes:
@@ -57,11 +58,21 @@ def _render_link_graph(data: Dict[str, Any], output_format: str) -> None:
             for target in node['links_to']:
                 print(f'  → {target}')
 
-    if isolated:
-        print()
-        print(f'Isolated ({len(isolated)} files with no links):')
-        for f in isolated:
-            print(f'  {f}')
+    # Each file once: an isolated doc is an orphan too, and is listed under Isolated.
+    isolated_set = set(isolated)
+    _print_file_list('Orphans', 'files that link out but nothing links to',
+                     [f for f in orphans if f not in isolated_set])
+    _print_file_list('Isolated', 'files with no links', isolated)
+
+
+def _print_file_list(title: str, what: str, files: list) -> None:
+    """A titled, counted list of files; nothing at all when the list is empty."""
+    if not files:
+        return
+    print()
+    print(f'{title} ({len(files)} {what}):')
+    for f in files:
+        print(f'  {f}')
 
 
 def _render_backlinks(data: Dict[str, Any], output_format: str) -> None:

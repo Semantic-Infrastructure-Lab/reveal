@@ -1098,7 +1098,8 @@ reveal 'markdown://docs/?backlinks=auth.md'
 
 - `?link-graph` builds and returns the full graph for every markdown file
   under the queried directory — use it to survey overall doc connectivity or
-  find orphaned files (`isolated` in the output).
+  find orphans: `orphans` lists every doc nothing links to, `isolated` the ones that also
+  link nowhere. An entry doc such as the root `README.md` is an orphan by construction.
 - `?backlinks=path` returns just the one node you asked about — cheaper when
   you only need "who references this doc" as a pre-edit staleness check.
   Accepts either a path relative to the queried directory or a bare filename

@@ -327,7 +327,8 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
 
     For each file, discovers which other files it links to (forward edges) and
     which files link back to it (back-edges / backlinks).  Files with neither
-    forward nor backward links are reported as ``isolated``.
+    forward nor backward links are reported as ``isolated``; files nothing links to, as
+    ``orphans`` (a superset of ``isolated``).
 
     Results are cached on disk keyed by a fingerprint of every markdown
     file's (relpath, mtime_ns, size) (BACK-866) — every Beth-parity feature
@@ -343,6 +344,7 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
             total_edges   — total number of directed link edges
             nodes         — list of node dicts, each with:
                             file, links_to, linked_by
+            orphans       — list of filenames with no inbound link (BACK-2519)
             isolated      — list of filenames with zero edges (in or out)
     """
     discovery: List[PathFailure] = []
@@ -401,15 +403,15 @@ def _link_graph_result(forward: Dict[str, List[str]], total_files: int) -> Dict[
         for rel in sorted(forward)
     ]
 
-    isolated = [
-        n['file'] for n in nodes
-        if not n['links_to'] and not n['linked_by']
-    ]
+    # Orphans: no other doc links to them (BACK-2519). Isolated ones also link nowhere.
+    orphans = [n['file'] for n in nodes if not n['linked_by']]
+    isolated = [n['file'] for n in nodes if not n['links_to'] and not n['linked_by']]
 
     return {
         'total_files': total_files,
         'total_edges': total_edges,
         'nodes': nodes,
+        'orphans': orphans,
         'isolated': isolated,
     }
 

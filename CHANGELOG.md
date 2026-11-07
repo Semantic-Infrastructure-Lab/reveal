@@ -106,6 +106,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Added
 
+- `markdown://DIR/?link-graph` lists orphans, the docs no other doc links to, as its help promised: JSON `orphans`, and an `Orphans` section and count in text. It reported only isolated docs (no link in or out), so a doc that links out but is never linked to was named nowhere (BACK-2519).
+
 - `reveal check FILE`, `FILE --check`, and `reveal --stdin --check` accept text and grep file sinks alongside JSON. Each format uses the same analysis; stdin text/grep files preserve input order and JSON files contain one aggregate report. Stdin file sinks require native file paths; URI inputs exit 2 before analysis. (BACK-2446)
 
 ### Fixed

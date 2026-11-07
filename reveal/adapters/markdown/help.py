@@ -89,7 +89,10 @@ _SCHEMA_OUTPUT_TYPES = [
                         }
                     }
                 },
-                'isolated': {'type': 'array', 'items': {'type': 'string'}},
+                'orphans': {'type': 'array', 'items': {'type': 'string'},
+                            'description': 'Docs no other doc links to (isolated ones included)'},
+                'isolated': {'type': 'array', 'items': {'type': 'string'},
+                             'description': 'Docs with no link in or out'},
             }
         }
     },

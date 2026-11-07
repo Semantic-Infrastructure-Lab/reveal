@@ -713,7 +713,7 @@ reveal 'markdown://docs/?link-graph' --format=grep
 reveal 'markdown://docs/?link-graph' --format=grep | cut -f2 | sort | uniq -c | sort -rn
 ```
 
-**Output:** Per-file: links-to list, linked-by count. Plus isolated files (no links in or out — orphaned docs).
+**Output:** Per-file: links-to list, linked-by count. Plus orphans (docs nothing links to) and isolated files (no links in or out).
 
 ### Pre-edit staleness check for one doc
 
