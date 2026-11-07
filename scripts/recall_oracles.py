@@ -1297,6 +1297,11 @@ def build_python_calls_oracle(scope: Scope) -> tuple[Edges, Coverage]:
         'population': 'python-function-body-bare-name-callers'}
 
 
+# The one Go toolchain the oracle runs (recall.yml installs the same). Kubernetes' go.mod and go.work declare
+# go 1.26.0, which an older go refuses to load.
+GO_ORACLE_VERSION = 'go1.27.3'
+
+
 def build_go_oracle(scope: Scope) -> tuple[Edges, Coverage]:
     """Go resolves package directories; its standard parser supplies per-file imports.
 
@@ -1308,17 +1313,23 @@ def build_go_oracle(scope: Scope) -> tuple[Edges, Coverage]:
     go = shutil.which('go')
     if not go:
         raise RuntimeError('Go oracle prerequisite unavailable: Go is required')
-    version = subprocess.run([go, 'version'], capture_output=True, text=True,
+    # GOTOOLCHAIN=local: a go.mod's toolchain line may not swap in a downloaded go behind the pin check.
+    env = {**os.environ, 'GOTOOLCHAIN': 'local'}
+    version = subprocess.run([go, 'version'], capture_output=True, text=True, env=env,
                              encoding='utf-8', check=True, timeout=30).stdout.split()[2]
-    expected = scope.config.get('go_version', 'go1.21.5')
+    expected = scope.config.get('go_version', GO_ORACLE_VERSION)
     if version != expected:
         raise RuntimeError(f'Go oracle requires {expected}, got {version}')
     patterns = ['./' + directory.strip('./') + '/...' if directory != '.' else './...'
                 for directory in scope.config['importer_dirs']]
-    listed = subprocess.run([go, 'list', '-json', *patterns], cwd=scope.root,
+    listed = subprocess.run([go, 'list', '-json', *patterns], cwd=scope.root, env=env,
                             capture_output=True, text=True, encoding='utf-8', timeout=180)
     if listed.returncode:
         raise RuntimeError(f'Go package resolution failed: {listed.stderr.strip()}')
+    # go list exits 0 on a pattern that matches nothing (in a workspace, ./dir/... only matches inside the
+    # module holding dir, so a multi-module row lists each module directory): a shrunken population, not a pass.
+    if 'matched no packages' in listed.stderr:
+        raise RuntimeError(f'Go package pattern matched nothing: {listed.stderr.strip()}')
     decoder = json.JSONDecoder()
     remaining = listed.stdout.strip()
     packages = {}
@@ -1327,7 +1338,7 @@ def build_go_oracle(scope: Scope) -> tuple[Edges, Coverage]:
         packages[package['ImportPath']] = Path(package['Dir']).resolve()
         remaining = remaining[end:].lstrip()
     probe = Path(__file__).with_name('oracles') / 'go_import_oracle.go'
-    parsed = subprocess.run([go, 'run', str(probe)], cwd=scope.root,
+    parsed = subprocess.run([go, 'run', str(probe)], cwd=scope.root, env=env,
                             input=json.dumps([str(p) for p in scope.importers]),
                             capture_output=True, text=True, encoding='utf-8', timeout=180)
     if parsed.returncode:

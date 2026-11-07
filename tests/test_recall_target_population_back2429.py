@@ -157,19 +157,19 @@ def test_cross_drive_identity_failure_does_not_hide_counts_or_leak_absolute_path
     assert str(root.parent) not in json.dumps(scope)
 
 
-def test_go_per_target_view_declines_observed_population(population_corpus, monkeypatch):
-    root, entry, _, calls = population_corpus
+def test_go_package_view_scores_one_summary_and_discloses_its_population(population_corpus, monkeypatch):
+    # Go reads the same one-request summary as every other language, its package rows fanned out to
+    # the package's files; a package row reaching non-target files is disclosed, never scored.
+    root, entry, additions, calls = population_corpus
     oracle = gate.ORACLES['python-ast']
     monkeypatch.setitem(gate.ORACLES, 'go-toolchain', oracle._replace(lazy_only=None))
     entry['recall'] = {**entry['recall'], 'oracle': 'go-toolchain'}
     del entry['recall']['test_importer_dirs']
-    monkeypatch.setattr(gate, 'rendered_dependents', lambda *args: {
-        'importers': {root / 'pkg/module.py', root / 'pkg/local.py', root / 'tests/use.py'},
-        'partial_files': 0, 'edge_rule': {}})
+    additions[root / 'pkg'] = {root / 'tests/use.py'}
     row = gate.measure(entry, root)
     assert row['recall'] == row['precision'] == 1
-    assert calls == []
+    assert calls == [('include', 'include', False)]
     scope = row['target_population']
-    assert scope['status'] == 'unavailable' and scope['oracle_targets'] == 1
-    assert 'per-target' in scope['reason']
-    assert 'observed_pairs' not in scope and 'unscored_targets' not in scope
+    assert scope['status'] == 'observed'
+    assert scope['unscored_target_paths'] == ['pkg/local.py', 'pkg/module.py', 'pkg/unused.py']
+    assert scope['unscored_pairs'] == 3

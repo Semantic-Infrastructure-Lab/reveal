@@ -1090,11 +1090,39 @@
       "packages": 11,
       "import_statements": 499,
       "resolved_statements": 58,
-      "go_version": "go1.21.5",
+      "go_version": "go1.27.3",
       "population": "tracked-buildless-source"
     },
     "partial_files": 0,
-    "differences": []
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [
+        "go"
+      ],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
+    "differences": [],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 98,
+      "observed_targets": 98,
+      "observed_pairs": 2589,
+      "scored_pairs": 2589,
+      "unscored_targets": 0,
+      "unscored_pairs": 0,
+      "unscored_target_paths": [],
+      "unscored_target_paths_unavailable": 0
+    }
   },
   "python-reveal": {
     "oracle": "python-ast",

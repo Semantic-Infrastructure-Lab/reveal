@@ -269,16 +269,19 @@ def _partial_files(result: dict[str, Any]) -> int:
     return failed
 
 
-def rendered_dependents(scan: Path, target: Path, cap: int | None) -> dict[str, Any]:
-    """Importers of one file as ``imports://<file>?importers`` prints them: the package view Go needs, where
-    an import names a directory. It builds the whole graph per request, so use it only where the
-    directory form below cannot answer."""
-    result = _importers_request(target, scan, cap)
-    importers = result['importers']
-    if len(importers) != result['count']:
-        raise RuntimeError(f'imports:// answer truncated for {target.name}: {len(importers)} of {result["count"]} shown')
-    return {'importers': {Path(os.path.normpath(target.parent / row['file'])) for row in importers},
-            'partial_files': _partial_files(result), 'edge_rule': _edge_rule(result)}
+def package_files(graph: dict[str, Any], files: list[Path]) -> dict[str, Any]:
+    """Go imports name a package directory, so the directory summary lists a package's importers once, under
+    the directory. Give each of its ``files`` (the oracle's population) that row minus itself: the oracle's
+    own fan-out (``build_go_oracle``). One graph build for the whole row, where the per-file form rebuilt the
+    graph per target (26 s each on Kubernetes' staging tree)."""
+    in_directory: dict[Path, list[Path]] = {}
+    for file in files:
+        in_directory.setdefault(Path(os.path.normpath(file.parent)), []).append(Path(os.path.normpath(file)))
+    by_target: dict[Path, set[Path]] = {}
+    for target, importers in graph['by_target'].items():
+        for file in in_directory.get(target, [target]):
+            by_target.setdefault(file, set()).update(importers - {file})
+    return {**graph, 'by_target': by_target}
 
 
 def rendered_reverse_graph(scan: Path, cap: int | None, lazy: str = 'include',
@@ -332,36 +335,30 @@ def measure(entry: dict, root: Path, *, policy: dict | None = None,
         # A file no build compiles has no true edges; its importers are not scored either way (BACK-2549).
         population -= oracle.unscored(Scope(root, scan, importers, config))
     reset_request_caches()
-    # Go imports name packages, so its per-file answer is the package view of imports://<file>?importers.
-    graph = None if name == 'go-toolchain' else rendered_reverse_graph(scan, cap)
-    meta: dict[str, Any] = {'partial_files': 0, 'edge_rule': {}}
-
-    def importers_of(target: str) -> set[Path]:
-        if graph is None:
-            view = rendered_dependents(scan, root / target, cap)
-            meta.update(partial_files=view['partial_files'], edge_rule=view['edge_rule'])
-            return view['importers']
-        meta.update(partial_files=graph['partial_files'], edge_rule=graph['edge_rule'])
-        return graph['by_target'].get(root / target, set())
-
-    hit, expected, extra, differences = _score(edges, importers_of, root, population)
+    graph = rendered_reverse_graph(scan, cap)
+    if name == 'go-toolchain':
+        graph = package_files(graph, importers)
+    hit, expected, extra, differences = _score(
+        edges, lambda target: graph['by_target'].get(root / target, set()), root, population)
     if not hit:
         raise RuntimeError('Reveal found zero oracle edges; positive control failed')
     result = {'oracle': name, 'sha': head, 'targets': len(edges), 'oracle_edges': expected, 'hit_edges': hit,
               'extra_edges': extra, 'recall': hit / expected, 'precision': hit / (hit + extra),
-              'coverage': coverage, 'partial_files': meta['partial_files'], 'edge_rule': meta['edge_rule'],
+              'coverage': coverage, 'partial_files': graph['partial_files'], 'edge_rule': graph['edge_rule'],
               'differences': differences, 'target_population': _target_population(edges, graph, root, population)}
     scope = Scope(root, scan, importers, config)
-    lazy_edges = oracle.lazy_only(scope) if oracle.lazy_only is not None and graph is not None else None
+    lazy_edges = oracle.lazy_only(scope) if oracle.lazy_only is not None else None
     if lazy_edges is not None:
         result['lazy'] = _measure_lazy(oracle, scope, edges, root, scan, cap, population, lazy_edges=lazy_edges)
+    # The test views score the file-keyed summary; Go's package fan-out is applied above only.
+    package_view = name == 'go-toolchain'
     if 'test_importer_dirs' in config:
-        if graph is None:
-            raise RuntimeError('Test exclusion scoring requires the directory importer view')
+        if package_view:
+            raise RuntimeError('Test exclusion scoring requires a file-keyed importer view; Go names packages')
         result['tests'] = {'exclude': _measure_test_views(scope, edges, cap, population,
                                                         lazy_edges if test_lazy else None)}
     if policy is not None:
-        if 'test_importer_dirs' not in config or graph is None:
+        if 'test_importer_dirs' not in config or package_view:
             raise RuntimeError('Configured test policy requires independently labelled test importers')
         if _read_test_policy(Path(policy['path'])) != policy:
             raise RuntimeError('Selected test policy input changed before measurement')
@@ -391,7 +388,7 @@ def _score(edges: dict[str, list[str]], importers_of, root: Path, population: se
     return hit, expected, extra, differences
 
 
-def _target_population(edges: dict[str, list[str]], graph: dict[str, Any] | None,
+def _target_population(edges: dict[str, list[str]], graph: dict[str, Any],
                        root: Path, population: set[Path]) -> dict[str, Any]:
     """Disclose observed claims outside scoring authority without declaring them false.
 
@@ -400,10 +397,7 @@ def _target_population(edges: dict[str, list[str]], graph: dict[str, Any] | None
     observed claims. Root-relative identities can name outside-root targets with
     ``../``; a different Windows drive leaves its identity explicitly unavailable.
     """
-    if graph is None:
-        return {'status': 'unavailable', 'oracle_targets': len(edges),
-                'reason': 'Go uses per-target package views; a directory-wide observed target population is unavailable'}
-    observed = {target: selected for target, importers in graph['by_target'].items()
+    observed ={target: selected for target, importers in graph['by_target'].items()
                 if (selected := importers & population)}
     unscored = observed.keys() - {root / target for target in edges}
     observed_pairs = sum(len(importers) for importers in observed.values())

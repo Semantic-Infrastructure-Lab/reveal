@@ -96,7 +96,7 @@ corpora:
     recall:
       oracle: go-toolchain
       importer_dirs: [prometheus]
-      go_version: go1.21.5
+      go_version: go1.27.3
   - language: java
     repo: https://github.com/elastic/elasticsearch.git
     sha: a6141b9dbec012eb147c8280ccc65f847b2956fa

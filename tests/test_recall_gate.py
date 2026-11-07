@@ -2,6 +2,7 @@
 import ast
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import textwrap
@@ -10,6 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from reveal.analyzers.imports.views import ImportView
 
@@ -533,21 +535,15 @@ def test_a_truncated_rendered_summary_is_a_failure_not_a_smaller_answer(python_c
         gate.measure(entry, root)
 
 
-def test_the_per_file_form_scores_the_rendered_package_view_and_refuses_a_cut(python_corpus, monkeypatch):
-    # Go's answer is the per-file form of imports://?importers, so that helper is gated the same way.
-    root, entry = python_corpus
-    scan = root.resolve()
-    assert gate.rendered_dependents(scan, scan / 'pkg/a.py', None)['importers'] == {scan / 'pkg/b.py'}
-    real = ImportsAdapter._format_file_importers
-
-    def cut(self, target):
-        result = real(self, target)
-        result['importers'] = []  # count still says what the full answer held
-        return result
-
-    monkeypatch.setattr(ImportsAdapter, '_format_file_importers', cut)
-    with pytest.raises(RuntimeError, match='truncated'):
-        gate.rendered_dependents(scan, scan / 'pkg/a.py', None)
+def test_go_package_rows_fan_out_to_each_file_of_the_package_minus_itself(tmp_path):
+    # Go's directory summary keys a package's importers by its directory; the gate gives each file of the
+    # package that row, less the file itself (the oracle's fan-out), and leaves a file-keyed row as it is.
+    pkg, other = tmp_path / 'pkg', tmp_path / 'other'
+    a, b, user, lone = pkg / 'a.go', pkg / 'b.go', other / 'user.go', tmp_path / 'lone.go'
+    graph = {'by_target': {pkg: {a, user}, lone: {user}}, 'partial_files': 0, 'edge_rule': {'k': 'v'}}
+    fanned = gate.package_files(graph, [a, b, user])
+    assert fanned['by_target'] == {a: {user}, b: {a, user}, lone: {user}}
+    assert fanned['partial_files'] == 0 and fanned['edge_rule'] == {'k': 'v'}
 
 
 def test_the_gate_scores_one_stated_rule_and_refuses_another(python_corpus, monkeypatch):
@@ -773,15 +769,15 @@ def _pinned_go_available():
     if not shutil.which('go'):
         return False
     try:
-        result = subprocess.run(['go', 'version'], capture_output=True, text=True,
+        result = subprocess.run(['go', 'version'], capture_output=True, text=True, env={**os.environ, 'GOTOOLCHAIN': 'local'},
                                 encoding='utf-8', check=True, timeout=30)
-        return result.stdout.split()[2] == 'go1.21.5'
+        return result.stdout.split()[2] == oracles.GO_ORACLE_VERSION
     except (OSError, subprocess.SubprocessError, IndexError):
         return False
 
 
 needs_go = pytest.mark.skipif(not _pinned_go_available(),
-                             reason='optional Go 1.21.5 oracle toolchain unavailable')
+                             reason=f'optional {oracles.GO_ORACLE_VERSION} oracle toolchain unavailable')
 
 
 @pytest.fixture
@@ -791,7 +787,7 @@ def go_corpus(tmp_path):
         'target/target.go': 'package target\nfunc Run() {}\n',
         'use/use.go': 'package use\nimport alias "example.org/project/target"\nfunc Run() { alias.Run() }\n',
         'use/strings.go': 'package use\n// import "example.org/project/target"\nvar Text = `import "example.org/project/target"`\n',
-    }, {'oracle': 'go-toolchain', 'importer_dirs': ['.'], 'go_version': 'go1.21.5'})
+    }, {'oracle': 'go-toolchain', 'importer_dirs': ['.'], 'go_version': oracles.GO_ORACLE_VERSION})
 
 
 @needs_go
@@ -808,15 +804,24 @@ def test_go_native_parser_and_public_package_projection(go_corpus):
 def test_go_lost_edge_fails_the_existing_gate(go_corpus, monkeypatch):
     root, entry = go_corpus
     before = gate.measure(entry, root)
-    original = ImportsAdapter._format_file_importers
-    def drop(self, target):
-        answer = original(self, target)
-        answer['importers'], answer['count'] = [], 0  # a consistent loss; a cut list fails as truncated
+    original = ImportsAdapter._format_importers
+    def drop(self, importers):
+        answer = original(self, importers)
+        answer['entries'], answer['total'] = [], 0  # a consistent loss; a cut list fails as truncated
         return answer
-    monkeypatch.setattr(ImportsAdapter, '_format_file_importers', drop)
+    monkeypatch.setattr(ImportsAdapter, '_format_importers', drop)
     with pytest.raises(RuntimeError, match='zero oracle edges'):
         gate.measure(entry, root)
     assert gate.regressions({'go': {**before, 'recall': 0.5}}, {'go': before})
+
+
+def test_the_go_oracle_pin_is_the_toolchain_recall_yml_installs_and_the_manifest_names():
+    # Three places name the Go toolchain; if they disagree, every Go row fails in CI or in the push gate.
+    trigger = _load('check_imports_gate')
+    assert trigger.pinned_go(SCRIPTS.parent) == oracles.GO_ORACLE_VERSION
+    manifest = yaml.safe_load((SCRIPTS.parent / 'tests/corpus/manifest.yaml').read_text(encoding='utf-8'))
+    rows = [entry['recall'] for entry in manifest['corpora'] if entry.get('recall', {}).get('oracle') == 'go-toolchain']
+    assert rows and {row.get('go_version', oracles.GO_ORACLE_VERSION) for row in rows} == {oracles.GO_ORACLE_VERSION}
 
 
 @needs_go
@@ -824,6 +829,18 @@ def test_go_wrong_toolchain_is_unavailable(go_corpus):
     root, entry = go_corpus
     entry['recall']['go_version'] = 'go0.0.0'
     with pytest.raises(RuntimeError, match='requires go0.0.0'):
+        _build(root, entry)
+
+
+@needs_go
+def test_go_pattern_that_matches_nothing_is_a_failure_not_a_smaller_population(go_corpus):
+    # go list exits 0 with a warning for a pattern that matches no package (a workspace module's
+    # directory named from another module does this); the oracle refuses instead of shrinking.
+    root, entry = go_corpus
+    (root / 'docs').mkdir()
+    (root / 'docs/README').write_text('no Go here\n', encoding='utf-8')
+    entry['recall']['importer_dirs'] = ['.', 'docs']
+    with pytest.raises(RuntimeError, match='matched nothing'):
         _build(root, entry)
 
 

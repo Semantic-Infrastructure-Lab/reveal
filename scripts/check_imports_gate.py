@@ -95,12 +95,22 @@ def build_request(repo):
 
 def pinned_pack(repo):
     """The tree-sitter-language-pack version recall.yml pins, or None."""
+    return _recall_pin(repo, 'tree-sitter-language-pack==')
+
+
+def pinned_go(repo):
+    """The Go toolchain recall.yml installs (``go1.27.3``), or None: the one the Go oracle accepts."""
+    version = _recall_pin(repo, 'go-version:')
+    return f'go{version}' if version else None
+
+
+def _recall_pin(repo, marker):
     workflow = repo / '.github/workflows/recall.yml'
     if not workflow.exists():
         return None
     for line in workflow.read_text(encoding='utf-8').splitlines():
-        if 'tree-sitter-language-pack==' in line:
-            return line.split('tree-sitter-language-pack==')[1].split()[0].strip('"\'')
+        if marker in line:
+            return line.split(marker)[1].split()[0].strip('"\'')
     return None
 
 
@@ -112,8 +122,14 @@ def measure(repo, rows, interpreter, corpus_root, output):
               'partial_files row may be the pack, not the change (BACK-2503): compare a base-commit run',
               file=sys.stderr)
     env = dict(os.environ)
-    if shutil.which('go', path=env.get('PATH')) is None and Path('/usr/local/go/bin/go').exists():
-        env['PATH'] = env.get('PATH', '') + os.pathsep + '/usr/local/go/bin'  # the Go oracle's toolchain
+    # The Go oracle runs exactly the toolchain recall.yml pins: prefer it where golang.org/dl installs it,
+    # else whatever go is on PATH, else the system install (the oracle names a version mismatch itself).
+    go_pin = pinned_go(repo)
+    pinned = Path.home() / 'sdk' / go_pin / 'bin' if go_pin else None
+    if pinned is not None and (pinned / 'go').exists():
+        env['PATH'] = str(pinned) + os.pathsep + env.get('PATH', '')
+    elif shutil.which('go', path=env.get('PATH')) is None and Path('/usr/local/go/bin/go').exists():
+        env['PATH'] = env.get('PATH', '') + os.pathsep + '/usr/local/go/bin'
     command = [str(interpreter), str(repo / 'scripts/recall_gate.py'), '--corpus-root', str(corpus_root),
                '--output', str(output)]
     for row in rows:
