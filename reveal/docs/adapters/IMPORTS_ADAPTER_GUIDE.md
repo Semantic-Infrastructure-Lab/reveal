@@ -122,7 +122,7 @@ reveal imports://src
 Import Analysis: src
 ============================================================
 
-  Total Files:   45
+  Files:         52 scanned, 45 with imports
   Total Imports: 238
   Cycles Found:  ❌ Yes
 

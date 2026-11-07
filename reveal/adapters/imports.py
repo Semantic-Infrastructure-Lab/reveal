@@ -927,7 +927,11 @@ class ImportsRenderer:
         print(f"\n{'='*60}")
         print(f"Import Analysis: {display_path}")
         print(f"{'='*60}\n")
-        print(f"  Total Files:   {total_files}")
+        # Both counts, each with its rule: total_files is only the files with an import, so alone it
+        # read as a contradiction of overview's scanned count (397 beside 443, BACK-2534).
+        scanned = metadata.get('scanned_files')
+        files = f'{total_files}' if scanned is None else f'{scanned} scanned, {total_files} with imports'
+        print(f"  Files:         {files}")
         print(f"  Total Imports: {total_imports}")
         ImportsRenderer._render_cycle_summary(result, display_path)
         print()

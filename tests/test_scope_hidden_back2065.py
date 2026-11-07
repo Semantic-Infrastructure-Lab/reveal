@@ -89,7 +89,7 @@ def test_no_gitignore_answers_and_drops_the_warning(repo):
     """Positive control: the fixture has real answers once nothing is hidden."""
     uris = _uris(repo / 'gen' / 'pkg')
     expected = {
-        'imports': 'Total Files:   2',
+        'imports': '2 with imports',
         'calls_target': 'Total:      1',
         'calls_uncalled': 'Total defined:        2',
         'surface': 'import requests',
