@@ -100,6 +100,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Zig files read correctly again on a fresh install. `tree-sitter-language-pack` 1.25.0 ships a different Zig grammar, and with it reveal found almost no Zig functions (383 of 6,731 on Ghostty) and printed empty outlines with exit 0. reveal now requires `tree-sitter-language-pack<1.25`; if you upgraded the pack by hand, run `pip install "tree-sitter-language-pack<1.25"` (BACK-2539).
+
 - A TypeScript decorator written before `export class`, `export default class` or `export abstract class` now belongs to the class: `@Component({...}) export class Widget` had no decorators in `ast://`, `contracts://` and `?decorator=Component` found nothing, which is how Angular and NestJS declare components and controllers (BACK-2535).
 
 - `contracts://` lists a class's decorators by name, as `ast://` and `calls://` do: C# `[ApiController, Route("api/x")]` gives `ApiController` and `Route` (it gave the raw `[ApiController, Route("api/x")]`), and TypeScript and Java decorators give their name instead of source text (`@Component({...})` -> `Component`). Python names are unchanged (BACK-2263).
