@@ -34,7 +34,8 @@ from ..conventions import conventions_for_path, family_for_path, same_package_fa
 from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
-from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec
+from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, peek_query_items
+from ..errors import RequestValidationError
 from ..utils.query_binding import boolean_value
 from ..analyzers.imports.views import (
     ImportView, _unused_not_checked, detect_autoload_regime, _component_cohesion,
@@ -1439,6 +1440,20 @@ class ImportsAdapter(ResourceAdapter):
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     PARAM_SPECS = PARAM_SPECS
+
+    @staticmethod
+    def validate_request(params, args):
+        """--fail-on findings gates the findings views only (_FINDINGS_VIEWS): the default, ranking,
+        component, entry-point, external and importers views have no findings verdict, so the gate
+        could never fire and a CI run that forgot --circular passed (BACK-2528)."""
+        if vars(args).get('fail_on') != 'findings':
+            return
+        keys = dict(peek_query_items(params))  # validating is not reading
+        if _IMPORTERS.name not in keys and any(key in keys for key in ('unused', 'circular', 'violations')):
+            return
+        raise RequestValidationError(
+            '--fail-on findings has no verdict to gate in this view: imports gates --circular, --unused '
+            'and --violations (exit 1 when the answer has a row); add one, or drop --fail-on')
 
     def __init__(self, resource: str = '.', query: Optional[str] = None, *,
                  params: Optional[Any] = None, parse_extensions: Optional[frozenset] = None):

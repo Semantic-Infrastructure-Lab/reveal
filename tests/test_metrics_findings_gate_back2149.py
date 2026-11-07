@@ -170,12 +170,17 @@ def test_a_single_file_target_gates_on_the_same_predicate(make):
     ['metrics://proj?view=provenance'],
 ])
 def test_views_without_the_ranking_have_nothing_to_gate(make, argv):
-    """The findings verdict belongs to the hotspots view; the other views accept the policy and exit 0
-    (the imports precedent: only its findings views gate), and carry no has_findings."""
+    """The findings verdict belongs to the hotspots view; asking another view to gate is refused, exit 2
+    naming the view that gates, since the gate could never fire (BACK-2528: it exited 0, a false green
+    for a CI run that forgot --hotspots). Without --fail-on the view answers, with no has_findings."""
     make('clean.py', 'complex.py', 'poor.py')
     result = run(*argv, '--fail-on', 'findings', '--format', 'json', '--no-gitignore')
-    assert result.returncode == 0, result.stderr
-    assert 'has_findings' not in json.loads(result.stdout).get('summary', {})
+    assert result.returncode == 2, result.stderr
+    assert 'metrics gates --hotspots' in result.stderr
+    assert 'metrics gates --hotspots' in json.loads(result.stdout)['error']
+    answered = run(*argv, '--format', 'json', '--no-gitignore')
+    assert answered.returncode == 0, answered.stderr
+    assert 'has_findings' not in json.loads(answered.stdout).get('summary', {})
 
 
 def test_the_exit_code_help_names_the_gate():

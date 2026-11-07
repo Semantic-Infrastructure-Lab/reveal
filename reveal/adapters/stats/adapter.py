@@ -41,6 +41,7 @@ from .queries import SORT_FIELDS, get_quality_config, field_value, compare, matc
 from .aggregation import aggregate_stats, has_findings, identify_hotspots
 from .provenance import PROVENANCE_RESULT_TYPE, provenance_report
 from ...reveal_types import PathFailure
+from ...errors import RequestValidationError
 
 
 def _pool_results(executor, args: list) -> list:
@@ -280,6 +281,19 @@ _SCHEMA_NOTES = [
 ]
 
 
+def _requests(value: Any) -> bool:
+    """Whether a boolean query value turns its view on: bare presence or true. A malformed value is
+    left to the parameter's own validation."""
+    if value is None:
+        return False
+    if value == '':
+        return True
+    try:
+        return boolean_value(value)
+    except ValueError:
+        return True
+
+
 @register_adapter('metrics')
 @register_renderer(StatsRenderer)
 class MetricsAdapter(ResourceAdapter):
@@ -337,6 +351,20 @@ class MetricsAdapter(ResourceAdapter):
             'example_queries': _SCHEMA_EXAMPLE_QUERIES,
             'notes': _SCHEMA_NOTES,
         }
+
+    @staticmethod
+    def validate_request(params, args):
+        """--fail-on findings gates the hotspots=true view only: any other view has no findings
+        verdict, so the gate could never fire and a CI run that forgot --hotspots passed (BACK-2528)."""
+        if vars(args).get('fail_on') != 'findings':
+            return
+        keys = dict(peek_query_items(params))  # validating is not reading
+        if keys.get('view') != 'provenance' and _requests(keys.get('hotspots')):
+            return
+        raise RequestValidationError(
+            '--fail-on findings has no verdict to gate in this view: metrics gates --hotspots '
+            '(exit 1 when an analysed file has quality below 70 or a function complexity above 20), '
+            'not the default or provenance view; add --hotspots, or drop --fail-on')
 
     @staticmethod
     def result_type_for(params) -> str:

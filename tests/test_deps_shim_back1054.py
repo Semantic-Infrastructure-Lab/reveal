@@ -214,13 +214,22 @@ def test_imports_uri_takes_fail_on_findings(proj):
 @pytest.mark.parametrize('argv', [
     ('--circular', '--fail-on', 'none'),          # the gate is off
     ('--circular',),                              # off by default
-    ('--rank', 'fan-in', '--fail-on', 'findings'),  # a view with no findings to gate
-    ('--external', '--fail-on', 'findings'),
-    ('--importers', 'pkg/a.py', '--fail-on', 'findings'),  # a counted answer that is not a finding
 ])
 def test_imports_exits_0_when_no_gate_matches(proj, argv):
     result = _run_reveal_direct('imports', str(proj), '--scope', 'path', *argv)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize('argv', [
+    ('--rank', 'fan-in', '--fail-on', 'findings'),  # a view with no findings to gate
+    ('--external', '--fail-on', 'findings'),
+    ('--importers', 'pkg/a.py', '--fail-on', 'findings'),  # a counted answer that is not a finding
+])
+def test_imports_refuses_the_gate_on_a_view_with_no_verdict(proj, argv):
+    """These exited 0, so the gate could never fire there (BACK-2528); now exit 2 naming the views that gate."""
+    result = _run_reveal_direct('imports', str(proj), '--scope', 'path', *argv)
+    assert result.returncode == 2, result.stderr
+    assert 'imports gates --circular, --unused and --violations' in result.stderr
 
 
 @pytest.mark.parametrize('view', ['--circular', '--unused'])

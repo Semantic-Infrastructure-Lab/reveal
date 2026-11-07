@@ -314,7 +314,7 @@ population, whatever the page.
 
 Exit codes: 0 when every file was counted, 1 with `--hotspots --fail-on findings` when
 `summary.has_findings` is true (see [Findings gate](#findings-gate)), 2 for a rejected request (an unknown
-`view`, a negative `top`, a missing path), 3 when files were lost
+`view`, a negative `top`, a missing path, `--fail-on findings` without `--hotspots`), 3 when files were lost
 or not analyzed (an `analysis_failed`, `parse_degraded`, `check_rules_failed` or unreadable-directory
 warning in `meta.warnings`). The retired `stats://` spelling keeps its older exit 0 on those until the cut.
 
@@ -744,7 +744,8 @@ thresholds are fixed. The verdict is taken over every analysed file, before the 
 (`--min-complexity` is an average-complexity filter), `tests=` and the `top`, `limit` and `offset`
 cuts, so a cut or a filter never hides a finding from the gate. `--fail-on findings` exits 1 on it;
 the default `--fail-on none` reports it with exit 0. The default and `view=provenance` answers have
-no findings, so `--fail-on findings` exits 0 there.
+no findings verdict, so `--fail-on findings` there is refused with exit 2 naming `--hotspots` (it exited 0,
+so a CI run that forgot `--hotspots` passed; BACK-2528).
 
 ```bash
 reveal metrics ./src --hotspots --fail-on findings          # CI gate: exit 1 on a finding
@@ -1957,7 +1958,7 @@ jq -s '.[0].summary as $a | .[1].summary as $b | {
 
 **A**: Yes! The metrics adapter is designed for CI/CD:
 - **JSON output**: `--format=json` for machine parsing
-- **Exit codes**: 0 when every file was counted, 1 with `--hotspots --fail-on findings` when an analysed file has quality below 70 or a function with complexity above 20 ([Findings gate](#findings-gate)), 2 for a rejected request (unknown view, bad `top`, missing path), 3 when files were lost or not analyzed. Without `--fail-on findings` a low score never fails the run.
+- **Exit codes**: 0 when every file was counted, 1 with `--hotspots --fail-on findings` when an analysed file has quality below 70 or a function with complexity above 20 ([Findings gate](#findings-gate)), 2 for a rejected request (unknown view, bad `top`, missing path, `--fail-on findings` without `--hotspots`), 3 when files were lost or not analyzed. Without `--fail-on findings` a low score never fails the run.
 - **Deterministic**: Same code → same stats
 - **Fast**: 1000 files analyzed in ~5 seconds
 
