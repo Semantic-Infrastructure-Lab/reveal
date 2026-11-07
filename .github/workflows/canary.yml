@@ -5,6 +5,8 @@ name: Latest-deps canary
 # invisible until a user hits it (BACK-574). This runs the suite weekly against
 # the newest release of every dependency, allowed by pyproject.toml's own
 # bounds (the tree-sitter<0.26 ceiling, BACK-1161, still applies).
+# tree-sitter-language-pack is capped at the newest validated release (BACK-2544),
+# so language-pack-newest forces the newest one past that ceiling (BACK-2542).
 #
 # Not a merge gate: a red run means "look at upstream", not "block a PR".
 
@@ -44,7 +46,7 @@ jobs:
         run: pytest tests/
 
   language-pack-middle:
-    # pyproject.toml allows any tree-sitter-language-pack from the 1.8.1 floor up. Per push,
+    # pyproject.toml allows tree-sitter-language-pack from the 1.8.1 floor to its validated ceiling. Per push,
     # test.yml runs the floor and the latest; these middle releases ran there too until
     # 2026-10-06, but never failed without a main-matrix leg failing as well, so they now
     # run weekly. 1.12.5: first release after the vendored parser; 1.14.3: a later one.
@@ -72,6 +74,40 @@ jobs:
           pip install -e ".[dev]"
           pip install "tree-sitter-language-pack==${{ matrix.lp-version }}"
           pip install build  # tests/test_packaging_manifest.py shells out to `python -m build`
+
+      - name: Run tests
+        env:
+          PYTHONIOENCODING: utf-8
+        run: pytest tests/
+
+  language-pack-newest:
+    # BACK-2542: pyproject.toml caps tree-sitter-language-pack at the newest release reveal was
+    # validated on (BACK-2544), so latest-deps and test.yml never see a newer one. This job installs
+    # the newest release past the ceiling. Green: the ceiling can be raised after the bump gates in
+    # MAINTAINER_WORKFLOW "Tree-sitter floor hazards". Red: an upstream grammar change reveal must
+    # adapt to before raising it (1.25.0 replaced the Zig grammar, BACK-2539). When the newest
+    # release is the ceiling itself, this repeats latest-deps.
+    name: Language-pack newest, past the ceiling (Python 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies, then the newest tree-sitter-language-pack
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          # pip warns that reveal-cli's ceiling is not met; that is the point of this job.
+          pip install --upgrade tree-sitter-language-pack
+          pip install build  # tests/test_packaging_manifest.py shells out to `python -m build`
+          python -c "import importlib.metadata as m; print('tree-sitter-language-pack', m.version('tree-sitter-language-pack'), 'tree-sitter', m.version('tree-sitter'))"
 
       - name: Run tests
         env:

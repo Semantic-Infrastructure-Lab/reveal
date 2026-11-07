@@ -70,6 +70,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - reveal now requires Python 3.11 or newer; 3.10 is no longer supported. pip on Python 3.10 keeps installing the last release that supports it. This closes the Python 3.10 `dnspython` advisory gap (the fixed 2.9.0 needs 3.11) and removes the `tomli` backport dependency. (BACK-2481)
 
+- reveal now requires `tree-sitter-language-pack<=1.25.0`, the newest pack it has been tested on. The pack releases about twice a week and a release can change a language's grammar without notice (1.25.0 replaced the Zig grammar), so each later pack is allowed only after reveal's tests pass on it. If another tool in the same environment needs a newer pack, install reveal in its own environment (for example with `pipx`). (BACK-2544)
+
 - The `python://` adapter is removed. Every `python://` spelling, including `--format json` and `--stdin` lines, now exits 2 with one line naming `python -m site` and `python -m pip list`/`show` as the replacement; `help://python` and `help://python-guide` are gone. (BACK-2225)
 
 - Python standard-library recognition now uses the running interpreter's full module list plus the modules removed in 3.11-3.13, through one list shared by rules I004/I008/B005 and `imports`. The old hand-typed list missed names such as `zoneinfo`, `opcode` and `ensurepip`, so I004 did not flag a local file shadowing them and `imports` treated `import zoneinfo` as an edge to such a file. (BACK-2483)
@@ -102,7 +104,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - Zig complexity counts a `for` loop used as an expression (`.flush => for (items) |x| { ... }`, `if (c) for (...) ...`): it added nothing, so 35 of Ghostty's functions scored 1 or 2 too low (BACK-2540).
 
-- Zig files read correctly on `tree-sitter-language-pack` 1.25.0, which ships a different Zig grammar: with it reveal found almost no Zig functions (383 of 6,731 on Ghostty) and printed empty outlines with exit 0. reveal now reads both the new grammar and the one older packs ship, with the same functions, tests and imports on Ghostty, so a fresh install works with any pack from 1.8.1 up (BACK-2539, BACK-2540).
+- Zig files read correctly on `tree-sitter-language-pack` 1.25.0, which ships a different Zig grammar: with it reveal found almost no Zig functions (383 of 6,731 on Ghostty) and printed empty outlines with exit 0. reveal now reads both the new grammar and the one older packs ship, with the same functions, tests and imports on Ghostty (BACK-2539, BACK-2540).
 
 - A TypeScript decorator written before `export class`, `export default class` or `export abstract class` now belongs to the class: `@Component({...}) export class Widget` had no decorators in `ast://`, `contracts://` and `?decorator=Component` found nothing, which is how Angular and NestJS declare components and controllers (BACK-2535).
 
