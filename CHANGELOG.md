@@ -102,7 +102,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - Zig complexity counts a `for` loop used as an expression (`.flush => for (items) |x| { ... }`, `if (c) for (...) ...`): it added nothing, so 35 of Ghostty's functions scored 1 or 2 too low (BACK-2540).
 
-- Zig files read correctly again on a fresh install. `tree-sitter-language-pack` 1.25.0 ships a different Zig grammar, and with it reveal found almost no Zig functions (383 of 6,731 on Ghostty) and printed empty outlines with exit 0. reveal now requires `tree-sitter-language-pack<1.25`; if you upgraded the pack by hand, run `pip install "tree-sitter-language-pack<1.25"` (BACK-2539).
+- Zig files read correctly on `tree-sitter-language-pack` 1.25.0, which ships a different Zig grammar: with it reveal found almost no Zig functions (383 of 6,731 on Ghostty) and printed empty outlines with exit 0. reveal now reads both the new grammar and the one older packs ship, with the same functions, tests and imports on Ghostty, so a fresh install works with any pack from 1.8.1 up (BACK-2539, BACK-2540).
 
 - A TypeScript decorator written before `export class`, `export default class` or `export abstract class` now belongs to the class: `@Component({...}) export class Widget` had no decorators in `ast://`, `contracts://` and `?decorator=Component` found nothing, which is how Angular and NestJS declare components and controllers (BACK-2535).
 
