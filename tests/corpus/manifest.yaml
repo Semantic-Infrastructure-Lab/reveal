@@ -137,7 +137,7 @@ corpora:
     license: MIT
     role: Real product (search engine)
     recall:
-      oracle: rust-use
+      oracle: rust-cargo
       importer_dirs: [.]
   - language: typescript
     repo: https://github.com/microsoft/vscode.git
@@ -226,7 +226,7 @@ corpora:
     license: MIT OR Unlicense
     role: Second Rust corpus; small multi-crate workspace, nested use-lists
     recall:
-      oracle: rust-use
+      oracle: rust-cargo
       importer_dirs: [.]
   - id: java-guava
     language: java

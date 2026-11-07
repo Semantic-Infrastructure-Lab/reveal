@@ -4,6 +4,7 @@ import importlib.util
 import json
 import re
 import subprocess
+import textwrap
 import shutil
 import sys
 from pathlib import Path
@@ -32,6 +33,7 @@ oracles = _load('recall_oracles')  # the gate imports it by name, as when run fr
 gate = _load('recall_gate')
 needs_gcc = pytest.mark.skipif(sys.platform == 'win32' or not shutil.which('gcc'),
                                reason='optional GCC oracle requires a qualified POSIX compiler host')
+needs_cargo = pytest.mark.skipif(not shutil.which('cargo'), reason='the Rust oracle reads cargo metadata')
 
 
 def _repo(root: Path, files: dict, recall: dict) -> tuple[Path, dict]:
@@ -286,7 +288,7 @@ def test_python_file_the_oracle_cannot_parse_is_a_failure_not_a_smaller_truth(tm
 
 
 RUST = {
-    'Cargo.toml': '[package]\nname = "fixture"\nversion = "0.1.0"\n',
+    'Cargo.toml': '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2021"\n',
     'src/main.rs': 'mod a;\nmod d;\nuse crate::{a::{b, c}, d::Thing};\nfn main() {}\n',
     'src/a.rs': 'pub mod b;\npub mod c;\n',
     'src/a/b.rs': 'use super::c::Item;\n',
@@ -295,8 +297,9 @@ RUST = {
 }
 
 
+@needs_cargo
 def test_rust_oracle_expands_nested_groups_and_super_paths(tmp_path):
-    root, entry = _repo(tmp_path, RUST, {'oracle': 'rust-use', 'importer_dirs': ['.']})
+    root, entry = _repo(tmp_path, RUST, {'oracle': 'rust-cargo', 'importer_dirs': ['.']})
     assert _build(root, entry)[0] == {
         'src/a/b.rs': ['src/main.rs'],
         'src/a/c.rs': ['src/a/b.rs', 'src/main.rs'],
@@ -307,11 +310,78 @@ def test_rust_oracle_expands_nested_groups_and_super_paths(tmp_path):
     assert measured['recall'] == measured['precision'] == 1
 
 
+@needs_cargo
 def test_rust_aliased_use_list_item_is_an_edge(tmp_path):
     root, entry = _repo(tmp_path, {**RUST, 'src/main.rs': 'mod a;\nmod d;\nuse crate::{d::Thing as T};\nfn main() {}\n'},
-                        {'oracle': 'rust-use', 'importer_dirs': ['.']})
+                        {'oracle': 'rust-cargo', 'importer_dirs': ['.']})
     assert _build(root, entry)[0]['src/d.rs'] == ['src/main.rs']
     assert gate.measure(entry, root)['recall'] == 1
+
+
+# BACK-2549: crate roots and in-tree crate names come from cargo metadata, files from rustc's module tree.
+RUST_TREE = {
+    'Cargo.toml': '[package]\nname = "tree"\nversion = "0.1.0"\nedition = "2021"\n',
+    'src/lib.rs': ('mod a;\nmod b;\nmod c;\n// mod commented;\n/* mod /* nested */ hidden; */\n'
+                   'const S: &str = r#"mod fake;"#;\n#[cfg(unix)]\n#[path = "os/unix.rs"]\nmod os;\n'
+                   '#[cfg(windows)]\n#[path = "os/windows.rs"]\nmod os;\nfn f() { mod in_fn; }\n'
+                   'pub struct Root;\n#[cfg(test)]\nmod tests {\n    pub struct TempDir;\n}\n'),
+    'src/a.rs': 'pub mod helpers;\n',
+    'src/a/helpers.rs': 'pub struct H;\n',
+    'src/b.rs': 'mod x;\nuse crate::a::helpers;\n',
+    'src/b/x.rs': 'use super::helpers::H;\nuse crate::Root;\nuse crate::tests::TempDir;\n',
+    'src/c.rs': 'mod y;\nuse crate::a::*;\n',
+    'src/c/y.rs': 'use super::helpers::H;\nuse crate::os::Thing;\n',
+    'src/os/unix.rs': 'pub struct Thing;\n',
+    'src/os/windows.rs': 'pub struct Thing;\n',
+    'src/commented.rs': 'use crate::a::helpers::H;\n',
+    'src/hidden.rs': 'pub struct Never;\n',
+    'src/fake.rs': 'pub struct Never;\n',
+    'src/in_fn.rs': 'pub struct Never;\n',
+}
+
+
+@needs_cargo
+def test_rust_module_tree_follows_mod_declarations_bindings_and_cfg_alternatives(tmp_path):
+    root, entry = _repo(tmp_path, RUST_TREE, {'oracle': 'rust-cargo', 'importer_dirs': ['.']})
+    edges, coverage = _build(root, entry)
+    assert edges == {
+        'src/a.rs': ['src/c.rs'],                                       # a glob depends on its module
+        'src/a/helpers.rs': ['src/b.rs', 'src/b/x.rs', 'src/c/y.rs'],   # a `use` binding and a glob, followed
+        'src/lib.rs': ['src/b/x.rs'],                                   # an inline module lives in its file
+        'src/os/unix.rs': ['src/c/y.rs'],                               # both #[cfg] alternatives
+        'src/os/windows.rs': ['src/c/y.rs'],
+    }
+    # commented-out, comment-hidden, string-only and fn-local modules are no part of the crate
+    assert coverage['unscored_importers'] == 4
+    assert coverage['anchor_item_paths'] == 1   # crate::Root: an item of the anchor module itself
+    assert oracles.rust_unscored_importers(oracles.Scope(root, root, oracles.tracked_files(
+        root, ['.'], frozenset({'.rs'})), {})) == {root / f'src/{n}.rs' for n in ('commented', 'hidden', 'fake', 'in_fn')}
+
+
+def test_rust_tokens_skip_comments_strings_and_chars_and_keep_path_attributes():
+    text = ("// mod a;\n/* /* mod b; */ mod c; */\nlet s = \"mod d;\"; let r = r##\"mod e;\"##;\n"
+            "let ch = '{'; let l: &'static str = x;\n#[path = \"p.rs\"]\nmod f;\nmod g { mod h; use crate::k; }\n"
+            "fn z() { use super::q; mod i; }\n")
+    declarations, uses = oracles.rust_file_items(text)
+    assert declarations == [((), 'f', 'p.rs', False), ((), 'g', None, True), (('g',), 'h', None, False)]
+    assert uses == [(('g',), 'crate::k', True), ((), 'super::q', False)]
+
+
+@needs_cargo
+def test_an_unscored_importer_is_out_of_the_population_on_both_sides(tmp_path):
+    """A file no crate compiles has no true edges; the engine's edges from it are not extras either."""
+    root, entry = _repo(tmp_path, {**RUST, 'src/dead.rs': 'use crate::d::Thing;\n'},
+                        {'oracle': 'rust-cargo', 'importer_dirs': ['.']})
+    measured = gate.measure(entry, root)
+    assert measured['coverage']['unscored_importers'] == 1
+    assert measured['extra_edges'] == 0 and measured['recall'] == 1
+
+
+def test_rust_oracle_requires_cargo(tmp_path, monkeypatch):
+    root, entry = _repo(tmp_path, RUST, {'oracle': 'rust-cargo', 'importer_dirs': ['.']})
+    monkeypatch.setattr(oracles.shutil, 'which', lambda name: None)
+    with pytest.raises(RuntimeError, match='cargo is required'):
+        _build(root, entry)
 
 
 JAVA = {

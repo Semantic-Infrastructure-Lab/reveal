@@ -48,6 +48,8 @@ class Oracle(NamedTuple):
     build: Callable[[Scope], tuple[Edges, Coverage]]
     # The edges (a subset of build's) whose every import is function-level; None when the oracle cannot tell.
     lazy_only: Callable[[Scope], Edges] | None = None
+    # Importers the oracle defines no edges for (a file no build compiles): left out of the scored population.
+    unscored: Callable[[Scope], set[Path]] | None = None
 
 
 def tracked_files(root: Path, directories: list[str], suffixes: frozenset[str]) -> list[Path]:
@@ -265,9 +267,25 @@ def python_lazy_only_edges(scope: Scope) -> Edges:
     return _finish(scope, _python_scoped_edges(scope)[1])
 
 
-# ---- Rust: deepest existing module file for crate::/super::/self:: use paths ----
+# ---- Rust: cargo's crate roots, rustc's module tree and its use bindings ----
+#
+# Cargo says which files are crate roots and which workspace crates each crate may name (`cargo metadata`).
+# rustc's module tree (`mod x;` from each root, `#[path]` honoured) says which file holds each module, and its
+# `use` bindings (globs included) say which module a path segment names. None of it comes from the filesystem
+# conventions the resolver uses (BACK-2549: a crate root outside src/, a workspace crate named bare).
 
-USE = re.compile(r'^\s*(?:pub(?:\([^)]*\))?\s+)?use\s+([^;]+);', re.MULTILINE)
+_LIB_KINDS = frozenset({'lib', 'rlib', 'dylib', 'cdylib', 'staticlib', 'proc-macro'})
+_RUST_TOKENS = re.compile(r'''
+    (?P<comment>//[^\n]*)
+  | (?P<block>/\*)
+  | (?P<raw>b?r(?P<hashes>\#*)")
+  | (?P<string>b?"(?:\\.|[^"\\])*")
+  | (?P<char>b?'(?:\\(?:x[0-9a-fA-F]{2}|u\{[0-9a-fA-F_]*\}|.)|[^'\\\n])')
+  | (?P<ident>(?:r\#)?[A-Za-z_][A-Za-z0-9_]*)
+  | (?P<punct>::|[{};#\[\]=*,])
+''', re.VERBOSE | re.DOTALL)
+Token = tuple[str, str]
+ModulePath = tuple[str, ...]
 
 
 def _split_top_level(text: str) -> list[str]:
@@ -283,72 +301,362 @@ def _split_top_level(text: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
-def rust_use_paths(body: str) -> list[str]:
-    """Expand one use-declaration body into ``a::b::c`` paths: groups nest to any depth,
-    ``self`` in a group names the group's base, and ``as`` aliases are dropped."""
+def rust_use_items(body: str) -> list[tuple[str, str | None]]:
+    """Expand one use-declaration body into ``(a::b::c, alias)`` items: groups nest to any depth and
+    ``self`` in a group names the group's base."""
     body = ' '.join(body.split())
     match = re.match(r'^(.*?)::\{(.*)\}$', body)
     if not match:
-        return [] if '{' in body else [body.split(' as ')[0].strip()]
+        if '{' in body:
+            return []
+        path, _, alias = body.partition(' as ')
+        return [(path.strip(), alias.strip() or None)]
     base, inner = match.groups()
-    paths = []
+    items: list[tuple[str, str | None]] = []
     for item in _split_top_level(inner):
         # `self` names the group's base; anything else (a::b, a::{b, c}, a bare {b, c}) recurses.
-        paths += [base] if item == 'self' else rust_use_paths(f'{base}::{item}')
-    return paths
+        name, _, alias = item.partition(' as ')
+        items += ([(base, alias.strip() or None)] if name.strip() == 'self'
+                  else rust_use_items(f'{base}::{item}'))
+    return items
 
 
-def _rust_module_file(base: Path, parts: list[str]) -> Path | None:
-    """Deepest prefix of ``parts`` that is a real module file under ``base``: rustc's rule
-    (``a::b::Item`` lives in a/b.rs or a/b/mod.rs; trailing segments name items)."""
-    for n in range(len(parts), 0, -1):
-        for candidate in (base.joinpath(*parts[:n]).with_suffix('.rs'), base.joinpath(*parts[:n], 'mod.rs')):
-            if candidate.is_file():
-                return candidate
-    return None
+def rust_use_paths(body: str) -> list[str]:
+    """The ``a::b::c`` paths of one use-declaration body, aliases dropped."""
+    return [path for path, _alias in rust_use_items(body)]
 
 
-def _crate_src(scope: Scope, importer: Path) -> Path | None:
-    for directory in importer.parents:
-        if not directory.is_relative_to(scope.root):
+def _rust_tokens(text: str) -> list[Token]:
+    """Identifiers, string literals and the punctuation of `mod` and `use` declarations, in order. Comments
+    (block comments nest, as in rustc), char literals and everything else are dropped."""
+    tokens: list[Token] = []
+    position = 0
+    while (match := _RUST_TOKENS.search(text, position)) is not None:
+        kind, position = match.lastgroup, match.end()
+        if kind == 'block':
+            depth = 1
+            while depth and position < len(text):
+                step = text[position:position + 2]
+                depth += (step == '/*') - (step == '*/')
+                position += 2 if step in ('/*', '*/') else 1
+        elif kind == 'raw':
+            close = '"' + match.group('hashes')
+            end = text.find(close, position)
+            end = len(text) if end < 0 else end
+            tokens.append(('string', text[position:end]))
+            position = end + len(close)
+        elif kind == 'string':
+            tokens.append(('string', match.group()[match.group().index('"') + 1:-1]))
+        elif kind in ('ident', 'punct'):
+            word = match.group()
+            tokens.append((kind, word[2:] if word.startswith('r#') else word))
+    return tokens
+
+
+def _module_suffix(stack: list[str | None]) -> ModulePath | None:
+    """The inline modules a position sits in, or None inside a module that is inside a function body."""
+    names: list[str] = []
+    for frame in stack:
+        if frame is None:
+            break
+        names.append(frame)
+    return None if any(frame is not None for frame in stack[len(names):]) else tuple(names)
+
+
+def rust_file_items(text: str) -> tuple[list[tuple[ModulePath, str, str | None, bool]],
+                                         list[tuple[ModulePath, str, bool]]]:
+    """A file's module declarations ``(inline modules, name, #[path] or None, has a body)``, outside function
+    bodies and other items, and its use declarations ``(inline modules, body, at module level)``."""
+    tokens = _rust_tokens(text)
+    declarations: list[tuple[ModulePath, str, str | None, bool]] = []
+    uses: list[tuple[ModulePath, str, bool]] = []
+    stack: list[str | None] = []   # one entry per open brace: the inline module's name, else None
+    path_attr: str | None = None
+    i = 0
+    while i < len(tokens):
+        kind, word = tokens[i]
+        names_module = i >= 2 and tokens[i - 2] == ('ident', 'mod') and tokens[i - 1][0] == 'ident'
+        if (kind, word) == ('ident', 'use') and (suffix := _module_suffix(stack)) is not None:
+            end, depth = i + 1, 0
+            while end < len(tokens) and (depth or tokens[end] != ('punct', ';')):
+                depth += (tokens[end] == ('punct', '{')) - (tokens[end] == ('punct', '}'))
+                end += 1
+            uses.append((suffix, ''.join(' as ' if t == ('ident', 'as') else t[1] for t in tokens[i + 1:end]),
+                         None not in stack))
+            i, path_attr = end + 1, None
+            continue
+        if (kind, word) == ('punct', '{'):
+            stack.append(tokens[i - 1][1] if names_module else None)
+            if names_module and None not in stack[:-1]:
+                declarations.append((tuple(stack[:-1]), tokens[i - 1][1], path_attr, True))
+            path_attr = None
+        elif (kind, word) == ('punct', '}'):
+            if stack:
+                stack.pop()
+            path_attr = None
+        elif (kind, word) == ('punct', ';'):
+            if names_module and None not in stack:
+                declarations.append((tuple(stack), tokens[i - 1][1], path_attr, False))
+            path_attr = None
+        elif (kind == 'string' and i >= 3 and tokens[i - 1] == ('punct', '=')
+              and tokens[i - 2] == ('ident', 'path') and tokens[i - 3] == ('punct', '[')):
+            path_attr = word
+        i += 1
+    return declarations, uses
+
+
+class _RustCrate(NamedTuple):
+    package: str        # cargo package id
+    root: Path          # the crate root file
+    is_lib: bool
+    is_build: bool      # a build script sees only build-dependencies
+    edition_2015: bool  # a bare use path is crate-root relative
+
+
+class _RustTree(NamedTuple):
+    # module -> the files holding its items: one, or one per `#[cfg]` alternative (`#[path = "a.rs"] mod imp;`
+    # beside `#[path = "b.rs"] mod imp;`); no configuration is evaluated, so every alternative is in the tree
+    modules: dict[ModulePath, list[Path]]
+    owned: dict[Path, set[ModulePath]]   # file -> the modules it is a file of (not its inline ones)
+    uses: dict[ModulePath, list[tuple[Path, str, bool]]]  # module -> (file, use body, at module level)
+
+
+def _rust_module_tree(root: Path) -> _RustTree:
+    """rustc's module tree from one crate root. An inline ``mod x { }`` lives in its parent's file."""
+    tree = _RustTree({(): [root]}, defaultdict(set), defaultdict(list))
+    tree.owned[root].add(())
+    pending: list[tuple[Path, ModulePath]] = [(root, ())]
+    while pending:
+        file, path = pending.pop()
+        try:
+            declarations, uses = rust_file_items(file.read_text(encoding='utf-8', errors='replace'))
+        except OSError:
+            continue
+        for suffix, body, top in uses:
+            tree.uses[path + suffix].append((file, body, top))
+        directory = file.parent if file == root or file.name == 'mod.rs' else file.with_suffix('')
+        for inline, name, attr, has_body in declarations:
+            module = path + inline + (name,)
+            if has_body:
+                child: Path | None = file
+            else:
+                # A #[path] outside inline modules is relative to the declaring file's own directory.
+                base = file.parent if attr is not None and not inline else directory.joinpath(*inline)
+                candidates = [base / attr] if attr is not None else [base / f'{name}.rs', base / name / 'mod.rs']
+                child = next((c.resolve() for c in candidates if c.is_file()), None)
+            if child is None or child in tree.modules.get(module, ()):
+                continue
+            tree.modules.setdefault(module, []).append(child)
+            if not has_body:
+                tree.owned[child].add(module)
+                pending.append((child, module))
+    return tree
+
+
+def _cargo_packages(scope: Scope) -> tuple[list[dict], int]:
+    """Every package of every tracked Cargo.toml's workspace, as ``cargo metadata --no-deps`` lists it, and
+    how many manifests cargo could not read. A rust-toolchain.toml pin must not download a toolchain."""
+    cargo = shutil.which('cargo')
+    if not cargo:
+        raise RuntimeError('Rust oracle prerequisite unavailable: cargo is required')
+    env = {**os.environ, 'RUSTUP_TOOLCHAIN': os.environ.get('RUSTUP_TOOLCHAIN', 'stable')}
+    manifests = sorted(p for p in tracked_files(scope.root, ['.'], frozenset({'.toml'})) if p.name == 'Cargo.toml')
+    packages: dict[str, dict] = {}
+    covered: set[Path] = set()
+    failed = 0
+    for manifest in manifests:
+        if manifest.resolve() in covered:
+            continue
+        try:
+            listed = subprocess.run([cargo, 'metadata', '--no-deps', '--offline', '--format-version', '1',
+                                     '--manifest-path', str(manifest)], cwd=manifest.parent, env=env,
+                                    capture_output=True, text=True, encoding='utf-8', timeout=ORACLE_PROBE_TIMEOUT)
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f'cargo metadata timed out on {manifest}; measurement unavailable') from exc
+        if listed.returncode:
+            failed += 1
+            continue
+        for package in json.loads(listed.stdout)['packages']:
+            packages.setdefault(package['id'], package)
+            covered.add(Path(package['manifest_path']).resolve())
+    if not packages:
+        raise RuntimeError('Rust oracle found no cargo packages; measurement unavailable')
+    return sorted(packages.values(), key=lambda p: p['manifest_path']), failed
+
+
+class _RustProject(NamedTuple):
+    packages: int
+    manifests_failed: int
+    trees: dict[_RustCrate, _RustTree]
+    names: dict[tuple[str, bool], dict[str, _RustCrate]]  # (package, build script?) -> workspace crates it names
+    homes: dict[Path, list[tuple[_RustCrate, ModulePath]]]  # file -> every (crate, module) it is the file of
+
+
+def _rust_project(scope: Scope) -> _RustProject:
+    """Every crate root and module tree, and the workspace crates each crate may name: its path dependencies
+    under the names code spells (renames applied) and, outside the library, its own package's library."""
+    packages, failed = _cargo_packages(scope)
+    lib_of: dict[str, _RustCrate] = {}
+    trees: dict[_RustCrate, _RustTree] = {}
+    for package in packages:
+        for target in package['targets']:
+            kinds = set(target['kind'])
+            crate = _RustCrate(package['id'], Path(target['src_path']).resolve(), bool(kinds & _LIB_KINDS),
+                               'custom-build' in kinds, target.get('edition', package.get('edition')) == '2015')
+            trees[crate] = _rust_module_tree(crate.root)
+            if crate.is_lib:
+                lib_of[package['id']] = crate
+    package_at = {Path(p['manifest_path']).resolve().parent: p['id'] for p in packages}
+    lib_names = {p['id']: next(t['name'] for t in p['targets'] if set(t['kind']) & _LIB_KINDS)
+                 for p in packages if p['id'] in lib_of}
+    names: dict[tuple[str, bool], dict[str, _RustCrate]] = {}
+    for package in packages:
+        for build in (False, True):
+            spelled = names.setdefault((package['id'], build), {})
+            for dependency in package['dependencies']:
+                if (dependency.get('kind') == 'build') != build or not dependency.get('path'):
+                    continue
+                local = lib_of.get(package_at.get(Path(dependency['path']).resolve(), ''))
+                if local is not None:
+                    spelled[(dependency.get('rename') or dependency['name']).replace('-', '_')] = local
+            if package['id'] in lib_of and not build:
+                spelled.setdefault(lib_names[package['id']].replace('-', '_'), lib_of[package['id']])
+    homes: dict[Path, list[tuple[_RustCrate, ModulePath]]] = defaultdict(list)
+    for crate, tree in trees.items():
+        for file, modules in tree.owned.items():
+            homes[file].extend((crate, module) for module in sorted(modules))
+    return _RustProject(len(packages), failed, trees, names, homes)
+
+
+class _RustPaths:
+    """rustc's path resolution over the module trees, at module granularity: a segment names a child
+    module, else a module a ``use`` in that module binds by name, else one a glob ``use`` brings in."""
+
+    def __init__(self, project: _RustProject):
+        self.project = project
+        self._bindings: dict[tuple[_RustCrate, ModulePath], tuple[dict[str, str], list[str]]] = {}
+        self._active: set[tuple[_RustCrate, ModulePath, str]] = set()
+
+    def _bound(self, crate: _RustCrate, module: ModulePath) -> tuple[dict[str, str], list[str]]:
+        key = (crate, module)
+        if key not in self._bindings:
+            named: dict[str, str] = {}
+            globs: list[str] = []
+            for _file, body, top in self.project.trees[crate].uses.get(module, ()):
+                for path, alias in (rust_use_items(body) if top else ()):
+                    if path.endswith('::*'):
+                        globs.append(path[:-3])
+                    else:
+                        named.setdefault(alias or path.rsplit('::', 1)[-1], path)
+            self._bindings[key] = (named, globs)
+        return self._bindings[key]
+
+    def child(self, crate: _RustCrate, module: ModulePath, name: str) -> tuple[_RustCrate, ModulePath] | None:
+        if module + (name,) in self.project.trees[crate].modules:
+            return crate, module + (name,)
+        key = (crate, module, name)
+        if key in self._active:
             return None
-        if (directory / 'Cargo.toml').is_file():
-            return directory / 'src' if (directory / 'src').is_dir() else directory
-    return None
+        self._active.add(key)
+        try:
+            named, globs = self._bound(crate, module)
+            if name in named and (found := self.module_of(crate, module, named[name])) is not None:
+                return found
+            for glob in globs:
+                if (base := self.module_of(crate, module, glob)) is not None:
+                    if (found := self.child(*base, name)) is not None:
+                        return found
+            return None
+        finally:
+            self._active.discard(key)
+
+    def module_of(self, crate: _RustCrate, module: ModulePath, path: str) -> tuple[_RustCrate, ModulePath] | None:
+        """The module the whole of ``path`` names from ``module``, or None."""
+        walked = self.walk(crate, module, path)
+        return (walked[1], walked[2]) if walked is not None and walked[3] else None
+
+    def walk(self, crate: _RustCrate, module: ModulePath, path: str):
+        """``(kind, crate, module, complete, below_anchor)`` for the deepest module ``path`` reaches from
+        ``module``: kind is ``anchored`` (crate::, self::, super::, a 2015 crate-relative path), ``extern``
+        (a workspace crate named bare; its root counts) or ``bare`` (a local name); None when the path names
+        nothing in the workspace."""
+        absolute = path.startswith('::')
+        head, *rest = path.lstrip(':').split('::')
+        spelled = self.project.names.get((crate.package, crate.is_build), {})
+        if head in ('crate', 'self', 'super') and not absolute:
+            kind, current = 'anchored', () if head == 'crate' else module[:-1] if head == 'super' else module
+        elif head in spelled:
+            kind, crate, current = 'extern', spelled[head], ()
+        elif absolute:
+            return None
+        elif crate.edition_2015:
+            kind, current, rest = 'anchored', (), [head, *rest]
+        elif (found := self.child(crate, module, head)) is not None:
+            kind, (crate, current) = 'bare', found
+        else:
+            return None
+        below = 0
+        for segment in rest:
+            if segment in ('super', 'self') and kind == 'anchored' and not below:
+                current = current[:-1] if segment == 'super' else current
+                continue
+            found = self.child(crate, current, segment)
+            if found is None:
+                return kind, crate, current, False, below
+            (crate, current), below = found, below + 1
+        return kind, crate, current, True, below
 
 
-def _rust_target(scope: Scope, importer: Path, path: str) -> Path | None:
-    head, _, rest = path.partition('::')
-    parts = [p for p in rest.split('::') if p]
-    if not parts:
-        return None
-    if head == 'crate':
-        src = _crate_src(scope, importer)
-        return _rust_module_file(src, parts) if src else None
-    if head == 'self':
-        return _rust_module_file(importer.parent, parts)
-    if head == 'super':
-        # 2015 mod.rs layout keeps the parent module's children in this directory;
-        # 2018 sibling-file layout keeps them one level up. Either real file wins.
-        return _rust_module_file(importer.parent, parts) or _rust_module_file(importer.parent.parent, parts)
-    return None
+def _rust_scored(scope: Scope, project: _RustProject) -> tuple[list[Path], list[Path]]:
+    """(importers some crate compiles, importers no crate's module tree holds: dead or macro-included files,
+    whose edges no compiler defines)."""
+    held = [p for p in scope.importers if project.homes.get(p.resolve())]
+    return held, [p for p in scope.importers if not project.homes.get(p.resolve())]
 
 
 def build_rust_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+    """Each use path from each importer, in each crate module holding the importer, to the file of the
+    deepest module it reaches: below its anchor for ``crate::``/``self::``/``super::``, from the named
+    crate's root (which counts) for a workspace crate named bare. Counted, not scored: a path that stays at
+    its anchor (``crate::Item``, ``super::*``), a 2018 path through a local name (``mod a; use a::B;``), and
+    importers no crate compiles (left out of the scored population)."""
+    project = _rust_project(scope)
+    paths = _RustPaths(project)
+    real_root = scope.root.resolve()
+    held, unheld = _rust_scored(scope, project)
+    importer_at = {p.resolve(): p for p in held}
     edges: dict[Path, set[Path]] = defaultdict(set)
-    statements = local_paths = 0
-    for importer in scope.importers:
-        for body in USE.findall(importer.read_text(encoding='utf-8', errors='replace')):
-            statements += 1
-            for path in rust_use_paths(body):
-                if path.split('::')[0] not in ('crate', 'self', 'super'):
+    counts = dict.fromkeys(('use_statements', 'local_paths', 'anchor_item_paths', 'bare_local_paths'), 0)
+    # Per crate: a file two crates compile (a shared tests/common/mod.rs) is read in each.
+    for crate, tree in sorted(project.trees.items(), key=lambda item: str(item[0].root)):
+        for module, uses in sorted(tree.uses.items()):
+            for source, body, _top in uses:
+                importer = importer_at.get(source)
+                if importer is None:
                     continue
-                local_paths += 1
-                target = _rust_target(scope, importer, path)
-                if target and target != importer:
-                    edges[target].add(importer)
-    return _finish(scope, edges), {'files': len(scope.importers), 'use_statements': statements,
-                                   'local_paths': local_paths}
+                counts['use_statements'] += 1
+                for path in rust_use_paths(body):
+                    walked = paths.walk(crate, module, path)
+                    if walked is None:
+                        continue
+                    kind, target_crate, target, _complete, below = walked
+                    if kind == 'bare':
+                        counts['bare_local_paths'] += 1
+                    elif kind == 'anchored' and not below:
+                        counts['anchor_item_paths'] += 1
+                    else:
+                        counts['local_paths'] += 1
+                        for file in project.trees[target_crate].modules[target]:
+                            if file != source and file.is_relative_to(real_root):
+                                edges[scope.root / file.relative_to(real_root)].add(importer)
+    return _finish(scope, edges), {
+        'files': len(scope.importers), 'unscored_importers': len(unheld), 'packages': project.packages,
+        'crate_roots': len(project.trees), 'manifests_failed': project.manifests_failed, **counts}
+
+
+def rust_unscored_importers(scope: Scope) -> set[Path]:
+    """Importers no crate compiles (a file a commented-out ``mod`` names, a macro-included file)."""
+    return set(_rust_scored(scope, _rust_project(scope))[1])
 
 
 # ---- Java: a public top-level type C of package a.b lives in a.b's C.java (JLS 7.6) ----
@@ -1055,7 +1363,7 @@ ORACLES: dict[str, Oracle] = {
     'gcc-c': Oracle(C_SUFFIXES, _gcc_oracle('c')),
     'gcc-cpp': Oracle(CPP_SUFFIXES, _gcc_oracle('c++')),
     'python-ast': Oracle(frozenset({'.py'}), build_python_oracle, python_lazy_only_edges),
-    'rust-use': Oracle(frozenset({'.rs'}), build_rust_oracle),
+    'rust-cargo': Oracle(frozenset({'.rs'}), build_rust_oracle, unscored=rust_unscored_importers),
     'typescript-compiler': Oracle(frozenset({'.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'}), build_typescript_oracle, typescript_lazy_only_edges),
     'java-jls': Oracle(frozenset({'.java'}), build_java_oracle),
     'kotlin-declared': Oracle(frozenset({'.kt'}), build_kotlin_declared_oracle),

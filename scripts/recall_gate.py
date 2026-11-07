@@ -50,7 +50,7 @@ SCORED_RULE = {'lazy': 'include', 'tests': 'included', 'type_checking': 'exclude
 LAZY_MODES = ('exclude', 'only')
 _LAZY_DECLINED = ('scored for python-ast, typescript-compiler and scala-declared populations, and the opt-in '
                   'php-token-static and ruby-ripper-relative pilots (the oracles label function-level imports). '
-                  'Declined elsewhere: rust-use is a regex that cannot tell a fn-local use '
+                  'Declined elsewhere: rust-cargo does not label a fn-local use '
                   '(BACK-2079); C, C++, Go, Java and Kotlin have no function-scope import')
 DECLINED = (
     {'combination': 'lazy=exclude', 'reason': _LAZY_DECLINED},
@@ -328,6 +328,9 @@ def measure(entry: dict, root: Path, *, policy: dict | None = None,
         raise RuntimeError('scan_file_cap must be a positive integer')
     excluded_suffixes = tuple(config.get('exclude_importer_suffixes', []))
     population = {p for p in importers if not excluded_suffixes or not p.name.endswith(excluded_suffixes)}
+    if oracle.unscored is not None:
+        # A file no build compiles has no true edges; its importers are not scored either way (BACK-2549).
+        population -= oracle.unscored(Scope(root, scan, importers, config))
     reset_request_caches()
     # Go imports name packages, so its per-file answer is the package view of imports://<file>?importers.
     graph = None if name == 'go-toolchain' else rendered_reverse_graph(scan, cap)
