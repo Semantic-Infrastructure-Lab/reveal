@@ -19,18 +19,22 @@ def tree(tmp_path):
     return tmp_path
 
 
+# Rows carry the result's POSIX path, as the text and JSON views do: on Windows the target
+# C:\...\a.py reads C:/.../a.py, so expectations use as_posix(), not str() (BACK-2530 CI).
 def test_file_grep_rows(tree):
     path = tree / 'a.py'
     result = _run_reveal_direct(str(path), '--grep', 'alpha', '--format', 'grep')
     assert result.returncode == 0, result.stderr
-    assert result.stdout.splitlines() == [f'{path}:1:def alpha():', f'{path}:4:X = alpha()']
+    shown = path.as_posix()
+    assert result.stdout.splitlines() == [f'{shown}:1:def alpha():', f'{shown}:4:X = alpha()']
 
 
 def test_directory_grep_rows_in_walk_order(tree):
     result = _run_reveal_direct(str(tree), '--grep', 'alpha', '--format', 'grep')
     assert result.returncode == 0, result.stderr
+    a, b = (tree / 'a.py').as_posix(), (tree / 'sub' / 'b.py').as_posix()
     assert sorted(result.stdout.splitlines()) == sorted([
-        f'{tree}/a.py:1:def alpha():', f'{tree}/a.py:4:X = alpha()', f'{tree}/sub/b.py:1:# alpha: a note'])
+        f'{a}:1:def alpha():', f'{a}:4:X = alpha()', f'{b}:1:# alpha: a note'])
 
 
 def test_no_match_prints_no_rows(tree):
