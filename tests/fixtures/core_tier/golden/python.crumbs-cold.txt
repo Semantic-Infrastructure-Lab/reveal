@@ -6,11 +6,11 @@ Imports (2):
   :3      import sys
 
 Functions (6):
-  :6      validate(order) [4 lines, depth:2]
-  :12     process_order(order) [10 lines, depth:3]
+  :6      validate(order) [4 lines, depth:1]
+  :12     process_order(order) [10 lines, depth:2]
   :24     run(order) [2 lines, depth:0]
   :33     Batch.__init__(self) [2 lines, depth:0]
-  :36     Batch.run(self, items) [5 lines, depth:2]
+  :36     Batch.run(self, items) [5 lines, depth:1]
   :47     Reporter.summarize() [3 lines, depth:0]
 
 Classes (2):
@@ -33,12 +33,12 @@ File: sample.py (1.3KB, 49 lines)
 
 import os (python/sample.py:2)
 import sys (python/sample.py:3)
-validate(order) [4 lines, depth:2] (python/sample.py:6)
-process_order(order) [10 lines, depth:3] (python/sample.py:12)
+validate(order) [4 lines, depth:1] (python/sample.py:6)
+process_order(order) [10 lines, depth:2] (python/sample.py:12)
 run(order) [2 lines, depth:0] (python/sample.py:24)
 Batch (python/sample.py:28)
   ├─ __init__(self) [2 lines, depth:0] (line 33)
-  └─ run(self, items) [5 lines, depth:2] (line 36)
+  └─ run(self, items) [5 lines, depth:1] (line 36)
 Reporter (python/sample.py:46)
   └─ summarize() [3 lines, depth:0] (line 47)
 

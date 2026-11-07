@@ -6,9 +6,9 @@ Imports (1):
 
 Functions (5):
   :4      validate(_ order: String?) throws -> String [6 lines, depth:0]
-  :11     processOrder(_ order: String?) -> String? [14 lines, depth:3]
+  :11     processOrder(_ order: String?) -> String? [14 lines, depth:2]
   :26     run(_ order: String?) -> String? [3 lines, depth:0]
-  :36     Batch.run(_ items: [Int]) [6 lines, depth:2]
+  :36     Batch.run(_ items: [Int]) [6 lines, depth:1]
   :48     Reporter.summarize() -> Int [1 line, depth:0]
 
 Classes (2):
@@ -22,10 +22,10 @@ File: sample.swift (1.2KB, 49 lines)
 
 import Foundation (swift/sample.swift:2)
 validate(_ order: String?) throws -> String [6 lines, depth:0] (swift/sample.swift:4)
-processOrder(_ order: String?) -> String? [14 lines, depth:3] (swift/sample.swift:11)
+processOrder(_ order: String?) -> String? [14 lines, depth:2] (swift/sample.swift:11)
 run(_ order: String?) -> String? [3 lines, depth:0] (swift/sample.swift:26)
 Batch (swift/sample.swift:33)
-  └─ run(_ items: [Int]) [6 lines, depth:2] (line 36)
+  └─ run(_ items: [Int]) [6 lines, depth:1] (line 36)
 Reporter (swift/sample.swift:46)
   └─ summarize() -> Int [1 line, depth:0] (line 48)
 

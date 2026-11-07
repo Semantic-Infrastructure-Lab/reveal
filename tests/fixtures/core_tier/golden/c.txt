@@ -6,10 +6,10 @@ Imports (2):
   :3      #include <string.h>  /* unused on purpose -- must still be flagged by imports:// */
 
 Functions (4):
-  :5      validate(int order) [6 lines, depth:2]
-  :12     process_order(int order) [14 lines, depth:2]
+  :5      validate(int order) [6 lines, depth:1]
+  :12     process_order(int order) [14 lines, depth:1]
   :27     run(int order) [3 lines, depth:0]
-  :38     batch_run(struct Batch *b, int *items, int n) [6 lines, depth:2]
+  :38     batch_run(struct Batch *b, int *items, int n) [6 lines, depth:1]
 
 Structs (1):
   :34     Batch
@@ -21,11 +21,11 @@ File: sample.c (1.2KB, 47 lines)
 
 #include <stdio.h> (c/sample.c:2)
 #include <string.h>  /* unused on purpose -- must still be flagged by imports:// */ (c/sample.c:3)
-validate(int order) [6 lines, depth:2] (c/sample.c:5)
-process_order(int order) [14 lines, depth:2] (c/sample.c:12)
+validate(int order) [6 lines, depth:1] (c/sample.c:5)
+process_order(int order) [14 lines, depth:1] (c/sample.c:12)
 run(int order) [3 lines, depth:0] (c/sample.c:27)
 Batch (c/sample.c:34)
-batch_run(struct Batch *b, int *items, int n) [6 lines, depth:2] (c/sample.c:38)
+batch_run(struct Batch *b, int *items, int n) [6 lines, depth:1] (c/sample.c:38)
 
 [exit 0]
 

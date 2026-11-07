@@ -9,10 +9,10 @@ Imports (5):
   :9      "strings"
 
 Functions (5):
-  :12     validate(order string) [6 lines, depth:2]
-  :19     processOrder(order string) [14 lines, depth:2]
+  :12     validate(order string) [6 lines, depth:1]
+  :19     processOrder(order string) [14 lines, depth:1]
   :34     Run(order string) [3 lines, depth:0]
-  :45     Batch.Run(items []int) [6 lines, depth:2]
+  :45     Batch.Run(items []int) [6 lines, depth:1]
   :64     Reporter.Summarize() [3 lines, depth:0]
 
 Structs (2):
@@ -32,11 +32,11 @@ File: sample.go (1.4KB, 66 lines)
 "os" (go/sample.go:7)
 "strconv" // unused on purpose -- must still be flagged by imports:// (go/sample.go:8)
 "strings" (go/sample.go:9)
-validate(order string) [6 lines, depth:2] (go/sample.go:12)
-processOrder(order string) [14 lines, depth:2] (go/sample.go:19)
+validate(order string) [6 lines, depth:1] (go/sample.go:12)
+processOrder(order string) [14 lines, depth:1] (go/sample.go:19)
 Run(order string) [3 lines, depth:0] (go/sample.go:34)
 Batch (go/sample.go:41)
-  └─ Run(items []int) [6 lines, depth:2] (line 45)
+  └─ Run(items []int) [6 lines, depth:1] (line 45)
 Summarizer [3 lines] (go/sample.go:56)
 Reporter (go/sample.go:60)
   └─ Summarize() [3 lines, depth:0] (line 64)

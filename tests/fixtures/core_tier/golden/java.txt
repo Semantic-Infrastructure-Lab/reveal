@@ -8,10 +8,10 @@ Imports (4):
   :7      import java.util.List;
 
 Functions (5):
-  :10     OrderProcessor.validate(int order) [6 lines, depth:2]
-  :17     OrderProcessor.processOrder(int order) [10 lines, depth:2]
+  :10     OrderProcessor.validate(int order) [6 lines, depth:1]
+  :17     OrderProcessor.processOrder(int order) [10 lines, depth:1]
   :28     OrderProcessor.run(int order) [3 lines, depth:0]
-  :39     Batch.run(java.util.List<Integer> items) [6 lines, depth:2]
+  :39     Batch.run(java.util.List<Integer> items) [6 lines, depth:1]
   :51     Reporter.summarize() [1 line, depth:0]
 
 Classes (3):
@@ -29,11 +29,11 @@ import java.nio.file.Files; (java/sample.java:5)
 import java.nio.file.Paths; (java/sample.java:6)
 import java.util.List; (java/sample.java:7)
 OrderProcessor (java/sample.java:9)
-  ├─ validate(int order) [6 lines, depth:2] (line 10)
-  ├─ processOrder(int order) [10 lines, depth:2] (line 17)
+  ├─ validate(int order) [6 lines, depth:1] (line 10)
+  ├─ processOrder(int order) [10 lines, depth:1] (line 17)
   └─ run(int order) [3 lines, depth:0] (line 28)
 Batch (java/sample.java:36)
-  └─ run(java.util.List<Integer> items) [6 lines, depth:2] (line 39)
+  └─ run(java.util.List<Integer> items) [6 lines, depth:1] (line 39)
 Reporter (java/sample.java:49)
   └─ summarize() [1 line, depth:0] (line 51)
 

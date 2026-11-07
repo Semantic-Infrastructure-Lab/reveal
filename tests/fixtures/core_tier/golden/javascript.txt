@@ -7,11 +7,11 @@ Imports (3):
   :4      const util = require('util');  // unused on purpose -- must still be flagged by imports://
 
 Functions (6):
-  :6      validate(order) [6 lines, depth:2]
-  :13     processOrder(order) [10 lines, depth:2]
+  :6      validate(order) [6 lines, depth:1]
+  :13     processOrder(order) [10 lines, depth:1]
   :24     run(order) [3 lines, depth:0]
   :32     Batch.constructor() [3 lines, depth:0]
-  :35     Batch.run(items) [7 lines, depth:2]
+  :35     Batch.run(items) [7 lines, depth:1]
   :48     Reporter.summarize() [3 lines, depth:0]
 
 Classes (2):
@@ -26,12 +26,12 @@ File: sample.js (1.4KB, 53 lines)
 const fs = require('fs'); (javascript/sample.js:2)
 const path = require('path'); (javascript/sample.js:3)
 const util = require('util');  // unused on purpose -- must still be flagged by imports:// (javascript/sample.js:4)
-validate(order) [6 lines, depth:2] (javascript/sample.js:6)
-processOrder(order) [10 lines, depth:2] (javascript/sample.js:13)
+validate(order) [6 lines, depth:1] (javascript/sample.js:6)
+processOrder(order) [10 lines, depth:1] (javascript/sample.js:13)
 run(order) [3 lines, depth:0] (javascript/sample.js:24)
 Batch (javascript/sample.js:31)
   ├─ constructor() [3 lines, depth:0] (line 32)
-  └─ run(items) [7 lines, depth:2] (line 35)
+  └─ run(items) [7 lines, depth:1] (line 35)
 Reporter (javascript/sample.js:47)
   └─ summarize() [3 lines, depth:0] (line 48)
 

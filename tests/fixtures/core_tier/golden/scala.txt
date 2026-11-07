@@ -6,10 +6,10 @@ Imports (2):
   :3      import scala.collection.mutable.ArrayBuffer
 
 Functions (5):
-  :6      Sample.validate(order: Int) [6 lines, depth:2]
-  :13     Sample.processOrder(order: Int) [12 lines, depth:1]
+  :6      Sample.validate(order: Int) [6 lines, depth:1]
+  :13     Sample.processOrder(order: Int) [12 lines, depth:0]
   :26     Sample.run(order: Int) [3 lines, depth:0]
-  :33     Batch.run(items: List[Int]) [6 lines, depth:2]
+  :33     Batch.run(items: List[Int]) [6 lines, depth:1]
   :43     Reporter.summarize() [1 line, depth:0]
 
 Classes (2):
@@ -27,11 +27,11 @@ File: sample.scala (906B, 44 lines)
 import java.io.FileWriter (scala/sample.scala:2)
 import scala.collection.mutable.ArrayBuffer (scala/sample.scala:3)
 Sample [25 lines] (scala/sample.scala:5)
-  ├─ validate(order: Int) [6 lines, depth:2] (line 6)
-  ├─ processOrder(order: Int) [12 lines, depth:1] (line 13)
+  ├─ validate(order: Int) [6 lines, depth:1] (line 6)
+  ├─ processOrder(order: Int) [12 lines, depth:0] (line 13)
   └─ run(order: Int) [3 lines, depth:0] (line 26)
 Batch (scala/sample.scala:31)
-  └─ run(items: List[Int]) [6 lines, depth:2] (line 33)
+  └─ run(items: List[Int]) [6 lines, depth:1] (line 33)
 Reporter (scala/sample.scala:41)
   └─ summarize() [1 line, depth:0] (line 43)
 

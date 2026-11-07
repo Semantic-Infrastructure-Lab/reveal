@@ -7,11 +7,11 @@ Imports (3):
   :4      use std::collections::HashMap;
 
 Functions (6):
-  :6      validate(order: i32) [6 lines, depth:2]
-  :13     process_order(order: i32) [8 lines, depth:2]
+  :6      validate(order: i32) [6 lines, depth:1]
+  :13     process_order(order: i32) [8 lines, depth:1]
   :22     run(order: i32) [3 lines, depth:0]
-  :30     count_down(mut n: i32) [13 lines, depth:2]
-  :52     Batch.run(&mut self, items: &[i32]) [6 lines, depth:2]
+  :30     count_down(mut n: i32) [13 lines, depth:1]
+  :52     Batch.run(&mut self, items: &[i32]) [6 lines, depth:1]
   :72     Reporter.summarize(&self) [3 lines, depth:0]
 
 Structs (2):
@@ -29,12 +29,12 @@ File: sample.rs (1.8KB, 75 lines)
 use std::fs; (rust/sample.rs:2)
 use std::io; (rust/sample.rs:3)
 use std::collections::HashMap; (rust/sample.rs:4)
-validate(order: i32) [6 lines, depth:2] (rust/sample.rs:6)
-process_order(order: i32) [8 lines, depth:2] (rust/sample.rs:13)
+validate(order: i32) [6 lines, depth:1] (rust/sample.rs:6)
+process_order(order: i32) [8 lines, depth:1] (rust/sample.rs:13)
 run(order: i32) [3 lines, depth:0] (rust/sample.rs:22)
-count_down(mut n: i32) [13 lines, depth:2] (rust/sample.rs:30)
+count_down(mut n: i32) [13 lines, depth:1] (rust/sample.rs:30)
 Batch (rust/sample.rs:47)
-  └─ run(&mut self, items: &[i32]) [6 lines, depth:2] (line 52)
+  └─ run(&mut self, items: &[i32]) [6 lines, depth:1] (line 52)
 Reporter (rust/sample.rs:63)
   └─ summarize(&self) [3 lines, depth:0] (line 72)
 Summary [3 lines] (rust/sample.rs:67)

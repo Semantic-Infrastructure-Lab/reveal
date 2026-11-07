@@ -5,10 +5,10 @@ Imports (1):
   :2      import java.io.File
 
 Functions (5):
-  :4      validate(order: String?): String [6 lines, depth:2]
-  :11     processOrder(order: String?): String? [13 lines, depth:2]
+  :4      validate(order: String?): String [6 lines, depth:1]
+  :11     processOrder(order: String?): String? [13 lines, depth:1]
   :25     run(order: String?): String? [3 lines, depth:0]
-  :35     Batch.run(items: List<Int>) [6 lines, depth:2]
+  :35     Batch.run(items: List<Int>) [6 lines, depth:1]
   :47     Reporter.summarize(): Int [1 line, depth:0]
 
 Classes (2):
@@ -21,11 +21,11 @@ $ reveal kotlin/sample.kt --outline
 File: sample.kt (1.2KB, 48 lines)
 
 import java.io.File (kotlin/sample.kt:2)
-validate(order: String?): String [6 lines, depth:2] (kotlin/sample.kt:4)
-processOrder(order: String?): String? [13 lines, depth:2] (kotlin/sample.kt:11)
+validate(order: String?): String [6 lines, depth:1] (kotlin/sample.kt:4)
+processOrder(order: String?): String? [13 lines, depth:1] (kotlin/sample.kt:11)
 run(order: String?): String? [3 lines, depth:0] (kotlin/sample.kt:25)
 Batch (kotlin/sample.kt:32)
-  └─ run(items: List<Int>) [6 lines, depth:2] (line 35)
+  └─ run(items: List<Int>) [6 lines, depth:1] (line 35)
 Reporter (kotlin/sample.kt:45)
   └─ summarize(): Int [1 line, depth:0] (line 47)
 

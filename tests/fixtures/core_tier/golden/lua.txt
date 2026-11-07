@@ -5,10 +5,10 @@ Imports (1):
   :2      require("unused_fixture")
 
 Functions (4):
-  :4      validate(order) [6 lines, depth:2]
-  :11     processOrder(order) [10 lines, depth:2]
+  :4      validate(order) [6 lines, depth:1]
+  :11     processOrder(order) [10 lines, depth:1]
   :22     run(order) [3 lines, depth:0]
-  :27     Batch.run(items) [6 lines, depth:2]
+  :27     Batch.run(items) [6 lines, depth:1]
 
 [exit 0]
 
@@ -16,10 +16,10 @@ $ reveal lua/sample.lua --outline
 File: sample.lua (809B, 35 lines)
 
 require("unused_fixture") (lua/sample.lua:2)
-validate(order) [6 lines, depth:2] (lua/sample.lua:4)
-processOrder(order) [10 lines, depth:2] (lua/sample.lua:11)
+validate(order) [6 lines, depth:1] (lua/sample.lua:4)
+processOrder(order) [10 lines, depth:1] (lua/sample.lua:11)
 run(order) [3 lines, depth:0] (lua/sample.lua:22)
-run(items) [6 lines, depth:2] (lua/sample.lua:27)
+run(items) [6 lines, depth:1] (lua/sample.lua:27)
 
 [exit 0]
 

@@ -6,10 +6,10 @@ Imports (2):
   :3      import 'dart:math' as unused_math;
 
 Functions (5):
-  :5      validate(int order) [6 lines, depth:2]
-  :12     processOrder(int order) [11 lines, depth:2]
+  :5      validate(int order) [6 lines, depth:1]
+  :12     processOrder(int order) [11 lines, depth:1]
   :24     run(int order) [3 lines, depth:0]
-  :30     Batch.run(List<int> items) [6 lines, depth:2]
+  :30     Batch.run(List<int> items) [6 lines, depth:1]
   :40     Reporter.summarize() [1 line, depth:0]
 
 Classes (2):
@@ -23,11 +23,11 @@ File: sample.dart (741B, 41 lines)
 
 import 'dart:io'; (dart/sample.dart:2)
 import 'dart:math' as unused_math; (dart/sample.dart:3)
-validate(int order) [6 lines, depth:2] (dart/sample.dart:5)
-processOrder(int order) [11 lines, depth:2] (dart/sample.dart:12)
+validate(int order) [6 lines, depth:1] (dart/sample.dart:5)
+processOrder(int order) [11 lines, depth:1] (dart/sample.dart:12)
 run(int order) [3 lines, depth:0] (dart/sample.dart:24)
 Batch (dart/sample.dart:28)
-  └─ run(List<int> items) [6 lines, depth:2] (line 30)
+  └─ run(List<int> items) [6 lines, depth:1] (line 30)
 Reporter (dart/sample.dart:38)
   └─ summarize() [1 line, depth:0] (line 40)
 

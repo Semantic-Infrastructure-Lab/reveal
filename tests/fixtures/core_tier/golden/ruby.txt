@@ -5,8 +5,8 @@ Imports (1):
   :2      require "json"
 
 Functions (7):
-  :4      validate(order) [4 lines, depth:1]
-  :9      process_order(order) [13 lines, depth:2]
+  :4      validate(order) [4 lines, depth:0]
+  :9      process_order(order) [13 lines, depth:1]
   :23     run(order) [3 lines, depth:0]
   :32     Batch.run(items) [6 lines, depth:0]
   :43     classify(mode) [7 lines, depth:0]
@@ -25,8 +25,8 @@ $ reveal ruby/sample.rb --outline
 File: sample.rb (1.6KB, 69 lines)
 
 require "json" (ruby/sample.rb:2)
-validate(order) [4 lines, depth:1] (ruby/sample.rb:4)
-process_order(order) [13 lines, depth:2] (ruby/sample.rb:9)
+validate(order) [4 lines, depth:0] (ruby/sample.rb:4)
+process_order(order) [13 lines, depth:1] (ruby/sample.rb:9)
 run(order) [3 lines, depth:0] (ruby/sample.rb:23)
 Batch (ruby/sample.rb:31)
   └─ run(items) [6 lines, depth:0] (line 32)

@@ -7,10 +7,10 @@ Imports (3):
   :4      #include <vector>  // unused on purpose -- must still be flagged by imports://
 
 Functions (5):
-  :8      validate(int order) [6 lines, depth:2]
-  :15     process_order(int order) [15 lines, depth:2]
+  :8      validate(int order) [6 lines, depth:1]
+  :15     process_order(int order) [15 lines, depth:1]
   :31     run(int order) [3 lines, depth:0]
-  :41     Batch.run(std::vector<int>& items) [6 lines, depth:1]
+  :41     Batch.run(std::vector<int>& items) [6 lines, depth:0]
   :54     Reporter.summarize() [1 line, depth:0]
 
 Classes (1):
@@ -27,11 +27,11 @@ File: sample.cpp (1.4KB, 55 lines)
 #include <cstdio> (cpp/sample.cpp:2)
 #include <string> (cpp/sample.cpp:3)
 #include <vector>  // unused on purpose -- must still be flagged by imports:// (cpp/sample.cpp:4)
-validate(int order) [6 lines, depth:2] (cpp/sample.cpp:8)
-process_order(int order) [15 lines, depth:2] (cpp/sample.cpp:15)
+validate(int order) [6 lines, depth:1] (cpp/sample.cpp:8)
+process_order(int order) [15 lines, depth:1] (cpp/sample.cpp:15)
 run(int order) [3 lines, depth:0] (cpp/sample.cpp:31)
 Batch (cpp/sample.cpp:38)
-  └─ run(std::vector<int>& items) [6 lines, depth:1] (line 41)
+  └─ run(std::vector<int>& items) [6 lines, depth:0] (line 41)
 Reporter (cpp/sample.cpp:53)
   └─ summarize() [1 line, depth:0] (line 54)
 

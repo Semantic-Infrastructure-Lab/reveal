@@ -7,8 +7,8 @@ Imports (3):
   :4      using System.Text;
 
 Functions (5):
-  :10     Sample.OrderProcessor.Validate(int order) [8 lines, depth:2]
-  :19     Sample.OrderProcessor.ProcessOrder(int order) [14 lines, depth:2]
+  :10     Sample.OrderProcessor.Validate(int order) [8 lines, depth:1]
+  :19     Sample.OrderProcessor.ProcessOrder(int order) [14 lines, depth:1]
   :34     Sample.OrderProcessor.Run(int order) [4 lines, depth:0]
   :47     Sample.Batch.Run(System.Collections.Generic.List<int> items) [8 lines, depth:1]
   :62     Sample.Reporter.Summarize() [1 line, depth:0]
@@ -31,8 +31,8 @@ using System.IO; (csharp/sample.cs:3)
 using System.Text; (csharp/sample.cs:4)
 Sample [59 lines] (csharp/sample.cs:6)
   ├─ OrderProcessor (line 8)
-  │  ├─ Validate(int order) [8 lines, depth:2] (line 10)
-  │  ├─ ProcessOrder(int order) [14 lines, depth:2] (line 19)
+  │  ├─ Validate(int order) [8 lines, depth:1] (line 10)
+  │  ├─ ProcessOrder(int order) [14 lines, depth:1] (line 19)
   │  └─ Run(int order) [4 lines, depth:0] (line 34)
   ├─ Batch (line 43)
   │  └─ Run(System.Collections.Generic.List<int> items) [8 lines, depth:1] (line 47)
