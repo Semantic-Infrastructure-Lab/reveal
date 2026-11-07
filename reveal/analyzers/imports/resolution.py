@@ -523,6 +523,7 @@ class ProjectResolver:
         units: List[PackageUnit] = []
         manifest_dirs: Set[Path] = set()
         for language, language_files in by_language.values():
+            manifests: List[Path] = []
             for marker in language.package_manifests:
                 found: Set[Path] = set()
                 for directory in sorted({f.parent for f in language_files}):
@@ -530,7 +531,9 @@ class ProjectResolver:
                     if nearest is not None and nearest not in found:
                         found.update(marker_ancestry(nearest, marker))
                 manifest_dirs |= found
-                units += language.package_units(sorted(d / marker for d in found), language_files, on_error)
+                manifests += [d / marker for d in found]
+            # One call per language with every manifest kind it reads: a Go go.work links the go.mod units.
+            units += language.package_units(sorted(manifests), language_files, on_error)
         return PackageModel(tuple(sorted(units, key=lambda unit: unit.manifest)), tuple(sorted(manifest_dirs)))
 
     @staticmethod

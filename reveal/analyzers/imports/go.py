@@ -12,7 +12,7 @@ Benefits:
 import logging
 import re
 from pathlib import Path
-from typing import List, Set, Optional
+from typing import Callable, Dict, List, Optional, Set, Tuple
 from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
 
@@ -65,6 +65,7 @@ def _line_text(analyzer, line_number: int) -> str:
 
 from .types import ImportStatement
 from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
+from .packages import EMPTY_PACKAGES, PackageModel, PackageUnit
 
 # Cross-invocation disk cache (BACK-626, extending BACK-625 to Go): same
 # independent-reparse gap as PythonExtractor had -- extract_imports() does not
@@ -86,6 +87,7 @@ class GoExtractor(LanguageExtractor):
 
     extensions = {'.go'}
     language_name = 'Go'
+    package_manifests = ('go.mod', 'go.work')
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all import declarations from Go file using tree-sitter.
@@ -338,55 +340,51 @@ class GoExtractor(LanguageExtractor):
 
         return None
 
+    def package_units(self, manifests: List[Path], files: List[Path],
+                      on_error: Callable[[OSError], None]) -> List[PackageUnit]:
+        """Each go.mod's module, linked to the in-tree modules it can import: its ``replace ... => ./path``
+        targets and, when a go.work ``use``s it, every other module that go.work uses and its own local
+        replaces (BACK-2557)."""
+        return _go_units(manifests, on_error)
+
+    def resolve_import_targets(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+        packages: Optional[PackageModel] = None,
+    ) -> List[Path]:
+        primary = self.resolve_import(stmt, base_path, search_paths=search_paths, packages=packages)
+        return [primary] if primary is not None else []
+
     def resolve_import(
         self,
         stmt: ImportStatement,
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> Optional[Path]:
-        """Resolve Go import to file path.
+        """Resolve a Go import path to its package directory, or None (stdlib, a dependency, or no module).
 
-        Args:
-            stmt: Import statement to resolve
-            base_path: Directory of the file containing the import
-
-        Returns:
-            Absolute path to package directory, or None if not resolvable
-
-        Go module resolution:
-        - All imports are absolute package paths (no relative imports)
-        - Local packages: in same module (go.mod)
-        - External packages: stdlib + go.mod dependencies (skip for cycles)
-        - Package = directory (all .go files in dir are same package)
+        Go has no relative imports: a path names a package of some module, and a package is a directory.
+        ``packages`` is the scan's package model (BACK-2559). Where it read the file's go.mod, the path
+        resolves in the in-tree module whose path contains it, the longest one winning: the file's own
+        module, a ``replace`` target that is a local directory, or another module of a go.work that uses
+        this one (BACK-2557). Without a model (calls://) only the nearest go.mod's own module counts.
         """
         package_path = stmt.module_name
-
-        # Find module root (go.mod location)
+        model = packages or EMPTY_PACKAGES
+        directory = base_path.resolve()
+        if model.owns(directory):
+            return _resolve_in_units(package_path, model.local_units(directory))
         module_root = self._find_go_module_root(base_path)
-        if not module_root:
-            # No go.mod found - can't resolve local packages
+        if module_root is None:
             return None
-
-        # Get module name from go.mod
         module_name = self._get_module_name(module_root)
         if not module_name:
             return None
-
-        # Check if this is a local package (starts with module name)
-        if not package_path.startswith(module_name):
-            # External package (stdlib or dependency) - skip
-            return None
-
-        # Map package path to directory
-        # Example: 'mymodule/internal/utils' -> module_root/internal/utils
-        relative_path = package_path[len(module_name):].lstrip('/')
-        package_dir = module_root / relative_path
-
-        if package_dir.exists() and package_dir.is_dir():
-            # Return directory (all .go files in it are the package)
-            return package_dir.resolve()
-
-        return None
+        return _resolve_in_units(package_path, ((module_name, PackageUnit(module_root / 'go.mod', module_name,
+                                                                           module_root)),))
 
     def is_intra_project_import(
         self,
@@ -396,16 +394,17 @@ class GoExtractor(LanguageExtractor):
         project_namespaces: Optional[Set[str]] = None,
     ) -> Optional[bool]:
         """Go classification is precise: an import is intra-project iff its
-        package path starts with the module name from go.mod (the same test
-        resolve_import uses to decide local-vs-external). If there's no go.mod
-        we can't tell (None)."""
+        package path is inside the module named by go.mod (the test resolve_import
+        applies to the file's own module). If there's no go.mod we can't tell (None).
+        A go.work or replace sibling still classifies as external here: classification
+        moves onto the package model in BACK-2550."""
         module_root = self._find_go_module_root(base_path)
         if not module_root:
             return None
         module_name = self._get_module_name(module_root)
         if not module_name:
             return None
-        return stmt.module_name.startswith(module_name)
+        return module_contains(module_name, stmt.module_name)
 
     def _find_go_module_root(self, start_path: Path) -> Optional[Path]:
         """Find go.mod file by walking up directory tree.
@@ -445,6 +444,124 @@ class GoExtractor(LanguageExtractor):
             return None
 
         return None
+
+
+def module_contains(module_path: str, package_path: str) -> bool:
+    """Whether ``package_path`` is a package of the module ``module_path``: equal, or below it on a ``/``
+    boundary, so ``k8s.io/apimachinery/...`` is not inside ``k8s.io/api`` (BACK-2558)."""
+    return package_path == module_path or package_path.startswith(module_path + '/')
+
+
+def _resolve_in_units(package_path: str, units: Tuple[Tuple[str, PackageUnit], ...]) -> Optional[Path]:
+    """The package directory ``package_path`` names in the longest-pathed module of ``units`` that contains it."""
+    matches = [(name, unit) for name, unit in units if module_contains(name, package_path)]
+    if not matches:
+        return None
+    name, unit = max(matches, key=lambda match: len(match[0]))
+    package_dir = unit.manifest.parent / package_path[len(name):].lstrip('/')
+    return package_dir.resolve() if package_dir.is_dir() else None
+
+
+def _go_tokens(text: str) -> List[str]:
+    return [token.strip('"`') for token in text.split()]
+
+
+def go_directives(text: str) -> List[Tuple[str, List[str]]]:
+    """(verb, arguments) for each directive of a go.mod or go.work, a block's entries each under its verb
+    (``replace ( a => ./a )`` reads as ``('replace', ['a', '=>', './a'])``). Comments are dropped."""
+    directives: List[Tuple[str, List[str]]] = []
+    block: Optional[str] = None
+    for raw in text.split('\n'):
+        line = raw.split('//', 1)[0].strip()
+        if not line:
+            continue
+        if block is not None:
+            if line == ')':
+                block = None
+            else:
+                directives.append((block, _go_tokens(line)))
+            continue
+        verb, _, rest = line.replace('\t', ' ').partition(' ')
+        if rest.strip() == '(':
+            block = verb
+        else:
+            directives.append((verb, _go_tokens(rest)))
+    return directives
+
+
+def _local_replace(arguments: List[str], manifest_dir: Path) -> Optional[Tuple[str, Path]]:
+    """(module path importers spell, target directory) of a ``replace`` whose target is a directory (Go: a
+    path beginning ./ or ../, or absolute); None for a module replacement or a malformed line."""
+    if '=>' not in arguments:
+        return None
+    left, right = arguments[:arguments.index('=>')], arguments[arguments.index('=>') + 1:]
+    if not left or not right:
+        return None
+    target = right[0]
+    if not (target.startswith(('./', '../', '.\\', '..\\')) or Path(target).is_absolute()):
+        return None
+    return left[0], (manifest_dir / target).resolve()
+
+
+def _read_go_manifest(manifest: Path, on_error: Callable[[OSError], None]) -> Optional[str]:
+    """A go.mod/go.work's text; None when it cannot be read (reported) or is not UTF-8 (go rejects it too)."""
+    try:
+        return manifest.read_text(encoding='utf-8')
+    except OSError as error:
+        on_error(error)
+    except UnicodeDecodeError:
+        pass
+    return None
+
+
+_Replaces = List[Tuple[str, Path]]  # (module path importers spell, local target directory)
+
+
+def _read_go_manifests(manifests: List[Path], on_error: Callable[[OSError], None]
+                       ) -> Tuple[Dict[Path, Tuple[str, _Replaces]], List[Tuple[Set[Path], _Replaces]]]:
+    """Every go.mod's (module path, local replaces) by directory, and every go.work's (used module
+    directories, local replaces)."""
+    modules: Dict[Path, Tuple[str, _Replaces]] = {}
+    workspaces: List[Tuple[Set[Path], _Replaces]] = []
+    for manifest in manifests:
+        text = _read_go_manifest(manifest, on_error)
+        if text is None:
+            continue
+        directives = go_directives(text)
+        replaces = [r for verb, args in directives if verb == 'replace'
+                    and (r := _local_replace(args, manifest.parent)) is not None]
+        if manifest.name == 'go.work':
+            used = {(manifest.parent / args[0]).resolve() for verb, args in directives if verb == 'use' and args}
+            workspaces.append((used, replaces))
+            continue
+        module = next((args[0] for verb, args in directives if verb == 'module' and args), None)
+        if module is not None:
+            modules[manifest.parent] = (module, replaces)
+    return modules, workspaces
+
+
+def _go_links(directory: Path, replaces: _Replaces, modules: Dict[Path, Tuple[str, _Replaces]],
+              workspaces: List[Tuple[Set[Path], _Replaces]]) -> Tuple[Tuple[str, Path], ...]:
+    """The local dependencies of the module in ``directory``, as (module path, its go.mod): a go.work that uses
+    it contributes its replaces (they override the module's own) and every other module it uses; then the
+    module's own local replaces. The first link for a module path wins."""
+    links: _Replaces = []
+    for used, work_replaces in workspaces:
+        if directory in used:
+            links += work_replaces
+            links += [(modules[d][0], d) for d in sorted(used) if d in modules and d != directory]
+    links += replaces
+    dependencies: Dict[str, Path] = {}
+    for name, target in links:
+        dependencies.setdefault(name, target / 'go.mod')
+    return tuple(dependencies.items())
+
+
+def _go_units(manifests: List[Path], on_error: Callable[[OSError], None]) -> List[PackageUnit]:
+    modules, workspaces = _read_go_manifests(manifests, on_error)
+    return [PackageUnit(directory / 'go.mod', module, directory, (directory,),
+                        _go_links(directory, replaces, modules, workspaces))
+            for directory, (module, replaces) in sorted(modules.items())]
 
 
 # Backward compatibility: Keep old function-based API

@@ -394,8 +394,10 @@ _TIER1: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_VERIFIED,
         imports_unused=True,
         import_resolution=(
-            "Bespoke extractor (imports/go.py) resolves within-module import "
-            "paths; fixed BACK-431 Issue G to derive the local package name "
+            "Bespoke extractor (imports/go.py) resolves import paths through "
+            "the per-scan package model: the file's own module, go.work "
+            "modules and local replace targets, longest module path first "
+            "on a / boundary; fixed BACK-431 Issue G to derive the local package name "
             "from the segment before a semantic-import-versioning /vN "
             "suffix (e.g. k8s.io/klog/v2 -> klog, not v2)."
         ),

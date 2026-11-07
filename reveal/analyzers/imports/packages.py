@@ -17,8 +17,9 @@ from typing import Dict, Optional, Tuple
 class PackageUnit:
     """One package a manifest declares, as its language's importers see it."""
     manifest: Path                       # the manifest file, resolved
-    name: str                            # how importers spell the package (Cargo: the library crate name)
-    library_root: Optional[Path] = None  # the root module file that name resolves to; None: no library
+    name: str                            # how importers spell the package (Cargo: the library crate name; Go: the module path)
+    library_root: Optional[Path] = None  # what that name resolves to (Cargo: the root module file; Go: the module
+                                         # directory, a package being a directory); None: no library
     # Every target's root-module directory (Cargo: lib, bins, tests, examples, benches, build script):
     # a path from the root of the target a file belongs to starts at the deepest one holding the file.
     target_roots: Tuple[Path, ...] = ()
@@ -73,6 +74,16 @@ class PackageModel:
             if spelled == name:
                 return self._by_manifest.get(manifest)
         return unit if name == unit.name and unit.library_root is not None else None
+
+    def local_units(self, directory: Path) -> Tuple[Tuple[str, PackageUnit], ...]:
+        """(name as importers spell it, unit) for every in-tree unit a file in ``directory`` (resolved) can name: its
+        own package first, then each local dependency the model read (Go matches an import path against all of
+        them, longest first). Empty: no manifest of ``directory``'s package declares a unit."""
+        unit = self.unit_for(directory)
+        if unit is None:
+            return ()
+        return ((unit.name, unit),) + tuple((spelled, dep) for spelled, manifest in unit.local_dependencies
+                                            if (dep := self._by_manifest.get(manifest)) is not None)
 
 
 EMPTY_PACKAGES = PackageModel()

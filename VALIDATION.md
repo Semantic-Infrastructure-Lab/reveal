@@ -55,7 +55,7 @@ measurement. See [Re-running this yourself](#re-running-this-yourself).
 | Python | ✅ 100% (Home Assistant, celery¹⁰) | ✅ 83.5% (Home Assistant) | ✅ 99.96%→100%³⁴ (Home Assistant, 3 query directions) | **Measured** |
 | TypeScript | ✅ 100% (VS Code), ✅ 68.48%→99.93%¹⁶ (nest, BACK-694/698/705/772/773 all fixed; 2-edge unexplored residual) | ✅ 91.3%¹ (VS Code) | ✅ 100%³⁵ (VS Code) | **Measured** |
 | Java | ✅ 100% (Elasticsearch, guava¹¹) | ✅ 97.5% (Elasticsearch) | ✅ 9.99%→100%³⁸ (Elasticsearch, BACK-734 fixed) | **Measured** |
-| Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 96.3% (client-go) | ✅ 100%³⁶ (Go compiler internals) | **Measured** |
+| Go | ✅ 100% (Kubernetes: 33 staging modules, full population, go.work and replace; client_golang¹³) | ✅ 96.3% (client-go) | ✅ 100%³⁶ (Go compiler internals) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | ✅ 22.05%→100%³⁹ (Discourse, BACK-735 fixed) | **Measured** |
 | Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 82.5% → **92.9%** (tivi, six-category sweep, BACK-727) | ✅ 99.69%→100%⁴² (8/bucket); 99.79%⁴² (20/bucket, tivi, BACK-738 shape 1 fixed & shipped in 0.123.0 — shape 5 SAM labeled-return spillage remains an accepted residual, grammar-level, not fixable in reveal) | **Measured** |
 | Rust | ✅ 98.1% (Meilisearch), 96.6% (ripgrep)⁹, full population, cargo oracle | ✅ 97.4% (Meilisearch) | ✅ 95.27%→100%³⁷ (Meilisearch, BACK-733 fixed) | **Measured** |
@@ -323,6 +323,24 @@ code-generation scripts that `go list` excludes but reveal's build-tag-blind
 parser doesn't (the same mechanism as the original loop's 8 Windows-build-tag
 FPs), plus external test-package files (`package foo_test`) whose own import
 of their parent package directory-fans-out to include themselves.
+
+The Kubernetes loop sampled 25 targets in the root module's `pkg/`, and that
+population shared the resolver's one assumption (BACK-2557): an import path is
+local only inside the nearest go.mod's own module. A module reached through a
+go.work `use` or a `replace => ./dir` was external on both sides, so none of
+Kubernetes' cross-module edges was scored (its 33 `staging/src/k8s.io` modules
+replace each other with `../<module>`, and the root go.work uses them all). The
+gated row now scans `staging/src/k8s.io` and lists every module: 7,479 files,
+6,323 targets, 317,978 projected edges from 22,748 package imports that `go list`
+resolves in workspace mode (go1.27.3; Kubernetes declares go 1.26.0). Before the
+fix Reveal hit 94,394 of them (29.69%), 0 extra: every edge that crosses a module
+boundary was missing. After it, 317,978 (100%), 0 extra. At the repository root,
+the importers of `staging/src/k8s.io/api/core/v1/types.go` went from 78 (all
+inside that module) to 2,558, 997 of them under `pkg/`. The same fix stops an
+import path matching a module on a non-`/` boundary (`k8s.io/apimachinery` was
+inside module `k8s.io/api`, BACK-2558); Kubernetes had no false edge from it, a
+fixture does. As for client_golang, the file edges are the buildless fan-out of
+package imports, so 100% is package-level agreement plus projection conformance.
 
 ¹⁴ Overfit guard (BACK-669): re-ran the same content-scanned member-import
 oracle technique (BACK-555) against a second, unrelated real corpus
@@ -2504,7 +2522,7 @@ manifest entry with a `recall:` block names an independent oracle from
 | `kotlin-declared` | Text rule: a top-level declaration is indexed under its package whatever the file is named; an explicit import resolves to the declaring file | tivi, kotlinx.coroutines |
 | `scala-declared` | The same rule with chained `package` clauses joined and imports read relative to enclosing packages; each selector-list name and type-member wildcard scored, package wildcards counted | GitBucket `src/main/scala`, cats-effect |
 | `typescript-compiler` | TypeScript parser plus `ts.resolveModuleName`, including aliases, re-exports, dynamic and type-query imports | VS Code base, Excalidraw workspace, three.js src |
-| `go-toolchain` | Go standard parser and `go list` decide package imports; file fan-out is a separate buildless projection | client_golang |
+| `go-toolchain` | Go standard parser and `go list` (go1.27.3, `GOTOOLCHAIN=local`; in a workspace, one pattern per module directory) decide package imports; file fan-out is a separate buildless projection | Kubernetes `staging/src/k8s.io` (33 modules), client_golang |
 | `python-ast-callers` | Python AST derives scoped function/method caller relationships; selected with `--signal calls` | celery `celery/utils/` |
 
 The corpora are optional test inputs, never runtime dependencies or services. Normal

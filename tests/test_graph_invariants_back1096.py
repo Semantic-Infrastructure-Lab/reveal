@@ -467,6 +467,48 @@ def test_local_units_resolved_reads_each_packages_own_dependencies(cargo_workspa
     assert scopes[root / 'crates/search'] == {'grep_search', 'matcher', 'inner'}
 
 
+@pytest.fixture
+def go_workspace(tmp_path):
+    """BACK-2557's tree: staged modules linked by go.work and local replaces, a nested and a decoy module."""
+    from test_go_package_model_back2557 import write_workspace
+    return write_workspace(tmp_path / 'ws')
+
+
+def test_local_units_resolved_holds_on_the_real_go_answer(go_workspace):
+    view = _answer(go_workspace.parent, 'imports://ws?root=ws')
+    row = inv.check_local_units_resolved(view, inv.scan_crate_scopes(go_workspace), go_workspace,
+                                         inv.scan_go_module_scopes(go_workspace))
+    # main.go x4 (go.work api and client, own pkg/util, replaced vendored/lib), rest.go, auth.go, sample.go;
+    # conv.go's apimachinery is no module api can name, tools' example.com/app is the published module
+    assert (row['status'], row['population'], row['packages']) == ('green', 7, 8), row
+
+
+@pytest.mark.parametrize('damage', ['unresolved', 'decoy'])
+def test_local_units_resolved_red_when_a_go_module_import_misses_or_lands_elsewhere(go_workspace, damage):
+    view = copy.deepcopy(_answer(go_workspace.parent, 'imports://ws?root=ws'))
+    for stmt in view['files']['pkg/app/main.go']:
+        if stmt['module'] == 'example.com/app/vendored/lib':
+            # an engine without go.work/replace (or the longest-path rule) answers one of these
+            stmt['resolved'] = None if damage == 'unresolved' else 'vendored/lib'
+    row = inv.check_local_units_resolved(view, {}, go_workspace, inv.scan_go_module_scopes(go_workspace))
+    assert (row['status'], row['violations']) == ('red', 1), row
+    assert row['examples'][0]['expected'] == 'third_party/vendored/lib'
+
+
+def test_go_module_scopes_read_go_work_and_local_replaces_from_the_corpus(go_workspace):
+    scopes = inv.scan_go_module_scopes(go_workspace)
+    root, staging = go_workspace.resolve(), go_workspace.resolve() / 'staging/src/example.com'
+    workspace = {'example.com/app', 'example.com/api', 'example.com/client', 'example.com/sampler', 'example.com/plugins'}
+    assert set(scopes[root]) == workspace | {'example.com/app/vendored'}
+    assert scopes[root]['example.com/app/vendored'] == root / 'third_party/vendored'
+    assert set(scopes[staging / 'client']) == workspace   # example.com/remote => a module: not a directory
+    assert set(scopes[staging / 'apimachinery']) == {'example.com/apimachinery'}
+    # scanning below the go.work still reads it (Kubernetes' staging/src/k8s.io row)
+    below = inv.scan_go_module_scopes(go_workspace / 'staging/src')
+    assert set(below[staging / 'sampler']) == {'example.com/api', 'example.com/client', 'example.com/sampler',
+                                               'example.com/plugins'}
+
+
 def test_package_wildcards_empty_when_no_wildcard_names_a_scanned_package(tmp_path):
     scan = tmp_path / 'p'
     scan.mkdir()

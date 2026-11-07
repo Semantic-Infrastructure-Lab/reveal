@@ -29,7 +29,11 @@ edges stay under that scan; the default view also retains resolved outside-scan 
                       grep_matcher::Matcher``, not crate::/self::/super::) is ``resolved``: code that compiles
                       names a workspace crate its package lists as a dependency, or its own library, and that
                       crate has a root file. Which in-tree crates each package names is read from the corpus's
-                      Cargo.toml files (crate names, dependency keys), not from Reveal (BACK-2549/2559)
+                      Cargo.toml files (crate names, dependency keys), not from Reveal (BACK-2549/2559).
+                      Go: every statement whose import path lies in an in-tree module its module can name (its
+                      own, a ``replace => ./dir`` target, a sibling of a go.work that uses it), longest module
+                      path first, and names a package directory of the scan, resolves to exactly that
+                      directory. Read from the corpus's go.mod and go.work files (BACK-2557/2558)
   package_wildcards   JVM corpora (java, kotlin, scala): every unresolved wildcard statement of the default
                       view whose prefix is a package some scanned file declares is counted in the answer's
                       ``edge_rule.package_wildcards`` (statements, importer files, per package), and the
@@ -523,8 +527,8 @@ def check_package_wildcards(default_view: Dict[str, Any], packages: Set[str]) ->
     return make_row('package_wildcards', statements, violations, packages=len(want), importer_files=importers)
 
 
-# The languages whose bare import names the manifest makes exact (BACK-2559): Rust's Cargo.toml.
-MANIFEST_EXACT_SUFFIXES = ('.rs',)
+# The languages whose bare import names the manifest makes exact (BACK-2559): Rust's Cargo.toml, Go's go.mod.
+MANIFEST_EXACT_SUFFIXES = ('.rs', '.go')
 
 
 def _cargo_doc(manifest: Path) -> Dict[str, Any]:
@@ -564,16 +568,117 @@ def scan_crate_scopes(scan_dir: Path) -> Dict[Path, Set[str]]:
     return scopes
 
 
+# Go: directories a module walk skips (the go tool ignores them for packages; vendored copies are not in-tree units).
+_GO_SKIPPED = ('vendor', 'testdata')
+
+
+def _go_directives(text: str) -> List[Tuple[str, List[str]]]:
+    """(verb, arguments) per go.mod/go.work directive, block entries under their verb; comments dropped."""
+    found: List[Tuple[str, List[str]]] = []
+    block: Optional[str] = None
+    for raw in text.split('\n'):
+        words = [w.strip('"`') for w in raw.split('//', 1)[0].split()]
+        if not words:
+            continue
+        if block is not None:
+            if words == [')']:
+                block = None
+            else:
+                found.append((block, words))
+        elif words[1:] == ['(']:
+            block = words[0]
+        else:
+            found.append((words[0], words[1:]))
+    return found
+
+
+def _go_local_replaces(directives: List[Tuple[str, List[str]]], base: Path) -> List[Tuple[str, Path]]:
+    pairs = []
+    for verb, words in directives:
+        if verb == 'replace' and '=>' in words and words.index('=>') > 0 and len(words) > words.index('=>') + 1:
+            target = words[words.index('=>') + 1]
+            if target.startswith(('./', '../')) or Path(target).is_absolute():
+                pairs.append((words[0], (base / target).resolve()))
+    return pairs
+
+
+def _go_text(manifest: Path) -> str:
+    try:
+        return manifest.read_text(encoding='utf-8')
+    except (OSError, ValueError):
+        return ''
+
+
+def scan_go_module_scopes(scan_dir: Path) -> Dict[Path, Dict[str, Path]]:
+    """Per Go module directory under ``scan_dir``: each in-tree module path its code may import, with the module
+    directory it names. Its own module; each ``replace`` whose target is a module directory of the scan; and,
+    when a go.work under ``scan_dir`` or the nearest one above it ``use``s the module, every other module it uses."""
+    root = scan_dir.resolve()
+    manifests = [m for m in sorted(root.rglob('go.mod'))
+                 if not set(m.relative_to(root).parts[:-1]) & set(_GO_SKIPPED)]
+    modules: Dict[Path, Tuple[str, List[Tuple[str, Path]]]] = {}
+    for manifest in manifests:
+        directives = _go_directives(_go_text(manifest))
+        name = next((words[0] for verb, words in directives if verb == 'module' and words), None)
+        if name:
+            modules[manifest.parent] = (name, _go_local_replaces(directives, manifest.parent))
+    works = sorted(root.rglob('go.work')) + [d / 'go.work' for d in root.parents if (d / 'go.work').is_file()][:1]
+    used_by: Dict[Path, List[Tuple[Set[Path], List[Tuple[str, Path]]]]] = {}
+    for work in works:
+        directives = _go_directives(_go_text(work))
+        used = {(work.parent / words[0]).resolve() for verb, words in directives if verb == 'use' and words}
+        for directory in used:
+            used_by.setdefault(directory, []).append((used, _go_local_replaces(directives, work.parent)))
+    scopes: Dict[Path, Dict[str, Path]] = {}
+    for directory, (name, replaces) in modules.items():
+        names: Dict[str, Path] = {name: directory}
+        for used, work_replaces in used_by.get(directory, []):
+            for other in sorted(used):
+                if other in modules:
+                    names.setdefault(modules[other][0], other)
+            for path, target in work_replaces:
+                names.setdefault(path, target)
+        for path, target in replaces:
+            names.setdefault(path, target)
+        scopes[directory] = {path: target for path, target in names.items() if target in modules}
+    return scopes
+
+
+def _go_local_target(package: str, names: Dict[str, Path]) -> Optional[Path]:
+    """The package directory ``package`` names in the longest in-tree module path containing it, if any."""
+    holding = [path for path in names if package == path or package.startswith(path + '/')]
+    if not holding:
+        return None
+    path = max(holding, key=len)
+    return names[path] / package[len(path):].lstrip('/')
+
+
 def check_local_units_resolved(default_view: Dict[str, Any], scopes: Dict[Path, Set[str]],
-                               scan_dir: Path) -> Dict[str, Any]:
-    """Every bare statement of a manifest-exact language whose first segment is an in-tree crate its package
-    names (its own library or a listed dependency) names its target in ``resolved``."""
+                               scan_dir: Path, go_scopes: Optional[Dict[Path, Dict[str, Path]]] = None) -> Dict[str, Any]:
+    """Every bare Rust statement whose first segment is an in-tree crate its package names (its own library or
+    a listed dependency) names its target in ``resolved``; every Go statement whose path names a package
+    directory of an in-tree module its module can import resolves to that directory."""
     population = 0
     violations: List[Any] = []
+    go_scopes = go_scopes or {}
+    root = scan_dir.resolve()
     for file, stmts in sorted((default_view.get('files') or {}).items()):
         if not file.endswith(MANIFEST_EXACT_SUFFIXES):
             continue
         path = (scan_dir / file).resolve()
+        if file.endswith('.go'):
+            go_names = next((go_scopes[d] for d in path.parents if d in go_scopes), {})
+            for stmt in stmts:
+                module = str(stmt.get('module') or '')
+                target = _go_local_target(module, go_names)
+                if target is None or not target.is_relative_to(root) or not any(target.glob('*.go')):
+                    continue
+                population += 1
+                resolved = stmt.get('resolved')
+                if not resolved or (scan_dir / resolved).resolve() != target.resolve():
+                    violations.append({'file': file, 'line': stmt.get('line'), 'module': module,
+                                       'resolved': resolved, 'expected': target.relative_to(root).as_posix()})
+            continue
         names = next((scopes[d] for d in path.parents if d in scopes), set())
         for stmt in stmts:
             module = str(stmt.get('module') or '')
@@ -582,7 +687,7 @@ def check_local_units_resolved(default_view: Dict[str, Any], scopes: Dict[Path, 
             population += 1
             if not stmt.get('resolved'):
                 violations.append({'file': file, 'line': stmt.get('line'), 'module': module})
-    return make_row('local_units_resolved', population, violations, packages=len(scopes))
+    return make_row('local_units_resolved', population, violations, packages=len(scopes) + len(go_scopes))
 
 
 class Requests:
@@ -642,7 +747,8 @@ def run_imports(req: Requests, scan: str, scan_dir: Path, only: Tuple[str, ...],
             rows.append(run_citations(req, scan, scan_dir, importers, default_view, citations))
     if 'local_units_resolved' in wanted:
         rows.append(error_row('local_units_resolved', err3 or '') if err3 or default_view is None
-                    else check_local_units_resolved(default_view, scan_crate_scopes(scan_dir), scan_dir))
+                    else check_local_units_resolved(default_view, scan_crate_scopes(scan_dir), scan_dir,
+                                                    scan_go_module_scopes(scan_dir)))
     if 'package_wildcards' in wanted:
         rows.append(error_row('package_wildcards', err3 or '') if err3 or default_view is None
                     else check_package_wildcards(default_view, scan_declared_packages(scan_dir)
