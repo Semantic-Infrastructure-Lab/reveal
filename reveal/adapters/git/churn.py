@@ -2,9 +2,10 @@
 
 import hashlib
 from datetime import datetime
-from typing import Any, Dict, Optional, cast, TYPE_CHECKING
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from ...core import disk_cache
+from .commits import resolve_commit
 
 # One entry per (repo, HEAD commit, since, no_merges) -- low cardinality like
 # I002's import-graph cache (one entry per scan root), not per-file like the
@@ -84,10 +85,7 @@ def get_churn_counts(
     if since:
         since_ts = datetime.fromisoformat(since).timestamp()
 
-    obj = repo.revparse_single(ref)
-    while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-        obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-    start = cast('pygit2.Commit', obj)
+    start = resolve_commit(repo, ref)
 
     fingerprint = _churn_fingerprint(repo, start.id, since, no_merges)
     if fingerprint is not None:

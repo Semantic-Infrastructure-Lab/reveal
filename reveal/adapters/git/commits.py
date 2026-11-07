@@ -2,14 +2,33 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, Dict, Any, List, Optional, TYPE_CHECKING
+from typing import Callable, Dict, Any, List, Optional, cast, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
 
+from ...errors import MissingResourceError
 from ...utils.query import ResultControl, apply_result_control, unknown_sort_field_warning
 from ...utils.results import ResultBuilder, note_truncation, note_warning
 
 if TYPE_CHECKING:
     import pygit2
+
+
+def resolve_commit(repo: 'pygit2.Repository', ref: str) -> 'pygit2.Commit':
+    """The commit `ref` names, peeling tags; the one ref lookup every git:// view uses.
+
+    A ref that names nothing is an invalid resource (MissingResourceError, exit 2, D6), as a
+    missing path is (BACK-2545); one that names a tree or blob is a ValueError.
+    """
+    import pygit2
+    try:
+        obj = repo.revparse_single(ref)
+        while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
+            obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
+    except (KeyError, pygit2.GitError) as e:
+        raise MissingResourceError(f"Cannot resolve ref: {ref}") from e
+    if not isinstance(obj, pygit2.Commit):
+        raise ValueError(f"Cannot resolve ref to commit: {ref}")
+    return cast('pygit2.Commit', obj)
 
 
 def history_sort() -> int:

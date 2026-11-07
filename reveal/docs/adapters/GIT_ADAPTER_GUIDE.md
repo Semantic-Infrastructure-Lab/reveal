@@ -1689,7 +1689,21 @@ mv repo repo.bak
 git clone <url> repo
 ```
 
-### Error: "Invalid ref: <name>"
+### Error: "File not found at <ref>: <path>" (exit 2)
+
+**Problem**: The file is not in the repository's tree at that ref: a typo, or a file deleted
+before it. A named thing that is not there is an invalid request (exit 2), not a finding.
+
+**Solution**:
+```bash
+# A deleted file still has its history
+reveal 'git://path/to/file.py?type=history'
+
+# Read it at a ref where it existed
+reveal git://path/to/file.py@HEAD~5
+```
+
+### Error: "Cannot resolve ref: <name>" (exit 2)
 
 **Problem**: Branch/tag/commit doesn't exist
 

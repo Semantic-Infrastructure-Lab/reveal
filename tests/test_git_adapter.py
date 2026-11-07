@@ -355,11 +355,12 @@ class TestRefExploration:
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_invalid_ref(self, git_repo):
         """Test error handling for invalid ref."""
+        from reveal.errors import MissingResourceError
         adapter = GitAdapter(path=str(git_repo), ref='nonexistent')
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(MissingResourceError) as exc_info:  # exit 2 (BACK-2545)
             adapter.get_structure()
 
-        assert "Invalid ref" in str(exc_info.value)
+        assert "Cannot resolve ref: nonexistent" in str(exc_info.value)
 
 
 class TestFileInspection:
@@ -2428,29 +2429,29 @@ class TestDetectNoiseCommits(unittest.TestCase):
 
 
 @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-class TestResolveBlamCommit:
-    """_resolve_blame_commit peels any ref type to a Commit."""
+class TestResolveCommit:
+    """resolve_commit peels any ref type to a Commit; a ref naming nothing is MissingResourceError."""
 
     def test_branch_ref_resolves_to_commit(self, git_repo):
         import pygit2
-        from reveal.adapters.git.files import _resolve_blame_commit
+        from reveal.adapters.git.commits import resolve_commit
         repo = pygit2.Repository(str(git_repo))
-        commit = _resolve_blame_commit(repo, 'master')
+        commit = resolve_commit(repo, 'master')
         assert isinstance(commit, pygit2.Commit)
 
     def test_head_ref_resolves_to_commit(self, git_repo):
         import pygit2
-        from reveal.adapters.git.files import _resolve_blame_commit
+        from reveal.adapters.git.commits import resolve_commit
         repo = pygit2.Repository(str(git_repo))
-        commit = _resolve_blame_commit(repo, 'HEAD')
+        commit = resolve_commit(repo, 'HEAD')
         assert isinstance(commit, pygit2.Commit)
 
     def test_sha_resolves_to_commit(self, git_repo):
         import pygit2
-        from reveal.adapters.git.files import _resolve_blame_commit
+        from reveal.adapters.git.commits import resolve_commit
         repo = pygit2.Repository(str(git_repo))
         head_sha = str(repo.head.target)
-        commit = _resolve_blame_commit(repo, head_sha)
+        commit = resolve_commit(repo, head_sha)
         assert isinstance(commit, pygit2.Commit)
         assert str(commit.id) == head_sha
 
@@ -2461,9 +2462,9 @@ class TestReadBlobLines:
 
     def test_reads_file_lines(self, git_repo):
         import pygit2
-        from reveal.adapters.git.files import _resolve_blame_commit, _read_blob_lines
+        from reveal.adapters.git.files import resolve_commit, _read_blob_lines
         repo = pygit2.Repository(str(git_repo))
-        commit = _resolve_blame_commit(repo, 'HEAD')
+        commit = resolve_commit(repo, 'HEAD')
         lines = _read_blob_lines(repo, commit, 'README.md')
         assert isinstance(lines, list)
         assert len(lines) > 0
@@ -2471,9 +2472,9 @@ class TestReadBlobLines:
 
     def test_missing_path_raises(self, git_repo):
         import pygit2
-        from reveal.adapters.git.files import _resolve_blame_commit, _read_blob_lines
+        from reveal.adapters.git.files import resolve_commit, _read_blob_lines
         repo = pygit2.Repository(str(git_repo))
-        commit = _resolve_blame_commit(repo, 'HEAD')
+        commit = resolve_commit(repo, 'HEAD')
         with pytest.raises(KeyError):
             _read_blob_lines(repo, commit, 'nonexistent.txt')
 
@@ -2484,9 +2485,9 @@ class TestFormatBlameHunks:
 
     def test_returns_list_of_hunk_dicts(self, git_repo):
         import pygit2
-        from reveal.adapters.git.files import _resolve_blame_commit, _format_blame_hunks
+        from reveal.adapters.git.files import resolve_commit, _format_blame_hunks
         repo = pygit2.Repository(str(git_repo))
-        commit = _resolve_blame_commit(repo, 'HEAD')
+        commit = resolve_commit(repo, 'HEAD')
         blame = repo.blame('README.md', newest_commit=commit.id)
         hunks = _format_blame_hunks(repo, blame)
         assert isinstance(hunks, list)
@@ -2494,9 +2495,9 @@ class TestFormatBlameHunks:
 
     def test_hunk_has_required_fields(self, git_repo):
         import pygit2
-        from reveal.adapters.git.files import _resolve_blame_commit, _format_blame_hunks
+        from reveal.adapters.git.files import resolve_commit, _format_blame_hunks
         repo = pygit2.Repository(str(git_repo))
-        commit = _resolve_blame_commit(repo, 'HEAD')
+        commit = resolve_commit(repo, 'HEAD')
         blame = repo.blame('README.md', newest_commit=commit.id)
         hunks = _format_blame_hunks(repo, blame)
         for h in hunks:

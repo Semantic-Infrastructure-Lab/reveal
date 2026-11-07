@@ -8,9 +8,10 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
 
+from ...errors import MissingResourceError
 from ...utils.path_utils import failure_of
 from ...utils.results import ResultBuilder, note_truncation
-from .commits import (commit_filter, disclose_timeline_cut, history_sort, timeline_fields,
+from .commits import (commit_filter, resolve_commit, disclose_timeline_cut, history_sort, timeline_fields,
                       walk_history)
 from reveal.utils.lines import normalize_newlines, split_lines
 
@@ -43,18 +44,7 @@ def get_file_at_ref(
     """Get file structure (or raw contents when raw=True) at a specific ref."""
     import pygit2
 
-    try:
-        # Resolve the ref to a commit
-        obj = repo.revparse_single(ref)
-        while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-            obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-
-        if not isinstance(obj, pygit2.Commit):
-            raise ValueError(f"Cannot resolve ref to commit: {ref}")
-
-        commit = cast('pygit2.Commit', obj)
-    except (KeyError, pygit2.GitError) as e:
-        raise ValueError(f"Cannot resolve ref: {ref}") from e
+    commit = resolve_commit(repo, ref)
 
     try:
         # Navigate to the file in the tree
@@ -110,7 +100,14 @@ def get_file_at_ref(
                 f"  For a specific repo: reveal 'git:///path/to/repo'"
             )
 
-    except (KeyError, pygit2.GitError) as e:
+    except KeyError as e:
+        # Not in the tree at this ref: an invalid resource (exit 2), not a findings answer
+        # (BACK-2545). A file deleted earlier still has its history.
+        raise MissingResourceError(
+            f"File not found at {ref}: {subpath}\n"
+            "  A file deleted earlier still has its history: add ?type=history to the URI"
+        ) from e
+    except pygit2.GitError as e:
         raise ValueError(f"File not found at {ref}: {subpath}") from e
 
 
@@ -151,17 +148,8 @@ def get_file_diff(
     - ?element=func_name  — pre-filter to hunks touching that element
     """
     import subprocess
-    import pygit2
 
-    try:
-        obj = repo.revparse_single(ref)
-        while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-            obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-        if not isinstance(obj, pygit2.Commit):
-            raise ValueError(f"Cannot resolve ref to commit: {ref}")
-        commit = cast('pygit2.Commit', obj)
-    except (KeyError, pygit2.GitError) as e:
-        raise ValueError(f"Cannot resolve ref: {ref}") from e
+    commit = resolve_commit(repo, ref)
 
     short_hash = str(commit.id)[:7]
     context = int(query.get('context', 3))
@@ -272,11 +260,7 @@ def get_file_history(
         limit = int(query.get('limit', 50))
 
         # Start from HEAD or specified ref
-        obj = repo.revparse_single(ref)
-        while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-            obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-
-        commit = cast('pygit2.Commit', obj)
+        commit = resolve_commit(repo, ref)
 
         content_pattern: Optional[str] = query.get('content~') or query.get('content') or None
         keep = commit_filter(repo, format_commit_func, matches_all_filters_func,
@@ -343,11 +327,7 @@ def get_file_timeline(
     try:
         limit = int(query.get('limit', 20000))
 
-        obj = repo.revparse_single(ref)
-        while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-            obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-
-        commit = cast('pygit2.Commit', obj)
+        commit = resolve_commit(repo, ref)
         keep = commit_filter(repo, format_commit_func, matches_all_filters_func,
                              no_merges=query.get('no_merges') in ('1', 'true', 'yes'),
                              touches=commit_touches_file_func, subpath=subpath)
@@ -548,15 +528,6 @@ def _apply_element_blame_filter(element_name, hunks, path, subpath, get_range_fu
     return element_info, filtered
 
 
-def _resolve_blame_commit(repo: 'pygit2.Repository', ref: str) -> 'pygit2.Commit':
-    """Peel a ref string to a Commit object."""
-    import pygit2
-    obj = repo.revparse_single(ref)
-    while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-        obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-    return cast('pygit2.Commit', obj)
-
-
 def _read_blob_lines(repo: 'pygit2.Repository', commit: 'pygit2.Commit', subpath: str) -> List[str]:
     """Read file lines from a blob in the given commit's tree."""
     tree = commit.tree
@@ -634,7 +605,7 @@ def get_file_blame(
     import pygit2
 
     try:
-        commit = _resolve_blame_commit(repo, ref)
+        commit = resolve_commit(repo, ref)
         blame = repo.blame(subpath, newest_commit=commit.id)
         lines = _read_blob_lines(repo, commit, subpath)
         hunks = _format_blame_hunks(repo, blame)
@@ -774,7 +745,7 @@ def get_ownership(
     import pygit2
 
     try:
-        commit = _resolve_blame_commit(repo, ref)
+        commit = resolve_commit(repo, ref)
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"Failed to resolve ref for ownership: {ref}") from e
 

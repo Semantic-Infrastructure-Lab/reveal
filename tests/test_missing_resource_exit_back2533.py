@@ -54,3 +54,53 @@ def test_a_deleted_file_inside_a_repository_still_reads_its_history(outside):
     result = _run_reveal_direct(f"git://{(repo / 'gone.txt').as_posix()}?type=history")
     assert result.returncode == 0, result.stderr
     assert 'File History' in result.stdout
+
+
+@pytest.fixture
+def repo_with_deleted_file(outside):
+    repo = outside / 'repo'
+    repo.mkdir()
+    env = {'GIT_AUTHOR_NAME': 't', 'GIT_AUTHOR_EMAIL': 't@example.com',
+           'GIT_COMMITTER_NAME': 't', 'GIT_COMMITTER_EMAIL': 't@example.com', 'PATH': '/usr/bin:/bin'}
+    git = lambda *a: subprocess.run(['git', '-C', str(repo), *a], check=True, capture_output=True, env=env)  # noqa: E731
+    git('init', '-q')
+    (repo / 'kept.txt').write_text('k\n', encoding='utf-8')
+    (repo / 'gone.txt').write_text('x\n', encoding='utf-8')
+    git('add', '.')
+    git('commit', '-q', '-m', 'add')
+    git('rm', '-q', 'gone.txt')
+    git('commit', '-q', '-m', 'remove')
+    return repo
+
+
+@pytest.mark.parametrize('rel,message', [
+    ('nosuch.txt', 'File not found at HEAD: nosuch.txt'),   # never in the repository
+    ('gone.txt', 'File not found at HEAD: gone.txt'),       # deleted: not there at this ref
+    ('kept.txt@nosuchref', 'Cannot resolve ref: nosuchref'),
+    ('@nosuchref', 'Cannot resolve ref: nosuchref'),         # ref view, no path
+])
+def test_a_name_missing_inside_a_repository_exits_2(repo_with_deleted_file, rel, message):
+    """BACK-2545: a file or ref named inside a repository that is not there exited 1, the findings code."""
+    uri = f"git://{repo_with_deleted_file.as_posix()}/{rel}"
+    result = _run_reveal_direct(uri)
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert message in result.stderr
+    assert result.stdout == ''
+    payload = json.loads(_run_reveal_direct(uri, '--format', 'json').stdout)
+    assert payload['meta']['errors'][0]['code'] == 'invalid_request'
+
+
+def test_a_missing_file_points_at_its_history(repo_with_deleted_file):
+    result = _run_reveal_direct(f"git://{repo_with_deleted_file.as_posix()}/gone.txt")
+    assert 'add ?type=history to the URI' in result.stderr
+
+
+@pytest.mark.parametrize('rel,expected', [
+    ('kept.txt', 'kept.txt @ HEAD'),
+    ('gone.txt@HEAD~1', 'gone.txt @ HEAD~1'),   # deleted now, present at an older ref
+])
+def test_a_file_present_at_the_ref_still_reads(repo_with_deleted_file, rel, expected):
+    """Control: a file in the tree at the requested ref answers, exit 0."""
+    result = _run_reveal_direct(f"git://{repo_with_deleted_file.as_posix()}/{rel}")
+    assert result.returncode == 0, result.stderr
+    assert expected in result.stdout
