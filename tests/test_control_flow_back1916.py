@@ -11,7 +11,6 @@ from reveal.adapters.ast.nav_exits import collect_exits, collect_gate_chains
 from reveal.adapters.ast.nav_loops import collect_fanout, collect_loops
 from reveal.adapters.ast.nav_outline import element_outline, scope_chain
 from reveal.core.treesitter_compat import _zero_arg, tree_root, ts_parse
-from zig_grammar import by_grammar
 
 pytestmark = pytest.mark.conformance
 
@@ -145,18 +144,17 @@ def test_zig_catch_outline_starts_at_operator_and_excludes_operand_scope():
         (4, [{'line': 3, 'text': 'on exception'}])]
 
 
-# Depth on the pack 1.25 Zig grammar follows the shared rule every other grammar with a bare
-# keyword token under its construct gets (JavaScript, C, Rust and Go read a lone `if` as depth
-# 2); the legacy grammar's `IfPrefix`/`ForPrefix` wrapper is counted once (complexity.is_nesting).
-# Complexity is the same on both. The shared rule's extra level is BACK-2543.
+# Both Zig grammars and Ruby read a lone `if` or `for` as depth 1: only a named node nests, so the
+# construct's bare keyword token (`if_statement > 'if'`, Ruby `if > 'if'`, legacy Zig
+# `IfPrefix > 'if'`) adds no level (complexity.is_nesting, BACK-2543). Complexity is unchanged.
 @pytest.mark.parametrize('language,source,expected', [
-    ('zig', 'fn f(items: []const i32) void { for (items) |item| {consume(item);} }', by_grammar((2, 1), (2, 2))),
+    ('zig', 'fn f(items: []const i32) void { for (items) |item| {consume(item);} }', (2, 1)),
     ('zig', 'fn f(a: bool, b: bool) i32 { const x = if (a) if (b) 1 else 2 else 3; return x; }',
-     by_grammar((3, 2), (3, 3))),
-    ('zig', 'fn f(a: bool) i32 { if (a) {return 1;} return 2; }', by_grammar((2, 1), (2, 2))),
+     (3, 2)),
+    ('zig', 'fn f(a: bool) i32 { if (a) {return 1;} return 2; }', (2, 1)),
     ('zig', 'fn f(a: i32) i32 { return a + 1; }', (1, 0)),
-    ('ruby', 'def f(a)\n if a\n  return 1\n end\n return 2\nend', (2, 2)),
-    ('ruby', 'def f(xs)\n for x in xs\n  for y in xs\n   consume(y)\n  end\n end\nend', (3, 3)),
+    ('ruby', 'def f(a)\n if a\n  return 1\n end\n return 2\nend', (2, 1)),
+    ('ruby', 'def f(xs)\n for x in xs\n  for y in xs\n   consume(y)\n  end\n end\nend', (3, 2)),
 ])
 def test_shared_control_flow_family_metrics(tmp_path, language, source, expected):
     tree, root, text = _parse(language, source)

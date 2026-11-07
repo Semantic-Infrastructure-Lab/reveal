@@ -260,6 +260,8 @@ def sample_json_data() -> dict:
     }
 
 
+# Nests five levels (if > for > else-if > while > if), so every function clears the hotspot
+# "depth > 4" cut; four levels cleared it only while a construct's keyword token counted too (BACK-2543).
 _PROBE_COMPLEX = '''
 def complex_{i}(x, y=0):
     total = 0
@@ -275,6 +277,8 @@ def complex_{i}(x, y=0):
                 total -= k
             else:
                 while total > 50:
+                    if total % 7 == 0:
+                        total -= 1
                     total //= 2
     elif x < 0:
         while x < 0:

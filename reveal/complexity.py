@@ -401,10 +401,14 @@ def is_decision(kind: str, parent_kind, node=None, node_text=None) -> bool:
     return kind == 'case' and parent_kind in _CASE_TOKEN_PARENTS
 
 
-def is_nesting(kind: str, parent_kind: Optional[str]) -> bool:
-    """Count Zig's wrapper once, retaining bare Ruby if/for nesting."""
-    return kind in _NESTING_TYPES and not (
-        parent_kind in ('IfPrefix', 'ForPrefix') and (parent_kind, kind) in _KEYWORD_PAIRS)
+def is_nesting(kind: str, node) -> bool:
+    """True if `node` (of `kind`) opens one nesting level.
+
+    Only a named node nests. Most grammars put the construct's bare keyword token under it
+    (`if_statement > 'if'`, Ruby `if > 'if'`, Zig legacy `IfPrefix > 'if'`); the token shares a
+    nesting kind but is anonymous, and counting it read a lone `if` as depth 2 (BACK-2543).
+    """
+    return kind in _NESTING_TYPES and bool(_zero_arg(node, 'is_named'))
 
 
 def calculate_complexity_and_depth(node, is_opaque=None, node_text=None) -> tuple:
@@ -437,7 +441,7 @@ def calculate_complexity_and_depth(node, is_opaque=None, node_text=None) -> tupl
             child_type = _zero_arg(child, 'kind')
             if is_decision(child_type, n_type, child, node_text):
                 decision_count += 1
-            child_depth = depth + 1 if is_nesting(child_type, n_type) else depth
+            child_depth = depth + 1 if is_nesting(child_type, child) else depth
             stack.append((child, child_type, child_depth))
 
     return decision_count + 1, max_depth

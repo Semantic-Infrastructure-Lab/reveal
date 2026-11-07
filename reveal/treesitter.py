@@ -2317,7 +2317,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         stack: List[Tuple[Any, Optional[str], int, str]] = []
         for child in _children(func_node):
             child_kind = kind_of(child)
-            stack.append((child, None, 1 if is_nesting(child_kind, None) else 0, child_kind))
+            stack.append((child, None, 1 if is_nesting(child_kind, child) else 0, child_kind))
         while stack:
             node, parent_kind, depth, kind = stack.pop()
             if depth > max_depth:
@@ -2364,7 +2364,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for child, child_kind in reversed(children):
                 if occluded_bodies is not None and _zero_arg(child, 'start_byte') in occluded_bodies:
                     continue
-                child_depth = depth + 1 if is_nesting(child_kind, kind) else depth
+                child_depth = depth + 1 if is_nesting(child_kind, child) else depth
                 stack.append((child, kind, child_depth, child_kind))
 
         for name in self._implicit_calls_in_function(func_node):

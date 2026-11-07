@@ -97,8 +97,9 @@ def test_code_line_count_negative_control_detects_a_wrong_index(tmp_path):
 def test_function_entries_carry_the_same_complexity_depth_calls(tmp_path):
     items = {f['name']: f for f in _analyzer(tmp_path).get_structure()['functions']}
     assert items['f']['calls'] == ['inner']
-    # values the retired implementation reported for this sample (HEAD 18c02c80)
-    assert (items['f']['complexity'], items['f']['depth'], items['f']['code_line_count']) == (2, 2, 7)
+    # values the retired implementation reported for this sample (HEAD 18c02c80), except depth:
+    # one `if` is depth 1 since BACK-2543 (its keyword token no longer nests a second level)
+    assert (items['f']['complexity'], items['f']['depth'], items['f']['code_line_count']) == (2, 1, 7)
     assert (items['inner']['complexity'], items['inner']['depth'], items['inner']['code_line_count']) == (1, 0, 2)
     assert items['g']['calls'] == ['f']
 
