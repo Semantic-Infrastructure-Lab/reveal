@@ -31,8 +31,15 @@ from ..utils.results import ResultBuilder, note_truncation
 
 logger = logging.getLogger(__name__)
 
-DIAGNOSTIC_CUT_HINT = ('Overview diagnostic samples contain at most 50 details; use imports://FILE '
-                       'or reveal FILE for a named source when available.')
+# Reader terms for the cut-list note: the fields are internal key paths (map.metadata.files_failed,
+# meta.warnings.0.files), and the old hint's 'at most 50' beside 'showing 5' read as a contradiction
+# of its own cap (BACK-2537).
+DIAGNOSTIC_CUT_HINT = 'imports:// on the same path with --format json names every file'
+_DIAGNOSTIC_LABELS = {'files': 'files named in diagnostics', 'directories': 'directories named in diagnostics'}
+
+
+def _diagnostic_label(key: str) -> str:
+    return _DIAGNOSTIC_LABELS.get(key, 'diagnostic details')
 
 
 def without_internal_filter_warnings(meta: Optional[RevealMeta]) -> List[WarningEntry]:
@@ -223,12 +230,13 @@ def _navigation_exclusions(path: Path, requested: List[str]) -> List[str]:
 
 
 def _cut_sequence(result: dict, holder: dict, key: str, field: str, limit: int,
-                  *, total: Optional[int] = None) -> None:
+                  *, total: Optional[int] = None, label_key: Optional[str] = None) -> None:
     values = holder.get(key)
     if isinstance(values, list):
         known = len(values) if total is None else total
         holder[key] = values[:limit]
-        note_truncation(result, field, len(holder[key]), known, 'auto_cap', hint=DIAGNOSTIC_CUT_HINT)
+        note_truncation(result, field, len(holder[key]), known, 'auto_cap', hint=DIAGNOSTIC_CUT_HINT,
+                        label=_diagnostic_label(label_key or key))
 
 
 def _bound_nested_details(result: dict, value: Any, field: str, limit: int) -> None:
@@ -252,13 +260,13 @@ def _bound_details(result: dict, top: int) -> None:
         metadata = facts['metadata']
         for key in ('files_failed', 'files_lost'):
             _cut_sequence(result, metadata, key, f'map.metadata.{key}', limit,
-                          total=metadata[key + '_count'])
+                          total=metadata[key + '_count'], label_key='files')
         diagnostics = metadata['extraction_diagnostics']
         metadata['extraction_diagnostics_count'] = len(diagnostics)
         metadata['extraction_diagnostics'] = dict(sorted(diagnostics.items())[:limit])
         note_truncation(result, 'map.metadata.extraction_diagnostics',
                         len(metadata['extraction_diagnostics']), len(diagnostics), 'auto_cap',
-                        hint=DIAGNOSTIC_CUT_HINT)
+                        hint=DIAGNOSTIC_CUT_HINT, label=_diagnostic_label('files'))
         _bound_nested_details(result, metadata['extraction_diagnostics'],
                               'map.metadata.extraction_diagnostics', limit)
     # Existing owners supply a fixed set of category records. Retain every category,

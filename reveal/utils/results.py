@@ -247,7 +247,8 @@ def execution_exit_code(facts: ExecutionFacts, *, fail_on: Literal['none', 'find
 
 
 def note_truncation(result: Any, field: str, shown: int, total: int,
-                    cause: str, hint: Optional[str] = None, exact: bool = True) -> None:
+                    cause: str, hint: Optional[str] = None, exact: bool = True,
+                    label: Optional[str] = None) -> None:
     """Record that ``result[field]`` holds ``shown`` of ``total`` items (BACK-1059).
 
     This is the one way to say a list was cut. It writes one ``meta.warnings`` entry per
@@ -266,6 +267,9 @@ def note_truncation(result: Any, field: str, shown: int, total: int,
     (BACK-1547). git:// walks history until it holds one commit past ``?limit``; it knows
     more exist, not how many, and says "showing 50 of 51+". When two cuts of one field
     merge, the larger total wins, and on a tie the exact one does.
+
+    ``label`` names the list in reader terms for the message when ``field`` is an internal key
+    path (``meta.warnings.0.files``); the entry keeps ``field`` for JSON consumers (BACK-2537).
     """
     if shown >= total:
         return
@@ -284,8 +288,11 @@ def note_truncation(result: Any, field: str, shown: int, total: int,
         total, exact = max((total, exact), (entry['total'], entry.get('exact', True)))
     if hint is None:
         hint = _TRUNCATION_HINTS.get(cause, '')
+    label = label or entry.get('label')
+    if label:
+        entry['label'] = label
     entry.update(shown=shown, total=total, exact=exact, cause=cause,
-                 message=_truncation_message(field, shown, total, hint, exact))
+                 message=_truncation_message(label or field, shown, total, hint, exact))
 
 
 def relabel_truncations(result: Any, field: str, hint: str) -> None:

@@ -393,7 +393,7 @@ apply after this legacy outcome handling:
 |---|---|---|---|
 | `failed` | a non-empty top-level `error` string | 1 | `ResultBuilder.create_error(...)` |
 | `not_applicable` | `applicable: false` plus a `reason` | 0 | `raise NotApplicableError(reason)` |
-| `truncated` | a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "exact", "cause", "message"}` per cut list | 0 | `note_truncation(result, field, shown, total, cause)` |
+| `truncated` | a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "exact", "cause", "message"}` (plus `label` when named in reader terms) per cut list | 0 | `note_truncation(result, field, shown, total, cause)` |
 | `ok` | none of these; an empty answer is still `ok` | 0 | `ResultBuilder.create(...)` |
 
 - **Return the error; don't exit or print it.** The router prints `Error (<scheme>://): <error>`
@@ -418,7 +418,9 @@ apply after this legacy outcome handling:
   (`cause`: `limit`, `auto_cap`, `max_items`, `head`, `tail`, `range`). The router records
   its own `--max-items`/`--head` cuts the same way and prints every cut once, after the
   render: `⚠ Truncated <field>: showing N of M — <how to see more>` on stdout for text, on
-  stderr for grep. A `?sort=` that did not apply is recorded and printed the same way: a
+  stderr for grep. When `field` is an internal key path, pass `label=` to name the list in
+  reader terms; the entry keeps `field` and gains `label`, and text prints one note per label
+  (the smallest sample) when several fields hold one list. A `?sort=` that did not apply is recorded and printed the same way: a
   `meta.warnings` entry `unknown_sort_field` (no result has the field) or `sort_failed`
   (json:// values that do not compare), `RESULT_CONTROL_WARNINGS` in `utils/results.py`.
   Renderers leave these warnings alone. An adapter that shows a

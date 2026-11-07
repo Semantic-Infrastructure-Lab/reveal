@@ -999,6 +999,20 @@ def print_result_control_notes(result: dict, output_format: str) -> None:
         return
     stream = sys.stdout if output_format == 'text' else sys.stderr
     print(file=stream)
-    for entry in notes:
+    for entry in _one_note_per_list(notes):
         prefix = 'Truncated ' if entry['type'] == 'truncated' else ''
         print(f"⚠ {prefix}{entry['message']}", file=stream)
+
+
+def _one_note_per_list(notes: list) -> list:
+    """One note per list the reader sees. Cuts that share a ``label`` (``note_truncation``) are one
+    reader-visible list held in several fields (overview's per-file diagnostics: three lines in
+    internal key paths for one list of 13 files, BACK-2537); the smallest sample is the one the
+    text shows. Unlabelled notes print once per distinct message."""
+    chosen: dict = {}
+    for entry in notes:
+        key = ('label', entry['label']) if entry.get('label') else ('message', entry['type'], entry['message'])
+        held = chosen.get(key)
+        if held is None or entry.get('shown', 0) < held.get('shown', 0):
+            chosen[key] = entry
+    return list(chosen.values())
