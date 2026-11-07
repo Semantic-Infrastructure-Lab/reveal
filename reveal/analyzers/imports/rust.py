@@ -12,13 +12,14 @@ Benefits:
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import FrozenSet, List, Set, Optional, Tuple
+from typing import Callable, Dict, FrozenSet, Iterator, List, Set, Optional, Tuple
 from ...core import node_children as _children, node_prev_sibling as _prev_sibling
 from ...core.node_taxonomy import edge_scope
 from ...core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
 
+from .packages import EMPTY_PACKAGES, PackageModel, PackageUnit
 from .types import ImportStatement
 from ...utils.request_cache import register_request_cache
 from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
@@ -130,6 +131,7 @@ class RustExtractor(LanguageExtractor):
 
     extensions = {'.rs'}
     language_name = 'Rust'
+    package_manifests = ('Cargo.toml',)
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all use declarations from Rust file using tree-sitter.
@@ -522,17 +524,40 @@ class RustExtractor(LanguageExtractor):
 
         return None
 
+    def package_units(self, manifests: List[Path], files: List[Path],
+                      on_error: Callable[[OSError], None]) -> List[PackageUnit]:
+        """Each Cargo package: its library crate, its targets' root directories and its path
+        dependencies, workspace-inherited ones included (BACK-2549)."""
+        return _cargo_units(manifests, files, on_error)
+
+    def resolve_import_targets(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+        packages: Optional[PackageModel] = None,
+    ) -> List[Path]:
+        primary = self.resolve_import(stmt, base_path, search_paths=search_paths, packages=packages)
+        return [primary] if primary is not None else []
+
     def resolve_import(
         self,
         stmt: ImportStatement,
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> Optional[Path]:
         """Resolve Rust use statement to file path.
 
         Args:
             stmt: Import statement to resolve
             base_path: Directory of the file containing the import
+            packages: The scan's package model (BACK-2559). Where it read the file's Cargo.toml,
+                the manifest decides: ``crate::`` starts at the root of the target the file belongs
+                to (a ``[[bin]]`` at ``crates/core/main.rs``, a ``tests/`` integration test), and a
+                bare crate name that is the package's own library or one of its path dependencies
+                resolves into that crate, its root file counting (BACK-2549). Elsewhere (no model,
+                or a file outside every manifest it read) the ``src/`` convention below applies.
 
         Returns:
             Absolute path to the module file, or None if not resolvable
@@ -544,6 +569,10 @@ class RustExtractor(LanguageExtractor):
         - External crates: std, external dependencies (skip for cycles)
         - Module file: either name.rs or name/mod.rs
         """
+        model = packages or EMPTY_PACKAGES
+        directory = base_path.resolve()
+        if model.owns(directory):
+            return self._resolve_in_package(stmt, base_path, directory, model)
         use_path = stmt.module_name
 
         # Skip external crates (don't start with crate/super/self)
@@ -573,6 +602,26 @@ class RustExtractor(LanguageExtractor):
             return self._resolve_from_dir(use_path[6:], base_path)  # Remove 'self::'
 
         return None
+
+    def _resolve_in_package(self, stmt: ImportStatement, base_path: Path, directory: Path,
+                            model: PackageModel) -> Optional[Path]:
+        """Resolution where the package model read the file's manifest (see :meth:`resolve_import`)."""
+        head, _, rest = stmt.module_name.lstrip(':').partition('::')
+        if head in ('crate', 'super', 'self'):
+            root = model.target_root_for(directory / Path(stmt.file_path).name)
+            if root is None:
+                return None
+            if head == 'crate':
+                return self._resolve_from_root(rest, root)
+            if head == 'super':
+                return self._resolve_super(rest, base_path)
+            return self._resolve_from_dir(rest, base_path)
+        unit = model.named_unit(directory, head)
+        if unit is None or unit.library_root is None:
+            return None
+        # A crate root's child modules sit beside it; an item at the root resolves to the root file.
+        parts = [part for part in rest.split('::') if part]
+        return self._deepest_module_match(parts, unit.library_root.parent) or unit.library_root
 
     def is_structural_edge(self, from_file: Path, to_file: Path) -> bool:
         """A module and an ancestor or descendant module in its own tree (BACK-2129).
@@ -778,6 +827,116 @@ def _rust_crate_inventory(crate_root: Path) -> Tuple[FrozenSet[str], FrozenSet[s
         external.update(table_external)
 
     return frozenset(local), frozenset(external)
+
+
+# ---------------------------------------------------------------------------
+# BACK-2549/2559: Cargo manifests as package units of the scan's package model. Cargo's own rules: a
+# target's root file is its `path` or the conventional one (src/lib.rs; src/main.rs and src/bin/;
+# tests/, examples/, benches/, each also as `<dir>/<name>/main.rs`; build.rs), auto-discovery can be
+# switched off per kind, and a dependency is in-tree when it has a `path`, written in place or inherited
+# from the workspace root's [workspace.dependencies] with `workspace = true`.
+# ---------------------------------------------------------------------------
+
+_CARGO_TARGET_TABLES = ('bin', 'test', 'example', 'bench')
+_CARGO_AUTO_DIRS = (('autobins', ('src', 'bin')), ('autotests', ('tests',)),
+                    ('autoexamples', ('examples',)), ('autobenches', ('benches',)))
+_CARGO_DEPENDENCY_TABLES = ('dependencies', 'dev-dependencies', 'build-dependencies')
+
+
+def _read_cargo(manifest: Path, on_error: Callable[[OSError], None]) -> Optional[dict]:
+    """A parsed Cargo.toml; None when it cannot be read (reported) or is not TOML (Cargo rejects it too,
+    so it declares nothing)."""
+    try:
+        with open(manifest, 'rb') as f:
+            return tomllib.load(f)
+    except OSError as error:
+        on_error(error)
+    except ValueError:  # TOMLDecodeError, or bytes that are not UTF-8
+        pass
+    return None
+
+
+def _cargo_units(manifests: List[Path], files: List[Path], on_error: Callable[[OSError], None]) -> List[PackageUnit]:
+    docs = {m: doc for m in manifests if (doc := _read_cargo(m, on_error)) is not None}
+    # `<dir>/<name>/main.rs` is its own target root; the scanned files say where such roots are
+    main_dirs = {f.resolve().parent for f in files if f.name == 'main.rs'}
+    units = []
+    for manifest, doc in docs.items():
+        package = doc.get('package')
+        if isinstance(package, dict) and isinstance(package.get('name'), str):
+            units.append(_cargo_unit(manifest, doc, package, docs, main_dirs))
+    return units
+
+
+def _cargo_unit(manifest: Path, doc: dict, package: dict, docs: Dict[Path, dict], main_dirs: Set[Path]) -> PackageUnit:
+    package_dir = manifest.parent
+    lib_table = doc.get('lib')
+    lib: dict = lib_table if isinstance(lib_table, dict) else {}
+    if isinstance(lib.get('path'), str):
+        library_root: Optional[Path] = (package_dir / lib['path']).resolve()
+    else:
+        default = package_dir / 'src' / 'lib.rs'
+        library_root = default if default.is_file() else None
+    name = lib['name'] if isinstance(lib.get('name'), str) else package['name']
+    return PackageUnit(manifest, name.replace('-', '_'), library_root,
+                       _cargo_target_roots(package_dir, doc, package, library_root, main_dirs),
+                       tuple(sorted(set(_cargo_local_dependencies(package_dir, doc, docs)))))
+
+
+def _cargo_target_roots(package_dir: Path, doc: dict, package: dict, library_root: Optional[Path],
+                        main_dirs: Set[Path]) -> Tuple[Path, ...]:
+    """The root-module directory of every target the manifest declares or Cargo discovers."""
+    roots = {package_dir / 'src'}
+    if library_root is not None:
+        roots.add(library_root.parent)
+    for table in _CARGO_TARGET_TABLES:
+        entries = doc.get(table)
+        for entry in entries if isinstance(entries, list) else ():
+            if isinstance(entry, dict) and isinstance(entry.get('path'), str):
+                roots.add((package_dir / entry['path']).resolve().parent)
+    for flag, parts in _CARGO_AUTO_DIRS:
+        if package.get(flag, True) is not False:
+            auto = package_dir.joinpath(*parts)
+            roots.add(auto)
+            roots.update(d for d in main_dirs if d.parent == auto)
+    build = package.get('build')
+    if isinstance(build, str):
+        roots.add((package_dir / build).resolve().parent)
+    elif build is not False and (package_dir / 'build.rs').is_file():
+        roots.add(package_dir)
+    return tuple(sorted(roots))
+
+
+def _cargo_local_dependencies(package_dir: Path, doc: dict, docs: Dict[Path, dict]) -> Iterator[Tuple[str, Path]]:
+    """(name as code spells it, the dependency's manifest) for each path dependency, the target-specific
+    tables included."""
+    tables = [doc.get(name) for name in _CARGO_DEPENDENCY_TABLES]
+    targets = doc.get('target')
+    for platform in (targets.values() if isinstance(targets, dict) else ()):
+        if isinstance(platform, dict):
+            tables += [platform.get(name) for name in _CARGO_DEPENDENCY_TABLES]
+    workspace = _cargo_workspace_dependencies(package_dir, docs)
+    for table in tables:
+        for key, spec in (table.items() if isinstance(table, dict) else ()):
+            if not isinstance(spec, dict):
+                continue
+            base, path = package_dir, spec.get('path')
+            if path is None and spec.get('workspace') is True and workspace is not None:
+                inherited = workspace[1].get(key)
+                base, path = workspace[0], inherited.get('path') if isinstance(inherited, dict) else None
+            if isinstance(path, str):
+                yield key.replace('-', '_'), (base / path / 'Cargo.toml').resolve()
+
+
+def _cargo_workspace_dependencies(package_dir: Path, docs: Dict[Path, dict]) -> Optional[Tuple[Path, dict]]:
+    """The nearest workspace root at or above the package (read among ``docs``) and its
+    ``[workspace.dependencies]``."""
+    for directory in (package_dir, *package_dir.parents):
+        workspace = docs.get(directory / 'Cargo.toml', {}).get('workspace')
+        if isinstance(workspace, dict):
+            dependencies = workspace.get('dependencies')
+            return directory, dependencies if isinstance(dependencies, dict) else {}
+    return None
 
 
 # Backward compatibility: Keep old function-based API

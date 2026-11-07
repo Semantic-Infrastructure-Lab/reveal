@@ -319,6 +319,24 @@ def test_rust_aliased_use_list_item_is_an_edge(tmp_path):
 
 
 # BACK-2549: crate roots and in-tree crate names come from cargo metadata, files from rustc's module tree.
+@needs_cargo
+def test_rust_oracle_reads_every_cargo_shape_and_reveal_agrees(tmp_path):
+    """[[bin]]/[[test]] roots outside src/, a workspace-inherited and a renamed path dependency, the own
+    library from an integration test: the edges the engine test fixes, scored end to end."""
+    from test_rust_package_model_back2549 import EXPECTED, WORKSPACE
+    files = {rel: textwrap.dedent(text).lstrip() for rel, text in WORKSPACE.items()}
+    root, entry = _repo(tmp_path, files, {'oracle': 'rust-cargo', 'importer_dirs': ['.']})
+    edges, coverage = _build(root, entry)
+    by_importer = {}
+    for target, importers in edges.items():
+        for importer in importers:
+            by_importer.setdefault(importer, set()).add(target)
+    assert by_importer == EXPECTED
+    assert coverage['packages'] == 4 and coverage['manifests_failed'] == 0 and coverage['unscored_importers'] == 0
+    measured = gate.measure(entry, root)
+    assert measured['recall'] == measured['precision'] == 1
+
+
 RUST_TREE = {
     'Cargo.toml': '[package]\nname = "tree"\nversion = "0.1.0"\nedition = "2021"\n',
     'src/lib.rs': ('mod a;\nmod b;\nmod c;\n// mod commented;\n/* mod /* nested */ hidden; */\n'

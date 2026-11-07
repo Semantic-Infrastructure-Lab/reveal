@@ -303,21 +303,84 @@
     }
   },
   "rust-ripgrep": {
-    "oracle": "rust-use",
+    "oracle": "rust-cargo",
     "sha": "3fce3b5bb0236da2df6d99672afb8a719642eca7",
-    "targets": 46,
-    "oracle_edges": 100,
-    "hit_edges": 100,
+    "targets": 72,
+    "oracle_edges": 177,
+    "hit_edges": 171,
     "extra_edges": 0,
-    "recall": 1.0,
+    "recall": 0.9661016949152542,
     "precision": 1.0,
     "coverage": {
       "files": 110,
-      "use_statements": 428,
-      "local_paths": 484
+      "unscored_importers": 0,
+      "packages": 12,
+      "crate_roots": 21,
+      "manifests_failed": 0,
+      "use_statements": 411,
+      "local_paths": 399,
+      "anchor_item_paths": 122,
+      "bare_local_paths": 3
     },
     "partial_files": 0,
-    "differences": []
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
+    "differences": [
+      {
+        "target": "crates/core/index/disabled.rs",
+        "missed": [
+          "crates/core/index/mod.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/core/index/enabled.rs",
+        "missed": [
+          "crates/core/index/mod.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/ignore/src/lib.rs",
+        "missed": [
+          "crates/ignore/src/dir.rs",
+          "crates/ignore/src/incremental.rs",
+          "crates/ignore/src/walk.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/searcher/src/sink.rs",
+        "missed": [
+          "crates/searcher/examples/search-stdin.rs"
+        ],
+        "extra": []
+      }
+    ],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 72,
+      "observed_targets": 70,
+      "observed_pairs": 171,
+      "scored_pairs": 171,
+      "unscored_targets": 0,
+      "unscored_pairs": 0,
+      "unscored_target_paths": [],
+      "unscored_target_paths_unavailable": 0
+    }
   },
   "java-guava": {
     "oracle": "java-jls",
@@ -477,21 +540,213 @@
     }
   },
   "rust": {
-    "oracle": "rust-use",
+    "oracle": "rust-cargo",
     "sha": "17758dce3fcc21d8e2415176c29d1106e905de00",
-    "targets": 305,
-    "oracle_edges": 1491,
-    "hit_edges": 1491,
-    "extra_edges": 0,
-    "recall": 1.0,
-    "precision": 1.0,
+    "targets": 346,
+    "oracle_edges": 2268,
+    "hit_edges": 2225,
+    "extra_edges": 26,
+    "recall": 0.9810405643738977,
+    "precision": 0.9884495779653487,
     "coverage": {
       "files": 702,
-      "use_statements": 6215,
-      "local_paths": 4443
+      "unscored_importers": 26,
+      "packages": 27,
+      "crate_roots": 45,
+      "manifests_failed": 0,
+      "use_statements": 6202,
+      "local_paths": 4637,
+      "anchor_item_paths": 1379,
+      "bare_local_paths": 336
     },
     "partial_files": 0,
-    "differences": []
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
+    "differences": [
+      {
+        "target": "crates/dump/src/lib.rs",
+        "missed": [
+          "crates/dump/src/reader/mod.rs",
+          "crates/dump/src/writer.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/filter-parser/src/lib.rs",
+        "missed": [
+          "crates/filter-parser/src/value.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/meilisearch/src/search/federated/proxy.rs",
+        "missed": [
+          "crates/meilisearch/src/routes/indexes/facet_search.rs",
+          "crates/meilisearch/src/routes/multi_search.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/meilisearch/src/search/ranking_rules.rs",
+        "missed": [
+          "crates/meilisearch/src/search/federated/perform.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/milli/src/index.rs",
+        "missed": [],
+        "extra": [
+          "crates/milli/src/search/facet/facet_distribution.rs",
+          "crates/milli/src/search/facet/filter/tests.rs",
+          "crates/milli/src/search/new/matches/matching_words.rs",
+          "crates/milli/src/search/new/matches/mod_test.rs",
+          "crates/milli/src/search/new/query_term/parse_query.rs",
+          "crates/milli/src/search/new/tests/attribute_fid.rs",
+          "crates/milli/src/search/new/tests/cutoff.rs",
+          "crates/milli/src/search/new/tests/distinct.rs",
+          "crates/milli/src/search/new/tests/exactness.rs",
+          "crates/milli/src/search/new/tests/geo_sort.rs",
+          "crates/milli/src/search/new/tests/language.rs",
+          "crates/milli/src/search/new/tests/ngram_split_words.rs",
+          "crates/milli/src/search/new/tests/proximity.rs",
+          "crates/milli/src/search/new/tests/proximity_typo.rs",
+          "crates/milli/src/search/new/tests/sort.rs",
+          "crates/milli/src/search/new/tests/stop_words.rs",
+          "crates/milli/src/search/new/tests/typo.rs",
+          "crates/milli/src/search/new/tests/typo_proximity.rs",
+          "crates/milli/src/search/new/tests/word_position.rs",
+          "crates/milli/src/search/new/tests/words_tms.rs",
+          "crates/milli/src/update/clear_documents.rs",
+          "crates/milli/src/update/facet/bulk.rs",
+          "crates/milli/src/update/index_documents/mod_test.rs",
+          "crates/milli/src/update/new/indexer/document_deletion.rs",
+          "crates/milli/src/update/test_settings.rs"
+        ]
+      },
+      {
+        "target": "crates/milli/src/search/new/interner.rs",
+        "missed": [
+          "crates/milli/src/search/new/matches/matching_words.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/milli/src/test_index.rs",
+        "missed": [
+          "crates/milli/src/search/facet/facet_distribution.rs",
+          "crates/milli/src/search/facet/filter/tests.rs",
+          "crates/milli/src/search/mod.rs",
+          "crates/milli/src/search/new/matches/matching_words.rs",
+          "crates/milli/src/search/new/matches/mod_test.rs",
+          "crates/milli/src/search/new/query_term/parse_query.rs",
+          "crates/milli/src/search/new/tests/attribute_fid.rs",
+          "crates/milli/src/search/new/tests/cutoff.rs",
+          "crates/milli/src/search/new/tests/distinct.rs",
+          "crates/milli/src/search/new/tests/exactness.rs",
+          "crates/milli/src/search/new/tests/geo_sort.rs",
+          "crates/milli/src/search/new/tests/language.rs",
+          "crates/milli/src/search/new/tests/ngram_split_words.rs",
+          "crates/milli/src/search/new/tests/proximity.rs",
+          "crates/milli/src/search/new/tests/proximity_typo.rs",
+          "crates/milli/src/search/new/tests/sort.rs",
+          "crates/milli/src/search/new/tests/stop_words.rs",
+          "crates/milli/src/search/new/tests/typo.rs",
+          "crates/milli/src/search/new/tests/typo_proximity.rs",
+          "crates/milli/src/search/new/tests/word_position.rs",
+          "crates/milli/src/search/new/tests/words_tms.rs",
+          "crates/milli/src/update/clear_documents.rs",
+          "crates/milli/src/update/facet/bulk.rs",
+          "crates/milli/src/update/index_documents/mod_test.rs",
+          "crates/milli/src/update/new/indexer/document_deletion.rs",
+          "crates/milli/src/update/test_settings.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/milli/src/update/new/channel.rs",
+        "missed": [
+          "crates/milli/src/update/new/indexer/extract.rs",
+          "crates/milli/src/update/new/indexer/write.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/milli/src/update/new/document_change.rs",
+        "missed": [
+          "crates/milli/src/update/new/indexer/document_changes.rs",
+          "crates/milli/src/update/new/indexer/document_operation.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/milli/src/update/new/extract/cache.rs",
+        "missed": [
+          "crates/milli/src/update/new/extract/faceted/extract_facets.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/milli/src/update/new/extract/geo/cellulite.rs",
+        "missed": [
+          "crates/milli/src/update/new/indexer/extract.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/milli/src/update/new/steps.rs",
+        "missed": [
+          "crates/milli/src/update/new/indexer/extract.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "crates/milli/src/update/new/thread_local.rs",
+        "missed": [
+          "crates/milli/src/update/new/indexer/extract.rs"
+        ],
+        "extra": []
+      },
+      {
+        "target": "external-crates/async-openai/src/lib.rs",
+        "missed": [],
+        "extra": [
+          "crates/meilisearch/src/routes/chats/errors.rs"
+        ]
+      },
+      {
+        "target": "external-crates/reqwest-eventsource/src/lib.rs",
+        "missed": [
+          "crates/meilisearch/src/routes/chats/errors.rs",
+          "external-crates/async-openai/src/lib.rs"
+        ],
+        "extra": []
+      }
+    ],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 346,
+      "observed_targets": 342,
+      "observed_pairs": 2251,
+      "scored_pairs": 2251,
+      "unscored_targets": 0,
+      "unscored_pairs": 0,
+      "unscored_target_paths": [],
+      "unscored_target_paths_unavailable": 0
+    }
   },
   "javascript": {
     "oracle": "typescript-compiler",

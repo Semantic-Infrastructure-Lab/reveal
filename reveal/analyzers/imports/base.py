@@ -18,6 +18,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable, Iterable, List, Set, ClassVar, Optional, Tuple, Type, Dict
 
+from .packages import PackageModel, PackageUnit
 from .types import ImportExtraction, ImportStatement, restamp_file_path
 from ...core import disk_cache
 from ...registry import get_analyzer
@@ -233,6 +234,22 @@ def nearest_marker_dir(start: Path, marker: str) -> Optional[Path]:
     return search_parents_within_ceiling(start.resolve(), lambda d: (d / marker).exists())
 
 
+def marker_ancestry(start: Path, marker: str) -> List[Path]:
+    """Every directory at or above *start* holding *marker*, nearest first, under the same
+    ceiling as :func:`nearest_marker_dir` (a Cargo workspace root sits above its members)."""
+    found: List[Path] = []
+    directory = nearest_marker_dir(start, marker)
+    while directory is not None:
+        found.append(directory)
+        directory = nearest_marker_dir(directory.parent, marker) if directory.parent != directory else None
+    return found
+
+
+def get_package_manifests() -> Set[str]:
+    """Every manifest file name a registered language reads its package model from (BACK-2559)."""
+    return {name for cls in _EXTRACTOR_REGISTRY.values() for name in cls.package_manifests}
+
+
 def build_project_namespaces(files: List[Path]) -> Set[str]:
     """Declared packages/namespaces across every namespace-resolved file in
     a scan (BACK-547/BACK-1234): the inventory
@@ -305,6 +322,9 @@ class LanguageExtractor(ABC):
     # file's extractor sets them.
     excludes_type_checking: ClassVar[bool] = False
     package_marker: ClassVar[Optional[str]] = None
+    # The manifest file names this language's package units are read from (``package_units``, BACK-2559).
+    # Empty: the language has no package model, and ``packages`` reaches its resolution as unused.
+    package_manifests: ClassVar[Tuple[str, ...]] = ()
 
     def __init__(self) -> None:
         # Set by _get_tree_analyzer() when a file this extractor claims to
@@ -499,11 +519,19 @@ class LanguageExtractor(ABC):
         """
         return False
 
+    def package_units(self, manifests: List[Path], files: List[Path],
+                      on_error: Callable[[OSError], None]) -> List[PackageUnit]:
+        """The package units ``manifests`` declare (each named in ``package_manifests``, resolved, sorted),
+        for the scan whose source files of this language are ``files``. A manifest that cannot be read is
+        handed to ``on_error`` and declares nothing; one that does not say something leaves it unknown."""
+        return []
+
     def resolve_import_targets(
         self,
         stmt: ImportStatement,
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> List[Path]:
         """Resolve an import statement to *all* files it depends on.
 
@@ -516,7 +544,8 @@ class LanguageExtractor(ABC):
         Default implementation wraps :meth:`resolve_import` in a one-element
         list (or empty), so languages without multi-target imports need no
         override. Python overrides this to add ``from pkg import submodule``
-        edges.
+        edges. ``packages`` is the scan's package model (BACK-2559); a language
+        with ``package_manifests`` reads it, every other ignores it.
         """
         primary = self.resolve_import(stmt, base_path, search_paths=search_paths)
         return [primary] if primary is not None else []

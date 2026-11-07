@@ -56,6 +56,7 @@ Read "Behavior changes" first. Commands now agree on exit codes: `2` means what 
 ### Fixed
 
 **Wrong or silent answers**
+- Rust: `imports` now resolves a workspace crate named bare, such as `use grep_matcher::Matcher`, to that crate's files. This covers a path dependency (also one inherited with `workspace = true` or renamed with `package =`) and the package's own library used from an integration test. It also resolves `crate::` paths in a target outside `src/`, such as a `[[bin]]` or `[[test]]` path. Before, each such crate's `lib.rs` read 0 importers with no warning; on one 27-package workspace, 1,732 such statements resolved, none before (BACK-2549, BACK-2559).
 - Zig now reads correctly on `tree-sitter-language-pack` 1.25.0. With its new grammar reveal found almost no Zig functions (383 of 6,731 on Ghostty) and printed empty outlines with exit 0. Zig `for` loops used as expressions now count toward complexity (BACK-2539, BACK-2540).
 - A TypeScript decorator before `export class` now belongs to the class, so Angular and NestJS components and controllers are found by `?decorator=Component`. `contracts://` lists decorators by name (`Component`, `ApiController`) rather than source text (BACK-2535, BACK-2263).
 - A Go method on a generic receiver (`func (s St[K]) Len()`) now belongs to its type in the outline and `reveal FILE St.Len` finds it (BACK-1682).

@@ -27,6 +27,7 @@ from ...core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
 
+from .packages import PackageModel
 from .types import ImportStatement
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .resolver import resolve_python_import, resolve_python_from_import_submodules
@@ -460,6 +461,7 @@ class PythonExtractor(LanguageExtractor):
         stmt: ImportStatement,
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> List[Path]:
         """All files a Python import statement depends on (BACK-542).
 

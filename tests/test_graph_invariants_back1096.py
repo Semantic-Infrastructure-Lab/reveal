@@ -434,6 +434,39 @@ def test_package_wildcards_red_when_the_disclosure_disagrees_with_the_listing(jv
     assert row['status'] == 'red', row
 
 
+@pytest.fixture
+def cargo_workspace(tmp_path):
+    """BACK-2549's workspace: crates named bare as path dependencies, inherited, renamed and own-library."""
+    from test_rust_package_model_back2549 import write_workspace
+    return write_workspace(tmp_path / 'ws')
+
+
+def test_local_units_resolved_holds_on_the_real_answer(cargo_workspace):
+    view = _answer(cargo_workspace.parent, 'imports://ws?root=ws')
+    row = inv.check_local_units_resolved(view, inv.scan_crate_scopes(cargo_workspace), cargo_workspace)
+    # matcher x3 (workspace-inherited twice, own library once), search (renamed), inner (inherited)
+    assert (row['status'], row['population'], row['packages']) == ('green', 5, 4)
+
+
+def test_local_units_resolved_red_when_a_local_crate_name_has_no_target(cargo_workspace):
+    view = _answer(cargo_workspace.parent, 'imports://ws?root=ws')
+    damaged = copy.deepcopy(view)
+    for stmt in damaged['files']['crates/search/src/lib.rs']:
+        stmt['resolved'] = None
+    row = inv.check_local_units_resolved(damaged, inv.scan_crate_scopes(cargo_workspace), cargo_workspace)
+    assert (row['status'], row['violations']) == ('red', 2)
+    assert {e['module'] for e in row['examples']} == {'matcher::Matcher', 'inner::Deep'}
+
+
+def test_local_units_resolved_reads_each_packages_own_dependencies(cargo_workspace):
+    """A crate the package does not depend on is a local binding of that name, not the crate: out of scope."""
+    scopes = inv.scan_crate_scopes(cargo_workspace)
+    root = cargo_workspace.resolve()
+    assert scopes[root / 'crates/matcher'] == {'matcher'}
+    assert scopes[root] == {'app', 'matcher', 'search'}   # keys as code spells them (renamed); serde is not in-tree
+    assert scopes[root / 'crates/search'] == {'grep_search', 'matcher', 'inner'}
+
+
 def test_package_wildcards_empty_when_no_wildcard_names_a_scanned_package(tmp_path):
     scan = tmp_path / 'p'
     scan.mkdir()

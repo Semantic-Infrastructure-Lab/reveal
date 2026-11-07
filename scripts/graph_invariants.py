@@ -25,6 +25,11 @@ edges stay under that scan; the default view also retains resolved outside-scan 
                       as the directory view, and every row cites a real import: a statement
                       of the default view at that line and module, or (a convention edge) a
                       line of the file naming the constant
+  local_units_resolved  Rust: every statement of the default view that names an in-tree crate bare (``use
+                      grep_matcher::Matcher``, not crate::/self::/super::) is ``resolved``: code that compiles
+                      names a workspace crate its package lists as a dependency, or its own library, and that
+                      crate has a root file. Which in-tree crates each package names is read from the corpus's
+                      Cargo.toml files (crate names, dependency keys), not from Reveal (BACK-2549/2559)
   package_wildcards   JVM corpora (java, kotlin, scala): every unresolved wildcard statement of the default
                       view whose prefix is a package some scanned file declares is counted in the answer's
                       ``edge_rule.package_wildcards`` (statements, importer files, per package), and the
@@ -78,9 +83,10 @@ from imports_fold_snapshot import (UNGATED, _git_head, _representative_file, cor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FORMAT_VERSION = 2
-INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations', 'package_wildcards', 'calls_inverse',
-              'callers_view', 'no_match')
-IMPORT_INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations', 'package_wildcards')
+INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations', 'local_units_resolved', 'package_wildcards',
+              'calls_inverse', 'callers_view', 'no_match')
+IMPORT_INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations', 'local_units_resolved',
+                     'package_wildcards')
 CALLS_INVARIANTS = ('calls_inverse', 'callers_view')
 DEFAULT_TIMEOUT = 1800
 EXAMPLES = 5
@@ -517,6 +523,68 @@ def check_package_wildcards(default_view: Dict[str, Any], packages: Set[str]) ->
     return make_row('package_wildcards', statements, violations, packages=len(want), importer_files=importers)
 
 
+# The languages whose bare import names the manifest makes exact (BACK-2559): Rust's Cargo.toml.
+MANIFEST_EXACT_SUFFIXES = ('.rs',)
+
+
+def _cargo_doc(manifest: Path) -> Dict[str, Any]:
+    import tomllib
+    try:
+        with open(manifest, 'rb') as f:
+            return tomllib.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _crate_name(doc: Dict[str, Any]) -> Optional[str]:
+    for table in (doc.get('lib'), doc.get('package')):
+        if isinstance(table, dict) and isinstance(table.get('name'), str):
+            return table['name'].replace('-', '_')
+    return None
+
+
+def scan_crate_scopes(scan_dir: Path) -> Dict[Path, Set[str]]:
+    """Per Cargo package directory under ``scan_dir``: the in-tree crate names its code may name bare, its own
+    library and every in-tree crate its manifest lists in a dependency table (keys as code spells them)."""
+    docs = {m.parent.resolve(): _cargo_doc(m) for m in sorted(scan_dir.rglob('Cargo.toml'))
+            if 'target' not in m.relative_to(scan_dir).parts}
+    in_tree = {name for doc in docs.values() if (name := _crate_name(doc))}
+    scopes: Dict[Path, Set[str]] = {}
+    for directory, doc in docs.items():
+        if not isinstance(doc.get('package'), dict):
+            continue
+        tables = [doc.get(t) for t in ('dependencies', 'dev-dependencies', 'build-dependencies')]
+        tables += [platform.get(t) for platform in (doc.get('target') or {}).values() if isinstance(platform, dict)
+                   for t in ('dependencies', 'dev-dependencies', 'build-dependencies')]
+        # a key is the name code spells; the crate it names is `package = ...` when renamed
+        keys = {key.replace('-', '_') for table in tables if isinstance(table, dict) for key, spec in table.items()
+                if str(spec.get('package', key) if isinstance(spec, dict) else key).replace('-', '_') in in_tree}
+        own = _crate_name(doc)
+        scopes[directory] = keys | ({own} if own else set())
+    return scopes
+
+
+def check_local_units_resolved(default_view: Dict[str, Any], scopes: Dict[Path, Set[str]],
+                               scan_dir: Path) -> Dict[str, Any]:
+    """Every bare statement of a manifest-exact language whose first segment is an in-tree crate its package
+    names (its own library or a listed dependency) names its target in ``resolved``."""
+    population = 0
+    violations: List[Any] = []
+    for file, stmts in sorted((default_view.get('files') or {}).items()):
+        if not file.endswith(MANIFEST_EXACT_SUFFIXES):
+            continue
+        path = (scan_dir / file).resolve()
+        names = next((scopes[d] for d in path.parents if d in scopes), set())
+        for stmt in stmts:
+            module = str(stmt.get('module') or '')
+            if stmt.get('is_relative') or module.lstrip(':').split('::')[0] not in names:
+                continue
+            population += 1
+            if not stmt.get('resolved'):
+                violations.append({'file': file, 'line': stmt.get('line'), 'module': module})
+    return make_row('local_units_resolved', population, violations, packages=len(scopes))
+
+
 class Requests:
     """Serial public requests for one corpus; keeps a short record of each."""
 
@@ -557,7 +625,7 @@ def run_imports(req: Requests, scan: str, scan_dir: Path, only: Tuple[str, ...],
     fan_in, err2 = req.answer([f'imports://{scan}?rank=fan-in&{pinned}', '--format', 'json'])
     default_view: Optional[Dict[str, Any]] = None
     err3 = None
-    if {'importers_resolved', 'importer_citations', 'package_wildcards'} & set(wanted):
+    if {'importers_resolved', 'importer_citations', 'local_units_resolved', 'package_wildcards'} & set(wanted):
         default_view, err3 = req.answer([f'imports://{scan}?{pinned}', '--format', 'json'])
     rows: List[Dict[str, Any]] = []
     if 'fan_in_total' in wanted:
@@ -572,6 +640,9 @@ def run_imports(req: Requests, scan: str, scan_dir: Path, only: Tuple[str, ...],
             rows.append(error_row('importer_citations', err1 or err3 or ''))
         else:
             rows.append(run_citations(req, scan, scan_dir, importers, default_view, citations))
+    if 'local_units_resolved' in wanted:
+        rows.append(error_row('local_units_resolved', err3 or '') if err3 or default_view is None
+                    else check_local_units_resolved(default_view, scan_crate_scopes(scan_dir), scan_dir))
     if 'package_wildcards' in wanted:
         rows.append(error_row('package_wildcards', err3 or '') if err3 or default_view is None
                     else check_package_wildcards(default_view, scan_declared_packages(scan_dir)

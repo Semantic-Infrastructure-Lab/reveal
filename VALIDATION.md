@@ -58,7 +58,7 @@ measurement. See [Re-running this yourself](#re-running-this-yourself).
 | Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 96.3% (client-go) | ✅ 100%³⁶ (Go compiler internals) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | ✅ 22.05%→100%³⁹ (Discourse, BACK-735 fixed) | **Measured** |
 | Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 82.5% → **92.9%** (tivi, six-category sweep, BACK-727) | ✅ 99.69%→100%⁴² (8/bucket); 99.79%⁴² (20/bucket, tivi, BACK-738 shape 1 fixed & shipped in 0.123.0 — shape 5 SAM labeled-return spillage remains an accepted residual, grammar-level, not fixable in reveal) | **Measured** |
-| Rust | ✅ 100% (Meilisearch, ripgrep⁹) | ✅ 97.4% (Meilisearch) | ✅ 95.27%→100%³⁷ (Meilisearch, BACK-733 fixed) | **Measured** |
+| Rust | ✅ 98.1% (Meilisearch), 96.6% (ripgrep)⁹, full population, cargo oracle | ✅ 97.4% (Meilisearch) | ✅ 95.27%→100%³⁷ (Meilisearch, BACK-733 fixed) | **Measured** |
 | C# | ✅ 100%¹⁹ (Jellyfin), 99.36%¹⁹ (Newtonsoft.Json, BACK-702 fixed) | ✅ 98.3% (Jellyfin) | ✅ 69.74%→100%⁴¹ (Jellyfin, BACK-737 fixed) | **Measured** |
 | PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹²) | ✅ 97.5% (WordPress) | ✅ 98.87%→100%⁴⁰ (WordPress, BACK-736 fixed) | **Measured** |
 | Swift | ✅ 100% of declared targets resolved (Kickstarter iOS — module-index coverage, not an edge-recall ratio), 98.42%¹⁸ (swift-collections, 14,824 edges, BACK-704 fixed) | ✅ 43.3% → **100.0%** (Kickstarter iOS, six-category sweep, BACK-728) | ✅ 97.62%→99.92%⁴³ (8/bucket); 99.79%⁴³ (20/bucket, Signal-iOS, BACK-742 open — two grammar bugs, not fixable in reveal) | **Measured** |
@@ -251,6 +251,25 @@ same shape as BACK-558's, one grouping level deeper — a `use_list` item
 that is itself a nested `scoped_use_list` (`use crate::{a::{x, y}, ...}`,
 ripgrep's dominant `lib.rs` re-export idiom) silently dropped the whole
 nested item, 56.0% → **100%** after the fix.
+
+That oracle and the resolver shared two assumptions (BACK-2549): only
+`crate::`/`super::`/`self::` paths are local, and a crate's modules start at
+`<nearest Cargo.toml>/src`. Both 100% figures therefore left out every
+workspace crate named bare (a path dependency, or the package's own library
+from an integration test) and every target root outside `src/` (ripgrep's
+`[[bin]]` at `crates/core/main.rs`). The `rust-cargo` oracle reads crate roots
+and in-tree dependencies from `cargo metadata` and files from rustc's module
+tree (`mod` declarations, `#[path]`, `use` bindings and globs). Measured with
+it at the manifest pins, after the fix: Meilisearch 2,225/2,268 edges (98.10%),
+26 extra (precision 98.84%), and ripgrep 171/177 (96.61%), 0 extra. Before
+the fix the same oracle measured 60.98% and 57.06%. Every residual edge is a
+resolver gap the old oracle shared. Meilisearch's 43 misses: `#[path]` modules
+26 (`crate::index::tests` is `test_index.rs`; the resolver names `index.rs`,
+which is 25 of the 26 extras), repeated `super::super::` 9, re-exports 4 (an
+edge to the re-exporting module's file instead; the last extra), paths into an
+inline `mod tests { }` 3, and one single-segment `pub use crate_name;` the
+extractor drops. ripgrep's 6: `#[path]` 2 (`#[cfg]` alternatives), inline
+modules 3, a re-export 1.
 
 ¹⁰ Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
 method against a second, unrelated real corpus (celery, 417 files, 185
@@ -1490,7 +1509,8 @@ every sample matched the published target and edge counts.
   ripgrep); a different canonical pin does not establish historical reproduction.
   - Python/celery `17b895ba` (whole repo): 443 files, 186 targets, 1,444/1,444 edges,
     0 extra (100% recall and precision).
-  - Rust/ripgrep `3fce3b5b` (whole repo): 110 files, 46 targets, 100/100 edges, 0 extra.
+  - Rust/ripgrep `3fce3b5b` (whole repo, `rust-cargo` oracle since BACK-2549): 110 files, 177
+    edges, 171 hit (96.61%), 0 extra.⁹
   - Java/guava `786bb1a9` (`guava/src`; `android/` repeats every type): 611 files,
     159 targets, 2,081/2,081 edges, 0 extra.
   - C++/assimp `d334c32f` (`code/`, `include/`): 522 files, 250 targets, 707/707 edges,
@@ -1501,8 +1521,9 @@ every sample matched the published target and edge counts.
     outside the oracle's scope (`test/`, `tools/`, `contrib/`), which the gate excludes.
 
   The same gate also measures two primary corpora at their existing pins, over the full
-  population rather than the published samples: Rust/Meilisearch (702 files, 305
-  targets, 1,491/1,491 edges, 0 extra, matching the published edge count) and
+  population rather than the published samples: Rust/Meilisearch (702 files, 26 of them
+  compiled by no crate and not scored; 2,268 edges, 2,225 hit, 26 extra, under the
+  `rust-cargo` oracle since BACK-2549⁹) and
   Java/Elasticsearch `server/src/main/java` (4,837 files, 3,382 targets, 32,590/32,590
   edges, 25 extra, precision 99.92%). The 25 extras are one class: an import of an
   external type whose simple name matches an in-tree class in another package (for
@@ -1851,7 +1872,7 @@ resolve importers from the project scan root and `<dir>` only limits which files
 is the architecture view (load-time edges only); `?circular` uses it by default, because a
 function-level import runs after every module has loaded and cannot close an import-time
 cycle. Python, PHP, JavaScript, TypeScript, TSX, Rust, Lua, Zig, GDScript and Scala record where an
-import sits (Rust's `rust-use` oracle does not label scope, so Rust `&lazy=exclude`/`only` are not
+import sits (Rust's `rust-cargo` oracle does not label scope, so Rust `&lazy=exclude`/`only` are not
 scored; Lua, Zig and GDScript have no import oracle). Ruby has the
 bounded literal-loader subset described below; remaining unclassified edges are disclosed,
 retained by `exclude` and omitted by `only`.
@@ -2478,7 +2499,7 @@ manifest entry with a `recall:` block names an independent oracle from
 | `gcc-c` | GCC opens each literal quoted include in an isolated probe | Redis, curl |
 | `gcc-cpp` | The same probe as C++ | assimp |
 | `python-ast` | `ast.parse` plus filesystem module resolution; `TYPE_CHECKING` imports skipped | celery, reveal's own tree |
-| `rust-use` | Deepest real module file for `crate::`/`super::`/`self::` use paths | Meilisearch, ripgrep |
+| `rust-cargo` | `cargo metadata` gives crate roots and in-tree dependencies; rustc's module tree (`mod`, `#[path]`, `use` bindings and globs) gives the file of each path's deepest module. Files no crate compiles are left out of the scored population | Meilisearch, ripgrep |
 | `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java` | Elasticsearch `server/src/main/java`, guava |
 | `kotlin-declared` | Text rule: a top-level declaration is indexed under its package whatever the file is named; an explicit import resolves to the declaring file | tivi, kotlinx.coroutines |
 | `scala-declared` | The same rule with chained `package` clauses joined and imports read relative to enclosing packages; each selector-list name and type-member wildcard scored, package wildcards counted | GitBucket `src/main/scala`, cats-effect |
@@ -2511,7 +2532,7 @@ each view, so an importer listed in the wrong view counts as extra. The gate rec
 `edge_rule` each answer prints and refuses an answer computed under another rule. The report's
 `declined` list names the combinations the gate cannot score everywhere, with the reason:
 `lazy=exclude` and `lazy=only` outside the populations whose oracle labels scope (the Rust oracle
-is a regex that cannot tell a function-local `use`, BACK-2079; C, C++, Go, Java and Kotlin have no
+does not label a function-local `use`, BACK-2079; C, C++, Go, Java and Kotlin have no
 function-scope import). `tests=exclude` is scored by default at `lazy=include` for populations
 with independently reviewed `test_importer_dirs` in the corpus manifest. The opt-in gate
 option `--test-lazy` also scores `tests=exclude` with `lazy=exclude` and `lazy=only` when

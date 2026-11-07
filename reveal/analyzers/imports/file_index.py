@@ -89,7 +89,8 @@ def load_path_manifests(root: Path, pattern: str, *,
 
 def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Path]],
                            excluded_root: Optional[Path] = None, *, root: Path,
-                           traversal_failures: Sequence[PathFailure] = ()) -> Optional[str]:
+                           traversal_failures: Sequence[PathFailure] = (),
+                           context: Iterable[Path] = ()) -> Optional[str]:
     """Hash the scan root, source membership and the complete resolution target set (BACK-1755).
     The target set is every indexed file and, when *index* is a :class:`FileIndex`, every
     directory the walk descended, by path alone: a file's stat covers its content, and a
@@ -101,7 +102,9 @@ def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Pat
     as an extra search path, so two roots that walk the same files (``w`` holding only
     ``w/sub``) still resolve differently and must not share an entry (BACK-2082).
     Known traversal loss or stat failure disables caching. Reveal's own cache artifacts are
-    excluded so writing this graph does not invalidate the next read.
+    excluded so writing this graph does not invalidate the next read. *context* names files
+    outside the walk that resolution reads (package manifests above the scan root, BACK-2559),
+    hashed like targets.
     """
     if traversal_failures:
         return None
@@ -109,7 +112,8 @@ def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Pat
         excluded = excluded_root.resolve() if excluded_root is not None else None
         hasher = hashlib.sha256()
         hasher.update(b'root\x01' + str(root).encode('utf-8', 'replace') + b'\x04')
-        groups = (('sources', set(candidates)), ('targets', {p for paths in index.values() for p in paths}))
+        groups = (('sources', set(candidates)), ('targets', {p for paths in index.values() for p in paths}),
+                  ('context', set(context)))
         for role, paths in groups:
             hasher.update(role.encode('ascii'))
             for path in sorted(paths):

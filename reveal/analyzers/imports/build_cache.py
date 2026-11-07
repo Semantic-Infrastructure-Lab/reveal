@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from ...core import disk_cache
 from ...reveal_types import PathFailure
 from ...utils.request_cache import in_host_request, register_request_cache, register_validated_cache
-from .base import get_all_extensions
+from .base import get_all_extensions, get_package_manifests, marker_ancestry
 from .file_index import resolution_fingerprint
 from .types import ImportAnalysis
 
@@ -22,7 +22,15 @@ def _candidate_set_fingerprint(candidates: List[Path],
                                traversal_failures: Sequence[PathFailure] = ()) -> Optional[str]:
     """Shared root/source/target fingerprint; preserve the private source-only call shape."""
     return resolution_fingerprint(candidates, {} if file_index is None else file_index, excluded_root=disk_cache.cache_root(),
-                                  root=root, traversal_failures=traversal_failures)
+                                  root=root, traversal_failures=traversal_failures, context=_context_manifests(root))
+
+
+def _context_manifests(root: Path) -> List[Path]:
+    """The package manifests at and above ``root`` (BACK-2559): the package model reads the ones above
+    the scan root too (a crate's workspace root), and the walk's index cannot see those."""
+    start = root if root.is_dir() else root.parent
+    return [directory / name for name in sorted(get_package_manifests())
+            for directory in marker_ancestry(start, name)]
 
 
 def _graph_cache_key(candidates: List[Path], file_index: Dict[str, List[Path]], root: Path,

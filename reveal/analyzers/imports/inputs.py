@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .base import LanguageExtractor
 from .file_index import discover_import_files
+from .packages import EMPTY_PACKAGES, PackageModel
 from .types import ImportGraph, ImportStatement
 from ...reveal_types import PathFailure
 from ...utils.path_utils import HiddenTally, failure_of
@@ -38,6 +39,7 @@ class ResolutionContext:
     base_path: Path
     search_paths: Tuple[Path, ...]
     file_index: Dict[str, List[Path]]
+    packages: PackageModel = EMPTY_PACKAGES  # the scan's package model (BACK-2559)
 
 
 def discover(scope: ScanScope) -> ImportFileSet:
@@ -75,7 +77,8 @@ def resolve_targets(stmt: ImportStatement, extractor: LanguageExtractor, context
     if getattr(extractor, 'spec', None) is not None:
         primary = resolve_primary(stmt, extractor, context)
         return [primary] if primary else []
-    return extractor.resolve_import_targets(stmt, context.base_path, search_paths=list(context.search_paths))
+    return extractor.resolve_import_targets(stmt, context.base_path, search_paths=list(context.search_paths),
+                                            packages=context.packages)
 
 
 def mark_structural(graph: ImportGraph, extractor: LanguageExtractor, from_file: Path, to_file: Path) -> None:

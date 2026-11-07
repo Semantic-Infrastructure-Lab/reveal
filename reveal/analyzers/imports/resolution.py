@@ -14,9 +14,10 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, cast
 
 from . import inputs as analysis_inputs
-from .base import get_extractor
+from .base import LanguageExtractor, get_extractor, marker_ancestry, nearest_marker_dir
 from .file_index import load_path_manifests
 from .generic import RubyImportExtractor
+from .packages import PackageModel, PackageUnit
 from .types import ImportGraph, ImportStatement
 from .._capability_table import depends_intra_project_classification_supported
 from ...utils.path_utils import (
@@ -214,6 +215,7 @@ class _ResolutionIndices(NamedTuple):
     # parse failure is absent: no evidence either way)
     declared_by_file: Dict[Path, Tuple[str, ...]]
     opened_by_file: Dict[Path, Tuple[str, ...]]  # BACK-2514: packages its clauses open, innermost first
+    packages: PackageModel              # BACK-2559: the scan's package units
 
 
 class ResolutionInputs(NamedTuple):
@@ -224,6 +226,7 @@ class ResolutionInputs(NamedTuple):
     manifest_dirs: List[Tuple[Path, str]]       # BACK-567: explicit-path Package.swift targets
     manifest_target_names: Set[str]             # BACK-669: every declared target name
     load_path_roots: List[Path]                 # BACK-669: gemspec lib/ roots
+    packages: PackageModel                      # BACK-2559: package units from the languages' manifests
 
 
 @dataclass
@@ -401,6 +404,7 @@ class ProjectResolver:
             manifest_dirs=self._build_manifest_module_dirs(files),
             manifest_target_names=self._build_manifest_target_names(files),
             load_path_roots=self._build_load_path_roots(files, scan_root, on_error=self._record_manifest_failure),
+            packages=self._build_package_model(files, on_error=self._record_manifest_failure),
         )
 
     def resolve_entries(self, scan_root: Path, files: List[Path], file_index: Dict[str, List[Path]],
@@ -470,7 +474,7 @@ class ProjectResolver:
         indices = _ResolutionIndices(
             all_imports=[], project_namespaces=set(inputs.manifest_target_names), namespace_index={},
             member_index={}, zeitwerk_index={}, module_index={}, load_path_roots=inputs.load_path_roots,
-            declared_by_file={}, opened_by_file={})
+            declared_by_file={}, opened_by_file={}, packages=inputs.packages)
         for file_path in files:
             entry = entries.get(file_path)
             if entry is None:
@@ -504,6 +508,30 @@ class ProjectResolver:
         """Resolution loss joins graph diagnostics without changing the source census."""
         failure = failure_of(error)
         self.result.traversal_failures += (failure,)
+
+    @staticmethod
+    def _build_package_model(files: List[Path], *, on_error: Callable[[OSError], None]) -> PackageModel:
+        """BACK-2559: the package units of every language among ``files`` that reads manifests
+        (``package_manifests``): the manifest nearest each file's directory, and every one above it (a
+        Cargo workspace root), each read once. Found by climbing from the scanned files, so no extra walk;
+        a manifest above the scan root is in the graph cache key (``build_cache``)."""
+        by_language: Dict[type, Tuple[LanguageExtractor, List[Path]]] = {}
+        for f in files:
+            extractor = get_extractor(f)
+            if extractor is not None and extractor.package_manifests:
+                by_language.setdefault(type(extractor), (extractor, []))[1].append(f)
+        units: List[PackageUnit] = []
+        manifest_dirs: Set[Path] = set()
+        for language, language_files in by_language.values():
+            for marker in language.package_manifests:
+                found: Set[Path] = set()
+                for directory in sorted({f.parent for f in language_files}):
+                    nearest = nearest_marker_dir(directory, marker)
+                    if nearest is not None and nearest not in found:
+                        found.update(marker_ancestry(nearest, marker))
+                manifest_dirs |= found
+                units += language.package_units(sorted(d / marker for d in found), language_files, on_error)
+        return PackageModel(tuple(sorted(units, key=lambda unit: unit.manifest)), tuple(sorted(manifest_dirs)))
 
     @staticmethod
     def _build_load_path_roots(files: List[Path], scan_root: Path, *,
@@ -713,7 +741,8 @@ class ProjectResolver:
         file declares the import's package; otherwise it is another package's same-named class and the
         later stages, which read declarations, decide."""
         targets = analysis_inputs.resolve_targets(
-            stmt, extractor, analysis_inputs.ResolutionContext(base_path, tuple(extra_paths), file_index))
+            stmt, extractor,
+            analysis_inputs.ResolutionContext(base_path, tuple(extra_paths), file_index, indices.packages))
         if getattr(getattr(extractor, 'spec', None), 'check_declared_package', False):
             targets = [t for t in targets if t is None or _declares_import_package(stmt, extractor, t, indices)]
         added = False
