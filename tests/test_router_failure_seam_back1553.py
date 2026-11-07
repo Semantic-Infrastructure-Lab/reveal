@@ -89,7 +89,7 @@ def _run(adapter_class, *, resource='x', element=None, fmt='text', tmp_path=None
 # Each way a query can fail in the router: (id, adapter class, run kwargs, meta.errors code).
 # All exit 1 (a failed legacy result) except an element lookup that finds nothing, an invalid
 # request that exits 2 (D6, plan rule 9; BACK-2521).
-_EXIT_CODE = {'element_none': 2}
+_EXIT_CODE = {'element_none': 2, 'missing_path': 2}  # BACK-2521, BACK-2533: an absent resource is exit 2
 EXITS = [
     ('construct', _adapter('construct'), {}, 'adapter_error'),
     ('base_path', _adapter('reconfigure_base_path'), {'base_path': '/tmp'}, 'adapter_error'),
@@ -98,7 +98,7 @@ EXITS = [
     ('post_process', _adapter('post_process'), {}, 'adapter_error'),
     ('get_element', _adapter('get_element'), {'element': 'alpha'}, 'adapter_error'),
     ('element_none', _adapter('none'), {'element': 'gamma'}, 'element_not_found'),
-    ('missing_path', _adapter(RESOURCE_IS_PATH=True), {'resource': '/no/such/zz_1553'}, 'adapter_error'),
+    ('missing_path', _adapter(RESOURCE_IS_PATH=True), {'resource': '/no/such/zz_1553'}, 'invalid_request'),
 ]
 
 

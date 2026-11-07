@@ -182,19 +182,20 @@ class TestGitAdapterBasics:
             assert 'pip install "reveal-cli[git]"' in str(exc_info.value)
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_adapter_with_invalid_path(self):
+    def test_adapter_with_invalid_path(self, tmp_path):
         """Test error handling for invalid repository path.
 
         BACK-1210: 'not a git repository' is a NotApplicableError (a fact
         about the target, not a failure) -- distinct from ValueError,
         which 'Failed to open' (a genuine corrupt-repo error) still is.
+        BACK-2533: a path that does not exist at all, outside every repository,
+        is a MissingResourceError (an invalid resource, exit 2), not that decline.
         """
-        from reveal.errors import NotApplicableError
-        adapter = GitAdapter(path='/nonexistent/path')
-        with pytest.raises((ValueError, NotApplicableError)) as exc_info:
-            adapter.get_structure()
-
-        assert "Not a git repository" in str(exc_info.value) or "Failed to open" in str(exc_info.value)
+        from reveal.errors import MissingResourceError, NotApplicableError
+        with pytest.raises(NotApplicableError, match='Not a git repository'):
+            GitAdapter(path=str(tmp_path)).get_structure()
+        with pytest.raises(MissingResourceError, match='Path not found'):
+            GitAdapter(path='/nonexistent/path').get_structure()
 
     def test_not_a_git_repo_raises_not_applicable_error(self, tmp_path):
         """BACK-1210: a plain (non-git) directory is a not-applicable

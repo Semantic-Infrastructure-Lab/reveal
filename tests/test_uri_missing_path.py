@@ -52,7 +52,9 @@ def _missing_path_contract(scheme):
         owner = adapters_base.get_adapter_class(scheme)
         select = getattr(owner, 'uri_execution_facts', None)
         adapter = owner if select and select('nonexistent_zz_1321') is not None else None
-    return (2, adapter.RESULT_TYPE) if adapter is not None else (1, scheme)
+    # Exit 2 either way (D6: a path that is not there is an invalid resource); a legacy mode keeps
+    # its own result type. Legacy modes exited 1, the findings code, until BACK-2533.
+    return (2, adapter.RESULT_TYPE) if adapter is not None else (2, scheme)
 
 
 def _missing_path_uri(scheme):

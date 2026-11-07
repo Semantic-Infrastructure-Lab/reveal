@@ -27,6 +27,15 @@ class NavRequestValidationError(RequestValidationError):
     """
 
 
+class MissingResourceError(RequestValidationError):
+    """The resource a request names is not there (a path that does not exist).
+
+    An invalid resource, exit 2 (D6), on a legacy operation too: transports classify this bounded
+    origin without reclassifying other legacy validation failures. git:// raises it for a path that
+    does not exist outside every repository, which answered 'not applicable', exit 0 (BACK-2533).
+    """
+
+
 class TestLayoutValidationError(RequestValidationError):
     """A selected test/support declaration or unsupported adoption is invalid."""
 

@@ -13,7 +13,8 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple, cast
 
-from ...errors import NotApplicableError, RequestValidationError, TestLayoutValidationError, TestLayoutConfigError
+from ...errors import (MissingResourceError, NotApplicableError, RequestValidationError, TestLayoutValidationError,
+                       TestLayoutConfigError)
 from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
@@ -99,7 +100,8 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
         _decline(scheme, resource, e.reason, adapter_class)
     except Exception as e:  # boundary-ok: broad-except -- the router's boundary for every adapter: the query ends as a failed result via _fail, exit 1
         logger.debug('%s:// adapter call raised', scheme, exc_info=True)
-        invalid = isinstance(e, TestLayoutValidationError) or (classify_validation and isinstance(e, RequestValidationError))
+        invalid = (isinstance(e, (TestLayoutValidationError, MissingResourceError))
+                   or (classify_validation and isinstance(e, RequestValidationError)))
         code = 'invalid_request' if invalid else 'adapter_error'
         _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class,
               test_layout_failure=isinstance(e, (TestLayoutValidationError, TestLayoutConfigError)),
@@ -596,9 +598,11 @@ def _reject_missing_path(adapter_class: type, scheme: str, resource: str, *, cla
         return
     if not path or os.path.exists(path):
         return
+    # A path that is not there is an invalid resource, exit 2 (D6, rule 9), for a legacy operation
+    # too, as a legacy element miss already is (BACK-2521): markdown://MISSING exited 1 (BACK-2533).
     # boundary-ok: display-path -- a str the user typed in the URI, never a Path
     _fail(scheme, resource, f"Path not found: {path}", adapter_class=adapter_class,
-          code='invalid_request' if classify_validation else 'adapter_error')
+          code='invalid_request', failure_cause=FailureCause.INVALID_REQUEST)
 
 
 def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],

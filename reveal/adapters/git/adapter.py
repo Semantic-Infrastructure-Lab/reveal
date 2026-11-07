@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Set, Tuple, Union
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from ...errors import NotApplicableError
+from ...errors import MissingResourceError, NotApplicableError
 from ...utils.query import (
     parse_query_filters,
     parse_query_params,
@@ -588,6 +588,11 @@ class GitAdapter(ResourceAdapter):
                 repo_path = pygit2.discover_repository(start)
                 if not repo_path:
                     target = to_posix(os.path.normpath(os.path.join(self.path, self.subpath or '')))
+                    if not os.path.lexists(os.path.join(self.path, self.subpath or '')):
+                        # Not there at all: an invalid resource (exit 2), not a directory outside a
+                        # repository, which keeps its genuine decline. A missing path inside a
+                        # repository is still read at a ref (BACK-2533).
+                        raise MissingResourceError(f"Path not found: {target}")
                     raise NotApplicableError(f"Not a git repository: {target}")
                 self.repo = pygit2.Repository(repo_path)
             except (pygit2.GitError, KeyError) as e:

@@ -132,9 +132,9 @@ def test_queries_keep_source_before_control_validation(files):
 def test_missing_legacy_resource_has_only_the_accepted_diagnostic_delta(files):
     result = run(uri(files / 'missing.json') + '?keys', '--format', 'json')
     answer = json.loads(result.stdout)
-    assert result.returncode == 1 and answer['type'] == 'json'
+    assert result.returncode == 2 and answer['type'] == 'json'  # BACK-2533: an absent path is exit 2
     assert answer['error'] == 'Path not found: ' + (files / 'missing.json').as_posix()
-    assert answer['meta']['errors'][0]['code'] == 'adapter_error'
+    assert answer['meta']['errors'][0]['code'] == 'invalid_request'
 
 
 def test_admission_uses_resource_syntax_before_any_content_load(files, monkeypatch):

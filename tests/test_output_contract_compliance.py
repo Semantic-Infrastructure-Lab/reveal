@@ -1139,13 +1139,17 @@ def test_batch_answers_like_the_uri(harness, scheme):
         select = getattr(owner, 'uri_execution_facts', None)
         qualified = declared or (owner if select and select(uri.partition('://')[2]) is not None else None)
         if qualified is not None and uri == _missing_uri(scheme):
-            # Direct D6 adoption leaves mixed batches on their explicit legacy contract.
+            # Direct D6 adoption leaves mixed batches on their legacy result identity; a missing path is
+            # an invalid request on both (BACK-2533: the batch said adapter_error, exit 1 semantics).
             assert payload['type'] == qualified.RESULT_TYPE
             assert payload['meta']['errors'][0]['code'] == 'invalid_request'
             legacy = copy.deepcopy(payload)
             legacy['type'] = scheme
             legacy['source'] = uri.partition('://')[2]  # legacy router retains original resource spelling
-            legacy['meta']['errors'][0]['code'] = 'adapter_error'
+            if not getattr(owner, 'RESOURCE_IS_PATH', False):
+                # The adapter raises its own 'not found' before the router's path check (metrics,
+                # patches, sqlite): a mixed batch still records that raise as adapter_error.
+                legacy['meta']['errors'][0]['code'] = 'adapter_error'
             assert entry.get('data') == legacy
         elif scheme == 'testability' and payload.get('applicable') is False:
             # Direct D6 identity is fixed; mixed-batch N/A retains its legacy identity.
