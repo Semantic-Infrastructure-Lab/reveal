@@ -29,7 +29,7 @@ Line counts and file totals are deliberately not listed here; they drift.
 | [MCP_SETUP.md](guides/MCP_SETUP.md) | MCP server setup for Claude Code, Cursor, Windsurf |
 | [CI_RECIPES.md](guides/CI_RECIPES.md) | GitHub Actions and GitLab CI YAML: PR review, complexity gate, hotspot tracking, SSL checks |
 | [RECIPES.md](guides/RECIPES.md) | Task-based workflows and multi-adapter patterns |
-| [NAV_GUIDE.md](guides/NAV_GUIDE.md) | Deep-dive code navigation flags: `--boundary`, `--varflow`, `--sideeffects` |
+| [NAV_GUIDE.md](guides/NAV_GUIDE.md) | Deep-dive code navigation flags: `--boundary`, `--varflow`, `--effects` |
 | [UX_GUIDE.md](guides/UX_GUIDE.md) | CLI flags vs URI query parameters: when to use each |
 | [SUBCOMMANDS_GUIDE.md](guides/SUBCOMMANDS_GUIDE.md) | Reference for the subcommands (`check`, `health`, `pack`, `dev`, and the retired names that map to new ones) |
 | [TESTABILITY_GUIDE.md](guides/TESTABILITY_GUIDE.md) | Test patch pressure joined with production boundary fan-out (`reveal patches --view pressure`) |

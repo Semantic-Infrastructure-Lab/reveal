@@ -164,7 +164,7 @@ name-resolution seam. Callees and trace use the same references; callees text la
 `(JSX reference)` and a name that is both called and rendered `(includes JSX reference)`. Callers text
 names each kind of site: `[call line 3, JSX line 4]` (JSON: `call_lines` and `reference_lines`), `[JSX line 6]`,
 and `[lines 4, 6]` for a `<module>` or class-field caller that calls the name more than once (a named
-function caller is one record at its definition line, see Limitations). `--sideeffects --transitive` follows a
+function caller is one record at its definition line, see Limitations). `--effects --transitive` follows a
 render-only reference as a hop (rendering a child runs it) and labels it `(JSX render)`; the `chain` of
 the JSON findings ends in `<Child/>`. Dynamic render scheduling, Angular/HTML strings and Vue/Svelte
 navigation remain outside this relationship model. Known limit: a scope is identified by its name and line, so two same-named functions

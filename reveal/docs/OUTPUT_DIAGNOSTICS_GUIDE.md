@@ -77,6 +77,6 @@ from that specific call.
 This isn't about *orchestrating* multiple reveal commands into one report —
 that's deliberately out of reveal's scope (see `reveal help://quick` and the
 rejected `reveal dd`/single-composite-report proposals). Cross-command result
-correlation (e.g. joining a `hotspots://` finding to its `check` detections)
+correlation (e.g. joining a `metrics://?hotspots=true` finding to its `check` detections)
 is the caller's job today — there's no shared identity between commands yet
 (tracked as `BACK-882`/`BACK-883`).

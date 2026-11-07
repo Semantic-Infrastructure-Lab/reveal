@@ -933,7 +933,7 @@ AST queries operate on individual code elements, not relationships between files
 AST is static analysis only:
 
 ❌ "Find functions that throw exceptions"
-✅ `reveal file.py fn --sideeffects` lists a function's db/http/cache/log/file calls
+✅ `reveal file.py fn --effects` lists a function's db/http/cache/log/file calls
 
 **3. Comment/docstring content**
 
@@ -960,7 +960,7 @@ AST can't understand code meaning:
 
 ### Current Implementation Limitations
 
-**Complexity calculation**: Tree-sitter-based McCabe cyclomatic complexity for supported languages; keyword-count estimate (`fallback_complexity`, the same one stats:// and C901 use) for others. Check `reveal --languages` to see what your target language supports.
+**Complexity calculation**: Tree-sitter-based McCabe cyclomatic complexity for supported languages; keyword-count estimate (`fallback_complexity`, the same one metrics:// and C901 use) for others. Check `reveal --languages` to see what your target language supports.
 
 **Complexity of iterator-method loops**: a loop written as a block-taking method call (Ruby `items.each do ... end`, JS/TS/Kotlin `forEach`, Rust `.iter().for_each(...)`, Scala `foreach`) is a call, not a loop node, so it adds nothing to complexity: such a function scores 1 where the equivalent `for` loop in Python, Go or Java scores 2. This is deliberate: treating every block-taking call as a decision point would also count `map`, `tap`, `File.open { }` and similar non-loops. Complexity is therefore a lower bound for code written mostly in iterator style. Swift `guard` and `for`/`while` forms are counted like any other branch.
 
@@ -1318,7 +1318,7 @@ sqlite3 code.db "SELECT file, symbol, complexity
 
 **Related adapters:**
 - [imports:// adapter](IMPORTS_ADAPTER_GUIDE.md) - Dependency analysis
-- [stats:// adapter](STATS_ADAPTER_GUIDE.md) - Codebase statistics
+- [metrics:// adapter](METRICS_ADAPTER_GUIDE.md) - Codebase metrics and hotspots
 
 **Workflow guides:**
 - [RECIPES.md](../guides/RECIPES.md) - Reveal recipes and patterns
@@ -1369,7 +1369,7 @@ A: Yes! reveal supports every language `reveal --languages` lists. However, some
 
 **Q: How accurate is complexity measurement?**
 
-A: Tree-sitter-based McCabe complexity for supported languages; keyword-count estimate fallback for others (the same one stats:// and C901 use). Run `reveal --languages` to see language-specific capabilities.
+A: Tree-sitter-based McCabe complexity for supported languages; keyword-count estimate fallback for others (the same one metrics:// and C901 use). Run `reveal --languages` to see language-specific capabilities.
 
 **Q: Can I find all callers of a function?**
 

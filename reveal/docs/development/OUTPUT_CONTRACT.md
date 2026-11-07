@@ -77,8 +77,8 @@ Every adapter/analyzer output MUST include these fields:
   - Database: `"localhost:3306/mydb"`
   - Runtime: `"env://"`
   - URL: `"https://api.example.com"`
-- **Paths are spelled as the user named the target** (BACK-1366): `stats://src` and
-  `reveal stats src` both report `"source": "src"`, never the resolved
+- **Paths are spelled as the user named the target** (BACK-1366): `metrics://src` and
+  `reveal metrics src` both report `"source": "src"`, never the resolved
   `/home/<user>/.../src`, and an absolute input stays absolute. Separators are `/` on
   every OS. The URI router, `ResourceAdapter.compose` (for a composed sibling's
   `source`) and the subcommand emitter apply this once, through
@@ -137,7 +137,7 @@ These fields are OPTIONAL but recommended for common patterns:
   ```python
   'next_steps': [
       'reveal ast://src/main.py:MainClass',
-      'reveal stats://src/ --hotspots'
+      'reveal metrics://src/ --hotspots'
   ]
   ```
 
@@ -1181,7 +1181,7 @@ reveal check reveal/adapters/ --select V023
     ],
     'next_steps': [
         'reveal ast://src/api/auth.py:authenticate',
-        'reveal stats://src/api/ --hotspots'
+        'reveal metrics://src/api/ --hotspots'
     ],
     'status': {
         'health': 'warning',

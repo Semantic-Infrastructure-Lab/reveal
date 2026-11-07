@@ -50,7 +50,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
   - `diff://` - Semantic structural comparison
   - `imports://` - Import graph analysis
   - `calls://` - Cross-file call graph queries
-  - `depends://` - Inverse module dependency graph
+  - `depends://` - Retired: answers with a note until the cut release; use `imports://PATH?importers`
   - `sqlite://` - SQLite database inspection
   - `mysql://` - MySQL database inspection
   - `metrics://` - Code quality metrics (was `stats://`)

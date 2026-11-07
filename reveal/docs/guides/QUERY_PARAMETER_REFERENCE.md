@@ -24,7 +24,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **calls://** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `uncalled`, `target`, `root`) | `calls://src?callers=fn` |
 | **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
 | **codex://** | `search`, `filter`, `since`, `until` | `codex://sessions/?search=auth-refactor` |
-| **depends://** | `top`, `format` | `depends://src?top=10` |
+| **depends://** (retired, with a note: use `imports://?importers`) | `top`, `format` | `depends://src?top=10` |
 | **xlsx://** | `sheet`, `range`, `search`, `format`, `limit`, `formulas`, `powerpivot`, `powerquery`, `names`, `connections` | `xlsx://model.xlsx?sheet=Sales` |
 | **help://** | `search`, `top` (only on `help://search`; `top` caps hits, default 20, `0` = all) | `help://search?search=find callers&top=50` |
 | **cpanel://** | `domain_type`, `dns-verified`, `check-live` | `cpanel://USER/ssl?domain_type=addon` |
@@ -557,7 +557,7 @@ reveal 'imports://src?importers=utils.py'   # one file's importers, each with it
   ```
 
 - **`format=dot`** (string) - Output GraphViz DOT format for visualization (directory mode only — single-file
-  targets ignore this param and return plain text): `depends://src?format=dot`, which has no `imports://` form yet
+  targets ignore this param and return plain text): `depends://src?format=dot`; the current spelling is `imports://src?importers&format=dot`
 
 ---
 

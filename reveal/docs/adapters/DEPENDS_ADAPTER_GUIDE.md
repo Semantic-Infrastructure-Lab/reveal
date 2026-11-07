@@ -15,7 +15,7 @@ scope and cascade stage. The graph, its rules and its limits are documented once
 | `reveal depends://src/utils.py` | `reveal 'imports://src/utils.py?importers'` or `reveal 'imports://src?importers=utils.py'` |
 | `reveal depends://src` | `reveal 'imports://src?importers'` (each module with its importers) |
 | `reveal 'depends://src?top=10'` | `reveal 'imports://src?rank=fan-in&top=10'` |
-| `reveal 'depends://src?format=dot'` | no DOT equivalent; `imports://` answers text and JSON |
+| `reveal 'depends://src?format=dot'` | `reveal 'imports://src?importers&format=dot'` |
 
 `depends://` counts function-level (lazy) imports and takes no `&lazy`; `imports://` counts
 them by default too and adds `&lazy=exclude` for the load-time view.

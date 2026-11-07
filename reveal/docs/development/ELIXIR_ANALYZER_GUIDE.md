@@ -30,7 +30,7 @@ function's `calls`/complexity walk covers the whole `def` — so control-flow
 macros (`case`/`if`/`cond`/`with`) and the def's own name can appear in its
 `calls` list. This is correct for complexity (they are real branch points) but
 mildly noisy for `calls://`. Elixir remains `[untested]` tier: the nav-flag
-surface (`--varflow`/`--sideeffects`/…) has no ground-truth fixtures yet.
+surface (`--varflow`/`--effects`/…) has no ground-truth fixtures yet.
 
 ## Installation
 

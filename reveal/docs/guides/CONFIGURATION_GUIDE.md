@@ -432,7 +432,7 @@ the values, and `<namespace>` names the kind of artifact.
 | `python_imports`, `javascript_imports`, `go_imports`, `rust_imports`, `zig_imports`, `generic_imports` | per-language import extraction feeding those graphs |
 | `markdown-headings` | a Markdown file's heading index |
 | `markdown_link_graph` | the link graph behind `markdown://` link queries |
-| `churn` | per-file commit counts behind `stats://` `hotspots=true` |
+| `churn` | per-file commit counts behind `metrics://` `hotspots=true` |
 | `d005_literals` | a Python file's repeated-literal clusters, the per-file input of the `D005` cross-file index |
 
 **How it stays correct (invalidation):**

@@ -73,8 +73,8 @@ Just `pip install reveal-cli` gives you everything:
 - `ast://` - Code queries and semantic analysis
 - `json://` - JSON navigation with path access
 - `reveal://` - Self-inspection and validation
-- `stats://` - Code quality metrics and hotspot detection
-- ...plus `calls://`, `git://`, `imports://`, `claude://`, `codex://`, `diff://`, `depends://`, and more
+- `metrics://` - Code quality metrics and hotspot detection
+- ...plus `calls://`, `git://`, `imports://`, `claude://`, `codex://`, `diff://`, `overview://`, and more
 
 ## Optional Features
 
