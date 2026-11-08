@@ -468,7 +468,7 @@ def outline_names(answer: Dict[str, Any]) -> Dict[str, Set[int]]:
         items = (answer.get('structure') or {}).get(key)
         for item in items if isinstance(items, list) else []:
             if isinstance(item, dict) and item.get('name') and isinstance(item.get('line'), int):
-                names.setdefault(str(item['name']).split('.')[-1], set()).add(item['line'])
+                names.setdefault(re.split(r'\.|::', str(item['name']))[-1], set()).add(item['line'])
     return names
 
 

@@ -217,14 +217,28 @@ def test_a_bare_named_import_reaches_the_module_function_not_a_same_named_method
     assert (_target(edge), edge['callee_line']) == (('d.js', None), 1)
 
 
-def test_a_qualified_call_through_the_imported_class_stays_undecided_between_them(tmp_path):
-    # Control: `DataUtils.toHalfFloat` may be the static method; the module-function preference is
-    # for a bare name only, so the two same-file candidates stay ambiguous.
+def test_a_qualified_call_through_the_imported_class_reaches_its_member(tmp_path):
+    # BACK-2569 (call_targets on excalidraw): `SnapCache.getReferenceSnapPoints` through the imported
+    # class is the class's static method, not the module function of that name. Before: ambiguous.
     path = _tree(tmp_path, {
         'a.js': "import { DataUtils } from './d.js';\n\nexport function setX(x) {\n  return DataUtils.toHalfFloat(x);\n}\n",
         'd.js': ('export function toHalfFloat(v) {\n  return v;\n}\n\n'
                  'export class DataUtils {\n  static toHalfFloat(v) {\n    return v;\n  }\n}\n')})
-    assert _target(_edges(path, 'setX', depth=2)['DataUtils.toHalfFloat']) == (None, 'ambiguous')
+    edge = _edges(path, 'setX', depth=2)['DataUtils.toHalfFloat']
+    assert (_target(edge), edge['callee_line']) == (('d.js', None), 6)
+
+
+def test_typescript_overloads_are_one_binding(tmp_path):
+    # BACK-2569 (call_targets on excalidraw math/point.ts): overload signatures and the implementation
+    # are one exported function; the import reaches the implementation (the last). Before: ambiguous.
+    path = _tree(tmp_path, {
+        'a.ts': "import { pointFrom } from './p';\n\nexport function go() {\n  return pointFrom(1, 2);\n}\n",
+        'p.ts': ('export function pointFrom(x: number): number;\n'
+                 'export function pointFrom(x: number, y: number): number;\n'
+                 'export function pointFrom(x: number, y?: number): number {\n  return x;\n}\n')})
+    edge = _edges(path, 'go', depth=2)['pointFrom']
+    assert _target(edge) == ('p.ts', None) and edge['callee_line'] == max(
+        d['line'] for d in CallsAdapter(path, 'callees=p.ts:pointFrom&depth=2').get_structure()['definitions'])
 
 
 def test_a_call_never_resolves_to_a_module_declaration(tmp_path):

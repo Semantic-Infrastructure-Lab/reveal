@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, NamedTuple, Optional, Tuple, Union
 
 from .types import ImportStatement
-from .unused import binds_reliably, bound_names
+from .unused import binds_reliably, bound_name, bound_names
 
 _SEPARATORS = re.compile(r'[./\\:]+')
 _PACKAGE_FILES = frozenset({'__init__', 'index', 'mod'})
@@ -33,7 +33,9 @@ class Binding(NamedTuple):
     # statement whose verdict could not place it (a package root or sys.path entry reveal does not
     # model, as a monorepo's python_modules/dagster). Empty: every statement is outside the tree.
     modules: Tuple[ModulePath, ...] = ()
-
+    # The module path the name is imported from, as the import spells it ('os.path.join' for
+    # ``from os.path import join``), when every statement binding it agrees; None otherwise.
+    origin: Optional[str] = None
 
 def _module_paths(stmt: ImportStatement) -> Tuple[ModulePath, ...]:
     """Where ``stmt``'s module, and a named import's member as a submodule, would sit under some
@@ -46,6 +48,19 @@ def _module_paths(stmt: ImportStatement) -> Tuple[ModulePath, ...]:
         return ()
     members = [entry.split(' as ')[0].strip() for entry in stmt.imported_names if entry != '*']
     return (module, *((*module, member) for member in members if member))
+
+
+def _origins(stmt: ImportStatement) -> Dict[str, str]:
+    """Local name -> the import's spelling of what it binds: a named entry's module and name, an
+    aliased or namespace import's module."""
+    module = stmt.module_name or ''
+    if stmt.import_type == 'default_import':
+        return {name: module for name in bound_names(stmt)}
+    named = {bound_name(entry): f"{module}.{entry.split(' as ')[0].strip()}"
+             for entry in stmt.imported_names if entry != '*'}
+    if not named and (stmt.alias or stmt.import_type == 'namespace_import'):
+        return {name: module for name in bound_names(stmt)}
+    return named
 
 
 def at_module(file_path: str, modules: Iterable[ModulePath]) -> bool:
@@ -68,14 +83,17 @@ def file_bindings(imports: Iterable[ImportStatement]) -> Dict[str, Binding]:
         target = str(stmt.resolved_path) if stmt.resolved_path else None
         unresolved = target is None and binds_reliably(stmt)
         modules = _module_paths(stmt) if unresolved else ()
+        origins = _origins(stmt)
         for name in bound_names(stmt):
             seen = bindings.get(name)
+            origin = origins.get(name)
             # Several imports binding one name (Java `import org.a.X` and `import org.b.Y` both
             # bind the guess `org`) name a file only when they agree on it.
-            bindings[name] = (Binding(target, unresolved, modules) if seen is None else
+            bindings[name] = (Binding(target, unresolved, modules, origin) if seen is None else
                               Binding(seen.target if seen.target == target else None,
                                       seen.unresolved and unresolved,
-                                      seen.modules + modules if seen.unresolved and unresolved else ()))
+                                      seen.modules + modules if seen.unresolved and unresolved else (),
+                                      seen.origin if seen.origin == origin else None))
     return bindings
 
 

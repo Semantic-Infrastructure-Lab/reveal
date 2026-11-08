@@ -823,6 +823,7 @@ class CallSource(NamedTuple):
     reference_only_calls: Tuple[str, ...]
     family: str
     member: bool = False  # a method of a class or struct: never what an import binds by name (BACK-2569)
+    owner: str = ''       # the class or struct a member belongs to
     category: str = ''    # the structure category; a 'modules' source (a file's top level, Rust `mod x;`) is no call target
 
 
@@ -862,8 +863,8 @@ class CalleeSource:
             intern(file_path), intern(name), elem.get('line', 0), elem.get('signature', ''),
             tuple(intern(call) for call in elem.get('calls', [])), tuple(elem.get('references', [])),
             tuple(elem.get('reference_only_calls', [])),
-            family(file_path), bool(elem.get('owner')) and elem.get('method') is not False,
-            elem.get('category', ''))
+            family(file_path), member=bool(elem.get('owner')) and elem.get('method') is not False,
+            category=elem.get('category', ''), owner=str(elem.get('owner') or ''))
             for file_path, name, elem in _call_definitions(structures))
         return cls(definitions, getattr(structures, 'skipped', ()), getattr(structures, 'traversal_failures', ()),
                    scope, dropped_values_summary(structures))
@@ -986,6 +987,7 @@ def _walk_index(source: CalleeSource) -> Tuple[List[Dict[str, Any]], Dict[str, L
         'reference_only_calls': list(d.reference_only_calls),
         'family': d.family,
         'member': d.member,
+        'owner': d.owner,
         'category': d.category,
     } for d in source.definitions]
     definitions.sort(key=lambda d: (d['file'], d['line']))

@@ -93,10 +93,12 @@ class CallResolver:
 
     def _via_import(self, call: str, tail: str, qualifier: str, caller_file: str,
                     candidates: List[Definition]) -> List[Definition]:
-        """The candidates in the file the call's qualifier or bare name is imported from. A bare name an
-        import binds is a module-level name, never a class's method of that name (three.js DataUtils.js:
-        `function toHalfFloat` and `static toHalfFloat`, BACK-2569); `DataUtils.toHalfFloat` through the
-        imported class may be either."""
+        """The candidates in the file the call's qualifier or bare name is imported from, narrowed to
+        what the import names (BACK-2569). A module binds a name once: a bare name, or a namespace's
+        member, is a module-level definition, never a class's method of that name (three.js
+        DataUtils.js: `function toHalfFloat` and `static toHalfFloat`), and of several (TypeScript
+        overload signatures, a Python redefinition) the last, the one the module ends up binding. A
+        call through an imported class (`SnapCache.getReferenceSnapPoints`) is that class's member."""
         bindings = self._bindings.of(caller_file)
         binding = bindings.get(qualifier or (call if call in bindings else tail))
         imported = binding.target if binding else None
@@ -104,6 +106,12 @@ class CallResolver:
             return []
         imported_path = Path(imported).resolve()
         via_import = [c for c in candidates if Path(c['file']).resolve() == imported_path]
-        if len(via_import) > 1 and not qualifier:
-            via_import = [c for c in via_import if not c.get('member')] or via_import
-        return via_import
+        if len(via_import) < 2:
+            return via_import
+        if qualifier:
+            owner = binding.origin.rsplit('.', 1)[-1] if binding.origin else qualifier
+            owned = [c for c in via_import if c.get('owner') == owner]
+            if owned:
+                return owned[-1:]
+        module_level = [c for c in via_import if not c.get('member')]
+        return module_level[-1:] if module_level else via_import
