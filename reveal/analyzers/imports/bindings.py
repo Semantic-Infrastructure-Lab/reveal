@@ -101,20 +101,30 @@ def _bound_target(stmt: ImportStatement, name: str) -> Optional[str]:
     if resolved.suffix not in ('.py', '.pyi'):
         return str(resolved)
     if stmt.imported_names and resolved.stem == '__init__':
-        entry = next((e for e in stmt.imported_names if bound_name(e) == name), None)
-        member = entry.split(' as ')[0].strip() if entry else ''
-        for candidate in (resolved.parent / f'{member}.py', resolved.parent / member / '__init__.py'):
-            if member and candidate.is_file():
-                return str(candidate)
-        return str(resolved)
+        return _submodule(stmt, name, resolved)
     depth = (stmt.module_name or '').count('.')
     if depth and not stmt.imported_names and not stmt.alias:
-        package = resolved.parent.parent if resolved.stem == '__init__' else resolved.parent
-        for _ in range(depth - 1):
-            package = package.parent
-        init = package / '__init__.py'
-        return str(init) if init.is_file() else None
+        return _top_package(resolved, depth)
     return str(resolved)
+
+
+def _submodule(stmt: ImportStatement, name: str, package_init: Path) -> str:
+    """``from pkg import mod``: the submodule ``mod`` names, else the package's __init__.py."""
+    entry = next((e for e in stmt.imported_names if bound_name(e) == name), None)
+    member = entry.split(' as ')[0].strip() if entry else ''
+    for candidate in (package_init.parent / f'{member}.py', package_init.parent / member / '__init__.py'):
+        if member and candidate.is_file():
+            return str(candidate)
+    return str(package_init)
+
+
+def _top_package(resolved: Path, depth: int) -> Optional[str]:
+    """``import a.b`` resolved to a/b.py (or a/b/__init__.py): a/__init__.py, None for a namespace package."""
+    package = resolved.parent.parent if resolved.stem == '__init__' else resolved.parent
+    for _ in range(depth - 1):
+        package = package.parent
+    init = package / '__init__.py'
+    return str(init) if init.is_file() else None
 
 
 def file_bindings(imports: Iterable[ImportStatement]) -> Dict[str, Binding]:
