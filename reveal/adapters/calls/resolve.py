@@ -17,7 +17,7 @@ as such, never guessed.
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ...analyzers.imports.bindings import ProjectBindings, at_module
+from ...analyzers.imports.bindings import ProjectBindings, reaches
 from .index import _bare_callee_name, _lang_family
 
 Definition = Dict[str, Any]
@@ -67,11 +67,8 @@ class CallResolver:
         BACK-2573). A bare call to a name the file also defines reaches its own definition (it
         shadows the import)."""
         binding = self._bindings.of(caller_file).get(call.split('.')[0])
-        if binding is None or not binding.unresolved:
-            return candidates
-        if '.' not in call and any(c['file'] == caller_file for c in candidates):
-            return candidates
-        return [c for c in candidates if at_module(c['file'], binding.modules)]
+        kept = reaches(binding, call, caller_file, (c['file'] for c in candidates))
+        return [c for c in candidates if c['file'] in kept]
 
     def _caller_family(self, caller_file: str) -> str:
         if caller_file not in self._families:
@@ -101,17 +98,21 @@ class CallResolver:
         call through an imported class (`SnapCache.getReferenceSnapPoints`) is that class's member."""
         bindings = self._bindings.of(caller_file)
         binding = bindings.get(qualifier or (call if call in bindings else tail))
-        imported = binding.target if binding else None
-        if not imported:
+        if binding is None or not binding.target:
             return []
-        imported_path = Path(imported).resolve()
+        imported_path = Path(binding.target).resolve()
         via_import = [c for c in candidates if Path(c['file']).resolve() == imported_path]
-        if len(via_import) < 2:
-            return via_import
-        if qualifier:
-            owner = binding.origin.rsplit('.', 1)[-1] if binding.origin else qualifier
-            owned = [c for c in via_import if c.get('owner') == owner]
-            if owned:
-                return owned[-1:]
-        module_level = [c for c in via_import if not c.get('member')]
-        return module_level[-1:] if module_level else via_import
+        return via_import if len(via_import) < 2 else _one_binding(via_import, qualifier, binding.origin)
+
+
+def _one_binding(in_file: List[Definition], qualifier: str, origin: Optional[str]) -> List[Definition]:
+    """Of several same-named definitions in the imported file, the one the import names: through an
+    imported class, that class's member; else the last module-level one (the binding the module ends
+    with); else all of them, still ambiguous."""
+    if qualifier:
+        owner = origin.rsplit('.', 1)[-1] if origin else qualifier
+        owned = [c for c in in_file if c.get('owner') == owner]
+        if owned:
+            return owned[-1:]
+    module_level = [c for c in in_file if not c.get('member')]
+    return module_level[-1:] if module_level else in_file

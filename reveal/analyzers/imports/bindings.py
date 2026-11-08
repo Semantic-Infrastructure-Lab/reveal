@@ -13,7 +13,7 @@ path can be (BACK-2573).
 import os
 import re
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Iterable, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, NamedTuple, Optional, Set, Tuple, Union
 
 from .types import ImportStatement
 from .unused import binds_reliably, bound_name, bound_names
@@ -36,6 +36,22 @@ class Binding(NamedTuple):
     # The module path the name is imported from, as the import spells it ('os.path.join' for
     # ``from os.path import join``), when every statement binding it agrees; None otherwise.
     origin: Optional[str] = None
+
+
+def reaches(binding: Optional[Binding], call: str, caller_file: str, files: Iterable[str]) -> Set[str]:
+    """Of ``files`` (where the called name is defined in the project), the ones ``call`` in
+    ``caller_file`` can reach given what its qualifier or bare name is bound to: all of them unless
+    imports that resolved to no file bind it; then none when they are outside the tree (BACK-2553), and
+    only a file at one of their module paths when the verdict could not place them (BACK-2573). A bare
+    call to a name its own file defines reaches it (the definition shadows the import). The one rule
+    for both directions: callee resolution and the callers index (BACK-2567)."""
+    files = set(files)
+    if binding is None or not binding.unresolved:
+        return files
+    if '.' not in call and caller_file in files:
+        return files
+    return {f for f in files if at_module(f, binding.modules)}
+
 
 def _module_paths(stmt: ImportStatement) -> Tuple[ModulePath, ...]:
     """Where ``stmt``'s module, and a named import's member as a submodule, would sit under some

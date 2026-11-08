@@ -304,7 +304,7 @@ reveal 'calls://src/?callees=handle_request&detail' --format=json | jq '.definit
 
 ### `rank`
 
-Rank the functions, methods and classes defined under the path by how many unique callers they have (in-degree coupling metric). Zero new infrastructure — uses the same cached index as `?callers`, and each count is what `?callers=NAME` reports for that name. Called names the scan does not define (library methods such as `dict.get` or `list.append`, stdlib classes, builtins) are counted in `undefined_callees` and not ranked; `builtins=true` ranks every name the index records instead, under each spelling it is keyed by. Matching is by name, so a defined method named like a library method (`get`) also collects that library method's calls.
+Rank the functions, methods and classes defined under the path by how many unique callers they have (in-degree coupling metric). Zero new infrastructure — uses the same cached index as `?callers`, and each count is what `?callers=NAME` reports for that name. Called names the scan does not define (library methods such as `dict.get` or `list.append`, stdlib classes, builtins) are counted in `undefined_callees` and not ranked; `builtins=true` ranks every name the index records instead, under each spelling it is keyed by. Matching is by name, so a defined method named like a library method (`get`) also collects that library method's calls, except where an import says otherwise: a call whose qualifier or bare name is bound only by imports that reach no file defining the name (`json.loads`, `ts.createProgram`, `join` from `os.path`) is no caller of the project's `loads`, `createProgram` or `join`. It stays under its own text, or a bare one under its import's spelling (`os.path.join`), which `builtins=true` lists; callee resolution reads the same rule (BACK-2567).
 
 ```bash
 # Top 10 most-called functions
@@ -358,7 +358,7 @@ Human-readable summary with file path, line, and caller context:
 Callers of: validate_item
 Project:    src/
 Total:      3
-Rule: callers whose body calls validate_item by bare name or import alias; level k+1 looks each caller up by name, so same-named functions' callers join; each (file, caller) once; depth 1 (clamped 1-5). Measured: levels 1 and 2.
+Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name, so same-named functions' callers join; each (file, caller) once; depth 1 (clamped 1-5). Measured: levels 1 and 2.
 
   src/auth/handlers.py:42  authenticate  (calls validate_item)
   src/api/routes.py:78     process_request  (calls validate_item)
@@ -379,7 +379,7 @@ Callers of: validate_item
 Project:    src/
 Depth:      2
 Total:      5
-Rule: callers whose body calls validate_item by bare name or import alias; level k+1 looks each caller up by name, so same-named functions' callers join; each (file, caller) once; depth 2 (clamped 1-5). Measured: levels 1 and 2.
+Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name, so same-named functions' callers join; each (file, caller) once; depth 2 (clamped 1-5). Measured: levels 1 and 2.
 
 Direct callers:
   src/auth/handlers.py:42  authenticate  (calls validate_item)
@@ -396,7 +396,7 @@ When no callers are found:
 Callers of: orphan_fn
 Project:    src/
 Total:      0
-Rule: callers whose body calls orphan_fn by bare name or import alias; ...; depth 1 (clamped 1-5). Measured: levels 1 and 2.
+Rule: callers whose body calls orphan_fn by bare name or import alias, except a call its imports bind to no file defining orphan_fn (json.loads is no caller of a project loads); ...; depth 1 (clamped 1-5). Measured: levels 1 and 2.
 
   No callers found for 'orphan_fn'.
 
@@ -503,7 +503,7 @@ reveal 'calls://src/?callers=validate_item' --format=json
     "depth": 1,
     "measured": {"depth_1": true, "depth_2": true, "beyond_depth_2": false},
     "unmeasured_languages": [],
-    "text": "Rule: callers whose body calls validate_item by bare name or import alias; ..."
+    "text": "Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); ..."
   },
   "levels": [
     {

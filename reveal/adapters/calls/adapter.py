@@ -967,7 +967,8 @@ def _walk_view(walk: CalleeWalk, detail: bool) -> Dict[str, Any]:
 def _callers_rule(name: str, depth: int, declined: List[str]) -> Dict[str, Any]:
     """find_callers' rule, for its JSON and its ``Rule:`` line (ground rule 4). The callers
     and depth-2 snapshots measure levels 1 and 2."""
-    text = (f"Rule: callers whose body calls {name} by bare name or import alias; level k+1 looks each caller "
+    text = (f"Rule: callers whose body calls {name} by bare name or import alias, except a call its imports bind "
+            f"to no file defining {name} (json.loads is no caller of a project loads); level k+1 looks each caller "
             f"up by name, so same-named functions' callers join; each (file, caller) once; depth {depth} "
             "(clamped 1-5). Measured: levels 1 and 2.")
     if declined:
@@ -975,6 +976,7 @@ def _callers_rule(name: str, depth: int, declined: List[str]) -> Dict[str, Any]:
     return {
         'direction': 'callers',
         'match': 'bare_name_or_import_alias',
+        'imports': 'bound_elsewhere_excluded',
         'expansion': 'by_name',
         'once_per': 'file_caller',
         'depth': depth,

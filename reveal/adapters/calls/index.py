@@ -444,6 +444,9 @@ class CallersIndex(Dict[str, List[Dict[str, Any]]]):
     dropped: Optional[Dict[str, Any]] = None
     # Lookup keys of the functions, methods and classes the indexed files define (BACK-2433).
     defined: FrozenSet[str] = frozenset()
+    # Each of those keys -> the files defining it (BACK-2567): what bound_view asks a binding about.
+    definitions: Optional[Dict[str, FrozenSet[str]]] = None
+    directory: str = ''
 
 
 def _disclose_skipped(result: Dict[str, Any], skipped: Sequence[Tuple[str, str]], *,
@@ -573,10 +576,14 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
     index.dropped = dropped_values_summary(structures)
     index.traversal_failures = list(getattr(structures, 'traversal_failures', ()))
     defined: Set[str] = set()
+    definitions: Dict[str, Set[str]] = {}
 
     for file_struct in structures:
         file_path = file_struct.get('file', '')
-        defined.update(_defined_keys(file_struct))
+        keys = set(_defined_keys(file_struct))
+        defined.update(keys)
+        for key in keys:
+            definitions.setdefault(key, set()).add(to_posix(file_path))
         # Build alias → canonical name map for this file so that calls using
         # an import alias (e.g. `h` for `from utils import helper as h`) also
         # index the definition name (`helper`).  This prevents find_uncalled
@@ -610,8 +617,54 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
                 _index_callee(index, callee, record, alias_map, class_aliases)
 
     index.defined = frozenset(defined)
+    index.definitions = {key: frozenset(files) for key, files in definitions.items()}
+    index.directory = dir_str
     _cache_callers_index(dir_str, cache_key, index, structures)
     return index
+
+
+def bound_view(index: CallersIndex) -> Dict[str, List[Dict[str, Any]]]:
+    """The callers index as a query reads it (BACK-2567). The index keys a call by its bare name, so
+    ``ts.createProgram`` read as a caller of the project's ``createProgram``; a call bound only by
+    imports that reach none of the files defining that name (``bindings.reaches``, the rule callee
+    resolution applies) is no caller of it. A qualified one stays under its own text
+    (``ts.createProgram``); a bare one moves under its import's spelling (``os.path.join`` for
+    ``from os.path import join``), or stays when the imports disagree on it. Import facts depend on
+    files outside the indexed directory, so they are applied per query, never stored in the index."""
+    from ...analyzers.imports.bindings import ProjectBindings, reaches
+    definitions = getattr(index, 'definitions', None) or {}
+    directory = getattr(index, 'directory', '')
+    bindings = ProjectBindings(Path(directory)) if directory and definitions else None
+    view: Dict[str, List[Dict[str, Any]]] = {}
+    moved: Set[Tuple[str, int]] = set()
+    for key, records in index.items():
+        files = definitions.get(key)
+        for record in records:
+            target = key if bindings is None or not files else _bound_key(key, record, files, bindings, reaches)
+            if target is None or (target != key and (target, id(record)) in moved):
+                continue
+            if target != key:
+                moved.add((target, id(record)))
+            view.setdefault(target, []).append(record)
+    return view
+
+
+def _bound_key(key: str, record: Dict[str, Any], files: FrozenSet[str], bindings: Any,
+               reaches: Callable[..., Set[str]]) -> Optional[str]:
+    """The key ``record`` (a call indexed under ``key``, which ``files`` define) belongs under: ``key``,
+    the import's spelling for a bare call bound elsewhere, or None (a qualified call bound elsewhere,
+    which stays under its own text only). A qualified call under its own text names no project
+    definition by that key; every other key (the bare name, an import alias's canonical name) does,
+    through the call's binding."""
+    call = str(record.get('call_expr') or '')
+    if '.' in call and key == call:
+        return key
+    binding = bindings.of(record['file']).get(call.split('.')[0])
+    if reaches(binding, call, record['file'], files):
+        return key
+    if '.' in call:
+        return None
+    return binding.origin if binding is not None and binding.origin else key
 
 
 def _defined_keys(file_struct: Dict[str, Any]) -> Iterator[str]:
@@ -1170,6 +1223,7 @@ def find_callers(
         at each level).
     """
     index = build_callers_index(path)
+    view = bound_view(index)
 
     # BFS up to *depth* levels
     visited_callers: Set[Tuple[str, str]] = set()
@@ -1177,7 +1231,7 @@ def find_callers(
     levels: List[Dict[str, Any]] = []
 
     for level in range(depth):
-        level_records, next_targets = _bfs_level(index, current_targets, visited_callers)
+        level_records, next_targets = _bfs_level(view, current_targets, visited_callers)
         if level_records:
             # '/' on every OS (BACK-1586); copies, so the cached index keeps its own records.
             levels.append({'level': level + 1,
@@ -1849,7 +1903,7 @@ def rank_by_callers(
 
     entries = []
     undefined = 0
-    for callee_name, caller_records in index.items():
+    for callee_name, caller_records in bound_view(index).items():
         if not include_builtins and callee_name not in index.defined:
             undefined += 1
             continue
