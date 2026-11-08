@@ -627,7 +627,7 @@ def test_call_targets_holds_on_the_fixture(root):
     row = _call_targets(root)
     assert row['status'] == 'green', row
     # Positive control: b.py's `helper()` is bound to pkg/a.py, which defines it. (`a.run()` is not
-    # checked: `from pkg import a` reads as pkg/__init__.py, the statement's first target, BACK-2574.)
+    # checked: imports:// names one target per statement, pkg/__init__.py for `from pkg import a`.)
     assert row['edges_checked']['bound_file'] >= 1 and row['edges_checked']['target_defines'] >= 3
     assert row['walks'] == row['walks_requested'] == 4
 

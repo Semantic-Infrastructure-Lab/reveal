@@ -90,15 +90,25 @@ def at_module(file_path: str, modules: Iterable[ModulePath]) -> bool:
                for module in modules for form in forms)
 
 
-def _bound_target(stmt: ImportStatement) -> Optional[str]:
-    """The file the name ``stmt`` binds is: its resolved file, except for Python's ``import a.b``,
-    which binds ``a``, the package, while it resolved to ``a/b.py``: then ``a/__init__.py`` (None for
-    a namespace package)."""
+def _bound_target(stmt: ImportStatement, name: str) -> Optional[str]:
+    """The file the name ``name`` that ``stmt`` binds is: its resolved file, except in Python, where a
+    statement resolves to its first target. ``import a.b`` binds ``a``, the package, while it resolved to
+    ``a/b.py``: then ``a/__init__.py`` (None for a namespace package). ``from pkg import mod`` resolved to
+    ``pkg/__init__.py`` and binds ``mod`` to the submodule ``pkg/mod.py`` when there is one (BACK-2574)."""
     resolved = stmt.resolved_path
     if resolved is None:
         return None
+    if resolved.suffix not in ('.py', '.pyi'):
+        return str(resolved)
+    if stmt.imported_names and resolved.stem == '__init__':
+        entry = next((e for e in stmt.imported_names if bound_name(e) == name), None)
+        member = entry.split(' as ')[0].strip() if entry else ''
+        for candidate in (resolved.parent / f'{member}.py', resolved.parent / member / '__init__.py'):
+            if member and candidate.is_file():
+                return str(candidate)
+        return str(resolved)
     depth = (stmt.module_name or '').count('.')
-    if depth and not stmt.imported_names and not stmt.alias and resolved.suffix in ('.py', '.pyi'):
+    if depth and not stmt.imported_names and not stmt.alias:
         package = resolved.parent.parent if resolved.stem == '__init__' else resolved.parent
         for _ in range(depth - 1):
             package = package.parent
@@ -115,11 +125,11 @@ def file_bindings(imports: Iterable[ImportStatement]) -> Dict[str, Binding]:
     in-tree (Zig ``const config = @import("config.zig")``), which only ever narrows candidates."""
     bindings: Dict[str, Binding] = {}
     for stmt in imports:
-        target = _bound_target(stmt)
-        unresolved = target is None and binds_reliably(stmt)
+        unresolved = stmt.resolved_path is None and binds_reliably(stmt)
         modules = _module_paths(stmt) if unresolved else ()
         origins = _origins(stmt)
         for name in bound_names(stmt):
+            target = _bound_target(stmt, name)
             seen = bindings.get(name)
             origin = origins.get(name)
             # Several imports binding one name (Java `import org.a.X` and `import org.b.Y` both

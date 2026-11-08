@@ -109,3 +109,12 @@ def test_a_bare_dotted_import_binds_the_package_not_the_module(tmp_path):
                             'other/helper_mod.py': 'def helper():\n    return 2\n',
                             'app/run.py': 'import pkg.sub\n\ndef go():\n    return pkg.helper()\n'})
     assert _target(_edges(path, 'go')['pkg.helper']) == ('__init__.py', None)
+
+
+def test_a_from_import_of_a_submodule_binds_the_submodule(tmp_path):
+    # BACK-2574: `from pkg import mod` resolves to pkg/__init__.py (its first target) and binds `mod`,
+    # the submodule pkg/mod.py: `mod.run()` reaches mod.py's run. Before: ambiguous between the two runs.
+    path = _tree(tmp_path, {'pkg/__init__.py': '', 'pkg/mod.py': 'def run():\n    return 1\n',
+                            'other.py': 'def run():\n    return 2\n',
+                            'app.py': 'from pkg import mod\n\ndef go():\n    return mod.run()\n'})
+    assert _target(_edges(path, 'go')['mod.run']) == ('mod.py', None)
