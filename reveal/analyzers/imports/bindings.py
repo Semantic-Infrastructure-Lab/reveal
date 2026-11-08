@@ -13,6 +13,7 @@ missing it says nothing about where its names are defined.
 """
 
 import os
+from collections import OrderedDict
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, FrozenSet, Iterable, NamedTuple, Optional, Set, Tuple, Union
 
@@ -210,18 +211,47 @@ class ProjectBindings:
         return self._files[file_path]
 
 
+# Absolute path -> (mtime_ns, size, the names its import statements bind), across host requests. The
+# extraction's own in-process layer is emptied at every request (BACK-2083) and the disk layer may be
+# off, so without this every ?callers= query re-parsed every file holding a call to the name
+# (BACK-2579). The stamp is the one the disk layer trusts across requests; an edit replaces the entry.
+_BOUND_NAMES: 'OrderedDict[str, Tuple[int, int, FrozenSet[str]]]' = OrderedDict()
+_BOUND_NAMES_MAX = 200_000
+
+
+def clear_bound_names() -> None:
+    """Forget every remembered file (tests)."""
+    _BOUND_NAMES.clear()
+
+
 def _names_bound_in(file_path: str) -> FrozenSet[str]:
-    """Every local name the file's own import statements bind (no resolution)."""
+    """Every local name the file's own import statements bind (no resolution), read once per file
+    version: an extraction its content did not decide (``ImportExtraction.cacheable``) is not kept."""
     from .base import get_extractor
     path = Path(file_path)
     extractor = get_extractor(path)
     if extractor is None:
         return frozenset()
+    key = _absolute(path)
+    try:
+        stat = os.stat(key)
+    except OSError:
+        return frozenset()
+    entry = _BOUND_NAMES.get(key)
+    if entry is not None and entry[:2] == (stat.st_mtime_ns, stat.st_size):
+        _BOUND_NAMES.move_to_end(key)
+        return entry[2]
     try:
         statements = extractor.extract_imports(path)
     except OSError:
         return frozenset()
-    return frozenset(name for stmt in statements for name in bound_names(stmt))
+    names = frozenset(name for stmt in statements for name in bound_names(stmt))
+    if extractor.analysis.cacheable:
+        _BOUND_NAMES[key] = (stat.st_mtime_ns, stat.st_size, names)
+        _BOUND_NAMES.move_to_end(key)
+        while len(_BOUND_NAMES) > _BOUND_NAMES_MAX:
+            _BOUND_NAMES.popitem(last=False)
+    return names
 
 
 def _absolute(path: Union[str, Path]) -> str:
