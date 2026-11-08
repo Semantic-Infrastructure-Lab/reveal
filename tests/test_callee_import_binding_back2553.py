@@ -204,3 +204,33 @@ def test_a_name_several_imports_bind_names_no_file(tmp_path):
                             'pkg/b.py': 'def go():\n    pass\n',
                             'c.py': 'import pkg.a\nimport pkg.b\n\ndef main():\n    pkg.b.go()\n'})
     assert _target(_edges(path, 'main')['pkg.b.go']) != ('a.py', None)
+
+
+def test_a_bare_named_import_reaches_the_module_function_not_a_same_named_method(tmp_path):
+    # BACK-2569 (call_targets on three.js): DataUtils.js defines `function toHalfFloat` and a class
+    # with `static toHalfFloat`; `import { toHalfFloat }` binds the module function. Before: ambiguous.
+    path = _tree(tmp_path, {
+        'a.js': "import { toHalfFloat } from './d.js';\n\nexport function setX(x) {\n  return toHalfFloat(x);\n}\n",
+        'd.js': ('export function toHalfFloat(v) {\n  return v;\n}\n\n'
+                 'export class DataUtils {\n  static toHalfFloat(v) {\n    return toHalfFloat(v);\n  }\n}\n')})
+    edge = _edges(path, 'setX', depth=2)['toHalfFloat']
+    assert (_target(edge), edge['callee_line']) == (('d.js', None), 1)
+
+
+def test_a_qualified_call_through_the_imported_class_stays_undecided_between_them(tmp_path):
+    # Control: `DataUtils.toHalfFloat` may be the static method; the module-function preference is
+    # for a bare name only, so the two same-file candidates stay ambiguous.
+    path = _tree(tmp_path, {
+        'a.js': "import { DataUtils } from './d.js';\n\nexport function setX(x) {\n  return DataUtils.toHalfFloat(x);\n}\n",
+        'd.js': ('export function toHalfFloat(v) {\n  return v;\n}\n\n'
+                 'export class DataUtils {\n  static toHalfFloat(v) {\n    return v;\n  }\n}\n')})
+    assert _target(_edges(path, 'setX', depth=2)['DataUtils.toHalfFloat']) == (None, 'ambiguous')
+
+
+def test_a_call_never_resolves_to_a_module_declaration(tmp_path):
+    # BACK-2569 (call_targets on Meilisearch): `mod parser;` is a call source named `parser`;
+    # `parser(input)` in a sibling crate resolved to it. Before: lib.rs:1.
+    path = _tree(tmp_path, {'a/src/lib.rs': 'mod parser;\n\npub fn helper() {}\n',
+                            'a/src/parser.rs': 'pub fn noop() {}\n',
+                            'b/src/value.rs': 'pub fn parse_value(input: u8) -> u8 {\n    parser(input)\n}\n'})
+    assert _target(_edges(path, 'parse_value', depth=2)['parser']) == (None, 'external')

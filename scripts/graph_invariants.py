@@ -46,6 +46,18 @@ edges stay under that scan; the default view also retains resolved outside-scan 
                       de-duplication under the same key, counted, not a failure)
   callers_view        calls ?callers=X for sampled plain-identifier names: the same callers,
                       as (file, caller), as the ranking's entry for X
+  call_targets        calls ?callees=FILE:NAME&depth=2 for sampled callers (one --stdin batch, so one import
+                      analysis) against imports:// default view (unpinned: the project root calls resolves
+                      from) and the outlines of the files involved, for every call spelled f or q.f:
+                      a call whose q (or f) is bound only by imports from outside the tree (resolved to no
+                      file, classified stdlib/unresolved) is not resolved to a project definition, unless a
+                      bare f is defined in the caller's own file; a call whose q (or f) is bound only by
+                      imports resolving to one file F of the scan that defines the name resolves to F; and
+                      a call resolved to one definition lands on a line where its target file defines that
+                      name. The binding rule is the language's own only: named entries, aliases, Python's
+                      bare import; a guessed bare import (C include, Ruby require, JVM import) binds nothing.
+                      The calls gate scores depth-1 call text, so this is the check on resolution TARGETS
+                      (BACK-2569; BACK-2553's first commit passed the gate with four target defects)
   no_match            every declared target-naming parameter (ParamSpec.names) of imports and
                       calls, URI and CLI spelling, with a value that matches nothing: exit 2
                       and stderr names the value (BACK-2161)
@@ -88,10 +100,10 @@ from imports_fold_snapshot import (UNGATED, _git_head, _representative_file, cor
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FORMAT_VERSION = 2
 INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations', 'local_units_resolved', 'package_wildcards',
-              'calls_inverse', 'callers_view', 'no_match')
+              'calls_inverse', 'callers_view', 'call_targets', 'no_match')
 IMPORT_INVARIANTS = ('fan_in_total', 'importers_resolved', 'importer_citations', 'local_units_resolved',
                      'package_wildcards')
-CALLS_INVARIANTS = ('calls_inverse', 'callers_view')
+CALLS_INVARIANTS = ('calls_inverse', 'callers_view', 'call_targets')
 DEFAULT_TIMEOUT = 1800
 EXAMPLES = 5
 NO_MATCH_VALUES = {'file': '__no_such_file_zz__.zzz', 'symbol': '__no_such_symbol_zz__'}
@@ -393,6 +405,138 @@ def check_callers_view(rank: Dict[str, Any], callers: Dict[str, Dict[str, Any]])
     return make_row('callers_view', population, violations, names=sorted(callers))
 
 
+# ── call_targets: where a resolved call lands (BACK-2569) ─────────────────────
+
+EXTERNAL_CLASSIFICATIONS = ('stdlib', 'unresolved')
+SIMPLE_CALL = re.compile(r'^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)?$')
+
+
+class NameBinding:
+    """What a file's imports bind one local name to, read off imports:// default view."""
+
+    def __init__(self) -> None:
+        self.external = True
+        self.targets: Set[Optional[str]] = set()
+        self.imported: Set[Optional[str]] = set()  # the name the import reads in its module, None if unknown
+
+    def add(self, stmt: Dict[str, Any], imported: Optional[str]) -> None:
+        target = stmt.get('resolved')
+        self.external = self.external and not target and stmt.get('classification') in EXTERNAL_CLASSIFICATIONS
+        self.targets.add(target)
+        self.imported.add(imported)
+
+
+def statement_bindings(stmt: Dict[str, Any]) -> List[Tuple[str, Optional[str]]]:
+    """(local name, name in the imported module) for each name `stmt` binds by the language's own rule:
+    each entry of a named import ('X as Y' binds Y to X), the alias of a namespace or aliased import, and
+    a Python bare ``import a.b`` (binds ``a``). A default import binds its local name to an export whose
+    name is unknown. Any other bare import (C ``#include``, Ruby ``require``, a JVM ``import a.b.C``) binds
+    a guessed name, so it binds nothing here."""
+    names = [n for n in stmt.get('names') or [] if n != '*']
+    if names:
+        if stmt.get('type') == 'default_import':
+            return [(name.strip(), None) for name in names]
+        return [(entry.split(' as ')[-1].strip(), entry.split(' as ')[0].strip()) for entry in names]
+    if stmt.get('alias'):
+        return [(stmt['alias'], None)]
+    if stmt.get('type') == 'import' and str(stmt.get('file', '')).endswith('.py'):
+        return [(str(stmt.get('module') or '').split('.')[0], None)]
+    return []
+
+
+def view_bindings(default_view: Dict[str, Any]) -> Dict[str, Dict[str, NameBinding]]:
+    """file (as the view spells it) -> local name -> binding. A name is external only when every statement
+    binding it is unresolved and classified outside the tree."""
+    out: Dict[str, Dict[str, NameBinding]] = {}
+    for file, stmts in (default_view.get('files') or {}).items():
+        names = out.setdefault(file, {})
+        for stmt in stmts:
+            for local, imported in statement_bindings(stmt):
+                if local:
+                    names.setdefault(local, NameBinding()).add(stmt, imported)
+    return out
+
+
+DEFINITION_LISTS = ('functions', 'methods', 'tests')  # the structure lists calls collects definitions from
+
+
+def outline_names(answer: Dict[str, Any]) -> Dict[str, Set[int]]:
+    """name -> the lines it is defined at, over the definition lists of a file's structure answer
+    (a class is not a call target: calls never resolves ``Foo()`` to a class)."""
+    names: Dict[str, Set[int]] = {}
+    for key in DEFINITION_LISTS:
+        items = (answer.get('structure') or {}).get(key)
+        for item in items if isinstance(items, list) else []:
+            if isinstance(item, dict) and item.get('name') and isinstance(item.get('line'), int):
+                names.setdefault(str(item['name']).split('.')[-1], set()).add(item['line'])
+    return names
+
+
+def walk_edges(walks: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Every distinct call edge of the callee walks, one per (caller file, caller line, call)."""
+    seen: Dict[Tuple[Any, Any, Any], Dict[str, Any]] = {}
+    for walk in walks:
+        for level in walk.get('levels') or []:
+            for edge in level.get('callees') or []:
+                seen.setdefault((edge.get('caller_file'), edge.get('caller_line'), edge.get('call_expr')), edge)
+    return [seen[key] for key in sorted(seen, key=lambda k: tuple(str(p) for p in k))]
+
+
+def check_call_targets(walks: Iterable[Dict[str, Any]], default_view: Dict[str, Any],
+                       outlines: Dict[str, Dict[str, Set[int]]], scan: str) -> Dict[str, Any]:
+    """Each call edge of the walks against the caller file's imports (imports:// default view, the scope
+    calls resolves in) and the outlines of the files involved, for calls spelled ``f`` or ``q.f``:
+
+      external_binding  q (or f) is bound only by imports from outside the tree: the call is not resolved
+                        to a project definition, unless a bare f is defined in the caller's own file
+      bound_file        q (or f) is bound only by imports that resolve to one file F under the scan, and F
+                        defines the name: the call resolves to F (a bare f the caller's file defines may
+                        resolve there instead)
+      target_defines    a call resolved to one definition: the target file defines that name at that line
+
+    ``outlines`` are keyed by the path as the walk spells it (scan-prefixed)."""
+    bindings = view_bindings(default_view)
+    prefix = scan.rstrip('/') + '/'
+    counts = Counter()
+    violations: List[Any] = []
+    for edge in walk_edges(walks):
+        call, caller = edge.get('call_expr') or '', edge.get('caller_file') or ''
+        if not SIMPLE_CALL.match(call) or not caller.startswith(prefix):
+            continue
+        qualified = '.' in call
+        head, tail = call.split('.')[0], call.split('.')[-1]
+        resolved = bool(edge.get('resolved'))
+        target = edge.get('callee_file') if resolved and not edge.get('ambiguous') else None
+        shadowed = not qualified and tail in outlines.get(caller, {})
+        record = {'caller': f"{caller}:{edge.get('caller_line')}", 'call': call,
+                  'got': (f"{target}:{edge.get('callee_line')}" if target else
+                          'ambiguous' if resolved else 'unresolved')}
+        if target:
+            counts['target_defines'] += 1
+            if edge.get('callee_line') not in outlines.get(target, {}).get(str(edge.get('callee') or tail), set()):
+                violations.append({'rule': 'target_defines', **record})
+        binding = bindings.get(caller[len(prefix):], {}).get(head)
+        if binding is None or shadowed:
+            continue
+        if binding.external:
+            counts['external_binding'] += 1
+            if resolved:
+                violations.append({'rule': 'external_binding', **record})
+            continue
+        if len(binding.targets) != 1 or None in binding.targets:
+            continue
+        bound = prefix + next(iter(binding.targets))  # type: ignore[operator]
+        name = tail if qualified or binding.imported == {None} else next(iter(binding.imported), None) or tail
+        if bound.startswith(prefix + '../') or len(binding.imported) > 1 or name not in outlines.get(bound, {}):
+            continue
+        counts['bound_file'] += 1
+        if target != bound:
+            violations.append({'rule': 'bound_file', 'bound_to': bound, **record})
+    population = sum(counts.values())
+    return make_row('call_targets', population, violations, edges_checked=dict(sorted(counts.items())),
+                    by_rule=dict(sorted(Counter(v['rule'] for v in violations).items())))
+
+
 # ── no-match control ──────────────────────────────────────────────────────────
 
 def no_match_requests(scan: str, specs: Iterable[Dict[str, Any]]) -> List[Tuple[str, str, str, List[str]]]:
@@ -690,6 +834,22 @@ def check_local_units_resolved(default_view: Dict[str, Any], scopes: Dict[Path, 
     return make_row('local_units_resolved', population, violations, packages=len(scopes) + len(go_scopes))
 
 
+def json_stream(text: str) -> List[Dict[str, Any]]:
+    """The JSON objects of a ``--stdin --format json`` batch, which prints one document per line read."""
+    decoder, pos, answers = json.JSONDecoder(), 0, []
+    while True:
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+        if pos >= len(text):
+            return answers
+        try:
+            obj, pos = decoder.raw_decode(text, pos)
+        except json.JSONDecodeError:
+            return answers
+        if isinstance(obj, dict):
+            answers.append(obj)
+
+
 class Requests:
     """Serial public requests for one corpus; keeps a short record of each."""
 
@@ -705,6 +865,27 @@ class Requests:
                          'partial': partial_reason(answer) if row.get('exit_code') == 3 else None,
                          'stderr_head': (row.get('stderr') or '')[:300]})
         return row
+
+    def batch(self, lines: List[str]) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+        """Every JSON answer of one ``--stdin`` batch (one process, so one import analysis for all its
+        walks), in order; (answers, why not) when the process gave none or timed out."""
+        started = time.monotonic()
+        argv = ['--stdin', '--format', 'json']
+        proc = subprocess.Popen([sys.executable, '-m', 'reveal', *argv], env=self.env, cwd=str(self.cwd),
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            out, err = proc.communicate(('\n'.join(lines) + '\n').encode('utf-8'), timeout=self.timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            self.log.append({'argv': argv, 'lines': len(lines), 'status': 'timeout'})
+            return [], f'--stdin batch of {len(lines)}: timeout'
+        answers = json_stream(out.decode('utf-8', 'replace'))
+        stderr = err.decode('utf-8', 'replace')
+        self.log.append({'argv': argv, 'lines': len(lines), 'status': 'ok', 'exit_code': proc.returncode,
+                         'answers': len(answers), 'wall_s_contended': round(time.monotonic() - started, 2),
+                         'stderr_head': stderr[:300]})
+        return answers, None if answers else f'--stdin batch of {len(lines)}: exit {proc.returncode}: {stderr[:200]}'
 
     def answer(self, argv: List[str]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """The JSON answer, or (None, why not). Exit 0 and 3 answer; anything else does not."""
@@ -799,8 +980,39 @@ def run_citations(req: Requests, scan: str, scan_dir: Path, importers: Dict[str,
     return error_row('importer_citations', '; '.join(failed)) if failed else row
 
 
+def run_call_targets(req: Requests, scan: str, callers: List[Caller]) -> Dict[str, Any]:
+    """Depth-2 callee walks of the sampled callers and imports:// default view (unpinned: the project
+    root calls resolves from) in one batch, then the outline of every file an edge involves."""
+    if not callers:
+        return make_row('call_targets', 0, [])
+    walk_lines = [f'calls://{scan}?callees={_quoted(f + ":" + c)}&depth=2&builtins=true' for f, c in callers]
+    answers, why = req.batch([f'imports://{scan}', *walk_lines])
+    default_view = next((a for a in answers if a.get('type') == 'imports'), None)
+    walks = [a for a in answers if a.get('type') == 'calls_callees' and a.get('levels')]
+    if why or default_view is None:
+        return error_row('call_targets', why or 'no imports:// answer in the batch')
+    bindings = view_bindings(default_view)
+    prefix = scan.rstrip('/') + '/'
+    files: Set[str] = set()
+    for edge in walk_edges(walks):
+        caller = edge.get('caller_file') or ''
+        files.add(caller)
+        if edge.get('callee_file'):
+            files.add(edge['callee_file'])
+        binding = bindings.get(caller[len(prefix):], {}).get(str(edge.get('call_expr') or '').split('.')[0])
+        files.update(prefix + t for t in (binding.targets if binding else ()) if t and not t.startswith('../'))
+    outlines: Dict[str, Dict[str, Set[int]]] = {}
+    if files:
+        structures, why = req.batch(sorted(files))
+        if why:
+            return error_row('call_targets', why)
+        outlines = {str(a['file']): outline_names(a) for a in structures if a.get('file')}
+    return check_call_targets(walks, default_view, outlines, scan) | {
+        'walks': len(walks), 'walks_requested': len(walk_lines), 'outlines': len(outlines)}
+
+
 def run_calls(req: Requests, scan: str, only: Tuple[str, ...], n_callers: int, n_names: int,
-              per_name: int) -> List[Dict[str, Any]]:
+              per_name: int, n_targets: int = 0) -> List[Dict[str, Any]]:
     wanted = [inv for inv in CALLS_INVARIANTS if inv in only]
     if not wanted:
         return []
@@ -840,6 +1052,8 @@ def run_calls(req: Requests, scan: str, only: Tuple[str, ...], n_callers: int, n
     if 'callers_view' in wanted:
         row = check_callers_view(rank, callers_answers)
         rows.append(error_row('callers_view', '; '.join(failed)) if failed else row)
+    if 'call_targets' in wanted:
+        rows.append(run_call_targets(req, scan, sample_callers(rank, n_targets)))
     label = _partial_label(req.log[start:])
     for row in rows:
         row['partial'] = label
@@ -878,7 +1092,7 @@ def run_corpus(name: str, scan_root: str, root: Path, env: Dict[str, str], args:
     started = time.monotonic()
     rows: List[Dict[str, Any]] = []
     rows += run_imports(req, scan, scan_dir, only, args.citations)
-    rows += run_calls(req, scan, only, args.callers, args.names, args.per_name)
+    rows += run_calls(req, scan, only, args.callers, args.names, args.per_name, args.target_callers)
     if 'no_match' in only:
         rows += run_no_match(req, scan, specs)
     return {'status': 'ok', 'scan': scan, 'corpus_head': _git_head(root / name), 'rows': rows,
@@ -926,7 +1140,7 @@ def run(args: argparse.Namespace) -> int:
         'corpus_root': root.as_posix(), 'python': sys.version, 'platform': platform.platform(),
         'disk_cache': bool(args.cache_dir), 'invariants': list(args.only or INVARIANTS),
         'samples': {'citations': args.citations, 'callers': args.callers, 'names': args.names,
-                    'per_name': args.per_name},
+                    'per_name': args.per_name, 'target_callers': args.target_callers},
         'target_specs': specs, 'started_at': datetime.now(timezone.utc).isoformat(),
         'loadavg_start': os.getloadavg() if hasattr(os, 'getloadavg') else None,
         'wall_times': 'contended: measured on a shared machine, not a benchmark', 'corpora': {}}
@@ -962,6 +1176,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument('--callers', type=int, default=6, help='evenly spaced callers whose callees are checked')
     parser.add_argument('--names', type=int, default=4, help='plain-identifier names whose callers are checked')
     parser.add_argument('--per-name', type=int, default=2, help='callers of each sampled name also checked inverse')
+    parser.add_argument('--target-callers', type=int, default=40,
+                        help='evenly spaced callers whose depth-2 walks call_targets checks (one batch)')
     return run(parser.parse_args(argv))
 
 

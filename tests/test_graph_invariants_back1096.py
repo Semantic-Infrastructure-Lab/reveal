@@ -590,6 +590,104 @@ def test_an_index_that_loses_one_call_turns_calls_inverse_red(root, monkeypatch)
     assert {'caller': ['proj/pkg/c.py', 'both'], 'callee_not_indexed': 'b.go'} in row['examples']
 
 
+# ── call_targets (BACK-2569) ──────────────────────────────────────────────────
+
+class _InProcess:
+    """run_call_targets' request side, in process: one --stdin batch per call, as Requests.batch."""
+
+    def __init__(self, root):
+        self.root = root
+
+    def batch(self, lines):
+        result = _run_reveal_in(self.root, '--stdin', '--format', 'json', stdin='\n'.join(lines) + '\n')
+        answers = inv.json_stream(result.stdout)
+        return answers, None if answers else f'no answers: {result.stderr}'
+
+
+def _call_targets(root, scan='proj', count=50):
+    rank = _answer(root, f'calls://{scan}?rank=callers&top=0&builtins=true&test-framework=true')
+    return inv.run_call_targets(_InProcess(root), scan, inv.sample_callers(rank, count))
+
+
+EXTERNAL_TREE = {
+    'ext/c.py': 'import json\nfrom os.path import join\n\n\ndef loads(s):\n    return json.loads(join(s, "x"))\n',
+    'ext/d.py': 'def join(a, b):\n    return a\n',
+    'ext/e.py': 'from d import join\n\n\ndef run(s):\n    return join(s, "y")\n',
+}
+
+
+def _tree(tmp_path, files):
+    for name, text in files.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(text, encoding='utf-8')
+    return tmp_path
+
+
+def test_call_targets_holds_on_the_fixture(root):
+    row = _call_targets(root)
+    assert row['status'] == 'green', row
+    # Positive control: b.py's `helper()` is bound to pkg/a.py, which defines it. (`a.run()` is not
+    # checked: `from pkg import a` reads as pkg/__init__.py, the statement's first target, BACK-2574.)
+    assert row['edges_checked']['bound_file'] >= 1 and row['edges_checked']['target_defines'] >= 3
+    assert row['walks'] == row['walks_requested'] == 4
+
+
+def test_call_targets_checks_external_and_in_tree_bindings(tmp_path):
+    root = _tree(tmp_path, EXTERNAL_TREE)
+    row = _call_targets(root, 'ext')
+    assert row['status'] == 'green', row
+    # json.loads and join (os.path) in c.py are external; join in e.py is bound to d.py.
+    assert row['edges_checked'] == {'bound_file': 1, 'external_binding': 2, 'target_defines': 1}
+
+
+def test_a_resolver_that_ignores_external_bindings_turns_call_targets_red(tmp_path, monkeypatch):
+    """Engine-level red control: the BACK-2553 defect (json.loads read as recursion, os.path's join
+    read as d.py's) restored by switching the binding check off."""
+    from reveal.adapters.calls.resolve import CallResolver
+    monkeypatch.setattr(CallResolver, '_reachable', lambda self, call, caller_file, candidates: candidates)
+    row = _call_targets(_tree(tmp_path, EXTERNAL_TREE), 'ext')
+    assert row['status'] == 'red'
+    assert {(v['rule'], v['call'], v['got']) for v in row['examples']} == {
+        ('external_binding', 'json.loads', 'ext/c.py:5'), ('external_binding', 'join', 'ext/d.py:1')}
+
+
+def test_a_call_that_misses_its_bound_file_turns_call_targets_red(tmp_path, monkeypatch):
+    """Engine-level red control: the resolver ignores what an in-tree import names, so e.py's `join`,
+    bound to d.py, is resolved to another file's same-named function."""
+    from reveal.adapters.calls.resolve import CallResolver
+    root = _tree(tmp_path, {**EXTERNAL_TREE, 'ext/f.py': 'def join(a, b):\n    return b\n'})
+    assert _call_targets(root, 'ext')['status'] == 'green'
+    monkeypatch.setattr(CallResolver, '_disambiguate',
+                        lambda self, call, tail, caller_file, candidates: candidates[-1])
+    row = _call_targets(root, 'ext')
+    assert [(v['rule'], v['call'], v['got'], v['bound_to']) for v in row['examples']] == [
+        ('bound_file', 'join', 'ext/f.py:1', 'ext/d.py')]
+
+
+def test_call_targets_red_when_a_target_does_not_define_the_name():
+    walks = [{'levels': [{'level': 1, 'callees': [
+        {'caller_file': 'p/a.py', 'caller_line': 1, 'call_expr': 'helper', 'callee': 'helper',
+         'resolved': True, 'callee_file': 'p/b.py', 'callee_line': 7}]}]}]
+    outlines = {'p/a.py': {}, 'p/b.py': {'helper': {3}}}
+    row = inv.check_call_targets(walks, {'files': {}}, outlines, 'p')
+    assert row['status'] == 'red' and row['examples'][0]['rule'] == 'target_defines'
+    outlines['p/b.py']['helper'] = {7}
+    assert inv.check_call_targets(walks, {'files': {}}, outlines, 'p')['status'] == 'green'
+
+
+@pytest.mark.parametrize('stmt, bound', [
+    ({'type': 'from_import', 'names': ['join', 'split as sp'], 'file': 'a.py'}, [('join', 'join'), ('sp', 'split')]),
+    ({'type': 'import', 'module': 'os.path', 'names': [], 'alias': 'osp', 'file': 'a.py'}, [('osp', None)]),
+    ({'type': 'import', 'module': 'os.path', 'names': [], 'file': 'a.py'}, [('os', None)]),
+    ({'type': 'namespace_import', 'module': 'fs', 'names': ['*'], 'alias': 'fs', 'file': 'a.ts'}, [('fs', None)]),
+    ({'type': 'default_import', 'module': 'typescript', 'names': ['ts'], 'file': 'a.ts'}, [('ts', None)]),
+    ({'type': 'import', 'module': 'java.util.List', 'names': [], 'file': 'A.java'}, []),  # a guessed name
+    ({'type': 'include', 'module': 'array', 'names': [], 'file': 'a.cpp'}, []),
+])
+def test_statement_bindings_reads_only_the_languages_own_binding_rule(stmt, bound):
+    assert inv.statement_bindings(stmt) == bound
+
+
 # ── no_match ──────────────────────────────────────────────────────────────────
 
 SPECS = [{'noun': 'imports', 'name': 'importers', 'names': 'file', 'flags': ['--importers']},

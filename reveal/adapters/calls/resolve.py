@@ -8,7 +8,8 @@ fixed that by walking definitions (BACK-1399); the recursive callees walk kept
 the name-keyed BFS (BACK-1442). One walk now does both (BACK-2096) and resolves
 each call site here: the caller's language family first (BACK-405), then what the
 call is bound to -- a call whose qualifier or bare name an import binds reaches that
-import's file, or is external when the import points outside the tree (BACK-2553) -- then a
+import's file, or no project definition when the import resolved to no file (BACK-2553,
+BACK-2573) -- then a
 same-file definition or the one its imports name, else the call is ambiguous and reported
 as such, never guessed.
 """
@@ -16,7 +17,7 @@ as such, never guessed.
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ...analyzers.imports.bindings import Binding, file_bindings
+from ...analyzers.imports.bindings import Binding, at_module, file_bindings
 from .index import _bare_callee_name, _lang_family
 
 Definition = Dict[str, Any]
@@ -42,7 +43,7 @@ class CallResolver:
 
     def resolve(self, call: str, caller_file: str) -> Tuple[str, Any]:
         """(bare name, target): target is one definition, a list of candidate
-        definitions when the name stays ambiguous, or None when external."""
+        definitions when the name stays ambiguous, or None when it reaches no project definition."""
         tail = _bare_callee_name(call)
         from ..ast.call_graph import build_alias_map
         if caller_file not in self._alias_maps:
@@ -50,24 +51,31 @@ class CallResolver:
         if '.' not in call:
             tail = self._alias_maps[caller_file].get(tail, tail)
         family = self._caller_family(caller_file)
+        # A module is a call source (its top-level calls), never what a call reaches: Rust's
+        # `mod parser;` is not the `parser(input)` a sibling calls (BACK-2569).
         candidates = [d for d in self.index.get(tail, [])
-                      if not family or d['family'] == family]
+                      if (not family or d['family'] == family) and d.get('category') != 'modules']
+        candidates = self._reachable(call, caller_file, candidates)
         if not candidates:
-            return tail, None
-        if self._is_external(call, caller_file, candidates):
             return tail, None
         if len(candidates) == 1:
             return tail, candidates[0]
         return tail, self._disambiguate(call, tail, caller_file, candidates) or candidates
 
-    def _is_external(self, call: str, caller_file: str, candidates: List[Definition]) -> bool:
-        """The call's qualifier (``json`` of ``json.loads``) or bare name is bound by an import that
-        points outside the tree, so a project function of that name is not what it reaches. A bare
-        call to a name the file also defines reaches its own definition (it shadows the import)."""
+    def _reachable(self, call: str, caller_file: str, candidates: List[Definition]) -> List[Definition]:
+        """The candidates the call can reach, given what its qualifier (``json`` of ``json.loads``)
+        or bare name is bound to. Bound only by imports that resolved to no project file, it reaches
+        none of them when they are outside the tree (BACK-2553), and when the verdict could not place
+        them (``pytest``; a monorepo package root reveal does not model) only one whose file sits at
+        the module's path (``dagster/_grpc/client.py`` for ``from dagster._grpc.client import f``,
+        BACK-2573). A bare call to a name the file also defines reaches its own definition (it
+        shadows the import)."""
         binding = self._file_bindings(caller_file).get(call.split('.')[0])
-        if binding is None or not binding.external:
-            return False
-        return '.' in call or not any(c['file'] == caller_file for c in candidates)
+        if binding is None or not binding.unresolved:
+            return candidates
+        if '.' not in call and any(c['file'] == caller_file for c in candidates):
+            return candidates
+        return [c for c in candidates if at_module(c['file'], binding.modules)]
 
     def _caller_family(self, caller_file: str) -> str:
         if caller_file not in self._families:
@@ -85,6 +93,11 @@ class CallResolver:
         imported = binding.target if binding else None
         imported_path = Path(imported).resolve() if imported else None
         via_import = [c for c in candidates if imported_path and Path(c['file']).resolve() == imported_path]
+        if len(via_import) > 1 and not qualifier:
+            # A bare name an import binds is a module-level name, never a class's method of that
+            # name (three.js DataUtils.js: `function toHalfFloat` and `static toHalfFloat`,
+            # BACK-2569); `DataUtils.toHalfFloat` through the imported class may be either.
+            via_import = [c for c in via_import if not c.get('member')] or via_import
         same_file = [c for c in candidates if c['file'] == caller_file]
         for group in ((via_import, same_file) if qualifier else (same_file, via_import)):
             if len(group) == 1:
@@ -107,7 +120,7 @@ class CallResolver:
     def _file_bindings(self, file_path: str) -> Dict[str, Binding]:
         """The caller file's import bindings: from the import analysis when it holds the file, else
         the per-file symbol map (a file past the scan's file cap, or a file no import extractor
-        reads), whose None never claims a target is external."""
+        reads), whose None never makes a name unresolved."""
         if file_path not in self._bindings:
             analysis = self._import_analysis()
             extraction = analysis.extractions.get(Path(file_path)) if analysis is not None else None
