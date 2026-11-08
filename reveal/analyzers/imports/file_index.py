@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from ...registry import DECLARATION_ONLY_EXTENSIONS
-from ...utils.path_utils import RESOLUTION, OnHidden, walk_with_causes
+from ...utils.path_utils import RESOLUTION, OnHidden, under_directory, walk_with_causes
 from ...reveal_types import PathFailure
 
 
@@ -88,20 +88,33 @@ def load_path_manifests(root: Path, pattern: str, *,
             if fnmatch(path.name, pattern)]
 
 
-def under_directory(directory: Path) -> Callable[[Path], bool]:
-    """A test for "*path* is *directory* or inside it" with the same lexical answer as
-    ``path.relative_to(directory)`` succeeding (case-insensitive where the OS is), prepared once
-    for many paths: one string compare per path instead of building pathlib parents (on a
-    17,800-file scan the pathlib form was the largest part of a focused build, BACK-2565)."""
-    if not directory.parts:  # Path('.'): every relative path is below it, no absolute one
-        return lambda path: not path.is_absolute()
+def _resolved_under(directory: Path) -> Callable[[str], bool]:
+    """Whether the path spelled *spelled*, symlinks resolved, is *directory* or inside it: the
+    answer of ``under_directory(directory)(Path(spelled).resolve())``, with each parent directory
+    resolved once instead of every file walking its own chain, on strings (a 17,800-file graph cache
+    key spent most of its time in realpath and pathlib, BACK-2566). Only a path that is itself a
+    symlink is resolved whole."""
     base = os.path.normcase(str(directory))
     prefix = base if base.endswith(os.sep) else base + os.sep
+    parents: Dict[str, str] = {}
 
-    def under(path: Path) -> bool:
-        spelled = os.path.normcase(str(path))
-        return spelled == base or spelled.startswith(prefix)
+    def under(spelled: str) -> bool:
+        head, tail = os.path.split(spelled)
+        if not tail or os.path.islink(spelled):
+            real = os.path.realpath(spelled)
+        else:
+            if head not in parents:
+                parents[head] = os.path.realpath(head or os.curdir)
+            real = os.path.join(parents[head], tail)
+        real = os.path.normcase(real)
+        return real == base or real.startswith(prefix)
     return under
+
+
+def _path_order(spelled: str) -> List[str]:
+    """The sort key that orders path strings as ``sorted()`` orders their ``Path``s (pathlib compares
+    the normcased string split on the separator), without building the Paths."""
+    return os.path.normcase(spelled).split(os.sep)
 
 
 def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Path]],
@@ -126,26 +139,26 @@ def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Pat
     if traversal_failures:
         return None
     try:
-        excluded = under_directory(excluded_root.resolve()) if excluded_root is not None else None
+        excluded = _resolved_under(excluded_root.resolve()) if excluded_root is not None else None
         hasher = hashlib.sha256()
         hasher.update(b'root\x01' + str(root).encode('utf-8', 'replace') + b'\x04')
         groups = (('sources', set(candidates)), ('targets', {p for paths in index.values() for p in paths}),
                   ('context', set(context)))
         for role, paths in groups:
             hasher.update(role.encode('ascii'))
-            for path in sorted(paths):
-                if excluded is not None and excluded(path.resolve()):
+            for spelled in sorted(map(str, paths), key=_path_order):
+                if excluded is not None and excluded(spelled):
                     continue
-                info = path.stat()
+                info = os.stat(spelled)
                 if not stat.S_ISREG(info.st_mode):
                     continue
-                hasher.update(str(path).encode('utf-8', 'replace'))
+                hasher.update(spelled.encode('utf-8', 'replace'))
                 hasher.update(f"\x02{info.st_mtime_ns}\x03{info.st_size}\x04".encode('ascii'))
         hasher.update(b'directories')
-        for directory in sorted(getattr(index, 'directories', ())):
-            if excluded is not None and excluded(directory.resolve()):
+        for spelled in sorted(map(str, getattr(index, 'directories', ())), key=_path_order):
+            if excluded is not None and excluded(spelled):
                 continue
-            hasher.update(str(directory).encode('utf-8', 'replace') + b'\x04')
+            hasher.update(spelled.encode('utf-8', 'replace') + b'\x04')
         return hasher.hexdigest()
     except (OSError, ValueError):
         return None

@@ -8,7 +8,7 @@ from .file_index import discover_import_files
 from .packages import EMPTY_PACKAGES, PackageModel
 from .types import ImportGraph, ImportStatement
 from ...reveal_types import PathFailure
-from ...utils.path_utils import HiddenTally, failure_of
+from ...utils.path_utils import HiddenTally, failure_of, under_directory
 
 @dataclass(frozen=True)
 class ScanScope:
@@ -65,7 +65,8 @@ def discover(scope: ScanScope) -> ImportFileSet:
     focus = scope.focus
     if focus is None:
         return ImportFileSet(tuple(candidates), index, capped, tuple(failures), dict(hidden), len(candidates))
-    analyzed = sum(1 for c in candidates if c == focus or focus in c.parents)
+    in_focus = under_directory(focus)
+    analyzed = sum(1 for c in candidates if in_focus(c))
     # A walk that kept nothing at all says everything it hid; one that kept files elsewhere
     # says only what hides the focus, so an ignored sibling is not blamed for an empty one.
     return ImportFileSet(tuple(candidates), index, capped, tuple(failures),

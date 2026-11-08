@@ -678,6 +678,40 @@ def _unsafe_scan_roots_for(temp_dir: str, home: Optional[str]) -> frozenset:
     return frozenset(roots)
 
 
+def under_directory(directory: Path) -> Callable[[Path], bool]:
+    """A test for "*path* is *directory* or inside it" with the same lexical answer as
+    ``path.relative_to(directory)`` succeeding (case-insensitive where the OS is), prepared once
+    for many paths: one string compare per path instead of building pathlib parents (on a
+    17,800-file scan the pathlib form was the largest part of a focused build, BACK-2565)."""
+    if not directory.parts:  # Path('.'): every relative path is below it, no absolute one
+        return lambda path: not path.is_absolute()
+    base = os.path.normcase(str(directory))
+    prefix = base if base.endswith(os.sep) else base + os.sep
+
+    def under(path: Path) -> bool:
+        spelled = os.path.normcase(str(path))
+        return spelled == base or spelled.startswith(prefix)
+    return under
+
+
+def relative_under(directory: Path) -> Callable[[Path], Optional[str]]:
+    """``path.relative_to(directory).as_posix()``, or None where that raises, prepared once for
+    many paths like :func:`under_directory` (a walk's per-entry ``relative_to`` was most of a
+    17,800-file walk, BACK-2566)."""
+    if not directory.parts:
+        return lambda path: None if path.is_absolute() else path.as_posix()
+    base = os.path.normcase(str(directory))
+    prefix = base if base.endswith(os.sep) else base + os.sep
+
+    def relative(path: Path) -> Optional[str]:
+        raw = str(path)
+        spelled = os.path.normcase(raw)
+        if spelled == base:
+            return '.'
+        return to_posix(raw[len(prefix):]) if spelled.startswith(prefix) else None
+    return relative
+
+
 def is_unsafe_scan_root(path: Union[str, PurePath, None]) -> bool:
     """True if *path* is a filesystem/system/home root, platform-aware.
 
@@ -1171,14 +1205,13 @@ def walk_filter(
             return in_scope(rel, is_dir)
         return dir_is_excluded(p) if is_dir else path_is_excluded(p)
 
+    relative = relative_under(path)
+
     def hidden(p: Path, is_dir: bool) -> Optional[str]:
         cause = by_shape(p, is_dir)
         if cause is not None:
             return cause
-        try:
-            rel: Optional[str] = p.relative_to(path).as_posix()
-        except ValueError:  # not under the walk root: ask the per-path checks
-            rel = None
+        rel = relative(p)  # None: not under the walk root, so the per-path checks decide
         if by_config(p, rel, is_dir):
             return 'reveal_ignore'
         if gi is not None and gi.ignored(p, is_dir=is_dir):
