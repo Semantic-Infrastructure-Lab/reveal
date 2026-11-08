@@ -66,7 +66,7 @@ class CallResolver:
         the module's path (``dagster/_grpc/client.py`` for ``from dagster._grpc.client import f``,
         BACK-2573). A bare call to a name the file also defines reaches its own definition (it
         shadows the import)."""
-        binding = self._bindings.of(caller_file).get(call.split('.')[0])
+        binding = self._bindings.get(caller_file, call.split('.')[0])
         kept = reaches(binding, call, caller_file, (c['file'] for c in candidates))
         return [c for c in candidates if c['file'] in kept]
 
@@ -96,8 +96,8 @@ class CallResolver:
         DataUtils.js: `function toHalfFloat` and `static toHalfFloat`), and of several (TypeScript
         overload signatures, a Python redefinition) the last, the one the module ends up binding. A
         call through an imported class (`SnapCache.getReferenceSnapPoints`) is that class's member."""
-        bindings = self._bindings.of(caller_file)
-        binding = bindings.get(qualifier or (call if call in bindings else tail))
+        binding = (self._bindings.get(caller_file, qualifier) if qualifier else
+                   self._bindings.get(caller_file, call) or self._bindings.get(caller_file, tail))
         if binding is None or not binding.target:
             return []
         imported_path = Path(binding.target).resolve()

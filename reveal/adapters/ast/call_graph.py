@@ -145,12 +145,11 @@ def annotate_resolved_calls(elements: List[Dict[str, Any]], target: str) -> None
     inside a project (a package marker, a repository or ``.reveal.yaml`` above ``target``): a loose
     file's imports name no project to resolve in, and its directory (a Downloads folder, /tmp/x) can be
     any size; a 1 s query of one file took 73 s walking a shared temp directory."""
-    from ...analyzers.imports.resolution import choose_scan_root
-    if not any(elem.get('calls') for elem in elements) or choose_scan_root(Path(target)).inferred:
-        return
-    bindings = ProjectBindings(Path(target))
+    bindings = ProjectBindings(Path(target), project_only=True)
     for elem in elements:
         if elem.get('calls') and elem.get('file'):
-            resolved = resolved_calls(elem['calls'], bindings.of(elem['file']))
+            heads = {call.split('.')[0] for call in elem['calls']}
+            bound = {head: b for head in heads if (b := bindings.get(elem['file'], head)) is not None}
+            resolved = resolved_calls(elem['calls'], bound)
             if any('resolved_file' in entry for entry in resolved):
                 elem['resolved_calls'] = resolved

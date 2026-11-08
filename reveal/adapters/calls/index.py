@@ -659,7 +659,7 @@ def _bound_key(key: str, record: Dict[str, Any], files: FrozenSet[str], bindings
     call = str(record.get('call_expr') or '')
     if '.' in call and key == call:
         return key
-    binding = bindings.of(record['file']).get(call.split('.')[0])
+    binding = bindings.get(record['file'], call.split('.')[0])
     if reaches(binding, call, record['file'], files):
         return key
     if '.' in call:

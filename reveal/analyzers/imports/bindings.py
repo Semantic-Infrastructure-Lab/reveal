@@ -13,7 +13,7 @@ path can be (BACK-2573).
 import os
 import re
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Iterable, NamedTuple, Optional, Set, Tuple, Union
+from typing import Any, Dict, FrozenSet, Iterable, NamedTuple, Optional, Set, Tuple, Union
 
 from .types import ImportStatement
 from .unused import binds_reliably, bound_name, bound_names
@@ -160,22 +160,39 @@ class ProjectBindings:
     scan's file cap, or one no import extractor reads) has no bindings: nothing is claimed about
     its names."""
 
-    def __init__(self, target: Optional[Path]) -> None:
+    def __init__(self, target: Optional[Path], *, project_only: bool = False) -> None:
         self._target = target
+        self._project_only = project_only  # no analysis outside a project (an inferred root)
         self._files: Dict[str, Dict[str, Binding]] = {}
         self._extractions: Optional[Dict[str, Any]] = None
+        self._bound_names: Dict[str, FrozenSet[str]] = {}
+
+    def get(self, file_path: str, name: str) -> Optional[Binding]:
+        """What ``name`` is bound to in ``file_path``: None unless one of the file's own imports binds
+        it, which its import extraction answers without the project's analysis, so a file (or a
+        whole query) whose calls go through no import never builds it. Same answer as
+        ``of(file_path).get(name)``: the analysis binds from the same statements."""
+        if file_path not in self._bound_names:
+            self._bound_names[file_path] = _names_bound_in(file_path)
+        if name not in self._bound_names[file_path]:
+            return None
+        return self.of(file_path).get(name)
 
     def _by_file(self) -> Dict[str, Any]:
         """The analysis' extractions keyed by absolute path: its root may be spelled '..' while the
         consumer walked '.', so the two spellings of one file must meet."""
         if self._extractions is None:
             self._extractions = {}
-            if self._target is not None:
+            if self._target is not None and not (self._project_only and self._outside_project()):
                 from . import service
                 analysis = service.analyze(service.project_scope(self._target)).analysis
                 self._extractions = {_absolute(path): extraction
                                      for path, extraction in analysis.extractions.items()}
         return self._extractions
+
+    def _outside_project(self) -> bool:
+        from .resolution import choose_scan_root
+        return choose_scan_root(self._target).inferred if self._target is not None else True
 
     def of(self, file_path: str) -> Dict[str, Binding]:
         """Local name -> binding for one file, however the consumer spells its path."""
@@ -183,6 +200,20 @@ class ProjectBindings:
             extraction = self._by_file().get(_absolute(file_path))
             self._files[file_path] = file_bindings(extraction.imports) if extraction is not None else {}
         return self._files[file_path]
+
+
+def _names_bound_in(file_path: str) -> FrozenSet[str]:
+    """Every local name the file's own import statements bind (no resolution)."""
+    from .base import get_extractor
+    path = Path(file_path)
+    extractor = get_extractor(path)
+    if extractor is None:
+        return frozenset()
+    try:
+        statements = extractor.extract_imports(path)
+    except OSError:
+        return frozenset()
+    return frozenset(name for stmt in statements for name in bound_names(stmt))
 
 
 def _absolute(path: Union[str, Path]) -> str:
