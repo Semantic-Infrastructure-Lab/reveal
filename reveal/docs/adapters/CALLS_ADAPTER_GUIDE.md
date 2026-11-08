@@ -272,7 +272,12 @@ name. Each definition is expanded once, at the shallowest level it is reached; e
 an expanded definition is an edge (call text de-duplicated per definition), including one to a
 definition already reached (`expanded: false`). A call resolves within the caller's language family
 to its one definition, else to a same-file one or the one its imports name, else it is `ambiguous`
-with its `candidates` and not expanded. The answer keeps type `calls_callees` and its depth-1
+with its `candidates` and not expanded. A call whose qualifier or bare name is bound by an import
+that `imports://` classifies as outside the tree (`json.loads`, `readFileSync` from `'fs'`) is
+external, never a project function of the same name; a bare call to a name the file itself defines
+reaches that definition. Imports are read from the analysis `imports://` builds for the walked
+directory (its project root, so a `tsconfig.json` alias above it counts). An import that binds no
+name (`#include`, Ruby `require`, C# `using`) binds nothing here. The answer keeps type `calls_callees` and its depth-1
 `matches`, and adds `depth`, `levels[].callees[]` (one per edge: `caller`, `caller_file`,
 `caller_line`, `call_expr`, `callee`, `resolved`, `callee_file`/`callee_line` or `ambiguous` and
 `candidates`, `expanded`), `definitions[]` (every definition reached: `name`, `file`, `line`,
