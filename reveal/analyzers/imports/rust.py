@@ -623,6 +623,13 @@ class RustExtractor(LanguageExtractor):
         parts = [part for part in rest.split('::') if part]
         return self._deepest_module_match(parts, unit.library_root.parent) or unit.library_root
 
+    def unplaced_module_paths(self, stmt: ImportStatement) -> Tuple[Tuple[str, ...], ...]:
+        """Where an unplaced ``use`` path's item sits (BACK-2573). The path spells the item into the
+        module (``use write::write_to_db``), so the item is either a module itself (``use a::b`` then
+        ``b::f()``: a/b.rs) or a member of the module before it (write.rs)."""
+        parts = tuple(part for part in (stmt.module_name or '').split('::') if part and part != '*')
+        return (parts, parts[:-1]) if len(parts) > 1 else (parts,) if parts else ()
+
     def is_structural_edge(self, from_file: Path, to_file: Path) -> bool:
         """A module and an ancestor or descendant module in its own tree (BACK-2129).
 

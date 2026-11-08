@@ -7,18 +7,18 @@ the answer is the one imports:// gives for the same statement. A name bound only
 extractor's verdict (``ImportStatement.intra_verdict``, BACK-2550) says outside the tree, no project
 function of that name is what a use of it reaches; when it cannot tell (a Python third-party package,
 or an in-tree package under a root reveal does not model), only one whose file sits at the module's
-path can be (BACK-2573).
+path, by its language's rule (``LanguageExtractor.unplaced_module_paths``), can be (BACK-2573). An
+import the verdict or its relative spelling puts in the tree is never ``unresolved``: resolution
+missing it says nothing about where its names are defined.
 """
 
 import os
-import re
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, FrozenSet, Iterable, NamedTuple, Optional, Set, Tuple, Union
 
 from .types import ImportStatement
 from .unused import binds_reliably, bound_name, bound_names
 
-_SEPARATORS = re.compile(r'[./\\:]+')
 _PACKAGE_FILES = frozenset({'__init__', 'index', 'mod'})
 
 
@@ -29,6 +29,7 @@ class Binding(NamedTuple):
     """What an import binds a local name to."""
     target: Optional[str]   # the one file every import binding the name resolved to
     unresolved: bool        # every import binding the name, by the language's own rule, resolved to no file
+                            # and may be from outside the tree (not an in-tree verdict or a relative spelling)
     # For an unresolved name, the module paths it may still come from inside the tree: those of a
     # statement whose verdict could not place it (a package root or sys.path entry reveal does not
     # model, as a monorepo's python_modules/dagster). Empty: every statement is outside the tree.
@@ -53,21 +54,6 @@ def reaches(binding: Optional[Binding], call: str, caller_file: str, files: Iter
     return {f for f in files if at_module(f, binding.modules)}
 
 
-def _module_paths(stmt: ImportStatement) -> Tuple[ModulePath, ...]:
-    """Where ``stmt``'s module, and a named import's member as a submodule, would sit under some
-    root: ``from a.b import c`` -> ('a', 'b') and ('a', 'b', 'c'); ``import a.b``, which binds ``a``,
-    -> ('a',) and ('a', 'b'). None for an import the extractor places outside the tree, or a relative
-    one (resolution had its directory)."""
-    if stmt.intra_verdict is False or stmt.is_relative:
-        return ()
-    module = tuple(part for part in _SEPARATORS.split(stmt.module_name or '') if part)
-    if not module:
-        return ()
-    members = [entry.split(' as ')[0].strip() for entry in stmt.imported_names if entry != '*']
-    first = (module[:1],) if not stmt.imported_names and not stmt.alias and len(module) > 1 else ()
-    return (*first, module, *((*module, member) for member in members if member))
-
-
 def _origins(stmt: ImportStatement) -> Dict[str, str]:
     """Local name -> the import's spelling of what it binds: a named entry's module and name, an
     aliased or namespace import's module."""
@@ -83,11 +69,30 @@ def _origins(stmt: ImportStatement) -> Dict[str, str]:
 
 def at_module(file_path: str, modules: Iterable[ModulePath]) -> bool:
     """Whether ``file_path`` is where one of ``modules`` would sit: its path without the extension
-    (and without a package's ``__init__``/``index``/``mod``) ends with the module's parts."""
-    parts = tuple(PurePosixPath(file_path.replace('\\', '/')).with_suffix('').parts)
-    forms = [parts, parts[:-1]] if parts and parts[-1] in _PACKAGE_FILES else [parts]
+    (and without a package's ``__init__``/``index``/``mod``) ends with the module's parts; for a
+    language whose package is a directory (Go), its directory does."""
+    path = PurePosixPath(file_path.replace('\\', '/'))
+    parts = tuple(path.with_suffix('').parts)
+    if _package_is_directory(path.suffix):
+        forms = [parts[:-1]]
+    else:
+        forms = [parts, parts[:-1]] if parts and parts[-1] in _PACKAGE_FILES else [parts]
     return any(len(form) >= len(module) and form[-len(module):] == module
                for module in modules for form in forms)
+
+
+def _package_is_directory(suffix: str) -> bool:
+    from .base import extractor_class
+    cls = extractor_class(suffix)
+    return bool(cls and cls.package_is_directory)
+
+
+def _unplaced_module_paths(stmt: ImportStatement) -> Tuple[ModulePath, ...]:
+    """Where an unplaced ``stmt`` (unknown verdict) may sit: its language's own rule
+    (``LanguageExtractor.unplaced_module_paths``); none for a file no extractor reads."""
+    from .base import get_extractor
+    extractor = get_extractor(Path(stmt.file_path))
+    return extractor.unplaced_module_paths(stmt) if extractor is not None else ()
 
 
 def _bound_target(stmt: ImportStatement, name: str) -> Optional[str]:
@@ -135,8 +140,8 @@ def file_bindings(imports: Iterable[ImportStatement]) -> Dict[str, Binding]:
     in-tree (Zig ``const config = @import("config.zig")``), which only ever narrows candidates."""
     bindings: Dict[str, Binding] = {}
     for stmt in imports:
-        unresolved = stmt.resolved_path is None and binds_reliably(stmt)
-        modules = _module_paths(stmt) if unresolved else ()
+        unresolved = stmt.resolved_path is None and binds_reliably(stmt) and _not_in_tree(stmt)
+        modules = _unplaced_module_paths(stmt) if unresolved and stmt.intra_verdict is None else ()
         origins = _origins(stmt)
         for name in bound_names(stmt):
             target = _bound_target(stmt, name)
@@ -150,6 +155,14 @@ def file_bindings(imports: Iterable[ImportStatement]) -> Dict[str, Binding]:
                                       seen.modules + modules if seen.unresolved and unresolved else (),
                                       seen.origin if seen.origin == origin else None))
     return bindings
+
+
+def _not_in_tree(stmt: ImportStatement) -> bool:
+    """Whether an import resolution placed in no file may be from outside the tree: not when the
+    extractor's verdict puts it in the tree, nor when its spelling is relative (Rust ``crate::``,
+    ``super::``; Python ``from . import``): resolution missed it (a crate with no Cargo.toml), and
+    that is no claim about where its names are defined."""
+    return stmt.intra_verdict is not True and not stmt.is_relative
 
 
 class ProjectBindings:

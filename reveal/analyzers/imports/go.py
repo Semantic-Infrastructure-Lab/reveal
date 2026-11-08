@@ -88,6 +88,19 @@ class GoExtractor(LanguageExtractor):
     extensions = {'.go'}
     language_name = 'Go'
     package_manifests = ('go.mod', 'go.work')
+    package_is_directory = True
+
+    def unplaced_module_paths(self, stmt: ImportStatement) -> Tuple[Tuple[str, ...], ...]:
+        """The package directory an unplaced import names (BACK-2573). An import path starts with the
+        module path ``go.mod`` declares, which is not on disk, so only its last element is known to
+        be a directory name: ``example.com/proj/internal/types`` -> ('types',). A major-version suffix
+        is either a directory or only the module's version (``k8s.io/klog/v2``): ('v2',) and ('klog',)."""
+        segments = [part for part in (stmt.module_name or '').split('/') if part]
+        if not segments:
+            return ()
+        if _GO_MAJOR_VERSION_SUFFIX.match(segments[-1]) and len(segments) > 1:
+            return ((segments[-1],), (segments[-2],))
+        return ((segments[-1],),)
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all import declarations from Go file using tree-sitter.

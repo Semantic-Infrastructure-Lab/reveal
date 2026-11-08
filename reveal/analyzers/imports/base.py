@@ -14,6 +14,7 @@ from copy import deepcopy
 import hashlib
 import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable, Iterable, List, Set, ClassVar, Optional, Tuple, Type, Dict
@@ -29,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 # Registry for auto-discovery of language extractors
 _EXTRACTOR_REGISTRY: Dict[str, Type['LanguageExtractor']] = {}
+# The separators of a module spelling ('a.b', 'a/b', 'a::b', 'a\\b').
+_MODULE_SEPARATORS = re.compile(r'[./\\:]+')
 
 
 class ImportsDiskCache:
@@ -178,6 +181,12 @@ def get_extractor(file_path: Path) -> Optional['LanguageExtractor']:
     return extractor_cls() if extractor_cls else None
 
 
+def extractor_class(suffix: str) -> Optional[Type['LanguageExtractor']]:
+    """The extractor class registered for a file extension ('.go'), for its class-level facts
+    without building an instance; None if unsupported."""
+    return _EXTRACTOR_REGISTRY.get(suffix)
+
+
 def get_all_extensions() -> Set[str]:
     """Get all supported file extensions from registered extractors.
 
@@ -298,6 +307,9 @@ class LanguageExtractor(ABC):
     # The manifest file names this language's package units are read from (``package_units``, BACK-2559).
     # Empty: the language has no package model, and ``packages`` reaches its resolution as unused.
     package_manifests: ClassVar[Tuple[str, ...]] = ()
+    # True when a package is a directory and every file in it belongs to it (Go): a module path
+    # from ``unplaced_module_paths`` then names the directory a candidate file sits in.
+    package_is_directory: ClassVar[bool] = False
 
     def __init__(self) -> None:
         # Set by _get_tree_analyzer() when a file this extractor claims to
@@ -523,6 +535,20 @@ class LanguageExtractor(ABC):
         """
         primary = self.resolve_import(stmt, base_path, search_paths=search_paths)
         return [primary] if primary is not None else []
+
+    def unplaced_module_paths(self, stmt: ImportStatement) -> Tuple[Tuple[str, ...], ...]:
+        """Where ``stmt``'s module, and a named import's member as a submodule, would sit under some
+        root, for an import resolution could not place and whose verdict is unknown (BACK-2573): a
+        call it binds reaches only a project definition at one of these paths. Each is the trailing
+        parts of a file's path without its extension (``bindings.at_module``). The default is a module
+        path that is a chain of directories under its root: ``from a.b import c`` -> ('a', 'b') and
+        ('a', 'b', 'c'); ``import a.b``, which binds ``a``, -> ('a',) and ('a', 'b')."""
+        module = tuple(part for part in _MODULE_SEPARATORS.split(stmt.module_name or '') if part)
+        if not module:
+            return ()
+        members = [entry.split(' as ')[0].strip() for entry in stmt.imported_names if entry != '*']
+        first = (module[:1],) if not stmt.imported_names and not stmt.alias and len(module) > 1 else ()
+        return (*first, module, *((*module, member) for member in members if member))
 
     def package_wildcard_prefix(self, stmt: ImportStatement) -> Optional[str]:
         """The package a wildcard import names (``a.b`` for Java/Kotlin ``import a.b.*``, Scala
