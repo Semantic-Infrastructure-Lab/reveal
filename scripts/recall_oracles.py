@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
 from typing import Callable, NamedTuple
@@ -665,6 +666,74 @@ PACKAGE = re.compile(r'^\s*package\s+([\w.]+)\s*;', re.MULTILINE)
 IMPORT = re.compile(r'^\s*import\s+(static\s+)?([\w.]+?)(\.\*)?\s*;', re.MULTILINE)
 
 
+def _pom_children(element: ET.Element | None, name: str) -> list[ET.Element]:
+    found = next((c for c in element if c.tag.split('}')[-1] == name), None) if element is not None else None
+    return list(found) if found is not None else []
+
+
+def _pom_text(element: ET.Element | None, name: str) -> str | None:
+    if element is None:
+        return None
+    found = next((c for c in element if c.tag.split('}')[-1] == name), None)
+    return (found.text or '').strip() or None if found is not None else None
+
+
+def maven_build_paths(scope: Scope) -> dict[Path, frozenset[Path]] | None:
+    """Each Maven module directory under the scan root -> the module directories it builds against (BACK-2552).
+
+    Written apart from reveal's package model on purpose: Maven resolves a dependency on an artifact the same
+    reactor builds to that reactor module, so this reads only each aggregator's ``<modules>`` and each
+    dependency's groupId:artifactId (no versions, no properties); reveal links by version coordinate. A
+    module no aggregator lists is a reactor of its own. None: the scan holds no pom.xml.
+    """
+    poms = [p for p in tracked_files(scope.root, [_relative(scope, scope.scan)], frozenset({'.xml'}))
+            if p.name == 'pom.xml']
+    if not poms:
+        return None
+    modules: dict[Path, tuple[str | None, str | None, list[Path], list[tuple[str | None, str | None]]]] = {}
+    for pom in poms:
+        root = ET.parse(pom).getroot()
+        parent = next((c for c in root if c.tag.split('}')[-1] == 'parent'), None)
+        group = _pom_text(root, 'groupId') or _pom_text(parent, 'groupId')
+        listed = [(pom.parent / (m.text or '').strip()).resolve() for m in _pom_children(root, 'modules')]
+        listed = [m.parent if m.suffix == '.xml' else m for m in listed]
+        deps = [(group if _pom_text(d, 'groupId') == '${project.groupId}' else _pom_text(d, 'groupId'),
+                 _pom_text(d, 'artifactId')) for d in _pom_children(root, 'dependencies')]
+        modules[pom.parent.resolve()] = (group, _pom_text(root, 'artifactId'), listed, deps)
+    reactor: dict[Path, Path] = {}
+    for top in sorted(modules, key=lambda d: len(d.parts)):  # the outermost aggregator claims its tree first
+        if top in reactor:
+            continue
+        stack = [top]
+        while stack:
+            directory = stack.pop()
+            if directory in modules and directory not in reactor:
+                reactor[directory] = top
+                stack.extend(modules[directory][2])
+    named: dict[tuple[Path, str | None, str | None], list[Path]] = defaultdict(list)
+    for d, (g, a, _m, _deps) in modules.items():
+        named[(reactor[d], g, a)].append(d)
+    # two modules of one reactor with one groupId:artifactId (versions differ): undecidable without versions
+    by_name = {key: dirs[0] for key, dirs in named.items() if len(dirs) == 1}
+    direct = {d: {by_name[key] for g, a in deps if (key := (reactor[d], g, a)) in by_name}
+              for d, (_g, _a, _m, deps) in modules.items()}
+    paths: dict[Path, frozenset[Path]] = {}
+    for directory in modules:
+        seen: set[Path] = set()
+        stack = list(direct[directory])
+        while stack:
+            dep = stack.pop()
+            if dep not in seen and dep != directory:
+                seen.add(dep)
+                stack.extend(direct[dep])
+        paths[directory] = frozenset(seen)
+    return paths
+
+
+def _module_of(path: Path, paths: dict[Path, frozenset[Path]]) -> Path | None:
+    return next((d for d in path.resolve().parents if d in paths), None)
+
+
 def build_java_oracle(scope: Scope) -> tuple[Edges, Coverage]:
     sources = {p: p.read_text(encoding='utf-8', errors='replace')
                for p in tracked_files(scope.root, [_relative(scope, scope.scan)], frozenset({'.java'}))}
@@ -676,17 +745,34 @@ def build_java_oracle(scope: Scope) -> tuple[Edges, Coverage]:
         types[(package, path.stem)].append(path)
         packages[package].append(path)
     duplicates = sorted(f'{p}.{t}' for (p, t), paths in types.items() if len(paths) > 1)
-    if duplicates:
+    build_paths = maven_build_paths(scope) if duplicates else None
+    if duplicates and build_paths is None:
         # Two files claiming one type make the truth ambiguous; narrow scan_root instead of guessing.
         raise RuntimeError(f'Java oracle found {len(duplicates)} duplicate type(s) under the scan root, '
                            f'e.g. {duplicates[:3]}; measurement unavailable')
+    undecided = 0
 
-    def resolve(dotted: str) -> list[Path]:
+    def on_build_path(importer: Path, hit: list[Path]) -> list[Path]:
+        """The one copy of a duplicate type the importer's Maven module builds against: its own, else one on
+        its build path. Several, or none: undecided, unscored."""
+        nonlocal undecided
+        assert build_paths is not None
+        module = _module_of(importer, build_paths)
+        for layer in (({module}, build_paths[module]) if module is not None else ()):
+            inside = [h for h in hit if _module_of(h, build_paths) in layer]
+            if len(inside) == 1:
+                return inside
+            if inside:
+                break
+        undecided += 1
+        return []
+
+    def resolve(dotted: str, importer: Path) -> list[Path]:
         parts = dotted.split('.')
         # a.b.C, then a.b.Outer for a.b.Outer.Nested, a.b.Outer.Mid.Nested, ...
         for cut in range(1, len(parts)):
             if hit := types.get(('.'.join(parts[:-cut]), parts[-cut])):
-                return hit
+                return on_build_path(importer, hit) if len(hit) > 1 else hit
         return []
 
     edges: dict[Path, set[Path]] = defaultdict(set)
@@ -706,15 +792,17 @@ def build_java_oracle(scope: Scope) -> tuple[Edges, Coverage]:
                 continue
             # a.b.C.* and static a.b.C.* import C's members: an explicit import of the file declaring C
             # (resolve peels the last segment, so a '.*' placeholder makes it start at C itself).
-            targets = [t for t in resolve(dotted + '.*' if wildcard else dotted) if t != importer]
+            targets = [t for t in resolve(dotted + '.*' if wildcard else dotted, importer) if t != importer]
             member_wildcards += bool(wildcard and targets)
             resolved += bool(targets)
             for target in targets:
                 edges[target].add(importer)
-    return _finish(scope, edges), {'files': len(scope.importers), 'indexed_types': len(types),
-                                   'import_statements': statements, 'resolved_statements': resolved,
-                                   'in_tree_package_wildcards': package_wildcards,
-                                   'type_member_wildcards': member_wildcards}
+    coverage = {'files': len(scope.importers), 'indexed_types': len(types),
+                'import_statements': statements, 'resolved_statements': resolved,
+                'in_tree_package_wildcards': package_wildcards, 'type_member_wildcards': member_wildcards}
+    if duplicates:  # BACK-2552: decided on the Maven build path
+        coverage.update(duplicate_types=len(duplicates), duplicate_type_imports_undecided=undecided)
+    return _finish(scope, edges), coverage
 
 
 # ---- Kotlin and Scala: a declaration is indexed under its package, whatever the file is named ----

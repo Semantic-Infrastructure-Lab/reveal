@@ -468,10 +468,71 @@ def test_java_type_member_wildcards_are_edges_in_reveal(tmp_path):
 
 
 def test_java_duplicate_types_in_scope_are_ambiguous_not_guessed(tmp_path):
-    root, entry = _repo(tmp_path, {**JAVA, 'lib/src2/com/ex/A.java': 'package com.ex;\npublic class A {}\n'},
+    """Without a pom.xml nothing says which copy an importer builds with: the measurement is unavailable."""
+    files = {path: text for path, text in JAVA.items() if path != 'lib/pom.xml'}
+    root, entry = _repo(tmp_path, {**files, 'lib/src2/com/ex/A.java': 'package com.ex;\npublic class A {}\n'},
                         {'oracle': 'java-jls', 'scan_root': 'lib', 'importer_dirs': ['lib/src']})
     with pytest.raises(RuntimeError, match='duplicate type'):
         _build(root, entry)
+
+
+def _maven_pom(artifact, *, version=None, parent=None, modules=(), deps=()):
+    head = (f'<parent><groupId>com.ex</groupId><artifactId>{parent[0]}</artifactId><version>{parent[1]}</version>'
+            f'</parent>' if parent else '<groupId>com.ex</groupId>')
+    return (f'<project xmlns="http://maven.apache.org/POM/4.0.0">{head}<artifactId>{artifact}</artifactId>'
+            + (f'<version>{version}</version>' if version else '')
+            + '<modules>' + ''.join(f'<module>{m}</module>' for m in modules) + '</modules><dependencies>'
+            + ''.join(f'<dependency><groupId>com.ex</groupId><artifactId>{d}</artifactId>'
+                      f'<version>${{project.version}}</version></dependency>' for d in deps)
+            + '</dependencies></project>')
+
+
+def _maven_reactor(prefix, flavor, modules):
+    parent = ('parent', f'1-{flavor}')
+    files = {f'{prefix}pom.xml': _maven_pom('parent', version=f'1-{flavor}', modules=modules),
+             f'{prefix}core/pom.xml': _maven_pom('core', parent=parent),
+             f'{prefix}core/src/com/ex/Pre.java': 'package com.ex;\npublic class Pre {}\n',
+             f'{prefix}tests/pom.xml': _maven_pom('tests', parent=parent, deps=['core']),
+             f'{prefix}tests/test/com/ex/t/PreTest.java': 'package com.ex.t;\nimport com.ex.Pre;\npublic class PreTest {}\n'}
+    return files
+
+
+# BACK-2552: Guava's shape. Two reactors (pom.xml, android/pom.xml) declare com.ex.Pre; a GWT module carries
+# its own super-source copy.
+MAVEN_REACTORS = {
+    **_maven_reactor('', 'jre', ['core', 'tests', 'gwt']),
+    **_maven_reactor('android/', 'android', ['core', 'tests']),
+    'gwt/pom.xml': _maven_pom('gwt', parent=('parent', '1-jre'), deps=['core']),
+    'gwt/super/com/ex/Pre.java': 'package com.ex;\npublic class Pre {}\n',
+    'gwt/src/com/ex/g/G.java': 'package com.ex.g;\nimport com.ex.Pre;\npublic class G {}\n',
+}
+
+
+def test_java_oracle_scores_a_duplicate_type_against_the_copy_on_the_maven_build_path(tmp_path):
+    edges, coverage = _build(*_repo(tmp_path, MAVEN_REACTORS, {'oracle': 'java-jls', 'importer_dirs': ['.']}))
+    assert edges == {'core/src/com/ex/Pre.java': ['tests/test/com/ex/t/PreTest.java'],
+                     'android/core/src/com/ex/Pre.java': ['android/tests/test/com/ex/t/PreTest.java'],
+                     'gwt/super/com/ex/Pre.java': ['gwt/src/com/ex/g/G.java']}
+    # com.ex.Pre (four copies) and com.ex.t.PreTest (one per reactor)
+    assert coverage['duplicate_types'] == 2 and coverage['duplicate_type_imports_undecided'] == 0
+
+
+def test_java_oracle_leaves_what_the_build_path_cannot_decide_unscored(tmp_path):
+    """Two copies in the importer's own module, and two modules of one reactor sharing groupId:artifactId (the
+    oracle reads no versions): undecided and counted, never guessed."""
+    files = {**MAVEN_REACTORS, 'gwt/super2/com/ex/Pre.java': 'package com.ex;\npublic class Pre {}\n',
+             'android/pom.xml': _maven_pom('parent', version='1-android', modules=['core', 'tests', 'core2']),
+             'android/core2/pom.xml': _maven_pom('core', version='2-android')}
+    edges, coverage = _build(*_repo(tmp_path, files, {'oracle': 'java-jls', 'importer_dirs': ['.']}))
+    assert edges == {'core/src/com/ex/Pre.java': ['tests/test/com/ex/t/PreTest.java']}
+    assert coverage['duplicate_type_imports_undecided'] == 2
+
+
+def test_java_maven_reactors_agree_with_reveal_and_the_gate_is_exact(tmp_path):
+    root, entry = _repo(tmp_path, MAVEN_REACTORS, {'oracle': 'java-jls', 'importer_dirs': ['.']})
+    measured = gate.measure(entry, root)
+    assert measured['oracle_edges'] == 3
+    assert measured['recall'] == measured['precision'] == 1 and measured['extra_edges'] == 0
 
 
 @pytest.mark.disk_cache

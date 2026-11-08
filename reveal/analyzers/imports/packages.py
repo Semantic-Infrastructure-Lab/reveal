@@ -10,7 +10,7 @@ say stays unknown (None), never a guess.
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple
 
 
 @dataclass(frozen=True)
@@ -75,6 +75,32 @@ class PackageModel:
                 return self._by_manifest.get(manifest)
         return unit if name == unit.name and unit.library_root is not None else None
 
+    def build_layers(self, directory: Path) -> Tuple[FrozenSet[Path], ...]:
+        """The manifests a file in ``directory`` (resolved) compiles against, nearest first: its own unit,
+        then every in-tree unit reachable through local dependencies. A build-module language (Maven) breaks
+        a tie between same-named declarations with them (BACK-2552). Empty: its package declares no unit."""
+        unit = self.unit_for(directory)
+        if unit is None:
+            return ()
+        seen = {unit.manifest}
+        frontier = [manifest for _name, manifest in unit.local_dependencies]
+        reachable: Set[Path] = set()
+        while frontier:
+            manifest = frontier.pop()
+            if manifest in seen:
+                continue
+            seen.add(manifest)
+            reachable.add(manifest)
+            dependency = self._by_manifest.get(manifest)
+            if dependency is not None:
+                frontier.extend(m for _name, m in dependency.local_dependencies)
+        return (frozenset({unit.manifest}), frozenset(reachable))
+
+    def manifest_of(self, file: Path) -> Optional[Path]:
+        """The manifest of the unit ``file`` (resolved) belongs to; None outside every unit."""
+        unit = self.unit_for(file.parent)
+        return unit.manifest if unit is not None else None
+
     def local_units(self, directory: Path) -> Tuple[Tuple[str, PackageUnit], ...]:
         """(name as importers spell it, unit) for every in-tree unit a file in ``directory`` (resolved) can name: its
         own package first, then each local dependency the model read (Go matches an import path against all of
@@ -87,3 +113,21 @@ class PackageModel:
 
 
 EMPTY_PACKAGES = PackageModel()
+
+
+class BuildScope(NamedTuple):
+    """What one importer compiles against (BACK-2552): the scan's model and the importer's
+    :meth:`PackageModel.build_layers`. Breaks a tie between files declaring one qualified name."""
+    model: PackageModel
+    layers: Tuple[FrozenSet[Path], ...]
+
+    def pick(self, matches: List[Path]) -> Optional[Path]:
+        """The one match in the nearest layer that holds any; None when that layer holds several (still
+        ambiguous) or no layer holds one (the name is declared only outside what the importer builds with)."""
+        for layer in self.layers:
+            inside = [m for m in matches if self.model.manifest_of(m.resolve()) in layer]
+            if len(inside) == 1:
+                return inside[0]
+            if inside:
+                return None
+        return None

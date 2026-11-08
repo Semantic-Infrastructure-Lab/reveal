@@ -276,10 +276,11 @@ corpora:
     license: Apache-2.0
     role: Second Java corpus; utility library, static and nested-type imports
     recall:
-      # android/ mirrors guava/ type for type; the main library alone is unambiguous.
+      # The whole repository (BACK-2552): two Maven reactors (pom.xml, android/pom.xml) declare the same
+      # types, and GWT super-source copies some again; each import is scored against the copy its module
+      # builds against (scripts/recall_oracles.py maven_build_paths).
       oracle: java-jls
-      scan_root: guava
-      importer_dirs: [guava/src]
+      importer_dirs: [.]
   # Restored at a new explicit release pin (BACK-1951); historical figures do not transfer.
   - id: scala-cats-effect
     language: scala

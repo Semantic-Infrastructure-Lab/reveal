@@ -70,6 +70,7 @@ def resolve_primary(stmt: ImportStatement, extractor: LanguageExtractor, context
     kwargs: Dict[str, Any] = {'search_paths': list(context.search_paths)}
     if getattr(extractor, 'spec', None) is not None:
         kwargs['file_index'] = context.file_index
+        kwargs['packages'] = context.packages
     return extractor.resolve_import(stmt, context.base_path, **kwargs)
 
 

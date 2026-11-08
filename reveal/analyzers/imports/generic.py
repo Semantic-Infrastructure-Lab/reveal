@@ -56,7 +56,7 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
+from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ...core import node_children as _children
 from ...core import tree_root
@@ -66,7 +66,8 @@ from ...registry import extensions_for_languages
 from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
 from .file_index import basename_index, load_path_manifests
 from .types import ImportStatement
-from .packages import PackageModel
+from .maven import maven_units
+from .packages import BuildScope, PackageModel, PackageUnit
 from ...utils.request_cache import register_request_cache
 from ...utils.path_utils import to_posix, failure_of
 from reveal.utils.lines import split_lines
@@ -165,6 +166,14 @@ def _selector_targets(prefix: str, selectors: str) -> List[Tuple[str, Optional[s
         else:
             targets.append((prefix + name, new or None))
     return targets
+
+
+def _build_scope(base_path: Path, packages: Optional[PackageModel]) -> Optional[BuildScope]:
+    """What a file in ``base_path`` compiles against, where the package model read its build module (BACK-2552)."""
+    if packages is None:
+        return None
+    layers = packages.build_layers(base_path.resolve())
+    return BuildScope(packages, layers) if layers else None
 
 
 def _include_ancestors(base_path: Path, search_paths: Optional[List[Path]]) -> List[Path]:
@@ -2287,6 +2296,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
         file_index: Optional[Dict[str, List[Path]]] = None,
+        packages: Optional[PackageModel] = None,
     ) -> Optional[Path]:
         """Resolve an import to a real in-tree file (for the dependency graph).
 
@@ -2314,11 +2324,15 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         walk it replaces. imports://, depends:// and I002 pass one through
         ``analyzers.imports.service``; callers that pass none (call_graph, B005)
         fall back to the walk unchanged.
+
+        ``packages`` (BACK-2552): the scan's package model. Where it holds the importer's build module
+        (Maven), a qualified name declared by several files resolves to the one the importer compiles
+        against: its own module first, then the in-tree modules it depends on.
         """
         if self.spec.resolve_includes:
             return self._resolve_include(stmt, base_path, search_paths, file_index)
         if self.spec.source_extensions:
-            return self._resolve_module(stmt, base_path, search_paths, file_index)
+            return self._resolve_module(stmt, base_path, search_paths, file_index, _build_scope(base_path, packages))
         return None
 
     def is_intra_project_import(
@@ -2470,6 +2484,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         base_path: Path,
         search_paths: Optional[List[Path]],
         file_index: Optional[Dict[str, List[Path]]],
+        build: Optional[BuildScope] = None,
     ) -> Optional[Path]:
         """Resolve a Java/PHP/Ruby/Swift/Kotlin import to an in-tree source file.
 
@@ -2526,13 +2541,13 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             # `{` is defensive: Scala selector lists are split at extraction.
             if parts and (parts[-1] == '_' or '{' in parts[-1]):
                 return None
-            return self._resolve_dotted(parts, exts, search_paths, file_index)
+            return self._resolve_dotted(parts, exts, search_paths, file_index, build)
 
         # Single-token module with no separator and no path markers: try it as a
         # bare basename (Swift `import Foo` → Foo.swift; Java default-package
         # `import Foo`). Only resolves when exactly one such file exists.
         if module.isidentifier():
-            resolved = self._resolve_dotted([module], exts, search_paths, file_index)
+            resolved = self._resolve_dotted([module], exts, search_paths, file_index, build)
             if resolved is not None:
                 return resolved
             if self.spec.class_name_convention:
@@ -2568,6 +2583,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         exts: FrozenSet[str],
         search_paths: Optional[List[Path]],
         file_index: Optional[Dict[str, List[Path]]],
+        build: Optional[BuildScope] = None,
     ) -> Optional[Path]:
         """Resolve a qualified type name (``[com, pkg, Type]``) to a source file.
 
@@ -2593,7 +2609,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         """
         if not parts:
             return None
-        match = self._match_dotted(parts, exts, search_paths, file_index)
+        match = self._match_dotted(parts, exts, search_paths, file_index, build)
         if match is not None:
             return match
         if not getattr(self.spec, 'nested_member_fallback', False):
@@ -2607,7 +2623,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             # lowercase component means we've reached the package path — stop.
             if not peeled[-1][:1].isupper():
                 break
-            match = self._match_dotted(peeled, exts, search_paths, file_index)
+            match = self._match_dotted(peeled, exts, search_paths, file_index, build)
             if match is not None:
                 return match
         return None
@@ -2618,6 +2634,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         exts: FrozenSet[str],
         search_paths: Optional[List[Path]],
         file_index: Optional[Dict[str, List[Path]]],
+        build: Optional[BuildScope] = None,
     ) -> Optional[Path]:
         """Longest-unique-suffix match of ``parts`` (last = type) across exts.
 
@@ -2643,7 +2660,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             dir_match = None
             for index_filename in self.spec.directory_index_filenames:
                 target_parts = parts + [index_filename]
-                match = self._longest_unique_suffix(target_parts, search_paths, file_index)
+                match = self._longest_unique_suffix(target_parts, search_paths, file_index, build)
                 if match is not None:
                     dir_match = match
                     break
@@ -2664,13 +2681,13 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 return dir_match
         for ext in exts:
             target_parts = parts[:-1] + [parts[-1] + ext]
-            match = self._longest_unique_suffix(target_parts, search_paths, file_index)
+            match = self._longest_unique_suffix(target_parts, search_paths, file_index, build)
             if match is not None:
                 return match
         if len(parts) != 1:
             for index_filename in self.spec.directory_index_filenames:
                 target_parts = parts + [index_filename]
-                match = self._longest_unique_suffix(target_parts, search_paths, file_index)
+                match = self._longest_unique_suffix(target_parts, search_paths, file_index, build)
                 if match is not None:
                     return match
         return None
@@ -2680,6 +2697,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         target_parts: List[str],
         search_paths: Optional[List[Path]],
         file_index: Optional[Dict[str, List[Path]]],
+        build: Optional[BuildScope] = None,
     ) -> Optional[Path]:
         """Return the file whose path ends with the longest unique suffix of
         ``target_parts`` (last element carries the extension), or None.
@@ -2699,6 +2717,11 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         (``spec.package_is_directory``, Java) accepts only the full suffix:
         the whole qualified name, never a same-named class in another package
         that shares the last package segment (BACK-1712).
+
+        ``build`` (BACK-2552): when several files end in the same most specific suffix (one qualified
+        name declared in parallel source trees, Guava's ``guava/`` and ``android/guava/``), the one in
+        the importer's own build module, else in the modules it depends on, is the file it compiles
+        against. Several in that nearest layer, or none in any, stays skipped.
         """
         basename = target_parts[-1]
         candidates = self._index_lookup(basename, search_paths, file_index)
@@ -2715,8 +2738,9 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 return matches[0].resolve()
             if len(matches) > 1:
                 # Already ambiguous at this (most-specific-available) suffix;
-                # shorter suffixes only get more ambiguous. Skip, don't guess.
-                return None
+                # shorter suffixes only get more ambiguous. Only the build decides; never guess.
+                picked = build.pick(matches) if build is not None else None
+                return picked.resolve() if picked is not None else None
         return None
 
     def _resolve_path_target(
@@ -3266,6 +3290,14 @@ class JavaImportExtractor(_GenericTreeSitterImportExtractor):
     extensions = {'.java'}
     language_name = 'Java'
     spec = _JAVA_SPEC
+    # BACK-2552: Maven modules are package units, so a type declared in parallel source trees resolves to
+    # the copy the importer compiles against. Gradle builds declare none yet (their settings are code).
+    package_manifests = ('pom.xml',)
+
+    def package_units(self, manifests: List[Path], files: List[Path],
+                      on_error: Callable[[OSError], None]) -> List[PackageUnit]:
+        """Each pom.xml: its coordinate and the in-tree modules it depends on."""
+        return maven_units(manifests, on_error)
 
 
 @register_extractor

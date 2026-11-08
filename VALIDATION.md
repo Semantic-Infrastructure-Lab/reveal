@@ -289,7 +289,15 @@ with no fix needed — including on the exact nested-type/static-member idiom
 `import static` statements) that BACK-551 previously found broken, confirming
 that fix generalizes past the corpus that found it. Guava's style guide
 forbids wildcard imports, so that resolution path is not exercised by this
-slice.
+slice. That row was scoped to `guava/src` because the oracle could not score a type
+declared twice, and `android/` repeats every one, so it never saw the repository root:
+there Reveal declined every such tie and kept 20 of the edges (BACK-2552). Since
+BACK-2552 Reveal reads Maven modules (coordinates, parent properties, in-tree
+dependencies) and resolves a duplicate to the importer's own module, then the modules
+it depends on; the oracle decides the same ties from reactor membership instead of
+versions. Whole repository: 3,275 files, 955 targets, 13,082/13,082 edges, 0 extra,
+0 undecided; the scoped `guava/` edges (2,081) and those of `android/guava`,
+`guava-testlib` and its Android twin reappear exactly, and no edge crosses reactors.
 
 ¹² Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
 method against a second, unrelated real corpus (osCommerce `catalog/`, 436
@@ -1529,8 +1537,8 @@ every sample matched the published target and edge counts.
     0 extra (100% recall and precision).
   - Rust/ripgrep `3fce3b5b` (whole repo, `rust-cargo` oracle since BACK-2549): 110 files, 177
     edges, 171 hit (96.61%), 0 extra.⁹
-  - Java/guava `786bb1a9` (`guava/src`; `android/` repeats every type): 611 files,
-    159 targets, 2,081/2,081 edges, 0 extra.
+  - Java/guava `786bb1a9` (whole repo since BACK-2552: two Maven reactors and GWT super-source
+    declare 1,587 types more than once): 3,275 files, 955 targets, 13,082/13,082 edges, 0 extra.¹¹
   - C++/assimp `d334c32f` (`code/`, `include/`): 522 files, 250 targets, 707/707 edges,
     1 extra (precision 99.86%). `code/AssetLib/IFC/IFCReaderGen_4.h`, which the CMake
     build does not compile, includes `"STEPFile.h"`; the build's include path cannot
@@ -2518,7 +2526,7 @@ manifest entry with a `recall:` block names an independent oracle from
 | `gcc-cpp` | The same probe as C++ | assimp |
 | `python-ast` | `ast.parse` plus filesystem module resolution; `TYPE_CHECKING` imports skipped | celery, reveal's own tree |
 | `rust-cargo` | `cargo metadata` gives crate roots and in-tree dependencies; rustc's module tree (`mod`, `#[path]`, `use` bindings and globs) gives the file of each path's deepest module. Files no crate compiles are left out of the scored population | Meilisearch, ripgrep |
-| `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java` | Elasticsearch `server/src/main/java`, guava |
+| `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java`. A type declared in several files is scored against the copy the importer's Maven module builds with: its own, else one on its build path (each aggregator's `<modules>` and dependency groupId:artifactId; no versions read). Undecided imports are counted, not scored; duplicates with no pom.xml make the measurement unavailable | Elasticsearch `server/src/main/java`, guava |
 | `kotlin-declared` | Text rule: a top-level declaration is indexed under its package whatever the file is named; an explicit import resolves to the declaring file | tivi, kotlinx.coroutines |
 | `scala-declared` | The same rule with chained `package` clauses joined and imports read relative to enclosing packages; each selector-list name and type-member wildcard scored, package wildcards counted | GitBucket `src/main/scala`, cats-effect |
 | `typescript-compiler` | TypeScript parser plus `ts.resolveModuleName`, including aliases, re-exports, dynamic and type-query imports | VS Code base, Excalidraw workspace, three.js src |
