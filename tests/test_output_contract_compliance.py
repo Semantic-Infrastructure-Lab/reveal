@@ -1096,8 +1096,10 @@ class _EmptyDepends:
 
     def run(self, uri, **flags):
         code, payload, err = self._real.run(uri, **flags)
-        if uri.startswith('depends://wide?') and payload:
+        if uri.startswith('depends://wide') and payload:  # every depends probe: wide/pkg/y.py's dependents
+            # are a list since its absolute imports resolve from the package root (BACK-2559)
             payload = {**payload, 'modules': [], 'total_modules': 0,
+                       **({'dependents': []} if 'dependents' in payload else {}),
                        'metadata': {**payload['metadata'], 'total_import_edges': 0}}
         return code, payload, err
 
