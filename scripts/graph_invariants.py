@@ -411,6 +411,9 @@ EXTERNAL_CLASSIFICATIONS = ('stdlib', 'unresolved')
 SIMPLE_CALL = re.compile(r'^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)?$')
 
 
+MODULE_SEPARATORS = re.compile(r'[./\\:]+')
+
+
 class NameBinding:
     """What a file's imports bind one local name to, read off imports:// default view."""
 
@@ -418,12 +421,27 @@ class NameBinding:
         self.external = True
         self.targets: Set[Optional[str]] = set()
         self.imported: Set[Optional[str]] = set()  # the name the import reads in its module, None if unknown
+        # The last two parts of each 'unresolved' statement's module spelling. 'unresolved' is both
+        # "outside the tree" and "in the tree where resolution could not place it" (a Go package with no
+        # go.mod, a Rust use through a child mod, a monorepo package root): calls may reach a project
+        # definition only where the import names it (BACK-2573), so such a target is no violation when
+        # its path names one of these. Empty: every statement is stdlib, and no target is allowed.
+        self.places: Set[str] = set()
 
     def add(self, stmt: Dict[str, Any], imported: Optional[str]) -> None:
         target = stmt.get('resolved')
         self.external = self.external and not target and stmt.get('classification') in EXTERNAL_CLASSIFICATIONS
         self.targets.add(target)
         self.imported.add(imported)
+        if stmt.get('classification') == 'unresolved':
+            self.places.update([part for part in MODULE_SEPARATORS.split(str(stmt.get('module') or '')) if part][-2:])
+
+    def names_place_of(self, target: str) -> bool:
+        """Whether ``target`` (a path under the scan, without its scan prefix) names one of ``places``:
+        one of its directories, or its file name without the extension."""
+        parts = target.replace('\\', '/').split('/')
+        parts[-1] = parts[-1].rsplit('.', 1)[0]
+        return bool(self.places.intersection(parts))
 
 
 def statement_bindings(stmt: Dict[str, Any]) -> List[Tuple[str, Optional[str]]]:
@@ -487,8 +505,11 @@ def check_call_targets(walks: Iterable[Dict[str, Any]], default_view: Dict[str, 
     """Each call edge of the walks against the caller file's imports (imports:// default view, the scope
     calls resolves in) and the outlines of the files involved, for calls spelled ``f`` or ``q.f``:
 
-      external_binding  q (or f) is bound only by imports from outside the tree: the call is not resolved
-                        to a project definition, unless a bare f is defined in the caller's own file
+      external_binding  q (or f) is bound only by imports that resolved to no file (stdlib or 'unresolved'):
+                        the call is not resolved to a project definition, unless a bare f is defined in
+                        the caller's own file, or an 'unresolved' import names the target's place (one
+                        of the last two parts of its module spelling is a directory or the file name of
+                        the target: an in-tree package resolution could not place, BACK-2573)
       bound_file        q (or f) is bound only by imports that resolve to one file F under the scan, and F
                         defines the name: the call resolves to F (a bare f the caller's file defines may
                         resolve there instead)
@@ -520,7 +541,7 @@ def check_call_targets(walks: Iterable[Dict[str, Any]], default_view: Dict[str, 
             continue
         if binding.external:
             counts['external_binding'] += 1
-            if resolved:
+            if resolved and not (target and target.startswith(prefix) and binding.names_place_of(target[len(prefix):])):
                 violations.append({'rule': 'external_binding', **record})
             continue
         if len(binding.targets) != 1 or None in binding.targets:

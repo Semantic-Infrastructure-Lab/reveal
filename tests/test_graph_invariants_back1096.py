@@ -748,3 +748,34 @@ def test_the_runner_end_to_end_on_the_fixture(root, tmp_path):
         'fan_in_total': 'green', 'importers_resolved': 'green', 'no_match': 'green'}
     assert rows['fan_in_total']['population'] == 6
     assert rows['no_match']['population'] == 2 * len(report['target_specs'])
+
+
+UNPLACED_TREE = {
+    # Rust: `use write::write_to_db` through `mod write;` resolves to no file ('unresolved'), and the
+    # call reaches write.rs, where the import names it (BACK-2573).
+    'unp/Cargo.toml': '[package]\nname = "unp"\nversion = "0.1.0"\n',
+    'unp/src/lib.rs': 'pub mod idx;\n',
+    'unp/src/idx/mod.rs': 'mod write;\nuse write::write_to_db;\n\npub fn run() { write_to_db(); }\n',
+    'unp/src/idx/write.rs': 'pub fn write_to_db() {}\n',
+    'unp/src/other.rs': 'pub fn write_to_db() {}\n',
+    # Python: pytest is third-party ('unresolved'); helpers.py's raises is not where it names.
+    'unp/tests/test_x.py': 'import pytest\n\n\ndef test_x():\n    pytest.raises(ValueError)\n',
+    'unp/tests/helpers.py': 'def raises(exc):\n    return exc\n',
+}
+
+
+def test_call_targets_allows_an_unplaced_import_that_lands_where_it_names(tmp_path):
+    row = _call_targets(_tree(tmp_path, UNPLACED_TREE), 'unp')
+    assert row['status'] == 'green', row
+    assert row['edges_checked']['external_binding'] >= 2  # write_to_db and pytest.raises both checked
+
+
+def test_an_unplaced_import_landing_elsewhere_still_turns_call_targets_red(tmp_path, monkeypatch):
+    """Red control for the 'unresolved' allowance: with the binding check off, pytest.raises lands on
+    tests/helpers.py, which names no part of 'pytest'; write_to_db goes ambiguous (two candidates)."""
+    from reveal.adapters.calls.resolve import CallResolver
+    monkeypatch.setattr(CallResolver, '_reachable', lambda self, call, caller_file, candidates: candidates)
+    row = _call_targets(_tree(tmp_path, UNPLACED_TREE), 'unp')
+    assert row['status'] == 'red'
+    assert ('external_binding', 'pytest.raises', 'unp/tests/helpers.py:1') in {
+        (v['rule'], v['call'], v['got']) for v in row['examples']}
