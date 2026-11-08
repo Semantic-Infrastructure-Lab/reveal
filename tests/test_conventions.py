@@ -248,6 +248,46 @@ def test_scanned_dir_named_like_stdlib_root_does_not_hide_stdlib():
     assert classify_module('json', 'python', frozenset({'json'})) == ('internal', None)
 
 
+class TestPackageKey:
+    """BACK-2551: the ?external table counts a third-party import under its family's package spelling."""
+
+    @staticmethod
+    def _key(module, family):
+        from reveal.analyzers.imports.classify import classify_module
+        bucket, key = classify_module(module, family, frozenset())
+        assert bucket == 'external'
+        return key
+
+    @pytest.mark.parametrize('module, key', [
+        ('github.com/prometheus/common/model', 'github.com/prometheus/common'),
+        ('github.com/prometheus/client_golang', 'github.com/prometheus/client_golang'),
+        ('golang.org/x/net/http2', 'golang.org/x/net'),
+        ('google.golang.org/protobuf/proto', 'google.golang.org/protobuf'),
+        ('gopkg.in/yaml.v3', 'gopkg.in/yaml.v3'),
+        ('go.uber.org/zap/zapcore', 'go.uber.org/zap'),
+        ('myapp/pkg/util', 'myapp'),
+    ])
+    def test_go_module_path(self, module, key):
+        assert self._key(module, 'go') == key
+
+    @pytest.mark.parametrize('module, key', [
+        ('serde::ser::SerializeStruct', 'serde'),
+        ('bstr::{ByteSlice, BString}', 'bstr'),
+        ('regex', 'regex'),
+    ])
+    def test_rust_crate(self, module, key):
+        assert self._key(module, 'rust') == key
+
+    @pytest.mark.parametrize('family', ['java', 'kotlin', 'scala'])
+    def test_jvm_first_two_segments(self, family):
+        assert self._key('com.google.common.base.Preconditions', family) == 'com.google'
+        assert self._key('org.junit.Test', family) == 'org.junit'
+
+    def test_python_and_js_keep_the_dot_rule(self):
+        assert self._key('kombu.messaging', 'python') == 'kombu'
+        assert self._key('sinon', 'js') == 'sinon'
+
+
 class TestJUnit3TestPrefix:
     """BACK-1290: `testXxx` counts as a test only inside test files."""
 

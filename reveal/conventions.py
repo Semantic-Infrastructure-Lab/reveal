@@ -93,6 +93,10 @@ class LanguageConventions:
     # when it is not stdlib. None here = no reliable stdlib rule for the language,
     # so nothing is claimed stdlib (BACK-1193: never fall back to Python's list).
     stdlib_key: Optional[Callable[[str], Optional[str]]] = None
+    # Maps a raw (non-relative) import string to the third-party package it counts under in the
+    # ?external table (BACK-2551). None = the dot rule (`module.split('.')[0]`: Python, JS). Each family
+    # states its own because the spelling of a package differs (Go module path, Rust crate, Java group).
+    package_key: Optional[Callable[[str], str]] = None
     # How to find which names the tests cover (hotspots `has_test_hint`, BACK-1276).
     # Basename patterns for test files (group 1 = the module under test), and
     # source patterns (MULTILINE, group 1 = the name under test) applied to test
@@ -298,6 +302,31 @@ def _rust_stdlib_key(module: str) -> Optional[str]:
     return top if top in {'std', 'core', 'alloc'} else None
 
 
+# Hosts whose module paths carry an owner and a repository (`github.com/owner/repo`), and
+# `golang.org/x/<name>`: three segments name the module. Every other dotted host (`go.uber.org/zap`,
+# `google.golang.org/grpc`, `gopkg.in/yaml.v3`) names it in two.
+_GO_THREE_SEGMENT_HOSTS = frozenset({'github.com', 'gitlab.com', 'bitbucket.org', 'golang.org'})
+
+
+def _go_package_key(module: str) -> str:
+    """Go module path of an import path: host rule, since go.mod requires are not read here."""
+    parts = module.split('/')
+    if '.' not in parts[0]:
+        return parts[0]
+    return '/'.join(parts[:3] if parts[0] in _GO_THREE_SEGMENT_HOSTS else parts[:2])
+
+
+def _rust_package_key(module: str) -> str:
+    """The crate: the first `::` segment (`serde::ser::Serialize` counts under `serde`)."""
+    return module.split('::')[0].strip()
+
+
+def _jvm_package_key(module: str) -> str:
+    """Java/Kotlin/Scala: no manifest group is read, so the stated rule is the first two dotted
+    segments (`com.google`, `org.junit`); a single-segment name stays whole."""
+    return '.'.join(module.split('.')[:2])
+
+
 def _prefix_stdlib_key(*roots: str) -> Callable[[str], Optional[str]]:
     """Dotted-namespace stdlib (Java `java.util.List`): key is the root segment."""
     def key(module: str) -> Optional[str]:
@@ -394,7 +423,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             family='go', same_package_visibility=True,
             entry_point_files=frozenset({'main.go'}),
             reexport_files=frozenset({'doc.go'}),
-            stdlib_key=_go_stdlib_key,
+            stdlib_key=_go_stdlib_key, package_key=_go_package_key,
             test_file_patterns=(re.compile(r'^(.+)_test\.go$'),),
             test_symbol_patterns=(
                 re.compile(r'^func\s+(?:Test|Benchmark|Example|Fuzz)(\w+)', re.MULTILINE),
@@ -407,6 +436,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         # reduced to the bare last path segment by the calls adapter).
         LanguageConventions(
             family='rust',
+            package_key=_rust_package_key,
             entry_point_files=frozenset({'main.rs', 'lib.rs'}),
             reexport_files=frozenset({'mod.rs'}),
             entry_point_decorators=PYTHON_ENTRY_POINT_DECORATORS,
@@ -481,7 +511,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
                 'readObjectNoData', 'readExternal', 'writeExternal',
             }),
             entry_point_decorators=JVM_ENTRY_POINT_DECORATORS,
-            stdlib_key=_prefix_stdlib_key('java', 'javax', 'jdk'),
+            stdlib_key=_prefix_stdlib_key('java', 'javax', 'jdk'), package_key=_jvm_package_key,
             # The analyzer's own decorator list, not a text scan from the claim line: a method whose
             # first annotation is @SuppressWarnings has its @Test below the line scanned (BACK-2171).
             test_decorators=frozenset({
@@ -498,14 +528,14 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             entry_point_files=frozenset({'main.kt', 'application.kt'}),
             implicit_names=frozenset({'main'}),
             entry_point_decorators=JVM_ENTRY_POINT_DECORATORS,
-            stdlib_key=_prefix_stdlib_key('kotlin', 'java', 'javax'),
+            stdlib_key=_prefix_stdlib_key('kotlin', 'java', 'javax'), package_key=_jvm_package_key,
             test_name_prefixes=('test',), test_prefixes_in_test_files_only=True,
             test_file_patterns=(re.compile(r'^(.+?)Tests?\.kts?$'), re.compile(r'^Test(.+)\.kts?$')),
             test_symbol_patterns=(re.compile(r'(?:void|fun)\s+`?test(\w+)', re.MULTILINE),),
         ),
         LanguageConventions(
             family='scala', same_package_visibility=True, test_annotation_markers=_JVM_TEST_MARKERS,
-            stdlib_key=_prefix_stdlib_key('scala', 'java', 'javax'),
+            stdlib_key=_prefix_stdlib_key('scala', 'java', 'javax'), package_key=_jvm_package_key,
         ),
     )
 }

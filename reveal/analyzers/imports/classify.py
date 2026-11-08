@@ -79,7 +79,8 @@ def classify_module(
     module = raw_module.split('.')[0]
     if not module:
         return ('skip', None)  # nothing to classify
-    stdlib_key = conventions_for(family).stdlib_key
+    conventions = conventions_for(family)
+    stdlib_key = conventions.stdlib_key
     key = stdlib_key(raw_module) if stdlib_key else None
     # local_names is Python-shaped (the scanned dir's own name + __init__.py
     # packages), so outside Python it is really "the dir's name": scanning
@@ -90,7 +91,9 @@ def classify_module(
         return ('internal', None)
     if key:
         return ('stdlib', key)
-    return ('external', module)
+    # BACK-2551: the family's own package spelling; the dot rule only where none is stated.
+    package_key = conventions.package_key
+    return ('external', package_key(raw_module) if package_key else module)
 
 
 def classify_import(
