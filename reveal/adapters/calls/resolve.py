@@ -84,18 +84,26 @@ class CallResolver:
         A bare call prefers a same-file definition (it shadows imports); a
         qualified one (`strings.rtrim`, `h.run`) prefers the module it names."""
         qualifier = call.split('.')[0] if '.' in call else ''
-        bindings = self._bindings.of(caller_file)
-        binding = bindings.get(qualifier or (call if call in bindings else tail))
-        imported = binding.target if binding else None
-        imported_path = Path(imported).resolve() if imported else None
-        via_import = [c for c in candidates if imported_path and Path(c['file']).resolve() == imported_path]
-        if len(via_import) > 1 and not qualifier:
-            # A bare name an import binds is a module-level name, never a class's method of that
-            # name (three.js DataUtils.js: `function toHalfFloat` and `static toHalfFloat`,
-            # BACK-2569); `DataUtils.toHalfFloat` through the imported class may be either.
-            via_import = [c for c in via_import if not c.get('member')] or via_import
+        via_import = self._via_import(call, tail, qualifier, caller_file, candidates)
         same_file = [c for c in candidates if c['file'] == caller_file]
         for group in ((via_import, same_file) if qualifier else (same_file, via_import)):
             if len(group) == 1:
                 return group[0]
         return None
+
+    def _via_import(self, call: str, tail: str, qualifier: str, caller_file: str,
+                    candidates: List[Definition]) -> List[Definition]:
+        """The candidates in the file the call's qualifier or bare name is imported from. A bare name an
+        import binds is a module-level name, never a class's method of that name (three.js DataUtils.js:
+        `function toHalfFloat` and `static toHalfFloat`, BACK-2569); `DataUtils.toHalfFloat` through the
+        imported class may be either."""
+        bindings = self._bindings.of(caller_file)
+        binding = bindings.get(qualifier or (call if call in bindings else tail))
+        imported = binding.target if binding else None
+        if not imported:
+            return []
+        imported_path = Path(imported).resolve()
+        via_import = [c for c in candidates if Path(c['file']).resolve() == imported_path]
+        if len(via_import) > 1 and not qualifier:
+            via_import = [c for c in via_import if not c.get('member')] or via_import
+        return via_import
