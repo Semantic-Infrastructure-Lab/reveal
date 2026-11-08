@@ -19,6 +19,12 @@ class ScanScope:
     # The file or directory the request is about when the walk is wider than it (depends
     # walks from the project root): what is left to analyze is judged there (BACK-2075).
     focus: Optional[Path] = None
+    # A focused build (BACK-2565): the walk, the file index and the project inputs still cover
+    # the root, but only files at the focus are resolved, and a file outside it is extracted only
+    # when its language indexes declarations project-wide (resolution.indexes_project_declarations).
+    # For a consumer that reads only the focus's own imports (calls' callee bindings), never for a
+    # view that needs edges INTO the focus (importers, rank, cycles).
+    focus_only: bool = False
 
 
 @dataclass(frozen=True)

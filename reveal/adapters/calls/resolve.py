@@ -92,9 +92,11 @@ class CallResolver:
         return None
 
     def _import_analysis(self) -> Any:
-        """The import analysis imports:// builds for the walked directory (``project_scope``: its
-        project root, focused on it), cached by the imports service. Built on the first call that
-        has candidates, not for a walk that never needs it."""
+        """The walked directory's import analysis, resolved as imports:// resolves it
+        (``project_scope``: from its project root, so an alias or sibling package above the
+        directory counts) but built for the directory's own files only (a focused build,
+        BACK-2565), or served from a cached whole-root build. Built on the first call that has
+        candidates, not for a walk that never needs it."""
         if not self._analysis_read:
             self._analysis_read = True
             if self._directory is not None:

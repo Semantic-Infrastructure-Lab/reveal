@@ -121,6 +121,10 @@ class ImportAnalysis:
     # The cascade's record (resolution.ProjectResolution: edge statements, honest-decline and
     # autoload counters) when the graph was resolved through it (imports://, BACK-1054).
     resolution: Any = None
+    # Set by a focused build (ScanScope.focus_only, BACK-2565): only files at this path had their
+    # imports resolved, and only they (plus declaration-indexed files outside it) were extracted.
+    # None: every scanned file was.
+    resolved_at: Optional[Path] = None
 
     @property
     def cacheable(self) -> bool:

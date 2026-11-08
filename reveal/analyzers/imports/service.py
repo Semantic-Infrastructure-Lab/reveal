@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from .base import get_extractor, get_all_extensions, scanned_rule_traits
 from . import build_cache, extraction as file_extraction, resolution
+from .file_index import under_directory
 from ...core import disk_cache
 from ...utils.exclusions import active_exclusions
 from ...utils.gitignore import gitignore_enabled
@@ -26,20 +27,21 @@ DEFAULT_FILE_CAP = 20000
 
 
 def path_scope(root: Path, *, cap: Optional[int] = DEFAULT_FILE_CAP,
-               focus: Optional[Path] = None) -> ScanScope:
+               focus: Optional[Path] = None, focus_only: bool = False) -> ScanScope:
     """The standard multi-language build scope, including unsupported-code coverage."""
-    return ScanScope(root, frozenset(get_all_extensions()), get_code_extensions(), cap, focus)
+    return ScanScope(root, frozenset(get_all_extensions()), get_code_extensions(), cap, focus,
+                     focus_only=focus_only and focus is not None)
 
 
 def project_scope(target: Path) -> ScanScope:
-    """The scope imports:// builds for ``target`` under its default parameters: the project root
-    the shared climb chooses (``resolution.choose_scan_root``), focused on ``target`` when that
-    root is above it. A consumer that needs the import analysis of a directory (calls' callee
-    resolution, BACK-2553) asks for this one, so an import resolves as imports:// resolves it --
-    a tsconfig ``paths`` alias or a sibling package above the directory included -- and the
-    two share one cached build."""
+    """The scope for the imports of the files at ``target``, resolved as imports:// resolves them:
+    the project root the shared climb chooses (``resolution.choose_scan_root``), so a tsconfig
+    ``paths`` alias or a sibling package above ``target`` counts, and, when that root is above
+    ``target``, a focused build (BACK-2565) that resolves only ``target``'s files. For a consumer
+    that reads only those files' own imports (calls' callee resolution, BACK-2553). ``analyze``
+    serves it from a cached whole-root build of the same tree when there is one."""
     root = resolution.choose_scan_root(target).root
-    return path_scope(root, focus=None if root == target else target)
+    return path_scope(root, focus=None if root == target else target, focus_only=True)
 
 
 @dataclass(frozen=True)
@@ -69,8 +71,7 @@ def analyze(scope: ScanScope, *, on_file_processed: Optional[Callable[[Path], No
     key = build_cache._graph_cache_key(candidates, files.index, scope.root, files.traversal_failures,
                                        scope.cap, scope.extensions) if (structure_reader is None and
                                        on_file_processed is None) else None
-    variant = (key or '', active_exclusions(), gitignore_enabled())
-    cached = build_cache._cached_graph(scope.root, key, variant)
+    cached, key, variant = _stored_build(scope, key)
     if cached is not None:
         return ImportBuild(cached, files)
     built = _extract_and_resolve(scope, files, candidates, structure_reader, on_file_processed)
@@ -83,6 +84,21 @@ def analyze(scope: ScanScope, *, on_file_processed: Optional[Callable[[Path], No
     return built
 
 
+def _stored_build(scope: ScanScope, key: Optional[str]
+                  ) -> Tuple[Optional[ImportAnalysis], Optional[str], Tuple[str, Any, bool]]:
+    """The stored build that answers ``scope``, and the key and variant a new build of it is
+    stored under. A whole-root build of the same tree answers a focused request too (it resolved
+    every file); a focused build is stored under its own key (BACK-2565), never served to a
+    request that needs the whole graph."""
+    variant = (key or '', active_exclusions(), gitignore_enabled())
+    cached = build_cache._cached_graph(scope.root, key, variant)
+    if cached is None and scope.focus_only and key is not None:
+        key = build_cache._focused_graph_key(key, scope.focus)
+        variant = (key, *variant[1:])
+        cached = build_cache._cached_graph(scope.root, key, variant)
+    return cached, key, variant
+
+
 def _extract_and_resolve(scope: ScanScope, files: ImportFileSet, candidates: List[Path],
                          structure_reader: Optional[file_extraction.StructureReader],
                          on_file_processed: Optional[Callable[[Path], None]]) -> ImportBuild:
@@ -90,19 +106,40 @@ def _extract_and_resolve(scope: ScanScope, files: ImportFileSet, candidates: Lis
     focus = scope.focus
     analysis = ImportAnalysis()
     structures: List[Dict[str, Any]] = []
-    resolver = resolution.ProjectResolver(cap=scope.cap, focus=focus)
+    resolver = resolution.ProjectResolver(cap=scope.cap, focus=focus, focus_only=scope.focus_only)
     resolver.result.scan_root = scope.root
     resolver.record_discovery(files)
     parse_corpus = [fp for fp in candidates if fp.suffix in scope.extensions]
-    inputs = resolver.prepare(parse_corpus, scope.root)
+    inputs = resolver.prepare(parse_corpus, scope.root)  # project inputs always cover the root
     entries: Dict[Path, resolution.FileEntry] = {}
-    _process_extracted_files(analysis, structures, candidates, structure_reader, on_file_processed,
+    extracted = _focused_candidates(candidates, focus) if scope.focus_only and focus is not None else candidates
+    _process_extracted_files(analysis, structures, extracted, structure_reader, on_file_processed,
                              scope.extensions, scope.lowercase_extensions, inputs, entries)
     resolved = resolver.resolve_entries(scope.root, [fp for fp in parse_corpus if fp in entries],
                                         files.index, entries, inputs)
     analysis.graph = resolved.graph
     analysis.resolution = resolved
+    analysis.resolved_at = focus if scope.focus_only else None
     return ImportBuild(analysis, files, structures)
+
+
+def _focused_candidates(candidates: List[Path], focus: Path) -> List[Path]:
+    """What a focused build extracts, in walk order: every file at the focus, and outside it only
+    a file whose language indexes declarations other files resolve through (C#/JVM namespaces,
+    PHP packages, Swift modules, Ruby constants: ``resolution.indexes_project_declarations``)."""
+    indexed: Dict[Tuple[type, int], bool] = {}
+
+    def project_indexed(path: Path) -> bool:
+        extractor = get_extractor(path)
+        if extractor is None:
+            return False
+        kind = type(extractor), id(getattr(extractor, 'spec', None))
+        if kind not in indexed:
+            indexed[kind] = resolution.indexes_project_declarations(extractor)
+        return indexed[kind]
+
+    at_focus = under_directory(focus)
+    return [fp for fp in candidates if at_focus(fp) or project_indexed(fp)]
 
 
 def _process_extracted_files(

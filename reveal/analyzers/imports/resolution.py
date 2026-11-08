@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, 
 
 from . import inputs as analysis_inputs
 from .base import LanguageExtractor, get_extractor, marker_ancestry, nearest_marker_dir
-from .file_index import load_path_manifests
+from .file_index import load_path_manifests, under_directory
 from .generic import RubyImportExtractor
 from .packages import PackageModel, PackageUnit
 from .types import ImportGraph, ImportStatement
@@ -331,6 +331,18 @@ def index_file(file_path: Path, extractor: Any, imports: List[ImportStatement],
     return entry
 
 
+def indexes_project_declarations(extractor: Any) -> bool:
+    """Whether ``index_file`` reads something from a file of this language that resolves imports
+    in OTHER files: its declared packages or namespaces, its member keys, its Swift module, its
+    Zeitwerk constant path or its autoload coverage. A focused build (``ScanScope.focus_only``,
+    BACK-2565) still extracts such a file outside the focus; a file of any other language is
+    resolved from paths and manifests alone, so outside the focus it is not read."""
+    spec = getattr(extractor, 'spec', None)
+    return bool(getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None)
+                or getattr(spec, 'module_dir_convention', None) or getattr(spec, 'zeitwerk_convention', False)
+                or getattr(spec, 'convention_autoloaded', False))
+
+
 def resolve_project(scope: analysis_inputs.ScanScope) -> ProjectResolution:
     """One cascade build of ``scope.root``: the walk is capped at ``scope.cap`` source files and
     judges what it hid at ``scope.focus``; only files with an extension in ``scope.extensions``
@@ -341,9 +353,13 @@ def resolve_project(scope: analysis_inputs.ScanScope) -> ProjectResolution:
 class ProjectResolver:
     """The cascade's phases over one scan root; ``resolve`` runs them in order."""
 
-    def __init__(self, cap: Optional[int] = None, focus: Optional[Path] = None):
+    def __init__(self, cap: Optional[int] = None, focus: Optional[Path] = None, focus_only: bool = False):
         self._cap = cap
         self._focus = focus
+        # A focused build (BACK-2565) resolves the imports of files at the focus only; every other
+        # file still feeds the indices it was extracted for.
+        self._resolved_at: Optional[Callable[[Path], bool]] = under_directory(focus) if (
+            focus_only and focus is not None) else None
         self.result = ProjectResolution()
         self._graph = ImportGraph()
         self._ruby_inventory_roots_seen: Set[Path] = set()
@@ -646,10 +662,10 @@ class ProjectResolver:
         indices: _ResolutionIndices,
     ) -> None:
         """Resolve every extracted import into dependency (and reverse_deps)
-        edges, one file at a time."""
+        edges, one file at a time (only the focus's files in a focused build)."""
         for file_path, imports in self._graph.files.items():
             extractor = get_extractor(file_path)
-            if not extractor:
+            if not extractor or not self._resolves(file_path):
                 continue
 
             base_path = file_path.parent
@@ -681,6 +697,11 @@ class ProjectResolver:
                 self._resolve_statement_edges(
                     stmt, file_path, extractor, base_path, extra_paths,
                     file_index, indices)
+
+    def _resolves(self, file_path: Path) -> bool:
+        """Whether this build resolves ``file_path``'s imports: every file, or in a focused build
+        only a file at the focus."""
+        return self._resolved_at is None or self._resolved_at(file_path)
 
     def _add_edge(self, stmt: ImportStatement, extractor: Any, file_path: Path, target: Path, via: str) -> None:
         """One edge of ``stmt``, tagged with the cascade stage that found it (``via``) and, when the
@@ -908,7 +929,7 @@ class ProjectResolver:
             return
         for file_path in files:
             extractor: Any = get_extractor(file_path)
-            if extractor is None:
+            if extractor is None or not self._resolves(file_path):
                 continue
             spec = getattr(extractor, 'spec', None)
             if not getattr(spec, 'zeitwerk_convention', False):

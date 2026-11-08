@@ -61,6 +61,12 @@ _GRAPH_MEMO_ROOTS = 4
 _GRAPH_MEMO_VARIANTS = 2
 
 
+def _focused_graph_key(key: str, focus: Optional[Path]) -> str:
+    """The key of a focused build (BACK-2565) of the tree ``key`` names: it resolved only the files
+    at ``focus``, so it is never served to a request that needs the whole graph."""
+    return hashlib.sha256(f'{key}|resolved_at={focus}'.encode('utf-8')).hexdigest()
+
+
 def _evict_graph_root(root: str) -> None:
     _GRAPH_MEMO.pop(root, None)
 
