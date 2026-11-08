@@ -573,12 +573,15 @@ def lazy_cycle_sites(package: Path, base: Path) -> Dict[str, List[int]]:
     from reveal.analyzers.imports import service, resolution
 
     base = base.resolve()
+    inside = package.resolve()
     root = resolution.choose_scan_root(package).root
     graph = service.analyze(service.path_scope(root, focus=None if root == package else package)).analysis.graph
     sites: Dict[str, List[int]] = {}
     for group in graph.find_cycle_groups():
         members = set(group)
         for importer in group:
+            if not Path(importer).resolve().is_relative_to(inside):
+                continue  # a test fixture's deliberate cycle (graph_invariants_back1096) is not reveal's
             for imported in graph._cycle_successors(importer):
                 if imported not in members or not graph.is_lazy_edge(importer, imported):
                     continue
