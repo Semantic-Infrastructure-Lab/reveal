@@ -1,13 +1,14 @@
-"""ProjectBindings' pre-check reads a file's bound names once per file version, not once per request
-(BACK-2579).
+"""ProjectBindings' pre-check reads a file's bound names once while its project tree is unchanged,
+not once per request (BACK-2579).
 
 ``?callers=`` applies the import bindings per query (BACK-2567), and ``ProjectBindings.get`` first
 asks the file's own import extraction which names it binds (3af89992), so a query whose calls go
 through no import never builds the project's analysis. The extraction's in-process layer is emptied
 at every host request (BACK-2083) and the disk layer may be off, so every query re-parsed every file
 holding a call to the name: go/callers through reveal.api.query took 1.4-2.3 s per query against
-0.03 s on 8d0d7b93, nearly all of it tree-sitter. The names are now kept per (mtime_ns, size), the
-stamp the disk layer already trusts across requests; a changed file is read again.
+0.03 s on 8d0d7b93, nearly all of it tree-sitter. The names are now a validated cache per project
+root (register_validated_cache, as build_cache's _GRAPH_MEMO holds the analysis): kept while the
+root's tree stamp is unchanged, so a changed file is read again.
 """
 
 import os

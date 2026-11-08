@@ -19,6 +19,7 @@ from typing import Any, Dict, FrozenSet, Iterable, NamedTuple, Optional, Set, Tu
 
 from .types import ImportStatement
 from .unused import binds_reliably, bound_name, bound_names
+from ...utils.request_cache import in_host_request, register_validated_cache
 
 _PACKAGE_FILES = frozenset({'__init__', 'index', 'mod'})
 
@@ -179,6 +180,7 @@ class ProjectBindings:
         self._files: Dict[str, Dict[str, Binding]] = {}
         self._extractions: Optional[Dict[str, Any]] = None
         self._bound_names: Dict[str, FrozenSet[str]] = {}
+        self._scope_root: Optional[str] = None
 
     def get(self, file_path: str, name: str) -> Optional[Binding]:
         """What ``name`` is bound to in ``file_path``: None unless one of the file's own imports binds
@@ -186,10 +188,18 @@ class ProjectBindings:
         whole query) whose calls go through no import never builds it. Same answer as
         ``of(file_path).get(name)``: the analysis binds from the same statements."""
         if file_path not in self._bound_names:
-            self._bound_names[file_path] = _names_bound_in(file_path)
+            self._bound_names[file_path] = _names_bound_in(file_path, self._root())
         if name not in self._bound_names[file_path]:
             return None
         return self.of(file_path).get(name)
+
+    def _root(self) -> Optional[str]:
+        """The root of the scope the analysis would be built for (the shared climb, cached), spelled
+        as build_cache's memo keys it, so one tree stamp per request serves both."""
+        if self._scope_root is None and self._target is not None:
+            from . import service
+            self._scope_root = str(service.project_scope(self._target).root)
+        return self._scope_root
 
     def _by_file(self) -> Dict[str, Any]:
         """The analysis' extractions keyed by absolute path: its root may be spelled '..' while the
@@ -211,47 +221,59 @@ class ProjectBindings:
         return self._files[file_path]
 
 
-# Absolute path -> (mtime_ns, size, the names its import statements bind), across host requests. The
-# extraction's own in-process layer is emptied at every request (BACK-2083) and the disk layer may be
-# off, so without this every ?callers= query re-parsed every file holding a call to the name
-# (BACK-2579). The stamp is the one the disk layer trusts across requests; an edit replaces the entry.
-_BOUND_NAMES: 'OrderedDict[str, Tuple[int, int, FrozenSet[str]]]' = OrderedDict()
-_BOUND_NAMES_MAX = 200_000
+# Project root -> absolute path -> the names that file's import statements bind, kept across host
+# requests while the root's tree is unchanged (register_validated_cache, as build_cache's _GRAPH_MEMO
+# holds the analysis). The extraction's own in-process layer is emptied at every request (BACK-2083)
+# and the disk layer may be off, so without this every ?callers= query re-parsed every file holding a
+# call to the name (BACK-2579).
+_BOUND_NAMES: 'OrderedDict[str, Dict[str, FrozenSet[str]]]' = OrderedDict()
+_BOUND_NAMES_ROOTS = 4
+
+
+def _evict_bound_names(root: str) -> None:
+    _BOUND_NAMES.pop(root, None)
+
+
+register_validated_cache(__name__ + '.bound_names', _BOUND_NAMES, _evict_bound_names)
 
 
 def clear_bound_names() -> None:
-    """Forget every remembered file (tests)."""
+    """Forget every remembered root (tests)."""
     _BOUND_NAMES.clear()
 
 
-def _names_bound_in(file_path: str) -> FrozenSet[str]:
-    """Every local name the file's own import statements bind (no resolution), read once per file
-    version: an extraction its content did not decide (``ImportExtraction.cacheable``) is not kept."""
+def _names_bound_in(file_path: str, root: Optional[str]) -> FrozenSet[str]:
+    """Every local name the file's own import statements bind (no resolution). Inside a host
+    request, a file under ``root`` is read once while the root's tree is unchanged; an extraction
+    its content did not decide (``ImportExtraction.cacheable``) is not kept."""
     from .base import get_extractor
     path = Path(file_path)
     extractor = get_extractor(path)
     if extractor is None:
         return frozenset()
     key = _absolute(path)
-    try:
-        stat = os.stat(key)
-    except OSError:
-        return frozenset()
-    entry = _BOUND_NAMES.get(key)
-    if entry is not None and entry[:2] == (stat.st_mtime_ns, stat.st_size):
-        _BOUND_NAMES.move_to_end(key)
-        return entry[2]
+    keep = root is not None and in_host_request() and _under(key, _absolute(root))
+    remembered = _BOUND_NAMES.get(root) if keep else None
+    if remembered is not None and key in remembered:
+        return remembered[key]
     try:
         statements = extractor.extract_imports(path)
     except OSError:
         return frozenset()
     names = frozenset(name for stmt in statements for name in bound_names(stmt))
-    if extractor.analysis.cacheable:
-        _BOUND_NAMES[key] = (stat.st_mtime_ns, stat.st_size, names)
-        _BOUND_NAMES.move_to_end(key)
-        while len(_BOUND_NAMES) > _BOUND_NAMES_MAX:
+    if keep and extractor.analysis.cacheable:
+        _BOUND_NAMES.setdefault(root, {})[key] = names
+        _BOUND_NAMES.move_to_end(root)
+        while len(_BOUND_NAMES) > _BOUND_NAMES_ROOTS:
             _BOUND_NAMES.popitem(last=False)
     return names
+
+
+def _under(path: str, root: str) -> bool:
+    try:
+        return os.path.commonpath([path, root]) == root
+    except ValueError:  # different drives
+        return False
 
 
 def _absolute(path: Union[str, Path]) -> str:
