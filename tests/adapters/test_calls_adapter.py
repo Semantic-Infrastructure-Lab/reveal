@@ -1,8 +1,7 @@
 """Phase 3 call graph tests: cross-file resolution and calls:// adapter.
 
 Covers:
-- resolved_calls() enriches call entries with resolved_file/resolved_name from import bindings
-- resolved_calls field appears in AST adapter output for resolved calls
+- ast:// carries no resolved_calls (retired, BACK-2566: calls:// answers where a call lands)
 - calls:// adapter: ?target= finds callers across project files
 - calls:// adapter: ?depth=2 finds transitive callers
 - calls:// adapter: missing target returns error message
@@ -21,8 +20,7 @@ from typing import Any, Dict
 
 import pytest
 
-from reveal.adapters.ast.call_graph import build_alias_map, resolved_calls
-from reveal.analyzers.imports.bindings import Binding
+from reveal.adapters.ast.call_graph import build_alias_map
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.calls.index import build_callers_index, find_callers, find_callees, rank_by_callers, _bare_callee_name
 from reveal.adapters.calls.adapter import CallsAdapter, CallsRenderer
@@ -96,38 +94,7 @@ class TestBuildAliasMap(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Unit: resolved_calls (BACK-2566: from import bindings, not a per-file symbol map)
-# ---------------------------------------------------------------------------
-
-class TestResolvedCalls(unittest.TestCase):
-
-    def test_empty_calls(self):
-        self.assertEqual(resolved_calls([], {}), [])
-
-    def test_unbound_call(self):
-        result = resolved_calls(['len', 'print'], {})
-        self.assertEqual(result, [{'name': 'len'}, {'name': 'print'}])
-
-    def test_bound_bare_name(self):
-        result = resolved_calls(['validate_item'], {'validate_item': Binding('utils/v.py', False)})
-        self.assertEqual(result, [{'name': 'validate_item', 'resolved_file': 'utils/v.py',
-                                   'resolved_name': 'validate_item'}])
-
-    def test_bound_qualifier(self):
-        """db.insert: the file from 'db', resolved_name = 'insert'."""
-        result = resolved_calls(['db.insert'], {'db': Binding('lib/database.py', False)})
-        self.assertEqual(result, [{'name': 'db.insert', 'resolved_file': 'lib/database.py',
-                                   'resolved_name': 'insert'}])
-
-    def test_unresolved_binding_does_not_resolve(self):
-        """A name bound by an import that resolved to no file (stdlib, third party) names no file."""
-        result = resolved_calls(['os.getcwd', 'pytest.raises'],
-                                {'os': Binding(None, True), 'pytest': Binding(None, True)})
-        self.assertEqual(result, [{'name': 'os.getcwd'}, {'name': 'pytest.raises'}])
-
-
-# ---------------------------------------------------------------------------
-# Integration: resolved_calls in AST adapter output
+# ast:// carries no resolved_calls (BACK-2566, Scott 2026-11-08)
 # ---------------------------------------------------------------------------
 
 class TestResolvedCallsInAstAdapter(unittest.TestCase):
@@ -139,64 +106,18 @@ class TestResolvedCallsInAstAdapter(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
-    def test_resolved_calls_field_present_when_resolved(self):
-        """If a call can be resolved against imports, resolved_calls appears (inside a project: a loose
-        directory builds no import analysis, BACK-2566)."""
+    def test_an_imported_call_carries_no_resolved_calls(self):
+        """The annotation is retired: calls://?callees=FILE:NAME&depth=2 names each call's target."""
         _write(self.tmpdir, 'pyproject.toml', '[project]\nname = "p"\n')
         _write(self.tmpdir, 'utils.py', 'def validate_item(x): return x\n')
-        main = _write(
-            self.tmpdir, 'main.py',
-            'from utils import validate_item\n\ndef process(x):\n    return validate_item(x)\n'
-        )
-        adapter = AstAdapter(main, 'type=function&name=process')
-        result = adapter.get_structure()
-        results = result.get('results', [])
-        process_elem = next((r for r in results if r['name'] == 'process'), None)
-        self.assertIsNotNone(process_elem, f"'process' not found in {[r['name'] for r in results]}")
-        # validate_item should be in calls
-        self.assertIn('validate_item', process_elem.get('calls', []))
-        # resolved_calls should exist and have the resolution
-        resolved = process_elem.get('resolved_calls')
-        self.assertIsNotNone(resolved, "resolved_calls should be present when import resolves")
-        vi_entry = next((e for e in resolved if e['name'] == 'validate_item'), None)
-        self.assertIsNotNone(vi_entry)
-        self.assertIn('resolved_file', vi_entry)
-        self.assertTrue(vi_entry['resolved_file'].endswith('utils.py'))
-
-    def test_in_tree_absolute_import_resolves_as_imports_does(self):
-        """BACK-2566: `from pkg.v import validate` inside pkg/ is in-tree; the per-file symbol map
-        (no project root) left it unresolved, the import graph resolves it, from any spelling."""
-        os.makedirs(os.path.join(self.tmpdir, 'pkg'))
-        _write(self.tmpdir, 'pyproject.toml', '[project]\nname = "p"\n')
-        _write(self.tmpdir, 'pkg/__init__.py', '')
-        _write(self.tmpdir, 'pkg/v.py', 'def validate(x):\n    return x\n')
-        _write(self.tmpdir, 'pkg/main.py', ('from pkg.v import validate\nimport pkg.v as pv\nimport json\n\n'
-                                            'def run(x):\n    validate(x)\n    pv.validate(x)\n    return json.dumps(x)\n'))
-        saved = os.getcwd()
-        try:
-            for cwd, target, want in ((self.tmpdir, 'pkg', 'pkg/v.py'), (self.tmpdir, 'pkg/main.py', 'pkg/v.py'),
-                                      (os.path.join(self.tmpdir, 'pkg'), '.', 'v.py')):
-                os.chdir(cwd)
-                run = next(r for r in AstAdapter(target, 'name=run').get_structure()['results'])
-                self.assertEqual([(e['name'], e.get('resolved_file')) for e in run['resolved_calls']],
-                                 [('validate', want), ('pv.validate', want), ('json.dumps', None)], (cwd, target))
-        finally:
-            os.chdir(saved)
-
-    def test_resolved_file_is_spelled_from_the_cwd_not_absolute(self):
-        """The TS extractor resolves to an absolute path; resolved_file is spelled like the result's
-        file, so the JSON carries no home directory (BACK-2566)."""
-        _write(self.tmpdir, 'package.json', '{"name": "p"}\n')
-        os.makedirs(os.path.join(self.tmpdir, 'app'))
-        _write(self.tmpdir, 'app/b.ts', 'export function helper() {}\n')
-        _write(self.tmpdir, 'app/main.ts', "import { helper } from './b';\n\nexport function go() {\n  helper();\n}\n")
-        saved = os.getcwd()
-        try:
-            os.chdir(self.tmpdir)
-            go = next(r for r in AstAdapter('app', 'name=go').get_structure()['results'])
-        finally:
-            os.chdir(saved)
-        self.assertEqual(go['resolved_calls'], [{'name': 'helper', 'resolved_file': 'app/b.ts', 'resolved_name': 'helper'}])
+        main = _write(self.tmpdir, 'main.py',
+                      'from utils import validate_item\n\ndef process(x):\n    return validate_item(x)\n')
+        process = next(r for r in AstAdapter(main, 'type=function&name=process').get_structure()['results'])
+        self.assertEqual(process['calls'], ['validate_item'])
+        self.assertNotIn('resolved_calls', process)
+        walk = CallsAdapter(self.tmpdir, 'callees=main.py:process&depth=2').get_structure()
+        edge = next(e for level in walk['levels'] for e in level['callees'] if e['call_expr'] == 'validate_item')
+        self.assertEqual(Path(edge['callee_file']).name, 'utils.py')
 
     def test_no_resolved_calls_when_no_imports(self):
         """A file with no imports should not gain resolved_calls."""
@@ -2973,15 +2894,16 @@ if __name__ == '__main__':
     unittest.main()
 
 
-def test_a_loose_file_builds_no_import_analysis(tmp_path, monkeypatch):
-    """BACK-2566: outside every project (no marker, repository or .reveal.yaml above it) ast:// leaves
-    resolved_calls out rather than walk the file's directory: one file in a shared temp directory took
-    73 s instead of 1 s."""
+def test_an_ast_query_builds_no_import_analysis(tmp_path, monkeypatch):
+    """BACK-2566: ast:// is a per-file structure query; it never builds the project's import analysis
+    (with resolved_calls it cost one Home Assistant file 0.3 s -> 4 s, and a loose file in a shared
+    temp directory 73 s)."""
     from reveal.analyzers.imports import service
 
     def no_build(*args, **kwargs):
-        raise AssertionError('import analysis built for a loose file')
+        raise AssertionError('import analysis built for an ast:// query')
 
+    (tmp_path / 'pyproject.toml').write_text('[project]\nname = "p"\n', encoding='utf-8')
     (tmp_path / 'utils.py').write_text('def validate_item(x):\n    return x\n', encoding='utf-8')
     main = tmp_path / 'main.py'
     main.write_text('from utils import validate_item\n\ndef process(x):\n    return validate_item(x)\n',

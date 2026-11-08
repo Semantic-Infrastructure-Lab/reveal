@@ -433,7 +433,7 @@ reveal 'ast://./src?complexity>10' --format=json
 - `total_files`: Number of files scanned
 - `total_results`: Number of matches before limit/offset
 - `displayed_results`: Number of results in output
-- `results`: Array of matched code elements — each has `name` (not `symbol`), `category` (not `type`; the plural of the element kind: `functions`, `classes`, `imports`, `structs`, `interfaces`, `modules`, `namespaces`, `tests`; methods are `functions` with an `owner`; an owned function that is not a method, such as a Rust `mod` member or a function nested in a method, also has `method: false`), and `line_count` (not `lines`). Functions also carry `signature`, `depth`, `calls`, `called_by` and, when a call resolves to another file, `resolved_calls`; classes carry `bases`. Import rows have no `complexity`.
+- `results`: Array of matched code elements — each has `name` (not `symbol`), `category` (not `type`; the plural of the element kind: `functions`, `classes`, `imports`, `structs`, `interfaces`, `modules`, `namespaces`, `tests`; methods are `functions` with an `owner`; an owned function that is not a method, such as a Rust `mod` member or a function nested in a method, also has `method: false`), and `line_count` (not `lines`). Functions also carry `signature`, `depth`, `calls` and `called_by`; classes carry `bases`. Import rows have no `complexity`.
 - `meta`: Trust metadata (parse mode, confidence) and `warnings`. When `results` holds fewer
   than `total_results` (`?limit=`, `?offset=`, the 200-result cap on any query without `limit=`,
   `--max-items`, `--head`), one warning says so: `{"type": "truncated", "field": "results",
@@ -465,7 +465,7 @@ The AST adapter extracts call graph data from every function and method during a
 
 - **`calls`** — list of function names called by this function (outgoing calls)
 - **`called_by`** — list of function names that call this function, within the same file
-- **`resolved_calls`** — like `calls`, but with `resolved_file` + `resolved_name` for calls whose qualifier or bare name an import binds to a project file, in every language `imports://` resolves. The imports are resolved as `imports://` resolves them (from the project root, so an absolute in-tree import or a `tsconfig.json` alias counts); building that for a file in a large project (tens of thousands of files) adds seconds to the first query. Only inside a project (a package marker, a repository or `.reveal.yaml` above the target): a loose file or directory gets no `resolved_calls`. `resolved_file` is spelled from the current directory, like `file`
+- `resolved_calls` is retired (BACK-2566): where a call lands across files is `calls://<path>?callees=FILE:NAME&depth=2`, whose `levels[].callees[]` give each call's `callee_file` and `callee_line` by the import resolution `imports://` uses
 
 Call graph fields appear automatically in JSON output and in the default text renderer (as `calls:` and `called by:` lines below each function).
 
@@ -483,7 +483,7 @@ different callers for the same name; callers and callees questions go to `calls:
 | `ast://<path>?callee_of=NAME` | `calls://<path>?callees=NAME` |
 | `ast://<path>?show=calls` | `calls://<path>?callers=NAME` or `?callees=NAME`; the `calls`/`called_by` JSON fields below |
 
-The `calls`, `called_by` and `resolved_calls` fields and the `callers>N` filter are not retired.
+The `calls` and `called_by` fields and the `callers>N` filter are not retired; `resolved_calls` is (see above).
 
 ### Cross-file call queries
 
@@ -506,7 +506,7 @@ See [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) for full `calls://` documen
 
 ```bash
 reveal 'ast://src/auth.py?type=function' --format=json | \
-  jq '.results[] | {name, calls, called_by, resolved_calls}'
+  jq '.results[] | {name, calls, called_by}'
 ```
 
 Example result:
@@ -514,18 +514,11 @@ Example result:
 {
   "name": "authenticate",
   "calls": ["validate_token", "hash_password"],
-  "called_by": ["login_handler"],
-  "resolved_calls": [
-    {
-      "name": "validate_token",
-      "resolved_file": "src/tokens.py",
-      "resolved_name": "validate_token"
-    }
-  ]
+  "called_by": ["login_handler"]
 }
 ```
 
-> **Note:** `resolved_calls` is only present when at least one call can be resolved to a file via imports. It is absent (not an empty list) when nothing resolves.
+Which file `validate_token` is: `reveal 'calls://src/?callees=auth.py:authenticate&depth=2' --format=json`.
 
 ---
 
@@ -688,7 +681,7 @@ reveal 'calls://src/?callers=validate_token&depth=2'
 
 # Step 4: Extract call data for a specific function (JSON)
 reveal 'ast://src/auth.py?name=authenticate' --format=json | \
-  jq '.results[0] | {calls, called_by, resolved_calls}'
+  jq '.results[0] | {calls, called_by}'
 
 # Step 5: Generate a visual graph
 reveal 'calls://src/?callers=authenticate&format=dot' | dot -Tsvg > auth_calls.svg
@@ -1349,7 +1342,7 @@ sqlite3 code.db "SELECT file, symbol, complexity
 - `..` - Range operator
 
 **Known limitations:**
-- Cross-file callers live in `calls://`; `ast://` call fields are per-file plus `resolved_calls`
+- Cross-file callers and call targets live in `calls://`; `ast://` call fields are per-file
 
 ---
 

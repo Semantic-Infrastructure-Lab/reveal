@@ -21,7 +21,6 @@ from .analysis import (
 )
 from .filtering import (apply_filters, matches_decorator, find_unknown_filter_keys, normalize_type_condition,
                         outline_plan)
-from .call_graph import annotate_resolved_calls
 from .help import get_help as _get_help, get_schema as _get_schema
 from .renderer import AstRenderer
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
@@ -576,10 +575,6 @@ class AstAdapter(ResourceAdapter):
                 builtins = conventions_for(family_for_path(elem.get('file', ''))).builtins
                 if elem.get('calls') and builtins:
                     elem['calls'] = [c for c in elem['calls'] if c.split('.')[-1] not in builtins]
-
-        # Where a shown function's calls land across files, from the import analysis imports://
-        # builds (BACK-2566); built only when a shown result has calls.
-        annotate_resolved_calls(controlled, self.path)
 
         # BACK-1258: tag each result test/vendor/minified, the same field
         # hotspots:// and overview:// already carry (read by _unfiltered_ranking_warning).

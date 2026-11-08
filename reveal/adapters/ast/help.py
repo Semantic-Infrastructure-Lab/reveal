@@ -573,7 +573,7 @@ def get_help() -> Dict[str, Any]:
             'Supports Python, JS, TS, Rust, Go and more via tree-sitter (reveal --languages)',
             'Use --format=json for programmatic filtering with jq',
             'Call graph: calls=, callee_of= and show=calls are retired (each prints a note); use calls:// for callers (?callers=X) and callees (?callees=X), or --grep for a text pattern',
-            'JSON output includes calls[], called_by[], and resolved_calls[] fields on each function/method',
+            'JSON output includes calls[] and called_by[] fields on each function/method; where a call lands across files is calls://<path>?callees=FILE:NAME&depth=2',
         ],
         'output_formats': ['text', 'json', 'grep'],
         'see_also': [
@@ -616,7 +616,7 @@ def get_schema() -> Dict[str, Any]:
             'Sort note: text output groups results by file; use --format=json or --format=grep for globally sorted output',
             'Supports the tree-sitter languages listed by reveal --languages (Python, JS, TS, Rust, Go, Java, C, C++, ...)',
             'Complexity is proper McCabe cyclomatic complexity for tree-sitter languages; falls back to a keyword-count estimate (shared with metrics:// and C901) for unsupported languages',
-            'Call graph fields on functions/methods in JSON: calls[] (outgoing), called_by[] (within-file incoming), resolved_calls[] (cross-file resolved entries)',
+            'Call graph fields on functions/methods in JSON: calls[] (outgoing), called_by[] (within-file incoming); cross-file targets: calls://<path>?callees=FILE:NAME&depth=2 (resolved_calls[] is retired, BACK-2566)',
             'calls=, callee_of= and show=calls are retired spellings (a replaced-by note until the cut): '
             "use calls://<path>?callers=NAME or ?callees=NAME, or --grep 'PATTERN' for a text pattern",
             'show=dict-heatmap / show=dict-schemas are Python-only and return their own '

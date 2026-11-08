@@ -1,19 +1,17 @@
-"""Call-site name maps for the AST and calls adapters, and ast://'s cross-file ``resolved_calls``.
+"""Call-site name maps for the AST and calls adapters: import aliases and class-attribute aliases.
 
-A function's raw ``calls`` list (bare names like ["validate_item", "db.insert"]) stays a
-List[str]; ``resolved_calls`` adds, per call, the file its import names, read from the same
-import analysis imports:// and calls' callee resolution use (BACK-2566: this module's own
-per-file import resolver, ``build_symbol_map``, disagreed with the import graph and is gone).
+Where a call lands across files is calls://'s answer (``?callees=FILE:NAME&depth=2``), from the
+import analysis imports:// builds. ast:// no longer annotates it (``resolved_calls``, retired by
+Scott 2026-11-08, BACK-2566): this module's per-file import resolver, ``build_symbol_map``,
+disagreed with the import graph, and the correct answer costs the project's import analysis,
+which a rung-1/2 query should not pay.
 """
 
 import ast
-import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from ...analyzers.imports.base import get_extractor
-from ...analyzers.imports.bindings import Binding, ProjectBindings
-from ...utils.path_utils import to_posix
 from ...utils.pyparse import parse_python
 
 
@@ -104,52 +102,3 @@ def class_attribute_alias(callee: str, line: int, spans: List[ClassAliasSpan]) -
         return None
     innermost = max(enclosing, key=lambda span: span[0])
     return innermost[2].get(attribute)
-
-
-def resolved_calls(calls: List[str], bindings: Dict[str, Binding]) -> List[Dict[str, Any]]:
-    """A function's raw ``calls`` list with the file each call's qualifier or bare name is bound to,
-    from the caller file's import bindings (``analyzers/imports/bindings.py``, the resolution
-    imports:// does; BACK-2566). Every entry has ``name``; one whose import resolved to a project
-    file adds ``resolved_file`` and ``resolved_name``::
-
-        calls    = ["db.insert", "validate_item", "len"]
-        bindings = {"db": Binding("lib/database.py", False), "validate_item": Binding("utils/v.py", False)}
-        -> [{"name": "db.insert", "resolved_file": "lib/database.py", "resolved_name": "insert"},
-            {"name": "validate_item", "resolved_file": "utils/v.py", "resolved_name": "validate_item"},
-            {"name": "len"}]
-    """
-    result: List[Dict[str, Any]] = []
-    for call in calls:
-        entry: Dict[str, Any] = {'name': call}
-        binding = bindings.get(call.split('.')[0])
-        if binding is not None and binding.target:
-            entry['resolved_file'] = to_posix(_spelled(binding.target))
-            entry['resolved_name'] = call.split('.', 1)[1] if '.' in call else call
-        result.append(entry)
-    return result
-
-
-def _spelled(target: str) -> str:
-    """The target as the shortest path from the cwd, as the result's ``file`` is spelled
-    ('../pkg/v.py' from inside pkg reads 'v.py'; an extractor's absolute path reads relative, so the
-    JSON carries no home directory); absolute only where no relative path exists (another drive)."""
-    try:
-        return os.path.relpath(os.path.abspath(target))
-    except ValueError:
-        return target
-
-
-def annotate_resolved_calls(elements: List[Dict[str, Any]], target: str) -> None:
-    """Add ``resolved_calls`` to each function-like element with at least one call bound to a project
-    file. The import analysis for ``target`` is built on the first element that has calls, and only
-    inside a project (a package marker, a repository or ``.reveal.yaml`` above ``target``): a loose
-    file's imports name no project to resolve in, and its directory (a Downloads folder, /tmp/x) can be
-    any size; a 1 s query of one file took 73 s walking a shared temp directory."""
-    bindings = ProjectBindings(Path(target), project_only=True)
-    for elem in elements:
-        if elem.get('calls') and elem.get('file'):
-            heads = {call.split('.')[0] for call in elem['calls']}
-            bound = {head: b for head in heads if (b := bindings.get(elem['file'], head)) is not None}
-            resolved = resolved_calls(elem['calls'], bound)
-            if any('resolved_file' in entry for entry in resolved):
-                elem['resolved_calls'] = resolved

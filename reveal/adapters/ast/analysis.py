@@ -424,8 +424,8 @@ def _release_buffers(analyzer) -> None:
 
 def _flatten_structure(file_path: str, structure: Dict[str, Any], analyzer, outline: bool) -> Dict[str, Any]:
     """A file's structure as the ``{'file', 'elements', ...}`` dict the ast:// and calls://
-    adapters share. Only the file's own facts: where a call lands across files depends on other
-    files, so ast:// adds ``resolved_calls`` to the results it shows (BACK-2566), never here."""
+    adapters share. Only the file's own facts: where a call lands across files is calls://'s answer
+    (BACK-2566)."""
     result: Dict[str, Any] = {'file': file_path, 'elements': []}
     if structure.get('_has_errors'):
         result['parse_recovered'] = True  # BACK-1847: the tree has syntax it could not read

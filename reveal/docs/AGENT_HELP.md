@@ -1322,13 +1322,13 @@ a note naming `calls://?callers=`/`?callees=` (or `--grep` for a `calls=*pattern
 **JSON output — call fields per function:**
 ```bash
 reveal 'ast://src/auth.py?type=function' --format=json | \
-  jq '.results[] | {name, calls, called_by, resolved_calls}'
+  jq '.results[] | {name, calls, called_by}'
 ```
 
 Fields:
 - `calls` — outgoing calls from this function
 - `called_by` — within-file callers
-- `resolved_calls` — cross-file resolved entries (file + name), resolved as `imports://` resolves them
+- where each call lands across files: `calls://<path>?callees=FILE:NAME&depth=2` (`resolved_calls` is retired)
 
 **See also:** `CALLS_ADAPTER_GUIDE.md` for full `calls://` documentation.
 

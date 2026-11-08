@@ -1,8 +1,8 @@
 """A relative target climbs to its project root like an absolute one (BACK-2572).
 
 ``resolve_project_root`` climbed the path as typed, and a relative spelling has no ancestors past
-'.': ``Path('.').parent`` is ``Path('.')``. So from inside a package, ``calls://.?callees=`` (and
-ast://'s ``resolved_calls``) read the import analysis of '.' alone, and a tsconfig ``paths`` alias or
+'.': ``Path('.').parent`` is ``Path('.')``. So from inside a package, ``calls://.?callees=`` read the
+import analysis of '.' alone, and a tsconfig ``paths`` alias or
 a sibling package declared above it read as outside the tree, while ``imports://.`` (which resolves
 its target first) climbed. The climb now runs from the absolute directory, and a relative target
 gets its root back relative to the cwd.

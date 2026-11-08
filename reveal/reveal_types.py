@@ -123,7 +123,6 @@ class ASTElement(TypedDict, total=False):
     depth: int
     calls: List[str]
     called_by: List[str]
-    resolved_calls: List[Any]
 
 
 class StructureItem(TypedDict, total=False):

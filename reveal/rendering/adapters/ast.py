@@ -135,22 +135,8 @@ def _render_ast_element(elem: ASTElement) -> None:
 
     calls = elem.get('calls', [])
     called_by = elem.get('called_by', [])
-    resolved_calls = elem.get('resolved_calls')
     if calls:
-        if resolved_calls:
-            # Show resolved info for entries that could be resolved
-            resolved_map = {e['name']: e for e in resolved_calls if 'resolved_file' in e}
-            parts = []
-            for name in calls:
-                if name in resolved_map:
-                    e = resolved_map[name]
-                    short_file = Path(e['resolved_file']).name
-                    parts.append(f"{name} (→ {short_file}::{e['resolved_name']})")
-                else:
-                    parts.append(name)
-            print(f"           calls:     {', '.join(parts)}")
-        else:
-            print(f"           calls:     {', '.join(calls)}")
+        print(f"           calls:     {', '.join(calls)}")
     if called_by:
         print(f"           called by: {', '.join(called_by)}")
 

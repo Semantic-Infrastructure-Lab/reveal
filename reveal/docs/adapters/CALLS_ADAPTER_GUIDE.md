@@ -649,7 +649,7 @@ For within-file analysis, `ast://` provides lighter-weight call graph features w
 | `called_by` incoming | ✅ within-file reverse | ✅ `?callers=<name>` (full project) |
 | Filters | `calls=`, `callee_of=` retired (a note names `calls://`) | `callers=<name>`, `callees=<name>` |
 | Display mode | `show=calls` retired (a note names `calls://`) | text / json / dot |
-| Cross-file resolution | `resolved_calls[]` in JSON | full index |
+| Cross-file resolution | no (`resolved_calls` retired, BACK-2566) | `?callees=FILE:NAME&depth=2` names each target |
 | Cache | No (per-request) | In-process only (MCP / `reveal.api`); each CLI run rebuilds |
 
 **Use `ast://` when:**
@@ -668,9 +668,9 @@ The `calls=`, `callee_of=` and `show=calls` parameters are retired: each still a
 replaced-by note (see [Retired spellings](#retired-spellings)).
 
 ```bash
-# JSON: get calls + resolved_calls for a specific function
+# JSON: get calls + called_by for a specific function
 reveal 'ast://src/auth.py?name=authenticate' --format=json | \
-  jq '.results[0] | {calls, called_by, resolved_calls}'
+  jq '.results[0] | {calls, called_by}'
 ```
 
 ---

@@ -1,7 +1,7 @@
 """What each import of a file binds a local name to, read from the resolved import analysis.
 
-A consumer that looks a use up by name -- calls' callee resolution (BACK-2553), its callers index
-(BACK-2567), ast://'s ``resolved_calls`` (BACK-2566) -- asks here instead of resolving imports
+A consumer that looks a use up by name -- calls' callee resolution (BACK-2553) and its callers index
+(BACK-2567) -- asks here instead of resolving imports
 itself: the target file is the one the resolution pass found (``ImportStatement.resolved_path``), so
 the answer is the one imports:// gives for the same statement. A name bound only by imports that resolved to no file is ``unresolved``: when the
 extractor's verdict (``ImportStatement.intra_verdict``, BACK-2550) says outside the tree, no project
@@ -160,9 +160,8 @@ class ProjectBindings:
     scan's file cap, or one no import extractor reads) has no bindings: nothing is claimed about
     its names."""
 
-    def __init__(self, target: Optional[Path], *, project_only: bool = False) -> None:
+    def __init__(self, target: Optional[Path]) -> None:
         self._target = target
-        self._project_only = project_only  # no analysis outside a project (an inferred root)
         self._files: Dict[str, Dict[str, Binding]] = {}
         self._extractions: Optional[Dict[str, Any]] = None
         self._bound_names: Dict[str, FrozenSet[str]] = {}
@@ -183,16 +182,12 @@ class ProjectBindings:
         consumer walked '.', so the two spellings of one file must meet."""
         if self._extractions is None:
             self._extractions = {}
-            if self._target is not None and not (self._project_only and self._outside_project()):
+            if self._target is not None:
                 from . import service
                 analysis = service.analyze(service.project_scope(self._target)).analysis
                 self._extractions = {_absolute(path): extraction
                                      for path, extraction in analysis.extractions.items()}
         return self._extractions
-
-    def _outside_project(self) -> bool:
-        from .resolution import choose_scan_root
-        return choose_scan_root(self._target).inferred if self._target is not None else True
 
     def of(self, file_path: str) -> Dict[str, Binding]:
         """Local name -> binding for one file, however the consumer spells its path."""
