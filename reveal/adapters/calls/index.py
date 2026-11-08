@@ -1085,7 +1085,7 @@ def walk_callees(path: str, root: str, depth: int = 2, include_builtins: bool = 
     if source is None:
         source = callee_source(path)
     definitions, index = _walk_index(source)
-    resolver = CallResolver(index)
+    resolver = CallResolver(index, path)
     file_filter, root_name = _split_root(root)
     placed: Set[Tuple[str, int, str]] = set()
 

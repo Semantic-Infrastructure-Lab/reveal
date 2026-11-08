@@ -85,6 +85,19 @@ def bound_name(entry: str) -> str:
     return entry.split(' as ')[-1].strip() if ' as ' in entry else entry
 
 
+def bound_names(stmt: 'ImportStatement') -> List[str]:
+    """Every local name `stmt` binds: each name of a named import, the alias of a namespace
+    import, else the alias or the module's first segment; plus the spellings in `alt_names`.
+    The same reading `unused_entries` judges by, for a consumer that looks a use up by name."""
+    if is_named_import(stmt):
+        names = [bound_name(entry).strip() for entry in stmt.imported_names]
+    elif stmt.import_type == 'namespace_import':
+        names = [stmt.alias or '']
+    else:
+        names = [stmt.alias or stmt.module_name.split('.')[0]]
+    return [name for name in (*names, *stmt.alt_names) if name]
+
+
 def unused_entries(stmt: 'ImportStatement', symbols_used: Set[str],
                    exports: FrozenSet[str] = frozenset()) -> List[str]:
     """The parts of `stmt` that are never referenced, as written in the source.

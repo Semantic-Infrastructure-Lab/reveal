@@ -990,7 +990,8 @@ def _callees_rule(depth: int, include_builtins: bool, declined: List[str]) -> Di
     text = ("Rule: callees by definition: each definition of the name, then each definition a call reaches, "
             "is expanded once, at its shallowest level; every call site of an expanded definition is an edge "
             "(call text de-duplicated per definition); a call resolves within the caller's language family to "
-            "its one definition, else a same-file one or the one its imports name, else it is ambiguous and "
+            "its one definition, except that a call through an import from outside the tree is external; "
+            "else a same-file one or the one its imports name, else it is ambiguous and "
             f"not expanded; builtins {builtins}{'' if include_builtins else ' (builtins=true shows them)'}; "
             f"depth {depth} (clamped 1-5). Measured: depth-1 call lists only.")
     if declined:
