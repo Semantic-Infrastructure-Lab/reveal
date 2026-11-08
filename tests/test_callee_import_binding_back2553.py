@@ -166,3 +166,22 @@ def test_a_subdirectory_root_reads_the_project_alias(tmp_path):
                      'src/lib/util.ts': 'export function helper() {}\n',
                      'src/lib/other.ts': 'export function helper() {}\n'})
     assert _target(_edges(str(tmp_path / 'src'), 'go')['helper']) == ('util.ts', None)
+
+
+# --- an import that binds no name binds nothing --------------------------------------------------
+
+def test_a_cpp_include_does_not_bind_its_header_name(tmp_path):
+    # `#include <array>` binds no name; `array.Size()` on a local variable is a project method
+    # call, not a call into the header (it read as external).
+    path = _tree(tmp_path, {'a.cpp': ('#include <array>\nstruct Arr { int Size(); };\n'
+                                      'int Arr::Size() { return 0; }\n'
+                                      'int run() {\n  Arr array;\n  return array.Size();\n}\n')})
+    assert _target(_edges(path, 'run')['array.Size']) == ('a.cpp', None)
+
+
+def test_a_ruby_require_does_not_bind_the_library_name(tmp_path):
+    # Gemfile.lock lists csv, so the verdict for `require 'csv'` is external (as on Discourse).
+    path = _tree(tmp_path, {'Gemfile.lock': 'GEM\n  remote: https://rubygems.org/\n  specs:\n    csv (3.3.0)\n',
+                            'a.rb': ("require 'csv'\n\ndef each_line\nend\n\n"
+                                     "def run(csv)\n  csv.each_line\nend\n")})
+    assert _target(_edges(path, 'run')['csv.each_line']) == ('a.rb', None)
