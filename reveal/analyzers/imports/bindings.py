@@ -1,9 +1,9 @@
 """What each import of a file binds a local name to, read from the resolved import analysis.
 
-A consumer that looks a use up by name -- calls' callee resolution (BACK-2553), ast://'s
-``resolved_calls`` (BACK-2566) -- asks here instead of resolving imports itself: the target file is the one the resolution pass found
-(``ImportStatement.resolved_path``), so the answer is the one imports:// gives for the same
-statement. A name bound only by imports that resolved to no file is ``unresolved``: when the
+A consumer that looks a use up by name -- calls' callee resolution (BACK-2553), its callers index
+(BACK-2567), ast://'s ``resolved_calls`` (BACK-2566) -- asks here instead of resolving imports
+itself: the target file is the one the resolution pass found (``ImportStatement.resolved_path``), so
+the answer is the one imports:// gives for the same statement. A name bound only by imports that resolved to no file is ``unresolved``: when the
 extractor's verdict (``ImportStatement.intra_verdict``, BACK-2550) says outside the tree, no project
 function of that name is what a use of it reaches; when it cannot tell (a Python third-party package,
 or an in-tree package under a root reveal does not model), only one whose file sits at the module's
@@ -55,15 +55,17 @@ def reaches(binding: Optional[Binding], call: str, caller_file: str, files: Iter
 
 def _module_paths(stmt: ImportStatement) -> Tuple[ModulePath, ...]:
     """Where ``stmt``'s module, and a named import's member as a submodule, would sit under some
-    root: ``from a.b import c`` -> ('a', 'b') and ('a', 'b', 'c'). None for an import the
-    extractor places outside the tree, or a relative one (resolution had its directory)."""
+    root: ``from a.b import c`` -> ('a', 'b') and ('a', 'b', 'c'); ``import a.b``, which binds ``a``,
+    -> ('a',) and ('a', 'b'). None for an import the extractor places outside the tree, or a relative
+    one (resolution had its directory)."""
     if stmt.intra_verdict is False or stmt.is_relative:
         return ()
     module = tuple(part for part in _SEPARATORS.split(stmt.module_name or '') if part)
     if not module:
         return ()
     members = [entry.split(' as ')[0].strip() for entry in stmt.imported_names if entry != '*']
-    return (module, *((*module, member) for member in members if member))
+    first = (module[:1],) if not stmt.imported_names and not stmt.alias and len(module) > 1 else ()
+    return (*first, module, *((*module, member) for member in members if member))
 
 
 def _origins(stmt: ImportStatement) -> Dict[str, str]:
@@ -88,6 +90,23 @@ def at_module(file_path: str, modules: Iterable[ModulePath]) -> bool:
                for module in modules for form in forms)
 
 
+def _bound_target(stmt: ImportStatement) -> Optional[str]:
+    """The file the name ``stmt`` binds is: its resolved file, except for Python's ``import a.b``,
+    which binds ``a``, the package, while it resolved to ``a/b.py``: then ``a/__init__.py`` (None for
+    a namespace package)."""
+    resolved = stmt.resolved_path
+    if resolved is None:
+        return None
+    depth = (stmt.module_name or '').count('.')
+    if depth and not stmt.imported_names and not stmt.alias and resolved.suffix in ('.py', '.pyi'):
+        package = resolved.parent.parent if resolved.stem == '__init__' else resolved.parent
+        for _ in range(depth - 1):
+            package = package.parent
+        init = package / '__init__.py'
+        return str(init) if init.is_file() else None
+    return str(resolved)
+
+
 def file_bindings(imports: Iterable[ImportStatement]) -> Dict[str, Binding]:
     """Local name -> binding, from one file's resolved import statements. A name names a file only
     when every statement that binds it names the same one, and is unresolved only when none of them
@@ -96,7 +115,7 @@ def file_bindings(imports: Iterable[ImportStatement]) -> Dict[str, Binding]:
     in-tree (Zig ``const config = @import("config.zig")``), which only ever narrows candidates."""
     bindings: Dict[str, Binding] = {}
     for stmt in imports:
-        target = str(stmt.resolved_path) if stmt.resolved_path else None
+        target = _bound_target(stmt)
         unresolved = target is None and binds_reliably(stmt)
         modules = _module_paths(stmt) if unresolved else ()
         origins = _origins(stmt)

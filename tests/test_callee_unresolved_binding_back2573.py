@@ -98,3 +98,14 @@ def test_a_third_party_name_does_not_reach_a_file_merely_named_like_its_member(t
     path = _tree(tmp_path, {'test_x.py': 'import pytest\n\ndef test_x():\n    pytest.raises(ValueError)\n',
                             'helpers/raises.py': 'def raises(exc):\n    return exc\n'})
     assert _target(_edges(path, 'test_x')['pytest.raises']) == (None, 'external')
+
+
+def test_a_bare_dotted_import_binds_the_package_not_the_module(tmp_path):
+    # `import pkg.sub` binds `pkg`, the package: `pkg.helper()` is pkg/__init__.py's helper. The
+    # statement resolves to pkg/sub.py, which named the binding's file before. Before: ambiguous.
+    path = _tree(tmp_path, {'pyproject.toml': '[project]\nname = "m"\n',
+                            'libs/pkg/__init__.py': 'def helper():\n    return 1\n',
+                            'libs/pkg/sub.py': 'x = 1\n',
+                            'other/helper_mod.py': 'def helper():\n    return 2\n',
+                            'app/run.py': 'import pkg.sub\n\ndef go():\n    return pkg.helper()\n'})
+    assert _target(_edges(path, 'go')['pkg.helper']) == ('__init__.py', None)
