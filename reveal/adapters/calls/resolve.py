@@ -79,30 +79,39 @@ class CallResolver:
                       candidates: List[Definition]) -> Optional[Definition]:
         """The one candidate the caller's own file or its imports point at.
         A bare call prefers a same-file definition (it shadows imports); a
-        qualified one (`strings.rtrim`, `h.run`) prefers the module it names."""
+        qualified one (`strings.rtrim`, `h.run`) prefers the module it names, and
+        when an import binds its qualifier it reaches only that module (dagster's
+        `click.group` is never dagster's own `def group`, BACK-2569)."""
         qualifier = call.split('.')[0] if '.' in call else ''
-        via_import = self._via_import(call, tail, qualifier, caller_file, candidates)
+        via_import, bound = self._via_import(call, tail, qualifier, caller_file, candidates)
         same_file = [c for c in candidates if c['file'] == caller_file]
-        for group in ((via_import, same_file) if qualifier else (same_file, via_import)):
+        groups = (via_import,) if qualifier and bound else (
+            (via_import, same_file) if qualifier else (same_file, via_import))
+        for group in groups:
             if len(group) == 1:
                 return group[0]
         return None
 
     def _via_import(self, call: str, tail: str, qualifier: str, caller_file: str,
-                    candidates: List[Definition]) -> List[Definition]:
-        """The candidates in the file the call's qualifier or bare name is imported from, narrowed to
-        what the import names (BACK-2569). A module binds a name once: a bare name, or a namespace's
-        member, is a module-level definition, never a class's method of that name (three.js
-        DataUtils.js: `function toHalfFloat` and `static toHalfFloat`), and of several (TypeScript
-        overload signatures, a Python redefinition) the last, the one the module ends up binding. A
-        call through an imported class (`SnapCache.getReferenceSnapPoints`) is that class's member."""
+                    candidates: List[Definition]) -> Tuple[List[Definition], bool]:
+        """(the candidates in the file the call's qualifier or bare name is imported from, narrowed to
+        what the import names; whether an import names a file for it) (BACK-2569). A module binds a
+        name once: a bare name, or a namespace's member, is a module-level definition, never a class's
+        method of that name (three.js DataUtils.js: `function toHalfFloat` and `static toHalfFloat`),
+        and of several (TypeScript overload signatures, a Python redefinition) the last, the one the
+        module ends up binding. A call through an imported class (`SnapCache.getReferenceSnapPoints`)
+        is that class's member. A package's ``__init__``/``index``/``mod`` that does not define the name
+        re-exports it from inside the package: the candidates there (``click.group`` in
+        click/decorators.py)."""
         binding = (self._bindings.get(caller_file, qualifier) if qualifier else
                    self._bindings.get(caller_file, call) or self._bindings.get(caller_file, tail))
         if binding is None or not binding.target:
-            return []
+            return [], False
         imported_path = Path(binding.target).resolve()
         via_import = [c for c in candidates if Path(c['file']).resolve() == imported_path]
-        return via_import if len(via_import) < 2 else _one_binding(via_import, qualifier, binding.origin)
+        if not via_import and imported_path.stem in ('__init__', 'index', 'mod'):
+            via_import = [c for c in candidates if imported_path.parent in Path(c['file']).resolve().parents]
+        return (via_import if len(via_import) < 2 else _one_binding(via_import, qualifier, binding.origin)), True
 
 
 def _one_binding(in_file: List[Definition], qualifier: str, origin: Optional[str]) -> List[Definition]:

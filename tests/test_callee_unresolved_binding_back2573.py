@@ -118,3 +118,13 @@ def test_a_from_import_of_a_submodule_binds_the_submodule(tmp_path):
                             'other.py': 'def run():\n    return 2\n',
                             'app.py': 'from pkg import mod\n\ndef go():\n    return mod.run()\n'})
     assert _target(_edges(path, 'go')['mod.run']) == ('mod.py', None)
+
+
+def test_a_qualifier_an_import_binds_never_reaches_a_same_file_function(tmp_path):
+    # BACK-2569 (census on the mixed corpus): dagster's `click.group`, with click vendored in the scan,
+    # resolved to dagster's own `def group` in the same file because click/__init__.py only
+    # re-exports `group` from click/decorators.py. Now: the re-export inside the package.
+    path = _tree(tmp_path, {'vendor/click/__init__.py': 'from .decorators import group\n',
+                            'vendor/click/decorators.py': 'def group():\n    return 1\n',
+                            'app/cli.py': 'import click\n\ndef group():\n    return click.group()\n'})
+    assert _target(_edges(path, 'cli.py:group')['click.group']) == ('decorators.py', None)
