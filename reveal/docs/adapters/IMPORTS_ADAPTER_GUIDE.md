@@ -1100,6 +1100,12 @@ language rule or marker (Python's list is never applied to another language); th
 package, which may be third-party or an unresolved local. `top_importers` counts import statements per
 file. `&tests=exclude` drops the files under a test path.
 
+**Package names** (`package`) follow the importing file's language: Go counts a module path
+(`github.com/owner/repo`, `golang.org/x/net`, `go.uber.org/zap`; the host rule, go.mod `require` lines
+are not read), Rust a crate (`serde` for `serde::ser::Serialize`), Java, Kotlin and Scala the first two
+segments (`com.google`: a prefix, so unrelated libraries under one prefix share a row), Python and
+JavaScript the first dotted segment. `languages` says which language each row came from.
+
 ---
 
 ## Workflows
