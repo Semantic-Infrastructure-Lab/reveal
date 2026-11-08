@@ -1756,12 +1756,18 @@ def resolve_project_root(
     if root_override is not None:
         return root_override
     start = target_path if target_path.is_dir() else target_path.parent
-    key = (start, honor_reveal_root, use_package_markers, use_vcs)
+    # Climb from the absolute directory: a relative spelling has no ancestors past '.', so
+    # Path('.') or Path('pkg') never saw a marker above the cwd (BACK-2572). A relative target
+    # gets its root back relative to the cwd ('..'), as imports:// prints it.
+    anchor = start if start.is_absolute() else Path(os.path.abspath(start))
+    key = (anchor, honor_reveal_root, use_package_markers, use_vcs)
     try:
         root = _marker_root_cache[key]
     except KeyError:
         root = _marker_root_cache[key] = _marker_root(
-            start, honor_reveal_root, use_package_markers, use_vcs)
+            anchor, honor_reveal_root, use_package_markers, use_vcs)
+    if root is not None and not start.is_absolute():
+        root = Path(os.path.relpath(root))
     if root is None and python_init_chain:
         return python_package_top(target_path)
     return root

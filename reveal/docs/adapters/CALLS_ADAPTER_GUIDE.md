@@ -276,7 +276,8 @@ with its `candidates` and not expanded. A call whose qualifier or bare name is b
 that `imports://` resolves to no project file (`json.loads`, `readFileSync` from `'fs'`, `pytest.raises`
 from an installed package) is external, never a project function of the same name; a bare call to a
 name the file itself defines reaches that definition. Imports resolve as `imports://` resolves them for
-the walked directory (from its project root, so a `tsconfig.json` alias above it counts), but only the walked
+the walked directory (from its project root, so a `tsconfig.json` alias above it counts, whether the
+directory is spelled `.`, `pkg` or an absolute path), but only the walked
 directory's files are read, plus, outside it, the files of languages whose package or namespace
 declarations other files resolve through (C#, Java, Kotlin, Scala, PHP, Swift, Ruby). An import that binds no
 name (`#include`, Ruby `require`, C# `using`) binds nothing here. The answer keeps type `calls_callees` and its depth-1
