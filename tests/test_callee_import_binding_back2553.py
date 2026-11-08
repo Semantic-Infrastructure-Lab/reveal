@@ -195,3 +195,12 @@ def test_a_resolved_bare_import_still_picks_its_file(tmp_path):
                             'config.zig': 'pub fn destroy() void {}\n',
                             'other.zig': 'pub fn destroy() void {}\n'})
     assert _target(_edges(path, 'run')['config.destroy']) == ('config.zig', None)
+
+
+def test_a_name_several_imports_bind_names_no_file(tmp_path):
+    # `import pkg.a` and `import pkg.b` both bind `pkg`. The first one's file must not answer
+    # `pkg.b.go()` (Java's `import org....` lines pinned every `org.` call to Build.java).
+    path = _tree(tmp_path, {'pkg/__init__.py': '', 'pkg/a.py': 'def go():\n    pass\n',
+                            'pkg/b.py': 'def go():\n    pass\n',
+                            'c.py': 'import pkg.a\nimport pkg.b\n\ndef main():\n    pkg.b.go()\n'})
+    assert _target(_edges(path, 'main')['pkg.b.go']) != ('a.py', None)

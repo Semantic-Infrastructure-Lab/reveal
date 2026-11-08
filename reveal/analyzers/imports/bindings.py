@@ -21,7 +21,8 @@ class Binding(NamedTuple):
 
 def file_bindings(imports: Iterable[ImportStatement]) -> Dict[str, Binding]:
     """Local name -> binding, from one file's resolved import statements. A name is external only
-    when every statement that binds it is; the unknown verdict (None) is not external, and neither
+    when every statement that binds it is, and names a file only when they all name the same one;
+    the unknown verdict (None) is not external, and neither
     is a bare import whose bound name is a guess (``binds_reliably``: C ``#include <array>`` binds
     no ``array``). Such an import still names its file when it resolved in-tree (Zig
     ``const config = @import("config.zig")``), which only ever narrows candidates."""
@@ -31,6 +32,9 @@ def file_bindings(imports: Iterable[ImportStatement]) -> Dict[str, Binding]:
         external = target is None and stmt.intra_verdict is False and binds_reliably(stmt)
         for name in bound_names(stmt):
             seen = bindings.get(name)
+            # Several imports binding one name (Java `import org.a.X` and `import org.b.Y` both
+            # bind the guess `org`) name a file only when they agree on it.
             bindings[name] = (Binding(target, external) if seen is None else
-                              Binding(seen.target or target, seen.external and external))
+                              Binding(seen.target if seen.target == target else None,
+                                      seen.external and external))
     return bindings
