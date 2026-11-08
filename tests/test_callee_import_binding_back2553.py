@@ -142,3 +142,27 @@ def test_cold_and_warm_import_analysis_give_the_same_edges(tmp_path):
     cold = {call: _target(edge) for call, edge in _edges(path, 'c.py:loads').items()}
     warm = {call: _target(edge) for call, edge in _edges(path, 'c.py:loads').items()}
     assert cold == warm == {'json.loads': (None, 'external'), 'join': ('d.py', None)}
+
+
+# --- the walk's root does not change the answer --------------------------------------------------
+
+def test_a_file_root_resolves_like_its_directory(tmp_path):
+    # A file root reads its directory's definitions; its calls must resolve the same way
+    # (`reveal FILE NAME --effects --transitive` walks from the file).
+    _tree(tmp_path, {'c.py': 'import json\nfrom os.path import join\n\ndef loads(s):\n    return json.loads(join(s))\n',
+                     'd.py': 'def join(a):\n    return a\n'})
+    edges = _edges(str(tmp_path / 'c.py'), 'loads')
+    assert _target(edges['json.loads']) == (None, 'external')
+    assert _target(edges['join']) == (None, 'external')
+
+
+def test_a_subdirectory_root_reads_the_project_alias(tmp_path):
+    # tsconfig `paths` live at the project root, above the walked directory. The import analysis
+    # is the one imports:// builds (project root, focused on the directory), so `@lib/util` is
+    # in-tree, not external.
+    _tree(tmp_path, {'package.json': '{"name": "x"}\n',
+                     'tsconfig.json': '{"compilerOptions": {"baseUrl": ".", "paths": {"@lib/*": ["src/lib/*"]}}}\n',
+                     'src/app/a.ts': "import { helper } from '@lib/util';\nexport function go() {\n  helper();\n}\n",
+                     'src/lib/util.ts': 'export function helper() {}\n',
+                     'src/lib/other.ts': 'export function helper() {}\n'})
+    assert _target(_edges(str(tmp_path / 'src'), 'go')['helper']) == ('util.ts', None)

@@ -27,7 +27,8 @@ from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealResult, Warn
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .confidence import build_meta as _call_graph_meta
 from .index import (find_callers, find_callees, find_uncalled, rank_by_callers, module_graph_from_importers,
-                    walk_callees, callee_levels, callee_source, CalleeWalk, _bare_callee_name, _split_root)
+                    walk_callees, callee_levels, callee_source, source_directory, CalleeWalk, _bare_callee_name,
+                    _split_root)
 from ..ast.analysis import collect_structures
 from ...core.definition_names import name_matches
 from .renderer import render_calls_structure
@@ -902,8 +903,7 @@ class CallsAdapter(ResourceAdapter):
 
     def _directory(self) -> Path:
         """The directory every engine scans for this path (a file scans its parent)."""
-        path = Path(self.path)
-        return path if path.is_dir() else path.parent
+        return source_directory(self.path)
 
     def _callees(self, name: str, query_format: str, detail: bool) -> RevealResult:
         """Depth 1 is find_callees' per-definition answer, as before; depth 2-5 and detail add the

@@ -31,6 +31,17 @@ def path_scope(root: Path, *, cap: Optional[int] = DEFAULT_FILE_CAP,
     return ScanScope(root, frozenset(get_all_extensions()), get_code_extensions(), cap, focus)
 
 
+def project_scope(target: Path) -> ScanScope:
+    """The scope imports:// builds for ``target`` under its default parameters: the project root
+    the shared climb chooses (``resolution.choose_scan_root``), focused on ``target`` when that
+    root is above it. A consumer that needs the import analysis of a directory (calls' callee
+    resolution, BACK-2553) asks for this one, so an import resolves as imports:// resolves it --
+    a tsconfig ``paths`` alias or a sibling package above the directory included -- and the
+    two share one cached build."""
+    root = resolution.choose_scan_root(target).root
+    return path_scope(root, focus=None if root == target else target)
+
+
 @dataclass(frozen=True)
 class ImportBuild:
     """One analysis plus fresh discovery and optional, uncached structure observations."""

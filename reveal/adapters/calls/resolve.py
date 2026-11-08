@@ -14,34 +14,12 @@ as such, never guessed.
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+from ...analyzers.imports.bindings import Binding, file_bindings
 from .index import _bare_callee_name, _lang_family
 
 Definition = Dict[str, Any]
-
-
-class Binding(NamedTuple):
-    """What an import binds a local name to."""
-    target: Optional[str]   # the file the import resolved to
-    external: bool          # no file, and the extractor says the import is outside the tree
-
-
-def file_bindings(imports: List[Any]) -> Dict[str, Binding]:
-    """Local name -> binding, from one file's resolved import statements (the import analysis
-    imports:// builds: ``resolved_path`` and the extractor's ``intra_verdict`` per statement).
-    A name is external only when every statement that binds it is; the unknown verdict (None)
-    is not external, as everywhere else."""
-    from ...analyzers.imports.unused import bound_names
-    bindings: Dict[str, Binding] = {}
-    for stmt in imports:
-        target = str(stmt.resolved_path) if stmt.resolved_path else None
-        external = target is None and stmt.intra_verdict is False
-        for name in bound_names(stmt):
-            seen = bindings.get(name)
-            bindings[name] = (Binding(target, external) if seen is None else
-                              Binding(seen.target or target, seen.external and external))
-    return bindings
 
 
 class CallResolver:
@@ -52,9 +30,9 @@ class CallResolver:
     every lookup key (core.definition_names.lookup_keys) to its definitions.
     """
 
-    def __init__(self, index: Dict[str, List[Definition]], root: Optional[str] = None) -> None:
+    def __init__(self, index: Dict[str, List[Definition]], directory: Optional[Path] = None) -> None:
         self.index = index
-        self._root = root
+        self._directory = directory  # the directory the definitions were collected from
         self._analysis: Any = None
         self._analysis_read = False
         self._bindings: Dict[str, Dict[str, Binding]] = {}
@@ -114,20 +92,20 @@ class CallResolver:
         return None
 
     def _import_analysis(self) -> Any:
-        """The import analysis of the walked directory (cached by the imports service), or None for a
-        single-file root. Built on the first bound call, not for a walk that never needs it."""
+        """The import analysis imports:// builds for the walked directory (``project_scope``: its
+        project root, focused on it), cached by the imports service. Built on the first call that
+        has candidates, not for a walk that never needs it."""
         if not self._analysis_read:
             self._analysis_read = True
-            root = Path(self._root) if self._root else None
-            if root is not None and root.is_dir():
+            if self._directory is not None:
                 from ...analyzers.imports import service
-                self._analysis = service.analyze(service.path_scope(root)).analysis
+                self._analysis = service.analyze(service.project_scope(self._directory)).analysis
         return self._analysis
 
     def _file_bindings(self, file_path: str) -> Dict[str, Binding]:
         """The caller file's import bindings: from the import analysis when it holds the file, else
-        the per-file symbol map (a file outside the scan's file cap, or a single-file root), whose
-        None never claims a target is external."""
+        the per-file symbol map (a file past the scan's file cap, or a file no import extractor
+        reads), whose None never claims a target is external."""
         if file_path not in self._bindings:
             analysis = self._import_analysis()
             extraction = analysis.extractions.get(Path(file_path)) if analysis is not None else None

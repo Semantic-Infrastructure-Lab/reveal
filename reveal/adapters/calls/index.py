@@ -937,6 +937,12 @@ def _callee_scope(root: str) -> CalleeScope:
     return CalleeScope(os.path.abspath(root), active_exclusions(), gitignore_enabled())
 
 
+def source_directory(path: str) -> Path:
+    """The directory the calls engines scan for *path*: the path itself, or a file's directory."""
+    path_obj = Path(path)
+    return path_obj if path_obj.is_dir() else path_obj.parent
+
+
 def callee_source(path: str) -> CalleeSource:
     """The forward queries' input for *path* (a file reads its directory).
 
@@ -944,8 +950,7 @@ def callee_source(path: str) -> CalleeSource:
     run, a direct library call) nothing would revalidate an entry, so it is always collected.
     A collection with environmental loss (``_environmental_loss``) is returned, never stored.
     """
-    path_obj = Path(path)
-    root = str(path_obj if path_obj.is_dir() else path_obj.parent)
+    root = str(source_directory(path))
     if not in_host_request():
         return CalleeSource.from_structures(collect_structures(root))
     scope = _callee_scope(root)
@@ -1085,7 +1090,7 @@ def walk_callees(path: str, root: str, depth: int = 2, include_builtins: bool = 
     if source is None:
         source = callee_source(path)
     definitions, index = _walk_index(source)
-    resolver = CallResolver(index, path)
+    resolver = CallResolver(index, source_directory(path))
     file_filter, root_name = _split_root(root)
     placed: Set[Tuple[str, int, str]] = set()
 
