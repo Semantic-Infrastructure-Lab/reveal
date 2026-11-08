@@ -8,6 +8,7 @@ through the shared walker's resolution purpose now (BACK-1580).
 """
 
 import hashlib
+import os
 import stat
 from fnmatch import fnmatch
 from pathlib import Path
@@ -87,6 +88,22 @@ def load_path_manifests(root: Path, pattern: str, *,
             if fnmatch(path.name, pattern)]
 
 
+def under_directory(directory: Path) -> Callable[[Path], bool]:
+    """A test for "*path* is *directory* or inside it" with the same lexical answer as
+    ``path.relative_to(directory)`` succeeding (case-insensitive where the OS is), prepared once
+    for many paths: one string compare per path instead of building pathlib parents (on a
+    17,800-file scan the pathlib form was the largest part of a focused build, BACK-2565)."""
+    if not directory.parts:  # Path('.'): every relative path is below it, no absolute one
+        return lambda path: not path.is_absolute()
+    base = os.path.normcase(str(directory))
+    prefix = base if base.endswith(os.sep) else base + os.sep
+
+    def under(path: Path) -> bool:
+        spelled = os.path.normcase(str(path))
+        return spelled == base or spelled.startswith(prefix)
+    return under
+
+
 def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Path]],
                            excluded_root: Optional[Path] = None, *, root: Path,
                            traversal_failures: Sequence[PathFailure] = (),
@@ -109,7 +126,7 @@ def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Pat
     if traversal_failures:
         return None
     try:
-        excluded = excluded_root.resolve() if excluded_root is not None else None
+        excluded = under_directory(excluded_root.resolve()) if excluded_root is not None else None
         hasher = hashlib.sha256()
         hasher.update(b'root\x01' + str(root).encode('utf-8', 'replace') + b'\x04')
         groups = (('sources', set(candidates)), ('targets', {p for paths in index.values() for p in paths}),
@@ -117,7 +134,7 @@ def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Pat
         for role, paths in groups:
             hasher.update(role.encode('ascii'))
             for path in sorted(paths):
-                if excluded is not None and path.resolve().is_relative_to(excluded):
+                if excluded is not None and excluded(path.resolve()):
                     continue
                 info = path.stat()
                 if not stat.S_ISREG(info.st_mode):
@@ -126,7 +143,7 @@ def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Pat
                 hasher.update(f"\x02{info.st_mtime_ns}\x03{info.st_size}\x04".encode('ascii'))
         hasher.update(b'directories')
         for directory in sorted(getattr(index, 'directories', ())):
-            if excluded is not None and directory.resolve().is_relative_to(excluded):
+            if excluded is not None and excluded(directory.resolve()):
                 continue
             hasher.update(str(directory).encode('utf-8', 'replace') + b'\x04')
         return hasher.hexdigest()
