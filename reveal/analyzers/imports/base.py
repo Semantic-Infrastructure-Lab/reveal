@@ -493,10 +493,11 @@ class LanguageExtractor(ABC):
         return False
 
     def package_units(self, manifests: List[Path], files: List[Path],
-                      on_error: Callable[[OSError], None]) -> List[PackageUnit]:
+                      on_error: Callable[[OSError], None], *, root: Optional[Path] = None) -> List[PackageUnit]:
         """The package units ``manifests`` declare (each named in ``package_manifests``, resolved, sorted),
-        for the scan whose source files of this language are ``files``. A manifest that cannot be read is
-        handed to ``on_error`` and declares nothing; one that does not say something leaves it unknown."""
+        for the scan whose source files of this language are ``files`` and whose root is ``root`` (None: not
+        known). A manifest that cannot be read is handed to ``on_error`` and declares nothing; one that does
+        not say something leaves it unknown."""
         return []
 
     def resolve_import_targets(

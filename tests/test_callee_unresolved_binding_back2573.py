@@ -58,14 +58,14 @@ def test_a_local_definition_still_shadows_a_third_party_name(tmp_path):
 
 
 # --- an in-tree package the resolution pass cannot place still reaches its file -----------------
-# A monorepo's packages live under roots reveal does not model (dagster's python_modules/<pkg>/),
-# and a test directory imports its siblings through sys.path. Those imports resolve to no file with
-# an unknown verdict; the call reaches a candidate only when its file sits at the module's path
-# (dagster: 15,949 call sites in the census would otherwise have lost their target).
+# A package under a root nothing in the source marks (a PEP 420 namespace package of a monorepo, with
+# no __init__.py), and a test directory's sys.path sibling, resolve to no file with an unknown
+# verdict; the call reaches a candidate only when its file sits at the module's path. (A regular
+# package's root is in the package model since BACK-2559: dagster's census loss, 15,949 call sites,
+# was that shape.)
 
 MONOREPO = {
     'pyproject.toml': '[project]\nname = "mono"\n',
-    'python_modules/pkg/pkg/__init__.py': '',
     'python_modules/pkg/pkg/core.py': 'def run_job(x):\n    return x\n',
     'python_modules/pkg/pkg/api.py': 'from pkg.core import run_job\n\ndef go(x):\n    return run_job(x)\n',
     'python_modules/other/other/jobs.py': 'def run_job(x):\n    return x\n',

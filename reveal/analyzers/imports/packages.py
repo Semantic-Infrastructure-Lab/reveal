@@ -16,7 +16,7 @@ from typing import Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple
 @dataclass(frozen=True)
 class PackageUnit:
     """One package a manifest declares, as its language's importers see it."""
-    manifest: Path                       # the manifest file, resolved
+    manifest: Path                       # the manifest file, resolved (Python: the top package's __init__.py)
     name: str                            # how importers spell the package (Cargo: the library crate name; Go: the module path)
     library_root: Optional[Path] = None  # what that name resolves to (Cargo: the root module file; Go: the module
                                          # directory, a package being a directory); None: no library

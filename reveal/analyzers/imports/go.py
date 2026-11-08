@@ -341,7 +341,7 @@ class GoExtractor(LanguageExtractor):
         return None
 
     def package_units(self, manifests: List[Path], files: List[Path],
-                      on_error: Callable[[OSError], None]) -> List[PackageUnit]:
+                      on_error: Callable[[OSError], None], *, root: Optional[Path] = None) -> List[PackageUnit]:
         """Each go.mod's module, linked to the in-tree modules it can import: its ``replace ... => ./path``
         targets and, when a go.work ``use``s it, every other module that go.work uses and its own local
         replaces (BACK-2557)."""

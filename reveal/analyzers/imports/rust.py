@@ -525,7 +525,7 @@ class RustExtractor(LanguageExtractor):
         return None
 
     def package_units(self, manifests: List[Path], files: List[Path],
-                      on_error: Callable[[OSError], None]) -> List[PackageUnit]:
+                      on_error: Callable[[OSError], None], *, root: Optional[Path] = None) -> List[PackageUnit]:
         """Each Cargo package: its library crate, its targets' root directories and its path
         dependencies, workspace-inherited ones included (BACK-2549)."""
         return _cargo_units(manifests, files, on_error)

@@ -420,7 +420,7 @@ class ProjectResolver:
             manifest_dirs=self._build_manifest_module_dirs(files),
             manifest_target_names=self._build_manifest_target_names(files),
             load_path_roots=self._build_load_path_roots(files, scan_root, on_error=self._record_manifest_failure),
-            packages=self._build_package_model(files, on_error=self._record_manifest_failure),
+            packages=self._build_package_model(files, root=scan_root, on_error=self._record_manifest_failure),
         )
 
     def resolve_entries(self, scan_root: Path, files: List[Path], file_index: Dict[str, List[Path]],
@@ -526,11 +526,13 @@ class ProjectResolver:
         self.result.traversal_failures += (failure,)
 
     @staticmethod
-    def _build_package_model(files: List[Path], *, on_error: Callable[[OSError], None]) -> PackageModel:
+    def _build_package_model(files: List[Path], *, on_error: Callable[[OSError], None],
+                             root: Optional[Path] = None) -> PackageModel:
         """BACK-2559: the package units of every language among ``files`` that reads manifests
         (``package_manifests``): the manifest nearest each file's directory, and every one above it (a
         Cargo workspace root), each read once. Found by climbing from the scanned files, so no extra walk;
-        a manifest above the scan root is in the graph cache key (``build_cache``)."""
+        a manifest above the scan root is in the graph cache key (``build_cache``). ``root`` is the scan root
+        a language may bound its units by (Python: a package imported from above it is not the scan's)."""
         by_language: Dict[type, Tuple[LanguageExtractor, List[Path]]] = {}
         for f in files:
             extractor = get_extractor(f)
@@ -549,7 +551,7 @@ class ProjectResolver:
                 manifest_dirs |= found
                 manifests += [d / marker for d in found]
             # One call per language with every manifest kind it reads: a Go go.work links the go.mod units.
-            units += language.package_units(sorted(manifests), language_files, on_error)
+            units += language.package_units(sorted(manifests), language_files, on_error, root=root)
         return PackageModel(tuple(sorted(units, key=lambda unit: unit.manifest)), tuple(sorted(manifest_dirs)))
 
     @staticmethod

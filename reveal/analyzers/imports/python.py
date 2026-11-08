@@ -20,14 +20,14 @@ import re
 from functools import lru_cache
 from ...utils.request_cache import register_request_cache
 from pathlib import Path
-from typing import FrozenSet, List, Set, Optional, Dict, Tuple
+from typing import Callable, FrozenSet, List, Set, Optional, Dict, Tuple
 from ...core import node_children as _children, node_prev_sibling as _prev_sibling
 from ...core.node_taxonomy import edge_scope
 from ...core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
 
-from .packages import PackageModel
+from .packages import PackageModel, PackageUnit
 from .types import ImportStatement
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .resolver import resolve_python_import, resolve_python_from_import_submodules
@@ -56,6 +56,22 @@ class PythonExtractor(LanguageExtractor):
     language_name = 'Python'
     excludes_type_checking = True
     package_marker = '__init__.py'
+    # A regular package's __init__.py is what declares it importable (BACK-2559): the package model
+    # takes each file's contiguous __init__.py chain, whose top is a top-level package (see package_units).
+    package_manifests = ('__init__.py',)
+
+    def package_units(self, manifests: List[Path], files: List[Path],
+                      on_error: Callable[[OSError], None], *, root: Optional[Path] = None) -> List[PackageUnit]:
+        """One unit per top-level package among the scanned files: the top of each file's contiguous
+        ``__init__.py`` chain, importable as its directory name from that directory's parent, the root
+        Python itself puts on sys.path for an installed or run package. A monorepo's packages
+        (dagster's ``python_modules/<pkg>/<pkg>``) and a ``src/`` layout sit under such roots, not the
+        scan root, and their absolute imports resolved nowhere. A package imported from above ``root``
+        (a scan rooted at the package directory itself, ``scope=path``) is not the scan's: resolution
+        stays at the root that was asked for. A namespace package (no __init__.py) declares nothing here."""
+        bound = root.resolve() if root is not None else None
+        return [unit for unit in _python_package_units({m.parent for m in manifests}, files)
+                if bound is None or unit.target_roots[0] == bound or bound in unit.target_roots[0].parents]
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all import statements from Python file using tree-sitter.
@@ -470,7 +486,9 @@ class PythonExtractor(LanguageExtractor):
         import idioms, which the primary resolution (resolving only the
         ``pkg`` part → ``pkg/__init__.py``) silently misses.
         """
-        paths = search_paths or []
+        paths = list(search_paths or [])
+        if packages is not None and not stmt.is_relative:
+            paths += [root for root in _package_roots(packages, stmt, base_path) if root not in paths]
         targets: List[Path] = []
         primary = resolve_python_import(stmt, base_path, search_paths=paths)
         if primary is not None:
@@ -519,6 +537,8 @@ class PythonExtractor(LanguageExtractor):
             return None
         if top_level in STDLIB_MODULES:
             return False
+        if packages is not None and _package_roots(packages, stmt, base_path):
+            return True  # a top-level package of the scan (BACK-2559)
         project_root = resolve_project_root(base_path, python_init_chain=True)
         if project_root is None:
             return None
@@ -641,6 +661,33 @@ def _parse_pyproject_dependency_names(path: Path) -> Set[str]:
     poetry_deps = ((data.get('tool') or {}).get('poetry') or {}).get('dependencies') or {}
     names.update(name for name in poetry_deps if name.lower() != 'python')
     return names
+
+
+def _python_package_units(package_dirs: Set[Path], files: List[Path]) -> List[PackageUnit]:
+    """The top-level package of each file's contiguous chain of directories holding __init__.py
+    (``package_dirs``, resolved), once each."""
+    tops: Set[Path] = set()
+    for directory in {f.resolve().parent for f in files}:
+        if directory not in package_dirs:
+            continue
+        while directory.parent in package_dirs and directory.parent != directory:
+            directory = directory.parent
+        tops.add(directory)
+    return [PackageUnit(top / '__init__.py', top.name, top, (top.parent,)) for top in sorted(tops)]
+
+
+def _package_roots(packages: PackageModel, stmt: ImportStatement, base_path: Path) -> List[Path]:
+    """The import root of the scan's top-level package an absolute import names (its first segment):
+    the importer's own package when it is that one, else the one package of that name in the scan.
+    Several and the importer in none: no root (which copy the program imports is not in the source)."""
+    top = stmt.module_name.split('.')[0]
+    named = [u for u in packages.units if u.name == top and u.manifest.name == '__init__.py']
+    if not named:
+        return []
+    directory = base_path.resolve()
+    own = [u for u in named if u.library_root == directory or u.library_root in directory.parents]
+    chosen = own or (named if len(named) == 1 else [])
+    return [root for unit in chosen[:1] for root in unit.target_roots]
 
 
 @lru_cache(maxsize=256)

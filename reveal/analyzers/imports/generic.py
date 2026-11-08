@@ -3295,7 +3295,7 @@ class JavaImportExtractor(_GenericTreeSitterImportExtractor):
     package_manifests = ('pom.xml',)
 
     def package_units(self, manifests: List[Path], files: List[Path],
-                      on_error: Callable[[OSError], None]) -> List[PackageUnit]:
+                      on_error: Callable[[OSError], None], *, root: Optional[Path] = None) -> List[PackageUnit]:
         """Each pom.xml: its coordinate and the in-tree modules it depends on."""
         return maven_units(manifests, on_error)
 
