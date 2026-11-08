@@ -1,80 +1,20 @@
-"""Cross-file call graph resolution for the AST adapter (Phase 3).
+"""Call-site name maps for the AST and calls adapters, and ast://'s cross-file ``resolved_calls``.
 
-Given a function's raw `calls` list (bare names like ["validate_item", "db.insert"]),
-and the import map for the file, resolves entries to their source files where possible.
-
-Keeps `calls` as List[str] (backward-compat) and adds `resolved_calls` as List[Dict]
-with optional `resolved_file` + `resolved_name` keys.
+A function's raw ``calls`` list (bare names like ["validate_item", "db.insert"]) stays a
+List[str]; ``resolved_calls`` adds, per call, the file its import names, read from the same
+import analysis imports:// and calls' callee resolution use (BACK-2566: this module's own
+per-file import resolver, ``build_symbol_map``, disagreed with the import graph and is gone).
 """
 
 import ast
+import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ...analyzers.imports.base import get_extractor
+from ...analyzers.imports.bindings import Binding, ProjectBindings
+from ...utils.path_utils import to_posix
 from ...utils.pyparse import parse_python
-
-
-def build_symbol_map(file_path: str) -> Dict[str, Optional[str]]:
-    """Build a symbol → resolved-file-path map from a file's imports.
-
-    Uses the language extractor registry so only languages with a registered
-    extractor (Python, JS, Go, Rust) participate in resolution.  An empty map
-    for unsupported languages or an unreadable file; an extractor bug propagates,
-    as it does in imports:// (BACK-1614).
-
-    Args:
-        file_path: Absolute or relative path to the source file.
-
-    Returns:
-        Dict mapping each imported symbol (or module alias) to its resolved
-        absolute file path, or None when the import target could not be found
-        on disk (e.g. stdlib or third-party package).
-    """
-    path = Path(file_path)
-    extractor = get_extractor(path)
-    if not extractor:
-        return {}
-
-    try:
-        imports = extractor.extract_imports(path)
-    except OSError:
-        return {}
-
-    base_path = path.parent
-    symbol_map: Dict[str, Optional[str]] = {}
-
-    for stmt in imports:
-        try:
-            resolved = extractor.resolve_import(stmt, base_path)
-        except (OSError, ValueError):  # a target path that can't be stat'd or made relative
-            resolved = None
-
-        resolved_str = str(resolved) if resolved else None
-
-        if stmt.imported_names:
-            # from X import Y, Z  or  from X import Y as alias
-            for name_spec in stmt.imported_names:
-                effective = _strip_alias(name_spec)
-                symbol_map[effective] = resolved_str
-        elif stmt.alias:
-            # import X as alias
-            symbol_map[stmt.alias] = resolved_str
-        else:
-            # import X  →  map the top-level name
-            top = stmt.module_name.split('.')[0] if stmt.module_name else ''
-            if top:
-                symbol_map[top] = resolved_str
-
-    return symbol_map
-
-
-def _strip_alias(name_spec: str) -> str:
-    """Return effective name from 'X as Y' → 'Y', or name as-is."""
-    if ' as ' in name_spec:
-        _, alias = name_spec.split(' as ', 1)
-        return alias.strip()
-    return name_spec.strip()
 
 
 def build_alias_map(file_path: str) -> Dict[str, str]:
@@ -166,43 +106,45 @@ def class_attribute_alias(callee: str, line: int, spans: List[ClassAliasSpan]) -
     return innermost[2].get(attribute)
 
 
-def resolve_callees(
-    calls: List[str],
-    symbol_map: Dict[str, Optional[str]],
-) -> List[Dict[str, Any]]:
-    """Enrich a raw `calls` list with source-file metadata where resolvable.
+def resolved_calls(calls: List[str], bindings: Dict[str, Binding]) -> List[Dict[str, Any]]:
+    """A function's raw ``calls`` list with the file each call's qualifier or bare name is bound to,
+    from the caller file's import bindings (``analyzers/imports/bindings.py``, the resolution
+    imports:// does; BACK-2566). Every entry has ``name``; one whose import resolved to a project
+    file adds ``resolved_file`` and ``resolved_name``::
 
-    For each call entry, checks whether the base name (left of the first dot)
-    appears in `symbol_map`.  If it does, adds `resolved_file` and
-    `resolved_name` to the entry dict.
-
-    Args:
-        calls: List of bare call strings, e.g. ["validate_item", "db.insert"].
-        symbol_map: Symbol → resolved-path map from `build_symbol_map`.
-
-    Returns:
-        List of dicts.  Every entry has at minimum ``{"name": <original>}``.
-        Resolved entries additionally carry ``resolved_file`` and
-        ``resolved_name``.
-
-    Example::
-
-        calls      = ["db.insert", "validate_item", "len"]
-        symbol_map = {"db": "/lib/database.py", "validate_item": "/utils/v.py"}
-
-        result = [
-            {"name": "db.insert",      "resolved_file": "/lib/database.py", "resolved_name": "insert"},
-            {"name": "validate_item",  "resolved_file": "/utils/v.py",      "resolved_name": "validate_item"},
-            {"name": "len"},
-        ]
+        calls    = ["db.insert", "validate_item", "len"]
+        bindings = {"db": Binding("lib/database.py", False), "validate_item": Binding("utils/v.py", False)}
+        -> [{"name": "db.insert", "resolved_file": "lib/database.py", "resolved_name": "insert"},
+            {"name": "validate_item", "resolved_file": "utils/v.py", "resolved_name": "validate_item"},
+            {"name": "len"}]
     """
     result: List[Dict[str, Any]] = []
     for call in calls:
         entry: Dict[str, Any] = {'name': call}
-        local_name = call.split('.')[0]
-        resolved_file = symbol_map.get(local_name)
-        if resolved_file:
-            entry['resolved_file'] = resolved_file
+        binding = bindings.get(call.split('.')[0])
+        if binding is not None and binding.target:
+            entry['resolved_file'] = to_posix(_spelled(binding.target))
             entry['resolved_name'] = call.split('.', 1)[1] if '.' in call else call
         result.append(entry)
     return result
+
+
+def _spelled(target: str) -> str:
+    """The target as the shortest path from the cwd, as the result's ``file`` is spelled
+    ('../pkg/v.py' from inside pkg reads 'v.py'; an extractor's absolute path reads relative, so the
+    JSON carries no home directory); absolute only where no relative path exists (another drive)."""
+    try:
+        return os.path.relpath(os.path.abspath(target))
+    except ValueError:
+        return target
+
+
+def annotate_resolved_calls(elements: Iterable[Dict[str, Any]], target: str) -> None:
+    """Add ``resolved_calls`` to each function-like element with at least one call bound to a project
+    file. The import analysis for ``target`` is built on the first element that has calls."""
+    bindings = ProjectBindings(Path(target))
+    for elem in elements:
+        if elem.get('calls') and elem.get('file'):
+            resolved = resolved_calls(elem['calls'], bindings.of(elem['file']))
+            if any('resolved_file' in entry for entry in resolved):
+                elem['resolved_calls'] = resolved

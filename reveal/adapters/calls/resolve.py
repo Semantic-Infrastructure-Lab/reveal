@@ -17,7 +17,7 @@ as such, never guessed.
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ...analyzers.imports.bindings import Binding, at_module, file_bindings
+from ...analyzers.imports.bindings import ProjectBindings, at_module
 from .index import _bare_callee_name, _lang_family
 
 Definition = Dict[str, Any]
@@ -33,12 +33,8 @@ class CallResolver:
 
     def __init__(self, index: Dict[str, List[Definition]], directory: Optional[Path] = None) -> None:
         self.index = index
-        self._directory = directory  # the directory the definitions were collected from
-        self._analysis: Any = None
-        self._analysis_read = False
-        self._bindings: Dict[str, Dict[str, Binding]] = {}
+        self._bindings = ProjectBindings(directory)  # the directory the definitions were collected from
         self._alias_maps: Dict[str, Dict[str, str]] = {}
-        self._symbol_maps: Dict[str, Dict[str, Optional[str]]] = {}
         self._families: Dict[str, str] = {}
 
     def resolve(self, call: str, caller_file: str) -> Tuple[str, Any]:
@@ -70,7 +66,7 @@ class CallResolver:
         the module's path (``dagster/_grpc/client.py`` for ``from dagster._grpc.client import f``,
         BACK-2573). A bare call to a name the file also defines reaches its own definition (it
         shadows the import)."""
-        binding = self._file_bindings(caller_file).get(call.split('.')[0])
+        binding = self._bindings.of(caller_file).get(call.split('.')[0])
         if binding is None or not binding.unresolved:
             return candidates
         if '.' not in call and any(c['file'] == caller_file for c in candidates):
@@ -88,7 +84,7 @@ class CallResolver:
         A bare call prefers a same-file definition (it shadows imports); a
         qualified one (`strings.rtrim`, `h.run`) prefers the module it names."""
         qualifier = call.split('.')[0] if '.' in call else ''
-        bindings = self._file_bindings(caller_file)
+        bindings = self._bindings.of(caller_file)
         binding = bindings.get(qualifier or (call if call in bindings else tail))
         imported = binding.target if binding else None
         imported_path = Path(imported).resolve() if imported else None
@@ -103,31 +99,3 @@ class CallResolver:
             if len(group) == 1:
                 return group[0]
         return None
-
-    def _import_analysis(self) -> Any:
-        """The walked directory's import analysis, resolved as imports:// resolves it
-        (``project_scope``: from its project root, so an alias or sibling package above the
-        directory counts) but built for the directory's own files only (a focused build,
-        BACK-2565), or served from a cached whole-root build. Built on the first call that has
-        candidates, not for a walk that never needs it."""
-        if not self._analysis_read:
-            self._analysis_read = True
-            if self._directory is not None:
-                from ...analyzers.imports import service
-                self._analysis = service.analyze(service.project_scope(self._directory)).analysis
-        return self._analysis
-
-    def _file_bindings(self, file_path: str) -> Dict[str, Binding]:
-        """The caller file's import bindings: from the import analysis when it holds the file, else
-        the per-file symbol map (a file past the scan's file cap, or a file no import extractor
-        reads), whose None never makes a name unresolved."""
-        if file_path not in self._bindings:
-            analysis = self._import_analysis()
-            extraction = analysis.extractions.get(Path(file_path)) if analysis is not None else None
-            if extraction is not None:
-                self._bindings[file_path] = file_bindings(extraction.imports)
-            else:
-                from ..ast.call_graph import build_symbol_map
-                self._bindings[file_path] = {name: Binding(target, False)
-                                             for name, target in build_symbol_map(file_path).items()}
-        return self._bindings[file_path]

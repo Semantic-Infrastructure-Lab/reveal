@@ -41,7 +41,6 @@ def _provide(monkeypatch, raw, *, parse_error=None):
             return self.get_structure()
 
     monkeypatch.setattr('reveal.registry.get_analyzer', lambda *args, **kwargs: Analyzer)
-    monkeypatch.setattr(analysis, 'build_symbol_map', lambda path: {})
 
 
 @pytest.mark.parametrize('outline', [False, True])
@@ -288,10 +287,6 @@ def test_optional_enrichment_and_harmless_metadata_do_not_fail_required_structur
         'meta': {'warnings': [{'type': 'imports_failed', 'message': 'optional import enrichment'}]},
     })
 
-    def optional_failure(path):
-        raise RuntimeError('optional cross-file import enrichment')
-
-    monkeypatch.setattr(analysis, 'build_symbol_map', optional_failure)
     structure, failure = analysis.analyze_file_outcome(str(source))
     assert failure is None
     assert [item['name'] for item in structure['elements']] == ['main']

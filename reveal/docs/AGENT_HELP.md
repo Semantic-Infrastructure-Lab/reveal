@@ -1328,7 +1328,7 @@ reveal 'ast://src/auth.py?type=function' --format=json | \
 Fields:
 - `calls` — outgoing calls from this function
 - `called_by` — within-file callers
-- `resolved_calls` — cross-file resolved entries (file + name, Python only)
+- `resolved_calls` — cross-file resolved entries (file + name), resolved as `imports://` resolves them
 
 **See also:** `CALLS_ADAPTER_GUIDE.md` for full `calls://` documentation.
 

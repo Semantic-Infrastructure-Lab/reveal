@@ -1,7 +1,7 @@
 """What each import of a file binds a local name to, read from the resolved import analysis.
 
-A consumer that looks a use up by name -- calls' callee resolution (BACK-2553) -- asks here
-instead of resolving imports itself: the target file is the one the resolution pass found
+A consumer that looks a use up by name -- calls' callee resolution (BACK-2553), ast://'s
+``resolved_calls`` (BACK-2566) -- asks here instead of resolving imports itself: the target file is the one the resolution pass found
 (``ImportStatement.resolved_path``), so the answer is the one imports:// gives for the same
 statement. A name bound only by imports that resolved to no file is ``unresolved``: when the
 extractor's verdict (``ImportStatement.intra_verdict``, BACK-2550) says outside the tree, no project
@@ -10,9 +10,10 @@ or an in-tree package under a root reveal does not model), only one whose file s
 path can be (BACK-2573).
 """
 
+import os
 import re
-from pathlib import PurePosixPath
-from typing import Dict, Iterable, NamedTuple, Optional, Tuple
+from pathlib import Path, PurePosixPath
+from typing import Any, Dict, Iterable, NamedTuple, Optional, Tuple, Union
 
 from .types import ImportStatement
 from .unused import binds_reliably, bound_names
@@ -77,3 +78,39 @@ def file_bindings(imports: Iterable[ImportStatement]) -> Dict[str, Binding]:
                                       seen.modules + modules if seen.unresolved and unresolved else ()))
     return bindings
 
+
+class ProjectBindings:
+    """The import bindings of the files at one target (a directory or a file), from the import
+    analysis imports:// builds for it: ``service.project_scope``, the project root the shared climb
+    chooses, focused on the target (BACK-2565), or a cached whole-root build. Built on the first
+    lookup, so a consumer that never asks pays nothing. A file the analysis does not hold (past the
+    scan's file cap, or one no import extractor reads) has no bindings: nothing is claimed about
+    its names."""
+
+    def __init__(self, target: Optional[Path]) -> None:
+        self._target = target
+        self._files: Dict[str, Dict[str, Binding]] = {}
+        self._extractions: Optional[Dict[str, Any]] = None
+
+    def _by_file(self) -> Dict[str, Any]:
+        """The analysis' extractions keyed by absolute path: its root may be spelled '..' while the
+        consumer walked '.', so the two spellings of one file must meet."""
+        if self._extractions is None:
+            self._extractions = {}
+            if self._target is not None:
+                from . import service
+                analysis = service.analyze(service.project_scope(self._target)).analysis
+                self._extractions = {_absolute(path): extraction
+                                     for path, extraction in analysis.extractions.items()}
+        return self._extractions
+
+    def of(self, file_path: str) -> Dict[str, Binding]:
+        """Local name -> binding for one file, however the consumer spells its path."""
+        if file_path not in self._files:
+            extraction = self._by_file().get(_absolute(file_path))
+            self._files[file_path] = file_bindings(extraction.imports) if extraction is not None else {}
+        return self._files[file_path]
+
+
+def _absolute(path: Union[str, Path]) -> str:
+    return os.path.normcase(os.path.abspath(path))

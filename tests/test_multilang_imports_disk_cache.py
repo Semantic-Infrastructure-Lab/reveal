@@ -5,7 +5,7 @@ and the shared generic tree-sitter extractor).
 Each of these extractors independently parses + walks the tree per call (they
 do not share TreeSitterAnalyzer.get_structure()'s own structure cache,
 BACK-535) and are called repeatedly per file across I001/I002/I005,
-calls://'s build_symbol_map, depends://, and imports:// -- both within one CLI
+depends:// and imports:// -- both within one CLI
 invocation and across fresh ones. The cache must be a pure performance
 optimization: a result served from disk must be indistinguishable from a
 fresh parse, and any change to the source file must invalidate its entry.

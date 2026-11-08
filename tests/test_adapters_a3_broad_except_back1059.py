@@ -419,18 +419,6 @@ def test_stats_logs_when_rule_config_cannot_be_resolved(tmp_path, monkeypatch, c
 
 # --------------------------------------------------------------------- ast
 
-def test_ast_analysis_logs_when_import_resolution_fails_and_keeps_the_structure(
-        tmp_path, monkeypatch, caplog):
-    from reveal.adapters.ast import analysis
-    (tmp_path / 'a.py').write_text('import os\n\n\ndef f():\n    return os.getcwd()\n',
-                                   encoding='utf-8')
-    monkeypatch.setattr(analysis, 'build_symbol_map', _raise_bug)
-    with caplog.at_level(logging.WARNING):
-        result = analysis.analyze_file(str(tmp_path / 'a.py'))
-    assert result and 'f' in [e['name'] for e in result['elements']]
-    assert 'injected' in caplog.text
-
-
 def test_content_pattern_search_discloses_a_git_diff_that_exited_nonzero(tmp_path, monkeypatch):
     """BACK-1854: a failed `git diff` is empty stdout, which read as "pattern not found"."""
     from reveal.adapters.git import files

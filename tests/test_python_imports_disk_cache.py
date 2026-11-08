@@ -3,8 +3,8 @@
 
 `PythonExtractor.extract_imports()` independently parses + walks the tree
 (it does not share `TreeSitterAnalyzer.get_structure()`'s own structure
-cache, BACK-535) and is called by I001/I002/I005, `calls://`'s
-`build_symbol_map`, `depends://`, and `imports://` -- all across fresh CLI
+cache, BACK-535) and is called by I001/I002/I005,
+`depends://` and `imports://` -- all across fresh CLI
 invocations. The cache must be a pure performance optimization: a result
 served from disk must be indistinguishable from a fresh parse, and ANY
 change to the source file must invalidate its entry.

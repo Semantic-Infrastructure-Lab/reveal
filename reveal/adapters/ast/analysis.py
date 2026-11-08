@@ -18,7 +18,6 @@ from ...utils.path_utils import (
     analysis_skipped_warning as analysis_skipped_warning,
 )
 from ...utils.results import outcome_of
-from .call_graph import build_symbol_map, resolve_callees
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +189,7 @@ def is_code_file(path: Path) -> bool:
 
 
 def _add_function_metrics(element: Dict[str, Any], category: str, item: StructureItem, line: int,
-                          line_count: int, analyzer, symbol_map: Optional[Dict[str, Any]]) -> None:
+                          line_count: int, analyzer) -> None:
     """Complexity, depth and call-graph fields of a function-like element, in place."""
     # Add complexity for functions/methods (and 'tests' — currently only Zig's
     # TestDecl blocks, which now carry 'calls' too; see zig.py/BACK-660 follow-on).
@@ -207,11 +206,6 @@ def _add_function_metrics(element: Dict[str, Any], category: str, item: Structur
     calls = item.get('calls', [])
     element['calls'] = calls
     element['called_by'] = item.get('called_by', [])
-    # Phase 3: resolve calls against import symbol map
-    if symbol_map is not None and calls:
-        resolved = resolve_callees(calls, symbol_map)
-        if any('resolved_file' in entry for entry in resolved):
-            element['resolved_calls'] = resolved
 
 
 def create_element_dict(
@@ -219,7 +213,6 @@ def create_element_dict(
     category: str,
     item: StructureItem,
     analyzer,
-    symbol_map: Optional[Dict[str, Any]] = None,
     metrics: bool = True,
 ) -> Dict[str, Any]:
     """Create element dict from analyzer item.
@@ -229,9 +222,6 @@ def create_element_dict(
         category: Element category (functions, classes, etc.)
         item: Item dict from analyzer
         analyzer: Analyzer instance for complexity calculation
-        symbol_map: Optional import-symbol map from build_symbol_map() for
-            cross-file call resolution.  When provided, functions/methods gain
-            a ``resolved_calls`` field alongside the plain ``calls`` list.
         metrics: False for an outline item (BACK-1867), which carries no complexity, depth
             or calls: leave those fields out rather than computing a fallback.
 
@@ -279,7 +269,7 @@ def create_element_dict(
             element[flag] = cast(Dict[str, Any], item)[flag]
 
     if metrics:
-        _add_function_metrics(element, category, item, line, line_count, analyzer, symbol_map)
+        _add_function_metrics(element, category, item, line, line_count, analyzer)
 
     return element
 
@@ -434,20 +424,13 @@ def _release_buffers(analyzer) -> None:
 
 def _flatten_structure(file_path: str, structure: Dict[str, Any], analyzer, outline: bool) -> Dict[str, Any]:
     """A file's structure as the ``{'file', 'elements', ...}`` dict the ast:// and calls://
-    adapters share. An outline carries no metrics, so it skips the symbol map too."""
+    adapters share. Only the file's own facts: where a call lands across files depends on other
+    files, so ast:// adds ``resolved_calls`` to the results it shows (BACK-2566), never here."""
     result: Dict[str, Any] = {'file': file_path, 'elements': []}
     if structure.get('_has_errors'):
         result['parse_recovered'] = True  # BACK-1847: the tree has syntax it could not read
     if structure.get('_dropped_function_values'):
         result['function_values_dropped'] = structure['_dropped_function_values']  # BACK-2229
-
-    # Build import symbol map for cross-file call resolution (Phase 3).
-    # build_symbol_map is cheap for already-parsed files (import extractor caches).
-    try:
-        symbol_map: Optional[Dict[str, Any]] = None if outline else build_symbol_map(file_path)
-    except Exception as e:  # boundary-ok: broad-except -- cross-file call resolution is an optional enrichment run through per-language import extractors (arbitrary parser code); without it calls stay unresolved but the file's own structure is still right, and the failure is logged at warning
-        logger.warning("cross-file call resolution failed for %s: %s", file_path, e)
-        symbol_map = None
 
     for category, items in structure.items():
         if not isinstance(items, list):
@@ -456,8 +439,7 @@ def _flatten_structure(file_path: str, structure: Dict[str, Any], analyzer, outl
             if not isinstance(item, dict):
                 continue
             result['elements'].append(create_element_dict(
-                file_path, category, cast(StructureItem, item), analyzer, symbol_map,
-                metrics=not outline))
+                file_path, category, cast(StructureItem, item), analyzer, metrics=not outline))
     return result
 
 
@@ -614,7 +596,7 @@ def analyze_file_outcome(file_path: str, outline: bool = False,
     coexist with it; None without a failure means unsupported or clean empty work.
 
     ``outline=True`` (BACK-1867) builds the cheap form: elements located by name, line and
-    decorators, with no metrics, calls, imports, call sites or symbol map. It is only for
+    decorators, with no metrics, calls, imports or call sites. It is only for
     deciding which files a query touches; ``needle`` records whether that text occurs in the
     file (``name_in_text``), for the imports an outline leaves out."""
     from ...registry import get_analyzer

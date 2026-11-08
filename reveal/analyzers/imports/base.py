@@ -41,7 +41,7 @@ class ImportsDiskCache:
     plumbing. ``extract_imports()`` independently re-parses+walks the tree
     per call -- it does not share ``TreeSitterAnalyzer.get_structure()``'s own
     structure cache (BACK-535) -- and is invoked repeatedly per file across
-    I001/I002/I005, ``calls://``'s build_symbol_map, ``depends://``, and
+    I001/I002/I005, ``depends://``, and
     ``imports://``, both within one CLI invocation and across fresh ones.
 
     One instance per language module (module-level singleton), keyed by a
