@@ -140,7 +140,9 @@ class TestResolvedCallsInAstAdapter(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_resolved_calls_field_present_when_resolved(self):
-        """If a call can be resolved against imports, resolved_calls appears."""
+        """If a call can be resolved against imports, resolved_calls appears (inside a project: a loose
+        directory builds no import analysis, BACK-2566)."""
+        _write(self.tmpdir, 'pyproject.toml', '[project]\nname = "p"\n')
         _write(self.tmpdir, 'utils.py', 'def validate_item(x): return x\n')
         main = _write(
             self.tmpdir, 'main.py',
@@ -2969,3 +2971,21 @@ class TestCallGraphMeta(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_a_loose_file_builds_no_import_analysis(tmp_path, monkeypatch):
+    """BACK-2566: outside every project (no marker, repository or .reveal.yaml above it) ast:// leaves
+    resolved_calls out rather than walk the file's directory: one file in a shared temp directory took
+    73 s instead of 1 s."""
+    from reveal.analyzers.imports import service
+
+    def no_build(*args, **kwargs):
+        raise AssertionError('import analysis built for a loose file')
+
+    (tmp_path / 'utils.py').write_text('def validate_item(x):\n    return x\n', encoding='utf-8')
+    main = tmp_path / 'main.py'
+    main.write_text('from utils import validate_item\n\ndef process(x):\n    return validate_item(x)\n',
+                    encoding='utf-8')
+    monkeypatch.setattr(service, 'analyze', no_build)
+    process = next(r for r in AstAdapter(str(main), 'name=process').get_structure()['results'])
+    assert process['calls'] == ['validate_item'] and 'resolved_calls' not in process

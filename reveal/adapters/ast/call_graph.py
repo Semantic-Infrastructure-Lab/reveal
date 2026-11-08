@@ -9,7 +9,7 @@ per-file import resolver, ``build_symbol_map``, disagreed with the import graph 
 import ast
 import os
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ...analyzers.imports.base import get_extractor
 from ...analyzers.imports.bindings import Binding, ProjectBindings
@@ -139,9 +139,15 @@ def _spelled(target: str) -> str:
         return target
 
 
-def annotate_resolved_calls(elements: Iterable[Dict[str, Any]], target: str) -> None:
+def annotate_resolved_calls(elements: List[Dict[str, Any]], target: str) -> None:
     """Add ``resolved_calls`` to each function-like element with at least one call bound to a project
-    file. The import analysis for ``target`` is built on the first element that has calls."""
+    file. The import analysis for ``target`` is built on the first element that has calls, and only
+    inside a project (a package marker, a repository or ``.reveal.yaml`` above ``target``): a loose
+    file's imports name no project to resolve in, and its directory (a Downloads folder, /tmp/x) can be
+    any size; a 1 s query of one file took 73 s walking a shared temp directory."""
+    from ...analyzers.imports.resolution import choose_scan_root
+    if not any(elem.get('calls') for elem in elements) or choose_scan_root(Path(target)).inferred:
+        return
     bindings = ProjectBindings(Path(target))
     for elem in elements:
         if elem.get('calls') and elem.get('file'):

@@ -465,7 +465,7 @@ The AST adapter extracts call graph data from every function and method during a
 
 - **`calls`** — list of function names called by this function (outgoing calls)
 - **`called_by`** — list of function names that call this function, within the same file
-- **`resolved_calls`** — like `calls`, but with `resolved_file` + `resolved_name` for calls whose qualifier or bare name an import binds to a project file, in every language `imports://` resolves. The imports are resolved as `imports://` resolves them (from the project root, so an absolute in-tree import or a `tsconfig.json` alias counts); building that for a file in a large project (tens of thousands of files) adds seconds to the first query. `resolved_file` is spelled from the current directory, like `file`
+- **`resolved_calls`** — like `calls`, but with `resolved_file` + `resolved_name` for calls whose qualifier or bare name an import binds to a project file, in every language `imports://` resolves. The imports are resolved as `imports://` resolves them (from the project root, so an absolute in-tree import or a `tsconfig.json` alias counts); building that for a file in a large project (tens of thousands of files) adds seconds to the first query. Only inside a project (a package marker, a repository or `.reveal.yaml` above the target): a loose file or directory gets no `resolved_calls`. `resolved_file` is spelled from the current directory, like `file`
 
 Call graph fields appear automatically in JSON output and in the default text renderer (as `calls:` and `called by:` lines below each function).
 
