@@ -185,3 +185,13 @@ def test_a_ruby_require_does_not_bind_the_library_name(tmp_path):
                             'a.rb': ("require 'csv'\n\ndef each_line\nend\n\n"
                                      "def run(csv)\n  csv.each_line\nend\n")})
     assert _target(_edges(path, 'run')['csv.each_line']) == ('a.rb', None)
+
+
+def test_a_resolved_bare_import_still_picks_its_file(tmp_path):
+    # Zig binds the @import to a const named like the file; resolved in-tree, it picks the file
+    # among same-named definitions (master did this; withholding the binding made 538 Zig sites
+    # ambiguous).
+    path = _tree(tmp_path, {'a.zig': 'const config = @import("config.zig");\npub fn run() void {\n    config.destroy();\n}\n',
+                            'config.zig': 'pub fn destroy() void {}\n',
+                            'other.zig': 'pub fn destroy() void {}\n'})
+    assert _target(_edges(path, 'run')['config.destroy']) == ('config.zig', None)

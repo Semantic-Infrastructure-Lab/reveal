@@ -86,22 +86,25 @@ def bound_name(entry: str) -> str:
 
 
 def bound_names(stmt: 'ImportStatement') -> List[str]:
-    """Every local name `stmt` binds: each name of a named import, the alias of a namespace or
-    aliased import, plus the spellings in `alt_names`. A bare import (no names, no alias) binds
-    its module's first segment only where the extractor reads that reliably (Python `import a.b`
-    binds `a`): one it marks `skip_unused` binds nothing here, because the language's rule is
-    different -- C/C++/PHP `include`, Ruby `require`, C# `using`, Swift and Dart `import` bind no
-    name, Java/Kotlin/Scala `import a.b.C` binds `C` (BACK-2553). The reading `unused_entries`
-    judges by, for a consumer that looks a use up by name."""
+    """Every local name `stmt` binds as the import graph reads it: each name of a named import,
+    the alias of a namespace or aliased import, else the module's first segment; plus the
+    spellings in `alt_names`. The first-segment reading is Python's (`import a.b` binds `a`);
+    for a bare import its extractor marks `skip_unused` (C/C++/PHP `include`, Ruby `require`,
+    C#/Swift/Dart/JVM `import`) it is only the name the file most likely uses, so a consumer
+    must not draw a negative conclusion from it (``binds_reliably``)."""
     if is_named_import(stmt):
         names = [bound_name(entry).strip() for entry in stmt.imported_names]
     elif stmt.import_type == 'namespace_import' or stmt.alias:
         names = [stmt.alias or '']
-    elif stmt.skip_unused:
-        names = []
     else:
         names = [stmt.module_name.split('.')[0]]
     return [name for name in (*names, *stmt.alt_names) if name]
+
+
+def binds_reliably(stmt: 'ImportStatement') -> bool:
+    """Whether `bound_names` is the language's own rule for `stmt`: names and aliases always are;
+    a bare import is only where unused detection judges it (Python `import a.b`)."""
+    return bool(stmt.imported_names) or bool(stmt.alias) or not stmt.skip_unused
 
 
 def unused_entries(stmt: 'ImportStatement', symbols_used: Set[str],
