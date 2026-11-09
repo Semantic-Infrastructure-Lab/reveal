@@ -12,6 +12,7 @@ tree's stamp is unchanged, so a changed file is read again.
 """
 
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,14 @@ def tree(tmp_path, monkeypatch):
     (tmp_path / 'go.mod').write_text('module example.com/p\n\ngo 1.22\n', encoding='utf-8')
     app = tmp_path / 'app.go'
     app.write_text('package main\n\nimport "fmt"\n\nfunc run() { fmt.Println(1) }\n', encoding='utf-8')
+    # A file written at or after a request's start is never trusted for it (request_cache._tree_stamp).
+    # On Windows with Python 3.11 time.time_ns() has the coarse system-clock tick, so a file written
+    # just before the first request can carry a later mtime than that request's start and the memo is
+    # dropped (the test failed on every windows-3.11 run at 50b22a15, BACK-2582). Age the fixture the
+    # way the validated-cache tests do.
+    aged = time.time_ns() - 10 * 1_000_000_000
+    for path in (tmp_path / 'go.mod', app):
+        os.utime(path, ns=(aged, aged))
     calls = []
     original = GoExtractor._extract_imports_uncached
 
