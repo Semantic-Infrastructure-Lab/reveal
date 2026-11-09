@@ -255,6 +255,9 @@ def test_runtime_artifact_failure_preserves_primary_json(project, monkeypatch):
 
 
 def test_tilde_uri_uses_one_resolved_path(project, monkeypatch):
+    # A fresh HOME has no update-check cache, so an installed-metadata version older than
+    # the release feed prints an update notice ahead of the JSON (BACK-2331).
+    monkeypatch.setenv('REVEAL_NO_UPDATE_CHECK', '1')
     monkeypatch.setenv('HOME', str(project.parent))
     monkeypatch.setenv('USERPROFILE', str(project.parent))
     a = run('surface://' + project.as_posix(), '--format', 'json', '--no-gitignore')
