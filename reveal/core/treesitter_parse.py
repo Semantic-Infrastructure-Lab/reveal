@@ -17,7 +17,8 @@ in ``reveal/core/treesitter*.py``.
 import functools
 import logging
 import threading
-from typing import Any, Callable, Dict, Iterable, Optional, Set
+import time
+from typing import Any, Callable, Dict, Iterable, Optional, Set, Tuple, Type
 
 from .treesitter_compat import ts_parse
 from ..utils.parse_audit import Domain, PathArg, capture_enabled, parse_attempt, parse_request
@@ -82,9 +83,11 @@ def get_parser(language: str, *, announce_fetch: bool = True) -> Any:
     nothing, so it is not announced; the pack refuses it as before (BACK-1887)."""
     pack = _pack(language)
     alias = _PACK_ALIASES.get(language)
+    first_fetch = False
     if announce_fetch and language and language not in _ready and language not in _warned_uncached:
         if not is_downloaded(language):
             _warned_uncached.add(language)
+            first_fetch = True
             logger.warning(
                 "tree-sitter grammar for %r not yet downloaded — first parse "
                 "will attempt to fetch it from the network (see "
@@ -93,7 +96,7 @@ def get_parser(language: str, *, announce_fetch: bool = True) -> Any:
             )
     name = _pack_name.get(language, language)
     try:
-        parser = pack.get_parser(name)
+        parser = _fetching_parser(pack, name, retry=first_fetch)
     except Exception as e:  # noqa: BLE001 - the pack raises its own types (LookupError, download errors)
         if alias is None or name == alias:
             raise GrammarUnavailable(language, e) from e
@@ -104,6 +107,32 @@ def get_parser(language: str, *, announce_fetch: bool = True) -> Any:
         _pack_name[language] = alias
     _ready.add(language)
     return parser
+
+
+# Waits before the 2nd and 3rd attempt of a process's first fetch of a grammar (BACK-2235).
+_FETCH_RETRY_DELAYS = (1.0, 3.0)
+
+
+def _fetching_parser(pack: Any, name: str, *, retry: bool) -> Any:
+    """``pack.get_parser(name)``, retrying a transient download failure on the first fetch.
+
+    The pack downloads a grammar from GitHub releases on first use, so a 504 there failed
+    every parse of that language for the whole run (CI run 40373822227: 5 of 14 jobs red,
+    green on re-run). Only the pack's ``DownloadError`` is retried, and only on the call
+    that first fetches the language in this process: a host that is offline pays the
+    waits once per language, not once per file.
+    """
+    error_type = getattr(pack, 'DownloadError', None)
+    retryable: Tuple[Type[BaseException], ...] = (
+        (error_type,) if isinstance(error_type, type) and issubclass(error_type, BaseException) else ())
+    for delay in (_FETCH_RETRY_DELAYS if retry and retryable else ()):
+        try:
+            return pack.get_parser(name)
+        except retryable as e:
+            logger.warning("tree-sitter grammar %r download failed (%s); retrying in %.0f s",
+                           name, e, delay)
+            time.sleep(delay)
+    return pack.get_parser(name)
 
 
 def get_tree(language: str, source: str, *, filename: Optional[PathArg] = None,

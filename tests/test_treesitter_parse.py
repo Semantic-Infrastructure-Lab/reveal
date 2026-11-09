@@ -101,6 +101,67 @@ class TestPackSpelling:
         pack_download.assert_called_once_with(['csharp', 'python'])
 
 
+class TestFetchRetry:
+    """BACK-2235: a GitHub 504 while the pack downloads a grammar failed every parse of that
+    language for the run (5 of 14 CI jobs red, green on re-run). The first fetch retries."""
+
+    @staticmethod
+    def _flaky(failures, error=None):
+        import tree_sitter_language_pack as tslp
+        real = tslp.get_parser
+        calls = []
+
+        def get_parser(name):
+            calls.append(name)
+            if len(calls) <= failures:
+                raise (error or tslp.DownloadError)('504 Gateway Time-out')
+            return real(name)
+        return get_parser, calls
+
+    def test_first_fetch_retries_a_download_error(self, monkeypatch):
+        monkeypatch.setattr(seam, '_FETCH_RETRY_DELAYS', (0, 0))
+        fake, calls = self._flaky(2)
+        with patch('tree_sitter_language_pack.downloaded_languages', return_value=[]), \
+                patch('tree_sitter_language_pack.get_parser', side_effect=fake):
+            assert seam.get_parser('python') is not None
+        assert calls == ['python'] * 3
+
+    def test_retries_are_bounded(self, monkeypatch):
+        monkeypatch.setattr(seam, '_FETCH_RETRY_DELAYS', (0, 0))
+        fake, calls = self._flaky(5)
+        with patch('tree_sitter_language_pack.downloaded_languages', return_value=[]), \
+                patch('tree_sitter_language_pack.get_parser', side_effect=fake):
+            with pytest.raises(seam.GrammarUnavailable):
+                seam.get_parser('python')
+        assert len(calls) == 3
+
+    def test_a_later_fetch_of_the_same_language_does_not_wait_again(self, monkeypatch):
+        monkeypatch.setattr(seam, '_FETCH_RETRY_DELAYS', (0, 0))
+        fake, calls = self._flaky(5)
+        with patch('tree_sitter_language_pack.downloaded_languages', return_value=[]), \
+                patch('tree_sitter_language_pack.get_parser', side_effect=fake):
+            for _ in range(2):
+                with pytest.raises(seam.GrammarUnavailable):
+                    seam.get_parser('python')
+        assert len(calls) == 3 + 1   # an offline host pays the waits once per language
+
+    def test_a_cached_grammar_or_other_error_is_not_retried(self, monkeypatch):
+        monkeypatch.setattr(seam, '_FETCH_RETRY_DELAYS', (0, 0))
+        fake, calls = self._flaky(1)
+        with patch('tree_sitter_language_pack.downloaded_languages', return_value=['python']), \
+                patch('tree_sitter_language_pack.get_parser', side_effect=fake):
+            with pytest.raises(seam.GrammarUnavailable):
+                seam.get_parser('python')
+        assert len(calls) == 1
+        seam._warned_uncached.clear()
+        fake, calls = self._flaky(1, error=LookupError)
+        with patch('tree_sitter_language_pack.downloaded_languages', return_value=[]), \
+                patch('tree_sitter_language_pack.get_parser', side_effect=fake):
+            with pytest.raises(seam.GrammarUnavailable):
+                seam.get_parser('python')
+        assert len(calls) == 1
+
+
 class TestFetchAnnouncement:
     def test_warns_once_per_language_before_a_fetch(self, caplog):
         with patch('tree_sitter_language_pack.downloaded_languages', return_value=[]):
