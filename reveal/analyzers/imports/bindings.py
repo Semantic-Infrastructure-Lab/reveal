@@ -52,7 +52,7 @@ def reaches(binding: Optional[Binding], call: str, caller_file: str, files: Iter
     language global (``Math.max``) that nothing imports reaches no other file (BACK-2581)."""
     files = set(files)
     if binding is None:
-        if '.' in call and _is_global_namespace(call.split('.', 1)[0], caller_file):
+        if '.' in call and _is_global_namespace(call, caller_file):
             # `Math.max` with `Math` bound by nothing: the language global's, never the project's one
             # `max`; only a class in the caller's own file can shadow the global (BACK-2581).
             return files & {caller_file}
@@ -64,7 +64,15 @@ def reaches(binding: Optional[Binding], call: str, caller_file: str, files: Iter
     return {f for f in files if at_module(f, binding.modules)}
 
 
-def _is_global_namespace(qualifier: str, caller_file: str) -> bool:
+# The global object itself: non-module scripts assign project functions onto it and call `window.f()`,
+# so only a deeper chain through it (`window.localStorage.setItem`) is the host's, never a direct call.
+_GLOBAL_OBJECTS = frozenset({'window', 'globalThis'})
+
+
+def _is_global_namespace(call: str, caller_file: str) -> bool:
+    qualifier = call.split('.', 1)[0]
+    if qualifier in _GLOBAL_OBJECTS and call.count('.') < 2:
+        return False
     return qualifier in conventions_for_path(caller_file).global_namespaces
 
 

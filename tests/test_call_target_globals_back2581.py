@@ -87,3 +87,6 @@ def test_reaches_global_qualifier_rule():
     assert reaches(None, 'Math.max', 'src/c.ts', files) == set()
     assert reaches(None, 'range.max', 'src/c.ts', files) == files          # not a global: unchanged
     assert reaches(None, 'Math.max', 'src/c.py', files) == files           # a JS fact only
+    # window.f() may be a project function assigned onto the global object; a deeper chain is the host's
+    assert reaches(None, 'window.max', 'src/c.ts', files) == files
+    assert reaches(None, 'window.localStorage.setItem', 'src/c.ts', files) == set()
