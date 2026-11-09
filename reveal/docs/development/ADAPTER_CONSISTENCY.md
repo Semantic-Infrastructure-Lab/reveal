@@ -15,7 +15,7 @@ help_category: dev_guides
 
 ## Overview
 
-Reveal has 34 URI adapters that follow a **3-tier UX model** for consistency:
+Reveal has 26 URI adapters that follow a **3-tier UX model** for consistency:
 
 1. **Resource Identity** (URI) - What to inspect
 2. **Operations** (Flags) - What to do with it
@@ -42,7 +42,7 @@ mysql://localhost:3306/db       # MySQL database
 ```bash
 ast://./src                     # Code analysis of directory
 git://./repo                    # Git repository
-stats://./src                   # Code metrics
+metrics://./src                   # Code metrics
 ```
 
 **Element-based resources**:
@@ -201,7 +201,7 @@ json://config.json?keys&flatten
 markdown://docs/?status=active&tags=python
 
 # Stats filtering
-stats://src?lines=50..200&hotspots=true
+metrics://src?lines=50..200&hotspots=true
 ```
 
 ### Display Flags (Output filtering)
@@ -324,7 +324,7 @@ Select specific fields to reduce output size:
 reveal ssl://example.com --fields host,valid_until,days_until_expiry --format json
 
 # Stats - each file's name and quality score
-reveal stats://src --fields file,quality.score --format json
+reveal metrics://src --fields file,quality.score --format json
 
 # Git - one file's commits
 reveal 'git://src/app.py?type=history' --fields hash,author,date,message --format json
@@ -341,13 +341,13 @@ It applies to `--format json` (help://fields).
 ## Adapter Comparison
 
 ### Query-Heavy Adapters
-**ast://, json://, markdown://, stats://** - Rich filtering via query params
+**ast://, json://, markdown://, metrics://** - Rich filtering via query params
 
 ```bash
 ast://src?lines>50&complexity>10&decorator=property
 json://config.json?schema&flatten&keys
 markdown://docs/?status=active&!deprecated
-stats://src?lines=50..200&hotspots=true
+metrics://src?lines=50..200&hotspots=true
 ```
 
 ### Progressive Disclosure Adapters
@@ -392,14 +392,14 @@ reveal mysql://localhost/db --check
 ```bash
 # JSON for composability
 reveal ssl://example.com --format=json | jq '.expiry'
-reveal stats://src --format=json | jq '.files[] | select(.quality_score < 7)'
+reveal metrics://src --format=json | jq '.files[] | select(.quality.score < 70)'
 ```
 
 ### 4. Use --fields for Efficiency
 ```bash
 # Reduce tokens when you know what you need
 reveal ssl://example.com --fields host,days_until_expiry --format json
-reveal stats://src --fields file,quality.score --format json
+reveal metrics://src --fields file,quality.score --format json
 ```
 
 ### 5. Batch Process with stdin
@@ -428,7 +428,7 @@ ssl://nginx:///path/*.conf?summary
 --fields connections,replication  # Specific health checks
 ```
 
-**stats://**:
+**metrics://**:
 ```bash
 --hotspots                  # Identify quality hotspots
 --code-only                 # Exclude data/config files

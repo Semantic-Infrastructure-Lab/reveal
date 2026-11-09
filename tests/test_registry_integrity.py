@@ -371,9 +371,11 @@ class TestDocumentationAccuracy(unittest.TestCase):
 
         This is what V013 validation rule checks, but as a test it runs in CI.
         """
-        # The advertised set, as --adapters lists it (BACK-1610)
+        # The advertised set, as --adapters lists it before its "Retired adapters" (BACK-1610)
         from reveal.adapters.registry import list_public_schemes
-        actual_count = len(list_public_schemes())
+        from reveal.cli.handlers.introspection import retired_schemes
+        retired = retired_schemes()
+        actual_count = len([s for s in list_public_schemes() if s not in retired])
 
         # Read README
         readme_file = Path(__file__).parent.parent / 'README.md'

@@ -1280,6 +1280,8 @@ class HelpAdapter(ResourceAdapter):
 
     def _list_adapters(self) -> List[Dict[str, Any]]:
         """List all registered adapters with basic info."""
+        from ..cli.handlers.introspection import retired_schemes
+        retired = retired_schemes()
         adapters = []
         for scheme in list_public_schemes():
             adapter_class = _ADAPTER_REGISTRY[scheme]
@@ -1297,6 +1299,9 @@ class HelpAdapter(ResourceAdapter):
             # Add description if available
             if has_help:
                 info['description'] = self._get_adapter_description(adapter_class)
+            if scheme in retired:
+                info['retired'] = True
+                info['replaced_by'] = retired[scheme].replacement
 
             adapters.append(info)
 
@@ -1553,7 +1558,7 @@ class HelpAdapter(ResourceAdapter):
         {'want': 'search git commit history by message, author, or date',
          'use': 'git://', 'example': "reveal 'git://.?type=history&message~=fix'"},
         {'want': 'search markdown docs or notes by content',
-         'use': 'markdown://', 'example': "reveal docs/ --grep 'keyword'"},
+         'use': 'markdown://', 'example': "reveal 'markdown://docs/?body-contains=keyword'"},
         {'want': 'read one section of a markdown document',
          'use': 'reveal FILE --section HEADING', 'example': 'reveal README.md --section "Building"'},
         {'want': 'inspect a SQLite, MySQL database, or Excel workbook',
@@ -1591,17 +1596,17 @@ class HelpAdapter(ResourceAdapter):
         from ..cli.handlers.introspection import retired_schemes
         mentioned.update(retired_schemes())
 
-        gaps = []
-        for cluster, schemes in sorted(self._cluster_membership().items()):
-            missing = [s for s in schemes if s not in mentioned]
-            if not missing:
-                continue
-            gaps.append({
-                'want': f'other {cluster} tooling not named above: {", ".join(missing)}',
-                'use': 'help://relationships',
-                'example': 'reveal help://relationships',
-            })
-        return gaps
+        # One row, not one per cluster: a row naming a cluster's leftovers ("other Self-Describing
+        # tooling ... : reveal") read as noise, and reveal's own inspection adapters are not for users.
+        missing = sorted(s for schemes in self._cluster_membership().values() for s in schemes
+                         if s not in mentioned and not is_internal_scheme(s))
+        if not missing:
+            return []
+        return [{
+            'want': f'other tooling not named above: {", ".join(missing)}',
+            'use': 'help://relationships',
+            'example': 'reveal help://relationships',
+        }]
 
     def _get_quick_help(self) -> Dict[str, Any]:
         """Return a concise orientation cheat-sheet (help://quick)."""
@@ -1786,7 +1791,7 @@ class HelpAdapter(ResourceAdapter):
         retired = retired_schemes()
         all_help: Dict[str, Any] = {
             'type': 'adapter_summary',
-            'count': len(public_schemes),
+            'count': len([scheme for scheme in public_schemes if scheme not in retired]),
             'adapters': {}
         }
 

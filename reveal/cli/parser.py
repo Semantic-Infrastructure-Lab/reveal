@@ -464,7 +464,7 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--sort', type=str, metavar='FIELD',
                         help='Sort results by field (e.g., modified, size, name, complexity). '
                              'Use --desc for descending order, or prefix with - in URI queries. Applied by --files and '
-                             'ast/markdown/json/git/stats; elsewhere a note says it has no effect.')
+                             'by the adapters that take sort= (help://schemas/<adapter>); elsewhere a note says it has no effect.')
     parser.add_argument('--desc', action='store_true',
                         help='Sort descending (use with --sort, e.g., --sort modified --desc)')
     parser.add_argument('--asc', action='store_true',
@@ -479,9 +479,9 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     # Navigation, not Quality checks: that group collapses in --help, which hid the one
     # cap flag shared by URI adapters and --check.
     parser.add_argument('--limit', type=int, metavar='N', default=None,
-                        help='Cap results at N. On URI targets it becomes ?limit=N on '
-                             'ast/markdown/json/git/stats and ?top=N on hotspots/calls/depends/testability; '
-                             'elsewhere a note says it has no effect. With --check, caps text output at the '
+                        help='Cap results at N. On a URI target it becomes that adapter\'s own cap '
+                             '(?limit=N, or ?top=N on calls; see help://schemas/<adapter>); an adapter '
+                             'with no cap says it ignores it. With --check, caps text output at the '
                              'first N files with issues and prints a "+N more files" footer (default 50, '
                              '0 disables; ignored with --format json).')
     parser.add_argument('--since', type=str, metavar='DATE',

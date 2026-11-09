@@ -89,17 +89,27 @@ def _render_dynamic_adapters_section(adapters: list, internal: Optional[list] = 
     if not adapters:
         return
 
-    print("### URI Adapters ({})".format(len(adapters)))
+    live = [a for a in adapters if not a.get('retired')]
+    retired = [a for a in adapters if a.get('retired')]
+    print("### URI Adapters ({})".format(len(live)))
     print("Source: Live adapter registry")
     print("Updates: Automatic when new adapters added")
     print("Legend: 🟢 Stable | 🟡 Beta | 🎓 Project Adapters | 🔴 Experimental")
     print()
-    for adapter in adapters:
+    for adapter in live:
         scheme = adapter['scheme']
         desc = adapter.get('description', 'No description')
         badge = _get_stability_badge(scheme)
         print(f"  {badge} {scheme}://      - {desc}")
         print(f"                 Details: reveal help://{scheme}")
+    if retired:
+        print()
+        print("### Retired adapters ({}): still answer, with a note, until the cut release".format(len(retired)))
+        print()
+        for adapter in retired:
+            scheme = adapter['scheme']
+            print(f"  {scheme}://      - Use {adapter['replaced_by']}")
+            print(f"                 Details: reveal help://{scheme}")
     if internal:
         names = ', '.join(f"{s}://" for s in internal)
         print(f"  Not listed: {names} (inspects reveal's own source) — reveal help://{internal[0]}")

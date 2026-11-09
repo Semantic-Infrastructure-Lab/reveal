@@ -79,7 +79,7 @@ _SUBCOMMANDS_GUIDE = 'guides/SUBCOMMANDS_GUIDE.md'
 COMMANDS: Dict[str, CommandSpec] = {
     'architecture': _declared('architecture',
                      'reveal architecture [path] [--against REF]',
-                     'Deprecated alias for overview; use reveal overview [path] [--against REF]'),
+                     'Retired: use reveal overview [path] [--against REF]'),
     'calls':        _declared('calls',
                      'reveal calls --callers FUNC',
                      'Call graph: callers, callees (--depth N, --detail), --rank callers, --modules'),

@@ -63,7 +63,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Prior Claude sessions | `reveal 'claude://sessions/?search=auth-refactor'` |
 | Databases, env, SSL, nginx, other resources | `reveal help://adapters` |
 
-- **Limit results:** `--limit N` becomes `?limit=N` on ast/markdown/json/git/stats and `?top=N` on hotspots/calls/depends/testability; elsewhere a note says it has no effect. `--head N` slices any list result.
+- **Limit results:** `--limit N` becomes that adapter's own cap, `?limit=N` (or `?top=N` on calls; `reveal 'help://schemas/<adapter>'` lists it); an adapter with no cap says it ignores it. `--head N` slices any list result.
 - **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
 - **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~15,000 tokens); rules are `reveal --rules`.
 - **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `check --changed RANGE` uses `check`'s codes, with 2 for an unusable range; `imports` defaults to no findings gate, with `--fail-on findings` for exit 1 on a `--circular`, `--unused` or `--violations` row, usage 2 and incomplete/output failure 3; `metrics --hotspots` (and the retired `hotspots`) defaults to no findings gate; `--fail-on findings` exits 1 for an analysed file with quality below 70 or a function with complexity above 20, usage exits 2, and incomplete/output failure exits 3.
@@ -238,7 +238,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | Subcommand | One-liner | Discover details |
 |------------|-----------|------------------|
 | `reveal overview [path]` | Compact project map: scope, components, import relationships | `reveal overview --help` |
-| `reveal architecture [path] [--against REF]` | Deprecated alias for overview; use reveal overview [path] [--against REF] | `reveal architecture --help` |
+| `reveal architecture [path] [--against REF]` | Retired: use reveal overview [path] [--against REF] | `reveal architecture --help` |
 | `reveal imports [path]` | Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations | `reveal imports --help` |
 | `reveal deps [path]` | Retired: use reveal imports <path> --external, --circular or --unused (one graph build); dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
 | `reveal hotspots [path]` | Retired: use reveal metrics <path> --hotspots (files, --fail-on findings) and the ast:// complexity sort (functions); high-complexity files and functions | `reveal hotspots --help` |
@@ -392,14 +392,17 @@ reveal 'ast://./tests?name=test_*'
 
 **Example output:**
 ```
-Found 12 functions matching 'complexity>10':
+AST Query: src
+Filter: complexity>10
+Files scanned: 41
+Results: 3
 
-src/auth/handler.py:
-  authenticate_user (line 45, complexity: 12, lines: 67)
-  validate_token (line 112, complexity: 14, lines: 89)
+File: src/auth/handler.py
+  :  45  authenticate_user [67 lines, complexity: 12]
+  : 112  validate_token [89 lines, complexity: 14]
 
-src/processor/main.py:
-  process_request (line 234, complexity: 15, lines: 103)
+File: src/processor/main.py
+  : 234  process_request [103 lines, complexity: 15]
 ```
 
 ---
@@ -1725,7 +1728,7 @@ reveal 'diff://app.py:git://app.py@HEAD~1'     # Working copy vs. a git revision
 reveal 'diff://config.yaml:config_new.yaml'    # Works on any analyzer-supported type
 ```
 
-**Discovery:** `reveal help://schemas/diff --format=json` for the full param list. Note: for git-history diffs prefer `git://file@sha?type=diff` (BACK-GIT-3) which is git-aware; `diff://` is for arbitrary on-disk pairs.
+**Discovery:** `reveal help://schemas/diff --format=json` for the full param list. Note: for git-history diffs prefer `git://file@sha?type=diff`, which is git-aware; `diff://` is for arbitrary on-disk pairs.
 
 **Use case:** Compare two checked-out versions of a file (e.g. `cp file.py file.py.bak`, edit, then diff) without `git stash`/branch acrobatics; or diff configs across environments where neither side is in git.
 
@@ -4398,7 +4401,6 @@ Start with `reveal --agent-help`, route through `reveal help://quick`, then load
 
 ---
 
-**Last updated:** 2026-09-24
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/
 

@@ -175,9 +175,8 @@ v0.37.0: Feature X removed (documented in CHANGELOG)
 | Adapter | Stability | Notes |
 |---------|-----------|-------|
 | `diff://` | 🟡 Beta | Output format may change, git:// integration stable |
-| `imports://` | 🟡 Beta | Query syntax stable, multi-language support growing |
+| `imports://` | 🟡 Beta | Query syntax stable, multi-language support growing; `?importers` is the reverse graph (replaces `depends://`) |
 | `calls://` | 🟡 Beta | Query syntax stable; multi-language coverage still expanding |
-| `depends://` | 🟡 Beta | Inverse of imports:// — same maturity profile |
 | `metrics://` | 🟡 Beta | Metrics may be added/renamed (replaces `stats://`) |
 | `git://` | 🟡 Beta | Core features stable (blame, history, diff), new query params may be added |
 | `sqlite://` | 🟡 Beta | Format stabilizing |

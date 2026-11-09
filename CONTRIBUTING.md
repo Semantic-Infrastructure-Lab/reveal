@@ -408,7 +408,7 @@ return {
 reveal test.kt                    # Structure
 reveal test.kt MyClass            # Element extraction
 reveal test.kt --format=json      # JSON output
-reveal test.kt --check            # Pattern detection
+reveal check test.kt            # Pattern detection
 
 # Unit tests
 pytest tests/test_your_analyzer.py -v

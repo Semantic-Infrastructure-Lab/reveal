@@ -80,6 +80,8 @@ class V013(BaseRule):
         return detections
 
     def _count_production_adapters(self) -> int:
-        """Count the advertised URI adapters (what `reveal --adapters` lists)."""
+        """Count the live URI adapters (what `reveal --adapters` lists before its "Retired adapters")."""
         from reveal.adapters.base import list_public_schemes
-        return len(list_public_schemes())
+        from reveal.cli.handlers.introspection import retired_schemes
+        retired = retired_schemes()
+        return len([scheme for scheme in list_public_schemes() if scheme not in retired])

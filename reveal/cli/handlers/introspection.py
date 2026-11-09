@@ -114,7 +114,7 @@ def handle_adapters(show_all: bool = False, fmt: str = 'text'):
     schemes = list_public_schemes(include_internal=show_all)
 
     lines = ["URI Adapters\n", "=" * 70]
-    lines.append(f"\n📡 Registered Adapters ({len(schemes)})")
+    lines.append(f"\n📡 Registered Adapters ({len([s for s in schemes if adapter_group(s) != 'retired'])})")
     lines.append("-" * 70)
     lines.append("Query resources beyond files using URI schemes\n")
     if not show_all and len(schemes) < len(list_public_schemes(include_internal=True)):
