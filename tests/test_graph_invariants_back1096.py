@@ -779,3 +779,25 @@ def test_an_unplaced_import_landing_elsewhere_still_turns_call_targets_red(tmp_p
     assert row['status'] == 'red'
     assert ('external_binding', 'pytest.raises', 'unp/tests/helpers.py:1') in {
         (v['rule'], v['call'], v['got']) for v in row['examples']}
+
+
+class _WindowsSpelling(_InProcess):
+    """The structure answers spell ``file`` with the OS separator, as reveal does on Windows; the
+    walk's ``caller_file``/``callee_file`` are POSIX (calls emits to_posix)."""
+
+    def batch(self, lines):
+        answers, why = super().batch(lines)
+        for answer in answers:
+            if answer.get('structure') is not None and isinstance(answer.get('file'), str):
+                answer['file'] = answer['file'].replace('/', '\\')
+        return answers, why
+
+
+def test_call_targets_matches_outlines_spelled_with_backslashes(tmp_path):
+    # Windows CI (a87a4c8e): every resolved edge read as a target_defines violation, because the
+    # outlines were keyed by the answer's OS spelling and looked up by the walk's POSIX one.
+    root = _tree(tmp_path, EXTERNAL_TREE)
+    rank = _answer(root, 'calls://ext?rank=callers&top=0&builtins=true&test-framework=true')
+    row = inv.run_call_targets(_WindowsSpelling(root), 'ext', inv.sample_callers(rank, 50))
+    assert row['status'] == 'green', row
+    assert row['edges_checked']['target_defines'] >= 1

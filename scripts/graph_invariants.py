@@ -1027,7 +1027,8 @@ def run_call_targets(req: Requests, scan: str, callers: List[Caller]) -> Dict[st
         structures, why = req.batch(sorted(files))
         if why:
             return error_row('call_targets', why)
-        outlines = {str(a['file']): outline_names(a) for a in structures if a.get('file')}
+        # Keyed by the walk's POSIX spelling: a structure answer spells its file the OS's way (Windows).
+        outlines = {str(a['file']).replace('\\', '/'): outline_names(a) for a in structures if a.get('file')}
     return check_call_targets(walks, default_view, outlines, scan) | {
         'walks': len(walks), 'walks_requested': len(walk_lines), 'outlines': len(outlines)}
 
