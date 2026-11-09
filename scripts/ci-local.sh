@@ -62,6 +62,11 @@
 # hand when they fit the change: --lp 1.8.1 for tree-sitter Node work (V040 lints the known floor
 # hazards in seconds), --matrix --changed for a new test of version-sensitive behaviour.
 # Push, keep working, and let scripts/ci-watch.sh report the GitHub run.
+# A default run that passes the full 3.12 suite on a clean tree records that tree in
+# $LOG_DIR/green-suite.txt; --push then skips the suite (and only the suite: lints, ratchets,
+# self-validation, mypy and doc hygiene still run) when HEAD's tree, a clean status, Python and the
+# language-pack version all match it (BACK-2187: a no-push gate then --push ran the suite twice on one
+# tree). REVEAL_PUSH_FULL_SUITE=1 forces the suite.
 #
 # What only --matrix catches (both reached GitHub CI from a green 3.12 run, BACK-1438):
 #   - 3.11: PEP 701 f-strings (same quote nested inside, backslashes in {...}) are 3.12+ syntax
@@ -91,6 +96,7 @@ RUN_TESTS=1
 FRESH=0
 MATRIX=0
 CHANGED=0
+SUITE_IDENTITY=""
 PUSH=0
 CALLS_EVIDENCE="${REVEAL_CALLS_GATE_EVIDENCE:-}"
 CALLS_SKIP=""
@@ -129,6 +135,24 @@ if [[ -z "${REVEAL_PRIVATE_TERMS:-}" && -z "${REVEAL_PRIVATE_TERMS_FILE:-}" && -
     export REVEAL_PRIVATE_TERMS_FILE="$TERMS_DEFAULT"
 fi
 
+# BACK-2187: the tree whose full 3.12 suite last passed, so --push need not run it again.
+# One TSV line: tree, python, language-pack version, HEAD, then when and which log.
+GREEN_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+GREEN_STAMP="${REVEAL_CI_LOG_DIR:-${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/logs}/green-suite.txt"
+GREEN_PY="${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/py3.12/bin/python"
+_green_identity() {  # prints "tree<TAB>python<TAB>lp" for a clean checkout, nothing otherwise
+    [[ -z "$(git -C "$GREEN_REPO" status --porcelain 2>/dev/null)" ]] || return 1
+    local tree lp
+    tree="$(git -C "$GREEN_REPO" rev-parse 'HEAD^{tree}' 2>/dev/null)" || return 1
+    lp="$("$GREEN_PY" -c 'import importlib.metadata as m; print(m.version("tree-sitter-language-pack"))' 2>/dev/null)" || return 1
+    printf '%s\t3.12\t%s' "$tree" "$lp"
+}
+green_suite_matches() {
+    local now
+    now="$(_green_identity)" || return 1
+    [[ -f "$GREEN_STAMP" && "$(cut -f1-3 "$GREEN_STAMP")" == "$now" ]]
+}
+
 # --push: the push gate is the default run (the lints run before the suite, so they fail in seconds).
 if [[ $PUSH -eq 1 ]]; then
     [[ $PY_EXPLICIT -eq 1 || -n "$LP_VERSION" || $MATRIX -eq 1 || $CHANGED -eq 1 || $RUN_TESTS -eq 0 || $EXPLICIT_TARGETS -eq 1 || $FRESH -eq 1 ]] \
@@ -149,7 +173,12 @@ if [[ $PUSH -eq 1 ]]; then
         --output "${REVEAL_CI_LOG_DIR:-${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/logs}/imports-gate-report.json")
     [[ -n "$IMPORTS_SKIP" ]] && IMPORTS_ARGS+=(--skip-reason "$IMPORTS_SKIP")
     python3 "$CALLS_HELPER" "${CALLS_ARGS[@]}" || exit 1
-    "$0" || { echo "push gate FAILED (ci-local.sh default run)" >&2; exit 1; }
+    INNER_ARGS=()
+    if [[ "${REVEAL_PUSH_FULL_SUITE:-0}" != 1 ]] && green_suite_matches; then
+        INNER_ARGS=(--no-tests)
+        echo "push gate: the full suite already passed on tree $(cut -f1 "$GREEN_STAMP" | cut -c1-12) ($(cut -f5- "$GREEN_STAMP")); running every step but the suite (REVEAL_PUSH_FULL_SUITE=1 forces it, BACK-2187)"
+    fi
+    "$0" "${INNER_ARGS[@]}" || { echo "push gate FAILED (ci-local.sh default run)" >&2; exit 1; }
     python3 "$CALLS_HELPER" "${CALLS_ARGS[@]}" || exit 1
     python3 "$IMPORTS_HELPER" "${IMPORTS_ARGS[@]}" || { echo "push gate FAILED (imports recall gate)" >&2; exit 1; }
     printf '\nPush gate passed. Push, then: scripts/ci-watch.sh (macOS, Windows and the floor run only on GitHub).\n'
@@ -404,6 +433,7 @@ fi
 # below (scripts/check_pytest_cpu.py) is wide, median-based and load-aware.
 if [[ $RUN_TESTS -eq 1 ]]; then
     step "Run tests (pytest ${PYTEST_TARGETS[*]})"
+    SUITE_IDENTITY="$(_green_identity || true)"
     CPU_LOAD1=$("$PY" -c 'import os; print(os.getloadavg()[0])' 2>/dev/null || echo 0)
     echo "host load at suite start: ${CPU_LOAD1} (1-min average, $(nproc 2>/dev/null || echo '?') CPUs)" | tee -a "$LOG"
     TIME_CMD=(); command -v /usr/bin/time >/dev/null 2>&1 && TIME_CMD=(/usr/bin/time -f '%U %S' -o "$LOG.cpu")
@@ -437,6 +467,15 @@ fi
 if [[ ${#BG_PIDS[@]} -gt 0 ]]; then
     step "Wait for parallel steps"
     bg_wait
+fi
+
+# BACK-2187: record the tree only for the full primary suite on a clean checkout that did not move
+# while the suite ran; --push compares HEAD's tree, Python and language pack against it.
+if [[ $PRIMARY -eq 1 && $RUN_TESTS -eq 1 && $EXPLICIT_TARGETS -eq 0 && $CHANGED -eq 0 \
+        && "${PYTEST_TARGETS[*]}" == "tests/" && -n "$SUITE_IDENTITY" ]]; then
+    if [[ "$(_green_identity)" == "$SUITE_IDENTITY" ]]; then
+        printf '%s\t%s\t%s %s\n' "$SUITE_IDENTITY" "$(git rev-parse HEAD)" "$(date -Iseconds)" "$LOG" >"$GREEN_STAMP"
+    fi
 fi
 
 printf '\nCI-parity run passed (python %s%s%s). Log: %s\n' "$PY_VERSION" \

@@ -249,12 +249,15 @@ def test_relevant_push_fails_before_suite_when_evidence_is_missing(repo, tmp_pat
     assert 'calls' in result.stderr.lower() and not marker.exists()
 
 
-def run_push_dispatch(repo, tmp_path, args, suite_body='', extra_env=None):
+def run_push_dispatch(repo, tmp_path, args, suite_body='', extra_env=None, before_run=None):
     scripts = repo / 'scripts'
     scripts.mkdir(parents=True, exist_ok=True)
     source = (ROOT / 'scripts' / 'ci-local.sh').read_text(encoding='utf-8')
     prefix = source.split('# --changed: pytest targets')[0]
-    prefix = prefix.replace('"$0" ||', 'bash "$SUITE_SCRIPT" ||')
+    stub = 'bash "$SUITE_SCRIPT" "${INNER_ARGS[@]}" ||'
+    prefix = prefix.replace('"$0" "${INNER_ARGS[@]}" ||', stub)
+    assert stub in prefix, 'the push block no longer runs "$0" "${INNER_ARGS[@]}"'
+    # The suite stub's own arguments land in the marker (BACK-2187: --no-tests on a green tree).
     script = scripts / 'ci-local.sh'
     script.write_text(prefix, encoding='utf-8')
     script.chmod(0o755)
@@ -265,7 +268,7 @@ def run_push_dispatch(repo, tmp_path, args, suite_body='', extra_env=None):
     git(repo, 'commit', '-qm', 'stage push dispatcher')
     marker = tmp_path / 'suite.marker'
     suite = tmp_path / 'suite.sh'
-    suite.write_text('touch "$SUITE_MARKER"\n' + suite_body, encoding='utf-8')
+    suite.write_text('printf "%s" "$*" > "$SUITE_MARKER"\n' + suite_body, encoding='utf-8')
     env = {k: v for k, v in os.environ.items() if not k.startswith('REVEAL_CALLS_GATE_')}
     env['SUITE_MARKER'] = str(marker)
     env['SUITE_SCRIPT'] = str(suite)
@@ -273,6 +276,8 @@ def run_push_dispatch(repo, tmp_path, args, suite_body='', extra_env=None):
     if not (env.get('REVEAL_PRIVATE_TERMS') or env.get('REVEAL_PRIVATE_TERMS_FILE')):
         env['REVEAL_PRIVATE_TERMS'] = 'zz-gate-test-term'  # --push refuses to start without terms (BACK-2489)
     env.update(extra_env or {})
+    if before_run is not None:
+        before_run(repo, env)
     result = subprocess.run(
         ['bash', str(script), *args], cwd=repo, env=env,
         capture_output=True, text=True, encoding='utf-8', timeout=30,
@@ -319,3 +324,58 @@ def test_push_revalidates_changes_after_the_suite(repo, tmp_path):
 def test_push_option_validation_still_refuses_invalid_combinations(repo, tmp_path, args):
     result, marker, _ = run_push_dispatch(repo, tmp_path, args)
     assert result.returncode != 0 and not marker.exists()
+
+
+# ---------------------------------------------------------------- BACK-2187: no second suite on a green tree
+
+def _fake_venv(tmp_path, lp='1.25.0'):
+    """A py3.12 'interpreter' that answers only the language-pack version query."""
+    python = tmp_path / 'venvs' / 'py3.12' / 'bin' / 'python'
+    python.parent.mkdir(parents=True)
+    python.write_text(f'#!/bin/sh\necho {lp}\n', encoding='utf-8')
+    python.chmod(0o755)
+    return tmp_path / 'venvs'
+
+
+def _stamp(tree_of='HEAD', lp='1.25.0'):
+    def write(repo, env):
+        logs = Path(env['REVEAL_CI_LOG_DIR'])
+        logs.mkdir(parents=True, exist_ok=True)
+        tree = git(repo, 'rev-parse', f'{tree_of}^{{tree}}')
+        (logs / 'green-suite.txt').write_text(
+            f"{tree}\t3.12\t{lp}\t{git(repo, 'rev-parse', 'HEAD')}\t2026-11-08T00:00:00 suite.log\n",
+            encoding='utf-8')
+    return write
+
+
+@shell_only
+def test_push_skips_only_the_suite_on_the_tree_that_already_passed(repo, tmp_path):
+    commit_file(repo, 'reveal/utils/results.py')
+    env = {'REVEAL_CI_VENV_ROOT': str(_fake_venv(tmp_path))}
+    result, marker, _ = run_push_dispatch(repo, tmp_path, ['--push'], extra_env=env, before_run=_stamp())
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    assert marker.read_text(encoding='utf-8') == '--no-tests'
+    assert 'already passed on tree' in result.stdout
+
+
+@shell_only
+@pytest.mark.parametrize('case', ['other-tree', 'other-pack', 'dirty', 'forced'])
+def test_push_runs_the_suite_unless_tree_and_environment_match(repo, tmp_path, case):
+    commit_file(repo, 'reveal/utils/results.py')
+    env = {'REVEAL_CI_VENV_ROOT': str(_fake_venv(tmp_path))}
+    stamp = _stamp()
+    if case == 'other-tree':
+        stamp = _stamp(tree_of='HEAD~1')
+    elif case == 'other-pack':
+        stamp = _stamp(lp='1.21.0')
+    elif case == 'forced':
+        env['REVEAL_PUSH_FULL_SUITE'] = '1'
+
+    def before(repo_, env_):
+        stamp(repo_, env_)
+        if case == 'dirty':
+            (repo_ / 'README.md').write_text('edited, not committed\n', encoding='utf-8')
+
+    result, marker, _ = run_push_dispatch(repo, tmp_path, ['--push'], extra_env=env, before_run=before)
+    assert marker.exists(), (result.stdout, result.stderr)
+    assert marker.read_text(encoding='utf-8') == ''
