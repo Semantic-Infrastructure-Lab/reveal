@@ -90,3 +90,17 @@ def test_reaches_global_qualifier_rule():
     # window.f() may be a project function assigned onto the global object; a deeper chain is the host's
     assert reaches(None, 'window.max', 'src/c.ts', files) == files
     assert reaches(None, 'window.localStorage.setItem', 'src/c.ts', files) == set()
+
+
+def test_a_local_named_like_a_global_is_the_local(tmp_path):
+    """typescript/src ipc.mp.ts: `window.webContents.send(...)` where `window` is a local BrowserWindow."""
+    src = tmp_path / 'src'
+    src.mkdir()
+    (src / 'chan.ts').write_text(
+        'export class Chan {\n    send(m: string) { return m; }\n}\n'
+        'export function connect(window: { webContents: Chan }) {\n'
+        '    window.webContents.send("x");\n}\n', encoding='utf-8')
+    edges = _callees(src, 'connect')
+    assert edges['window.webContents.send']['resolved'] is True
+    run = _run_reveal_direct(f'calls://{src.as_posix()}?callers=send', '--format', 'json')
+    assert [c['caller'] for level in json.loads(run.stdout)['levels'] for c in level['callers']] == ['connect']

@@ -72,7 +72,9 @@ class CallResolver:
         the module's path (``dagster/_grpc/client.py`` for ``from dagster._grpc.client import f``,
         BACK-2573). A bare call to a name the file also defines reaches its own definition (it
         shadows the import)."""
-        binding = None if shadowed else self._bindings.get(caller_file, call.split('.')[0])
+        if shadowed:  # a local value: neither an import nor a language global binds it (BACK-2580/2581)
+            return candidates
+        binding = self._bindings.get(caller_file, call.split('.')[0])
         kept = reaches(binding, call, caller_file, (c['file'] for c in candidates))
         return [c for c in candidates if c['file'] in kept]
 

@@ -666,8 +666,11 @@ def _bound_key(key: str, record: Dict[str, Any], files: FrozenSet[str], bindings
     if '.' in call and key == call:
         return key
     qualifier = call.split('.')[0]
-    # A caller that declares the qualifier itself (a parameter `src`) calls a method on that value (BACK-2580).
-    binding = None if '.' in call and qualifier in record.get('shadows', ()) else bindings.get(record['file'], qualifier)
+    # A caller that declares the qualifier itself (a parameter `src`, a local `window`) calls a method on that
+    # value: no import and no language global binds it (BACK-2580, BACK-2581).
+    if '.' in call and qualifier in record.get('shadows', ()):
+        return key
+    binding = bindings.get(record['file'], qualifier)
     if reaches(binding, call, record['file'], files):
         return key
     if '.' in call:
