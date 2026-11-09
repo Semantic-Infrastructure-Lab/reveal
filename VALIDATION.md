@@ -2259,8 +2259,11 @@ limitations remain unchanged.
 
 The same runner has a separately scoped `--signal calls` mode. Its first population
 is the existing pinned celery corpus, `celery/utils/`, using Python's standard AST
-to derive bare-name caller relationships independently. All **1,046 expected
-relationships** agree (**100% recall and precision**). The scope is function/method
+to derive bare-name caller relationships independently. **1,031 of 1,046 expected
+relationships** agree (**98.57% recall, 100% precision**). The 15 missed are calls
+through an external module (`base64.b64encode`, `os.environ.get`, `warnings.warn`) that the
+bare-name oracle credits to a same-named project function and that reveal now reports
+as external. The scope is function/method
 bodies, deduplicated by file and caller name, with import aliases normalized.
 Module calls, decorators/default-expression evaluation, class initialization,
 dynamic dispatch and receiver-type resolution are excluded. This population does

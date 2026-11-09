@@ -4,9 +4,9 @@
     "sha": "17b895bad43aab73fca37609ae9b93be6cc1c6e1",
     "targets": 437,
     "oracle_edges": 1046,
-    "hit_edges": 1046,
+    "hit_edges": 1031,
     "extra_edges": 0,
-    "recall": 1.0,
+    "recall": 0.98565965583174,
     "precision": 1.0,
     "coverage": {
       "files": 25,
@@ -14,6 +14,70 @@
       "call_sites": 1240,
       "population": "python-function-body-bare-name-callers"
     },
-    "differences": []
+    "differences": [
+      {
+        "target": "b64encode",
+        "missed": [
+          "celery/utils/term.py::_read_as_base64"
+        ],
+        "extra": []
+      },
+      {
+        "target": "current_process",
+        "missed": [
+          "celery/utils/log.py::current_process"
+        ],
+        "extra": []
+      },
+      {
+        "target": "flush",
+        "missed": [
+          "celery/utils/threads.py::run",
+          "celery/utils/timer2.py::run"
+        ],
+        "extra": []
+      },
+      {
+        "target": "get",
+        "missed": [
+          "celery/utils/term.py::supports_images"
+        ],
+        "extra": []
+      },
+      {
+        "target": "get_logger",
+        "missed": [
+          "celery/utils/log.py::get_multiprocessing_logger"
+        ],
+        "extra": []
+      },
+      {
+        "target": "isatty",
+        "missed": [
+          "celery/utils/term.py::supports_images"
+        ],
+        "extra": []
+      },
+      {
+        "target": "join",
+        "missed": [
+          "celery/utils/static/__init__.py::get_file",
+          "celery/utils/sysinfo.py::_min_quota",
+          "celery/utils/sysinfo.py::_read_v1_quota",
+          "celery/utils/sysinfo.py::_read_v2_quota",
+          "celery/utils/sysinfo.py::cgroup_cpu_quota"
+        ],
+        "extra": []
+      },
+      {
+        "target": "warn",
+        "missed": [
+          "celery/utils/deprecated.py::warn",
+          "celery/utils/dispatch/signal.py::disconnect",
+          "celery/utils/imports.py::load_extension_classes"
+        ],
+        "extra": []
+      }
+    ]
   }
 }
