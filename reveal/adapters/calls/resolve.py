@@ -48,9 +48,11 @@ class CallResolver:
             tail = self._alias_maps[caller_file].get(tail, tail)
         family = self._caller_family(caller_file)
         # A module is a call source (its top-level calls), never what a call reaches: Rust's
-        # `mod parser;` is not the `parser(input)` a sibling calls (BACK-2569).
+        # `mod parser;` is not the `parser(input)` a sibling calls (BACK-2569); nor is a class field
+        # holding an object (`static max = new OffsetPair(...)`, BACK-2581).
         candidates = [d for d in self.index.get(tail, [])
-                      if (not family or d['family'] == family) and d.get('category') != 'modules']
+                      if (not family or d['family'] == family) and d.get('category') != 'modules'
+                      and d.get('callable', True) is not False]
         candidates = self._reachable(call, caller_file, candidates)
         if not candidates:
             return tail, None

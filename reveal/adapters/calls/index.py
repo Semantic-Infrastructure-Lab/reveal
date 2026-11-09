@@ -672,7 +672,8 @@ def _defined_keys(file_struct: Dict[str, Any]) -> Iterator[str]:
     source (function, method, test block, callable class field) and every class, by the same
     lookup keys a definition search uses plus the bare segment the index keys calls by."""
     names = [elem.get('name', '') for elem in call_sources(file_struct)
-             if elem.get('category') in _CALL_SOURCE_CATEGORIES and elem.get('category') != 'modules']
+             if elem.get('category') in _CALL_SOURCE_CATEGORIES and elem.get('category') != 'modules'
+             and elem.get('callable', True) is not False]  # a field holding an object (BACK-2581)
     names += [elem.get('name', '') for elem in file_struct.get('elements', []) if elem.get('category') == 'classes']
     for name in names:
         if name:
@@ -878,6 +879,7 @@ class CallSource(NamedTuple):
     member: bool = False  # a method of a class or struct: never what an import binds by name (BACK-2569)
     owner: str = ''       # the class or struct a member belongs to
     category: str = ''    # the structure category; a 'modules' source (a file's top level, Rust `mod x;`) is no call target
+    callable: bool = True  # False for a class field holding an object (`= new X()`): a source, no target (BACK-2581)
 
 
 class CalleeSource:
@@ -917,7 +919,8 @@ class CalleeSource:
             tuple(intern(call) for call in elem.get('calls', [])), tuple(elem.get('references', [])),
             tuple(elem.get('reference_only_calls', [])),
             family(file_path), member=bool(elem.get('owner')) and elem.get('method') is not False,
-            category=elem.get('category', ''), owner=str(elem.get('owner') or ''))
+            category=elem.get('category', ''), owner=str(elem.get('owner') or ''),
+            callable=elem.get('callable', True) is not False)
             for file_path, name, elem in _call_definitions(structures))
         return cls(definitions, getattr(structures, 'skipped', ()), getattr(structures, 'traversal_failures', ()),
                    scope, dropped_values_summary(structures))
@@ -1042,6 +1045,7 @@ def _walk_index(source: CalleeSource) -> Tuple[List[Dict[str, Any]], Dict[str, L
         'member': d.member,
         'owner': d.owner,
         'category': d.category,
+        'callable': d.callable,
     } for d in source.definitions]
     definitions.sort(key=lambda d: (d['file'], d['line']))
     index: Dict[str, List[Dict[str, Any]]] = {}

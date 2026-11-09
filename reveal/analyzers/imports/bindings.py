@@ -19,6 +19,7 @@ from typing import Any, Dict, FrozenSet, Iterable, NamedTuple, Optional, Set, Tu
 
 from .types import ImportStatement
 from .unused import binds_reliably, bound_name, bound_names
+from ...conventions import conventions_for_path
 from ...utils.request_cache import in_host_request, register_validated_cache
 
 _PACKAGE_FILES = frozenset({'__init__', 'index', 'mod'})
@@ -47,13 +48,24 @@ def reaches(binding: Optional[Binding], call: str, caller_file: str, files: Iter
     imports that resolved to no file bind it; then none when they are outside the tree (BACK-2553), and
     only a file at one of their module paths when the verdict could not place them (BACK-2573). A bare
     call to a name its own file defines reaches it (the definition shadows the import). The one rule
-    for both directions: callee resolution and the callers index (BACK-2567)."""
+    for both directions: callee resolution and the callers index (BACK-2567). A call qualified by a
+    language global (``Math.max``) that nothing imports reaches no other file (BACK-2581)."""
     files = set(files)
-    if binding is None or not binding.unresolved:
+    if binding is None:
+        if '.' in call and _is_global_namespace(call.split('.', 1)[0], caller_file):
+            # `Math.max` with `Math` bound by nothing: the language global's, never the project's one
+            # `max`; only a class in the caller's own file can shadow the global (BACK-2581).
+            return files & {caller_file}
+        return files
+    if not binding.unresolved:
         return files
     if '.' not in call and caller_file in files:
         return files
     return {f for f in files if at_module(f, binding.modules)}
+
+
+def _is_global_namespace(qualifier: str, caller_file: str) -> bool:
+    return qualifier in conventions_for_path(caller_file).global_namespaces
 
 
 def _origins(stmt: ImportStatement) -> Dict[str, str]:

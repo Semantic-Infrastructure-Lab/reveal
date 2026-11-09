@@ -65,6 +65,11 @@ class LanguageConventions:
     # Scoped per family because the names collide with real methods elsewhere
     # (Python `map`/`filter` vs Scala/Ruby `.map`/`.filter`, BACK-748).
     builtins: FrozenSet[str] = frozenset()
+    # Language-global objects a call is qualified by (JS `Math.max`, `JSON.parse`): with no import or
+    # project definition binding the qualifier, the call reaches no project function of that name, only
+    # a member of a project class that shadows the global (BACK-2581). Unlike `builtins`, nothing is
+    # hidden from a calls list; this only stops `Math.max` resolving to the project's one `max`.
+    global_namespaces: FrozenSet[str] = frozenset()
     # Decorators/annotations that make the runtime dispatch a function implicitly.
     implicit_decorators: FrozenSet[str] = frozenset()
     # Framework route/handler/scheduler decorators (bare names, case-sensitive) that
@@ -169,6 +174,16 @@ PYTHON_ENTRY_POINT_DECORATORS: FrozenSet[str] = frozenset({
     'given', 'when', 'then', 'step', 'fixture',
 })
 # NestJS/Angular: decorators are PascalCase, so the lowercase Python list never matched.
+# ECMAScript standard built-in objects plus the host globals a call is commonly qualified by
+# (BACK-2581). A call `Math.max(a, b)` is the global's, never a project `max`.
+JS_GLOBAL_NAMESPACES: FrozenSet[str] = frozenset({
+    'Array', 'ArrayBuffer', 'Atomics', 'BigInt', 'Boolean', 'DataView', 'Date', 'Error', 'Function',
+    'Intl', 'JSON', 'Map', 'Math', 'Number', 'Object', 'Promise', 'Proxy', 'Reflect', 'RegExp', 'Set',
+    'String', 'Symbol', 'WeakMap', 'WeakRef', 'WeakSet', 'globalThis',
+    'console', 'document', 'window', 'navigator', 'process', 'Buffer',
+})
+
+
 JS_ENTRY_POINT_DECORATORS: FrozenSet[str] = frozenset({
     'Get', 'Post', 'Put', 'Patch', 'Delete', 'Head', 'Options', 'All',
     'Query', 'Mutation', 'Subscription', 'ResolveField',
@@ -393,6 +408,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         # (BACK-1009: 18.5% of ?uncalled hits on the VS Code corpus).
         LanguageConventions(
             family='js', implicit_names=frozenset({'constructor'}), stdlib_key=_node_stdlib_key,
+            global_namespaces=JS_GLOBAL_NAMESPACES,
             entry_point_files=frozenset({
                 'main.js', 'index.js', 'app.js', 'server.js',
                 'main.ts', 'index.ts', 'app.ts', 'server.ts',

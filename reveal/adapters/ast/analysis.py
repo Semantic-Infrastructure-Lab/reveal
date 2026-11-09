@@ -309,6 +309,10 @@ def module_call_sites(file_path: str, analyzer, elements: Sequence[Dict[str, Any
 
 _CLASS_FIELD_KINDS = frozenset({'public_field_definition', 'field_definition'})
 _FUNCTION_VALUE_KINDS = frozenset({'arrow_function', 'function_expression', 'function', 'generator_function'})
+# A field initialised by one of these holds an object, never a function: it is a call source (its
+# initializer runs calls) but no call target (`static max = new OffsetPair(...)` is not what
+# `Math.max(a, b)` calls, BACK-2581). Any other initializer (`debounce(fn)`) may return one.
+_OBJECT_VALUE_KINDS = frozenset({'new_expression', 'object', 'array'})
 
 
 def class_field_call_sites(file_path: str, analyzer) -> List[Dict[str, Any]]:
@@ -340,7 +344,8 @@ def class_field_call_sites(file_path: str, analyzer) -> List[Dict[str, Any]]:
                 start = _zero_arg(node, 'start_position').row + 1
                 sites = range_calls(node, start, _zero_arg(node, 'end_position').row + 1, text)
                 if sites:
-                    out.append({'name': text(name), 'line': start, 'sites': sites})
+                    out.append({'name': text(name), 'line': start, 'sites': sites,
+                                'callable': _zero_arg(value, 'kind') not in _OBJECT_VALUE_KINDS})
             continue
         stack.extend(node_children(node))
     return out
@@ -370,7 +375,8 @@ def _class_field_sources(file_struct: Dict[str, Any]):
     """One caller per class field whose initializer calls something (BACK-2230)."""
     for field in file_struct.get('class_field_call_sites', []):
         yield {'category': 'class_fields', 'name': field['name'], 'line': field['line'], 'caller_kind': 'class_field',
-               'calls': list(dict.fromkeys(s['callee'] for s in field['sites'])), 'call_sites': field['sites']}
+               'calls': list(dict.fromkeys(s['callee'] for s in field['sites'])), 'call_sites': field['sites'],
+               'callable': field.get('callable', True)}
 
 
 def call_sources(file_struct: Dict[str, Any]):
@@ -449,6 +455,8 @@ def _call_site_layer_complete(layer: Dict[str, Any], family: Optional[str]) -> b
         return False
     if family == 'js' and not isinstance(layer.get('class_field_call_sites'), list):
         return False
+    if family == 'js' and not all('callable' in f for f in layer['class_field_call_sites']):
+        return False  # stored before fields recorded whether they hold a function (BACK-2581)
     return family != 'js' or all(isinstance(layer.get(k), list) for k in ('jsx_references', 'jsx_call_sites'))
 
 
