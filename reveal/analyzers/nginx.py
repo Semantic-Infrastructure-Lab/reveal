@@ -1033,7 +1033,6 @@ class NginxAnalyzer(FileAnalyzer):
                 last_seen   – raw timestamp string of most recent match
                 sample      – one representative log line (first 120 chars)
         """
-        import os
 
         domains = set(self.extract_ssl_domains())
         if not domains:

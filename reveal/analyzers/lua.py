@@ -1,6 +1,6 @@
 """Lua analyzer using tree-sitter."""
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from ..reveal_types import StructureItem
 from ..core import node_children as _children

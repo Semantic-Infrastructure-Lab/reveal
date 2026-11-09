@@ -13,14 +13,12 @@ Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
 import ast
-import hashlib
 import logging
-import os
 import re
 from functools import lru_cache
 from ...utils.request_cache import register_request_cache
 from pathlib import Path
-from typing import Callable, FrozenSet, List, Set, Optional, Dict, Tuple
+from typing import Callable, FrozenSet, List, Set, Optional, Tuple
 from ...core import node_children as _children, node_prev_sibling as _prev_sibling
 from ...core.node_taxonomy import edge_scope
 from ...core.treesitter_compat import _zero_arg

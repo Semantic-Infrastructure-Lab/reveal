@@ -1,6 +1,6 @@
 """SQL analyzer using tree-sitter."""
 
-from typing import Dict, List, Any, Optional
+from typing import List, Optional
 from ..reveal_types import StructureItem
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer

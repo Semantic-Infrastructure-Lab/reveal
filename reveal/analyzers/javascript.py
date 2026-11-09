@@ -1,6 +1,6 @@
 """JavaScript file analyzer - tree-sitter based."""
 
-from typing import Any, Dict, List
+from typing import List
 from ..reveal_types import StructureItem
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer

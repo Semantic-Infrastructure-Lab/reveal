@@ -1,6 +1,6 @@
 """Shared disclosures carried by complete import analysis artifacts."""
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, Callable, List, Optional, Tuple, cast
 
 from .types import ImportAnalysis
 from ...reveal_types import PathFailure, WarningEntry
