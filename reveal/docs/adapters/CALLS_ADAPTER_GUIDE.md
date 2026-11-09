@@ -274,8 +274,13 @@ definition already reached (`expanded: false`). A call resolves within the calle
 to its one definition, else to a same-file one or the one its imports name, else it is `ambiguous`
 with its `candidates` and not expanded. A call whose qualifier or bare name is bound only by imports
 that `imports://` resolves to no project file (`json.loads`, `readFileSync` from `'fs'`, `pytest.raises`
-from an installed package) is external, never a project function of the same name; a bare call to a
-name the file itself defines reaches that definition. Imports resolve as `imports://` resolves them for
+from an installed package) is external, never a project function of the same name, unless the
+import's verdict could not place it (no `go.mod`, a monorepo package root): then it reaches only a
+definition where the import names it, by its language (a Python module path, a Go package directory,
+a Rust item's module: `use write::write_to_db` reaches `write.rs`). An import that is in the project
+by its verdict or its relative spelling (Rust `crate::` in a crate with no `Cargo.toml`) blocks
+nothing when resolution misses it. `?callers=` applies the same rule. A bare call to a name the file
+itself defines reaches that definition. Imports resolve as `imports://` resolves them for
 the walked directory (from its project root, so a `tsconfig.json` alias above it counts, whether the
 directory is spelled `.`, `pkg` or an absolute path), but only the walked
 directory's files are read, plus, outside it, the files of languages whose package or namespace
