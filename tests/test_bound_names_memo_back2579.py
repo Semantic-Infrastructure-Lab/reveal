@@ -6,9 +6,9 @@ asks the file's own import extraction which names it binds (3af89992), so a quer
 through no import never builds the project's analysis. The extraction's in-process layer is emptied
 at every host request (BACK-2083) and the disk layer may be off, so every query re-parsed every file
 holding a call to the name: go/callers through reveal.api.query took 1.4-2.3 s per query against
-0.03 s on 8d0d7b93, nearly all of it tree-sitter. The names are now a validated cache per project
-root (register_validated_cache, as build_cache's _GRAPH_MEMO holds the analysis): kept while the
-root's tree stamp is unchanged, so a changed file is read again.
+0.03 s on 8d0d7b93, nearly all of it tree-sitter. The names are now a validated cache per target
+directory (register_validated_cache, as the callers index is kept): kept while that
+tree's stamp is unchanged, so a changed file is read again.
 """
 
 import os

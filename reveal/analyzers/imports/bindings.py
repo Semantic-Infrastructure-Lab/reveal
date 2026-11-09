@@ -194,11 +194,11 @@ class ProjectBindings:
         return self.of(file_path).get(name)
 
     def _root(self) -> Optional[str]:
-        """The root of the scope the analysis would be built for (the shared climb, cached), spelled
-        as build_cache's memo keys it, so one tree stamp per request serves both."""
-        if self._scope_root is None and self._target is not None:
-            from . import service
-            self._scope_root = str(service.project_scope(self._target).root)
+        """The tree whose stamp keeps this target's remembered bound names: the target directory,
+        the one the callers index is kept for, spelled as given (no project climb: a query whose
+        calls go through no import walks nothing, 3af89992). None for a file target."""
+        if self._scope_root is None and self._target is not None and self._target.is_dir():
+            self._scope_root = str(self._target)
         return self._scope_root
 
     def _by_file(self) -> Dict[str, Any]:
@@ -221,9 +221,8 @@ class ProjectBindings:
         return self._files[file_path]
 
 
-# Project root -> absolute path -> the names that file's import statements bind, kept across host
-# requests while the root's tree is unchanged (register_validated_cache, as build_cache's _GRAPH_MEMO
-# holds the analysis). The extraction's own in-process layer is emptied at every request (BACK-2083)
+# Target directory -> absolute path -> the names that file's import statements bind, kept across
+# host requests while that tree is unchanged (register_validated_cache, as the callers index is). The extraction's own in-process layer is emptied at every request (BACK-2083)
 # and the disk layer may be off, so without this every ?callers= query re-parsed every file holding a
 # call to the name (BACK-2579).
 _BOUND_NAMES: 'OrderedDict[str, Dict[str, FrozenSet[str]]]' = OrderedDict()
