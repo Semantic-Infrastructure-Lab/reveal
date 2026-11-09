@@ -683,6 +683,48 @@ class TestM104MultiLanguage(unittest.TestCase):
         self.assertEqual(len(detections), 1)
         self.assertIn('List.of', detections[0].message)
 
+    # ----- BACK-2556: numbers and path segments are not dotfiles or extensions -----
+
+    def test_go_float_buckets_not_labelled_directories(self):
+        # prometheus histogram.go DefBuckets: '.005' is a number, not a dotfile.
+        content = (
+            'package p\n'
+            'var DefBuckets = []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}\n'
+        )
+        path = self.create_temp_file(content, "h.go")
+        self.assertEqual(self.rule.check(path, None, content), [])
+
+    def test_js_number_array_not_labelled(self):
+        content = "const STEPS = [.5, .25, 1, 2, 4, 8];\n"
+        path = self.create_temp_file(content, "s.js")
+        self.assertEqual(self.rule.check(path, None, content), [])
+
+    def test_go_path_segments_not_file_extensions(self):
+        # kubernetes validation_test.go failureCases: '.' and '..' are path segments.
+        content = (
+            'package p\n'
+            'var failureCases = []string{".", "..", "..bad", "a/b", "c", "d"}\n'
+        )
+        path = self.create_temp_file(content, "v.go")
+        self.assertEqual(self.rule.check(path, None, content), [])
+
+    def test_go_skip_dir_list_still_directories(self):
+        content = (
+            'package p\n'
+            'var skipDirs = []string{".git", ".venv", "node_modules", "vendor", "dist"}\n'
+        )
+        path = self.create_temp_file(content, "d.go")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('DIRECTORIES', detections[0].message)
+
+    def test_dotted_extension_still_file_extensions(self):
+        content = "EXTS = ['.d.ts', '.py', '.js', '.ts', '.go']\n"
+        path = self.create_temp_file(content, "e.py")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('FILE_EXTENSIONS', detections[0].message)
+
 
 if __name__ == '__main__':
     unittest.main()

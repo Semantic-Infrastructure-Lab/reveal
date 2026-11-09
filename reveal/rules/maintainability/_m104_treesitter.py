@@ -13,15 +13,47 @@ represents a hardcoded list/array/vec differently in its grammar:
 - Java:   `T[] NAME = {...}` or `List.of(...)`/`Arrays.asList(...)`
 
 Each extractor yields (name, line, kind, values) tuples, mirroring what
-M104's own `_extract_list_values` + `ast.Assign` walk produces for Python.
+M104's own `_extract_list_values` + `ast.Assign` walk produces for Python:
+a string literal is a `str` (quotes stripped), any other literal (a number,
+a Go identifier) is a `RawLiteral`, as Python's `ast.Constant` keeps 0.005
+a float. M104 labels a collection from its string values only (BACK-2556).
 """
 
-from typing import Any, Iterator, List, Optional, Tuple
+from typing import Any, Iterator, List, Optional, Tuple, Union
 
 from ...core.treesitter_compat import iter_tree, node_children, _zero_arg
 from ..base_mixins import kind_nodes
 
 _QUOTE_CHARS = '"\'`'
+
+
+class RawLiteral:
+    """A non-string literal's source text (``.005``, ``10L``, ``maxRetries``).
+
+    Not a ``str``, so M104's string tests (dotfile, extension, bare word) never
+    read ``.005`` as a dotfile; ``str()`` gives the text for the sample line.
+    """
+
+    __slots__ = ('text',)
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def __str__(self) -> str:
+        return self.text
+
+    def __repr__(self) -> str:
+        return f'RawLiteral({self.text!r})'
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, RawLiteral) and other.text == self.text
+
+    def __hash__(self) -> int:
+        return hash(('RawLiteral', self.text))
+
+
+LiteralValue = Union[str, RawLiteral]
+Collection = Tuple[str, int, str, List[LiteralValue]]
 
 
 def _node_text(node: Any, content_bytes: bytes) -> str:
@@ -34,6 +66,15 @@ def _strip_quotes(text: str) -> str:
     if len(text) >= 2 and text[0] in _QUOTE_CHARS and text[-1] == text[0]:
         return text[1:-1]
     return text
+
+
+def _literal(text: str, is_string: bool) -> LiteralValue:
+    """A string literal's value, or the raw text of any other literal."""
+    return _strip_quotes(text) if is_string else RawLiteral(text)
+
+
+def _is_quoted(text: str) -> bool:
+    return len(text) >= 2 and text[0] in _QUOTE_CHARS and text[-1] == text[0]
 
 
 def _node_line(node: Any) -> int:
@@ -66,15 +107,14 @@ def _find_descendant(node: Any, kinds: frozenset) -> Optional[Any]:
 _JS_STRING_KINDS = frozenset({'string', 'number'})
 
 
-def _extract_js(root: Any, content_bytes: bytes) -> Iterator[Tuple[str, int, str, List[str]]]:
+def _extract_js(root: Any, content_bytes: bytes) -> Iterator[Collection]:
     for node in kind_nodes(root, 'variable_declarator'):
         name_node = _find_child(node, 'identifier')
         array_node = _find_child(node, 'array')
         if name_node is None or array_node is None:
             continue
         values = [
-            _strip_quotes(_node_text(child, content_bytes)) if _kind(child) == 'string'
-            else _node_text(child, content_bytes)
+            _literal(_node_text(child, content_bytes), _kind(child) == 'string')
             for child in node_children(array_node)
             if _kind(child) in _JS_STRING_KINDS
         ]
@@ -86,7 +126,7 @@ _GO_DECL_KINDS = frozenset({'var_spec', 'const_spec', 'short_var_declaration'})
 _GO_COLLECTION_TYPE_KINDS = frozenset({'slice_type', 'array_type'})
 
 
-def _extract_go(root: Any, content_bytes: bytes) -> Iterator[Tuple[str, int, str, List[str]]]:
+def _extract_go(root: Any, content_bytes: bytes) -> Iterator[Collection]:
     for node in kind_nodes(root, *_GO_DECL_KINDS):
         name_node = _find_child(node, 'identifier')
         if name_node is None:
@@ -107,9 +147,12 @@ def _extract_go(root: Any, content_bytes: bytes) -> Iterator[Tuple[str, int, str
         if literal_value is None:
             continue
         values = [
-            _strip_quotes(_node_text(child, content_bytes))
-            for child in node_children(literal_value)
-            if _kind(child) == 'literal_element'
+            _literal(text, _is_quoted(text))
+            for text in (
+                _node_text(child, content_bytes)
+                for child in node_children(literal_value)
+                if _kind(child) == 'literal_element'
+            )
         ]
         if values:
             yield _node_text(name_node, content_bytes), _node_line(node), 'slice', values
@@ -121,7 +164,7 @@ _RUST_LITERAL_KINDS = frozenset({
 })
 
 
-def _extract_rust(root: Any, content_bytes: bytes) -> Iterator[Tuple[str, int, str, List[str]]]:
+def _extract_rust(root: Any, content_bytes: bytes) -> Iterator[Collection]:
     for node in kind_nodes(root, *_RUST_DECL_KINDS):
         name_node = _find_child(node, 'identifier')
         if name_node is None:
@@ -139,9 +182,7 @@ def _extract_rust(root: Any, content_bytes: bytes) -> Iterator[Tuple[str, int, s
             continue
 
         values = [
-            _strip_quotes(_node_text(child, content_bytes))
-            if _kind(child).endswith('string_literal')
-            else _node_text(child, content_bytes)
+            _literal(_node_text(child, content_bytes), _kind(child).endswith('string_literal'))
             for child in node_children(collection)
             if _kind(child) in _RUST_LITERAL_KINDS
         ]
@@ -155,18 +196,18 @@ _JAVA_COLLECTION_METHODS = frozenset({
 })
 
 
-def _extract_java(root: Any, content_bytes: bytes) -> Iterator[Tuple[str, int, str, List[str]]]:
+def _extract_java(root: Any, content_bytes: bytes) -> Iterator[Collection]:
     for node in kind_nodes(root, 'variable_declarator'):
         name_node = _find_child(node, 'identifier')
         if name_node is None:
             continue
 
         kind = 'array'
-        values: List[str] = []
+        values: List[LiteralValue] = []
         array_init = _find_child(node, 'array_initializer')
         if array_init is not None:
             values = [
-                _strip_quotes(_node_text(child, content_bytes))
+                _literal(_node_text(child, content_bytes), _kind(child) == 'string_literal')
                 for child in node_children(array_init)
                 if _kind(child) in _JAVA_LITERAL_KINDS
             ]
@@ -184,7 +225,7 @@ def _extract_java(root: Any, content_bytes: bytes) -> Iterator[Tuple[str, int, s
                     args = _find_child(call, 'argument_list')
                     if args is not None:
                         values = [
-                            _strip_quotes(_node_text(child, content_bytes))
+                            _literal(_node_text(child, content_bytes), _kind(child) == 'string_literal')
                             for child in node_children(args)
                             if _kind(child) in _JAVA_LITERAL_KINDS
                         ]
@@ -207,7 +248,7 @@ SUPPORTED_LANGUAGES = tuple(_EXTRACTORS)
 
 def extract_collections(
     language: str, root: Any, content_bytes: bytes,
-) -> Iterator[Tuple[str, int, str, List[str]]]:
+) -> Iterator[Collection]:
     """Yield (name, line, kind, values) for every named collection literal
     `check()` should classify, for the given tree-sitter `language` name."""
     extractor = _EXTRACTORS.get(language)

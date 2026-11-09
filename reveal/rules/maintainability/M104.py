@@ -26,6 +26,7 @@ operate on plain (name, values) pairs, not ast nodes, so they're reused as-is.
 """
 
 import ast
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -35,6 +36,15 @@ from ...core.treesitter_compat import tree_root
 from ...core.treesitter_parse import GrammarUnavailable, get_tree
 from ...registry import extensions_for_languages, language_for_extension
 from ._m104_treesitter import SUPPORTED_LANGUAGES, extract_collections
+
+_DOT_NAME = re.compile(r'\.[A-Za-z0-9_+-]+(?:\.[A-Za-z0-9_+-]+)*')
+
+
+def _is_dot_name(value: str, max_len: Optional[int] = None) -> bool:
+    """``.git``/``.py``/``.d.ts``-shaped: a dot then a name; ``.``, ``..`` and ``..x`` are not."""
+    if max_len is not None and len(value) > max_len:
+        return False
+    return _DOT_NAME.fullmatch(value) is not None
 
 
 class M104(BaseRule, ASTParsingMixin):
@@ -362,7 +372,7 @@ class M104(BaseRule, ASTParsingMixin):
         name_lower = name.lower()
         if any(hint in name_lower for hint in self._DIR_NAME_HINTS):
             return True
-        has_dotfile = any(v.startswith('.') and '/' not in v for v in str_values)
+        has_dotfile = any(_is_dot_name(v) for v in str_values)
         has_bareword = any(
             v and not v.startswith('.') and '.' not in v
             and v.replace('_', '').replace('-', '').isalnum()
@@ -371,20 +381,25 @@ class M104(BaseRule, ASTParsingMixin):
         return has_dotfile and has_bareword
 
     def _classify_list(self, name: str, values: List[Any]) -> str:
-        """Classify what kind of hardcoded list this is."""
+        """Classify what kind of hardcoded list this is.
+
+        The directory and extension labels read string values only: a number
+        (``0.005``, or a tree-sitter ``RawLiteral('.005')``) is never a dotfile
+        or an extension, and ``.``/``..`` are path segments, not either (BACK-2556).
+        """
         if not values:
             return 'OTHER'
 
-        str_values = [str(v) for v in values]
+        str_values = [v for v in values if isinstance(v, str)]
 
         # Directory / skip lists — checked before extensions because dotfile
         # entries (.git, .venv) otherwise look like extensions.
-        if any(v.startswith('.') and len(v) <= 6 for v in str_values[:5]) \
+        if any(_is_dot_name(v, 6) for v in str_values[:5]) \
                 and self._looks_like_directory_list(name, str_values):
             return 'DIRECTORIES'
 
         # File extensions
-        if any(str(v).startswith('.') and len(str(v)) <= 6 for v in values[:5]):
+        if any(_is_dot_name(v, 6) for v in str_values[:5]):
             return 'FILE_EXTENSIONS'
 
         # Tree-sitter node types
