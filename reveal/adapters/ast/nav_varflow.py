@@ -57,6 +57,11 @@ class _DeclShape:
 
     write_field: Optional[str] = None
     read_field: Optional[str] = None
+    # The declared name takes the walk's context instead of WRITE: a defaulted
+    # parameter is bound by the caller like a plain one, so in a function's own
+    # parameter list (walked READ) it is an input, and in a lambda's bound
+    # parameters (walked WRITE) a binding (BACK-2555).
+    name_follows_context: bool = False
     missing_name: Optional[str] = None
     missing_value: Optional[str] = None
     positional: Optional[str] = None
@@ -110,10 +115,14 @@ _DECL_SHAPES: Dict[str, _DeclShape] = {
     'lambda_literal': _DeclShape(positional='_walk_closure'),
     'catch_clause': _DeclShape(positional='_walk_catch'),
     'as_pattern': _DeclShape(write_field='alias'),
-    'default_parameter': _DeclShape(write_field='name', read_field='value'),
-    'typed_default_parameter': _DeclShape(write_field='name', read_field='value'),
-    'assignment_pattern': _DeclShape(write_field='left', read_field='right'),
-    'object_assignment_pattern': _DeclShape(write_field='left', read_field='right'),
+    'default_parameter': _DeclShape(write_field='name', read_field='value',
+                                    name_follows_context=True),
+    'typed_default_parameter': _DeclShape(write_field='name', read_field='value',
+                                          name_follows_context=True),
+    'assignment_pattern': _DeclShape(write_field='left', read_field='right',
+                                     name_follows_context=True),
+    'object_assignment_pattern': _DeclShape(write_field='left', read_field='right',
+                                            name_follows_context=True),
     'for_in_clause': _DeclShape(write_field='left', read_field='right'),
     'range_clause': _DeclShape(write_field='left', read_field='right'),
     'list_comprehension': _DeclShape(positional='_walk_comprehension'),
@@ -395,7 +404,7 @@ class VarFlowWalker:
             # Declaration-with-initializer, table-driven across all covered
             # grammars (BACK-431 Issue C) — see _DECL_SHAPES for per-language
             # field names and fallback strategies.
-            self._walk_decl_shape(n, shape)
+            self._walk_decl_shape(n, shape, c)
         elif ntype == 'declaration' and n.child_by_field_name('declarator') is not None:
             self._walk_c_declaration(n)
         elif ntype in FOR_NODES:
@@ -535,7 +544,7 @@ class VarFlowWalker:
         if index is not None:
             self.walk(index, 'READ')
 
-    def _walk_decl_shape(self, n: Any, shape: _DeclShape) -> None:
+    def _walk_decl_shape(self, n: Any, shape: _DeclShape, c: str = 'READ') -> None:
         """Declaration-with-initializer: declared name is a WRITE, initializer is a READ.
 
         Table-driven per _DECL_SHAPES (BACK-431 Issue C) — one method for
@@ -558,7 +567,7 @@ class VarFlowWalker:
             (_zero_arg(value, 'start_byte'), _zero_arg(value, 'end_byte')) if value else None,
         }
         if name:
-            self.walk(name, 'WRITE')
+            self.walk(name, c if shape.name_follows_context else 'WRITE')
         if value:
             self.walk(value, 'READ')
         for child in _children(n):
