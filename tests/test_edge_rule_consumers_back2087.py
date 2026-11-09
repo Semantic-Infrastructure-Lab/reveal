@@ -242,7 +242,9 @@ def test_architecture_against_states_its_rule(tmp_path):
     assert data['type'] == 'overview_diff'
     late = [d for d in data['deltas']['fan_in'] if d['file'].endswith('late.py')]
     assert [(d['base'], d['head']) for d in late] == [(0, 1)]  # the delta is the lazy edge
-    _assert_rules(data, root)
+    # The comparison is 'overview --against' now; the retired architecture:// spelling notes and
+    # reaches it, and the rule names the live noun (BACK-2554).
+    _assert_rules(data, root, noun='overview://')
 
 
 def test_architecture_against_states_its_rule_in_text(tmp_path):
@@ -256,3 +258,29 @@ def test_architecture_against_states_its_rule_in_text(tmp_path):
     text = _run(f'architecture://{to_posix(root)}?against=HEAD')
     assert 'late.py' in text and 'Fan-in changes' in text
     _assert_rule_lines(text)
+
+
+def test_overview_against_text_names_live_noun_and_new_files(tmp_path):
+    """BACK-2554: the rule line said 'architecture:// takes no &lazy' and a file only the head
+    has printed 'None -> 1'; the McCabe caveat printed once per side."""
+    root = _tree(tmp_path / 'repo', {k: v for k, v in FILES.items() if k != 'tests/test_core.py'})
+    _git(root, 'init', '-q')
+    _git(root, 'add', '.')
+    _git(root, '-c', 'commit.gpgsign=false', '-c', 'user.name=t', '-c', 'user.email=t@example.com',
+         'commit', '-q', '-m', 'base')
+    (root / 'added.py').write_text('import core\nimport late\n\nY = core.X\n', encoding='utf-8')
+    text = _run('overview', to_posix(root), '--against', 'HEAD')
+    assert 'overview:// takes no &lazy' in text
+    assert 'architecture://' not in text
+    assert 'None' not in text
+    added = [line for line in text.splitlines() if 'added.py' in line and ' -> ' in line]
+    assert added and all('new -> ' in line for line in added), added
+    caveats = [line for line in text.splitlines() if 'McCabe' in line]
+    assert len(caveats) <= 1, caveats
+
+
+def test_side_warnings_merge_only_identical_messages():
+    from reveal.rendering.diff import _merge_side_warnings
+    lines = ['  ⚠ base: same caveat', '  ⚠ head: only head', '  ⚠ head: same caveat', 'plain']
+    assert _merge_side_warnings(lines) == [
+        '  ⚠ base and head: same caveat', '  ⚠ head: only head', 'plain']

@@ -384,7 +384,7 @@ def _snapshot(root: Path, top_n: int, *, test_layout: Optional[TestLayout] = Non
         built = import_analysis.analyze(import_analysis.path_scope(root))
         adapter = ImportView(built.analysis, root, ScanRoot(root, 'path'), import_analysis.DEFAULT_FILE_CAP,
                              test_layout=test_layout)
-        with import_analysis.composed_rules('architecture://'):  # BACK-2087
+        with import_analysis.composed_rules('overview://'):  # BACK-2087; 'overview --against' (BACK-2554)
             fan_in_data = adapter.fan_in()
             circular_data = adapter.circular()
             components_data = adapter.components()

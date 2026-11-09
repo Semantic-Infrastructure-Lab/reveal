@@ -484,7 +484,7 @@ def architecture_diff_text(report: Dict[str, Any], *, title: str = 'Architecture
     JSON is the primary contract (design doc: "JSON-first, no verdict") —
     this is a convenience summary for terminal use, not a demand.
     """
-    lines = meta_warning_lines(report)
+    lines = _merge_side_warnings(meta_warning_lines(report))
     if report.get('error'):
         lines.append(str(report['error']))
         for side, components in report['analysis']['snapshots'].items():
@@ -505,14 +505,16 @@ def architecture_diff_text(report: Dict[str, Any], *, title: str = 'Architecture
     if fan_in:
         lines.append(f"Fan-in changes ({len(fan_in)})")
         for e in fan_in:
-            lines.append(f"  {e['file']:<54}  {e['base']} -> {e['head']}  ({_signed(e['change'])})")
+            lines.append(f"  {e['file']:<54}  {_count_cell(e['base'], 'new')} -> "
+                         f"{_count_cell(e['head'], 'removed')}  ({_signed(e['change'])})")
         lines.append('')
 
     fan_out = deltas['fan_out']
     if fan_out:
         lines.append(f"Fan-out changes ({len(fan_out)})")
         for e in fan_out:
-            lines.append(f"  {e['file']:<54}  {e['base']} -> {e['head']}  ({_signed(e['change'])})")
+            lines.append(f"  {e['file']:<54}  {_count_cell(e['base'], 'new')} -> "
+                         f"{_count_cell(e['head'], 'removed')}  ({_signed(e['change'])})")
         lines.append('')
 
     cg = deltas['circular_groups']
@@ -550,6 +552,43 @@ def _diff_entry_point_lines(eps: Dict[str, List[str]]) -> List[str]:
         return []
     return ['\nEntry points', *(f'  + {file}' for file in eps['added']),
             *(f'  - {file}' for file in eps['removed'])]
+
+
+def _count_cell(value: Optional[int], absent: str) -> str:
+    """A fan count, or 'new'/'removed' for a file only one side has (BACK-2554)."""
+    return absent if value is None else str(value)
+
+
+_SIDE_PREFIXES = ('base: ', 'head: ')
+
+
+def _merge_side_warnings(lines: List[str]) -> List[str]:
+    """Print a diagnostic both snapshots raised once, as 'base and head: ...' (BACK-2554).
+
+    The JSON keeps one entry per side (each names its snapshot); only the text
+    collapses an identical message, so a caveat is not printed twice.
+    """
+    marker = '  ⚠ '
+    bodies: Dict[str, set] = {}
+    for line in lines:
+        if line.startswith(marker):
+            text = line[len(marker):]
+            for prefix in _SIDE_PREFIXES:
+                if text.startswith(prefix):
+                    bodies.setdefault(text[len(prefix):], set()).add(prefix)
+    both = {body for body, sides in bodies.items() if len(sides) == len(_SIDE_PREFIXES)}
+    merged: List[str] = []
+    emitted: set = set()
+    for line in lines:
+        text = line[len(marker):] if line.startswith(marker) else None
+        body = next((text[len(p):] for p in _SIDE_PREFIXES if text and text.startswith(p)), None)
+        if body is not None and body in both:
+            if body not in emitted:
+                emitted.add(body)
+                merged.append(f"{marker}base and head: {body}")
+            continue
+        merged.append(line)
+    return merged
 
 
 def _signed(value: Optional[float]) -> str:
