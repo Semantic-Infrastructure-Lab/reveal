@@ -41,6 +41,23 @@ def _assessable(structure: Dict[str, Any]) -> bool:
                for key in structure)
 
 
+def is_empty_code_outline(structure: Dict[str, Any]) -> bool:
+    """A code-shaped structure whose category lists are all empty.
+
+    BACK-2541. An analyzer that returns ``{'functions': [], 'classes': []}`` (a grammar whose
+    node kinds match none of its tables parses cleanly and extracts nothing) rendered as a bare
+    file header at exit 0, while ``{}`` already said "No structure available". Both are the same
+    answer. Only code-shaped structures qualify (every key a listed category, an internal ``_``
+    key or ``meta``, and at least one listed category present): markdown headings, rows and
+    other readers keep their own empty views.
+    """
+    if not structure or not any(key in _LISTED_CATEGORIES for key in structure):
+        return False
+    if not all(key in _LISTED_CATEGORIES or key.startswith('_') or key == 'meta' for key in structure):
+        return False
+    return not any(isinstance(value, list) and value for value in structure.values())
+
+
 def outline_coverage(structure: Dict[str, Any], lines: List[str]) -> Optional[Dict[str, Any]]:
     """Return a coverage record when the outline is partial, else None.
 

@@ -11,7 +11,7 @@ from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import is_minified_content, is_minified_filename, to_posix
 from reveal.utils.results import note_truncation, outcome_of, truncations_of
 
-from .coverage import format_coverage_warning, outline_coverage
+from .coverage import format_coverage_warning, is_empty_code_outline, outline_coverage
 from .element import listed_item_line
 from .metadata import _print_file_header
 from .outline import build_hierarchy, build_heading_hierarchy, render_outline
@@ -726,8 +726,10 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
     """
     _print_file_header(path, is_fallback, fallback_lang)
 
-    if not structure:
+    if not structure or is_empty_code_outline(structure):
         _print_structureless_body(analyzer, path)
+        if structure:
+            _print_coverage_warning(analyzer, structure)
         return
 
     hierarchy = _build_outline_hierarchy(structure)
@@ -772,9 +774,11 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
         return
 
     # Handle empty structure
-    if not structure:
+    if not structure or is_empty_code_outline(structure):
         _print_file_header(path, is_fallback, fallback_lang)
         _print_structureless_body(analyzer, path, no_raw_fallback)
+        if structure:
+            _print_coverage_warning(analyzer, structure)
         return
 
     # Text output: show header, categories, and navigation hints
