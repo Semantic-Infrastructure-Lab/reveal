@@ -160,7 +160,7 @@ def test_range_past_every_item_exits_2_and_names_the_line_spelling(tmp_path):
     doc.write_text('# A\n\ntext\n\n## B\n\nmore\n\n## C\n', encoding='utf-8')
     run = _run_reveal_direct(doc, '--range', '40-60')
     assert run.returncode == 2
-    assert '3 headings' in run.stderr and ':40-60' in run.stderr
+    assert '3 headings' in run.stderr and ':40-60' in run.stderr and run.stderr.startswith('error: ')
     assert run.stdout.strip() == ''
 
 

@@ -604,9 +604,8 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
                 'file': to_posix(file_path),  # '/' on every OS (BACK-1586)
                 'caller': elem.get('name', ''),
                 'line': elem.get('line', 0),
+                **_shadow_field(elem),
             }
-            if elem.get('shadows'):
-                record_base['shadows'] = tuple(elem['shadows'])  # BACK-2580
             for callee in elem.get('calls', []):
                 record = {**record_base, 'call_expr': callee}
                 refs = [r for r in elem.get('references', []) if r['callee'] == callee]
@@ -649,6 +648,11 @@ def bound_view(index: CallersIndex) -> Dict[str, List[Dict[str, Any]]]:
                 moved.add((target, id(record)))
             view.setdefault(target, []).append(record)
     return view
+
+
+def _shadow_field(elem: Dict[str, Any]) -> Dict[str, Tuple[str, ...]]:
+    """A callers record's ``shadows``: the call qualifiers its caller declares itself (BACK-2580)."""
+    return {'shadows': tuple(elem['shadows'])} if elem.get('shadows') else {}
 
 
 def _bound_key(key: str, record: Dict[str, Any], files: FrozenSet[str], bindings: Any,

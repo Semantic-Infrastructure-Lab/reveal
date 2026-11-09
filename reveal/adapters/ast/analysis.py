@@ -5,7 +5,7 @@ import builtins
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Sequence, Tuple, cast
+from typing import Dict, List, Any, Optional, Sequence, Set, Tuple, cast
 
 from ...complexity import fallback_complexity
 from ...reveal_types import StructureItem, WarningEntry, PathFailure
@@ -377,44 +377,59 @@ _SELF_QUALIFIERS = frozenset({'self', 'this', 'cls', 'super', 'Self'})
 _PARAMETER_LIST_KINDS = frozenset({'parameters', 'lambda_parameters', 'formal_parameters', 'parameter_list'})
 
 
-def shadowed_qualifiers(file_path: str, analyzer, elements: Sequence[Dict[str, Any]]) -> Dict[str, List[str]]:
-    """Per element (keyed by its line), the call qualifiers it declares itself: a parameter or local
-    variable ``src`` makes ``src.MapType()`` a method call on that value, whatever an import of ``src`` binds
-    (BACK-2580: Go ``func f(src *types.Type)`` beside ``import "cmd/internal/src"``, Rust ``let iter`` beside
-    ``use std::iter``). A declaration is a name leaf calls' reference scan classifies as binding
-    (``references._binding_kind``), anywhere in the element's lines."""
-    from ...registry import language_for_extension
-    from ...core import get_tree, _zero_arg, iter_tree
-    from ..calls.references import _binding_kind, _is_name_leaf
+def _qualified_spans(elements: Sequence[Dict[str, Any]]) -> List[Tuple[int, int, Set[str]]]:
+    """(first line, last line, call qualifiers) per element whose calls go through a qualifier."""
     spans = []
     for elem in elements:
-        calls = elem.get('calls') or []
-        qualifiers = {c.split('.', 1)[0] for c in calls if isinstance(c, str) and '.' in c} - _SELF_QUALIFIERS
+        qualifiers = {c.split('.', 1)[0] for c in elem.get('calls') or [] if isinstance(c, str) and '.' in c}
         start, count = elem.get('line'), elem.get('line_count')
-        if qualifiers and isinstance(start, int) and isinstance(count, int) and count > 0:
-            spans.append((start, start + count - 1, qualifiers))
-    if not spans:
-        return {}
-    language = language_for_extension(Path(file_path).suffix)
-    if language is None:
-        return {}
-    wanted = set().union(*(q for _, _, q in spans))
-    tree = getattr(analyzer, 'tree', None) or get_tree(language, analyzer.content, filename=file_path)
-    content = analyzer.content.encode('utf-8')
-    declared: List[Tuple[int, str]] = []
-    for node in iter_tree(_zero_arg(tree, 'root_node')):
+        if qualifiers - _SELF_QUALIFIERS and isinstance(start, int) and isinstance(count, int) and count > 0:
+            spans.append((start, start + count - 1, qualifiers - _SELF_QUALIFIERS))
+    return spans
+
+
+def _declared_names(root: Any, content: bytes, wanted: Set[str]) -> List[Tuple[int, str]]:
+    """(line, name) for every name leaf in ``wanted`` that declares the name: a parameter or a variable."""
+    from ...core import _zero_arg, iter_tree
+    from ..calls.references import _binding_kind, _is_name_leaf
+    declared = []
+    for node in iter_tree(root):
         if not _is_name_leaf(_zero_arg(node, 'kind')):
             continue
         name = content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8', errors='replace')
         if name in wanted and (_binding_kind(node) is not None or _zero_arg(
                 _zero_arg(node, 'parent'), 'kind') in _PARAMETER_LIST_KINDS):
             declared.append((_zero_arg(node, 'start_position').row + 1, name))
+    return declared
+
+
+def shadowed_qualifiers(file_path: str, analyzer, elements: Sequence[Dict[str, Any]]) -> Dict[str, List[str]]:
+    """Per element (keyed by its line), the call qualifiers it declares itself: a parameter or local
+    variable ``src`` makes ``src.MapType()`` a method call on that value, whatever an import of ``src`` binds
+    (BACK-2580: Go ``func f(src *types.Type)`` beside ``import "cmd/internal/src"``, Rust ``let iter`` beside
+    ``use std::iter``). A declaration is a name leaf calls' reference scan classifies as binding
+    (``references._binding_kind``), or a bare name in a parameter list, anywhere in the element's lines."""
+    from ...registry import language_for_extension
+    from ...core import get_tree, _zero_arg
+    spans = _qualified_spans(elements)
+    language = language_for_extension(Path(file_path).suffix) if spans else None
+    if language is None:
+        return {}
+    tree = getattr(analyzer, 'tree', None) or get_tree(language, analyzer.content, filename=file_path)
+    declared = _declared_names(_zero_arg(tree, 'root_node'), analyzer.content.encode('utf-8'),
+                               set().union(*(q for _, _, q in spans)))
     shadows: Dict[str, List[str]] = {}
     for start, end, qualifiers in spans:
         names = sorted({name for line, name in declared if start <= line <= end and name in qualifiers})
         if names:
             shadows[str(start)] = names
     return shadows
+
+
+def _with_shadows(elem: Dict[str, Any], shadowed: Dict[str, List[str]]) -> Dict[str, Any]:
+    """The element plus the call qualifiers it declares itself, when it has any (BACK-2580)."""
+    names = shadowed.get(str(elem.get('line')))
+    return {**elem, 'shadows': names} if names else elem
 
 
 def _class_field_sources(file_struct: Dict[str, Any]):
@@ -428,10 +443,9 @@ def _class_field_sources(file_struct: Dict[str, Any]):
 def call_sources(file_struct: Dict[str, Any]):
     """Call/reference projection shared by callers, callees and trace."""
     refs = file_struct.get('jsx_references', [])
-    shadowed = file_struct.get('shadowed_qualifiers') or {}
+    shadowed = file_struct.get('shadowed_qualifiers', {})
     for elem in file_struct.get('elements', []):
-        if shadowed.get(str(elem.get('line'))):
-            elem = {**elem, 'shadows': shadowed[str(elem.get('line'))]}  # BACK-2580
+        elem = _with_shadows(elem, shadowed)
         references = [r for r in refs if r['owner'] == elem.get('name') and r['owner_line'] == elem.get('line')]
         if references:
             yield {**elem, 'calls': list(dict.fromkeys([*elem.get('calls', []), *(r['callee'] for r in references)])),

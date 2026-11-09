@@ -580,8 +580,8 @@ def _merge_side_warnings(lines: List[str]) -> List[str]:
     merged: List[str] = []
     emitted: set = set()
     for line in lines:
-        text = line[len(marker):] if line.startswith(marker) else None
-        body = next((text[len(p):] for p in _SIDE_PREFIXES if text and text.startswith(p)), None)
+        shown: Optional[str] = line[len(marker):] if line.startswith(marker) else None
+        body = next((shown[len(p):] for p in _SIDE_PREFIXES if shown and shown.startswith(p)), None)
         if body is not None and body in both:
             if body not in emitted:
                 emitted.add(body)
