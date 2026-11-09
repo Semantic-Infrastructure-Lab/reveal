@@ -78,10 +78,10 @@ Two problems shape the current work.
 
 **Next, in priority order**
 
-1. **The first screen teaches only current names.** The README, `--agent-help` and
-   `help://quick` teach only spellings that are not retiring (a ratchet reads the retired-names
-   table and fails the build if one comes back); `--adapters` marks retired schemes from the
-   same table.
+1. **Close the gaps that let a wrong answer through.** Run the calls recall check before a
+   push that changes call resolution (BACK-2586); gate imports on a multi-package Python
+   repository (BACK-2575); make a damaged file exit like its URI spelling (BACK-2588); keep
+   summaries computed over the whole scan, not the shown page (BACK-2592).
 2. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
    through `imports`; finish per-language parity before the old names stop working (BACK-2079, BACK-2063);
    the public-path recall gate and the oracle-free graph invariants run in CI and stay green
@@ -98,8 +98,8 @@ Two problems shape the current work.
    own adapter" guide with one contract test every adapter passes (BACK-2162, BACK-2165).
    Help discovery folds into `help://` (BACK-1055).
 6. **Measure what is still judgment.** Decide per heuristic output whether to measure,
-   narrow or retire it (BACK-2353); precision oracles for the element flags from
-   independent tools (BACK-2203); rule precision beyond Python (BACK-1095); more languages
+   narrow or retire it (BACK-2353), starting with the file hotspot score (BACK-2593);
+   precision oracles for the element flags from independent tools (BACK-2203); rule precision beyond Python (BACK-1095); more languages
    in the recall gate (BACK-2079); a language scorecard generated from data (BACK-1900).
 7. **Docs that cannot drift.** Every example in the README, the agent guide, the guides and
    `help://examples` now runs in CI; the ones that need a live host still skip until recorded
