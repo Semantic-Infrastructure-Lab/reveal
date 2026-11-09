@@ -13,7 +13,6 @@ from ...utils.formatting import shell_command
 
 if TYPE_CHECKING:
     from ..invocation import Retirement
-    from argparse import Namespace
 
 
 def _normalize_patterns(patterns) -> list:

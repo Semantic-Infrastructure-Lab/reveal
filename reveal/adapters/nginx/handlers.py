@@ -19,7 +19,7 @@ from typing import List, Optional, TYPE_CHECKING
 from reveal.utils.lines import split_lines
 
 if TYPE_CHECKING:
-    from argparse import Namespace
+    pass
 
 # What the cert loaders/checkers can still raise: load_certificate_from_file
 # documents FileNotFoundError (OSError) and ValueError; check_ssl_health turns

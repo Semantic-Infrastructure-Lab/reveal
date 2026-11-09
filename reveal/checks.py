@@ -633,7 +633,7 @@ def collect_schema_detections(analyzer: FileAnalyzer, path: str, schema: dict,
     this call and is cleared even if structure extraction or a rule fails.
     """
     from .rules.frontmatter import set_validation_context, clear_validation_context
-    from .rules import CoverageTally, RuleRegistry
+    from .rules import RuleRegistry
 
     structure = analyzer.get_structure(extract_frontmatter=True)
     errors: List[dict] = []

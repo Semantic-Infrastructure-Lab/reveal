@@ -390,7 +390,6 @@ with a note naming `--callers` and `--callees NAME --depth N` ([retired spelling
 reveal calls [PATH] --callers NAME [--depth N]
 reveal calls [PATH] --callees NAME|FILE:NAME [--depth N] [--detail] [--builtins]
 reveal calls [PATH] --rank callers [--top N] [--builtins] [--test-framework]
-reveal calls [PATH] --modules [--external]
 ```
 
 ### CLI Flags
@@ -690,7 +689,7 @@ load-time edges only; the text prints that rule under the Health line (`Rule:`, 
 ### Usage
 
 ```
-reveal deps [PATH] [--top N] [--no-unused] [--no-circular]
+reveal deps [PATH] [--top N] [--no-unused] [--no-circular]   # retired: reveal imports PATH --external | --circular | --unused
 ```
 
 ### CLI Flags

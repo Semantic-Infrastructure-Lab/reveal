@@ -10,7 +10,7 @@ from reveal.utils.warning_render import meta_warning_lines
 _REQUIRED_LOSS_TYPES = frozenset({'analysis_failed', 'analysis_incomplete'})
 # Printed above every view: what the answer lost, what no measurement covers (W-CALLS-9/10) and what the
 # function-value rule left out (BACK-2229).
-_ALWAYS_SHOWN = _REQUIRED_LOSS_TYPES | {'not_measured', 'function_values_dropped'}
+_ALWAYS_SHOWN = _REQUIRED_LOSS_TYPES | {'not_measured', 'function_values_dropped', 'analysis_capped'}
 
 
 def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -108,6 +108,15 @@ def _print_absent_detail(data: Dict[str, Any]) -> None:
     _print_caveats(data)
 
 
+def _print_definitions(data: Dict[str, Any]) -> None:
+    """``Defined in: 2 places (a.py:1, b.py:2); ...``: present only when the queried name has several (BACK-2479)."""
+    definitions = data.get('definitions') or []
+    if definitions:
+        places = ', '.join(f"{d['file']}:{d['line']}" for d in definitions)
+        print(f"Defined in: {len(definitions)} places ({places}); callers are matched by name, "
+              f"so these merge the callers of every one of them")
+
+
 def _render_text(data: Dict[str, Any]) -> None:
     if 'error' in data and 'target' not in data:  # the router reports the error (BACK-1059)
         if 'example' in data:
@@ -130,6 +139,7 @@ def _render_text(data: Dict[str, Any]) -> None:
     if depth > 1:
         print(f"Depth:      {depth}")
     print(f"Total:      {total}")
+    _print_definitions(data)
     _print_rule(data)
     print()
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from functools import partial
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
-from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, WarningEntry
+from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .surface import _supported_coverage_languages, _unparsed_note

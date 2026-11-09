@@ -219,6 +219,7 @@ class RustExtractor(LanguageExtractor):
             use std::{fs, io};                    # scoped_use_list
             use std::io::Result as IoResult;     # use_as_clause
             use std::collections::*;              # use_wildcard
+            use serde;  pub use reqwest;          # identifier: a crate (or item) named bare (BACK-2562)
         """
         line_number = _zero_arg(node, 'start_position').row + 1
 
@@ -252,6 +253,14 @@ class RustExtractor(LanguageExtractor):
             elif _zero_arg(child, 'kind') == 'use_as_clause':
                 # Aliased use: use std::io::Result as IoResult
                 return self._parse_use_as_clause(child, file_path, line_number, analyzer, is_reexport)
+
+            elif _zero_arg(child, 'kind') == 'identifier':
+                # One segment: use serde;  pub use reqwest_eventsource;
+                use_path = analyzer._get_node_text(child)
+                return [self._create_import(
+                    file_path, line_number, use_path, skip_unused=is_reexport,
+                    source_line=_line_text(analyzer, line_number),
+                )]
 
             elif _zero_arg(child, 'kind') == 'use_wildcard':
                 # Glob use: use std::collections::*
@@ -377,9 +386,11 @@ class RustExtractor(LanguageExtractor):
         for child in _children(node):
             if _zero_arg(child, 'kind') == 'scoped_identifier':
                 use_path = analyzer._get_node_text(child)
-            elif (_zero_arg(child, 'kind') == 'identifier' and
-                    analyzer._get_node_text(_prev_sibling(child) or child) == 'as'):
-                alias = analyzer._get_node_text(child)
+            elif _zero_arg(child, 'kind') == 'identifier':
+                if analyzer._get_node_text(_prev_sibling(child) or child) == 'as':
+                    alias = analyzer._get_node_text(child)
+                elif use_path is None:  # `use serde as s;`: the bare crate before `as` (BACK-2562)
+                    use_path = analyzer._get_node_text(child)
 
         if not use_path:
             return []

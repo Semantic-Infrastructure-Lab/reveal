@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Dict
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from argparse import Namespace
+    pass
 
 
 def _collect_decorator_counts(structure: dict) -> Dict[str, int]:

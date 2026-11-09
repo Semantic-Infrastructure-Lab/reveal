@@ -16,37 +16,33 @@ import difflib
 import os
 import sys
 from pathlib import Path
-from typing import Callable, Dict, Any, List, Optional, Sequence, Tuple, cast
-from reveal.reveal_types import CONTRACT_VERSION, PathFailure, WarningEntry
+from typing import Callable, Dict, Any, List, Optional, Tuple, cast
+from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
-from ..core import disk_cache
 from ..utils.formatting import cwd_path
 from ..utils import print_json_result
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.types import (
-    LAZY_EXCLUDE, LAZY_INCLUDE, LAZY_MODES, ImportAnalysis, ImportExtraction,
+    LAZY_EXCLUDE, LAZY_INCLUDE, LAZY_MODES, ImportAnalysis,
 )
 from ..analyzers.imports.classify import classify_import, local_package_names, package_table
 from ..analyzers.imports.unused import describe_unused
-from ..conventions import conventions_for_path, family_for_path, same_package_families
+from ..conventions import family_for_path
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, peek_query_items
 from ..errors import RequestValidationError
 from ..utils.query_binding import boolean_value
-from ..analyzers.imports.views import (
-    ImportView, _unused_not_checked, detect_autoload_regime, _component_cohesion,
-    _cohesion_fields, _cohesion_declined, COHESION_DECLINED_RULE, COHESION_DECLINED_REASON,
-)
+from ..analyzers.imports.views import ImportView, _unused_not_checked  # noqa: F401 -- checks.py imports _unused_not_checked from here (BACK-2255)
 from ..analyzers.imports import diagnostics as import_diagnostics
-from ..analyzers.imports.diagnostics import worker_lost_warning, parse_failure_warning, file_loss_warnings
+from ..analyzers.imports.diagnostics import file_loss_warnings
 from ..analyzers.imports import service as import_analysis
-from ..analyzers.imports.build_cache import (
-    _ADAPTER_IMPORT_GRAPH_NAMESPACE, _candidate_set_fingerprint, _graph_cache_key, _GRAPH_MEMO,
+from ..analyzers.imports.build_cache import (  # noqa: F401 -- tests import both from here (BACK-2255)
+    _ADAPTER_IMPORT_GRAPH_NAMESPACE, _candidate_set_fingerprint,
 )
-from ..analyzers.imports.extraction import (
+from ..analyzers.imports.extraction import (  # noqa: F401 -- tests import these aliases from here (BACK-2255)
     extract_one_file as _extract_one_file, lost_extraction as _lost_extraction,
 )
 from ..analyzers.imports import resolution
@@ -1218,7 +1214,7 @@ class ImportsRenderer:
             print("  No imports found")
 
 
-from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages  # noqa: E402
+from ..analyzers.imports.base import get_all_extensions, get_supported_languages  # noqa: E402
 
 
 # ── BACK-489 P1: parallel per-file extraction ───────────────────────────────

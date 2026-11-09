@@ -37,6 +37,10 @@ class CallResolver:
         self._alias_maps: Dict[str, Dict[str, str]] = {}
         self._families: Dict[str, str] = {}
 
+    def capped_note(self) -> Optional[str]:
+        """See ``ProjectBindings.capped_note``: set once a resolution has read the import analysis."""
+        return self._bindings.capped_note()
+
     def resolve(self, call: str, caller_file: str, shadows: Tuple[str, ...] = ()) -> Tuple[str, Any]:
         """(bare name, target): target is one definition, a list of candidate
         definitions when the name stays ambiguous, or None when it reaches no project definition.

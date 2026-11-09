@@ -546,10 +546,10 @@
     "sha": "17758dce3fcc21d8e2415176c29d1106e905de00",
     "targets": 346,
     "oracle_edges": 2268,
-    "hit_edges": 2225,
+    "hit_edges": 2226,
     "extra_edges": 26,
-    "recall": 0.9810405643738977,
-    "precision": 0.9884495779653487,
+    "recall": 0.9814814814814815,
+    "precision": 0.9884547069271759,
     "coverage": {
       "files": 702,
       "unscored_importers": 26,
@@ -731,8 +731,7 @@
       {
         "target": "external-crates/reqwest-eventsource/src/lib.rs",
         "missed": [
-          "crates/meilisearch/src/routes/chats/errors.rs",
-          "external-crates/async-openai/src/lib.rs"
+          "crates/meilisearch/src/routes/chats/errors.rs"
         ],
         "extra": []
       }
@@ -742,8 +741,8 @@
       "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
       "oracle_targets": 346,
       "observed_targets": 342,
-      "observed_pairs": 2251,
-      "scored_pairs": 2251,
+      "observed_pairs": 2252,
+      "scored_pairs": 2252,
       "unscored_targets": 0,
       "unscored_pairs": 0,
       "unscored_target_paths": [],

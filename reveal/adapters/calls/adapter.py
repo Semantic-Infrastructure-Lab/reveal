@@ -264,6 +264,7 @@ _SCHEMA: Dict[str, Any] = {
                     'target':        {'type': 'string'},
                     'depth':         {'type': 'integer'},
                     'total_callers': {'type': 'integer'},
+                    'definitions':   {'type': 'array', 'description': 'file/line of each definition, present only when the name has several (callers are matched by name)'},
                     'levels': {
                         'type': 'array',
                         'items': {
@@ -786,10 +787,13 @@ class CallsAdapter(ResourceAdapter):
             # Query-string format= (dot/json) applies whatever the CLI --format flag says.
             data['_query_format'] = query_format
         dropped = data.pop('function_values_dropped', None)
+        analysis_capped = data.pop('import_analysis_capped', None)
         meta = _call_graph_meta(self.path, uncalled=uncalled, unmeasured_walk=unmeasured_walk,
                                 skipped=data.pop('analysis_skipped', ()),
                                 traversal_failures=data.pop('analysis_traversal_failures', ()),
                                 census=census, dropped=dropped)
+        if analysis_capped:  # not a loss of evidence: what the answer's resolution did not cover (BACK-2570)
+            meta['warnings'].append({'type': 'analysis_capped', 'code': 'W-CALLS-13', 'message': analysis_capped})
         if rule is not None:
             declined: List[str] = next((w['languages'] for w in meta['warnings'] if w.get('code') == 'W-CALLS-10'), [])
             data['walk_rule'] = rule(declined)
@@ -960,8 +964,9 @@ def _walk_view(walk: CalleeWalk, detail: bool) -> Dict[str, Any]:
             entry.update(params=node.params, effects=node.effects)
         definitions.append(entry)
         queue.extend(child for _edge, child in node.edges if child is not None)
+    capped = {'import_analysis_capped': view['import_analysis_capped']} if view.get('import_analysis_capped') else {}
     return {'depth': walk.depth, 'levels': view['levels'], 'definitions': definitions,
-            **{key: view[key] for key in _WALK_TOTALS}}
+            **{key: view[key] for key in _WALK_TOTALS}, **capped}
 
 
 def _callers_rule(name: str, depth: int, declined: List[str]) -> Dict[str, Any]:

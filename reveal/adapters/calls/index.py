@@ -446,12 +446,16 @@ class CallersIndex(Dict[str, List[Dict[str, Any]]]):
     defined: FrozenSet[str] = frozenset()
     # Each of those keys -> the files defining it (BACK-2567): what bound_view asks a binding about.
     definitions: Optional[Dict[str, FrozenSet[str]]] = None
+    # Only the keys defined at more than one site -> every ``(file, line)`` (BACK-2479): what ``?callers=``
+    # names when its callers merge the callers of several definitions. Kept for those keys alone.
+    multiple_definitions: Optional[Dict[str, List[Tuple[str, int]]]] = None
     directory: str = ''
 
 
 def _disclose_skipped(result: Dict[str, Any], skipped: Sequence[Tuple[str, str]], *,
                       traversal_failures: Sequence[PathFailure] = (),
-                      dropped: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                      dropped: Optional[Dict[str, Any]] = None,
+                      analysis_capped: Optional[str] = None) -> Dict[str, Any]:
     """Carry file and directory loss separately for adapter metadata construction, and the function values
     the JS rule left out (``dropped``, BACK-2229: not a loss, a statement of scope).
 
@@ -459,6 +463,8 @@ def _disclose_skipped(result: Dict[str, Any], skipped: Sequence[Tuple[str, str]]
     """
     if dropped:
         result['function_values_dropped'] = dropped
+    if analysis_capped:
+        result['import_analysis_capped'] = analysis_capped
     if skipped:
         result['analysis_skipped'] = [list(item) for item in skipped]
     if traversal_failures:
@@ -575,15 +581,10 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
     index.skipped = list(structures.skipped)
     index.dropped = dropped_values_summary(structures)
     index.traversal_failures = list(getattr(structures, 'traversal_failures', ()))
-    defined: Set[str] = set()
-    definitions: Dict[str, Set[str]] = {}
+    defined, definitions, sites = _definition_tables(structures)
 
     for file_struct in structures:
         file_path = file_struct.get('file', '')
-        keys = set(_defined_keys(file_struct))
-        defined.update(keys)
-        for key in keys:
-            definitions.setdefault(key, set()).add(to_posix(file_path))
         # Build alias → canonical name map for this file so that calls using
         # an import alias (e.g. `h` for `from utils import helper as h`) also
         # index the definition name (`helper`).  This prevents find_uncalled
@@ -617,21 +618,21 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
                 record.update(_scope_record_fields(elem, callee))
                 _index_callee(index, callee, record, alias_map, class_aliases)
 
-    index.defined = frozenset(defined)
-    index.definitions = {key: frozenset(files) for key, files in definitions.items()}
+    _attach_definitions(index, defined, definitions, sites)
     index.directory = dir_str
     _cache_callers_index(dir_str, cache_key, index, structures)
     return index
 
 
-def bound_view(index: CallersIndex) -> Dict[str, List[Dict[str, Any]]]:
+def bound_view(index: CallersIndex, notes: Optional[List[str]] = None) -> Dict[str, List[Dict[str, Any]]]:
     """The callers index as a query reads it (BACK-2567). The index keys a call by its bare name, so
     ``ts.createProgram`` read as a caller of the project's ``createProgram``; a call bound only by
     imports that reach none of the files defining that name (``bindings.reaches``, the rule callee
     resolution applies) is no caller of it. A qualified one stays under its own text
     (``ts.createProgram``); a bare one moves under its import's spelling (``os.path.join`` for
     ``from os.path import join``), or stays when the imports disagree on it. Import facts depend on
-    files outside the indexed directory, so they are applied per query, never stored in the index."""
+    files outside the indexed directory, so they are applied per query, never stored in the index.
+    ``notes`` collects what a reader of the view must be told (the import analysis stopped at its file cap)."""
     from ...analyzers.imports.bindings import ProjectBindings, reaches
     definitions = getattr(index, 'definitions', None) or {}
     directory = getattr(index, 'directory', '')
@@ -647,6 +648,9 @@ def bound_view(index: CallersIndex) -> Dict[str, List[Dict[str, Any]]]:
             if target != key:
                 moved.add((target, id(record)))
             view.setdefault(target, []).append(record)
+    capped = bindings.capped_note() if bindings is not None else None
+    if notes is not None and capped:
+        notes.append(capped)
     return view
 
 
@@ -678,18 +682,41 @@ def _bound_key(key: str, record: Dict[str, Any], files: FrozenSet[str], bindings
     return binding.origin if binding is not None and binding.origin else key
 
 
-def _defined_keys(file_struct: Dict[str, Any]) -> Iterator[str]:
-    """Index keys a call to something this file defines is recorded under: every named call
-    source (function, method, test block, callable class field) and every class, by the same
-    lookup keys a definition search uses plus the bare segment the index keys calls by."""
-    names = [elem.get('name', '') for elem in call_sources(file_struct)
+def _definition_tables(structures: StructureList) -> Tuple[Set[str], Dict[str, Set[str]], Dict[str, Set[Tuple[str, int]]]]:
+    """Every defined index key, each key's defining files, and each key's ``(file, line)`` sites."""
+    defined: Set[str] = set()
+    definitions: Dict[str, Set[str]] = {}
+    sites: Dict[str, Set[Tuple[str, int]]] = {}
+    for file_struct in structures:
+        posix_path = to_posix(file_struct.get('file', ''))
+        for key, line in _defined_sites(file_struct):
+            defined.add(key)
+            definitions.setdefault(key, set()).add(posix_path)
+            sites.setdefault(key, set()).add((posix_path, line))
+    return defined, definitions, sites
+
+
+def _attach_definitions(index: CallersIndex, defined: Set[str], definitions: Dict[str, Set[str]],
+                        sites: Dict[str, Set[Tuple[str, int]]]) -> None:
+    """Freeze the definition tables onto the index; sites are kept only for keys defined more than once."""
+    index.defined = frozenset(defined)
+    index.definitions = {key: frozenset(files) for key, files in definitions.items()}
+    index.multiple_definitions = {key: sorted(found) for key, found in sites.items() if len(found) > 1}
+
+
+def _defined_sites(file_struct: Dict[str, Any]) -> Iterator[Tuple[str, int]]:
+    """``(index key, line)`` for every definition this file holds: every named call source (function,
+    method, test block, callable class field) and every class, under the same lookup keys a definition
+    search uses plus the bare segment the index keys calls by."""
+    named = [(elem.get('name', ''), elem.get('line', 0)) for elem in call_sources(file_struct)
              if elem.get('category') in _CALL_SOURCE_CATEGORIES and elem.get('category') != 'modules'
              and elem.get('callable', True) is not False]  # a field holding an object (BACK-2581)
-    names += [elem.get('name', '') for elem in file_struct.get('elements', []) if elem.get('category') == 'classes']
-    for name in names:
+    named += [(elem.get('name', ''), elem.get('line', 0)) for elem in file_struct.get('elements', [])
+              if elem.get('category') == 'classes']
+    for name, line in named:
         if name:
-            yield from lookup_keys(name)
-            yield _bare_callee_name(name)
+            for key in (*lookup_keys(name), _bare_callee_name(name)):
+                yield key, line
 
 
 def find_callees(
@@ -1107,6 +1134,7 @@ class CalleeWalk:
     skipped: List[Tuple[str, str]]
     traversal_failures: List[PathFailure]
     dropped: Optional[Dict[str, Any]] = None
+    analysis_capped: Optional[str] = None
 
 
 def _callee_node(record: Dict[str, Any], name: str, level: int, depth: int) -> CalleeNode:
@@ -1201,7 +1229,7 @@ def walk_callees(path: str, root: str, depth: int = 2, include_builtins: bool = 
             break
     return CalleeWalk(root=root, root_name=root_name, depth=depth, roots=roots, levels=levels,
                       skipped=list(source.skipped), traversal_failures=list(source.traversal_failures),
-                      dropped=source.dropped)
+                      dropped=source.dropped, analysis_capped=resolver.capped_note())
 
 
 def callee_levels(walk: CalleeWalk) -> Dict[str, Any]:
@@ -1219,7 +1247,15 @@ def callee_levels(walk: CalleeWalk) -> Dict[str, Any]:
         'total_unresolved': len(edges) - resolved,
         'total_edges': len(edges),
         'total_ambiguous': sum(1 for edge in edges if edge.get('ambiguous')),
-    }, walk.skipped, traversal_failures=walk.traversal_failures, dropped=walk.dropped)
+    }, walk.skipped, traversal_failures=walk.traversal_failures, dropped=walk.dropped,
+        analysis_capped=walk.analysis_capped)
+
+
+def _definitions_note(index: CallersIndex, target: str) -> Dict[str, Any]:
+    """Callers match by name, so a name defined in several places merges their callers; name the
+    definitions then (BACK-2479). Nothing for one definition, or a library name with none."""
+    multiple = (getattr(index, 'multiple_definitions', None) or {}).get(target)
+    return {'definitions': [{'file': file, 'line': line} for file, line in multiple]} if multiple else {}
 
 
 def find_callers(
@@ -1240,7 +1276,8 @@ def find_callers(
         at each level).
     """
     index = build_callers_index(path)
-    view = bound_view(index)
+    notes: List[str] = []
+    view = bound_view(index, notes)
 
     # BFS up to *depth* levels
     visited_callers: Set[Tuple[str, str]] = set()
@@ -1265,8 +1302,9 @@ def find_callers(
         'total_callers': total,
         'levels': levels,
     }
+    result.update(_definitions_note(index, target))
     _disclose_skipped(result, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()),
-                      dropped=getattr(index, 'dropped', None))
+                      dropped=getattr(index, 'dropped', None), analysis_capped=notes[0] if notes else None)
 
     if total == 0:
         parent = str(Path(path).parent)
@@ -1920,7 +1958,8 @@ def rank_by_callers(
 
     entries = []
     undefined = 0
-    for callee_name, caller_records in bound_view(index).items():
+    notes: List[str] = []
+    for callee_name, caller_records in bound_view(index, notes).items():
         if not include_builtins and callee_name not in index.defined:
             undefined += 1
             continue
@@ -1941,7 +1980,8 @@ def rank_by_callers(
         'undefined_callees': undefined,
         'rule': _RANK_RULE_ALL if include_builtins else _RANK_RULE,
         'entries': entries[:shown],
-    }, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()), dropped=getattr(index, 'dropped', None))
+    }, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()), dropped=getattr(index, 'dropped', None),
+        analysis_capped=notes[0] if notes else None)
 
 
 def _posix_absolute(path: str) -> bool:

@@ -12,7 +12,6 @@ from ...reveal_types import StructureItem, WarningEntry, PathFailure
 from ...utils.path_utils import (
     _walk_code_files,
     to_posix,
-    to_relative_display,
     traversal_failed_warning as traversal_failed_warning,
     failure_of,
     analysis_skipped_warning as analysis_skipped_warning,

@@ -201,6 +201,13 @@ class ProjectBindings:
         self._extractions: Optional[Dict[str, Any]] = None
         self._bound_names: Dict[str, FrozenSet[str]] = {}
         self._scope_root: Optional[str] = None
+        self._capped_note: Optional[str] = None
+
+    def capped_note(self) -> Optional[str]:
+        """A sentence when the analysis these lookups read stopped at the scan's file cap, else None
+        (also None until a lookup has built the analysis: a query that never needed it read nothing
+        capped). Files past the cap have no bindings, so their calls resolve by bare name (BACK-2570)."""
+        return self._capped_note
 
     def get(self, file_path: str, name: str) -> Optional[Binding]:
         """What ``name`` is bound to in ``file_path``: None unless one of the file's own imports binds
@@ -228,9 +235,18 @@ class ProjectBindings:
             self._extractions = {}
             if self._target is not None:
                 from . import service
-                analysis = service.analyze(service.project_scope(self._target)).analysis
+                scope = service.project_scope(self._target)
+                analysis = service.analyze(scope).analysis
                 self._extractions = {_absolute(path): extraction
                                      for path, extraction in analysis.extractions.items()}
+                record = analysis.resolution
+                if record is not None and record.capped:
+                    accounting = record.scan_accounting
+                    read = f"{accounting.returned} of {accounting.total} source files" if accounting and accounting.exact \
+                        else f"the first {scope.cap} source files"
+                    self._capped_note = (f"the import analysis behind call resolution read {read} (the scan cap is "
+                                         f"{scope.cap}); calls from the other files are matched by bare name, not "
+                                         "by what their imports bind")
         return self._extractions
 
     def of(self, file_path: str) -> Dict[str, Binding]:

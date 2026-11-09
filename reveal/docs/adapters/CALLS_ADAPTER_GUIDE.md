@@ -374,6 +374,10 @@ Rule: callers whose body calls validate_item by bare name or import alias, excep
   src/worker/jobs.py:17    run_job  (calls self.validate_item)
 ```
 
+Callers match by name, so a name defined in more than one place merges the callers of every definition. When
+there are several, the answer names them under `Defined in:` (JSON `definitions`, `{file, line}` each) and says the
+callers are matched by name; a single definition, or a library name with none, adds nothing.
+
 > File paths are printed under the path you queried (relative if you passed a relative path, absolute if absolute) — never just the basename, so `auth/handlers.py` and `utils/handlers.py` are never confused.
 
 Every callers and callees answer states its rule: `walk_rule` in JSON (`direction`, `depth`,
@@ -463,6 +467,9 @@ A scope whose census counts no source file (an empty directory, only non-code fi
 hidden by `.gitignore`) has nothing to weight: no `confidence`, and W-CALLS-12 says so. A census that could not
 be taken (an error outside directory enumeration) withholds it the same way, and W-CALLS-12 then names the
 error (`could not be taken (PermissionError: ...)`), not an empty scope.
+W-CALLS-13 says the import analysis behind call resolution stopped at its file cap (20,000 source files): the
+callers, `--rank callers` and callee walks that read it match calls from the files past the cap by bare name
+only. It is not a loss of evidence and does not withhold the confidence; a project under the cap never sees it.
 `?uncalled` (retired) withholds it in every language, because the figure is call-extraction recall and
 says nothing about dead code; over a JavaScript, TypeScript, TSX, Java or PHP scan W-CALLS-11 also names the
 language and states the figures of the languages in scope: a source review of 20 claims per corpus found 0 of 20
