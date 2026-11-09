@@ -87,3 +87,28 @@ def test_the_script_exits_0_on_the_current_tree():
                           text=True, encoding='utf-8', check=False)
     assert done.returncode == 0, done.stdout + done.stderr
     assert 'ratchet OK' in done.stdout
+
+
+# ---------------------------------------------------------------- BACK-2546: every shipped doc
+
+def test_shipped_docs_cover_the_guides_and_skip_the_changelog():
+    from scripts.check_retired_names import shipped_docs
+    docs = shipped_docs()
+    assert 'reveal/docs/adapters/CALLS_ADAPTER_GUIDE.md' in docs
+    assert 'ARCHITECTURE.md' in docs
+    assert not any('CHANGELOG' in d or d.startswith('tests/') for d in docs)
+
+
+def test_a_doc_over_its_baseline_or_new_is_reported():
+    from scripts.check_retired_names import docs_over_baseline
+    counts = {'reveal/docs/guides/A.md': 2, 'reveal/docs/guides/NEW.md': 1, 'reveal/docs/guides/B.md': 1}
+    baseline = {'reveal/docs/guides/A.md': 1, 'reveal/docs/guides/B.md': 3}
+    assert docs_over_baseline(counts, baseline) == [
+        ('reveal/docs/guides/A.md', 2, 1), ('reveal/docs/guides/NEW.md', 1, 0)]
+
+
+def test_the_docs_baseline_matches_the_tree():
+    """The committed baseline is exactly the current counts: a fixed doc lowers it in the same commit."""
+    import json
+    from scripts.check_retired_names import DOCS_BASELINE, doc_counts
+    assert json.loads(DOCS_BASELINE.read_text(encoding='utf-8')) == doc_counts()

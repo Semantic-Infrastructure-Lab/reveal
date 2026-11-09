@@ -17,9 +17,17 @@ Code-element outline examples are classified with the real argument parser. The
 static check covers explicit element positionals; inline ``file.py:2`` binding
 depends on filesystem evidence at runtime and is not inferred from teaching text.
 
+Every other shipped Markdown doc (top-level and ``reveal/docs/``; CHANGELOG and tests excluded) is held
+to a per-file count in ``.github/retired_names_docs_baseline.json`` that may only fall (BACK-2546): the
+first-screen check missed adapter and dev guides that still taught ``--sideeffects``, ``stats://`` and
+``depends://``. A doc not in the baseline must name none; ``--write-baseline`` lowers the counts after a
+doc is fixed (it refuses to raise one).
+
 Run:
     python scripts/check_retired_names.py        # exits 1 and names each line that teaches one
+    python scripts/check_retired_names.py --write-baseline   # record lower per-doc counts
 """
+import json
 import re
 import shlex
 import subprocess
@@ -230,6 +238,55 @@ SURFACES = {
 }
 
 
+# --- every other shipped doc, held to a falling per-file count (BACK-2546) -------------------
+
+DOCS_BASELINE = ROOT / '.github' / 'retired_names_docs_baseline.json'
+_SKIP_PARTS = {'.git', 'tests', 'node_modules', '.venv', 'venv', 'build', 'dist', '.tox'}
+# Already held to zero above, whole or in part; the per-doc count would double-count them.
+_FIRST_SCREEN_DOCS = {'README.md', 'ROADMAP.md', 'reveal/docs/AGENT_HELP.md'}
+
+
+def shipped_docs():
+    """Top-level and reveal/docs/ Markdown, minus the CHANGELOG (a record of what each release did)."""
+    docs = [*ROOT.glob('*.md'), *(ROOT / 'reveal' / 'docs').rglob('*.md')]
+    return sorted(
+        path.relative_to(ROOT).as_posix() for path in docs
+        if not _SKIP_PARTS & set(path.relative_to(ROOT).parts) and 'CHANGELOG' not in path.name
+    )
+
+
+def doc_counts():
+    counts = {}
+    for name in shipped_docs():
+        if name in _FIRST_SCREEN_DOCS:
+            continue
+        hits = scan(_read(name))
+        if hits:
+            counts[name] = len(hits)
+    return counts
+
+
+def docs_over_baseline(counts=None, baseline=None):
+    """(doc, count, allowed) for every shipped doc that teaches more retired spellings than recorded."""
+    counts = doc_counts() if counts is None else counts
+    if baseline is None:
+        baseline = json.loads(DOCS_BASELINE.read_text(encoding='utf-8')) if DOCS_BASELINE.exists() else {}
+    return [(name, count, baseline.get(name, 0)) for name, count in sorted(counts.items())
+            if count > baseline.get(name, 0)]
+
+
+def write_docs_baseline():
+    counts = doc_counts()
+    over = docs_over_baseline(counts)
+    if over and DOCS_BASELINE.exists():
+        for name, count, allowed in over:
+            print(f'{name}: {count} > {allowed}: fix the doc, the baseline only falls')
+        return 1
+    DOCS_BASELINE.write_text(json.dumps(counts, indent=1, sort_keys=True) + '\n', encoding='utf-8')
+    print(f'wrote {DOCS_BASELINE.relative_to(ROOT)}: {sum(counts.values())} line(s) in {len(counts)} doc(s)')
+    return 0
+
+
 def surface_hits(name):
     """The (line number, key, line) hits of one surface; an empty surface is an error, not a pass."""
     text = SURFACES[name]()
@@ -237,18 +294,28 @@ def surface_hits(name):
     return scan(text)
 
 
-def main():
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv == ['--write-baseline']:
+        return write_docs_baseline()
     failed = 0
     for name in SURFACES:
         hits = surface_hits(name)
         for number, key, line in hits:
             print(f'{name}: line {number}: {key}: {line}')
         failed += len(hits)
-    if failed:
-        print(f'\n{failed} line(s) teach a retired spelling: name it only in a "replaced by" sentence '
+    counts = doc_counts()
+    over = docs_over_baseline(counts)
+    for name, count, allowed in over:
+        for number, key, line in scan(_read(name)):
+            print(f'{name}: line {number}: {key}: {line}')
+        print(f'{name}: {count} line(s) teach a retired spelling, baseline {allowed}')
+    if failed or over:
+        print(f'\n{failed + len(over)} problem(s): name a retired spelling only in a "replaced by" sentence '
               '(or use its replacement). See scripts/check_retired_names.py.')
         return 1
-    print(f'retired-names ratchet OK ({len(RETIREMENTS)} retired spellings, {len(SURFACES)} surfaces)')
+    print(f'retired-names ratchet OK ({len(RETIREMENTS)} retired spellings, {len(SURFACES)} surfaces, '
+          f'{len(shipped_docs())} shipped docs: {sum(counts.values())} baselined line(s) in {len(counts)} doc(s))')
     return 0
 
 
