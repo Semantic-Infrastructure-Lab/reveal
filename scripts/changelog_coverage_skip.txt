@@ -2,11 +2,3 @@
 # internal work a user never sees (CI, ratchets, test harnesses, maintainer scripts), or ids
 # covered by a grouped entry. One per line: id, then why (name the grouped entry).
 # Clear this list in the first commit after each release: it only names work since the last tag.
-BACK-2489 maintainer push gate only (ci-local.sh / check_doc_hygiene.py private-name check)
-BACK-2493 maintainer measurement script (scripts/rule_census.py), no user-visible change
-BACK-2134 internal speedup of the rule ignore filter (about 0.2 ms per call), identical answers, no user-visible change
-BACK-2503 scheduled recall workflow pin (recall.yml) and re-recorded partial_files baselines, no user-visible change
-BACK-2471 covered by the grouped "lazy=exclude/only" and import-recall entries under Behavior changes (opt-in Ruby pilot scoring is maintainer-side)
-BACK-2472 covered by the grouped "lazy=exclude/only" entry under Behavior changes (Ruby named-method loaders)
-BACK-2512 covered by the grouped "Kotlin and Scala imports are much more complete" entry (BACK-2510)
-BACK-2514 covered by the grouped "Kotlin and Scala imports are much more complete" entry (BACK-2510)

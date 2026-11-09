@@ -67,7 +67,7 @@ done
 check_step "Test Suite (All Tests)" 3 12
 
 TEST_LOG=$(mktemp)
-pytest tests/ -v --cov=reveal --cov-report=term-missing --cov-fail-under=70 2>&1 | tee "$TEST_LOG"
+python3 -m pytest tests/ -v --cov=reveal --cov-report=term-missing --cov-fail-under=70 2>&1 | tee "$TEST_LOG"
 TEST_STATUS=${PIPESTATUS[0]}
 TEST_SUMMARY=$(grep -E '^=+ .* in [0-9.]+s' "$TEST_LOG" | tail -1)
 
