@@ -178,7 +178,8 @@ if [[ $PUSH -eq 1 ]]; then
         INNER_ARGS=(--no-tests)
         echo "push gate: the full suite already passed on tree $(cut -f1 "$GREEN_STAMP" | cut -c1-12) ($(cut -f5- "$GREEN_STAMP")); running every step but the suite (REVEAL_PUSH_FULL_SUITE=1 forces it, BACK-2187)"
     fi
-    "$0" "${INNER_ARGS[@]}" || { echo "push gate FAILED (ci-local.sh default run)" >&2; exit 1; }
+    # ${a[@]+"${a[@]}"}: an empty array under `set -u` is "unbound" on bash 3.2 (macOS).
+    "$0" ${INNER_ARGS[@]+"${INNER_ARGS[@]}"} || { echo "push gate FAILED (ci-local.sh default run)" >&2; exit 1; }
     python3 "$CALLS_HELPER" "${CALLS_ARGS[@]}" || exit 1
     python3 "$IMPORTS_HELPER" "${IMPORTS_ARGS[@]}" || { echo "push gate FAILED (imports recall gate)" >&2; exit 1; }
     printf '\nPush gate passed. Push, then: scripts/ci-watch.sh (macOS, Windows and the floor run only on GitHub).\n'

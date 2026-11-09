@@ -254,9 +254,9 @@ def run_push_dispatch(repo, tmp_path, args, suite_body='', extra_env=None, befor
     scripts.mkdir(parents=True, exist_ok=True)
     source = (ROOT / 'scripts' / 'ci-local.sh').read_text(encoding='utf-8')
     prefix = source.split('# --changed: pytest targets')[0]
-    stub = 'bash "$SUITE_SCRIPT" "${INNER_ARGS[@]}" ||'
-    prefix = prefix.replace('"$0" "${INNER_ARGS[@]}" ||', stub)
-    assert stub in prefix, 'the push block no longer runs "$0" "${INNER_ARGS[@]}"'
+    stub = 'bash "$SUITE_SCRIPT" ${INNER_ARGS[@]+"${INNER_ARGS[@]}"} ||'
+    prefix = prefix.replace('"$0" ${INNER_ARGS[@]+"${INNER_ARGS[@]}"} ||', stub)
+    assert stub in prefix, 'the push block no longer runs "$0" with INNER_ARGS'
     # The suite stub's own arguments land in the marker (BACK-2187: --no-tests on a green tree).
     script = scripts / 'ci-local.sh'
     script.write_text(prefix, encoding='utf-8')
