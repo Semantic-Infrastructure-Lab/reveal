@@ -162,6 +162,15 @@ The release process adds an entry here for each version; the three most recent a
 Everything is in [CHANGELOG.md](CHANGELOG.md), and unreleased work on master is under its
 `[Unreleased]` heading.
 
+### v0.134.0 — Exit 2 for "not there", exit 3 for incomplete, accurate imports for Kotlin, Scala, Java, Go and Rust
+
+- ✅ Commands agree on exit codes: `2` means the path, element, topic or request is not there or cannot be answered, `3` means the answer is incomplete, including an unreadable file under `--grep` (BACK-2528, 2527, 2492, 2533).
+- ✅ Function nesting depth reads one lower in every language; `check`'s I002 reports one finding per file in a cycle, and I005 and D001 stop flagging correct Rust and cross-function code (BACK-2490, 2491, 2156).
+- ✅ Import analysis is more accurate: Java full-package resolution and Maven modules, Kotlin and Scala names and packages, Go `go.work` and `replace` modules, Rust workspace crates and one-segment `use`, GDScript project roots (BACK-1712, 2549, 2557, 2552, 2562, 2155).
+- ✅ `calls ?callees=` no longer credits an external call (`json.loads`) to a same-named project function, and `?callers=` names every definition of an ambiguous name (BACK-2553, 2479).
+- ✅ A fresh install reads Zig correctly on `tree-sitter-language-pack` 1.25.0, and an outline that comes back empty says so instead of printing a bare header (BACK-2540, 2541).
+- ⚠️ reveal needs Python 3.11 or newer, `python://` is removed, and scripts that tested for exit 1 on a missing path or relied on the old nesting depth need the changes under "Behavior changes" in CHANGELOG.md.
+
 ### v0.133.0 — Exit codes on json, ast, markdown and imports, compact overview, trustworthy caller ranking
 
 - ✅ `json://`, `ast://` and `markdown://` queries exit 2 for an invalid request and 3 when a required read or parse failed, where they used to report success with matches missing (BACK-2361, 2367, 2414, 2415).
@@ -179,15 +188,6 @@ Everything is in [CHANGELOG.md](CHANGELOG.md), and unreleased work on master is 
 - ✅ Measured: the pinned-corpus recall gate scores imports and Python callers through the public request path, and `scripts/graph_invariants.py` checks oracle-free graph invariants on all 24 pinned corpora.
 - ✅ Old spellings (`trace`, `deps`, `calls ?root=` and `?target=`, `stats://`, `classify://`, `health` on a code path) still run and print a replaced-by note from the one `RETIREMENTS` table; they error at the cut release.
 - ⚠️ Exit codes of `review`, `health`, `calls` and `check --also-json` changed, `imports` and `calls` count some edges differently, and the nine `reveal.cli.commands.<noun>` modules moved to `reveal.adapters.<noun>` — see the "Behavior changes" section of CHANGELOG.md.
-
-### v0.131.0 — Silent answers refused or disclosed, special modes and `--stdin`, install hints, cross-platform self-checks
-
-- ✅ A command that cannot honor an argument says so: a mode that reads no path, a flag that reads no element, 23 per-file flags and `--stdin --section` refuse a second path or section and exit 2 instead of answering for the first (BACK-1751, 1728, 1687, 1715, 1735, 1773, 1764, 1765).
-- ✅ Wrong answers that looked clean now decline or disclose: `diff://` on resources it cannot compare and on every element category (BACK-1689, 1732), a recovered parse no longer claims clean-parse trust (BACK-1729), unbalanced nginx braces lower confidence (BACK-1768), files lost to a dead pool worker are reported as lost everywhere (BACK-1726, 1752-1754, 1681, 1717, 1718).
-- ✅ `git://` scopes to the directory asked for, relative or absolute, and resolves a target to its own repository (BACK-1690, 1654, 1760); line numbers count `\n` only (BACK-1722); `imports://` and I002 find cycles through `from pkg import submodule` (BACK-1723).
-- ✅ Install hints name `reveal-cli` and a real extra, `reveal-cli[all]` installs every runtime extra, and `help://install` exists (BACK-1699, 1117, 1116); C# parses on a fresh language-pack 1.21 install (BACK-1746).
-- ✅ Self-checks catch the cross-platform failure classes locally: V036-V042 in `reveal reveal:// --check`, the one-hop V026, and Windows test shards balanced by recorded cost; the push gate is the lints plus the 3.12 suite (BACK-1705, 1707, 1720, 1739, 1745, 1747).
-- ⚠️ Scripts that passed extra paths to element-less flags, special modes or `--stdin --section` now get exit 2; line numbers on files containing form feeds or other non-`\n` separators shift by design — see CHANGELOG "Changed".
 
 ## Validation
 
