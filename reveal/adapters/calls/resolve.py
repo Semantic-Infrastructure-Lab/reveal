@@ -37,9 +37,11 @@ class CallResolver:
         self._alias_maps: Dict[str, Dict[str, str]] = {}
         self._families: Dict[str, str] = {}
 
-    def resolve(self, call: str, caller_file: str) -> Tuple[str, Any]:
+    def resolve(self, call: str, caller_file: str, shadows: Tuple[str, ...] = ()) -> Tuple[str, Any]:
         """(bare name, target): target is one definition, a list of candidate
-        definitions when the name stays ambiguous, or None when it reaches no project definition."""
+        definitions when the name stays ambiguous, or None when it reaches no project definition.
+        ``shadows``: the call qualifiers the calling definition declares itself (a parameter or local
+        ``src``), which no import binds there (BACK-2580)."""
         tail = _bare_callee_name(call)
         from ..ast.call_graph import build_alias_map
         if caller_file not in self._alias_maps:
@@ -53,14 +55,16 @@ class CallResolver:
         candidates = [d for d in self.index.get(tail, [])
                       if (not family or d['family'] == family) and d.get('category') != 'modules'
                       and d.get('callable', True) is not False]
-        candidates = self._reachable(call, caller_file, candidates)
+        shadowed = '.' in call and call.split('.')[0] in shadows
+        candidates = self._reachable(call, caller_file, candidates, shadowed)
         if not candidates:
             return tail, None
         if len(candidates) == 1:
             return tail, candidates[0]
-        return tail, self._disambiguate(call, tail, caller_file, candidates) or candidates
+        return tail, self._disambiguate(call, tail, caller_file, candidates, shadowed) or candidates
 
-    def _reachable(self, call: str, caller_file: str, candidates: List[Definition]) -> List[Definition]:
+    def _reachable(self, call: str, caller_file: str, candidates: List[Definition],
+                   shadowed: bool = False) -> List[Definition]:
         """The candidates the call can reach, given what its qualifier (``json`` of ``json.loads``)
         or bare name is bound to. Bound only by imports that resolved to no project file, it reaches
         none of them when they are outside the tree (BACK-2553), and when the verdict could not place
@@ -68,7 +72,7 @@ class CallResolver:
         the module's path (``dagster/_grpc/client.py`` for ``from dagster._grpc.client import f``,
         BACK-2573). A bare call to a name the file also defines reaches its own definition (it
         shadows the import)."""
-        binding = self._bindings.get(caller_file, call.split('.')[0])
+        binding = None if shadowed else self._bindings.get(caller_file, call.split('.')[0])
         kept = reaches(binding, call, caller_file, (c['file'] for c in candidates))
         return [c for c in candidates if c['file'] in kept]
 
@@ -78,14 +82,15 @@ class CallResolver:
         return self._families[caller_file]
 
     def _disambiguate(self, call: str, tail: str, caller_file: str,
-                      candidates: List[Definition]) -> Optional[Definition]:
+                      candidates: List[Definition], shadowed: bool = False) -> Optional[Definition]:
         """The one candidate the caller's own file or its imports point at.
         A bare call prefers a same-file definition (it shadows imports); a
         qualified one (`strings.rtrim`, `h.run`) prefers the module it names, and
         when an import binds its qualifier it reaches only that module (dagster's
         `click.group` is never dagster's own `def group`, BACK-2569)."""
         qualifier = call.split('.')[0] if '.' in call else ''
-        via_import, bound = self._via_import(call, tail, qualifier, caller_file, candidates)
+        via_import, bound = (([], False) if shadowed else
+                             self._via_import(call, tail, qualifier, caller_file, candidates))
         same_file = [c for c in candidates if c['file'] == caller_file]
         groups = (via_import,) if qualifier and bound else (
             (via_import, same_file) if qualifier else (same_file, via_import))

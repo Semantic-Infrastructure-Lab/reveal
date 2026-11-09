@@ -371,6 +371,52 @@ def _owner_call_lines(file_struct: Dict[str, Any], elem: Dict[str, Any]) -> Dict
     return {callee: sorted(found) for callee, found in lines.items()}
 
 
+_SELF_QUALIFIERS = frozenset({'self', 'this', 'cls', 'super', 'Self'})
+# A bare name leaf directly inside one of these is a parameter (Python `def f(json)` has no field on it,
+# which `references._binding_kind` requires).
+_PARAMETER_LIST_KINDS = frozenset({'parameters', 'lambda_parameters', 'formal_parameters', 'parameter_list'})
+
+
+def shadowed_qualifiers(file_path: str, analyzer, elements: Sequence[Dict[str, Any]]) -> Dict[str, List[str]]:
+    """Per element (keyed by its line), the call qualifiers it declares itself: a parameter or local
+    variable ``src`` makes ``src.MapType()`` a method call on that value, whatever an import of ``src`` binds
+    (BACK-2580: Go ``func f(src *types.Type)`` beside ``import "cmd/internal/src"``, Rust ``let iter`` beside
+    ``use std::iter``). A declaration is a name leaf calls' reference scan classifies as binding
+    (``references._binding_kind``), anywhere in the element's lines."""
+    from ...registry import language_for_extension
+    from ...core import get_tree, _zero_arg, iter_tree
+    from ..calls.references import _binding_kind, _is_name_leaf
+    spans = []
+    for elem in elements:
+        calls = elem.get('calls') or []
+        qualifiers = {c.split('.', 1)[0] for c in calls if isinstance(c, str) and '.' in c} - _SELF_QUALIFIERS
+        start, count = elem.get('line'), elem.get('line_count')
+        if qualifiers and isinstance(start, int) and isinstance(count, int) and count > 0:
+            spans.append((start, start + count - 1, qualifiers))
+    if not spans:
+        return {}
+    language = language_for_extension(Path(file_path).suffix)
+    if language is None:
+        return {}
+    wanted = set().union(*(q for _, _, q in spans))
+    tree = getattr(analyzer, 'tree', None) or get_tree(language, analyzer.content, filename=file_path)
+    content = analyzer.content.encode('utf-8')
+    declared: List[Tuple[int, str]] = []
+    for node in iter_tree(_zero_arg(tree, 'root_node')):
+        if not _is_name_leaf(_zero_arg(node, 'kind')):
+            continue
+        name = content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8', errors='replace')
+        if name in wanted and (_binding_kind(node) is not None or _zero_arg(
+                _zero_arg(node, 'parent'), 'kind') in _PARAMETER_LIST_KINDS):
+            declared.append((_zero_arg(node, 'start_position').row + 1, name))
+    shadows: Dict[str, List[str]] = {}
+    for start, end, qualifiers in spans:
+        names = sorted({name for line, name in declared if start <= line <= end and name in qualifiers})
+        if names:
+            shadows[str(start)] = names
+    return shadows
+
+
 def _class_field_sources(file_struct: Dict[str, Any]):
     """One caller per class field whose initializer calls something (BACK-2230)."""
     for field in file_struct.get('class_field_call_sites', []):
@@ -382,7 +428,10 @@ def _class_field_sources(file_struct: Dict[str, Any]):
 def call_sources(file_struct: Dict[str, Any]):
     """Call/reference projection shared by callers, callees and trace."""
     refs = file_struct.get('jsx_references', [])
+    shadowed = file_struct.get('shadowed_qualifiers') or {}
     for elem in file_struct.get('elements', []):
+        if shadowed.get(str(elem.get('line'))):
+            elem = {**elem, 'shadows': shadowed[str(elem.get('line'))]}  # BACK-2580
         references = [r for r in refs if r['owner'] == elem.get('name') and r['owner_line'] == elem.get('line')]
         if references:
             yield {**elem, 'calls': list(dict.fromkeys([*elem.get('calls', []), *(r['callee'] for r in references)])),
@@ -453,6 +502,8 @@ def _call_site_layer_complete(layer: Dict[str, Any], family: Optional[str]) -> b
     """A stored layer is whole: JS carries its JSX extras in the same entry or the layer is a miss."""
     if not isinstance(layer.get('module_call_sites'), list):
         return False
+    if not isinstance(layer.get('shadowed_qualifiers'), dict):
+        return False  # stored before locals shadowing an import were recorded (BACK-2580)
     if family == 'js' and not isinstance(layer.get('class_field_call_sites'), list):
         return False
     if family == 'js' and not all('callable' in f for f in layer['class_field_call_sites']):
@@ -474,19 +525,22 @@ def _add_call_sites(result: Dict[str, Any], file_path: str, analyzer) -> None:
         layer = analyzer.load_call_site_layer(form)
         if layer is not None and _call_site_layer_complete(layer, family):
             result['module_call_sites'] = layer['module_call_sites']
+            result['shadowed_qualifiers'] = layer['shadowed_qualifiers']
             if family == 'js':
                 result['jsx_references'] = layer['jsx_references']
                 result['jsx_call_sites'] = layer['jsx_call_sites']
                 result['class_field_call_sites'] = layer['class_field_call_sites']
             return
     result['module_call_sites'] = module_call_sites(file_path, analyzer, result['elements'])
+    result['shadowed_qualifiers'] = shadowed_qualifiers(file_path, analyzer, result['elements'])
     if family == 'js':
         result['class_field_call_sites'] = class_field_call_sites(file_path, analyzer)
         from ..calls.references import jsx_component_references, jsx_owner_call_sites
         result['jsx_references'] = jsx_component_references(analyzer, result['elements'])
         result['jsx_call_sites'] = jsx_owner_call_sites(analyzer, result['elements'], result['jsx_references'])
     if persist:
-        stored = {'module_call_sites': result['module_call_sites']}
+        stored = {'module_call_sites': result['module_call_sites'],
+                  'shadowed_qualifiers': result['shadowed_qualifiers']}
         if family == 'js':
             stored.update(jsx_references=result['jsx_references'], jsx_call_sites=result['jsx_call_sites'],
                           class_field_call_sites=result['class_field_call_sites'])

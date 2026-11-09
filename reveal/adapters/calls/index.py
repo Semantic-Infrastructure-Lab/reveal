@@ -605,6 +605,8 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
                 'caller': elem.get('name', ''),
                 'line': elem.get('line', 0),
             }
+            if elem.get('shadows'):
+                record_base['shadows'] = tuple(elem['shadows'])  # BACK-2580
             for callee in elem.get('calls', []):
                 record = {**record_base, 'call_expr': callee}
                 refs = [r for r in elem.get('references', []) if r['callee'] == callee]
@@ -659,7 +661,9 @@ def _bound_key(key: str, record: Dict[str, Any], files: FrozenSet[str], bindings
     call = str(record.get('call_expr') or '')
     if '.' in call and key == call:
         return key
-    binding = bindings.get(record['file'], call.split('.')[0])
+    qualifier = call.split('.')[0]
+    # A caller that declares the qualifier itself (a parameter `src`) calls a method on that value (BACK-2580).
+    binding = None if '.' in call and qualifier in record.get('shadows', ()) else bindings.get(record['file'], qualifier)
     if reaches(binding, call, record['file'], files):
         return key
     if '.' in call:
@@ -880,6 +884,7 @@ class CallSource(NamedTuple):
     owner: str = ''       # the class or struct a member belongs to
     category: str = ''    # the structure category; a 'modules' source (a file's top level, Rust `mod x;`) is no call target
     callable: bool = True  # False for a class field holding an object (`= new X()`): a source, no target (BACK-2581)
+    shadows: Tuple[str, ...] = ()  # call qualifiers it declares itself (a parameter `src`), so no import binds them (BACK-2580)
 
 
 class CalleeSource:
@@ -920,7 +925,7 @@ class CalleeSource:
             tuple(elem.get('reference_only_calls', [])),
             family(file_path), member=bool(elem.get('owner')) and elem.get('method') is not False,
             category=elem.get('category', ''), owner=str(elem.get('owner') or ''),
-            callable=elem.get('callable', True) is not False)
+            callable=elem.get('callable', True) is not False, shadows=tuple(elem.get('shadows', ())))
             for file_path, name, elem in _call_definitions(structures))
         return cls(definitions, getattr(structures, 'skipped', ()), getattr(structures, 'traversal_failures', ()),
                    scope, dropped_values_summary(structures))
@@ -1046,6 +1051,7 @@ def _walk_index(source: CalleeSource) -> Tuple[List[Dict[str, Any]], Dict[str, L
         'owner': d.owner,
         'category': d.category,
         'callable': d.callable,
+        'shadows': d.shadows,
     } for d in source.definitions]
     definitions.sort(key=lambda d: (d['file'], d['line']))
     index: Dict[str, List[Dict[str, Any]]] = {}
@@ -1111,7 +1117,7 @@ def _callee_node(record: Dict[str, Any], name: str, level: int, depth: int) -> C
 
 def _callee_edge(node: CalleeNode, call: str, resolver: Any) -> Tuple[Dict[str, Any], Any]:
     """One call site of *node*: the edge record and its target (definition, candidates, None)."""
-    tail, target = resolver.resolve(call, node.file)
+    tail, target = resolver.resolve(call, node.file, node.record.get('shadows', ()))
     edge: Dict[str, Any] = {
         'caller': node.name,
         'callee': tail if target is not None else call,

@@ -644,7 +644,7 @@ def test_a_resolver_that_ignores_external_bindings_turns_call_targets_red(tmp_pa
     """Engine-level red control: the BACK-2553 defect (json.loads read as recursion, os.path's join
     read as d.py's) restored by switching the binding check off."""
     from reveal.adapters.calls.resolve import CallResolver
-    monkeypatch.setattr(CallResolver, '_reachable', lambda self, call, caller_file, candidates: candidates)
+    monkeypatch.setattr(CallResolver, '_reachable', lambda self, call, caller_file, candidates, *_: candidates)
     row = _call_targets(_tree(tmp_path, EXTERNAL_TREE), 'ext')
     assert row['status'] == 'red'
     assert {(v['rule'], v['call'], v['got']) for v in row['examples']} == {
@@ -658,7 +658,7 @@ def test_a_call_that_misses_its_bound_file_turns_call_targets_red(tmp_path, monk
     root = _tree(tmp_path, {**EXTERNAL_TREE, 'ext/f.py': 'def join(a, b):\n    return b\n'})
     assert _call_targets(root, 'ext')['status'] == 'green'
     monkeypatch.setattr(CallResolver, '_disambiguate',
-                        lambda self, call, tail, caller_file, candidates: candidates[-1])
+                        lambda self, call, tail, caller_file, candidates, *_: candidates[-1])
     row = _call_targets(root, 'ext')
     assert [(v['rule'], v['call'], v['got'], v['bound_to']) for v in row['examples']] == [
         ('bound_file', 'join', 'ext/f.py:1', 'ext/d.py')]
@@ -774,7 +774,7 @@ def test_an_unplaced_import_landing_elsewhere_still_turns_call_targets_red(tmp_p
     """Red control for the 'unresolved' allowance: with the binding check off, pytest.raises lands on
     tests/helpers.py, which names no part of 'pytest'; write_to_db goes ambiguous (two candidates)."""
     from reveal.adapters.calls.resolve import CallResolver
-    monkeypatch.setattr(CallResolver, '_reachable', lambda self, call, caller_file, candidates: candidates)
+    monkeypatch.setattr(CallResolver, '_reachable', lambda self, call, caller_file, candidates, *_: candidates)
     row = _call_targets(_tree(tmp_path, UNPLACED_TREE), 'unp')
     assert row['status'] == 'red'
     assert ('external_binding', 'pytest.raises', 'unp/tests/helpers.py:1') in {

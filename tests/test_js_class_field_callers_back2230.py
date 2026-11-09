@@ -70,10 +70,14 @@ def test_callees_of_a_field_lists_what_its_initializer_calls(project):
 
 def test_a_stale_cached_layer_without_the_field_key_is_rebuilt():
     from reveal.adapters.ast.analysis import _call_site_layer_complete
-    old = {'module_call_sites': [], 'jsx_references': [], 'jsx_call_sites': []}
+    old = {'module_call_sites': [], 'jsx_references': [], 'jsx_call_sites': [], 'shadowed_qualifiers': {}}
     assert not _call_site_layer_complete(old, 'js')
     assert _call_site_layer_complete({**old, 'class_field_call_sites': []}, 'js')
-    assert _call_site_layer_complete({'module_call_sites': []}, 'python')
+    assert _call_site_layer_complete({'module_call_sites': [], 'shadowed_qualifiers': {}}, 'python')
+    # BACK-2580/2581: a layer stored before locals or callable fields were recorded is rebuilt too.
+    assert not _call_site_layer_complete({'module_call_sites': []}, 'python')
+    assert not _call_site_layer_complete(
+        {**old, 'class_field_call_sites': [{'name': 'x', 'line': 1, 'sites': []}]}, 'js')
 
 
 def test_a_field_record_names_its_own_line_and_the_call_lines_inside_it(project):
