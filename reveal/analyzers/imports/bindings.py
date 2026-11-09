@@ -251,8 +251,8 @@ def _names_bound_in(file_path: str, root: Optional[str]) -> FrozenSet[str]:
     if extractor is None:
         return frozenset()
     key = _absolute(path)
-    keep = root is not None and in_host_request() and _under(key, _absolute(root))
-    remembered = _BOUND_NAMES.get(root) if keep else None
+    kept_at = root if root is not None and in_host_request() and _under(key, _absolute(root)) else None
+    remembered = _BOUND_NAMES.get(kept_at) if kept_at is not None else None
     if remembered is not None and key in remembered:
         return remembered[key]
     try:
@@ -260,9 +260,9 @@ def _names_bound_in(file_path: str, root: Optional[str]) -> FrozenSet[str]:
     except OSError:
         return frozenset()
     names = frozenset(name for stmt in statements for name in bound_names(stmt))
-    if keep and extractor.analysis.cacheable:
-        _BOUND_NAMES.setdefault(root, {})[key] = names
-        _BOUND_NAMES.move_to_end(root)
+    if kept_at is not None and extractor.analysis.cacheable:
+        _BOUND_NAMES.setdefault(kept_at, {})[key] = names
+        _BOUND_NAMES.move_to_end(kept_at)
         while len(_BOUND_NAMES) > _BOUND_NAMES_ROOTS:
             _BOUND_NAMES.popitem(last=False)
     return names
