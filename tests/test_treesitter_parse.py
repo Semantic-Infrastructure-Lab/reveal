@@ -101,6 +101,13 @@ class TestPackSpelling:
         pack_download.assert_called_once_with(['csharp', 'python'])
 
 
+def _pack_has_download_error() -> bool:
+    import tree_sitter_language_pack as tslp
+    return isinstance(getattr(tslp, 'DownloadError', None), type)
+
+
+@pytest.mark.skipif(not _pack_has_download_error(),
+                    reason='this language pack (the 1.8.1 floor) raises no DownloadError, so the seam retries nothing')
 class TestFetchRetry:
     """BACK-2235: a GitHub 504 while the pack downloads a grammar failed every parse of that
     language for the run (5 of 14 CI jobs red, green on re-run). The first fetch retries."""
