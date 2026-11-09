@@ -604,8 +604,8 @@ reveal README.md --head 5
 # Last 3 headings
 reveal README.md --tail 3
 
-# Headings 10-15
-reveal README.md --range 10-15
+# Headings 2-4 (headings, not lines; lines are reveal README.md :10-15)
+reveal README.md --range 2-4
 
 # Works with all features
 reveal README.md --links --head 10

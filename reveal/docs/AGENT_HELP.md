@@ -3461,8 +3461,8 @@ reveal huge_file.py
    # Last 5 functions
    reveal huge_file.py --tail 5
 
-   # Specific range
-   reveal huge_file.py --range 100-150
+   # Items 2-4 of each list (outline items, not lines; lines are reveal huge_file.py :100-150)
+   reveal huge_file.py --range 2-4
    ```
 
 2. **Extract specific element**

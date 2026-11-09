@@ -279,8 +279,12 @@ import's verdict could not place it (no `go.mod`, a monorepo package root): then
 definition where the import names it, by its language (a Python module path, a Go package directory,
 a Rust item's module: `use write::write_to_db` reaches `write.rs`). An import that is in the project
 by its verdict or its relative spelling (Rust `crate::` in a crate with no `Cargo.toml`) blocks
-nothing when resolution misses it. `?callers=` applies the same rule. A bare call to a name the file
-itself defines reaches that definition. Imports resolve as `imports://` resolves them for
+nothing when resolution misses it. A qualifier the calling function declares itself (a parameter or
+local `src` in `src.MapType()`, beside `import "cmd/internal/src"`) is that value, so no import binds
+it there. A JS/TS call through a language global nothing imports (`Math.max`, `JSON.parse`) reaches no
+project definition outside the caller's file, and a class field holding an object
+(`static max = new OffsetPair()`) is a caller but never a callee. `?callers=` applies the same rules.
+A bare call to a name the file itself defines reaches that definition. Imports resolve as `imports://` resolves them for
 the walked directory (from its project root, so a `tsconfig.json` alias above it counts, whether the
 directory is spelled `.`, `pkg` or an absolute path), but only the walked
 directory's files are read, plus, outside it, the files of languages whose package or namespace

@@ -155,8 +155,8 @@ reveal src/app.py --head 5
 # Last 3 items in each section
 reveal src/app.py --tail 3
 
-# Items 10-20 in each section
-reveal src/app.py --range 10-20
+# Items 2-5 in each section (items, not lines; lines are reveal src/app.py :10-20)
+reveal src/app.py --range 2-5
 ```
 
 ---
