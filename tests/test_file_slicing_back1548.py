@@ -148,3 +148,30 @@ def test_element_lookup_sees_past_the_display_sample(tmp_path):
     run = _run_reveal_direct(log, '@15')
     assert run.returncode == 0, run.stderr
     assert '"n": 15' in run.stdout
+
+
+# ------------------------------------------------------------- BACK-2547: a range past every list
+
+def test_range_past_every_item_exits_2_and_names_the_line_spelling(tmp_path):
+    """'reveal README.md --range 40-60' on 3 headings printed an empty outline with
+    'showing 0 of 3' at exit 0: agents read --range as lines. It selects items, so a
+    range that selects none is a request that matched nothing."""
+    doc = tmp_path / 'doc.md'
+    doc.write_text('# A\n\ntext\n\n## B\n\nmore\n\n## C\n', encoding='utf-8')
+    run = _run_reveal_direct(doc, '--range', '40-60')
+    assert run.returncode == 2
+    assert '3 headings' in run.stderr and ':40-60' in run.stderr
+    assert run.stdout.strip() == ''
+
+
+def test_range_inside_the_items_still_cuts(six_funcs):
+    run = _run_reveal_direct(six_funcs, '--range', '5-60', '--format', 'json')
+    assert run.returncode == 0
+    names = [f['name'] for f in json.loads(run.stdout)['structure']['functions']]
+    assert names == ['f5', 'f6']
+
+
+def test_range_on_a_file_with_no_items_is_not_an_error(tmp_path):
+    empty = tmp_path / 'empty.py'
+    empty.write_text('X = 1\n', encoding='utf-8')
+    assert _run_reveal_direct(empty, '--range', '3-4').returncode == 0

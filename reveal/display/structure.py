@@ -838,6 +838,27 @@ def _apply_file_budget_constraints(structure: Dict[str, Any], args=None,
     return structure
 
 
+def _reject_empty_range(analyzer: FileAnalyzer, structure: Dict[str, Any], sliced: List[str],
+                        totals: Dict[str, int], range_: tuple) -> None:
+    """A --range past every list is a request that matched nothing, not an empty file (BACK-2547).
+
+    --range counts outline items (headings, functions), which agents read as lines:
+    'reveal README.md --range 40-60' on 10 headings printed an empty outline at exit 0.
+    Exit 2 naming what the range counted, and the line-range spelling.
+    """
+    if not any(totals.get(field) for field in sliced):
+        return  # nothing to select from: an empty file is not a missed range
+    if any(structure.get(field) for field in sliced):
+        return
+    start, end = range_
+    spelled = f"{start}-{end}" if end is not None else f"{start}-"
+    counts = ', '.join(f"{totals[field]} {field}" for field in sliced if totals.get(field))
+    print(f"Error: --range {spelled} selects no item: {analyzer.path.name} has {counts}. --range counts "
+          f"outline items, not lines; for lines {spelled} use: reveal {to_posix(analyzer.path)} :{spelled}",
+          file=sys.stderr)
+    sys.exit(2)
+
+
 def _apply_head_tail_range(analyzer: FileAnalyzer, structure: Any, args) -> None:
     """Cut a file's lists for --head/--tail/--range here, once, not in each analyzer (BACK-1548).
 
@@ -848,7 +869,11 @@ def _apply_head_tail_range(analyzer: FileAnalyzer, structure: Any, args) -> None
     head = getattr(args, 'head', None) if args else None
     tail = getattr(args, 'tail', None) if args else None
     range_ = getattr(args, 'range', None) if args else None
+    totals = ({k: len(v) for k, v in structure.items() if isinstance(v, list)}
+              if range_ and isinstance(structure, dict) else {})
     sliced = analyzer.cut_structure(structure, head, tail, range_)
+    if range_ and sliced:
+        _reject_empty_range(analyzer, structure, sliced, totals, range_)
     if (head or tail or range_) and not sliced:
         flag = '--head' if head else '--tail' if tail else '--range'
         print(f"Note: {flag} has no effect on {analyzer.path.name} -- its structure has no "
