@@ -82,28 +82,39 @@ Two problems shape the current work.
    push that changes call resolution (BACK-2586); gate imports on a multi-package Python
    repository (BACK-2575); make a damaged file exit like its URI spelling (BACK-2588); keep
    summaries computed over the whole scan, not the shown page (BACK-2592).
-2. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
+2. **One structure for every command.** Every noun gets both spellings (`reveal NOUN
+   TARGET --option` and `NOUN://TARGET?option=value`) generated from one declaration, and a
+   shared idea gets one option name with one meaning on every noun (BACK-2595, BACK-2597,
+   BACK-2598). Counting rules shrink to one line in text output and stay in full in the
+   JSON (BACK-2599). The model is accepted when a fresh agent, given one help screen, forms
+   the right command on a fixed question set (BACK-2596). Old names keep working with a
+   note until 1.0.
+3. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
    through `imports`; finish per-language parity before the old names stop working (BACK-2079, BACK-2063);
    the public-path recall gate and the oracle-free graph invariants run in CI and stay green
    in every language.
-3. **One quality family.** `metrics` absorbs `hotspots` (BACK-2149);
-   commands share their requested parses instead of repeating them
-   (BACK-1889, BACK-1885). Compact overview already uses one import analysis;
-   the old dashboard assessment passes were removed.
-4. **The rest of the result contract.** Typed outcomes at the remaining adapter and analyzer
+4. **One quality family.** `metrics` absorbs `hotspots` (BACK-2149). Compact overview
+   already uses one import analysis; the old dashboard assessment passes were removed.
+5. **The rest of the result contract.** Typed outcomes at the remaining adapter and analyzer
    boundaries (BACK-2325, BACK-1857), one rendering layer (BACK-916), one scan-budget policy
    (BACK-1052).
-5. **A smaller core and a public adapter framework.** The hosting-operations adapters move
-   to a separate `reveal-ops` package installed through pip entry points, and a "write your
-   own adapter" guide with one contract test every adapter passes (BACK-2162, BACK-2165).
-   Help discovery folds into `help://` (BACK-1055).
 6. **Measure what is still judgment.** Decide per heuristic output whether to measure,
    narrow or retire it (BACK-2353), starting with the file hotspot score (BACK-2593);
    precision oracles for the element flags from independent tools (BACK-2203); rule precision beyond Python (BACK-1095); more languages
    in the recall gate (BACK-2079); a language scorecard generated from data (BACK-1900).
 7. **Docs that cannot drift.** Every example in the README, the agent guide, the guides and
    `help://examples` now runs in CI; the ones that need a live host still skip until recorded
-   host fixtures exist (BACK-1615). Consumers move to the new names before the cut (BACK-2071).
+   host fixtures exist (BACK-1615). Help discovery folds into `help://` (BACK-1055). Consumers move to the new names before
+   the cut (BACK-2071).
+
+**After 1.0.** 1.0 freezes names, exit codes and the JSON envelope. These follow it:
+
+- **A smaller core and a public adapter framework.** The hosting-operations adapters move
+  to a separate `reveal-ops` package installed through pip entry points, with a "write your
+  own adapter" guide and one contract test every adapter passes (BACK-2162, BACK-2165).
+  Until then they ship in the default install, noted as moving and outside the 1.0 freeze.
+- **Shared parses.** Commands share their requested parses instead of repeating them
+  (BACK-1889, BACK-1885).
 
 Not on this list: new adapters, new languages and new flags, which wait until the work
 above lands.
