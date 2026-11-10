@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-10-25
+> **Last updated**: 2026-11-09
 
 Where reveal is going and what will change for the people who use it. What has already
 shipped is in [CHANGELOG.md](CHANGELOG.md); measured accuracy per language is in
@@ -29,8 +29,9 @@ Everything reveal does sits on one ladder, and the docs teach it in this order:
 
 About 90% of real use is five operations: extract an element (`reveal FILE NAME`), extract
 a markdown section (`reveal DOC.md "Heading"`), `--grep`, outline a file (`reveal FILE`), and
-read a line range (`reveal FILE :N-M`). A bug in one of them outranks all other work, and
-none of the changes below touches them.
+read a line range (`reveal FILE :N-M`). A bug in one of them outranks all other work. The
+changes below leave their text output alone; their `--format json` gains the same envelope
+every other answer carries, by addition (BACK-2601).
 
 Their bar is `tests/test_core_tier_golden.py`: text output pinned byte for byte across the
 tier-1 languages and markdown, in three views (breadcrumbs off, a first run with
@@ -87,25 +88,28 @@ Two problems shape the current work.
    shared idea gets one option name with one meaning on every noun (BACK-2595, BACK-2597,
    BACK-2598). Counting rules shrink to one line in text output and stay in full in the
    JSON (BACK-2599). The model is accepted when a fresh agent, given one help screen, forms
-   the right command on a fixed question set (BACK-2596). Old names keep working with a
-   note until 1.0.
+   the right command on a fixed question set (BACK-2596). Every answer, path reads
+   included, carries the same JSON envelope (BACK-2601). `check` shows medium and above,
+   counts low findings in one line and exits 1 on high only, in a minor release before 1.0
+   (BACK-2602). Old names keep working with a note until 1.0.
 3. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
    through `imports`; finish per-language parity before the old names stop working (BACK-2079, BACK-2063);
    the public-path recall gate and the oracle-free graph invariants run in CI and stay green
    in every language.
-4. **One quality family.** `metrics` absorbs `hotspots` (BACK-2149). Compact overview
+4. **One quality family.** `metrics` absorbs the retiring `hotspots` noun (BACK-2149). Compact overview
    already uses one import analysis; the old dashboard assessment passes were removed.
 5. **The rest of the result contract.** Typed outcomes at the remaining adapter and analyzer
    boundaries (BACK-2325, BACK-1857), one rendering layer (BACK-916), one scan-budget policy
    (BACK-1052).
-6. **Measure what is still judgment.** Decide per heuristic output whether to measure,
-   narrow or retire it (BACK-2353), starting with the file hotspot score (BACK-2593);
+6. **Measure what is still judgment.** Each heuristic output is measured, narrowed or
+   retired, starting with the file hotspot score (BACK-2593);
    precision oracles for the element flags from independent tools (BACK-2203); rule precision beyond Python (BACK-1095); more languages
-   in the recall gate (BACK-2079); a language scorecard generated from data (BACK-1900).
+   in the recall gate (BACK-2079); each answer names its tier, and the language scorecard
+   is generated from the same data (BACK-1900).
 7. **Docs that cannot drift.** Every example in the README, the agent guide, the guides and
    `help://examples` now runs in CI; the ones that need a live host still skip until recorded
-   host fixtures exist (BACK-1615). Help discovery folds into `help://` (BACK-1055). Consumers move to the new names before
-   the cut (BACK-2071).
+   host fixtures exist (BACK-1615). Help discovery folds into `help://` (BACK-1055). Consumers,
+   the MCP tools included, move to the new names before the cut (BACK-2071).
 
 **After 1.0.** 1.0 freezes names, exit codes and the JSON envelope. These follow it:
 
@@ -139,11 +143,11 @@ above lands.
 compares a tracked ref with the live working tree. Follow its drill-down commands
 for detailed quality, complexity, import relationships and history.
 
-Element flag consolidation has started: `--deps` is deprecated in favor of
-`--inputs`, `--mutations`/`--writes` are replaced by `--outputs`, and `--calls`
-by `--callsites`. The remaining flow, effects and variable-view merges still need
-their language/mode qualification; the target is about 12 flags with no name shared
-with a command.
+Element flags are becoming one option: `reveal PATH ELEMENT --view
+boundary|effects|flow|exits|vars`. The first renames have shipped: `--deps` is replaced by
+`--inputs`, `--mutations`/`--writes` by `--outputs`, and `--calls` by `--callsites`. Each
+old flag keeps working with a note until the cut, and a view is checked in every
+language before it absorbs a flag.
 
 ### How a name retires
 
@@ -154,16 +158,17 @@ with a command.
   CHANGELOG entry for that release carries the full old-to-new table, generated from the
   same list. There is one breaking release, not one per change.
 - **Hosting-operations adapters** (`cpanel`, `autossl`, `letsencrypt`, the nginx live probes,
-  `mysql`, `ssl`, `domain`) move to a separate `reveal-ops` package at the cut, published
-  before that release; an old scheme then exits 2 and says how to install it. nginx config analysis and its rules stay in core. `python://`
+  `mysql`, `ssl`, `domain`) ship in 1.0, noted as moving and outside its freeze. They move
+  to a separate `reveal-ops` package in a later release, published before core drops them;
+  an old scheme then exits 2 and says how to install it. nginx config analysis and its rules stay in core. `python://`
   is retired outright (removed, not moved); `env://` stays.
 
 ### Exit codes
 
 One contract for every command: 0 completed, 1 completed with findings when a findings gate
 is on, 2 invalid invocation or resource, 3 analysis or output failed or was incomplete.
-Incomplete wins over findings. `check` gates on findings by default; `--fail-on none`
-reports them without exit 1.
+Incomplete wins over findings. `check` gates on findings by default (on high-severity
+findings only once BACK-2602 lands); `--fail-on none` reports them without exit 1.
 
 ---
 
