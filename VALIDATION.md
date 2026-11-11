@@ -2527,7 +2527,8 @@ manifest entry with a `recall:` block names an independent oracle from
 |---|---|---|
 | `gcc-c` | GCC opens each literal quoted include in an isolated probe | Redis, curl |
 | `gcc-cpp` | The same probe as C++ | assimp |
-| `python-ast` | `ast.parse` plus filesystem module resolution; `TYPE_CHECKING` imports skipped | celery, reveal's own tree |
+| `python-ast` | `ast.parse` plus CPython `PathFinder` under the declared scan root; packages precede same-named module files; `TYPE_CHECKING` imports skipped | celery, reveal's own tree |
+| `python-hatch` | Native Hatchling editable wheels supply import roots, then CPython `PathFinder` resolves absolute imports without executing the measured packages | Dagster, Dagster Pipes and Dagster Shared runtime packages |
 | `rust-cargo` | `cargo metadata` gives crate roots and in-tree dependencies; rustc's module tree (`mod`, `#[path]`, `use` bindings and globs) gives the file of each path's deepest module. Files no crate compiles are left out of the scored population | Meilisearch, ripgrep |
 | `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java`. A type declared in several files is scored against the copy the importer's Maven module builds with: its own, else one on its build path (each aggregator's `<modules>` and dependency groupId:artifactId; no versions read). Undecided imports are counted, not scored; duplicates with no pom.xml make the measurement unavailable | Elasticsearch `server/src/main/java`, guava |
 | `kotlin-declared` | Text rule: a top-level declaration is indexed under its package whatever the file is named; an explicit import resolves to the declaring file | tivi, kotlinx.coroutines |
@@ -2630,6 +2631,27 @@ per-target view it replaced reported it as unavailable (BACK-2429).
 
 The `python-reveal` population is reveal's own repository at public
 `4d4116cc` (whole tree, tests included): 1,397 files, 544 targets, 4,986/4,986 edges, 0 extra.
+
+The `python-dagster` row (BACK-2575) pins `c97898c3e4a8a3cc5e32fcc2ca97aea810342ed9` and
+scores the runtime source of three distributions under `python_modules`: `dagster`,
+`dagster-pipes` and `libraries/dagster-shared`. Hatchling 1.33.0 with editables 0.5
+(the development dependencies) builds temporary editable wheels; their literal `.pth`
+entries establish import roots. Build metadata hashes, tool versions, roots and source
+population digest are retained in coverage. No application dependencies are installed and
+the measured packages are not imported. Dynamic editable hooks or missing build inputs
+make this bounded oracle unavailable rather than falling back to directory guesses.
+
+On the weekly workflow's language-pack 1.23.1: 860 Python files, 649 targets and
+6,161/6,161 static edges, 0 extra, including 350 cross-package edges. Before BACK-2610,
+117 were missing: 70 package-file targets were attributed to an earlier namespace
+container and 47 submodule targets were hidden by that same container. Both function-local
+views also measure 100% (5,558 load-time / 603 function-only edges). This covers the three
+selected packages, not the whole Dagster repository or every Python packaging backend.
+The existing flat Python rows retain their populations and scores. The self-corpus pin
+contains both `mysql.py` and `mysql/__init__.py`: CPython selects the package. Three
+importer targets were corrected from module to package when reviewing the oracle and
+resolver together; the row still has 4,986 expected edges. No existing baseline row was
+lowered. Python changes select the monorepo row in the push gate.
 
 ```bash
 npm ci --prefix scripts/oracles --ignore-scripts --no-audit --no-fund  # optional compiler oracle

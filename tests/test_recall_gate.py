@@ -1103,7 +1103,8 @@ def test_oracle_independence_predicate_on_planted_snippets(language, source, mus
 
 
 @pytest.mark.parametrize('language,path', [
-    ('python', 'recall_oracles.py'), ('js', 'ts_import_oracle.cjs'), ('go', 'oracles/go_import_oracle.go'),
+    ('python', 'recall_oracles.py'), ('python', 'oracles/python_build_paths.py'),
+    ('js', 'ts_import_oracle.cjs'), ('go', 'oracles/go_import_oracle.go'),
 ])
 def test_oracles_never_depend_on_reveal(language, path):
     # The oracle must stay independent of the resolver it measures, or a shared bug scores 100%.

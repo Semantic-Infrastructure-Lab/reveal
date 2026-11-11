@@ -1894,5 +1894,171 @@
       ],
       "unscored_target_paths_unavailable": 0
     }
+  },
+  "python-dagster": {
+    "oracle": "python-hatch",
+    "sha": "c97898c3e4a8a3cc5e32fcc2ca97aea810342ed9",
+    "targets": 649,
+    "oracle_edges": 6161,
+    "hit_edges": 6161,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "coverage": {
+      "files": 860,
+      "import_statements": 9348,
+      "resolved_statements": 6455,
+      "type_checking_skipped": 670,
+      "build_roots": [
+        "python_modules/dagster",
+        "python_modules/dagster-pipes",
+        "python_modules/libraries/dagster-shared"
+      ],
+      "build": {
+        "backend": "hatchling.build",
+        "backend_version": "1.33.0",
+        "editables_version": "0.5",
+        "projects": [
+          {
+            "inputs": {
+              "python_modules/dagster/pyproject.toml": "68260c833347b9c84fc650f243dcbc6f2354ca82c2207d3ca43314fc5e9a224a"
+            },
+            "project": "python_modules/dagster",
+            "roots": [
+              "python_modules/dagster"
+            ]
+          },
+          {
+            "inputs": {
+              "python_modules/dagster-pipes/pyproject.toml": "ab28da5baee642bb39dfa65a996a7ba1e385f3df537e16decc8dfbc8e7598817"
+            },
+            "project": "python_modules/dagster-pipes",
+            "roots": [
+              "python_modules/dagster-pipes"
+            ]
+          },
+          {
+            "inputs": {
+              "python_modules/libraries/dagster-shared/pyproject.toml": "35baff88432106b7803f2859393deef146f080e9ac8a79861796e85ae8b62c24"
+            },
+            "project": "python_modules/libraries/dagster-shared",
+            "roots": [
+              "python_modules/libraries/dagster-shared"
+            ]
+          }
+        ],
+        "roots": [
+          "python_modules/dagster",
+          "python_modules/dagster-pipes",
+          "python_modules/libraries/dagster-shared"
+        ]
+      },
+      "cross_package_edges": 350,
+      "population_digest": "c00048cf0c041c01cc5fd718d92d84f95e71a2f6597ef373b069f3e23057ec86",
+      "oracle_digest": "f194a1e52fed45103b1ea775e7699f6a9f8c7bebbb12c320a38153c07a4392e8",
+      "config_digest": "b628016970c1aa9f08a6c1ecfd416a6fc7d855a7521db2c5fd3bc647cbdbf997"
+    },
+    "partial_files": 0,
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [],
+      "test_scope": {
+        "anchor": ".",
+        "source": "explicit_root",
+        "include_anchor_name": false,
+        "rule": "is_test_path",
+        "basis": "paths relative to the selected project"
+      }
+    },
+    "differences": [],
+    "target_population": {
+      "status": "observed",
+      "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+      "oracle_targets": 649,
+      "observed_targets": 649,
+      "observed_pairs": 6161,
+      "scored_pairs": 6161,
+      "unscored_targets": 0,
+      "unscored_pairs": 0,
+      "unscored_target_paths": [],
+      "unscored_target_paths_unavailable": 0
+    },
+    "lazy": {
+      "exclude": {
+        "targets": 612,
+        "oracle_edges": 5558,
+        "hit_edges": 5558,
+        "extra_edges": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "partial_files": 0,
+        "edge_rule": {
+          "lazy": "exclude",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": [],
+          "test_scope": {
+            "anchor": ".",
+            "source": "explicit_root",
+            "include_anchor_name": false,
+            "rule": "is_test_path",
+            "basis": "paths relative to the selected project"
+          }
+        },
+        "differences": [],
+        "target_population": {
+          "status": "observed",
+          "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+          "oracle_targets": 649,
+          "observed_targets": 612,
+          "observed_pairs": 5558,
+          "scored_pairs": 5558,
+          "unscored_targets": 0,
+          "unscored_pairs": 0,
+          "unscored_target_paths": [],
+          "unscored_target_paths_unavailable": 0
+        }
+      },
+      "only": {
+        "targets": 273,
+        "oracle_edges": 603,
+        "hit_edges": 603,
+        "extra_edges": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "partial_files": 0,
+        "edge_rule": {
+          "lazy": "only",
+          "tests": "included",
+          "type_checking": "excluded",
+          "scope": "scan_root",
+          "unclassified_languages": [],
+          "test_scope": {
+            "anchor": ".",
+            "source": "explicit_root",
+            "include_anchor_name": false,
+            "rule": "is_test_path",
+            "basis": "paths relative to the selected project"
+          }
+        },
+        "differences": [],
+        "target_population": {
+          "status": "observed",
+          "basis": "Rendered pairs restricted to the scored importer population; oracle target keys define scoring authority",
+          "oracle_targets": 649,
+          "observed_targets": 273,
+          "observed_pairs": 603,
+          "scored_pairs": 603,
+          "unscored_targets": 0,
+          "unscored_pairs": 0,
+          "unscored_target_paths": [],
+          "unscored_target_paths_unavailable": 0
+        }
+      }
+    }
   }
 }

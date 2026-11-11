@@ -24,6 +24,7 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+from importlib.machinery import PathFinder
 from pathlib import Path
 from typing import Callable, NamedTuple
 
@@ -153,21 +154,31 @@ def _gcc_oracle(language: str) -> Callable[[Scope], tuple[Edges, Coverage]]:
 # ---- Python: ast.parse (no execution) + filesystem module resolution ----
 
 def _python_module(base: Path, dotted: str) -> Path | None:
-    """``a.b.c`` -> base/a/b/c.py, else base/a/b/c/__init__.py; None if not in tree."""
+    """Resolve under one declared root with CPython package/module precedence."""
+    return _python_spec([base], dotted)
+
+
+def _python_spec(paths: list[Path], dotted: str) -> Path | None:
+    """Resolve through CPython's path finder without executing package __init__ code."""
+    search = [str(path) for path in paths]
+    spec = None
     parts = dotted.split('.')
-    for part in parts[:-1]:
-        base = base / part
-        if not base.is_dir():
+    for index in range(len(parts)):
+        spec = PathFinder.find_spec('.'.join(parts[:index + 1]), search)
+        if spec is None:
             return None
-    for candidate in (base / f'{parts[-1]}.py', base / parts[-1] / '__init__.py'):
-        if candidate.is_file():
-            return candidate
-    return None
+        if index < len(parts) - 1:
+            if spec.submodule_search_locations is None:
+                return None
+            search = list(spec.submodule_search_locations)
+    return Path(spec.origin) if spec is not None and spec.origin and spec.origin.endswith('.py') else None
 
 
-def _python_targets(scan: Path, importer: Path, node: ast.Import | ast.ImportFrom) -> list[Path]:
+def _python_targets(scan: Path, importer: Path, node: ast.Import | ast.ImportFrom,
+                    search_paths: list[Path] | None = None) -> list[Path]:
     if isinstance(node, ast.Import):
-        return [t for alias in node.names if (t := _python_module(scan, alias.name))]
+        return [t for alias in node.names if (t := (_python_spec(search_paths, alias.name)
+                                                  if search_paths is not None else _python_module(scan, alias.name)))]
     names = [a.name for a in node.names if a.name != '*']
     if node.level:
         base = importer.parent
@@ -178,8 +189,10 @@ def _python_targets(scan: Path, importer: Path, node: ast.Import | ast.ImportFro
     if node.module:
         # `from a.b import n`: the package a.b is always imported, and each name
         # may itself be a submodule of it.
-        found = [_python_module(base, node.module)]
-        found += [_python_module(base, f'{node.module}.{n}') for n in names]
+        resolve = (lambda name: _python_spec(search_paths, name)) if search_paths is not None and not node.level else (
+            lambda name: _python_module(base, name))
+        found = [resolve(node.module)]
+        found += [resolve(f'{node.module}.{n}') for n in names]
         return [t for t in found if t]
     if not node.level:
         return []
@@ -226,7 +239,7 @@ def _python_imports(tree: ast.AST) -> list[tuple[ast.Import | ast.ImportFrom, bo
     return found
 
 
-def _python_scoped_edges(scope: Scope) -> tuple[dict[Path, set[Path]], dict[Path, set[Path]], Coverage]:
+def _python_scoped_edges(scope: Scope, search_paths: list[Path] | None = None) -> tuple[dict[Path, set[Path]], dict[Path, set[Path]], Coverage]:
     """(every edge, the edges whose every import is function-level, coverage), from one parse of each file."""
     edges: dict[Path, set[Path]] = defaultdict(set)
     load_time: dict[Path, set[Path]] = defaultdict(set)
@@ -243,7 +256,7 @@ def _python_scoped_edges(scope: Scope) -> tuple[dict[Path, set[Path]], dict[Path
                 type_checking += 1
                 continue
             statements += 1
-            targets = [t for t in _python_targets(scope.scan, importer, node) if t != importer]
+            targets = [t for t in _python_targets(scope.scan, importer, node, search_paths) if t != importer]
             resolved += bool(targets)
             for target in targets:
                 edges[target].add(importer)
@@ -256,6 +269,40 @@ def _python_scoped_edges(scope: Scope) -> tuple[dict[Path, set[Path]], dict[Path
     lazy_only = {t: importers - load_time.get(t, set()) for t, importers in edges.items()}
     return edges, lazy_only, {'files': len(scope.importers), 'import_statements': statements,
                               'resolved_statements': resolved, 'type_checking_skipped': type_checking}
+
+
+def _python_hatch_edges(scope: Scope) -> tuple[dict[Path, set[Path]], dict[Path, set[Path]], Coverage]:
+    projects = scope.config.get('build_projects')
+    if not isinstance(projects, list) or not projects or any(not isinstance(p, str) for p in projects):
+        raise RuntimeError('Hatch oracle requires nonempty build_projects')
+    probe = Path(__file__).parent / 'oracles/python_build_paths.py'
+    run = subprocess.run([sys.executable, str(probe), str(scope.root), *projects],
+                         capture_output=True, text=True, encoding='utf-8', timeout=ORACLE_PROBE_TIMEOUT)
+    if run.returncode:
+        raise RuntimeError(run.stderr.strip() or 'Hatch build-path oracle failed')
+    proof = json.loads(run.stdout)
+    roots = [scope.root / path for path in proof['roots']]
+    if not roots or any(not path.resolve().is_relative_to(scope.scan) for path in roots):
+        raise RuntimeError('Hatch build roots must be within the measured scan')
+    edges, lazy, coverage = _python_scoped_edges(scope, roots)
+    def owner(path):
+        return next((root for root in sorted(roots, key=lambda p: len(p.parts), reverse=True)
+                     if path.is_relative_to(root)), None)
+    cross = sum(owner(target) != owner(importer) for target, importers in edges.items() for importer in importers)
+    coverage.update(build_roots=proof['roots'], build=proof,
+                    cross_package_edges=cross, **_probe_identity(scope, probe))
+    if not cross:
+        raise RuntimeError('Hatch oracle measured no cross-package edges; measurement unavailable')
+    return edges, lazy, coverage
+
+
+def build_python_hatch_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+    edges, _, coverage = _python_hatch_edges(scope)
+    return _finish(scope, edges), coverage
+
+
+def python_hatch_lazy_only_edges(scope: Scope) -> Edges:
+    return _finish(scope, _python_hatch_edges(scope)[1])
 
 
 def build_python_oracle(scope: Scope) -> tuple[Edges, Coverage]:
@@ -1462,6 +1509,7 @@ ORACLES: dict[str, Oracle] = {
     'gcc-c': Oracle(C_SUFFIXES, _gcc_oracle('c')),
     'gcc-cpp': Oracle(CPP_SUFFIXES, _gcc_oracle('c++')),
     'python-ast': Oracle(frozenset({'.py'}), build_python_oracle, python_lazy_only_edges),
+    'python-hatch': Oracle(frozenset({'.py'}), build_python_hatch_oracle, python_hatch_lazy_only_edges),
     'rust-cargo': Oracle(frozenset({'.rs'}), build_rust_oracle, unscored=rust_unscored_importers),
     'typescript-compiler': Oracle(frozenset({'.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'}), build_typescript_oracle, typescript_lazy_only_edges),
     'java-jls': Oracle(frozenset({'.java'}), build_java_oracle),

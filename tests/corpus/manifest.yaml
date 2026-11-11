@@ -260,6 +260,27 @@ corpora:
     recall:
       oracle: python-ast
       importer_dirs: [.]
+  - id: python-dagster
+    language: python
+    repo: https://github.com/dagster-io/dagster.git
+    sha: c97898c3e4a8a3cc5e32fcc2ca97aea810342ed9
+    license: Apache-2.0
+    role: Multi-package Python import roots from Hatchling editable-wheel paths; runtime packages only
+    sparse_paths:
+    - python_modules/dagster/dagster
+    - python_modules/dagster-pipes/dagster_pipes
+    - python_modules/libraries/dagster-shared/dagster_shared
+    recall:
+      oracle: python-hatch
+      scan_root: python_modules
+      importer_dirs:
+      - python_modules/dagster/dagster
+      - python_modules/dagster-pipes/dagster_pipes
+      - python_modules/libraries/dagster-shared/dagster_shared
+      build_projects:
+      - python_modules/dagster
+      - python_modules/dagster-pipes
+      - python_modules/libraries/dagster-shared
   - id: rust-ripgrep
     language: rust
     repo: https://github.com/BurntSushi/ripgrep.git

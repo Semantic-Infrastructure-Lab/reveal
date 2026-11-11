@@ -48,7 +48,7 @@ SCORED_RULE = {'lazy': 'include', 'tests': 'included', 'type_checking': 'exclude
 # The combinations the engine states but this gate cannot score everywhere (BACK-2062). &lazy=exclude and
 # &lazy=only are scored for the populations whose oracle labels function-level imports (Oracle.lazy_only; LAZY_MODES).
 LAZY_MODES = ('exclude', 'only')
-_LAZY_DECLINED = ('scored for python-ast, typescript-compiler and scala-declared populations, and the opt-in '
+_LAZY_DECLINED = ('scored for python-ast, python-hatch, typescript-compiler and scala-declared populations, and the opt-in '
                   'php-token-static and ruby-ripper-relative pilots (the oracles label function-level imports). '
                   'Declined elsewhere: rust-cargo does not label a fn-local use '
                   '(BACK-2079); C, C++, Go, Java and Kotlin have no function-scope import')
