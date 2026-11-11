@@ -409,12 +409,14 @@ class MetricsAdapter(ResourceAdapter):
             self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
                 PARAM_SPECS, params, transport='typed')
             filter_query, self.result_control = parse_result_control(self._control_query())
-            filter_query = self._expression_filters()
         else:
             # Parse query string with type coercion (for legacy params)
             self.query_params = parse_query_params(query or '', coerce=True)
             # Parse result control (sort, limit, offset) - extract from query string
             filter_query, self.result_control = parse_result_control(query or '')
+
+        # Declared controls are never file filters, in legacy API queries either.
+        filter_query = self._expression_filters()
 
         # Parse query filters (new unified syntax: lines>50, complexity=5..15, etc.)
         # Only parse if the query contains new-style operators (>, <, !=, ~=, ..)

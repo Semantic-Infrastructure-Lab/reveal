@@ -55,3 +55,8 @@ def test_uri_generated_cli_and_mcp_have_same_aggregates(project):
         assert json.loads(result.stdout)['summary'] == expected
     result = json.loads(mcp_server.reveal_query(f'metrics://{project.as_posix()}?limit=1', provenance=True))
     assert result['summary'] == expected
+
+
+def test_legacy_api_mixed_control_is_not_an_extra_file_filter(project):
+    expected = ask(project, 'min_lines=3&limit=0')['summary']
+    assert ask(project, 'churn=false&lines>2&limit=1')['summary'] == expected
