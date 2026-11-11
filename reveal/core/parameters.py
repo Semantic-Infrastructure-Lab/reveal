@@ -37,9 +37,10 @@ def _bindings(node: Any, text: Callable) -> Optional[List[str]]:
     if kind in ('self_parameter', 'positional_separator', 'keyword_separator'):
         return []
     # Go groups bind several names; C uses declarator chains; C# has a name field.
-    names = node.children_by_field_name('name')
-    if kind == 'parameter_declaration' and names:
-        return [text(n) for n in names]
+    if kind == 'parameter_declaration':
+        names = [c for c in node_children(node) if _zero_arg(c, 'kind') == 'identifier']
+        if names:
+            return [text(n) for n in names]
     field = _BINDING_FIELD.get(kind)
     target = node.child_by_field_name(field) if field else None
     if target is None:

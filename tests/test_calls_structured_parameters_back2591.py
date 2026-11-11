@@ -8,6 +8,7 @@ CASES = {
     'py': ('def sink(a, sep=",", /, *args, option=")", **kwargs): return a\n', ['a', 'sep', 'args', 'option', 'kwargs']),
     'js': ('function sink(a, sep=",") { return a; }\n', ['a', 'sep']),
     'ts': ('function sink(a: number, sep: string=","): number { return a; }\n', ['a', 'sep']),
+    'tsx': ('function sink(a: number, sep: string=","): number { return a; }\n', ['a', 'sep']),
     'go': ('package p\nfunc sink(a, b int, rest ...string) int { return a }\n', ['a', 'b', 'rest']),
     'rs': ('fn sink(a: i32, sep: &str) -> i32 { a }\n', ['a', 'sep']),
     'java': ('class A { int sink(int a, String sep) { return a; } }\n', ['a', 'sep']),
@@ -58,6 +59,7 @@ def test_unqualified_legacy_structure_declines_instead_of_guessing():
     ('java', 'class A { void sink(String... args) {} }\n', ['args']),
     ('rb', 'def sink(a, key: ",", *rest, **kwargs, &block)\n a\nend\n', ['a', 'key', 'rest', 'kwargs', 'block']),
     ('c', 'int sink(void) { return 1; }\n', []),
+    ('c', 'int sink(int (*cb)(int), int a) { return cb(a); }\n', ['cb', 'a']),
 ])
 def test_receiver_variadic_and_pattern_names(tmp_path, extension, source, expected):
     (tmp_path / ('app.' + extension)).write_text(source, encoding='utf-8')
@@ -75,3 +77,12 @@ def test_unqualified_language_and_binding_shape_are_explicitly_unavailable(tmp_p
     render_calls_structure(answer, 'text')
     text = capsys.readouterr().out
     assert 'params: unavailable' in text
+
+
+def test_trace_accepts_explicitly_unavailable_parameters_but_not_a_missing_field():
+    from reveal.adapters.trace import _trace_frame_valid
+    frame = {'name': 'f', 'file': 'a.kt', 'line': 1, 'depth': 0, 'resolved': True,
+             'ambiguous': False, 'params': None, 'effects': [], 'calls': []}
+    assert _trace_frame_valid(frame, 1)
+    del frame['params']
+    assert not _trace_frame_valid(frame, 1)

@@ -409,6 +409,10 @@ def _trace_depth(value: Any) -> int:
     return clamped_whole(value, 1, 5)
 
 
+def _trace_parameters_valid(frame: Dict[str, Any]) -> bool:
+    return 'params' in frame and (frame['params'] is None or _trace_strings(frame['params']))
+
+
 def _trace_frame_valid(frame: Any, depth: int) -> bool:
     if not isinstance(frame, dict):
         return False
@@ -416,7 +420,7 @@ def _trace_frame_valid(frame: Any, depth: int) -> bool:
               and isinstance(frame.get('file'), str) and _trace_count(frame.get('line'))
               and _trace_count(frame.get('depth')) and frame['depth'] <= depth
               and type(frame.get('resolved')) is bool and type(frame.get('ambiguous')) is bool)
-    params_valid = frame.get('params') is None or _trace_strings(frame.get('params'))
+    params_valid = _trace_parameters_valid(frame)
     return scalar and params_valid and all(_trace_strings(frame.get(field)) for field in ('effects', 'calls'))
 
 
