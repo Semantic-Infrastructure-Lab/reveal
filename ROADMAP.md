@@ -79,8 +79,7 @@ Two problems shape the current work.
 
 **Next, in priority order**
 
-1. **Close the gaps that let a wrong answer through.** Run the calls recall check before a
-   push that changes call resolution (BACK-2586); gate imports on a multi-package Python
+1. **Close the gaps that let a wrong answer through.** Gate imports on a multi-package Python
    repository (BACK-2575); make a damaged file exit like its URI spelling (BACK-2588); keep
    summaries computed over the whole scan, not the shown page (BACK-2592).
 2. **One structure for every command.** Every noun gets both spellings (`reveal NOUN
