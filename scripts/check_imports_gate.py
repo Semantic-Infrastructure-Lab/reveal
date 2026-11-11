@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the public imports recall gate on the rows an unpushed range touches (BACK-2516).
+"""Run public recall signals on the rows an unpushed range touches (BACK-2516/2586).
 
 A change that moves what counts as an import runs its gate rows before it is pushed (plan rule
 10). BACK-2497 changed parse-loss counting in analyzers/imports/base.py and was pushed with four
@@ -10,7 +10,9 @@ helper runs scripts/recall_gate.py itself on the selected rows and fails on a re
 
 Path classes: shared infrastructure, the import engine and the gate's own inputs re-measure every
 row; a language's analyzer or extractor re-measures that language's rows; anything else is
-unrelated. --describe prints the selection without measuring.
+unrelated. --signal calls uses the private Calls trigger's path semantics, selecting
+call_recall populations from the public manifest. Its report and audit are separate
+from imports and private Calls evidence. --describe prints the selection without measuring.
 """
 import argparse
 import json
@@ -25,13 +27,13 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_calls_gate import (  # noqa: E402  (sibling script, not a package)
     SHARED_PATHS, analyzer_languages, audit, changed_paths, git, toolchain, unpushed_base,
+    path_languages as calls_path_languages,
 )
 
 # What the measurement itself reads: a change to one re-measures every row.
 GATE_INPUTS = frozenset({
     'scripts/recall_gate.py', 'scripts/recall_oracles.py', 'tests/corpus/manifest.yaml',
-    'tests/corpus/recall_baseline.json', '.github/workflows/recall.yml',
-    'reveal/adapters/imports.py',
+    '.github/workflows/recall.yml', 'scripts/check_imports_gate.py', 'scripts/check_calls_gate.py',
 })
 # The import engine and what it shares: parse-loss counting, node access, the stdlib lists.
 ENGINE_PREFIXES = ('reveal/analyzers/imports/', 'reveal/core/', 'reveal/rules/imports/', 'scripts/oracles/')
@@ -39,9 +41,13 @@ ENGINE_PREFIXES = ('reveal/analyzers/imports/', 'reveal/core/', 'reveal/rules/im
 LANGUAGE_EXTRACTORS = frozenset({'go', 'rust', 'python', 'javascript', 'zig'})
 
 
-def path_languages(path):
-    """None re-measures every row; an empty set is unrelated to import recall."""
-    if path in SHARED_PATHS or path in GATE_INPUTS:
+def path_languages(path, signal='imports'):
+    """None re-measures every row; an empty set is unrelated to the signal."""
+    if path in GATE_INPUTS:
+        return None
+    if signal == 'calls':
+        return None if path == 'tests/corpus/calls_baseline.json' else calls_path_languages(path)
+    if path in SHARED_PATHS or path in {'tests/corpus/recall_baseline.json', 'reveal/adapters/imports.py'}:
         return None
     stem = Path(path).stem
     if path.startswith('reveal/analyzers/imports/'):
@@ -54,23 +60,26 @@ def path_languages(path):
     return set()
 
 
-def recall_rows(manifest):
-    """Imports recall corpus ids by manifest language (recall_gate.corpus_key)."""
+def recall_rows(manifest, signal='imports'):
+    """Recall corpus ids by signal and manifest language (recall_gate.corpus_key)."""
+    field = 'call_recall' if signal == 'calls' else 'recall'
     rows = {}
     for entry in manifest['corpora']:
-        if 'recall' in entry:
+        if field in entry:
             rows.setdefault(entry['language'], []).append(entry.get('id', entry['language']))
     return rows
 
 
-def select(paths, manifest):
+def select(paths, manifest, signal='imports'):
     """(sorted corpus ids, languages touched that have no recall row)."""
-    rows = recall_rows(manifest)
+    rows = recall_rows(manifest, signal)
     every = sorted(key for keys in rows.values() for key in keys)
+    known_languages = {entry['language'] for entry in manifest['corpora']}
     wanted, unmeasured = set(), set()
     for path in paths:
-        languages = path_languages(path)
-        if languages is None:
+        languages = path_languages(path, signal)
+        if languages is None or (signal == 'calls' and languages - known_languages):
+            # Match the Calls trigger's conservative fallback for unknown shared owners.
             return every, []
         if 'typescript' in languages:
             languages = languages | {'tsx'}  # the manifest keeps the .tsx population as its own language
@@ -82,14 +91,14 @@ def select(paths, manifest):
     return sorted(wanted), sorted(unmeasured)
 
 
-def build_request(repo):
+def build_request(repo, signal='imports'):
     repo, base = unpushed_base(repo)
     paths = changed_paths(repo, base)
     request = {'checkout': str(repo), 'head': git(repo, 'rev-parse', 'HEAD'), 'base': base,
-               'changed_paths': paths, 'rows': [], 'no_recall_row': []}
-    if any(path_languages(path) != set() for path in paths):
+               'changed_paths': paths, 'signal': signal, 'rows': [], 'no_recall_row': []}
+    if any(path_languages(path, signal) != set() for path in paths):
         manifest = yaml.safe_load((repo / 'tests/corpus/manifest.yaml').read_text(encoding='utf-8'))
-        request['rows'], request['no_recall_row'] = select(paths, manifest)
+        request['rows'], request['no_recall_row'] = select(paths, manifest, signal)
     return request
 
 
@@ -114,11 +123,11 @@ def _recall_pin(repo, marker):
     return None
 
 
-def measure(repo, rows, interpreter, corpus_root, output):
+def measure(repo, rows, interpreter, corpus_root, output, signal='imports'):
     """Run the gate on ROWS with INTERPRETER; returns its exit code (output streams to the terminal)."""
     pin, have = pinned_pack(repo), toolchain(interpreter)['tree_sitter_language_pack']
     if pin and pin != have:
-        print(f'imports gate: WARNING language pack {have} here, recall.yml pins {pin}; a moved '
+        print(f'{signal} recall gate: WARNING language pack {have} here, recall.yml pins {pin}; a moved '
               'partial_files row may be the pack, not the change (BACK-2503): compare a base-commit run',
               file=sys.stderr)
     env = dict(os.environ)
@@ -131,7 +140,7 @@ def measure(repo, rows, interpreter, corpus_root, output):
     elif shutil.which('go', path=env.get('PATH')) is None and Path('/usr/local/go/bin/go').exists():
         env['PATH'] = env.get('PATH', '') + os.pathsep + '/usr/local/go/bin'
     command = [str(interpreter), str(repo / 'scripts/recall_gate.py'), '--corpus-root', str(corpus_root),
-               '--output', str(output)]
+               '--output', str(output), '--signal', signal]
     for row in rows:
         command += ['--corpus', row]
     return subprocess.run(command, cwd=repo, env=env, check=False).returncode
@@ -139,17 +148,23 @@ def measure(repo, rows, interpreter, corpus_root, output):
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--signal', choices=['imports', 'calls'], default='imports')
     parser.add_argument('--repo', type=Path, default=Path.cwd())
     parser.add_argument('--interpreter', type=Path, required=True,
                         help='the Python that has this checkout installed (the CI venv)')
     parser.add_argument('--corpus-root', type=Path,
                         default=Path(os.environ.get('REVEAL_CORPUS_DIR', '~/.cache/reveal-corpus')).expanduser())
-    parser.add_argument('--output', type=Path,
-                        default=Path.home() / '.cache/reveal-ci/logs/imports-gate-report.json')
+    parser.add_argument('--output', type=Path)
     parser.add_argument('--describe', action='store_true')
     parser.add_argument('--skip-reason')
-    parser.add_argument('--log', type=Path, default=Path.home() / '.cache/reveal-ci/logs/imports-gate.jsonl')
+    parser.add_argument('--log', type=Path)
     args = parser.parse_args(argv)
+    stem = 'calls-recall-gate' if args.signal == 'calls' else 'imports-gate'
+    logs = Path.home() / '.cache/reveal-ci/logs'
+    if args.output is None:
+        args.output = logs / f'{stem}-report.json'
+    if args.log is None:
+        args.log = logs / f'{stem}.jsonl'
     if args.skip_reason is not None and (not args.skip_reason.strip() or args.describe):
         parser.error('--skip-reason requires a nonempty reason and cannot accompany --describe')
     return args
@@ -157,36 +172,37 @@ def parse_args(argv):
 
 def main(argv=None):
     args = parse_args(argv)
+    label = 'calls recall gate' if args.signal == 'calls' else 'imports gate'
     try:
         if args.skip_reason is not None:
-            detail = f'imports gate SKIPPED explicitly: {args.skip_reason}'
+            detail = f'{label} SKIPPED explicitly: {args.skip_reason}'
             audit(args.log, args.repo.resolve(), 'skip', detail)
             print(detail, file=sys.stderr)
             return 0
-        request = build_request(args.repo)
+        request = build_request(args.repo, args.signal)
         if args.describe:
             print(json.dumps(request, indent=2, sort_keys=True))
             return 0
         if request['no_recall_row']:
-            print(f"imports gate: no recall row for {', '.join(request['no_recall_row'])} "
-                  '(no independent import oracle; nothing to measure)', file=sys.stderr)
+            print(f"{label}: no recall row for {', '.join(request['no_recall_row'])} "
+                  f'(no independent {args.signal} oracle; nothing to measure)', file=sys.stderr)
         if not request['rows']:
-            detail = 'imports gate: no import paths with a recall row changed in the unpushed range'
+            detail = f'{label}: no {args.signal} paths with a recall row changed in the unpushed range'
             audit(args.log, args.repo.resolve(), 'pass', detail)
             print(detail)
             return 0
         rows = request['rows']
-        print(f"imports gate: measuring {len(rows)} row(s): {' '.join(rows)}", flush=True)
-        code = measure(Path(request['checkout']), rows, args.interpreter, args.corpus_root, args.output)
+        print(f"{label}: measuring {len(rows)} row(s): {' '.join(rows)}", flush=True)
+        code = measure(Path(request['checkout']), rows, args.interpreter, args.corpus_root, args.output, args.signal)
         if code:
             raise ValueError(f'recall_gate.py exited {code} on {len(rows)} row(s); report {args.output}')
-        detail = f"imports gate: {len(rows)} row(s) green at {request['head'][:12]}"
+        detail = f"{label}: {len(rows)} row(s) green at {request['head'][:12]}"
         audit(args.log, args.repo.resolve(), 'pass', detail)
         print(detail)
         return 0
     except (OSError, ValueError, KeyError, yaml.YAMLError,
             subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-        detail = f'imports gate FAILED: {exc}'
+        detail = f'{label} FAILED: {exc}'
         audit(args.log, args.repo.resolve(), 'fail', detail)
         print(detail, file=sys.stderr)
         return 1

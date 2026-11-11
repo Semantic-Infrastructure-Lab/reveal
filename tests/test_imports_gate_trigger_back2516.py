@@ -25,15 +25,18 @@ MANIFEST = {'corpora': [
     {'language': 'scala', 'recall': {'oracle': 'jvm-declared'}},
     {'id': 'scala-cats-effect', 'language': 'scala', 'recall': {'oracle': 'jvm-declared'}},
     {'id': 'python-reveal', 'language': 'python', 'recall': {'oracle': 'python-ast'}},
+    {'id': 'python-celery', 'language': 'python', 'call_recall': {'oracle': 'python-ast-callers'}},
     {'id': 'ruby-solidus', 'language': 'ruby'},  # pinned, but no recall oracle
 ]}
 EVERY_ROW = ['c', 'go-client_golang', 'javascript', 'python-reveal', 'scala', 'scala-cats-effect', 'tsx', 'typescript']
 
 # A stand-in for scripts/recall_gate.py: records its argv and exits with $STUB_GATE_EXIT.
 STUB_GATE = """import json, os, sys
-with open(os.environ['STUB_GATE_ARGV'], 'w', encoding='utf-8') as out:
+signal = sys.argv[sys.argv.index('--signal') + 1] if '--signal' in sys.argv else 'imports'
+path = os.environ['STUB_GATE_ARGV'] + ('.calls' if signal == 'calls' else '')
+with open(path, 'w', encoding='utf-8') as out:
     json.dump(sys.argv[1:], out)
-sys.exit(int(os.environ.get('STUB_GATE_EXIT', '0')))
+sys.exit(int(os.environ.get('STUB_CALLS_GATE_EXIT' if signal == 'calls' else 'STUB_GATE_EXIT', '0')))
 """
 
 
@@ -168,7 +171,7 @@ def test_explicit_skip_persists_its_reason(gate, manifested, tmp_path, monkeypat
     assert records[0]['decision'] == 'skip' and 'reviewed: docs only' in records[0]['detail']
 
 
-def _dispatch(repo, tmp_path, args, gate_exit='0', changed='reveal/analyzers/imports/go.py'):
+def _dispatch(repo, tmp_path, args, gate_exit='0', changed='reveal/analyzers/imports/go.py', calls_exit='0'):
     """ci-local.sh --push with the suite stubbed, a stub recall gate and this Python as the CI venv."""
     venv = tmp_path / 'venv'
     (venv / 'py3.12/bin').mkdir(parents=True)
@@ -181,7 +184,7 @@ def _dispatch(repo, tmp_path, args, gate_exit='0', changed='reveal/analyzers/imp
     _with_stub_gate(repo)  # both are gate inputs, so they belong to the pushed base, not the range
     commit_file(repo, changed)
     env = {'REVEAL_CI_VENV_ROOT': str(venv), 'STUB_GATE_ARGV': str(tmp_path / 'argv.json'),
-           'STUB_GATE_EXIT': gate_exit, 'REVEAL_CORPUS_DIR': str(tmp_path / 'corpora')}
+           'STUB_GATE_EXIT': gate_exit, 'STUB_CALLS_GATE_EXIT': calls_exit, 'REVEAL_CORPUS_DIR': str(tmp_path / 'corpora')}
     if '--push' in args:  # extractor paths are calls-gate paths too; that gate is BACK-2204's test
         args = ['--skip-calls-gate', 'imports gate under test', *args]
     result, marker, _ = run_push_dispatch(repo, tmp_path, args, extra_env=env)
@@ -225,3 +228,116 @@ def test_push_skip_is_logged_and_measures_nothing(repo, tmp_path):
 def test_imports_gate_options_are_validated_before_the_suite(repo, tmp_path, args):
     result, marker, _ = _dispatch(repo, tmp_path, args)
     assert result.returncode != 0 and not marker.exists()
+
+
+# BACK-2586: the public callers signal is independent of import-row selection.
+@pytest.mark.parametrize('path', [
+    'reveal/adapters/calls/index.py', 'reveal/adapters/ast/call_graph.py',
+    'reveal/analyzers/python.py', 'reveal/analyzers/imports/python.py',
+    'reveal/conventions.py', 'reveal/analyzers/imports/generic.py',
+    'reveal/analyzers/imports/base.py', 'reveal/analyzers/new_language.py',
+    'tests/corpus/calls_baseline.json',
+    'scripts/check_imports_gate.py', 'scripts/check_calls_gate.py',
+    'scripts/recall_gate.py', 'scripts/recall_oracles.py',
+    'tests/corpus/manifest.yaml', '.github/workflows/recall.yml',
+])
+def test_public_calls_selects_its_manifest_rows(gate, path):
+    assert gate.select([path], MANIFEST, signal='calls') == (['python-celery'], [])
+
+
+@pytest.mark.parametrize('path', [
+    'README.md', 'reveal/analyzers/imports/service.py', 'tests/corpus/recall_baseline.json',
+])
+def test_public_calls_skips_unrelated_paths(gate, path):
+    assert gate.select([path], MANIFEST, signal='calls') == ([], [])
+
+
+def test_call_selection_preserves_language_scope_and_reports_unmeasured(gate):
+    assert gate.select(['reveal/analyzers/go.py'], MANIFEST, signal='calls') == ([], ['go'])
+    assert gate.select(['reveal/analyzers/_python_helpers.py'], MANIFEST, signal='calls') == (['python-celery'], [])
+    assert gate.select(['reveal/adapters/calls/index.py'], MANIFEST) == ([], [])
+    assert gate.select(['tests/corpus/calls_baseline.json'], MANIFEST) == ([], [])
+
+
+@pytest.mark.parametrize('path', ['scripts/check_imports_gate.py', 'scripts/check_calls_gate.py'])
+def test_trigger_inputs_remeasure_import_rows_too(gate, path):
+    assert gate.select([path], MANIFEST) == (EVERY_ROW, [])
+
+
+def test_calls_only_request_does_not_disappear_with_empty_import_rows(gate, manifested):
+    commit_file(manifested, 'reveal/adapters/calls/index.py')
+    assert gate.build_request(manifested)['rows'] == []
+    request = gate.build_request(manifested, signal='calls')
+    assert request['rows'] == ['python-celery'] and request['signal'] == 'calls'
+
+
+@shell_only
+@pytest.mark.parametrize('calls_exit', ['0', '1'])
+def test_push_runs_public_calls_without_import_rows(repo, tmp_path, calls_exit):
+    result, marker, records = _dispatch(repo, tmp_path, ['--push'],
+                                      changed='reveal/adapters/calls/index.py', calls_exit=calls_exit)
+    assert marker.exists()
+    assert result.returncode == int(calls_exit), (result.stdout, result.stderr)
+    assert not (tmp_path / 'argv.json').exists()  # no imports measurement
+    argv = json.loads((tmp_path / 'argv.json.calls').read_text(encoding='utf-8'))
+    assert argv[argv.index('--signal') + 1] == 'calls'
+    assert argv[argv.index('--corpus') + 1] == 'python-celery'
+    assert argv[argv.index('--output') + 1].endswith('calls-recall-gate-report.json')
+    calls = [json.loads(line) for line in (tmp_path / 'logs/calls-recall-gate.jsonl').read_text(encoding='utf-8').splitlines()]
+    assert calls[0]['decision'] == ('pass' if calls_exit == '0' else 'fail')
+    assert records[0]['decision'] == 'pass'
+
+
+@shell_only
+def test_imports_skip_does_not_skip_public_calls(repo, tmp_path):
+    result, _, records = _dispatch(repo, tmp_path, ['--push', '--skip-imports-gate', 'imports reviewed'],
+                                   changed='reveal/adapters/calls/index.py', calls_exit='1')
+    assert result.returncode == 1 and records[0]['decision'] == 'skip'
+    assert (tmp_path / 'argv.json.calls').exists()
+
+
+@shell_only
+def test_public_calls_skip_is_separate_and_logged(repo, tmp_path):
+    result, marker, records = _dispatch(repo, tmp_path,
+        ['--push', '--skip-calls-recall-gate', 'call population reviewed'], calls_exit='1')
+    assert result.returncode == 0 and marker.exists(), (result.stdout, result.stderr)
+    assert (tmp_path / 'argv.json').exists() and not (tmp_path / 'argv.json.calls').exists()
+    assert records[0]['decision'] == 'pass'
+    calls = [json.loads(line) for line in (tmp_path / 'logs/calls-recall-gate.jsonl').read_text(encoding='utf-8').splitlines()]
+    assert calls[0]['decision'] == 'skip' and 'call population reviewed' in calls[0]['detail']
+
+
+@shell_only
+@pytest.mark.parametrize('args', [
+    ['--skip-calls-recall-gate', 'reason'], ['--push', '--skip-calls-recall-gate', '   '],
+    ['--push', '--skip-calls-recall-gate'],
+])
+def test_public_calls_skip_validated_before_suite(repo, tmp_path, args):
+    result, marker, _ = _dispatch(repo, tmp_path, args)
+    assert result.returncode != 0 and not marker.exists()
+
+
+@shell_only
+def test_docs_only_push_measures_neither_public_signal(repo, tmp_path):
+    result, marker, _ = _dispatch(repo, tmp_path, ['--push'], changed='README.md')
+    assert result.returncode == 0 and marker.exists(), (result.stdout, result.stderr)
+    assert not (tmp_path / 'argv.json').exists() and not (tmp_path / 'argv.json.calls').exists()
+
+
+@shell_only
+def test_python_change_measures_both_signals_with_distinct_reports(repo, tmp_path):
+    result, _, _ = _dispatch(repo, tmp_path, ['--push'], changed='reveal/analyzers/python.py')
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    imports = json.loads((tmp_path / 'argv.json').read_text(encoding='utf-8'))
+    calls = json.loads((tmp_path / 'argv.json.calls').read_text(encoding='utf-8'))
+    assert imports[imports.index('--signal') + 1] == 'imports'
+    assert imports[imports.index('--output') + 1] != calls[calls.index('--output') + 1]
+    assert 'python-reveal' in imports and 'python-celery' in calls
+
+
+def test_public_signal_defaults_keep_logs_and_reports_separate(gate):
+    imports = gate.parse_args(['--interpreter', sys.executable])
+    calls = gate.parse_args(['--interpreter', sys.executable, '--signal', 'calls'])
+    assert imports.log.name == 'imports-gate.jsonl' and calls.log.name == 'calls-recall-gate.jsonl'
+    assert imports.output.name == 'imports-gate-report.json'
+    assert calls.output.name == 'calls-recall-gate-report.json'

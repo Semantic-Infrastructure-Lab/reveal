@@ -42,7 +42,10 @@
 #   scripts/ci-local.sh --push --calls-evidence FILE  # external calls measurement record
 #   scripts/ci-local.sh --push --skip-calls-gate REASON # visible, persistently logged override
 #   scripts/ci-local.sh --push --skip-imports-gate REASON # logged override of the imports recall gate
+#   scripts/ci-local.sh --push --skip-calls-recall-gate REASON # public Python callers override
 #   scripts/ci-local.sh --skip-cpu-gate REASON          # logged override of the pytest-CPU verdict (never fails)
+# The same helper runs the public Python callers signal on relevant Calls paths (BACK-2586);
+# --skip-calls-gate overrides private evidence only; public callers has its own logged skip.
 # Set REVEAL_CALLS_GATE_BASELINE to the external calls runner's baseline JSON.
 # Evidence is bound to this clean checkout, HEAD/tree and the primary CI interpreter.
 # After the suite, --push runs the public imports recall gate (scripts/recall_gate.py) on the rows whose
@@ -102,6 +105,7 @@ CALLS_EVIDENCE="${REVEAL_CALLS_GATE_EVIDENCE:-}"
 CALLS_SKIP=""
 CALLS_OPTIONS=0
 IMPORTS_SKIP=""
+CALLS_RECALL_SKIP=""
 # Exported so the --push gate's inner default run (`"$0"`) sees the same logged override.
 CPU_SKIP="${REVEAL_CPU_GATE_SKIP:-}"
 PYTEST_TARGETS=(tests/)
@@ -117,6 +121,7 @@ while [[ $# -gt 0 ]]; do
         --push) PUSH=1; shift ;;
         --calls-evidence) [[ $# -ge 2 && -n "$2" ]] || { echo "--calls-evidence needs a path" >&2; exit 2; }; CALLS_EVIDENCE="$2"; CALLS_OPTIONS=1; shift 2 ;;
         --skip-calls-gate) [[ $# -ge 2 && -n "$2" ]] || { echo "--skip-calls-gate needs a reason" >&2; exit 2; }; CALLS_SKIP="$2"; CALLS_OPTIONS=1; shift 2 ;;
+        --skip-calls-recall-gate) [[ $# -ge 2 && -n "${2//[[:space:]]/}" ]] || { echo "--skip-calls-recall-gate needs a reason" >&2; exit 2; }; CALLS_RECALL_SKIP="$2"; CALLS_OPTIONS=1; shift 2 ;;
         --skip-imports-gate) [[ $# -ge 2 && -n "${2//[[:space:]]/}" ]] || { echo "--skip-imports-gate needs a reason" >&2; exit 2; }; IMPORTS_SKIP="$2"; CALLS_OPTIONS=1; shift 2 ;;
         --skip-cpu-gate) [[ $# -ge 2 && -n "$2" ]] || { echo "--skip-cpu-gate needs a reason" >&2; exit 2; }; CPU_SKIP="$2"; export REVEAL_CPU_GATE_SKIP="$2"; shift 2 ;;
         --) shift; [[ $# -gt 0 ]] && { PYTEST_TARGETS=("$@"); EXPLICIT_TARGETS=1; }; break ;;
@@ -171,6 +176,10 @@ if [[ $PUSH -eq 1 ]]; then
     IMPORTS_ARGS=(--repo "$GATE_REPO" --interpreter "$CALLS_PY"
         --log "${REVEAL_CI_LOG_DIR:-${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/logs}/imports-gate.jsonl"
         --output "${REVEAL_CI_LOG_DIR:-${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/logs}/imports-gate-report.json")
+    CALLS_RECALL_ARGS=(--repo "$GATE_REPO" --interpreter "$CALLS_PY" --signal calls
+        --log "${REVEAL_CI_LOG_DIR:-${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/logs}/calls-recall-gate.jsonl"
+        --output "${REVEAL_CI_LOG_DIR:-${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/logs}/calls-recall-gate-report.json")
+    [[ -n "$CALLS_RECALL_SKIP" ]] && CALLS_RECALL_ARGS+=(--skip-reason "$CALLS_RECALL_SKIP")
     [[ -n "$IMPORTS_SKIP" ]] && IMPORTS_ARGS+=(--skip-reason "$IMPORTS_SKIP")
     python3 "$CALLS_HELPER" "${CALLS_ARGS[@]}" || exit 1
     INNER_ARGS=()
@@ -182,6 +191,7 @@ if [[ $PUSH -eq 1 ]]; then
     "$0" ${INNER_ARGS[@]+"${INNER_ARGS[@]}"} || { echo "push gate FAILED (ci-local.sh default run)" >&2; exit 1; }
     python3 "$CALLS_HELPER" "${CALLS_ARGS[@]}" || exit 1
     python3 "$IMPORTS_HELPER" "${IMPORTS_ARGS[@]}" || { echo "push gate FAILED (imports recall gate)" >&2; exit 1; }
+    python3 "$IMPORTS_HELPER" "${CALLS_RECALL_ARGS[@]}" || { echo "push gate FAILED (public calls recall gate)" >&2; exit 1; }
     printf '\nPush gate passed. Push, then: scripts/ci-watch.sh (macOS, Windows and the floor run only on GitHub).\n'
     exit 0
 fi

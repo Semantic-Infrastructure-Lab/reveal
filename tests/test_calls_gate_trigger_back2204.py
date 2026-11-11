@@ -31,7 +31,11 @@ def repo(tmp_path):
     git(root, 'config', 'user.email', 'gate@example.invalid')
     git(root, 'config', 'commit.gpgsign', 'false')
     (root / 'README.md').write_text('initial\n', encoding='utf-8')
-    git(root, 'add', 'README.md')
+    scripts = root / 'scripts'
+    scripts.mkdir()
+    for helper in (HELPER, HELPER.with_name('check_imports_gate.py')):
+        shutil.copy2(helper, scripts / helper.name)
+    git(root, 'add', '.')
     git(root, 'commit', '-qm', 'base')
     git(root, 'update-ref', 'refs/remotes/origin/master', 'HEAD')
     return root
@@ -301,7 +305,8 @@ def test_unrelated_push_retains_default_suite(repo, tmp_path):
 def test_explicit_push_skip_logs_reason_and_still_runs_suite(repo, tmp_path):
     commit_file(repo, 'reveal/treesitter.py')
     result, marker, log = run_push_dispatch(repo, tmp_path, ['--push', '--skip-calls-gate', 'reviewed exception',
-                                                             '--skip-imports-gate', 'calls gate under test'])
+                                                             '--skip-imports-gate', 'calls gate under test',
+                                                             '--skip-calls-recall-gate', 'private evidence gate under test'])
     assert result.returncode == 0 and marker.exists(), (result.stdout, result.stderr)
     records = [json.loads(line) for line in log.read_text(encoding='utf-8').splitlines()]
     assert len(records) == 2 and all(row['decision'] == 'skip' for row in records)
