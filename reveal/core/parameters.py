@@ -47,6 +47,11 @@ def _bindings(node: Any, text: Callable) -> Optional[List[str]]:
                   or node.child_by_field_name('declarator'))
     if target is not None:
         return _bindings(target, text)
+    return _wrapped_bindings(node, kind, text)
+
+
+def _wrapped_bindings(node: Any, kind: str, text: Callable) -> Optional[List[str]]:
+    """Binding containers whose children, rather than a named field, own the names."""
     children = [c for c in node_children(node) if _zero_arg(c, 'is_named')]
     if kind == 'spread_parameter':
         binding = next((c for c in children if _zero_arg(c, 'kind') == 'variable_declarator'), None)

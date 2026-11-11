@@ -253,6 +253,10 @@ def _short_callee(call: str) -> str:
     return text if len(text) <= _MAX_EXTERNAL_NAME else text[:_MAX_EXTERNAL_NAME - 3] + '...'
 
 
+def _parameter_text(params: Optional[List[str]]) -> str:
+    return 'unavailable' if params is None else ', '.join(params)
+
+
 def _frame(name: str, node: Optional[CalleeNode], depth: int) -> Dict[str, Any]:
     return {
         'name': name,
@@ -378,10 +382,9 @@ def _render_trace(report: Dict[str, Any]) -> None:
         print(f"{indent}{name}{loc}{marker}{relation}")
 
         inner = indent + '  '
-        if frame['params'] is None:
-            print(f"{inner}params:  unavailable")
-        elif frame['params']:
-            print(f"{inner}params:  {', '.join(frame['params'])}")
+        params_text = _parameter_text(frame['params'])
+        if params_text:
+            print(f"{inner}params:  {params_text}")
         if frame['effects']:
             print(f"{inner}effects: {', '.join(frame['effects'])}")
         if frame['calls']:
