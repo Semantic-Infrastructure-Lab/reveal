@@ -79,9 +79,9 @@ Two problems shape the current work.
 
 **Next, in priority order**
 
-1. **Close the gaps that let a wrong answer through.** Keep summaries computed over the
-   whole scan, not the shown page (BACK-2592). The Python imports gate now includes a
-   build-backed multi-package repository alongside the existing flat-project rows.
+1. **Make the first request work.** Fix misleading cap guidance (BACK-2603) and the
+   unimplemented noun spellings' error message (BACK-2605). Define the fixed first-call
+   questions (BACK-2596) before command-model mapping and implementation.
 2. **One structure for every command.** Every noun gets both spellings (`reveal NOUN
    TARGET --option` and `NOUN://TARGET?option=value`) generated from one declaration, and a
    shared idea gets one option name with one meaning on every noun (BACK-2595, BACK-2597,

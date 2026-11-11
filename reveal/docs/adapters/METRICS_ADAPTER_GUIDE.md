@@ -483,7 +483,11 @@ When results are limited, output includes (text output ends with the same messag
 }
 ```
 
-The summary aggregates only the files shown.
+The summary aggregates all successfully analyzed files kept by the filters, before
+`limit` or `offset`. `summary_only=true` omits rows without changing those aggregates.
+The directory result's `population` names `filtered_analyzed_files` as the summary basis
+and distinguishes `analyzed_files`, `filtered_files` and `displayed_files`. Existing
+failure and exclusion diagnostics qualify what the scan could analyze.
 
 ---
 
