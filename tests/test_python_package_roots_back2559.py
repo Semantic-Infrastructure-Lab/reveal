@@ -106,3 +106,55 @@ def test_a_scan_rooted_at_the_package_itself_stays_at_that_root(tmp_path):
     # Its own directory as the scan root (the import root itself) resolves them.
     assert _statements(root, 'python_modules/core')[('python_modules/core/core/api.py', 'core.engine.run')][0] == (
         'python_modules/core/core/engine/run.py')
+
+
+def test_namespace_container_before_a_regular_package_does_not_hide_it(tmp_path):
+    from reveal.analyzers.imports.resolver import resolve_python_import, resolve_python_from_import_submodules
+    from reveal.analyzers.imports.types import ImportStatement
+    early, installed = tmp_path / 'scan', tmp_path / 'install'
+    for path in [early / 'pkg/part.py', installed / 'pkg/__init__.py', installed / 'pkg/part.py']:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('', encoding='utf-8')
+    stmt = ImportStatement(file_path=tmp_path / 'caller.py', is_relative=False,
+                           module_name='pkg', import_type='from_import', imported_names=['part'], line_number=1)
+    assert resolve_python_import(stmt, tmp_path, [early, installed]) == installed / 'pkg/__init__.py'
+    assert resolve_python_from_import_submodules(stmt, tmp_path, [early, installed]) == [installed / 'pkg/part.py']
+    nested = ImportStatement(file_path=tmp_path / 'caller.py', is_relative=False, imported_names=[],
+                             module_name='pkg.part', import_type='import', line_number=1)
+    assert resolve_python_import(nested, tmp_path, [early, installed]) == installed / 'pkg/part.py'
+
+
+def test_namespace_portions_still_supply_a_nested_module(tmp_path):
+    from reveal.analyzers.imports.resolver import resolve_python_import
+    from reveal.analyzers.imports.types import ImportStatement
+    left, right = tmp_path / 'left', tmp_path / 'right'
+    (left / 'pkg').mkdir(parents=True)
+    (right / 'pkg').mkdir(parents=True)
+    target = right / 'pkg/leaf.py'
+    target.write_text('', encoding='utf-8')
+    stmt = ImportStatement(tmp_path / 'caller.py', 1, 'pkg.leaf', [], False, 'import')
+    assert resolve_python_import(stmt, tmp_path, [left, right]) == target
+
+
+def test_regular_package_precedes_a_same_root_module_file(tmp_path):
+    from reveal.analyzers.imports.resolver import resolve_python_import
+    from reveal.analyzers.imports.types import ImportStatement
+    (tmp_path / 'pkg').mkdir()
+    (tmp_path / 'pkg/__init__.py').write_text('', encoding='utf-8')
+    (tmp_path / 'pkg.py').write_text('', encoding='utf-8')
+    stmt = ImportStatement(tmp_path / 'caller.py', 1, 'pkg', [], False, 'import')
+    assert resolve_python_import(stmt, tmp_path, [tmp_path]) == tmp_path / 'pkg/__init__.py'
+
+
+def test_from_imported_package_precedes_a_same_named_module(tmp_path):
+    from reveal.analyzers.imports.resolver import resolve_python_import, resolve_python_from_import_submodules
+    from reveal.analyzers.imports.types import ImportStatement
+    outer = tmp_path / 'outer'
+    (outer / 'inner').mkdir(parents=True)
+    for path in [outer / '__init__.py', outer / 'inner.py', outer / 'inner/__init__.py']:
+        path.write_text('', encoding='utf-8')
+    absolute = ImportStatement(tmp_path / 'caller.py', 1, 'outer', ['inner'], False, 'from_import')
+    relative = ImportStatement(outer / 'caller.py', 1, '', ['inner'], True, 'from_import', level=1)
+    assert resolve_python_from_import_submodules(absolute, tmp_path, [tmp_path]) == [outer / 'inner/__init__.py']
+    assert resolve_python_import(relative, outer, [tmp_path]) == outer / 'inner/__init__.py'
+    assert resolve_python_from_import_submodules(relative, outer, [tmp_path]) == [outer / 'inner/__init__.py']

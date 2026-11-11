@@ -60,12 +60,9 @@ def _resolve_relative(import_stmt: ImportStatement, base_path: Path) -> Optional
         # imported_names = ['query as q']; strip the alias before resolving.
         for raw_name in import_stmt.imported_names:
             name = raw_name.split()[0]  # 'query as q' → 'query'
-            mod_file = target_path / f"{name}.py"
-            if mod_file.exists():
-                return mod_file
-            pkg_init = target_path / name / "__init__.py"
-            if pkg_init.exists():
-                return pkg_init
+            resolved = _try_resolve_module(target_path, [name])
+            if resolved is not None and resolved.is_file():
+                return resolved
         # No imported name matched a submodule — the name lives in __init__.py.
         init = target_path / "__init__.py"
         return init if init.exists() else None
@@ -76,7 +73,7 @@ def _resolve_relative(import_stmt: ImportStatement, base_path: Path) -> Optional
     # package and silently mis-targeted every multi-segment relative import
     # (helpers/__init__.py absorbed the edge, so the real module's fan-in was
     # undercounted). _try_resolve_module handles the single-part case
-    # identically (module.py -> package/__init__.py -> namespace dir).
+    # with the same package/module/namespace precedence.
     return _try_resolve_module(target_path, parts)
 
 
@@ -121,55 +118,39 @@ def _resolve_absolute(
     else:
         all_paths = [base_path] + list(search_paths)
 
-    for search_path in all_paths:
-        # Try to resolve as module file or package
-        resolved = _try_resolve_module(search_path, module_parts)
-        if resolved:
-            return resolved
+    return _resolve_module_paths(all_paths, module_parts)
 
-    # Not found in any search path - likely stdlib or external package
+
+def _python_component(roots: List[Path], name: str) -> tuple[Optional[Path], List[Path]]:
+    """Regular packages/modules win over namespace portions across the search path."""
+    namespaces = []
+    for root in roots:
+        package = root / name
+        init = package / '__init__.py'
+        if init.is_file():
+            return init, [package]
+        module = root / f'{name}.py'
+        if module.is_file():
+            return module, []
+        if package.is_dir():
+            namespaces.append(package)
+    return (namespaces[0], namespaces) if namespaces else (None, [])
+
+
+def _resolve_module_paths(roots: List[Path], parts: List[str]) -> Optional[Path]:
+    """Resolve each prefix before descending; an earlier namespace cannot shadow a package."""
+    for index, part in enumerate(parts):
+        resolved, roots = _python_component(roots, part)
+        if resolved is None or index == len(parts) - 1:
+            return resolved
+        if not roots:  # a module file cannot contain further import path components
+            return None
     return None
 
 
 def _try_resolve_module(base: Path, parts: List[str]) -> Optional[Path]:
-    """Try to resolve module parts to a file under base path.
-
-    Examples:
-        ['mypackage', 'utils'] ->
-            1. mypackage/utils.py
-            2. mypackage/utils/__init__.py
-            3. mypackage/utils/ (namespace package)
-    """
-    if not parts:
-        return None
-
-    # Single module: 'utils' -> utils.py or utils/__init__.py
-    if len(parts) == 1:
-        module_file = base / f"{parts[0]}.py"
-        if module_file.exists():
-            return module_file
-
-        package_init = base / parts[0] / "__init__.py"
-        if package_init.exists():
-            return package_init
-
-        package_dir = base / parts[0]
-        if package_dir.is_dir():
-            return package_dir
-
-        return None
-
-    # Nested module: 'mypackage.utils' -> mypackage/utils.py
-    first = parts[0]
-    rest = parts[1:]
-
-    # Check if first part is a package directory
-    package_dir = base / first
-    if not package_dir.is_dir():
-        return None
-
-    # Recursively resolve remaining parts
-    return _try_resolve_module(package_dir, rest)
+    """Resolve under one root using the same package/module/namespace precedence."""
+    return _resolve_module_paths([base], parts)
 
 
 def resolve_python_from_import_submodules(
@@ -206,13 +187,9 @@ def resolve_python_from_import_submodules(
         name = raw_name.split()[0]  # 'intent as i' → 'intent'
         if not name or name == '*':
             continue
-        submodule = pkg_dir / f"{name}.py"
-        if submodule.exists():
+        submodule = _try_resolve_module(pkg_dir, [name])
+        if submodule is not None and submodule.is_file():
             targets.append(submodule)
-            continue
-        sub_pkg_init = pkg_dir / name / "__init__.py"
-        if sub_pkg_init.exists():
-            targets.append(sub_pkg_init)
             continue
         symbol_seen = True  # name isn't a submodule -> lives in pkg_dir/__init__.py
 
@@ -255,24 +232,14 @@ def _from_import_package_dir(
             target = target / part
         return target if target.is_dir() else None
 
-    # Same stdlib guard as _resolve_absolute (BACK-1080): `from os import path`
-    # loads the stdlib, never a same-named in-tree os/ package's path.py.
-    if not parts or parts[0] in STDLIB_MODULES:
+    if not parts:
         return None
-    # Same package-interior guard as _resolve_absolute: a `from typing import X`
-    # whose base_path package also holds a `typing/` dir must not shadow the
-    # stdlib name via the importer's own directory.
-    if (base_path / "__init__.py").exists():
-        roots = list(search_paths)
-    else:
-        roots = [base_path] + list(search_paths)
-    for search_path in roots:
-        candidate = search_path
-        for part in parts:
-            candidate = candidate / part
-        if candidate.is_dir():
-            return candidate
-    return None
+    resolved = _resolve_absolute(import_stmt, base_path, search_paths)
+    if resolved is None:
+        return None
+    if resolved.is_dir():
+        return resolved
+    return resolved.parent if resolved.name == '__init__.py' else None
 
 
 __all__ = [

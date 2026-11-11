@@ -18,6 +18,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- Python import resolution now continues past namespace-directory candidates to a regular package
+  on a later import root, and prefers packages over same-named module files in `from` imports too.
+  `reveal imports DIR` previously missed or misattributed these dependencies in monorepos. (BACK-2610)
+
 - `reveal FILE` structure views now exit 2 for invalid Office archives or notebook document shapes,
   and 3 when required parsing, worksheet analysis or output fails; they previously exited 1.
   `xlsx://` overviews also preserve workbook parse failures instead of reporting an empty success,
