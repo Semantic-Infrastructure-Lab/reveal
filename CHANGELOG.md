@@ -16,6 +16,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
+### Fixed
+
+- Python `query("calls://…", callers="NAME", depth=2)` now applies declared keyword controls before choosing a mode. Unknown keywords raise `TypeError`; pass controls to `query` or the constructor instead of `CallsAdapter.get_structure` (BACK-2608).
+
 ### Behavior changes
 
 - Python import resolution now continues past namespace-directory candidates to a regular package

@@ -139,6 +139,8 @@ _PRESENCE_FLAGS = ('uncalled', 'modules', 'detail')
 
 def _selects(name: str, value: Any) -> bool:
     """Whether a supplied mode key selects its mode: ``uncalled=false`` does not."""
+    if value is None:
+        return False
     if name in _PRESENCE_FLAGS:
         return not (value is False or isinstance(value, str) and value.strip().lower() in ('false', 'no', '0'))
     return True
@@ -605,6 +607,7 @@ class CallsAdapter(ResourceAdapter):
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = _RESOURCE
     PARAM_SPECS = _PARAM_SPECS
+    BOUND_QUERY_CALL = True
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -742,11 +745,11 @@ class CallsAdapter(ResourceAdapter):
         print(f"⚠ Query param 'depth' for calls:// applies to ?callers, ?callees and ?root only, "
               f"not ?{mode} — ignored.", file=sys.stderr)
 
-    def get_structure(self, **kwargs) -> RevealResult:
+    def get_structure(self) -> RevealResult:
         with self.composition_run():
-            return self._get_structure(**kwargs)
+            return self._get_structure()
 
-    def _get_structure(self, **kwargs) -> RevealResult:
+    def _get_structure(self) -> RevealResult:
         self.validate_request(self.query_params)
         params = self.query_params
         # Every mode key is read here, whichever mode answers: the flag ledger counts each as applied.

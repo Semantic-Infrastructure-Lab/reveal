@@ -177,6 +177,8 @@ def query(
             adapters; otherwise forwarded to ``get_structure()`` or ``get_element()``.
             Surface accepts type, source_only, by, depth and top; Contracts accepts
             abstract_only, implementations and impls; Trace accepts from and depth.
+            Calls accepts its declared mode and analysis/presentation controls; mode
+            validation uses the effective URI plus typed overrides.
             Trace requires a valid URI from selector first; use dictionary expansion
             for its canonical from keyword. Explicit values override
             validated URI controls; None selects the declared default.
