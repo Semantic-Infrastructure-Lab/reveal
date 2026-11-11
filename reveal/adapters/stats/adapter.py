@@ -447,6 +447,7 @@ class MetricsAdapter(ResourceAdapter):
                              f"{', '.join(VIEWS)} (omit view for per-file metrics)")
         self._analysis_failures: list = []
         self._population_findings = False
+        self._analyzed_count = 0
         self._excluded_by_extension: Dict[str, int] = {}
         self._unknown_filter_fields: List[str] = []
         self._sort_failure: Optional[Dict[str, Any]] = None
@@ -562,6 +563,7 @@ class MetricsAdapter(ResourceAdapter):
                                    if is_failure(s) or s and (s.get('parse_degraded')
                                                               or s.get('check_rules_failed'))]
         analysed = [s for s in all_stats if s and not is_failure(s)]
+        self._analyzed_count = len(analysed)
         self._population_findings = has_findings((s['quality']['score'] for s in analysed),
                                                  (s['complexity']['max'] for s in analysed))
 
@@ -897,7 +899,13 @@ class MetricsAdapter(ResourceAdapter):
         controlled_stats = self._apply_pagination(controlled_stats)
 
         # Aggregate and build result
-        result = aggregate_stats(controlled_stats, self.path)
+        result = aggregate_stats(dir_file_stats, self.path)
+        result['files'] = controlled_stats
+        result['population'] = {
+            'summary': 'filtered_analyzed_files', 'analyzed_files': self._analyzed_count,
+            'filtered_files': total_filtered,
+            'displayed_files': 0 if summary_only else len(controlled_stats),
+        }
         self._add_truncation_metadata(result, len(controlled_stats), total_filtered)
         note_warning(result, unknown_sort_field_warning(
             self.result_control.sort_field, dir_file_stats, field_value, SORT_FIELDS))

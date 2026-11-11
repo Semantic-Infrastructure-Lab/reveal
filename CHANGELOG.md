@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- `metrics` summary totals and averages now describe all analyzed files kept by the filters. `--limit`, offset and summary-only output change displayed rows without changing those aggregates (BACK-2592).
+
 - Python `query("calls://…", callers="NAME", depth=2)` now applies declared keyword controls before choosing a mode. Unknown keywords raise `TypeError`; pass controls to `query` or the constructor instead of `CallsAdapter.get_structure` (BACK-2608).
 
 ### Behavior changes

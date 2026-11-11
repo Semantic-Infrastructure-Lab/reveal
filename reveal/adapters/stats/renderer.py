@@ -126,6 +126,10 @@ class StatsRenderer:
             print(f"Complexity: {s['avg_complexity']:.2f} (avg)")
             print(f"Quality:    {s['avg_quality_score']:.1f}/100")
 
+            if result.get('population'):
+                p = result['population']
+                print(f"Summary:    {p['filtered_files']} filtered files of {p['analyzed_files']} analyzed; "
+                      f"{p['displayed_files']} file rows displayed")
             _print_hotspots(result)
             _print_test_scope(result)
             _print_issue_count_line(result)
