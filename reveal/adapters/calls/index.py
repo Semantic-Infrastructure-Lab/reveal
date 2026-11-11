@@ -238,29 +238,57 @@ def _index_callee(
         index.setdefault(canonical, []).append(record)
 
 
+class _ReverseTarget(NamedTuple):
+    """A query name first, then the definition site of each reached caller."""
+    name: str
+    file: str = ''
+    line: int = 0
+
+
+def _reverse_evidence(record: Dict[str, Any], target: _ReverseTarget, resolver: Any) -> Optional[Dict[str, Any]]:
+    """Qualify a later hop with the forward owner's target evidence, retaining name-only candidates."""
+    if not target.file or resolver is None:
+        return {}
+    _name, resolved = resolver.resolve(record.get('call_expr', target.name), record['file'],
+                                       record.get('shadows', ()))
+    identity = (target.file, target.line)
+    bound = resolver.has_import_target(record.get('call_expr', target.name), record['file'],
+                                      record.get('shadows', ()))
+    if isinstance(resolved, dict) and bound:
+        if (resolved['file'], resolved['line']) != identity:
+            return None
+        return {'target_resolution': 'resolved', 'target_file': target.file, 'target_line': target.line}
+    if isinstance(resolved, list):
+        if bound and identity not in {(d['file'], d['line']) for d in resolved}:
+            return None
+        return {'target_resolution': 'ambiguous',
+                'target_candidates': [{'file': d['file'], 'line': d['line'], 'name': d['name']}
+                                      for d in resolved]}
+    return {'target_resolution': 'name_only'}
+
+
 def _bfs_level(
     index: Dict[str, List[Dict[str, Any]]],
-    current_targets: Set[str],
+    current_targets: Set[_ReverseTarget],
     visited_callers: Set[Tuple[str, str]],
-) -> Tuple[List[Dict[str, Any]], Set[str]]:
-    """Run one BFS level: return (level_records, next_targets).
-
-    A qualified target (`Foo::run`, and every caller name fed back in as the
-    next level's target) is also looked up by its bare name, which is how call
-    sites are indexed (BACK-1390).
-    """
+    resolver: Any = None,
+) -> Tuple[List[Dict[str, Any]], Set[_ReverseTarget]]:
+    """One reverse level: names find candidates; definition evidence qualifies later hops."""
     level_records: List[Dict[str, Any]] = []
-    next_targets: Set[str] = set()
-    for t in sorted(current_targets):
-        bare = _bare_callee_name(t)
-        records = index.get(t, []) + (index.get(bare, []) if bare != t else [])
+    next_targets: Set[_ReverseTarget] = set()
+    for target in sorted(current_targets):
+        bare = _bare_callee_name(target.name)
+        records = index.get(target.name, []) + (index.get(bare, []) if bare != target.name else [])
         for record in records:
             key = (record['file'], record['caller'])
             if key in visited_callers:
                 continue
+            evidence = _reverse_evidence(record, target, resolver)
+            if evidence is None:
+                continue
             visited_callers.add(key)
-            level_records.append({**record, 'callee': t})
-            next_targets.add(record['caller'])
+            level_records.append({**record, 'callee': target.name, **evidence})
+            next_targets.add(_ReverseTarget(record['caller'], record['file'], record['line']))
     return level_records, next_targets
 
 
@@ -450,6 +478,7 @@ class CallersIndex(Dict[str, List[Dict[str, Any]]]):
     # names when its callers merge the callers of several definitions. Kept for those keys alone.
     multiple_definitions: Optional[Dict[str, List[Tuple[str, int]]]] = None
     directory: str = ''
+    source: Optional['CalleeSource'] = None  # definitions from this same collection, for later-hop identity
 
 
 def _disclose_skipped(result: Dict[str, Any], skipped: Sequence[Tuple[str, str]], *,
@@ -620,6 +649,7 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
 
     _attach_definitions(index, defined, definitions, sites)
     index.directory = dir_str
+    index.source = CalleeSource.from_structures(structures)
     _cache_callers_index(dir_str, cache_key, index, structures)
     return index
 
@@ -1223,11 +1253,15 @@ def find_callers(
 
     # BFS up to *depth* levels
     visited_callers: Set[Tuple[str, str]] = set()
-    current_targets = {target}
+    current_targets = {_ReverseTarget(target)}
     levels: List[Dict[str, Any]] = []
 
+    resolver = None
+    if depth > 1 and index.source is not None:
+        from .resolve import CallResolver
+        resolver = CallResolver(_walk_index(index.source)[1], Path(index.directory))
     for level in range(depth):
-        level_records, next_targets = _bfs_level(view, current_targets, visited_callers)
+        level_records, next_targets = _bfs_level(view, current_targets, visited_callers, resolver)
         if level_records:
             # '/' on every OS (BACK-1586); copies, so the cached index keeps its own records.
             levels.append({'level': level + 1,
@@ -1237,6 +1271,9 @@ def find_callers(
             break
         current_targets = next_targets
 
+    capped_note = resolver.capped_note() if resolver is not None else None
+    if capped_note:
+        notes.append(capped_note)
     total = sum(len(lvl['callers']) for lvl in levels)
     result: Dict[str, Any] = {
         'target': target,
@@ -1249,16 +1286,7 @@ def find_callers(
                       dropped=getattr(index, 'dropped', None), analysis_capped=notes[0] if notes else None)
 
     if total == 0:
-        parent = str(Path(path).parent)
-        if parent != path and os.path.isdir(parent) and _parent_hint_scan_is_cheap(parent):
-            parent_index = build_callers_index(parent)
-            potential = len(parent_index.get(target, []))
-            if potential:
-                result['hint'] = (
-                    f"0 callers found in '{path}' — "
-                    f"{potential} potential caller(s) exist in '{parent}'; "
-                    f"try widening the path"
-                )
+        _parent_callers_hint(result, path, target)
 
     return result
 
@@ -1270,6 +1298,20 @@ def find_callers(
 # parent is a well-known system/home root, or when a cheap parse-free count of
 # its code files exceeds this ceiling.
 _HINT_SCAN_MAX_FILES = 2000
+
+
+def _parent_callers_hint(result: Dict[str, Any], path: str, target: str) -> None:
+    """A bounded widening suggestion for an empty callers answer."""
+    parent = str(Path(path).parent)
+    if parent != path and os.path.isdir(parent) and _parent_hint_scan_is_cheap(parent):
+        parent_index = build_callers_index(parent)
+        potential = len(parent_index.get(target, []))
+        if potential:
+            result['hint'] = (
+                f"0 callers found in '{path}' — "
+                f"{potential} potential caller(s) exist in '{parent}'; "
+                f"try widening the path"
+            )
 
 
 def _parent_hint_scan_is_cheap(parent: str) -> bool:

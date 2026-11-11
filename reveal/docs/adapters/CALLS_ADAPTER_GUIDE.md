@@ -375,7 +375,7 @@ Human-readable summary with file path, line, and caller context:
 Callers of: validate_item
 Project:    src/
 Total:      3
-Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name, so same-named functions' callers join; each (file, caller) once; depth 1 (clamped 1-5). Measured: levels 1 and 2.
+Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name carrying its definition site; explicit import targets qualify later hops, otherwise same-named candidates join; each (file, caller) once; depth 1 (clamped 1-5). Measured: levels 1 and 2.
 
   src/auth/handlers.py:42  authenticate  (calls validate_item)
   src/api/routes.py:78     process_request  (calls validate_item)
@@ -400,7 +400,7 @@ Callers of: validate_item
 Project:    src/
 Depth:      2
 Total:      5
-Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name, so same-named functions' callers join; each (file, caller) once; depth 2 (clamped 1-5). Measured: levels 1 and 2.
+Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name carrying its definition site; explicit import targets qualify later hops, otherwise same-named candidates join; each (file, caller) once; depth 2 (clamped 1-5). Measured: levels 1 and 2.
 
 Direct callers:
   src/auth/handlers.py:42  authenticate  (calls validate_item)
@@ -522,7 +522,7 @@ reveal 'calls://src/?callers=validate_item' --format=json
   "walk_rule": {
     "direction": "callers",
     "match": "bare_name_or_import_alias",
-    "expansion": "by_name",
+    "expansion": "import_target_else_by_name",
     "once_per": "file_caller",
     "depth": 1,
     "measured": {"depth_1": true, "depth_2": true, "beyond_depth_2": false},
@@ -911,3 +911,13 @@ result). At the cut the same text becomes an exit-2 error.
 - [`AST_ADAPTER_GUIDE.md`](AST_ADAPTER_GUIDE.md) — `ast://` adapter, including its per-function `calls`/`called_by` fields
 - [`IMPORTS_ADAPTER_GUIDE.md`](IMPORTS_ADAPTER_GUIDE.md) — import graph analysis (`imports://`)
 - [`AGENT_HELP.md`](../AGENT_HELP.md) — complete agent workflow reference including call graph task patterns
+
+Later reverse hops carry the reached caller's file and definition line. When an explicit
+import supplies a target, the same resolver as the forward walk checks that definition
+site; a call resolved to an unrelated definition is excluded. The initial name query and
+depth-one population keep their existing matching policy. Without explicit import proof,
+name-only and ambiguous candidates remain in the answer. Later records label
+`target_resolution` as `resolved`, `ambiguous` (with `target_candidates`) or `name_only`;
+resolved records carry `target_file` and `target_line`. Counts still deduplicate each
+(file, caller name). Partial scans retain their diagnostics, and this bounded qualification
+does not promise receiver inference or complete definition-level reverse recall.

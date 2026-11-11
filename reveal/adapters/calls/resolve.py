@@ -41,6 +41,18 @@ class CallResolver:
         """See ``ProjectBindings.capped_note``: set once a resolution has read the import analysis."""
         return self._bindings.capped_note()
 
+    def has_import_target(self, call: str, caller_file: str, shadows: Tuple[str, ...] = ()) -> bool:
+        """Whether an explicit import supplies target evidence for this call's binding.
+
+        Reverse name queries keep their candidate policy without that evidence; a
+        unique project name or a guessed receiver is not an explicit import proof.
+        """
+        qualifier = call.split('.')[0]
+        if '.' in call and qualifier in shadows:
+            return False
+        binding = self._bindings.get(caller_file, qualifier)
+        return binding is not None and binding.target is not None
+
     def resolve(self, call: str, caller_file: str, shadows: Tuple[str, ...] = ()) -> Tuple[str, Any]:
         """(bare name, target): target is one definition, a list of candidate
         definitions when the name stays ambiguous, or None when it reaches no project definition.

@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Calls reverse walks now retain definition sites and check explicit import targets at later levels. Importing an unrelated same-named function no longer creates a false ancestor; ambiguous and name-only candidates remain disclosed (BACK-2607).
+
 - Calls `--detail` and Trace now use parameter names extracted from syntax, so commas or parentheses inside defaults cannot invent parameters. Unqualified language or binding forms report parameters as unavailable (`null` in JSON) (BACK-2591).
 
 - `metrics` summary totals and averages now describe all analyzed files kept by the filters. `--limit`, offset and summary-only output change displayed rows without changing those aggregates (BACK-2592).
