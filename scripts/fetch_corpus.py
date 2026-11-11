@@ -153,7 +153,8 @@ def fetch_one(entry: dict, root: Path, dry: bool = False) -> None:
         _run(["git", "-C", str(dest), "fetch", "--depth", "1",
               "--filter=blob:none", "origin", sha], dry=dry)
         if entry.get('sparse_paths'):
-            _run(['git', '-C', str(dest), 'sparse-checkout', 'set', '--cone', *entry['sparse_paths']], dry=dry)
+            _run(['git', '-C', str(dest), 'sparse-checkout', 'init', '--cone'], dry=dry)
+            _run(['git', '-C', str(dest), 'sparse-checkout', 'set', *entry['sparse_paths']], dry=dry)
         _run(["git", "-C", str(dest), "checkout", "--detach", sha], dry=dry)
     else:
         # No pinned commit: shallow-clone default HEAD and report the SHA.

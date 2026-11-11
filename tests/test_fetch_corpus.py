@@ -265,4 +265,23 @@ def test_sparse_fetch_selects_paths_before_checkout(tmp_path, monkeypatch):
     sparse = next(i for i, cmd in enumerate(commands) if 'sparse-checkout' in cmd)
     checkout = next(i for i, cmd in enumerate(commands) if 'checkout' in cmd)
     assert sparse < checkout
-    assert commands[sparse][-2:] == ['server', 'ui']
+    assert commands[sparse][-2:] == ['init', '--cone']
+    assert commands[sparse + 1][-3:] == ['set', 'server', 'ui']
+
+
+def test_sparse_fetch_preserves_ancestor_build_metadata(tmp_path):
+    source = tmp_path / 'source'
+    source.mkdir()
+    for relative, text in {'packages/app/pyproject.toml': '[project]\nname="app"\n',
+                           'packages/app/src/app/__init__.py': '',
+                           'packages/other/src/other/__init__.py': ''}.items():
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+    sha = _init_repo(source, {})
+    fetch_corpus.fetch_one({'id': 'sparse', 'language': 'python', 'repo': source.as_uri(),
+                           'sha': sha, 'sparse_paths': ['packages/app/src/app']}, tmp_path / 'cache')
+    dest = tmp_path / 'cache/sparse'
+    assert (dest / 'packages/app/src/app/__init__.py').is_file()
+    assert (dest / 'packages/app/pyproject.toml').is_file()
+    assert not (dest / 'packages/other/src/other/__init__.py').exists()
