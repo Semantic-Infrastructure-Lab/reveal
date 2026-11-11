@@ -61,6 +61,35 @@ jobs:
           pip install -e ".[dev]"
           pip install build  # Required for packaging manifest tests
 
+      # BACK-2583: warm runners restore every grammar before any smoke/test worker starts.
+      # Native grammar libraries are shared across Python versions, but never OS/architecture/pack versions.
+      - name: Resolve tree-sitter grammar cache
+        id: grammar-cache-info
+        shell: python
+        run: |
+          import os
+          from importlib.metadata import version
+          from pathlib import Path
+          import tree_sitter_language_pack as pack
+          cache = Path(pack.cache_dir()).as_posix()
+          pack_version = version("tree-sitter-language-pack")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"path={cache}\nversion={pack_version}\n")
+          print(f"Grammar cache: {cache} (language-pack {pack_version})")
+
+      - name: Cache tree-sitter grammars
+        id: grammar-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ steps.grammar-cache-info.outputs.path }}
+          key: grammars-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.grammar-cache-info.outputs.version }}
+
+      - name: Pre-download every tree-sitter grammar (cache miss)
+        # Cache entries are saved only after a successful job. An exact hit contains the
+        # libraries already; calling download_all again would also need its manifest/bundle cache.
+        if: steps.grammar-cache.outputs.cache-hit != 'true'
+        run: python -c "from reveal.core import treesitter_parse; print('grammars fetched:', treesitter_parse.download_all())"
+
       # Exercise the installed wheel without [dev], outside the source checkout.
       # Every main-matrix Python version on Linux/macOS/Windows; Windows shard 2 and
       # the duplicate Ubuntu leg do not repeat the build/install (BACK-2321).
