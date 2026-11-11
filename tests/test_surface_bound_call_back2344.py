@@ -145,7 +145,7 @@ def test_adopter_callable_and_class_local_capability():
     adopted = {get_adapter_class(scheme) for scheme in BUILTIN_SCHEMES
                if uses_bound_query_call(get_adapter_class(scheme))}
     assert adopted == {SurfaceAdapter, get_adapter_class('contracts'), get_adapter_class('trace'),
-                       get_adapter_class('overview'), get_adapter_class('architecture')}
+                       get_adapter_class('overview'), get_adapter_class('architecture'), get_adapter_class('calls')}
     assert list(inspect.signature(SurfaceAdapter.get_structure).parameters) == ['self']
     assert SurfaceAdapter.__dict__['BOUND_QUERY_CALL'] is True
     assert ResourceAdapter.BOUND_QUERY_CALL is False
@@ -197,7 +197,7 @@ def test_bare_kwargs_inventory_ratchet_and_surface_mutation():
                         if method.lineno in sites:
                             identities.append((path.relative_to(ROOT).as_posix(), cls.name))
     assert len(identities) == sum(baseline[rule].values())
-    assert ('reveal/adapters/base.py', 'ResourceAdapter') in identities
+    assert ('reveal/adapters/base.py', 'ResourceAdapter') not in identities
     assert ('reveal/adapters/demo.py', 'DemoAdapter') in identities
     assert ('reveal/adapters/surface.py', 'SurfaceAdapter') not in identities
     surface_path = ROOT / 'reveal/adapters/surface.py'
