@@ -171,6 +171,8 @@ def build_help_epilog(full: bool = True) -> str:
 
     help_text = _build_subcommands_section()
     help_text += _build_core_examples()
+    help_text += ("\nFile structure exits: 0 completed, 2 invalid resource, "
+                  "3 required analysis/output failed or incomplete.\n")
     if not full:
         return help_text + _build_more_help_pointer()
     if has_jq:

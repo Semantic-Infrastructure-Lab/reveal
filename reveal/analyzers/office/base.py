@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from ...base import FileAnalyzer
 from ...utils import format_size
-from ...utils.results import ResultBuilder
+from ...utils.results import FailureCause, ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
 
@@ -74,6 +74,7 @@ class ZipXMLAnalyzer(FileAnalyzer):
         self.parts: List[str] = []
         self.metadata: Dict[str, Any] = {}
         self.content_tree: Optional[ET.Element] = None
+        self.structure_failure_cause = FailureCause.ANALYSIS
 
         # For compatibility with base class
         self.lines: List[str] = []
@@ -101,6 +102,9 @@ class ZipXMLAnalyzer(FileAnalyzer):
             self.archive = zipfile.ZipFile(self.path, 'r')
             self.parts = self.archive.namelist()
 
+            if self.CONTENT_PATH and self.CONTENT_PATH not in self.parts:
+                self.structure_failure_cause = FailureCause.INVALID_REQUEST
+
             # Parse main content if available
             if self.CONTENT_PATH and self.CONTENT_PATH in self.parts:
                 xml_content = self._safe_read(self.CONTENT_PATH)
@@ -110,6 +114,10 @@ class ZipXMLAnalyzer(FileAnalyzer):
             self._parse_metadata()
 
         except zipfile.BadZipFile as e:
+            # A rejected container is not this document format. A bad member in an
+            # already opened archive is required analysis loss (CRC/header corruption).
+            if self.archive is None:
+                self.structure_failure_cause = FailureCause.INVALID_REQUEST
             self.parse_error = f"Invalid ZIP archive: {e}"
         except ET.ParseError as e:
             self.parse_error = f"Invalid XML content: {e}"

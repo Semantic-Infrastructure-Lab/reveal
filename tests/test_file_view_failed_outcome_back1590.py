@@ -2,9 +2,9 @@
 
 XML, CSV and notebook analyzers return ``ResultBuilder.create_error`` when their parser
 fails. The URI router turns a top-level ``error`` into stderr + exit 1 (BACK-1059), but the
-file view rendered that result under a clean header and exited 0, and its text never showed
+file view originally rendered that result under a clean header and exited 0, and its text never showed
 the error -- only "Parse recovered from syntax tree-sitter could not read", which is wrong
-twice: XML isn't parsed by tree-sitter, and nothing was recovered. A recovered parse
+twice: XML isn't parsed by tree-sitter, and nothing was recovered. BACK-2588 now maps failed analysis to D6 exit 3. A recovered parse
 (invalid JSON) is not a failure and still exits 0 with its note.
 """
 
@@ -31,10 +31,10 @@ def cwd(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('name,source,error', FAILED, ids=[f[0] for f in FAILED])
-def test_failed_parse_reports_and_exits_1(cwd, name, source, error):
+def test_failed_parse_reports_and_exits_3(cwd, name, source, error):
     (cwd / name).write_text(source, encoding='utf-8')
     run = _run_reveal_direct(name)
-    assert run.returncode == 1
+    assert run.returncode == 3
     assert f'Error ({name}): {error}' in run.stderr
     assert 'Parse recovered' not in run.stdout
 
@@ -44,7 +44,7 @@ def test_failed_parse_json_envelope_carries_the_error(cwd, name, source, error):
     (cwd / name).write_text(source, encoding='utf-8')
     run = _run_reveal_direct(name, '--format', 'json')
     payload = json.loads(run.stdout)
-    assert run.returncode == 1
+    assert run.returncode == 3
     assert error in payload['error']
     assert 'parse_recovered' not in payload['meta']
 

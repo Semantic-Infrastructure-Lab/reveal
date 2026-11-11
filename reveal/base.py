@@ -8,7 +8,8 @@ from typing import Optional, Dict, Any, List
 
 from reveal.utils import format_size, get_file_type_from_analyzer
 from reveal.utils.lines import normalize_newlines, split_lines
-from reveal.utils.results import slice_structure
+from reveal.utils.results import (AnalysisCompleteness, ExecutionFacts, FailureCause,
+                                  result_execution_facts, slice_structure)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,18 @@ class FileAnalyzer(ABC):
     # sample shown when no flag is given, disclosed as a cut.
     SLICE_FIELDS: Optional[tuple] = None
     DEFAULT_HEAD: Optional[int] = None
+    # Producers refine rejected document shapes; parser/read failures remain analysis failures.
+    structure_failure_cause = FailureCause.ANALYSIS
+
+    def structure_execution_facts(self, structure: Any) -> ExecutionFacts:
+        """Facts for the ordinary file structure, before display cuts.
+
+        An explicit failed result means the required parser failed. Optional diagnostics,
+        recovered observations and display cuts retain their existing file-view meaning.
+        This does not qualify element, check, metadata or embedded pack execution.
+        """
+        return result_execution_facts(structure, completeness=AnalysisCompleteness.COMPLETE,
+                                      failure_cause=self.structure_failure_cause)
 
     def __init__(self, path: str):
         self.path = Path(path)

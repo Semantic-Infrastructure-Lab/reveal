@@ -886,7 +886,7 @@ def _apply_head_tail_range(analyzer: FileAnalyzer, structure: Any, args) -> None
               f"list to slice.", file=sys.stderr)
 
 
-def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config=None) -> Any:
+def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config=None, *, emit=None) -> Any:
     """Show file structure, and return it so the caller can act on its outcome.
 
     Refactored to reduce complexity from 42 → ~18 by extracting mode handlers.
@@ -896,6 +896,7 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
         output_format: Output format ('text', 'json', 'typed')
         args: Optional command-line arguments
         config: Optional RevealConfig instance
+        emit: Optional transport callback receiving structure and pre-cut execution facts
     """
     # Build kwargs and get structure
     kwargs = _build_analyzer_kwargs(analyzer, args)
@@ -905,6 +906,7 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
         kwargs['outline'] = args.outline
 
     structure = analyzer.get_structure(**kwargs)
+    facts = analyzer.structure_execution_facts(structure) if emit is not None else None
     _apply_head_tail_range(analyzer, structure, args)
     default_cap = _default_file_item_cap(analyzer, args, output_format)
     structure = _apply_file_budget_constraints(
@@ -932,17 +934,25 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
             file=sys.stderr,
         )
 
+    if emit is not None:
+        emit(structure, facts)
+    else:
+        _render_file_structure(analyzer, structure, output_format, args, config)
+        print_result_control_notes(structure, output_format)
+    return structure
+
+
+def _render_file_structure(analyzer: FileAnalyzer, structure, output_format, args=None, config=None) -> None:
+    """Render the existing file shapes, also used inside the shared execution finalizer."""
     # Handle --related-flat: output just paths, no decoration
     if args and getattr(args, 'related_flat', False) and 'related' in structure:
         from .formatting import _format_related_flat
         paths = _format_related_flat(structure['related'])
         for p in paths:
             print(p)
-        return structure
+        return
 
     _render_structure_view(analyzer, structure, output_format, args, config)
-    print_result_control_notes(structure, output_format)
-    return structure
 
 
 def _render_structure_view(analyzer: FileAnalyzer, structure: Dict[str, Any], output_format: str,

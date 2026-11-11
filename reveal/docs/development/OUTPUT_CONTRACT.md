@@ -452,9 +452,10 @@ apply after this legacy outcome handling:
   doesn't return what it had as the whole answer.
 - **A file's own parser failing is a failed outcome too.** An analyzer whose parser fails
   outright (XML, CSV, a notebook) returns `ResultBuilder.create_error`; the file view
-  (`reveal <file>`) reports it through the router's `announce_outcome`/`conclude_outcome`:
-  `Error (<path>): <error>` on stderr, the error at the top of the JSON envelope, exit 1
-  (BACK-1590). A tree-sitter parse that *recovered* around errors is not a failure: it
+  (`reveal <file>`) reports `Error (<path>): <error>` on stderr and the error at the top
+  of its existing JSON document (BACK-1590). Producer execution facts now map invalid document
+  resources to exit 2 and required parser/read failures to exit 3 (BACK-2588), through the shared
+  execution/output finalizer. A tree-sitter parse that *recovered* around errors is not a failure: it
   sets `_has_errors`, prints the parse-recovered note, and exits 0.
 - **Problems inside an answer are not a failure.** Per-file parse failures in a result that
   was still produced go in `meta.errors` (v1.1). An error on one item of a list stays on that
@@ -807,9 +808,20 @@ lists. `NOT_STARTED` records rejected/unattempted work without asserting success
 analysis. Legacy `outcome_of()` behavior remains unchanged.
 
 Adoption is explicit in `Invocation`'s command catalog. Other commands, adapter-specific
-checks, file views, stdin and mixed URI batches retain their existing policies.
+checks, element/metadata file views, stdin and mixed URI batches retain their existing policies.
 `--fail-on` is rejected on unqualified operations/transports. This section does not
 claim those paths have adopted the declared policy.
+
+Ordinary file structures use analyzer-owned facts captured before display cuts (BACK-2588).
+A non-Office ZIP or an archive missing its main document part is an invalid resource (2),
+as is decoded notebook JSON with an incompatible document shape. Malformed XML/CSV/notebook
+content, unreadable Office parts and renderer failures are required analysis/output failures (3).
+Workbook overviews in both file and URI forms preserve failed workbook structures; corrupt or
+oversized required worksheets are incomplete, with surviving sheet observations retained.
+Optional Office metadata and the URI Power Pivot banner remain optional. Healthy empty answers,
+recorded non-applicability, recovered file parses and display cuts keep their existing success
+meaning. This does not add a findings gate, `--exit-zero`, file sinks or an envelope to file views;
+unsupported controls still reject. Embedded Pack rendering retains its own execution owner.
 
 ### Declared parameter bindings
 

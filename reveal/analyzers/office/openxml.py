@@ -14,7 +14,8 @@ from typing import Dict, Any, List, Optional, Tuple
 from ...registry import register
 from ...utils import format_size
 from ...utils.path_utils import to_posix
-from ...utils.results import ResultBuilder
+from ...utils.results import (AnalysisCompleteness, ExecutionFacts, ResultBuilder,
+                              merge_execution_facts)
 from .base import ZipXMLAnalyzer
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -232,8 +233,16 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
     """Analyzer for Microsoft Excel spreadsheets (.xlsx)."""
 
     CONTENT_PATH = 'xl/workbook.xml'
+    REQUIRED_STRUCTURE_WARNINGS = frozenset({'sheet_parse_failed', 'sheet_too_large'})
     NAMESPACES = OPENXML_NS
     PREVIEW_ROWS = 20  # rows a sheet element (reveal file.xlsx Sheet) shows
+
+    def structure_execution_facts(self, structure: Any) -> ExecutionFacts:
+        facts = super().structure_execution_facts(structure)
+        warnings = structure.get('meta', {}).get('warnings', []) if isinstance(structure, dict) else []
+        if any(warning.get('type') in self.REQUIRED_STRUCTURE_WARNINGS for warning in warnings):
+            return merge_execution_facts(facts, ExecutionFacts(AnalysisCompleteness.INCOMPLETE))
+        return facts
 
     def __init__(self, path: str):
         super().__init__(path)
@@ -292,6 +301,10 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             for s in sheets:
                 if s.get('too_large'):
                     label = f"{s['name']} - too large to parse ({s['size_mb']} MB)"
+                    warnings.append({
+                        'type': 'sheet_too_large',
+                        'message': f"Sheet '{s['name']}' exceeds the XML part limit and could not be parsed.",
+                    })
                 elif s.get('parse_failed'):
                     label = f"{s['name']} - could not parse (corrupt or malformed XML)"
                     warnings.append({

@@ -18,7 +18,7 @@ def test_corrupt_office_file_reports_the_message(tmp_path, suffix):
     path = tmp_path / f'bad.{suffix}'
     path.write_text('not a zip', encoding='utf-8')
     r = _run_reveal_direct(str(path))
-    assert r.returncode == 1
+    assert r.returncode == 2
     assert 'Invalid ZIP archive: File is not a zip file' in r.stderr
     assert "[{'message'" not in r.stderr
     assert 'Error (1)' not in r.stdout
@@ -28,7 +28,7 @@ def test_corrupt_office_file_json_error_is_a_string(tmp_path):
     path = tmp_path / 'bad.xlsx'
     path.write_text('not a zip', encoding='utf-8')
     r = _run_reveal_direct(str(path), '--format', 'json')
-    assert r.returncode == 1
+    assert r.returncode == 2
     data = json.loads(r.stdout)
     assert data['structure']['error'] == 'Invalid ZIP archive: File is not a zip file'
 

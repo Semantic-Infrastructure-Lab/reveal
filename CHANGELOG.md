@@ -16,6 +16,14 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
+### Behavior changes
+
+- `reveal FILE` structure views now exit 2 for invalid Office archives or notebook document shapes,
+  and 3 when required parsing, worksheet analysis or output fails; they previously exited 1.
+  `xlsx://` overviews also preserve workbook parse failures instead of reporting an empty success,
+  and oversized required sheets exit 3. Healthy empty answers, recovered file parses and display
+  cuts remain successful. (BACK-2588)
+
 ## [0.134.0] - 2026-11-09
 
 Read "Behavior changes" first. Commands now agree on exit codes: `2` means what you asked for is not there or the request cannot be answered, `3` means the answer is incomplete. Function nesting depth reads one lower in every language. reveal needs Python 3.11 or newer and pins its tree-sitter grammar pack. Import analysis is more accurate for Kotlin, Scala, Java, Go and GDScript, and a fresh install now reads Zig correctly.

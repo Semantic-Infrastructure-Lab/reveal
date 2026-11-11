@@ -292,8 +292,12 @@ def detach_stdout() -> None:
 
 
 def emit_declared_result(result, args, scheme, render, facts, *, execution_answer=None, announce_error=True,
-                         default_fail_on=None, **render_kwargs) -> None:
-    """Finalize selected D6 facts; legacy emitters keep their existing policy."""
+                         default_fail_on=None, renderer_owns_json=False, **render_kwargs) -> None:
+    """Finalize selected D6 facts; legacy emitters keep their existing policy.
+
+    File structures own their current JSON representation through the renderer;
+    their output and failures still pass through this same boundary.
+    """
     from ...display.formatting import print_result_control_notes
     from ...rendering.base import emit_rendered
     from ...utils.json_utils import (attach_provenance, print_json_result, write_also_json,
@@ -315,7 +319,7 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
             execution_answer.exception = failure
     code = execution_exit_code(facts, fail_on=policy)
     try:
-        if output_format == 'json':
+        if output_format == 'json' and not renderer_owns_json:
             print_json_result(result)
         else:
             emit_rendered(render, result, output_format, **render_kwargs)

@@ -24,7 +24,7 @@ from ..utils.query_parser import (
 from ..utils.path_utils import to_posix
 from ..errors import RequestValidationError
 from ..utils.results import (
-    AnalysisCompleteness, ExecutionFacts, FailureCause, ResultBuilder, note_truncation, result_execution_facts,
+    AnalysisCompleteness, ExecutionFacts, FailureCause, ResultBuilder, note_truncation, outcome_of, result_execution_facts,
 )
 from ..utils.warning_render import render_meta_warnings
 from reveal.reveal_types import CONTRACT_VERSION
@@ -73,7 +73,7 @@ _WORKBOOK = 'xlsx_workbook'
 # The warnings that mean an answer is missing a part it is built from (D6 exit 3). The overview's
 # Power Pivot banner is optional decoration, so its unreadable part is disclosed but not required.
 _REQUIRED_PARTS: Dict[str, frozenset] = {
-    'xlsx_workbook': frozenset({'sheet_parse_failed'}),
+    'xlsx_workbook': XlsxAnalyzer.REQUIRED_STRUCTURE_WARNINGS,
     'xlsx_search': frozenset({'sheets_unsearched'}),
     'xlsx_powerpivot': frozenset({'part_unreadable'}),
     'xlsx_powerquery': frozenset({'part_unreadable'}),
@@ -936,6 +936,10 @@ class XlsxAdapter(ResourceAdapter):
         # composed meta -- previously discarded, so a corrupt sheet and a
         # genuinely empty sheet both rendered as a clean confidence:1.0 result.
         self.fold_meta(structure.get('meta'))
+        if outcome_of(structure) == 'failed':
+            return dict(ResultBuilder.create_error(
+                result_type='xlsx_workbook', source=self.file_path or Path('unknown'),
+                error=structure['error'], meta=self.composed_meta() or {}))
 
         # Enhance with sheet metadata
         enhanced_sheets = []

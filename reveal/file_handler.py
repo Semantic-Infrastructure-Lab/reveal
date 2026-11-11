@@ -15,8 +15,7 @@ from typing import NoReturn, Optional, TYPE_CHECKING
 
 from .core import tree_root
 from .core.treesitter_compat import _zero_arg
-from .utils.results import (FailureCause, NavSourceFailure, execution_exit_code, failure_execution_facts,
-                            outcome_of)
+from .utils.results import FailureCause, NavSourceFailure, execution_exit_code, failure_execution_facts
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -584,9 +583,17 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         extract_element(analyzer, element, output_format, config=config, cut=cut)
         return
 
-    # An analyzer whose own parser failed (XML, CSV, a notebook) returns a failed result:
-    # report it and exit 1 as the router does for a URI, not 0 under a clean header (BACK-1590).
-    from .cli.routing.uri import announce_outcome, conclude_outcome  # noqa: I006 — circular avoidance
-    structure = show_structure(analyzer, output_format, args, config=config)
-    if outcome_of(structure) == 'failed':
-        conclude_outcome(structure, announce_outcome(structure, path), output_format)
+    # Capture producer facts before display cuts and use the existing D6 output boundary.
+    from .cli.routing.uri import _emit_result, announce_outcome  # noqa: I006 — circular avoidance
+    from .display.structure import _render_file_structure
+    from argparse import Namespace
+
+    def emit(structure, facts):
+        announce_outcome(structure, path)
+        def render(result, format):
+            _render_file_structure(analyzer, result, format, args, config)
+        _emit_result(structure, args or Namespace(format=output_format), 'file', render,
+                     execution_facts=facts, default_fail_on='none', announce_error=False,
+                     renderer_owns_json=True)
+
+    show_structure(analyzer, output_format, args, config=config, emit=emit)

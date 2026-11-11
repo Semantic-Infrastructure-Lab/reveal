@@ -4,7 +4,7 @@ import json
 from typing import Dict, Any, List, Tuple, Optional
 from ..base import FileAnalyzer
 from ..registry import register
-from ..utils.results import ResultBuilder
+from ..utils.results import FailureCause, ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
 
@@ -27,6 +27,7 @@ class JupyterAnalyzer(FileAnalyzer):
             self.parse_error = str(e)
             return
         if not isinstance(data, dict):
+            self.structure_failure_cause = FailureCause.INVALID_REQUEST
             # Valid JSON that is not a notebook object (a list, a string, a number).
             self.parse_error = f"not a notebook: top-level JSON value is a {type(data).__name__}, expected an object"
             return
@@ -35,14 +36,17 @@ class JupyterAnalyzer(FileAnalyzer):
         # Valid JSON of the wrong shape ({"cells": 5}, {"cells": [9]}) crashed get_structure
         # with a TypeError/AttributeError instead of reading as not a notebook (BACK-1855).
         if not isinstance(cells, list):
+            self.structure_failure_cause = FailureCause.INVALID_REQUEST
             self.parse_error = f"not a notebook: 'cells' is a {type(cells).__name__}, expected a list"
             return
         bad = next((i for i, cell in enumerate(cells) if not isinstance(cell, dict)), None)
         if bad is not None:
+            self.structure_failure_cause = FailureCause.INVALID_REQUEST
             self.parse_error = (f"not a notebook: cells[{bad}] is a {type(cells[bad]).__name__}, "
                                 "expected an object")
             return
         if not isinstance(metadata, dict):
+            self.structure_failure_cause = FailureCause.INVALID_REQUEST
             self.parse_error = f"not a notebook: 'metadata' is a {type(metadata).__name__}, expected an object"
             return
         self.notebook_data = data
