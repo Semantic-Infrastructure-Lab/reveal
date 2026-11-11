@@ -299,6 +299,14 @@ name (`#include`, Ruby `require`, C# `using`) binds nothing here. The answer kee
 definition, also at depth 1. Text is a depth-indented tree: `[external]`, `[ambiguous: N ...]`,
 and `(expanded above)` / `(expanded below)` for a definition whose calls are listed elsewhere.
 
+Parameter names are syntax facts carried from the analyzer, not parsed from the display
+signature. Qualified forms cover Python, JavaScript/TypeScript/TSX, Go, Rust, Java, C#,
+PHP, Ruby, C and C++. `params: []` means a known empty list; `params: null` (text:
+`unavailable`) means the language or binding shape is not qualified. Other languages,
+legacy structures without these facts, and unsupported forms explicitly decline parameter
+names. Trace uses the same facts. This is syntax conformance coverage, not a parameter
+accuracy measurement.
+
 No oracle scores a callee walk beyond depth 1 or `detail`'s params and effects in any language:
 those answers carry W-CALLS-9 ("... not measured in any language"), and `walk_rule.measured` is
 `{depth_1: true, beyond_depth_1: false, detail: false}`. The callees snapshot measures depth-1 call

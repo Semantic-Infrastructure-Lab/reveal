@@ -264,7 +264,7 @@ class _WalkTree:
         self.printed.add(key)
         out = [f"{pad}{label or node['name']}  {node['file']}:{node['line']}"]
         if 'params' in node:
-            out.append(f"{pad}    params: {', '.join(node['params']) or '(none)'}")
+            out.append(f"{pad}    params: {'unavailable' if node['params'] is None else ', '.join(node['params']) or '(none)'}")
             out.append(f"{pad}    effects: {', '.join(node['effects']) or '(none)'}")
         children = self.edges.get(key, [])
         if node['expanded'] and not children:

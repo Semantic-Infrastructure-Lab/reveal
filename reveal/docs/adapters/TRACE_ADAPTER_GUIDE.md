@@ -64,3 +64,7 @@ above remain in effect.
 
 - `reveal help://schemas/trace` - the retired result type's JSON schema
 - [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) - `?callees=&depth=&detail`, the replacement
+
+Parameter names use the same syntax facts as Calls detail. An unqualified language or binding
+shape reports `params: null` (text: `unavailable`); an empty list means a known empty
+parameter list. See [Calls parameter coverage](CALLS_ADAPTER_GUIDE.md#callees).

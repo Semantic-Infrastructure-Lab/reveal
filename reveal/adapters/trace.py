@@ -378,7 +378,9 @@ def _render_trace(report: Dict[str, Any]) -> None:
         print(f"{indent}{name}{loc}{marker}{relation}")
 
         inner = indent + '  '
-        if frame['params']:
+        if frame['params'] is None:
+            print(f"{inner}params:  unavailable")
+        elif frame['params']:
             print(f"{inner}params:  {', '.join(frame['params'])}")
         if frame['effects']:
             print(f"{inner}effects: {', '.join(frame['effects'])}")
@@ -411,7 +413,8 @@ def _trace_frame_valid(frame: Any, depth: int) -> bool:
               and isinstance(frame.get('file'), str) and _trace_count(frame.get('line'))
               and _trace_count(frame.get('depth')) and frame['depth'] <= depth
               and type(frame.get('resolved')) is bool and type(frame.get('ambiguous')) is bool)
-    return scalar and all(_trace_strings(frame.get(field)) for field in ('params', 'effects', 'calls'))
+    params_valid = frame.get('params') is None or _trace_strings(frame.get('params'))
+    return scalar and params_valid and all(_trace_strings(frame.get(field)) for field in ('effects', 'calls'))
 
 
 def _trace_candidates_valid(frame: Dict[str, Any]) -> bool:

@@ -1053,7 +1053,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # list even after the _function_end_node fix above. (BACK-760)
         calls = self._dart_merge_signature_extra_calls(node, calls)
         calls = self._decorator_extra_calls(decorated_node, calls)
+        from .core.parameters import parameter_names
         result: StructureItem = {
+            'parameters': parameter_names(node, self.language or '', self._get_node_text),
             'line': line_start,
             'line_end': line_end,
             'name': name,

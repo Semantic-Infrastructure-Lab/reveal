@@ -249,6 +249,7 @@ def create_element_dict(
         'line': line,
         'line_count': line_count,
         'signature': item.get('signature', ''),
+        'parameters': item.get('parameters'),
         'decorators': item.get('decorators', []),
         'bases': item.get('bases', []),
     }

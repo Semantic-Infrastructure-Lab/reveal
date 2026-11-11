@@ -15,7 +15,7 @@ import pytest
 
 from functools import partial
 from reveal.cli.routing.declared import create_declared_parser, run_declared_command
-from reveal.adapters.calls.index import _effects_from_calls, _params_from_signature, walk_callees
+from reveal.adapters.calls.index import _effects_from_calls, walk_callees
 from reveal.adapters.trace import (
     _build_trace,
     _relpath,
@@ -78,62 +78,6 @@ class TestCreateTraceParser(unittest.TestCase):
     def test_format_default_text(self):
         args = create_trace_parser().parse_args(['--from', 'f'])
         self.assertEqual(args.format, 'text')
-
-
-# ---------------------------------------------------------------------------
-# _params_from_signature
-# ---------------------------------------------------------------------------
-
-class TestParamsFromSignature(unittest.TestCase):
-
-    def test_empty_signature(self):
-        self.assertEqual(_params_from_signature('', 'f'), [])
-
-    def test_no_parens(self):
-        self.assertEqual(_params_from_signature('no parens here', 'f'), [])
-
-    def test_no_params(self):
-        self.assertEqual(_params_from_signature('() -> None', 'f'), [])
-
-    def test_simple_params(self):
-        self.assertEqual(_params_from_signature('(name, greeting) -> str', 'f'), ['name', 'greeting'])
-
-    def test_self_stripped(self):
-        self.assertEqual(_params_from_signature('(self, x) -> None', 'bar'), ['x'])
-
-    def test_type_annotations_stripped(self):
-        params = _params_from_signature('(name: str, count: int) -> None', 'f')
-        self.assertEqual(params, ['name', 'count'])
-
-    def test_star_args_stripped(self):
-        params = _params_from_signature('(*args, **kwargs) -> None', 'f')
-        self.assertEqual(params, ['args', 'kwargs'])
-
-    def test_defaults_stripped(self):
-        params = _params_from_signature('(x=1, y=2) -> None', 'f')
-        self.assertEqual(params, ['x', 'y'])
-
-    def test_generic_type_with_comma_no_phantom_param(self):
-        # BACK-464: a comma inside a type annotation must not fabricate a param.
-        # Found dogfooding home-assistant/core: `dict[str, str] | None` produced
-        # a phantom 'str] | None' param in `trace`.
-        params = _params_from_signature(
-            '(self, key: str, placeholders: dict[str, str] | None = None) -> None',
-            'f',
-        )
-        self.assertEqual(params, ['key', 'placeholders'])
-
-    def test_callable_type_with_nested_commas(self):
-        params = _params_from_signature(
-            '(cb: Callable[[int, str], None], items: tuple[int, ...]) -> None', 'f'
-        )
-        self.assertEqual(params, ['cb', 'items'])
-
-    def test_default_containing_parens_not_truncated(self):
-        # The closing paren of the param list must be the one matching the
-        # opening paren — not the first ')' (which a default like foo() has).
-        params = _params_from_signature('(factory=dict(), name="x") -> None', 'f')
-        self.assertEqual(params, ['factory', 'name'])
 
 
 # ---------------------------------------------------------------------------

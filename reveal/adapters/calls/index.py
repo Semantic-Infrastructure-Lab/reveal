@@ -803,67 +803,6 @@ def _path_matches(file_path: str, file_filter: str) -> bool:
         return Path(file_path).resolve() == want.resolve()
     return Path(file_path).parts[-len(want.parts):] == want.parts
 
-def _split_top_level_commas(text: str) -> List[str]:
-    """Split on commas that are not nested inside (), [] or {}.
-
-    Type annotations routinely contain commas (`dict[str, str]`,
-    `Callable[[int], None]`, `tuple[int, ...]`), so a naive `str.split(',')`
-    over a parameter list fabricates phantom parameters.
-    """
-    parts: List[str] = []
-    depth = 0
-    current: List[str] = []
-    for ch in text:
-        if ch in '([{':
-            depth += 1
-        elif ch in ')]}':
-            depth = max(0, depth - 1)
-        if ch == ',' and depth == 0:
-            parts.append(''.join(current))
-            current = []
-        else:
-            current.append(ch)
-    if current:
-        parts.append(''.join(current))
-    return parts
-
-
-def _params_from_signature(signature: str, func_name: str) -> List[str]:
-    """Extract parameter names from a function signature string.
-
-    Signature format from tree-sitter: '(param1: Type, *args) -> ReturnType'
-    or just '(param1, param2)'. A parameter's type annotation or default can
-    itself contain commas, parens and brackets (`dict[str, str]`,
-    `Callable[[], None]`, `x=foo()`), so the list is delimited by the paren
-    that matches the opening one — not the first close-paren — and split on
-    top-level commas only. A naive `split('(',1)[1].split(')',1)[0]` +
-    `split(',')` produced phantom params like `str] | None` from
-    `error_...placeholders: dict[str, str] | None` and truncated on any
-    default containing `)`.
-    """
-    start = signature.find('(')
-    if start == -1:
-        return []
-    depth = 0
-    end = -1
-    for i in range(start, len(signature)):
-        ch = signature[i]
-        if ch == '(':
-            depth += 1
-        elif ch == ')':
-            depth -= 1
-            if depth == 0:
-                end = i
-                break
-    inner = signature[start + 1:end] if end != -1 else signature[start + 1:]
-    params = []
-    for part in _split_top_level_commas(inner):
-        name = part.strip().lstrip('*').split(':')[0].split('=')[0].strip()
-        if name and name not in ('self', 'cls', '/', ''):
-            params.append(name)
-    return params
-
-
 def _effects_from_calls(calls: List[str], classify_call, language=None) -> List[str]:
     """Return deduplicated effect labels for a function's call list."""
     effects: List[str] = []
@@ -918,6 +857,7 @@ class CallSource(NamedTuple):
     owner: str = ''       # the class or struct a member belongs to
     category: str = ''    # the structure category; a 'modules' source (a file's top level, Rust `mod x;`) is no call target
     callable: bool = True  # False for a class field holding an object (`= new X()`): a source, no target (BACK-2581)
+    parameters: Optional[Tuple[str, ...]] = None
     shadows: Tuple[str, ...] = ()  # call qualifiers it declares itself (a parameter `src`), so no import binds them (BACK-2580)
 
 
@@ -959,7 +899,8 @@ class CalleeSource:
             tuple(elem.get('reference_only_calls', [])),
             family(file_path), member=bool(elem.get('owner')) and elem.get('method') is not False,
             category=elem.get('category', ''), owner=str(elem.get('owner') or ''),
-            callable=elem.get('callable', True) is not False, shadows=tuple(elem.get('shadows', ())))
+            callable=elem.get('callable', True) is not False,
+            parameters=tuple(elem['parameters']) if elem.get('parameters') is not None else None, shadows=tuple(elem.get('shadows', ())))
             for file_path, name, elem in _call_definitions(structures))
         return cls(definitions, getattr(structures, 'skipped', ()), getattr(structures, 'traversal_failures', ()),
                    scope, dropped_values_summary(structures))
@@ -1077,6 +1018,7 @@ def _walk_index(source: CalleeSource) -> Tuple[List[Dict[str, Any]], Dict[str, L
         'file': to_posix(d.file),  # '/' on every OS (BACK-1586)
         'line': d.line,
         'signature': d.signature,
+        'parameters': list(d.parameters) if d.parameters is not None else None,
         'calls': list(d.calls),
         'references': [dict(reference) for reference in d.references],
         'reference_only_calls': list(d.reference_only_calls),
@@ -1115,7 +1057,7 @@ class CalleeNode:
     file: str
     line: int
     level: int
-    params: List[str]
+    params: Optional[List[str]]
     effects: List[str]
     references: List[Dict[str, Any]]
     expanded: bool
@@ -1145,7 +1087,7 @@ def _callee_node(record: Dict[str, Any], name: str, level: int, depth: int) -> C
     calls = [c for c in record['calls'] if c not in record['reference_only_calls']]
     return CalleeNode(
         name=name, file=record['file'], line=record['line'], level=level,
-        params=_params_from_signature(record['signature'], record['name']),
+        params=record.get('parameters'),
         effects=_effects_from_calls(calls, classify_call, language_for_extension(Path(record['file']).suffix)),
         references=record['references'], expanded=level < depth, record=record)
 

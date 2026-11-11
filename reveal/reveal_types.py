@@ -111,6 +111,7 @@ class ASTElement(TypedDict, total=False):
     line: int
     line_count: int
     signature: str
+    parameters: Optional[List[str]]  # native syntax bindings; None = unavailable, [] = known empty
     decorators: List[str]
     bases: List[str]
     # Optional flags propagated from the analyzer (absent unless true):
@@ -141,6 +142,7 @@ class StructureItem(TypedDict, total=False):
     line_count: int
     code_line_count: int
     signature: str
+    parameters: Optional[List[str]]  # native binding names; None = unqualified shape
     decorators: List[str]
     bases: List[str]
     is_abstract: bool
