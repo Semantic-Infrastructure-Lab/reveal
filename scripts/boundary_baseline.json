@@ -1,7 +1,6 @@
 {
  "argv": {},
  "bare-get-structure-kwargs": {
-  "reveal/adapters/base.py": 1,
   "reveal/adapters/classify.py": 1,
   "reveal/adapters/claude/adapter.py": 1,
   "reveal/adapters/codex/adapter.py": 1,

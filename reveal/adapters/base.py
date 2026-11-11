@@ -242,8 +242,11 @@ class ResourceAdapter(ABC):
         return _default_from_uri(cls, scheme, resource, element)
 
     @abstractmethod
-    def get_structure(self, **kwargs) -> RevealResult:
+    def get_structure(self) -> RevealResult:
         """Get the structure/overview of the resource.
+
+        The common contract is a zero-argument call after construction. Legacy
+        adapters may declare additional optional controls on their own method.
 
         Returns:
             Dict containing structured representation of the resource
