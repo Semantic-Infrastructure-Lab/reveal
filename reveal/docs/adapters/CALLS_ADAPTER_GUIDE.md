@@ -213,6 +213,20 @@ callee → [(file, caller_func, line), ...]
 > `top=-1`, `rank=often`, `type=klass`, `builtins=maybe`) exits 2 naming the parameter. Boolean
 > keys take `true/false/yes/no/1/0` or bare presence.
 
+### Python API
+
+```python
+from reveal.api import query
+answer = query("calls://src", callers="validate_item", depth=2)
+```
+
+Canonical keyword controls override validated URI values before the mode is selected.
+Explicit `False` and `0` retain their meanings; `None` restores the declared default
+(and clears an optional mode selector). Unknown keywords raise `TypeError` and malformed
+values or contradictory effective modes raise `ValueError`. Direct `CallsAdapter` calls
+supply controls through constructor `params=` and then call `get_structure()` without
+keywords.
+
 ### Subcommand and exit codes
 
 `reveal calls <path>` takes the same parameters as flags (`--callers NAME`, `--callees NAME`, `--depth N`, `--detail`, `--rank callers`, `--top N`, `--uncalled`, `--type KIND`, `--modules`,
@@ -375,7 +389,7 @@ Human-readable summary with file path, line, and caller context:
 Callers of: validate_item
 Project:    src/
 Total:      3
-Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name carrying its definition site; explicit import targets qualify later hops, otherwise same-named candidates join; each (file, caller) once; depth 1 (clamped 1-5). Measured: levels 1 and 2.
+Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name carrying its definition site; explicit imports of module-level functions qualify later hops, otherwise same-named candidates join; each (file, caller) once; depth 1 (clamped 1-5). Measured: levels 1 and 2.
 
   src/auth/handlers.py:42  authenticate  (calls validate_item)
   src/api/routes.py:78     process_request  (calls validate_item)
@@ -400,7 +414,7 @@ Callers of: validate_item
 Project:    src/
 Depth:      2
 Total:      5
-Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name carrying its definition site; explicit import targets qualify later hops, otherwise same-named candidates join; each (file, caller) once; depth 2 (clamped 1-5). Measured: levels 1 and 2.
+Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name carrying its definition site; explicit imports of module-level functions qualify later hops, otherwise same-named candidates join; each (file, caller) once; depth 2 (clamped 1-5). Measured: levels 1 and 2.
 
 Direct callers:
   src/auth/handlers.py:42  authenticate  (calls validate_item)
@@ -522,7 +536,7 @@ reveal 'calls://src/?callers=validate_item' --format=json
   "walk_rule": {
     "direction": "callers",
     "match": "bare_name_or_import_alias",
-    "expansion": "import_target_else_by_name",
+    "expansion": "imported_function_else_by_name",
     "once_per": "file_caller",
     "depth": 1,
     "measured": {"depth_1": true, "depth_2": true, "beyond_depth_2": false},
@@ -913,10 +927,11 @@ result). At the cut the same text becomes an exit-2 error.
 - [`AGENT_HELP.md`](../AGENT_HELP.md) — complete agent workflow reference including call graph task patterns
 
 Later reverse hops carry the reached caller's file and definition line. When an explicit
-import supplies a target, the same resolver as the forward walk checks that definition
+import supplies a module-level function target, the same resolver as the forward walk checks that definition
 site; a call resolved to an unrelated definition is excluded. The initial name query and
 depth-one population keep their existing matching policy. Without explicit import proof,
-name-only and ambiguous candidates remain in the answer. Later records label
+name-only and ambiguous candidates remain in the answer. Class/member targets retain
+the name-candidate policy; receiver and overload identity are not qualified by this repair. Later records label
 `target_resolution` as `resolved`, `ambiguous` (with `target_candidates`) or `name_only`;
 resolved records carry `target_file` and `target_line`. Counts still deduplicate each
 (file, caller name). Partial scans retain their diagnostics, and this bounded qualification

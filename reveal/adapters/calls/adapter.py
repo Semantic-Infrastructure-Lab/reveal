@@ -977,7 +977,7 @@ def _callers_rule(name: str, depth: int, declined: List[str]) -> Dict[str, Any]:
     and depth-2 snapshots measure levels 1 and 2."""
     text = (f"Rule: callers whose body calls {name} by bare name or import alias, except a call its imports bind "
             f"to no file defining {name} (json.loads is no caller of a project loads); level k+1 looks each caller "
-            f"up by name carrying its definition site; explicit import targets qualify later hops, "
+            f"up by name carrying its definition site; explicit imports of module-level functions qualify later hops, "
             f"otherwise same-named candidates join; each (file, caller) once; depth {depth} "
             "(clamped 1-5). Measured: levels 1 and 2.")
     if declined:
@@ -986,7 +986,7 @@ def _callers_rule(name: str, depth: int, declined: List[str]) -> Dict[str, Any]:
         'direction': 'callers',
         'match': 'bare_name_or_import_alias',
         'imports': 'bound_elsewhere_excluded',
-        'expansion': 'import_target_else_by_name',
+        'expansion': 'imported_function_else_by_name',
         'once_per': 'file_caller',
         'depth': depth,
         'measured': {'depth_1': True, 'depth_2': True, 'beyond_depth_2': False},

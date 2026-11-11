@@ -31,9 +31,10 @@ class CallResolver:
     every lookup key (core.definition_names.lookup_keys) to its definitions.
     """
 
-    def __init__(self, index: Dict[str, List[Definition]], directory: Optional[Path] = None) -> None:
+    def __init__(self, index: Dict[str, List[Definition]], directory: Optional[Path] = None,
+                 *, bindings: Optional[ProjectBindings] = None) -> None:
         self.index = index
-        self._bindings = ProjectBindings(directory)  # the directory the definitions were collected from
+        self._bindings = bindings if bindings is not None else ProjectBindings(directory)  # the directory the definitions were collected from
         self._alias_maps: Dict[str, Dict[str, str]] = {}
         self._families: Dict[str, str] = {}
 
@@ -64,13 +65,7 @@ class CallResolver:
             self._alias_maps[caller_file] = build_alias_map(caller_file)
         if '.' not in call:
             tail = self._alias_maps[caller_file].get(tail, tail)
-        family = self._caller_family(caller_file)
-        # A module is a call source (its top-level calls), never what a call reaches: Rust's
-        # `mod parser;` is not the `parser(input)` a sibling calls (BACK-2569); nor is a class field
-        # holding an object (`static max = new OffsetPair(...)`, BACK-2581).
-        candidates = [d for d in self.index.get(tail, [])
-                      if (not family or d['family'] == family) and d.get('category') != 'modules'
-                      and d.get('callable', True) is not False]
+        candidates = self.name_candidates(tail, caller_file)
         shadowed = '.' in call and call.split('.')[0] in shadows
         candidates = self._reachable(call, caller_file, candidates, shadowed)
         if not candidates:
@@ -78,6 +73,17 @@ class CallResolver:
         if len(candidates) == 1:
             return tail, candidates[0]
         return tail, self._disambiguate(call, tail, caller_file, candidates, shadowed) or candidates
+
+    def name_candidates(self, name: str, caller_file: str) -> List[Definition]:
+        """Name/family candidates, without reading aliases or inferring receiver identity."""
+        family = self._caller_family(caller_file)
+        # A module is a call source (its top-level calls), never what a call reaches: Rust's
+        # `mod parser;` is not the `parser(input)` a sibling calls (BACK-2569); nor is a class field
+        # holding an object (`static max = new OffsetPair(...)`, BACK-2581).
+        candidates = [d for d in self.index.get(name, [])
+                      if (not family or d['family'] == family) and d.get('category') != 'modules'
+                      and d.get('callable', True) is not False]
+        return candidates
 
     def _reachable(self, call: str, caller_file: str, candidates: List[Definition],
                    shadowed: bool = False) -> List[Definition]:

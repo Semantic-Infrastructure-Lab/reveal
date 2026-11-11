@@ -245,26 +245,41 @@ class _ReverseTarget(NamedTuple):
     line: int = 0
 
 
-def _reverse_evidence(record: Dict[str, Any], target: _ReverseTarget, resolver: Any) -> Optional[Dict[str, Any]]:
-    """Qualify a later hop with the forward owner's target evidence, retaining name-only candidates."""
-    if not target.file or resolver is None:
-        return {}
-    _name, resolved = resolver.resolve(record.get('call_expr', target.name), record['file'],
-                                       record.get('shadows', ()))
+def _candidate_evidence(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if len(candidates) > 1:
+        return {'target_resolution': 'ambiguous',
+                'target_candidates': [{'file': d['file'], 'line': d['line'], 'name': d['name']}
+                                      for d in candidates]}
+    return {'target_resolution': 'name_only'}
+
+
+def _resolved_reverse_evidence(resolved: Any, target: _ReverseTarget) -> Optional[Dict[str, Any]]:
+    """Only imported module-level functions qualify a rejected later hop; members retain candidates."""
     identity = (target.file, target.line)
-    bound = resolver.has_import_target(record.get('call_expr', target.name), record['file'],
-                                      record.get('shadows', ()))
-    if isinstance(resolved, dict) and bound:
+    if isinstance(resolved, dict):
+        if resolved.get('member'):
+            return _candidate_evidence([resolved])
         if (resolved['file'], resolved['line']) != identity:
             return None
         return {'target_resolution': 'resolved', 'target_file': target.file, 'target_line': target.line}
     if isinstance(resolved, list):
-        if bound and identity not in {(d['file'], d['line']) for d in resolved}:
+        if not any(d.get('member') for d in resolved) and identity not in {(d['file'], d['line']) for d in resolved}:
             return None
-        return {'target_resolution': 'ambiguous',
-                'target_candidates': [{'file': d['file'], 'line': d['line'], 'name': d['name']}
-                                      for d in resolved]}
-    return {'target_resolution': 'name_only'}
+        return _candidate_evidence(resolved)
+    return _candidate_evidence([])
+
+
+def _reverse_evidence(record: Dict[str, Any], target: _ReverseTarget, resolver: Any) -> Optional[Dict[str, Any]]:
+    """Names remain candidates unless explicit import evidence qualifies a module-level target."""
+    if not target.file or resolver is None:
+        return {}
+    candidates = resolver.name_candidates(_bare_callee_name(target.name), record['file'])
+    call = record.get('call_expr', target.name)
+    shadows = record.get('shadows', ())
+    if not resolver.has_import_target(call, record['file'], shadows) or all(d.get('member') for d in candidates):
+        return _candidate_evidence(candidates)
+    _name, resolved = resolver.resolve(call, record['file'], shadows)
+    return _resolved_reverse_evidence(resolved, target)
 
 
 def _bfs_level(
@@ -654,7 +669,13 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
     return index
 
 
-def bound_view(index: CallersIndex, notes: Optional[List[str]] = None) -> Dict[str, List[Dict[str, Any]]]:
+def _query_bindings(index: CallersIndex) -> Any:
+    from ...analyzers.imports.bindings import ProjectBindings
+    return ProjectBindings(Path(index.directory)) if index.directory and index.definitions else None
+
+
+def bound_view(index: CallersIndex, notes: Optional[List[str]] = None, *,
+               bindings: Any = None) -> Dict[str, List[Dict[str, Any]]]:
     """The callers index as a query reads it (BACK-2567). The index keys a call by its bare name, so
     ``ts.createProgram`` read as a caller of the project's ``createProgram``; a call bound only by
     imports that reach none of the files defining that name (``bindings.reaches``, the rule callee
@@ -663,10 +684,9 @@ def bound_view(index: CallersIndex, notes: Optional[List[str]] = None) -> Dict[s
     ``from os.path import join``), or stays when the imports disagree on it. Import facts depend on
     files outside the indexed directory, so they are applied per query, never stored in the index.
     ``notes`` collects what a reader of the view must be told (the import analysis stopped at its file cap)."""
-    from ...analyzers.imports.bindings import ProjectBindings, reaches
+    from ...analyzers.imports.bindings import reaches
     definitions = getattr(index, 'definitions', None) or {}
-    directory = getattr(index, 'directory', '')
-    bindings = ProjectBindings(Path(directory)) if directory and definitions else None
+    bindings = _query_bindings(index) if bindings is None else bindings
     view: Dict[str, List[Dict[str, Any]]] = {}
     moved: Set[Tuple[str, int]] = set()
     for key, records in index.items():
@@ -1249,7 +1269,8 @@ def find_callers(
     """
     index = build_callers_index(path)
     notes: List[str] = []
-    view = bound_view(index, notes)
+    bindings = _query_bindings(index)
+    view = bound_view(index, notes, bindings=bindings)
 
     # BFS up to *depth* levels
     visited_callers: Set[Tuple[str, str]] = set()
@@ -1259,7 +1280,7 @@ def find_callers(
     resolver = None
     if depth > 1 and index.source is not None:
         from .resolve import CallResolver
-        resolver = CallResolver(_walk_index(index.source)[1], Path(index.directory))
+        resolver = CallResolver(_walk_index(index.source)[1], Path(index.directory), bindings=bindings)
     for level in range(depth):
         level_records, next_targets = _bfs_level(view, current_targets, visited_callers, resolver)
         if level_records:

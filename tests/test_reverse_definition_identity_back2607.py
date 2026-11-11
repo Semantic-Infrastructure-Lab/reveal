@@ -70,3 +70,12 @@ def test_typescript_import_distinguishes_later_definition(tmp_path):
     (tmp_path / 'b.ts').write_text('export function run() {}\n', encoding='utf-8')
     (tmp_path / 'top.ts').write_text('import { run } from "./b";\nexport function top() { run(); }\n', encoding='utf-8')
     assert names(reverse(tmp_path)) == [(1, 'a.ts', 'run')]
+
+
+def test_member_name_candidates_keep_the_disclosed_policy(tmp_path):
+    (tmp_path / 'a.cs').write_text('namespace P { class A { public static void sink() {} public static void run() { sink(); } } }\n', encoding='utf-8')
+    (tmp_path / 'b.cs').write_text('namespace P { class B { public static void run() {} } }\n', encoding='utf-8')
+    (tmp_path / 'top.cs').write_text('using Other = P.B;\nnamespace P { class Top { public static void top() { Other.run(); } } }\n', encoding='utf-8')
+    answer = reverse(tmp_path)
+    assert any(row['caller'].endswith('top') for level in answer['levels'] for row in level['callers'])
+    assert answer['levels'][1]['callers'][0]['target_resolution'] in ('ambiguous', 'name_only')
