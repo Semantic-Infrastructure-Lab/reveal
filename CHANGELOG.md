@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Claude Python API query controls now bind before session reading, so typed tool/search overrides, false flags, explicit zero and `None` reach the existing readers instead of being ignored (BACK-2617).
+
 - Calls and Imports rankings and Overview now accept `--limit` as an alias for their existing `--top` cap; help states which views apply it. Typing a URI-only noun as a subcommand now names its URI spelling instead of reporting a missing file (BACK-2603, BACK-2605).
 
 - The README and first help screens now lead with file navigation and current code commands. Hosting operations and sessions are reached through the adapter index; retired subcommands leave the headline list, and `scaffold` names its `dev` replacement (BACK-2604).

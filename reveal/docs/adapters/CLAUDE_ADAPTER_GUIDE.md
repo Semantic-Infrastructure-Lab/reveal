@@ -81,6 +81,21 @@ The **claude://** adapter provides two families of resources: **session analysis
 
 ## Quick Start
 
+Python callers can bind the existing query controls without constructing a URI query:
+
+```python
+from reveal.api import query
+calls = query("claude://session/my-session?tools=Read", tools="Bash")
+```
+
+Typed overrides apply after the original controls validate. Strings stay literal;
+`None` restores omission, and typed `False` disables a presence flag. Legacy URI
+flags retain presence semantics (`?summary=false` still selects the summary).
+Legacy `tail=0` selects no turns, and snippet sizing retains its 60–500 clamp and
+120-character fallback for invalid values. These declarations do not yet add a
+Claude subcommand, new vocabulary or a new source-completeness policy.
+
+
 ### 1. Session Overview
 
 Get high-level session summary (messages, tools, duration):
@@ -871,6 +886,11 @@ reveal 'claude://session/infernal-earth-0118?summary'
 **Use when**: Quick session understanding, post-session review
 
 ---
+
+### ?timeline
+
+The existing query selector returns the chronological message timeline, like
+`/timeline`: `reveal 'claude://session/my-session?timeline'`.
 
 ### ?digest
 

@@ -50,7 +50,8 @@ import json
 
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from .renderer import ClaudeRenderer
-from ...utils.query import parse_query_params
+from ...utils.query_parser import ResourceSpec
+from .params import PARAM_SPECS, bind_query
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
     search_sessions as _h_search_sessions,
@@ -104,7 +105,6 @@ from .analysis import (
 
 
 from .schema import (
-    _SCHEMA_QUERY_PARAMS,
     _SCHEMA_CLI_FLAGS,
     _SCHEMA_ELEMENTS,
     _SCHEMA_OUTPUT_TYPES,
@@ -396,6 +396,9 @@ class ClaudeAdapter(ResourceAdapter):
     """
     HELP_CLUSTER = 'Sessions & Docs'
     LEGACY_INIT = False
+    BOUND_QUERY_CALL = True
+    PARAM_SPECS = PARAM_SPECS
+    RESOURCE_SPEC = ResourceSpec(walks=False, filesystem=False)
     QUICK_RANK = 3
     # --since/--until reach every claude:// view as ?since=/?until= (BACK-1549). The
     # session list and history read them in post_process from args, which nothing
@@ -443,7 +446,7 @@ class ClaudeAdapter(ResourceAdapter):
     # Set REVEAL_SESSIONS_DIR env var to enable; not required for standard usage.
     SESSIONS_DIR: Optional[Path] = Path(os.environ.get('REVEAL_SESSIONS_DIR', '')) if os.environ.get('REVEAL_SESSIONS_DIR') else None
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None, *, params=None):
         """Initialize Claude adapter.
 
         Args:
@@ -458,8 +461,8 @@ class ClaudeAdapter(ResourceAdapter):
         if resource is None or not isinstance(resource, str):
             raise TypeError(f"resource must be a string, got {type(resource).__name__}")
         self.resource = resource
-        self.query = query
-        self.query_params = parse_query_params(query or "")
+        self.query = query if query is not None else getattr(params, '_source_query', None)
+        self.query_params = bind_query(query, params)
         self._warn_unknown_query_params(self.query_params)  # BACK-507
         self.session_name = self._parse_session_name(resource) or "unknown"
         self.conversation_path = self._find_conversation()
@@ -617,7 +620,7 @@ class ClaudeAdapter(ResourceAdapter):
 
     def _has_query_flag(self, name: str) -> bool:
         """True when query is bare ?name or has ?name=value."""
-        return self.query == name or self.query_params.get(name) is not None
+        return self.query_params.get(name) is not None
 
     def _resolve_tail_count(self) -> int:
         last_val = self.query_params.get('last')
@@ -638,10 +641,10 @@ class ClaudeAdapter(ResourceAdapter):
             return get_errors(messages, self.session_name, contract_base)
         if self._has_query_flag('tokens'):
             return get_token_breakdown(messages, self.session_name, contract_base)
-        if self.query and self.query.startswith('tools='):
-            return get_tool_calls(messages, self.query.split('=')[1], self.session_name, contract_base)
-        if self.query and self.query.startswith('search='):
-            return search_messages(messages, self.query.split('=', 1)[1], self.session_name, contract_base)
+        if 'tools' in self.query_params:
+            return get_tool_calls(messages, self.query_params['tools'], self.session_name, contract_base)
+        if 'search' in self.query_params:
+            return search_messages(messages, self.query_params['search'], self.session_name, contract_base)
         # ?tail=N or ?last=N — last N turns; bare ?last — shorthand for ?tail=1
         if self.query_params.get('tail') is not None or self.query_params.get('last') is not None:
             tail = self._resolve_tail_count()
@@ -960,7 +963,7 @@ class ClaudeAdapter(ResourceAdapter):
             'adapter': 'claude',
             'description': 'Claude Code conversation analysis with tool usage, workflow tracking, and error detection',
             'uri_syntax': 'claude://session/{name}[/resource][?query]',
-            'query_params': _SCHEMA_QUERY_PARAMS,
+            'query_params': {spec.name: spec.schema() for spec in PARAM_SPECS},
             'elements': _SCHEMA_ELEMENTS,
             'cli_flags': _SCHEMA_CLI_FLAGS,
             'supports_batch': False,

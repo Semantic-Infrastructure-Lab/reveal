@@ -119,6 +119,7 @@ class QueryParams(Dict[str, Any]):
         self._aliases: Dict[str, Tuple[str, ...]] = {}
         self._selectors: Dict[str, str] = {}
         self._supplied_aliases: set[str] = set()
+        self._source_query: Optional[str] = None
         self._overrides: set[str] = set()
         self._transport = "typed"
         self._normalized: Dict[str, Tuple[Any, Any, Any]] = {}

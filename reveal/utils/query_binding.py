@@ -133,6 +133,7 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     prepared = QueryParams(_normalize_aliases(declarations, params))
     prepared._aliases = {spec.name: spec.aliases for spec in declarations}
     prepared._selectors = selectors
+    prepared._source_query = source
     prepared._supplied_aliases = {alias for spec in declarations for alias in spec.aliases
                                   if alias in dict.keys(params)}
     for name, selector in selectors.items():

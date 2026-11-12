@@ -1446,7 +1446,7 @@ class TestClaudeSchemaParamParity:
                       'tail', 'last', 'tokens'}
 
     def _schema_params(self):
-        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        _SCHEMA_QUERY_PARAMS = ClaudeAdapter.get_schema()['query_params']
         return set(_SCHEMA_QUERY_PARAMS.keys())
 
     def test_all_handler_params_in_schema(self):
@@ -1454,26 +1454,26 @@ class TestClaudeSchemaParamParity:
         assert missing == set(), f"Handler params missing from schema: {missing}"
 
     def test_since_documented(self):
-        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        _SCHEMA_QUERY_PARAMS = ClaudeAdapter.get_schema()['query_params']
         assert 'since' in _SCHEMA_QUERY_PARAMS
         assert 'today' in _SCHEMA_QUERY_PARAMS['since']['examples'][0] or \
                any('today' in ex for ex in _SCHEMA_QUERY_PARAMS['since']['examples'])
 
     def test_word_documented(self):
-        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        _SCHEMA_QUERY_PARAMS = ClaudeAdapter.get_schema()['query_params']
         assert 'word' in _SCHEMA_QUERY_PARAMS
         assert _SCHEMA_QUERY_PARAMS['word']['type'] == 'flag'
 
     def test_filter_documented(self):
-        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        _SCHEMA_QUERY_PARAMS = ClaudeAdapter.get_schema()['query_params']
         assert 'filter' in _SCHEMA_QUERY_PARAMS
 
     def test_project_documented(self):
-        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        _SCHEMA_QUERY_PARAMS = ClaudeAdapter.get_schema()['query_params']
         assert 'project' in _SCHEMA_QUERY_PARAMS
 
     def test_key_documented(self):
-        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        _SCHEMA_QUERY_PARAMS = ClaudeAdapter.get_schema()['query_params']
         assert 'key' in _SCHEMA_QUERY_PARAMS
 
     def test_cli_flags_include_all_and_base_path(self):
@@ -1956,7 +1956,7 @@ class TestSnippetWindowParam:
         assert result['matches']  # no crash
 
     def test_snippet_documented_in_schema(self):
-        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        _SCHEMA_QUERY_PARAMS = ClaudeAdapter.get_schema()['query_params']
         assert 'snippet' in _SCHEMA_QUERY_PARAMS
 
 
@@ -2164,8 +2164,8 @@ class TestBack353ValueFormQueryParams:
 
     def test_summary_bare_flag_still_works(self, tmp_path):
         adapter = self._make_session(tmp_path, [_user_msg('hi'), _assistant_msg('hello')])
-        adapter.query = 'summary'
-        adapter.query_params = {}
+        from reveal.adapters.claude.params import bind_query
+        adapter.query_params = bind_query('summary', None)
         result = adapter._route_by_query(adapter.messages, '', adapter._get_contract_base())
         assert result is not None
         assert result.get('type') == 'claude_analytics'
@@ -2310,9 +2310,9 @@ class TestHasQueryFlag:
         from unittest.mock import patch
         with patch.object(ClaudeAdapter, '_load_messages', return_value=[]):
             with patch.object(ClaudeAdapter, '_find_conversation', return_value=None):
-                a = ClaudeAdapter.__new__(ClaudeAdapter)
-                a.query = query
-                a.query_params = params or {}
+                a = ClaudeAdapter('session/test-session', query=query)
+                if params is not None:
+                    a.query_params = params
                 return a
 
     def test_bare_flag_name_match(self):
