@@ -304,6 +304,23 @@ RETIREMENTS: Dict[str, Retirement] = {
                                        'Roslyn IDE0051, Periphery, Psalm)'),
     # Decision (e): ast's call filters are retired, not kept as element filters; calls= matched call
     # text in every scanned file instead of the callers index, so the two could disagree.
+    # Claude vocabulary retains its legacy readers/codecs until the cut (BACK-2617).
+    'param:claude.summary': Retirement('claude ?summary',
+        '--detail summary (or ?detail=summary) on a session overview'),
+    'param:claude.search': Retirement('claude ?search',
+        '--match TEXT (or ?match=TEXT) on the same supported text population; URI match text percent-decodes once'),
+    'param:claude.contains': Retirement('claude ?contains',
+        '--view messages --match TEXT for narrative text, or --match TEXT with --tools/--errors for tool-result text; URI match text percent-decodes once'),
+    'param:claude.filter': Retirement('claude ?filter',
+        'sessions --where session~=TEXT (or ?where=session~=TEXT), a case-insensitive session-name substring; URI expressions percent-decode once'),
+    'param:claude.tail': Retirement('claude ?tail',
+        '--view messages --sort=-message_index --limit N selects latest-first; the legacy slice stays chronological, zero is empty and negative counts retain all turns; canonical limit=0 is uncapped'),
+    'param:claude.last': Retirement('claude ?last',
+        '--view messages --sort=-message_index --limit N selects latest-first; the legacy slice stays chronological, bare last or zero selects one; canonical limit=0 is uncapped'),
+    'param:claude.full': Retirement('claude ?full',
+        '--detail full (or ?detail=full) on a supported expanding view; unsupported views reject'),
+    'param:claude.raw': Retirement('claude ?raw',
+        '--view messages or --view prompts with --detail raw (or ?detail=raw); canonical raw also expands the text display'),
     'param:ast.calls': Retirement('ast://?calls=', "calls://<path>?callers=NAME, or --grep 'PATTERN' for a pattern"),
     'param:ast.callee_of': Retirement('ast://?callee_of=', 'calls://<path>?callees=NAME'),
     'value:ast.show=calls': Retirement('ast://?show=calls',

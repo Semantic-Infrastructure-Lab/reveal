@@ -32,7 +32,7 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'filter': {
         'type': 'string',
-        'description': 'Filter session list by name substring (claude://sessions/ list mode). Alias of ?search= for list filtering.',
+        'description': 'Deprecated catalog-name substring filter; use where=session~=TEXT. Does not select cross-session content search.',
         'examples': ['?filter=auth-refactor']
     },
     'project': {
@@ -72,7 +72,7 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'full': {
         'type': 'flag',
-        'description': 'Disable per-message 600-char truncation on /messages?raw, /message --range and /exchanges. No effect on plain /messages (use --verbose) or on /message/<n> (use --verbose)',
+        'description': 'Disable per-message 600-char truncation on /messages?detail=raw, /message --range and /exchanges. No effect on plain /messages (use --verbose) or on /message/<n> (use --verbose)',
         'examples': ['?full']
     },
     'raw': {
@@ -82,12 +82,12 @@ _SCHEMA_QUERY_PARAMS = {
             '(text, thinking, tool_use, tool_result blocks all included) instead of '
             'the narrative-only extract — bulk forensic scanning (e.g. exact tool_use '
             'arguments across a session), not narrative reading. Replaces the old '
-            'standalone /user and /assistant elements (removed) — /prompts?raw reaches '
+            'standalone /user and /assistant elements (removed) — /prompts?detail=raw reaches '
             'full parity with /user\'s scope (every role=user record, tool-result '
-            'wrapper turns included, not narrowed to real prompts); /messages?raw '
+            'wrapper turns included, not narrowed to real prompts); /messages?detail=raw '
             'reaches parity with /assistant.'
         ),
-        'examples': ['/prompts?raw', '/messages?raw', '/messages?raw&full']
+        'examples': ['/prompts?detail=raw', '/messages?detail=raw', '/messages?detail=raw&full']
     },
 }
 
@@ -98,12 +98,12 @@ _SCHEMA_CLI_FLAGS = {
     },
     '--all': {
         'description': 'Return all results (cross-session search: disable default 20-result cap)',
-        'applies_to': ['claude://sessions/?search='],
+        'applies_to': ['claude://sessions/?match='],
     },
     '--base-path': {
         'description': 'Override the sessions base directory. Required when sessions live outside ~/.claude/projects/ (e.g. ~/src/tia/sessions/ for TIA).',
         'applies_to': ['claude://sessions/', 'claude://session/<name>'],
-        'examples': ["reveal 'claude://sessions/?search=term' --base-path ~/src/tia/sessions"],
+        'examples': ["reveal 'claude://sessions/?match=term' --base-path ~/src/tia/sessions"],
     },
 }
 
@@ -160,11 +160,11 @@ _SCHEMA_OUTPUT_TYPES = [
     _make_output_type('claude_errors', 'All errors and exceptions in session', {
         'errors': {'type': 'array'}, 'count': {'type': 'integer'}
     }),
-    _make_output_type('claude_user_messages', 'Raw role=user records, unfiltered — reached via /prompts?raw. Initial prompt + tool-result turn summaries. May include a `hint` field pointing at plain /prompts when tool-result-only turns are present.', {
+    _make_output_type('claude_user_messages', 'Raw role=user records, unfiltered — reached via /prompts?detail=raw. Initial prompt + tool-result turn summaries. May include a `hint` field pointing at plain /prompts when tool-result-only turns are present.', {
         'messages': {'type': 'array'}, 'hint': {'type': 'string'}
     }),
     _make_output_type('claude_user_prompts', 'Human-typed prompts only — excludes tool-result wrapper messages and harness-injected text (use /prompts)', {'messages': {'type': 'array'}}),
-    _make_output_type('claude_assistant_messages', 'Raw role=assistant records, unfiltered — reached via /messages?raw. All blocks present: text, thinking, tool_use, tool_result.', {'messages': {'type': 'array'}}),
+    _make_output_type('claude_assistant_messages', 'Raw role=assistant records, unfiltered — reached via /messages?detail=raw. All blocks present: text, thinking, tool_use, tool_result.', {'messages': {'type': 'array'}}),
     _make_output_type('claude_thinking', 'All thinking blocks with content previews and token estimates', {
         'blocks': {'type': 'array'}, 'total_tokens': {'type': 'integer'}
     }),
@@ -275,31 +275,31 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'claude://session/infernal-earth-0118/errors', 'description': 'All errors and exceptions', 'element': 'errors', 'output_type': 'claude_errors'},
     {'uri': 'claude://session/infernal-earth-0118?tools=Bash', 'description': 'Filter for Bash tool usage', 'query_param': '?tools=Bash', 'output_type': 'claude_tool_calls'},
     {'uri': 'claude://session/infernal-earth-0118?errors', 'description': 'Filter for error messages', 'query_param': '?errors', 'output_type': 'claude_errors'},
-    {'uri': 'claude://session/infernal-earth-0118?summary', 'description': 'Overview plus per-tool success rates, message sizes and thinking-block count', 'query_param': '?summary', 'output_type': 'claude_analytics'},
+    {'uri': 'claude://session/infernal-earth-0118?detail=summary', 'description': 'Overview plus per-tool success rates, message sizes and thinking-block count', 'query_param': '?detail=summary', 'output_type': 'claude_analytics'},
     {'uri': 'claude://session/infernal-earth-0118/digest', 'description': 'Composed readable view: overview + human prompts + assistant narrative in one call — start here for "what happened in this session"', 'element': 'digest', 'output_type': 'claude_digest'},
     {'uri': 'claude://session/infernal-earth-0118/exchanges', 'description': 'Each human prompt paired with the assistant\'s final answer to it — use when you need "what was asked, what did it finally say" per turn, not a whole-session dump', 'element': 'exchanges', 'output_type': 'claude_exchanges'},
     {'uri': 'claude://session/infernal-earth-0118/messages', 'description': 'All assistant narrative turns (text only) — best resource for reading what was said', 'element': 'messages', 'output_type': 'claude_messages'},
-    {'uri': 'claude://session/infernal-earth-0118/prompts?raw', 'description': 'Raw role=user records, unfiltered — bulk forensic scan (tool-result turns included), prefer plain /prompts for reading intent', 'element': 'prompts', 'output_type': 'claude_user_messages'},
-    {'uri': 'claude://session/infernal-earth-0118/messages?raw', 'description': 'Raw role=assistant records, unfiltered (text, thinking, tool_use, tool_result all included) — bulk forensic scan, prefer plain /messages for reading intent', 'element': 'messages', 'output_type': 'claude_assistant_messages'},
+    {'uri': 'claude://session/infernal-earth-0118/prompts?detail=raw', 'description': 'Raw role=user records, unfiltered — bulk forensic scan (tool-result turns included), prefer plain /prompts for reading intent', 'element': 'prompts', 'output_type': 'claude_user_messages'},
+    {'uri': 'claude://session/infernal-earth-0118/messages?detail=raw', 'description': 'Raw role=assistant records, unfiltered (text, thinking, tool_use, tool_result all included) — bulk forensic scan, prefer plain /messages for reading intent', 'element': 'messages', 'output_type': 'claude_assistant_messages'},
     {'uri': 'claude://session/infernal-earth-0118/thinking', 'description': 'All thinking blocks with content and token estimates', 'element': 'thinking', 'output_type': 'claude_thinking'},
     {'uri': 'claude://session/infernal-earth-0118/message/5', 'description': 'Read a specific message by zero-based JSONL index — response includes a `turn` field (1-based) for cross-referencing with /message --range', 'element': 'message/<n>', 'output_type': 'claude_message'},
     {'uri': 'claude://session/infernal-earth-0118/agents', 'description': 'Every Agent tool call with type, status and (finished foreground agents) duration, tokens and usage', 'element': 'agents', 'output_type': 'claude_session_agents'},
     {'uri': 'claude://session/infernal-earth-0118/timeline', 'description': 'Chronological message timeline with timestamps and turn types', 'element': 'timeline', 'output_type': 'claude_timeline'},
     {'uri': 'claude://session/infernal-earth-0118/context', 'description': 'Working-directory and git-branch changes over the session', 'element': 'context', 'output_type': 'claude_context'},
     {
-        'uri': 'claude://session/infernal-earth-0118?search=validate_token',
+        'uri': 'claude://session/infernal-earth-0118?match=validate_token',
         'description': 'Search all content (text, thinking, tool inputs, tool results) for a term',
-        'query_param': '?search=<term>',
+        'query_param': '?match=<term>',
         'output_type': 'claude_search_results'
     },
-    {'uri': 'claude://session/infernal-earth-0118?last', 'description': 'Last assistant turn — fast recovery ("where did it stop?")', 'query_param': '?last', 'output_type': 'claude_messages'},
-    {'uri': 'claude://session/infernal-earth-0118?tail=3', 'description': 'Last 3 assistant turns', 'query_param': '?tail=N', 'output_type': 'claude_messages'},
+    {'uri': 'claude://session/infernal-earth-0118/messages?sort=-message_index&limit=1', 'description': 'Last assistant turn — fast recovery ("where did it stop?")', 'query_param': '?view=messages&sort=-message_index&limit=1', 'output_type': 'claude_messages'},
+    {'uri': 'claude://session/infernal-earth-0118/messages?sort=-message_index&limit=3', 'description': 'Last 3 assistant turns', 'query_param': '?view=messages&sort=-message_index&limit=N', 'output_type': 'claude_messages'},
     {'uri': 'claude://session/infernal-earth-0118/message/-1', 'description': 'Last raw record (negative index; may be a metadata record, use ?last for the last assistant turn)', 'element': 'message/<n>', 'output_type': 'claude_message'},
-    {'uri': "claude://sessions/?search=validate_token", 'description': 'Cross-session content search — sessions mentioning a term (20 results by default)', 'query_param': '?search=<term>', 'output_type': 'claude_cross_session_search'},
-    {'uri': "claude://sessions/?search=auth&since=2026-03-01", 'description': 'Cross-session search scoped to recent sessions', 'query_param': '?search=<term>&since=<date>', 'output_type': 'claude_cross_session_search'},
+    {'uri': "claude://sessions/?match=validate_token", 'description': 'Cross-session content search — sessions mentioning a term (20 results by default)', 'query_param': '?match=<term>', 'output_type': 'claude_cross_session_search'},
+    {'uri': "claude://sessions/?match=auth&since=2026-03-01", 'description': 'Cross-session search scoped to recent sessions', 'query_param': '?match=<term>&since=<date>', 'output_type': 'claude_cross_session_search'},
     {'uri': "claude://search/validate_token", 'description': 'Path-based alias for cross-session search', 'output_type': 'claude_cross_session_search'},
     {'uri': 'claude://history', 'description': 'Recent prompt history — last 50 prompts across all projects', 'output_type': 'claude_history'},
-    {'uri': "claude://history?search=validate_token", 'description': 'Find prompts mentioning a term', 'query_param': '?search=<term>', 'output_type': 'claude_history'},
+    {'uri': "claude://history?match=validate_token", 'description': 'Find prompts mentioning a term', 'query_param': '?match=<term>', 'output_type': 'claude_history'},
     {'uri': "claude://history?project=frono&since=2026-03-28", 'description': 'Prompts in a specific project since a date', 'query_param': '?project=<path>&since=<date>', 'output_type': 'claude_history'},
     {'uri': 'claude://info', 'description': 'Diagnostic dump of all resolved data paths', 'output_type': 'claude_info'},
     {'uri': 'claude://settings', 'description': 'Claude Code settings (model, permissions, hooks)', 'output_type': 'claude_settings'},
@@ -307,12 +307,12 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': "claude://settings?key=permissions.additionalDirectories", 'description': 'Extract nested settings value', 'query_param': '?key=<dotpath>', 'output_type': 'claude_settings'},
     {'uri': 'claude://plans', 'description': 'List all saved implementation plans', 'output_type': 'claude_plans'},
     {'uri': 'claude://plans/gentle-foraging-candy', 'description': 'Read a specific plan by name', 'output_type': 'claude_plan'},
-    {'uri': "claude://plans?search=token", 'description': 'Search across plan content', 'query_param': '?search=<term>', 'output_type': 'claude_plans'},
+    {'uri': "claude://plans?match=token", 'description': 'Search across plan content', 'query_param': '?match=<term>', 'output_type': 'claude_plans'},
     {'uri': 'claude://config', 'description': 'Per-install config: project count, MCP servers, feature flags', 'output_type': 'claude_config'},
     {'uri': "claude://config?key=projects./path/to/proj.mcpServers", 'description': 'Extract a specific config value (dot-notation)', 'query_param': '?key=<dotpath>', 'output_type': 'claude_config'},
     {'uri': 'claude://memory', 'description': 'All memory files across all projects', 'output_type': 'claude_memory'},
     {'uri': 'claude://memory/my-project', 'description': 'Memory files for a specific project', 'output_type': 'claude_memory'},
-    {'uri': "claude://memory?search=feedback", 'description': 'Search memory file content', 'query_param': '?search=<term>', 'output_type': 'claude_memory'},
+    {'uri': "claude://memory?match=feedback", 'description': 'Search memory file content', 'query_param': '?match=<term>', 'output_type': 'claude_memory'},
     {'uri': 'claude://agents', 'description': 'List all agent definitions', 'output_type': 'claude_agents'},
     {'uri': 'claude://agents/reveal-codereview', 'description': 'Read a specific agent definition', 'output_type': 'claude_agent'},
     {'uri': 'claude://hooks', 'description': 'List all hook event types and scripts', 'output_type': 'claude_hooks'},
@@ -325,7 +325,7 @@ _SCHEMA_NOTES = [
     'Workflow tracking shows tool operation sequences',
     'File tracking shows all Read/Write/Edit operations',
     'Tool success rates calculated from result vs error status',
-    'Cross-session search: claude://sessions/?search=term scans all JSONL files (parallel grep + snippet extraction). Default 20 results; use --all for full scan. ?since=DATE narrows corpus.',
+    'Cross-session search: claude://sessions/?match=term scans all JSONL files (parallel grep + snippet extraction). Default 20 displayed results; limit=0 removes the display cap without lifting source/input budgets. ?since=DATE narrows corpus.',
     'Two message-indexing schemes coexist by design: /message/<n> is 0-based over raw JSONL records (Python-style negative indexing supported, e.g. -1 = last); /message --range is 1-based over conversation turns (matches reveal\'s system-wide --range/--head/--tail convention). /message/<n> responses include a `turn` field and /message --range responses include a `message_index` field so either number can be converted to the other without a second call.',
-    'The standalone /user and /assistant elements and the ?role=user|assistant query param were removed (consolidation): 8 overlapping message-reading resources (/user, /prompts, /assistant, /messages, /digest, /exchanges, /thinking, /message/<n>) collapsed to 6 by folding raw/unfiltered access into ?raw on /prompts and /messages rather than keeping it as separate freestanding elements. No capability was removed — /prompts?raw and /messages?raw reach full parity with the old /user and /assistant scope respectively.',
+    'The standalone /user and /assistant elements and the ?role=user|assistant query param were removed (consolidation): 8 overlapping message-reading resources (/user, /prompts, /assistant, /messages, /digest, /exchanges, /thinking, /message/<n>) collapsed to 6 by folding raw/unfiltered access into ?detail=raw on /prompts and /messages rather than keeping it as separate freestanding elements. No capability was removed — /prompts?detail=raw and /messages?detail=raw reach full parity with the old /user and /assistant scope respectively.',
 ]

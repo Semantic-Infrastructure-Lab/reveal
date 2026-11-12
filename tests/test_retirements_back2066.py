@@ -22,7 +22,11 @@ SOURCE = 'def auth_gate(value):\n    return value\n'
 
 
 @pytest.fixture
-def source(tmp_path):
+def source(tmp_path, monkeypatch):
+    from claude_session_fixture import build_claude_home
+    from reveal.adapters.claude.adapter import ClaudeAdapter
+    home = build_claude_home(tmp_path / 'home')
+    monkeypatch.setattr(ClaudeAdapter, 'CONVERSATION_BASE', home / 'projects')
     path = tmp_path / 'sample.py'
     path.write_text(SOURCE, encoding='utf-8')
     return path
@@ -208,6 +212,14 @@ PRODUCTION_CASES = {
     'param:calls.external': lambda f: [f'calls://{Path(f).parent}?callers=auth_gate&external'],
     # BACK-2195 (D8): ?uncalled is retired; every spelling is in tests/test_retired_call_spellings_back2066.py.
     'param:calls.uncalled': lambda f: [f'calls://{Path(f).parent}?uncalled'],
+    'param:claude.summary': lambda f: ['claude://session/my-session?summary'],
+    'param:claude.search': lambda f: ['claude://session/my-session?search=token'],
+    'param:claude.contains': lambda f: ['claude://session/my-session/messages?contains=Fixed'],
+    'param:claude.filter': lambda f: ['claude://sessions?filter=my-session'],
+    'param:claude.tail': lambda f: ['claude://session/my-session?tail=2'],
+    'param:claude.last': lambda f: ['claude://session/my-session?last'],
+    'param:claude.full': lambda f: ['claude://session/my-session/exchanges?full'],
+    'param:claude.raw': lambda f: ['claude://session/my-session/messages?raw'],
     'param:ast.calls': lambda f: [f'ast://{f}?calls=auth_gate'],
     'param:ast.callee_of': lambda f: [f'ast://{f}?callee_of=auth_gate'],
     'value:ast.show=calls': lambda f: [f'ast://{f}?show=calls'],

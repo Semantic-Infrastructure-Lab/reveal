@@ -10,6 +10,17 @@ category: guide
 
 ---
 
+Legacy query names `summary`, `search`, `contains`, `filter`, `tail`, `last`,
+`full` and `raw` are deprecated compatibility spellings. They still use their
+original readers and codecs and emit one retirement notice. Prefer `detail`,
+`match`, session-name `where`, and explicit message `view`/`sort`/`limit`.
+Canonical `match` and `where` URI values percent-decode once; API values remain
+literal. Latest-turn examples below use `sort=-message_index`, so they display
+latest-first. Legacy `tail`/`last` preserve chronological order: `tail=0` is empty,
+while bare `last` or `last=0` selects one. Canonical `limit=0` is uncapped.
+Canonical raw detail also expands text display. Legacy names in compatibility
+headings describe the retained behavior, not additional recommended controls.
+
 ## Table of Contents
 
 1. [Overview](#overview)
@@ -124,7 +135,7 @@ Typed overrides apply after the original controls validate. Strings stay literal
 `None` restores omission, and typed `False` disables a presence flag. Legacy URI
 flags retain presence semantics (`?summary=false` still selects the summary).
 Legacy `tail=0` selects no turns, and snippet sizing retains its 60–500 clamp and
-120-character fallback for invalid values. The adapter remains URI-only; the qualified execution-policy scope is described
+120-character fallback for invalid values. The named command and URI share one declared owner; the qualified execution-policy scope is described
 under [Malformed transcript lines](#malformed-transcript-lines).
 
 
@@ -147,7 +158,7 @@ reveal claude://session/infernal-earth-0118
 Get the overview plus per-tool success rates and message sizes:
 
 ```bash
-reveal 'claude://session/infernal-earth-0118?summary'
+reveal 'claude://session/infernal-earth-0118?detail=summary'
 ```
 
 **Returns**: Overview plus per-tool success rates, average/max message size and thinking-block count
@@ -247,8 +258,8 @@ reveal claude://session/infernal-earth-0118/digest      # overview + prompts + n
 Find a term across all text, thinking blocks, tool inputs and tool results:
 
 ```bash
-reveal 'claude://session/infernal-earth-0118?search=verify'
-reveal 'claude://session/infernal-earth-0118?search=path traversal'
+reveal 'claude://session/infernal-earth-0118?match=verify'
+reveal 'claude://session/infernal-earth-0118?match=path traversal'
 ```
 
 **Returns**: Matches with message index, role, block type, and excerpt
@@ -259,7 +270,7 @@ Browse recent prompts across all sessions:
 
 ```bash
 reveal claude://history
-reveal 'claude://history?search=deploy&since=2026-03-01'
+reveal 'claude://history?match=deploy&since=2026-03-01'
 ```
 
 **Returns**: Prompts newest-first (50 by default); consecutive entries are grouped under their project path
@@ -541,7 +552,7 @@ Combine filters for precise analysis:
 reveal 'claude://session/my-session?tools=Bash&errors'
 
 # Assistant narrative turns containing specific text
-reveal 'claude://session/my-session/messages?contains=reveal'
+reveal 'claude://session/my-session/messages?match=reveal'
 
 # Error list (the summary already carries per-tool failure counts)
 reveal 'claude://session/my-session?errors'
@@ -721,7 +732,7 @@ reveal claude://session/infernal-earth-0118/prompts
 **`?raw`**: add `?raw` to get every raw role=user record unfiltered instead — prompts, tool-result turns, and harness-injected text all included, normalized to a block list. This is a bulk forensic scan (e.g. skimming every tool-result payload in a session at once), not narrative reading; prefer plain `/prompts` unless you specifically need that. Response includes a `hint` field when tool-result-only turns are present, pointing back at plain `/prompts`.
 
 ```bash
-reveal 'claude://session/<session-name>/prompts?raw'
+reveal 'claude://session/<session-name>/prompts?detail=raw'
 ```
 
 ---
@@ -733,8 +744,8 @@ reveal 'claude://session/<session-name>/prompts?raw'
 **Syntax**:
 ```bash
 reveal 'claude://session/<session-name>/messages'
-reveal 'claude://session/<session-name>/messages?raw'     # raw, unfiltered role=assistant dump
-reveal 'claude://session/<session-name>/messages?raw&full'   # + disable 600-char truncation
+reveal 'claude://session/<session-name>/messages?detail=raw'     # raw, unfiltered role=assistant dump
+reveal 'claude://session/<session-name>/messages?detail=raw'   # + disable 600-char truncation
 ```
 
 **Example**:
@@ -783,7 +794,7 @@ reveal claude://session/infernal-earth-0118/message/-1
 **Syntax**:
 ```bash
 reveal 'claude://session/<session-name>/message' --range 10-20
-reveal 'claude://session/<session-name>/message?full' --range 10-20
+reveal 'claude://session/<session-name>/message?detail=full' --range 10-20
 reveal 'claude://session/<session-name>/message' --range 300-    # open-ended: 300 to end
 ```
 
@@ -880,7 +891,7 @@ reveal claude://session/infernal-earth-0118/digest
 **Syntax**:
 ```bash
 reveal 'claude://session/<session-name>/exchanges'
-reveal 'claude://session/<session-name>/exchanges?full'   # disable 600-char truncation on answers
+reveal 'claude://session/<session-name>/exchanges?detail=full'   # disable 600-char truncation on answers
 ```
 
 **Example**:
@@ -901,18 +912,18 @@ reveal claude://session/infernal-earth-0118/exchanges
 
 ## Query Parameters
 
-### ?summary
+### Legacy ?summary (deprecated)
 
 **Description**: Overview plus per-tool success rates, message sizes and thinking-block count
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>?summary'
+reveal 'claude://session/<session-name>?detail=summary'
 ```
 
 **Example**:
 ```bash
-reveal 'claude://session/infernal-earth-0118?summary'
+reveal 'claude://session/infernal-earth-0118?detail=summary'
 ```
 
 **Output**: The overview fields plus `tool_success_rate` (per tool: success, failure, total, success_rate), `avg_message_size`, `max_message_size` and `thinking_blocks`. There is no timeline, event list or recommendation
@@ -1034,14 +1045,14 @@ reveal 'claude://session/infernal-earth-0118?tools=Edit'
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>?search=<term>'
+reveal 'claude://session/<session-name>?match=<term>'
 ```
 
 **Examples**:
 ```bash
-reveal 'claude://session/infernal-earth-0118?search=verify=False'
-reveal 'claude://session/infernal-earth-0118?search=path traversal'
-reveal 'claude://session/infernal-earth-0118?search=credential'
+reveal 'claude://session/infernal-earth-0118?match=verify=False'
+reveal 'claude://session/infernal-earth-0118?match=path traversal'
+reveal 'claude://session/infernal-earth-0118?match=credential'
 ```
 
 **Output**: Matching messages with role, block type (`text`, `thinking`, `tool_use:Bash`, `tool_result`), timestamp, and a 120-char excerpt centered on the match
@@ -1050,20 +1061,20 @@ reveal 'claude://session/infernal-earth-0118?search=credential'
 
 ---
 
-### ?contains=<text>
+### Legacy ?contains=<text> (deprecated)
 
 **Description**: A modifier, not a stand-alone filter. On `/messages` it filters narrative turns; combined with `tools=` or `errors` it filters tool-result content. On its own at the session root it is ignored (use `?search=<term>` for a whole-session search)
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>?contains=<text>'
+reveal 'claude://session/<session-name>/messages?match=<text>'
 ```
 
 **Examples**:
 ```bash
-reveal 'claude://session/infernal-earth-0118/messages?contains=reveal'
-reveal 'claude://session/infernal-earth-0118?tools=Bash&contains=error'
-reveal 'claude://session/infernal-earth-0118/messages?contains=import pandas'
+reveal 'claude://session/infernal-earth-0118/messages?match=reveal'
+reveal 'claude://session/infernal-earth-0118?tools=Bash&match=error'
+reveal 'claude://session/infernal-earth-0118/messages?match=import pandas'
 ```
 
 **Output**: Case-insensitive match. On `/messages`, the narrative turns that contain the text; with `tools=`, the results of that tool whose output contains it (tool inputs are not searched)
@@ -1072,21 +1083,21 @@ reveal 'claude://session/infernal-earth-0118/messages?contains=import pandas'
 
 ---
 
-### ?raw
+### Legacy ?raw (deprecated)
 
 **Description**: On `/prompts` or `/messages`, return every raw role record unfiltered (text, thinking, tool_use, tool_result blocks all included) instead of the narrative-only extract. Replaces the old standalone `/user` and `/assistant` elements and the `?role=user|assistant` query param (both removed; a request for `/user`, `/assistant` or any other unknown element falls back to the session overview with rc 0 and no warning, and `?role=` is ignored with a warning) — `/prompts?raw` reaches full parity with `/user`'s old scope (every role=user record, tool-result wrapper turns included, not narrowed to real prompts); `/messages?raw` reaches parity with `/assistant`'s old scope.
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>/prompts?raw'
-reveal 'claude://session/<session-name>/messages?raw'
-reveal 'claude://session/<session-name>/messages?raw&full'   # + disable 600-char truncation
+reveal 'claude://session/<session-name>/prompts?detail=raw'
+reveal 'claude://session/<session-name>/messages?detail=raw'
+reveal 'claude://session/<session-name>/messages?detail=raw'   # + disable 600-char truncation
 ```
 
 **Examples**:
 ```bash
-reveal 'claude://session/infernal-earth-0118/prompts?raw'
-reveal 'claude://session/infernal-earth-0118/messages?raw'
+reveal 'claude://session/infernal-earth-0118/prompts?detail=raw'
+reveal 'claude://session/infernal-earth-0118/messages?detail=raw'
 ```
 
 **Output**: Every raw record for that role, normalized to a block list — nothing skipped, nothing filtered.
@@ -1095,32 +1106,32 @@ reveal 'claude://session/infernal-earth-0118/messages?raw'
 
 ---
 
-### ?tail=N
+### Latest assistant turns (legacy ?tail=N is deprecated)
 
 **Description**: Show the last N assistant turns — fast session recovery ("where did it stop?")
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>?tail=N'
+reveal 'claude://session/<session-name>/messages?sort=-message_index&limit=N'
 ```
 
 **Examples**:
 ```bash
-reveal 'claude://session/infernal-earth-0118?tail=3'
-reveal 'claude://session/infernal-earth-0118?tail=1'
+reveal 'claude://session/infernal-earth-0118/messages?sort=-message_index&limit=3'
+reveal 'claude://session/infernal-earth-0118/messages?sort=-message_index&limit=1'
 ```
 
 **Use when**: Resuming a session and only need the most recent turns, not the full history
 
 ---
 
-### ?last
+### Latest assistant turn (legacy ?last is deprecated)
 
 **Description**: Show the last assistant turn only — shorthand for `?tail=1`
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>?last'
+reveal 'claude://session/<session-name>/messages?sort=-message_index&limit=1'
 ```
 
 **Use when**: The fastest way to check "what did the assistant just say/do" — cheaper than a full session read
@@ -1136,7 +1147,7 @@ Combine multiple query parameters:
 reveal 'claude://session/my-session?tools=Bash&errors'
 
 # Assistant narrative turns about reveal
-reveal 'claude://session/my-session/messages?contains=reveal'
+reveal 'claude://session/my-session/messages?match=reveal'
 
 # Read operations with errors
 reveal 'claude://session/my-session?tools=Read&errors'
@@ -1191,7 +1202,7 @@ reveal claude://session/my-session/workflow   # Operation sequence
 ```bash
 reveal 'claude://session/my-session?errors'           # Only errors
 reveal 'claude://session/my-session?tools=Bash'       # Only Bash usage
-reveal 'claude://session/my-session?search=reveal'    # Text search (whole session)
+reveal 'claude://session/my-session?match=reveal'    # Text search (whole session)
 ```
 
 **Token cost**: ~400-800 tokens (depends on filter match count)
@@ -1206,7 +1217,7 @@ reveal 'claude://session/my-session?search=reveal'    # Text search (whole sessi
 
 **Commands**:
 ```bash
-reveal 'claude://session/my-session?summary'          # Full summary
+reveal 'claude://session/my-session?detail=summary'          # Full summary
 reveal claude://session/my-session/thinking         # All thinking blocks
 reveal 'claude://session/my-session?tools=Bash&errors' # Composite filter
 ```
@@ -1548,7 +1559,7 @@ reveal claude://session/my-session/files
 # Returns: Files modified, created, read
 
 # Step 5: Comprehensive summary
-reveal 'claude://session/my-session?summary'
+reveal 'claude://session/my-session?detail=summary'
 # Returns: Overview plus per-tool success rates and message sizes
 ```
 
@@ -1609,7 +1620,7 @@ reveal claude://session/failed-build/tools
 
 ```bash
 # Step 1: Get summary with token estimates
-reveal 'claude://session/my-session?summary'
+reveal 'claude://session/my-session?detail=summary'
 # Returns: Overview with token usage patterns
 
 # Step 2: Analyze thinking blocks
@@ -1738,14 +1749,14 @@ Start with overview, drill down only when needed:
 
 ```bash
 # ❌ Expensive: Jump to comprehensive analysis
-reveal 'claude://session/my-session?summary'
+reveal 'claude://session/my-session?detail=summary'
 
 # ✅ Efficient: Start with overview
 reveal claude://session/my-session
 # If issues detected:
 reveal 'claude://session/my-session?errors'
 # If deeper analysis needed:
-reveal 'claude://session/my-session?summary'
+reveal 'claude://session/my-session?detail=summary'
 ```
 
 **Token savings**: 60-70%
@@ -1777,7 +1788,7 @@ Choose specific elements instead of full summary:
 
 ```bash
 # ❌ Heavy: Full summary
-reveal 'claude://session/my-session?summary'
+reveal 'claude://session/my-session?detail=summary'
 
 # ✅ Light: Just what you need
 reveal claude://session/my-session/tools  # Only tool analytics
@@ -1829,17 +1840,17 @@ reveal claude://session/my-session/tools --format json | jq '.tools | to_entries
    - **Limitation**: Read-only analysis (can't edit conversations)
    - **Design**: Intentional (inspection tool, not editor)
 
-6. **Cross-session search available via `claude://sessions/?search=term`**
+6. **Cross-session search available via `claude://sessions/?match=term`**
    - **Status**: Implemented — scans all session JSONL files, returns one snippet per match
    - **Default**: 20 results; use `--all` for full scan; `?since=DATE` narrows corpus
-   - **Examples**: `reveal 'claude://sessions/?search=validate_token'`, `reveal 'claude://sessions/?search=auth&since=2026-03-01'`
+   - **Examples**: `reveal 'claude://sessions/?match=validate_token'`, `reveal 'claude://sessions/?match=auth&since=2026-03-01'`
 
 ---
 
 ### Design Limitations (Intentional)
 
 1. **No conversation editing**: Read-only (by design)
-2. **Cross-session search available** via `claude://sessions/?search=term`; full multi-session analysis not supported (by design)
+2. **Cross-session search available** via `claude://sessions/?match=term`; full multi-session analysis not supported (by design)
 3. **No real-time monitoring**: File-based analysis only (by design)
 
 ---
@@ -1867,7 +1878,7 @@ A stock Claude Code install stores transcripts at `~/.claude/projects/<project-d
 
 #### Cross-session search
 
-Cross-session content search is fully implemented via `claude://sessions/?search=term`:
+Cross-session content search is fully implemented via `claude://sessions/?match=term`:
 
 Search matches decoded message blocks and `toolUseResult` sidecars, so JSON
 escaping does not change whether text matches. File tracking likewise matches
@@ -1882,22 +1893,22 @@ rejecting them from raw JSON text; use `?since` and `?until` to bound large stor
 
 ```bash
 # Find sessions mentioning a term (20 most recent matches by default)
-reveal 'claude://sessions/?search=validate_token'
+reveal 'claude://sessions/?match=validate_token'
 
 # Scope to recent sessions (much faster on large stores)
-reveal 'claude://sessions/?search=auth&since=2026-03-01'
+reveal 'claude://sessions/?match=auth&since=2026-03-01'
 
 # Path-based alias
 reveal 'claude://search/validate_token'
 
 # Show all matches (no 20-result limit)
-reveal 'claude://sessions/?search=auth' --all
+reveal 'claude://sessions/?match=auth' --all
 
 # Widen the context snippet around each match (default 120, range 60–500)
-reveal 'claude://sessions/?search=validate_token&snippet=300'
+reveal 'claude://sessions/?match=validate_token&snippet=300'
 
 # Whole-word match (no substring hits: "auth" won't match "authenticate")
-reveal 'claude://sessions/?search=auth&word'
+reveal 'claude://sessions/?match=auth&word'
 ```
 
 **Query parameters:**
@@ -2097,7 +2108,7 @@ or directory lookup loss remains required loss. Switching the store with
 
 ```bash
 # ❌ Wasteful: Jump to deep analysis
-reveal 'claude://session/my-session?summary'
+reveal 'claude://session/my-session?detail=summary'
 
 # ✅ Efficient: Progressive disclosure
 reveal claude://session/my-session              # Overview
@@ -2569,7 +2580,7 @@ reveal claude://history --all
 reveal claude://history --head 20
 
 # Filter by prompt content
-reveal 'claude://history?search=deploy'
+reveal 'claude://history?match=deploy'
 
 # Filter by project path
 reveal 'claude://history?project=my-webapp'
@@ -2579,7 +2590,7 @@ reveal 'claude://history?since=2026-03-01'
 reveal 'claude://history?since=today'
 
 # Combine filters
-reveal 'claude://history?search=migration&since=2026-02-01&project=sdms'
+reveal 'claude://history?match=migration&since=2026-02-01&project=sdms'
 ```
 
 **Query Parameters**:
@@ -2663,7 +2674,7 @@ reveal claude://plans
 reveal claude://plans/my-session-name
 
 # Search plan content
-reveal 'claude://plans?search=deployment'
+reveal 'claude://plans?match=deployment'
 ```
 
 **Query Parameters**:
@@ -2748,10 +2759,10 @@ reveal claude://memory
 reveal claude://memory/-home-user-src-myproject
 
 # Search memory file content
-reveal 'claude://memory?search=deployment'
+reveal 'claude://memory?match=deployment'
 
 # Combine: filter project + search content
-reveal 'claude://memory/-home-user-src-myproject?search=feedback'
+reveal 'claude://memory/-home-user-src-myproject?match=feedback'
 ```
 
 **Sub-resource**:
@@ -2784,7 +2795,7 @@ reveal claude://agents
 reveal claude://agents/my-agent-name
 
 # Search agent content
-reveal 'claude://agents?search=codereview'
+reveal 'claude://agents?match=codereview'
 ```
 
 **Query Parameters**:
@@ -2895,7 +2906,7 @@ A: Approximate (±10%). Formula: `tokens ≈ characters / 4`. Use for relative c
 
 **Q: Can I analyze multiple sessions at once?**
 
-A: Some views span sessions: `claude://` (the session list), `claude://sessions/?search=<term>` (cross-session search) and `claude://history`. For per-session analysis across many sessions use shell loops. See [Integration Examples](#integration-examples).
+A: Some views span sessions: `claude://` (the session list), `claude://sessions/?match=<term>` (cross-session search) and `claude://history`. For per-session analysis across many sessions use shell loops. See [Integration Examples](#integration-examples).
 
 ---
 
@@ -3026,7 +3037,7 @@ A: `reveal claude://session/my-session/files` - Look for `access_count > 3`
 A: Yes:
 ```bash
 reveal 'claude://session/my-session?tools=Bash&errors'
-reveal 'claude://session/my-session/messages?contains=reveal'
+reveal 'claude://session/my-session/messages?match=reveal'
 ```
 
 ---
@@ -3041,11 +3052,11 @@ A:
 
 **Q: Can I search across all sessions?**
 
-A: Yes — use `claude://sessions/?search=term`:
+A: Yes — use `claude://sessions/?match=term`:
 ```bash
-reveal 'claude://sessions/?search=error'
-reveal 'claude://sessions/?search=auth&since=2026-03-01'
-reveal 'claude://sessions/?search=validate_token' --all
+reveal 'claude://sessions/?match=error'
+reveal 'claude://sessions/?match=auth&since=2026-03-01'
+reveal 'claude://sessions/?match=validate_token' --all
 ```
 See the [Cross-session search](#cross-session-search) section for full syntax and filters.
 

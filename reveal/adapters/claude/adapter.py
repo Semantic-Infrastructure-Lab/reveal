@@ -176,11 +176,11 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Composed readable view: overview + human prompts + assistant narrative in one call — start here for "what happened in this session"'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118/prompts?raw',
+        'uri': 'claude://session/infernal-earth-0118/prompts?detail=raw',
         'description': 'Raw role=user records, unfiltered: initial prompts + tool-result turns — bulk forensic scan, prefer /prompts for reading intent'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118/messages?raw',
+        'uri': 'claude://session/infernal-earth-0118/messages?detail=raw',
         'description': 'Raw role=assistant records, unfiltered: text, thinking, tool_use, tool_result blocks — bulk forensic scan (e.g. exact tool arguments), prefer /messages for reading intent'
     },
     {
@@ -192,23 +192,23 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Read the last message (negative index supported)'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118?last',
+        'uri': 'claude://session/infernal-earth-0118/messages?sort=-message_index&limit=1',
         'description': 'Show last assistant turn — fast session recovery'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118?tail=3',
-        'description': 'Show last 3 assistant turns'
+        'uri': 'claude://session/infernal-earth-0118/messages?sort=-message_index&limit=3',
+        'description': 'Show latest 3 assistant turns, latest-first'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118?search=verify',
+        'uri': 'claude://session/infernal-earth-0118?match=verify',
         'description': 'Search all content (text, thinking, tool inputs) for a term'
     },
     {
-        'uri': "claude://sessions/?search=validate_token",
+        'uri': "claude://sessions/?match=validate_token",
         'description': 'Cross-session content search — find sessions mentioning a term (20 by default)'
     },
     {
-        'uri': "claude://sessions/?search=auth&since=2026-03-01",
+        'uri': "claude://sessions/?match=auth&since=2026-03-01",
         'description': 'Cross-session search scoped to recent sessions (?since= reduces scan time)'
     },
     {
@@ -228,7 +228,7 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Recent prompt history — last 50 prompts across all projects'
     },
     {
-        'uri': "claude://history?search=validate_token",
+        'uri': "claude://history?match=validate_token",
         'description': 'Find prompts mentioning a term'
     },
     {
@@ -240,7 +240,7 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Read a specific plan by name'
     },
     {
-        'uri': "claude://plans?search=token",
+        'uri': "claude://plans?match=token",
         'description': 'Search across all plan content for a term'
     },
     {
@@ -256,7 +256,7 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'All memory files across projects (~/.claude/projects/*/memory/)'
     },
     {
-        'uri': "claude://memory?search=feedback",
+        'uri': "claude://memory?match=feedback",
         'description': 'Search memory file content across all projects'
     },
     {
@@ -279,7 +279,7 @@ _HELP_WORKFLOWS: List[Dict[str, Any]] = [
         'scenario': 'Understand what happened in a completed session',
         'steps': [
             'reveal claude://session/session-name',
-            'reveal claude://session/session-name?summary',
+            'reveal claude://session/session-name?detail=summary',
             'reveal claude://session/session-name/tools'
         ]
     },
@@ -296,7 +296,7 @@ _HELP_WORKFLOWS: List[Dict[str, Any]] = [
         'name': 'Token Optimization',
         'scenario': 'Identify token waste',
         'steps': [
-            'reveal claude://session/current?summary',
+            'reveal claude://session/current?detail=summary',
             'reveal claude://session/current/thinking',
             'reveal claude://session/current?tools=Read'
         ]
@@ -316,8 +316,8 @@ _HELP_WORKFLOWS: List[Dict[str, Any]] = [
         'steps': [
             'reveal claude://session/session-a/prompts',
             'reveal claude://session/session-b/prompts',
-            'reveal claude://session/session-a?search=<finding>',
-            'reveal claude://session/session-b?search=<finding>',
+            'reveal claude://session/session-a?match=<finding>',
+            'reveal claude://session/session-b?match=<finding>',
         ]
     },
     {
@@ -1071,11 +1071,11 @@ class ClaudeAdapter(ResourceAdapter):
             'description': 'Navigate and analyze Claude Code conversations - progressive session exploration',
             'syntax': (
                 'claude://                                          # list all sessions\n'
-                'claude://?search=<term>                            # search across sessions\n'
+                'claude://?match=<term>                            # search across sessions\n'
                 'claude://session/{name}[/resource][?query]        # session-scoped access\n'
                 'claude://info                                      # install overview\n'
                 'claude://config[?key=<name>]                      # config flags and MCP registrations\n'
-                'claude://history[?search=<term>]                  # prompt history\n'
+                'claude://history[?match=<term>]                  # prompt history\n'
                 'claude://plans[/{name}]                           # saved plans\n'
                 'claude://memory                                    # memory files\n'
                 'claude://agents                                    # agent definitions\n'
@@ -1106,7 +1106,7 @@ class ClaudeAdapter(ResourceAdapter):
                 'reveal claude://info                               # install overview',
                 'reveal claude://config                            # config flags and MCP registrations',
                 'reveal claude://session/infernal-earth-0118',
-                'reveal claude://session/infernal-earth-0118?summary',
+                'reveal claude://session/infernal-earth-0118?detail=summary',
                 'reveal claude://session/infernal-earth-0118/thinking'
             ],
             'notes': [

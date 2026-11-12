@@ -247,7 +247,7 @@ reveal claude://sessions/
 reveal claude://session/my-session-0316/files
 
 # Search across all sessions
-reveal 'claude://sessions/?search=validate_token'
+reveal 'claude://sessions/?match=validate_token'
 ```
 
 **What you get:** Your AI work history is queryable. The `/files` element shows every file read, written, and edited with operation counts — useful for auditing what a session actually changed.

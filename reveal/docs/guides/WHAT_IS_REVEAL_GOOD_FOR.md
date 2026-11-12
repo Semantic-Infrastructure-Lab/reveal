@@ -408,7 +408,7 @@ Reveal is one of the few tools here that treats AI session history as first-clas
 
 ```bash
 reveal claude://sessions/
-reveal 'claude://sessions/?search=validate_token'
+reveal 'claude://sessions/?match=validate_token'
 reveal claude://session/my-session/files
 reveal claude://session/my-session/workflow
 reveal claude://config

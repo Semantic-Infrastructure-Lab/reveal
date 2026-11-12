@@ -49,7 +49,8 @@ def _spec(name, schema):
     kind = 'integer' if name in ('tail', 'last') else schema['type']
     retired = {'summary', 'search', 'contains', 'filter', 'tail', 'last', 'full', 'raw'}
     cli = None if name in retired else CliBinding(('--' + name,), action='store_true' if kind == 'flag' else None)
-    return ParamSpec(name, kind, schema['description'], None, convert,
+    description = ('Deprecated compatibility control; ' if name in retired else '') + schema['description']
+    return ParamSpec(name, kind, description, None, convert,
                      examples=tuple(schema.get('examples', ())), cli=cli)
 
 

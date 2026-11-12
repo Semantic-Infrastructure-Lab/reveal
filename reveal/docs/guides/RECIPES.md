@@ -104,7 +104,7 @@ orphan detection.
 
 ```bash
 reveal claude://
-reveal 'claude://sessions/?search=auth'
+reveal 'claude://sessions/?match=auth'
 reveal claude://config
 ```
 
@@ -1136,7 +1136,7 @@ The `claude://` adapter reads Claude Code session files (`.jsonl` in `~/.claude/
 reveal claude://
 
 # Filter by project
-reveal 'claude://?filter=reveal'
+reveal 'claude://?where=session~=reveal'
 
 # Sessions from today only
 reveal 'claude://?since=today'
@@ -1146,11 +1146,11 @@ reveal 'claude://?since=today'
 
 ```bash
 # Find all sessions that mention a keyword
-reveal 'claude://?search=migration'
+reveal 'claude://?match=migration'
 
 # Scope to recent sessions (recommended for large histories)
-reveal 'claude://?search=authentication&since=today'
-reveal 'claude://?search=deployment&since=2026-03-01'
+reveal 'claude://?match=authentication&since=today'
+reveal 'claude://?match=deployment&since=2026-03-01'
 
 # Path-style alias (same result)
 reveal 'claude://search/migration'
@@ -1196,10 +1196,10 @@ reveal claude://session/my-session-name/workflow
 
 ```bash
 # Last assistant message (fast session recovery)
-reveal 'claude://my-session-name?last'
+reveal 'claude://session/my-session-name/messages?sort=-message_index&limit=1'
 
-# Last 5 turns
-reveal 'claude://my-session-name?tail=5'
+# Latest 5 assistant turns, latest-first
+reveal 'claude://session/my-session-name/messages?sort=-message_index&limit=5'
 ```
 
 ### Inspect Claude install state
@@ -1214,7 +1214,7 @@ reveal 'claude://config?key=installMethod'
 
 # Prompt history across all projects
 reveal claude://history
-reveal 'claude://history?search=deploy'
+reveal 'claude://history?match=deploy'
 
 # Saved plans, memory, agents, and hooks
 reveal claude://plans
@@ -1698,7 +1698,7 @@ reveal 'calls://src/?callers=fn'          # Who calls fn? (cross-file reverse)
 reveal 'calls://src/file.py:fn'          # Shorthand for ?callers=fn
 reveal 'calls://src/?callees=fn'         # What does fn call? (cross-file forward)
 reveal 'calls://src/?rank=callers'       # Most-called functions (coupling metrics)
-reveal 'claude://?search=term'           # Search session history for keyword
+reveal 'claude://?match=term'           # Search session history for keyword
 reveal 'claude://files/path/to/file.py'  # Sessions that touched this file
 reveal 'markdown://docs/?link-graph'     # Cross-file doc link graph
 reveal 'markdown://docs/?aggregate=type' # Frontmatter field frequency table

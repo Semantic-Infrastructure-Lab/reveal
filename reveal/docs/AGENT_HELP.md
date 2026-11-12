@@ -60,7 +60,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | File history / commit search | `reveal 'git://src/app.py?type=history'`, `reveal 'git://.?type=history&message~=fix'` |
 | One section of a markdown doc | `reveal doc.md "Heading"` |
 | Review a commit range | `reveal check --changed main..HEAD` (rules on the files the range changed); structure: `reveal 'diff://git://main/.:git://HEAD/.'` |
-| Prior Claude sessions | `reveal 'claude://sessions/?search=auth-refactor'` |
+| Prior Claude sessions | `reveal 'claude://sessions/?match=auth-refactor'` |
 | Databases, env, SSL, nginx, other resources | `reveal help://adapters` |
 
 - **Limit results:** `calls --rank callers` and `imports --rank fan-in` accept `--limit N` (also `--top N`); `overview --limit N` caps each map section. Caps depend on the selected view: Calls caller/callee walks and the default Imports summary do not use `top`. Other nouns and URI forms list their caps in `help://schemas/<adapter>`; a note names an unused cap. `--head N` slices list output.
@@ -2523,8 +2523,8 @@ reveal claude://session/my-session-0302/prompts
 reveal claude://session/my-session-0302/messages
 
 # Bulk/forensic: every raw user or assistant record unfiltered
-reveal 'claude://session/my-session-0302/prompts?raw'
-reveal 'claude://session/my-session-0302/messages?raw'
+reveal 'claude://session/my-session-0302/prompts?detail=raw'
+reveal 'claude://session/my-session-0302/messages?detail=raw'
 
 # Composed readable view: overview + prompts + narrative in one call
 reveal claude://session/my-session-0302/digest
@@ -2533,14 +2533,14 @@ reveal claude://session/my-session-0302/digest
 reveal claude://session/my-session-0302/exchanges
 
 # Fast session recovery — last assistant turn
-reveal 'claude://session/my-session-0302?last'
+reveal 'claude://session/my-session-0302/messages?sort=-message_index&limit=1'
 
 # Cross-session content search
-reveal 'claude://sessions/?search=validate_token'
+reveal 'claude://sessions/?match=validate_token'
 
 # Prompt history across all projects
 reveal claude://history
-reveal 'claude://history?search=validate_token'
+reveal 'claude://history?match=validate_token'
 ```
 
 **Claude install introspection:**
@@ -2558,12 +2558,12 @@ reveal 'claude://config?key=installMethod'
 
 # Saved plans (~/.claude/plans/)
 reveal claude://plans
-reveal 'claude://plans?search=token'
+reveal 'claude://plans?match=token'
 reveal claude://plans/my-plan-name
 
 # Memory files across all projects
 reveal claude://memory
-reveal 'claude://memory?search=feedback'
+reveal 'claude://memory?match=feedback'
 reveal claude://memory/my-project
 
 # Agent definitions (~/.claude/agents/)
@@ -2613,8 +2613,8 @@ reveal claude://hooks/PostToolUse
 | "How many tokens did thinking use?" | `.../thinking` |
 | "What was the original prompt?" | `.../prompts` |
 | "What did Claude output?" | `.../messages` (or `.../exchanges` for prompt → answer pairs) |
-| "Where did the session stop?" | `?last` |
-| "Find sessions about X" | `claude://sessions/?search=X` |
+| "Where did the session stop?" | `view=messages&sort=-message_index&limit=1` |
+| "Find sessions about X" | `claude://sessions/?match=X` |
 | "What MCP servers are configured?" | `claude://config` |
 | "What memory does this project have?" | `claude://memory/<project>` |
 

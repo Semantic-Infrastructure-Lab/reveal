@@ -325,8 +325,8 @@ Reveal adapters cover more than source code. Use `reveal_query` for any URI adap
 
 ```
 # Search prior Claude sessions for a topic
-reveal_query("claude://sessions/?search=validate_token")
-reveal_query("claude://sessions/?search=auth&since=2026-03-01")
+reveal_query("claude://sessions/?match=validate_token")
+reveal_query("claude://sessions/?match=auth&since=2026-03-01")
 
 # Search OpenAI Codex CLI sessions
 reveal_query("codex://sessions/?filter=validate_token")

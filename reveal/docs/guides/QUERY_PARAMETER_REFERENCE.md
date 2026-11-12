@@ -22,7 +22,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **metrics://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `exclude`, `sort`, `limit`, `offset` | `metrics://.?hotspots` |
 | **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `show`, `sort`, `limit`, `offset`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` (retired, with a note: `calls`, `callee_of`, `show=calls`) | `ast://src?complexity>10` |
 | **calls://** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `uncalled`, `target`, `root`) | `calls://src?callers=fn` |
-| **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
+| **claude://** | `view`, `detail`, `errors`, `tools`, `match`, `where`, `sort`, `offset`, `limit`, `tokens` | `claude://session/NAME?detail=summary` |
 | **codex://** | `search`, `filter`, `since`, `until` | `codex://sessions/?search=auth-refactor` |
 | **depends://** (retired, with a note: use `imports://?importers`) | `top`, `format` | `depends://src?top=10` |
 | **xlsx://** | `sheet`, `range`, `search`, `format`, `limit`, `formulas`, `powerpivot`, `powerquery`, `names`, `connections` | `xlsx://model.xlsx?sheet=Sales` |
@@ -488,9 +488,9 @@ site). A scanned call-source language with no recall snapshot (Elixir, Objective
 
 **Query Parameters**:
 
-- **`summary`** (flag) - Session summary (overview + key events)
+- **`detail=summary`** - Session overview plus analytics (deprecated `summary` retains its original behavior)
   ```bash
-  reveal 'claude://my-session?summary'
+  reveal 'claude://my-session?detail=summary'
   ```
 
 - **`errors`** (flag) - Filter for messages containing errors
@@ -504,9 +504,9 @@ site). A scanned call-source language with no recall snapshot (Elixir, Objective
   reveal 'claude://my-session?tools=Edit'
   ```
 
-- **`contains=<text>`** (string) - Filter messages containing text
+- **`match=<text>`** - Narrative message text on the messages view, or tool-result text with tools/errors (deprecated `contains` retains its original scope)
   ```bash
-  reveal 'claude://my-session?contains=reveal'
+  reveal 'claude://session/my-session/messages?match=reveal'
   ```
 
 - **User messages only** - there is no `role=` filter; the `prompts` view lists the
@@ -515,20 +515,20 @@ site). A scanned call-source language with no recall snapshot (Elixir, Objective
   reveal claude://session/my-session/prompts
   ```
 
-- **`search=<term>`** (string) - Search all message content (text, thinking, tool inputs), case-insensitive
+- **`match=<term>`** - Search session content (text, thinking, tool inputs/results), case-insensitive; the deprecated `search` retains its original codec
   ```bash
-  reveal 'claude://my-session?search=FileNotFoundError'
+  reveal 'claude://my-session?match=FileNotFoundError'
   ```
 
-- **`tail=N`** (integer) - Show last N assistant turns — fast session recovery
+- **`view=messages&sort=-message_index&limit=N`** - Latest N assistant turns, latest-first. The deprecated `tail` preserves chronological order and zero-empty behavior; canonical limit zero is uncapped.
   ```bash
-  reveal 'claude://my-session?tail=3'
-  reveal 'claude://my-session?tail=1'
+  reveal 'claude://session/my-session/messages?sort=-message_index&limit=3'
+  reveal 'claude://session/my-session/messages?sort=-message_index&limit=1'
   ```
 
-- **`last`** (flag) - Show last assistant turn (shorthand for `?tail=1`)
+- **`view=messages&sort=-message_index&limit=1`** - Latest assistant turn. Deprecated `last` retains bare/zero-as-one behavior.
   ```bash
-  reveal 'claude://my-session?last'
+  reveal 'claude://session/my-session/messages?sort=-message_index&limit=1'
   ```
 
 - **`tokens`** (flag) - Token usage breakdown by message role (input/output/cache)
