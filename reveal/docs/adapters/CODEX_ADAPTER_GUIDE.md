@@ -1,6 +1,7 @@
 ---
 title: Codex Adapter Guide (codex://)
 category: guide
+beth_topics: [reveal, codex, sessions, configuration]
 ---
 # Codex Adapter Guide (codex://)
 
@@ -44,7 +45,7 @@ semantics remain unchanged (`?last=false` still selects the last agent message).
 `full=False` or `full=None` restores bounded exchange text while JSON retains the
 complete strings. The Codex subcommand and vocabulary migration remain open. Direct transcript
 URI execution, optional goals and SQLite catalog reads are qualified below;
-install and remaining resource policies remain separate.
+installation info and remaining resource policies remain separate.
 
 
 ```bash
@@ -380,6 +381,25 @@ queries. Source failures report their actual phase instead of claiming no
 session exists. This evidence covers UUID lookup, including the index used to
 select a thread goal. Direct transcript views consume these decisions for
 outcome policy; goal reads also qualify their optional database as described below.
+
+---
+
+## Configuration Outcomes
+
+`codex://config` records `meta.installation_analysis` around source selection,
+TOML loading and secret masking. The acquisition mechanism is shared with
+Claude's configuration readers; TOML parsing and masking retain their existing
+Codex owner. Healthy configuration, including empty documents and false/zero
+values, exits **0**. A missing file or absent `?key=` exits **2**; denied, malformed,
+undecodable or interrupted input and output loss exit **3**. A parsed document
+survives close failure after masking, with source disclosures.
+
+Key selection follows masking. Native API missing-key dictionaries retain
+`value: null` without a top-level error; qualified CLI/MCP requests carry an
+authored public request diagnostic. Malformed source is an MCP analysis error,
+while usable partial data retains its warning. Source decisions and masked
+observations remain checked through presentation, including nested scalar types,
+TOML NaN and datetime values. Fresh reads refresh acquisition and key decisions.
 
 ---
 

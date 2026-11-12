@@ -8,6 +8,7 @@ from ...utils.query_parser import peek_query_items
 from ...utils.results import (AnalysisCompleteness, FailureCause, failure_execution_facts,
                               result_execution_facts)
 from .params import bind_query
+from .configuration import execution_facts as config_facts, answer_requirement_error as config_error
 from .content import execution_facts as content_facts, answer_requirement_error as content_error
 from .rollout import ROLLOUT_RULE, rollout_lost as _rollout_lost
 from .catalog import (CATALOG_PATHS, execution_facts as catalog_facts,
@@ -31,6 +32,8 @@ RESULT_VARIANTS = {kind: ('codex_error', 'codex_not_installed') for kind in (*CO
 
 
 def selected_type(resource, params):
+    if resource == 'config':
+        return 'codex_config'
     values = dict(peek_query_items(params))
     if resource in CATALOG_PATHS:
         return 'codex_content_search' if values.get('search') else 'codex_session_list'
@@ -86,6 +89,8 @@ def _goal_state(lookup, goal):
 def execution_facts(result):
     if _invalid_envelope(result):
         return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+    if result.get('type') == 'codex_config':
+        return config_facts(result)
     if result.get('type') == 'codex_content_search':
         return content_facts(result)
     if result.get('type') == 'codex_session_list':
@@ -197,6 +202,8 @@ def _rejected_index_error(adapter, result, expected_type):
 
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
+    if expected_type == 'codex_config':
+        return config_error(adapter, result, prior_facts)
     if expected_type == 'codex_content_search':
         return content_error(adapter, result, prior_facts)
     if expected_type == 'codex_session_list':

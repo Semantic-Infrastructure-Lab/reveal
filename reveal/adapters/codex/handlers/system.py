@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
+from ....utils.document_read import DocumentRead
 from ....utils.secrets import redact_secrets
 from ....utils.path_utils import failure_of
 
@@ -113,24 +114,38 @@ def get_config(codex_home: Path, query_params: Optional[Dict[str, Any]] = None) 
         contract_version=CONTRACT_VERSION,
     )
 
-    if not config_path.exists():
-        return {**base, 'config': {}, 'error': f'Config not found: {config_path}'}
-
+    read = DocumentRead(config_path, label='Codex TOML')
     try:
-        with open(config_path, 'rb') as fh:
-            parsed = tomllib.load(fh)
-        masked = redact_secrets(parsed)
-    except (OSError, ValueError) as exc:  # unreadable, not UTF-8, or invalid TOML (TOMLDecodeError is a ValueError)
-        return {**base, 'config': {}, 'error': str(exc)}
+        read.select()
+        with read.operation('load'):
+            with open(config_path, 'rb') as fh:
+                parsed = tomllib.load(fh)
+                read.parsed = True
+    except (OSError, ValueError) as exc:
+        if not read.parsed:
+            message = f'Config not found: {config_path}' if isinstance(exc, FileNotFoundError) and not read.selected else str(exc)
+            return read.attach({**base, 'config': {}, 'error': message})
+    try:
+        with read.operation('mask'):
+            masked = redact_secrets(parsed)
+        read.usable = True
+    except (OSError, ValueError) as exc:
+        return read.attach({**base, 'config': {}, 'error': str(exc)})
 
     key = (query_params.get('key') or '').strip()
     if key:
         val: Any = masked
+        found = True
         for part in key.split('.'):
-            val = val.get(part) if isinstance(val, dict) else None
-        return {**base, 'key': key, 'value': val}
+            if not isinstance(val, dict) or part not in val:
+                val, found = None, False
+                break
+            val = val[part]
+        if not found:
+            read.error('key', KeyError(f'Config key not found: {key}'), rejected=True)
+        return read.attach({**base, 'key': key, 'value': val})
 
-    return {**base, 'config': masked}
+    return read.attach({**base, 'config': masked})
 
 
 def get_memories(codex_home: Path) -> Dict[str, Any]:

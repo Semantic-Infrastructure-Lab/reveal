@@ -105,7 +105,7 @@ class CodexAdapter(ResourceAdapter):
     def uri_execution_facts(cls, resource):
         path = resource.partition('?')[0]
         identifier, _, sub = path.partition('/')
-        if path in CATALOG_PATHS:
+        if path == 'config' or path in CATALOG_PATHS:
             return cls.execution_facts
         if not _UUID_RE.match(identifier):
             return None
@@ -131,7 +131,10 @@ class CodexAdapter(ResourceAdapter):
     def public_diagnostic(result):
         from .qualification import execution_facts
         from ...utils.results import FailureCause
-        return result.get('error') if FailureCause.INVALID_REQUEST in execution_facts(result).failures else None
+        if FailureCause.INVALID_REQUEST not in execution_facts(result).failures:
+            return None
+        return result.get('error') or next((item.get('message') for item in result.get('meta', {}).get('errors', [])
+                                          if item.get('code') == 'invalid_request'), None)
 
     # BACK-1379: get_structure already reads since/until from query_params and
     # threads them into _h_search_sessions/_h_filter_sessions (below), but nothing
@@ -544,7 +547,9 @@ class CodexAdapter(ResourceAdapter):
         return _h_get_history(self.CODEX_HOME, self.query_params)
 
     def _get_config(self) -> Dict[str, Any]:
-        return _h_get_config(self.CODEX_HOME, self.query_params)
+        result = _h_get_config(self.CODEX_HOME, self.query_params)
+        self._config_answer = deepcopy(result)
+        return result
 
     def _get_memories(self) -> Dict[str, Any]:
         return _h_get_memories(self.CODEX_HOME)

@@ -22,11 +22,13 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Codex TOML configuration reads now measure selection, loading and masking, distinguishing missing files/keys (2) from source/output loss (3). Masked data survives a close failure after parsing; falsy, nested, NaN and datetime observations retain their types through presentation. Native missing-key null dictionaries remain available, with public diagnostics on qualified CLI/MCP requests. Claude and Codex share one document-acquisition mechanism (BACK-2618).
+
 - Codex content search now measures every selected rollout before snippet caps, retaining matches from interrupted reads and disclosing malformed records, decoding repairs and unavailable paths. Healthy empty results exit 0, missing indexes 2 and source/output loss 3; MCP preserves usable partial results and marks failed analysis as an error. Existing literal matching, date scope and snippet limits are retained (BACK-2618).
 
 - Codex session catalogs and metadata filters now retain interrupted SQLite row prefixes, disclose timestamp/source failures, and distinguish healthy emptiness (0), a missing index (2), and required acquisition/output loss (3). Source and selection receipts survive presentation and display cuts; failed catalog analysis is an MCP error (BACK-2618).
 
-- Direct Codex UUID transcript views now distinguish complete answers (0), healthy invalid targets or indices (2), and required SQLite/JSONL or output loss (3). Read-only index lookup preserves source decisions and acquired rows, and failed required analysis is an MCP error. Goal reads also qualify optional-database absence versus acquisition failure, retain acquired goals after close loss, and skip unrelated rollout reads. Install transports retain their separate policies (BACK-2618).
+- Direct Codex UUID transcript views now distinguish complete answers (0), healthy invalid targets or indices (2), and required SQLite/JSONL or output loss (3). Read-only index lookup preserves source decisions and acquired rows, and failed required analysis is an MCP error. Goal reads also qualify optional-database absence versus acquisition failure, retain acquired goals after close loss, and skip unrelated rollout reads. Installation info and remaining resource transports retain their separate policies (BACK-2618).
 
 - Claude plan, agent, hook, memory and file-tracking paths beginning with `chain` now reach their namespace reader instead of being intercepted as a session continuation chain (BACK-2617).
 
