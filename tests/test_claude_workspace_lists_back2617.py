@@ -15,7 +15,27 @@ def workspace_home(transcript, monkeypatch):
     for name, path in {'PLANS_DIR': home / 'plans', 'AGENTS_DIR': home / 'agents',
                        'HOOKS_DIR': home / 'hooks', 'CONVERSATION_BASE': home / 'projects'}.items():
         monkeypatch.setattr(ClaudeAdapter, name, path)
+    monkeypatch.setattr(ClaudeAdapter, 'SESSIONS_DIR', None)
     return home
+
+
+@pytest.mark.parametrize('resource,kind', [('plans/chain-note', 'claude_plan'),
+                                         ('agents/chain-review', 'claude_agent'),
+                                         ('hooks/chain-event', 'claude_hooks'),
+                                         ('memory/chain-project', 'claude_memory'),
+                                         ('files//workspace/chain-file.py', 'claude_file_sessions')])
+def test_namespace_paths_are_not_session_chain_selectors(transcript, workspace_home, resource, kind):
+    from reveal.api import query
+    (workspace_home / 'plans' / 'chain-note.md').write_text('# A plan\n', encoding='utf-8')
+    (workspace_home / 'agents' / 'chain-review.md').write_text('Review a chain\n', encoding='utf-8')
+    (workspace_home / 'hooks' / 'chain-event').write_text('echo chain\n', encoding='utf-8')
+    memory = workspace_home / 'projects' / 'chain-project' / 'memory'
+    memory.mkdir(parents=True)
+    (memory / 'chain.md').write_text('Remember the chain\n', encoding='utf-8')
+    answer = query('claude://' + resource)
+    assert answer['type'] == kind
+    if kind == 'claude_memory':
+        assert answer['total'] == 1
 
 
 @pytest.mark.parametrize('resource,directory', [('plans', 'plans'), ('agents', 'agents'),

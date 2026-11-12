@@ -631,8 +631,9 @@ acquisition; content filters follow required reads. Candidate entries equal
 analyzed plus failed entries; required discovery/ordering loss and replacement
 decoding are disclosed separately. Missing required roots give 2; complete/empty
 catalogs give 0; required loss gives 3 with known entries retained. Existing list
-fields and legacy error markers remain. Singular plan/agent lookups, hook-event
-detail and non-session `/chain` routes retain separate policies.
+fields and legacy error markers remain. Reserved namespace paths are routed
+before session-chain selection, including names beginning with `chain`.
+Singular plan/agent lookups and hook-event detail retain separate policies.
 Other install resources, positional elements, Check, stdin and mixed batches retain their
 separate policies. Qualified postprocessing recognizes explicit request validation;
 unqualified transports preserve their prior classification.

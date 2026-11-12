@@ -1919,7 +1919,8 @@ Settings/config JSON also qualify acquisition and preserve scalar values; see
 [Install Config](#claudeconfig--install-config).
 [Path Diagnostics](#claudeinfo--path-diagnostics) qualifies path inventory.
 Ordinary workspace catalogs also qualify named-entry acquisition, as described
-below. Singular lookups, hook-event detail and non-session `/chain` routes retain their separate
+below. Reserved namespace paths, including names beginning with `chain`, reach
+their own readers before session-chain selection. Singular lookups and hook-event detail retain their separate
 policies. Stdin and mixed batches retain legacy completeness behavior; a warning
 there is not yet guaranteed to change the exit code.
 

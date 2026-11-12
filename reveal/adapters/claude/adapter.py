@@ -808,14 +808,14 @@ class ClaudeAdapter(ResourceAdapter):
             self._inject_search_term()
             return self._search_sessions()
 
-        # /chain substring (not a simple prefix — appears mid-path).
-        if '/chain' in self.resource:
-            return self._get_chain()
-
         # Simple prefix dispatch (files/, history, plans/, memory/, …).
         handler = self._resolve_resource_handler()
         if handler is not None:
             return handler()
+
+        # Session chain selection follows the reserved namespace owners.
+        if '/chain' in self.resource:
+            return self._get_chain()
 
         # Session message routing — load messages then dispatch by query/resource.
         messages = self._load_messages()

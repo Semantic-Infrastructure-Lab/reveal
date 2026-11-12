@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Claude plan, agent, hook, memory and file-tracking paths beginning with `chain` now reach their namespace reader instead of being intercepted as a session continuation chain (BACK-2617).
+
 - Claude workspace catalogs now measure named-entry acquisition before content filters and disclose read, discovery, ordering and decoding loss. Missing roots give exit 2; required source loss gives 3 while retaining known entries and existing list fields. Singular lookups and hook-event detail retain their separate policies (BACK-2617).
 
 - Claude installation `info` now distinguishes confirmed absence from denied metadata, retains partial directory counts and known paths, and exits 3 for required inspection loss. Qualified partial MCP answers omit duplicate legacy stderr error announcements, keeping requested JSON parseable (BACK-2617).
