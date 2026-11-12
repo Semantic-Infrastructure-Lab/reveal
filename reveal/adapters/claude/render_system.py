@@ -121,7 +121,7 @@ def _render_claude_plans(result: dict) -> None:
 def _render_claude_plan(result: dict) -> None:
     """Render a single plan's content."""
     error = result.get('error')
-    if error:
+    if error and 'content' not in result:
         return
     name = result.get('name', '')
     source = result.get('source', '')
@@ -272,7 +272,7 @@ def _render_claude_agents(result: dict) -> None:
 def _render_claude_agent(result: dict) -> None:
     """Render a single agent definition."""
     error = result.get('error')
-    if error:
+    if error and 'content' not in result:
         return
     name = result.get('name', '')
     modified = result.get('modified', '')

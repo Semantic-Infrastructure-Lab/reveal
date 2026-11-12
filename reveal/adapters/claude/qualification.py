@@ -149,7 +149,7 @@ _COUNTS = {
 
 
 def execution_facts(result):
-    if result.get('type') in ('claude_plans', 'claude_agents', 'claude_memory', 'claude_hooks'):
+    if result.get('type') in ('claude_plan', 'claude_agent', 'claude_plans', 'claude_agents', 'claude_memory', 'claude_hooks'):
         from .workspace_scan import workspace_execution_facts
         return workspace_execution_facts(result)
     if result.get('type') == 'claude_info':
@@ -180,6 +180,11 @@ def execution_facts(result):
 
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
+    if expected_type in ('claude_plan', 'claude_agent'):
+        from .markdown_lookup import lookup_requirement_error
+        error = lookup_requirement_error(adapter, result, expected_type, prior_facts)
+        fields: Dict[str, Any] = {'matches': list} if result.get('ambiguous') else {'content': str} if 'content' in result else {}
+        return error or _presentation_error(adapter, result, fields, prior_facts)
     if expected_type in ('claude_plans', 'claude_agents', 'claude_memory', 'claude_hooks'):
         return _workspace_answer_error(adapter, result, expected_type, prior_facts)
     if expected_type == 'claude_info':

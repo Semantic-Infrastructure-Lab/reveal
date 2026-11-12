@@ -1943,6 +1943,18 @@ the receipt supplies measured scan counts. Display cuts retain match counts and
 source receipts. MCP keeps usable partial answers, rejects fully failed scans,
 and re-reads source decisions on follow-up requests.
 
+Single plan and agent lookups also qualify acquisition. Exact filenames take
+precedence over prefix matching; nested paths and glob prefixes retain their
+existing matching behavior. An ambiguous prefix remains a successful plural
+`claude_plans`/`claude_agents` answer with `ambiguous`, `matches` and `query`.
+`meta.workspace_analysis.lookup` records the resolution and selected source.
+A confirmed missing request exits 2; selection/discovery/read/metadata loss and
+replacement decoding exit 3. Known bodies survive later metadata failure, and
+partial discovery retains its known matches without claiming completeness.
+Successful empty bodies exit 0. The envelope identifies a selected file as a
+file. MCP retains usable partial bodies or candidate names, rejects failed
+acquisition and reads source state again on follow-up requests.
+
 `meta.transcript_selection` records lookup and first-timestamp selection decisions.
 Unknown timestamps sort last. A recovered decode in an unselected candidate does
 not make the answer incomplete when the required timestamp field is unchanged;

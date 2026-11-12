@@ -403,10 +403,11 @@ def qualify_declared_answer(result, adapter_class, path: str, expected_type=None
     """Keep required answers canonical before projections; malformed success is failure."""
     from ...reveal_types import RevealResult
     expected_type = expected_type or adapter_class.RESULT_TYPE
+    variants = getattr(adapter_class, 'RESULT_TYPE_VARIANTS', {}).get(expected_type, ())
     required = RevealResult.__required_keys__
     valid = (isinstance(result, dict)
              and all(isinstance(result.get(key), str) and result[key] for key in required)
-             and result.get('type') == expected_type
+             and result.get('type') in (expected_type, *variants)
              and _valid_answer_meta(result.get('meta', {}))
              and isinstance(result.get('scope', {}), dict))
     requirement_error = None

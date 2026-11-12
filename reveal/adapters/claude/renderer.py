@@ -72,7 +72,7 @@ class ClaudeRenderer(TypeDispatchRenderer):
                  and history_execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE)
                 or (result.get('type') == 'claude_info'
                     and info_execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE)
-                or (result.get('type') in ('claude_plans', 'claude_agents', 'claude_memory', 'claude_hooks')
+                or (result.get('type') in ('claude_plan', 'claude_agent', 'claude_plans', 'claude_agents', 'claude_memory', 'claude_hooks')
                     and workspace_execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE))):
             return cls._render_text(result)
         return super().render_structure(result, format)

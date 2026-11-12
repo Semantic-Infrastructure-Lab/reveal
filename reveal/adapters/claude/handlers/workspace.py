@@ -2,13 +2,14 @@
 import logging
 import stat as stat_module
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from datetime import datetime
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder, note_warning
 from reveal.utils.lines import split_lines
 from ..workspace_scan import WorkspaceScan
+from ..markdown_lookup import MarkdownLookup
 
 logger = logging.getLogger(__name__)
 
@@ -51,26 +52,6 @@ def skipped_entries_warning(field: str, skipped: Iterable[Tuple[Path, BaseExcept
     }
 
 
-def _resolve_md_resource(directory: Path, name: str) -> Union[Path, List[str], None]:
-    """Resolve a claude://<X>/<name> single-item lookup to its .md file.
-
-    Returns the resolved Path on an unambiguous match, a list of candidate
-    stems if the glob fallback matches more than one file, or None if
-    nothing matches.
-    """
-    path = directory / name
-    if not path.suffix:
-        path = directory / (name + '.md')
-    if path.exists():
-        return path
-    matches = sorted(directory.glob(f'{name}*.md')) if directory.exists() else []
-    if len(matches) == 1:
-        return matches[0]
-    if len(matches) > 1:
-        return [p.stem for p in matches]
-    return None
-
-
 def _parse_agent_frontmatter(content: str) -> Dict[str, Any]:
     """Extract YAML-ish frontmatter from an agent markdown file."""
     fm: Dict[str, Any] = {}
@@ -104,29 +85,28 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
     parts = resource.split('/', 1)
     plan_name = parts[1].strip() if len(parts) > 1 else ''
     if plan_name:
-        resolved = _resolve_md_resource(plans_dir, plan_name)
-        if isinstance(resolved, list):
-            return {**base, 'type': 'claude_plans', 'ambiguous': True,
-                    'matches': resolved, 'query': plan_name}
-        if resolved is None:
-            return {**base, 'type': 'claude_plan',
-                    'error': f'Plan not found: {plan_name}', 'name': plan_name}
-        plan_path = resolved
-        try:
-            content = plan_path.read_text(encoding='utf-8', errors='replace')
-        except OSError as e:
-            return {**base, 'type': 'claude_plan', 'error': str(e), 'name': plan_name}
-        stat = plan_path.stat()
-        return {
-            **base,
-            'type': 'claude_plan',
-            'source': str(plan_path),
-            'name': plan_path.stem,
-            'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-            'content': content,
-        }
+        return _read_markdown_resource(plans_dir, plan_name, base, 'plan')
 
     return _list_plans(plans_dir, query_params, base)
+
+
+def _read_markdown_resource(directory, name, base, noun) -> Dict[str, Any]:
+    """Read the selected body, retaining content even if later metadata fails."""
+    lookup = MarkdownLookup()
+    resolved = lookup.resolve(directory, name)
+    if isinstance(resolved, list):
+        return lookup.attach({**base, 'ambiguous': True, 'matches': resolved, 'query': name})
+    result = {**base, 'type': 'claude_' + noun, 'name': name}
+    if resolved is None:
+        result['error'] = (str(lookup.discovery_errors[0][1]) if lookup.discovery_errors
+                           else f'{noun.title()} not found: {name}')
+        return lookup.attach(result)
+    result.update(source=str(resolved), source_type='file', name=resolved.stem)
+    lookup.read(resolved, result)
+    if noun == 'agent' and 'content' in result:
+        fm = _parse_agent_frontmatter(result['content'])
+        result.update(description=fm.get('description', ''), tools=fm.get('tools', []), model=fm.get('model', ''))
+    return lookup.attach(result)
 
 
 def _list_plans(plans_dir: Path, query_params: Dict[str, Any], base: Dict[str, Any]) -> Dict[str, Any]:
@@ -258,31 +238,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
     parts = resource.split('/', 1)
     agent_name = parts[1].strip() if len(parts) > 1 else ''
     if agent_name:
-        resolved = _resolve_md_resource(agents_dir, agent_name)
-        if isinstance(resolved, list):
-            return {**base, 'type': 'claude_agents', 'ambiguous': True,
-                    'matches': resolved, 'query': agent_name}
-        if resolved is None:
-            return {**base, 'type': 'claude_agent',
-                    'error': f'Agent not found: {agent_name}', 'name': agent_name}
-        agent_path = resolved
-        try:
-            content = agent_path.read_text(encoding='utf-8', errors='replace')
-        except OSError as e:
-            return {**base, 'type': 'claude_agent', 'error': str(e), 'name': agent_name}
-        stat = agent_path.stat()
-        fm = _parse_agent_frontmatter(content)
-        return {
-            **base,
-            'type': 'claude_agent',
-            'source': str(agent_path),
-            'name': agent_path.stem,
-            'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-            'description': fm.get('description', ''),
-            'tools': fm.get('tools', []),
-            'model': fm.get('model', ''),
-            'content': content,
-        }
+        return _read_markdown_resource(agents_dir, agent_name, base, 'agent')
 
     # claude://agents — list all agents
     scan = WorkspaceScan()

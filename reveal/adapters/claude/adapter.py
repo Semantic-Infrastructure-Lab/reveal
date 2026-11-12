@@ -386,6 +386,7 @@ class ClaudeAdapter(ResourceAdapter):
     PARAM_SPECS = PARAM_SPECS
     RESOURCE_SPEC = ResourceSpec(walks=False, filesystem=False)
     RESULT_TYPE = 'claude_session_overview'
+    RESULT_TYPE_VARIANTS = {'claude_plan': ('claude_plans',), 'claude_agent': ('claude_agents',)}
     DEFAULT_FAIL_ON = 'none'
     FINDINGS_POLICIES = ('none',)
 
@@ -423,7 +424,7 @@ class ClaudeAdapter(ResourceAdapter):
         fields = {'claude_history': ('history_analysis', 'request_absent'),
                   'claude_settings': ('installation_analysis', 'request_rejected'),
                   'claude_config': ('installation_analysis', 'request_rejected'),
-                  **dict.fromkeys(('claude_plans', 'claude_agents', 'claude_memory', 'claude_hooks'),
+                  **dict.fromkeys(('claude_plan', 'claude_agent', 'claude_plans', 'claude_agents', 'claude_memory', 'claude_hooks'),
                                   ('workspace_analysis', 'request_rejected'))}.get(kind)
         if fields is None:
             return None

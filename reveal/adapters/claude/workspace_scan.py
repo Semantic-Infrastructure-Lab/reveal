@@ -107,6 +107,8 @@ def workspace_listing_type(resource):
     noun, _, name = path.partition('/')
     if noun == 'memory':
         return 'claude_memory'
+    if name.strip() and noun in ('plans', 'agents'):
+        return 'claude_plan' if noun == 'plans' else 'claude_agent'
     if not name.strip():
         return {'plans': 'claude_plans', 'agents': 'claude_agents', 'hooks': 'claude_hooks'}.get(noun)
     return None
