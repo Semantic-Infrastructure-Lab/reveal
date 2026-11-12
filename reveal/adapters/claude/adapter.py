@@ -51,6 +51,7 @@ import json
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from .renderer import ClaudeRenderer
 from ...utils.query_parser import ResourceSpec
+from ...utils.results import ResultBuilder, note_warning
 from .params import PARAM_SPECS, bind_query
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
@@ -467,6 +468,7 @@ class ClaudeAdapter(ResourceAdapter):
         self.session_name = self._parse_session_name(resource) or "unknown"
         self.conversation_path = self._find_conversation()
         self.messages: Optional[List[Dict]] = None  # Lazy load
+        self._transcript_analysis: Optional[Dict[str, Any]] = None
 
     def reconfigure_base_path(self, path: Path) -> None:
         """Update all Claude install paths derived from the given projects directory.
@@ -505,24 +507,27 @@ class ClaudeAdapter(ResourceAdapter):
         self.PLANS_DIR = path.parent / 'plans'
         self.AGENTS_DIR = path.parent / 'agents'
         self.HOOKS_DIR = path.parent / 'hooks'
+        self.messages = None
+        self._transcript_analysis = None
+        self.conversation_path = None
         self.conversation_path = self._find_conversation()
 
     def _get_contract_base(self) -> Dict[str, Any]:
-        """Get Output Contract base fields.
-
-        Returns:
-            Dictionary with required contract fields:
-            - contract_version: CONTRACT_VERSION
-            - type: (to be set by caller)
-            - source: Path to conversation file
-            - source_type: 'file'
-        """
-        return {
-            'contract_version': CONTRACT_VERSION,
-            'type': '',  # Set by caller
-            'source': str(self.conversation_path) if self.conversation_path else '',
-            'source_type': 'file'  # JSONL file
-        }
+        """Build the shared envelope; each view supplies its own type and observations."""
+        result: Dict[str, Any] = dict(ResultBuilder.create(
+            '', str(self.conversation_path) if self.conversation_path else '',
+            source_type='file', contract_version=CONTRACT_VERSION))
+        proof = getattr(self, '_transcript_analysis', None)
+        if proof is not None:
+            result['meta']['transcript_analysis'] = dict(proof)
+            if proof['failed_records']:
+                note_warning(result, {
+                    'type': 'analysis_incomplete', 'code': 'analysis_incomplete',
+                    'message': (f"{proof['failed_records']} nonblank JSONL record(s) could not be decoded as objects; "
+                                f"counts cover {proof['analyzed_records']} decoded object records. "
+                                'Source decisions: JSON meta.transcript_analysis.'),
+                })
+        return result
 
     def _parse_session_name(self, resource: str) -> str:
         """Extract session name from URI resource string.
@@ -608,13 +613,26 @@ class ClaudeAdapter(ResourceAdapter):
             )
 
         messages = []
+        candidates = failed = 0
+        first_failed = None
         with open(self.conversation_path, 'r', encoding='utf-8') as f:
-            for line in f:
+            for line_number, line in enumerate(f, 1):
+                if not line.strip():
+                    continue
+                candidates += 1
                 try:
-                    messages.append(json.loads(line))
+                    record = json.loads(line)
                 except json.JSONDecodeError:
-                    continue  # Skip malformed lines
-
+                    record = None
+                if isinstance(record, dict):
+                    messages.append(record)
+                else:
+                    failed += 1
+                    first_failed = first_failed or line_number
+        self._transcript_analysis = {
+            'candidate_records': candidates, 'analyzed_records': len(messages),
+            'failed_records': failed, 'first_failed_line': first_failed,
+        }
         self.messages = messages
         return messages
 

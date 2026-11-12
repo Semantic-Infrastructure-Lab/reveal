@@ -1887,7 +1887,17 @@ Use the full UUID, its first 8 hex characters (`2627362f`), or any trailing part
 
 #### Malformed transcript lines
 
-Lines that are not valid JSON are skipped silently (exit 0). A file with no valid lines reports `Messages: 0`.
+Ordinary session views skip malformed JSON and non-object records while retaining
+usable decoded object records. `meta.transcript_analysis` reports candidate,
+analyzed and failed record counts plus the first failed line; a source-loss
+warning distinguishes failed input from a genuinely empty transcript. Blank
+lines are not records. These are JSON decoding/object counts, not a guarantee
+that every record payload satisfies every view's semantic requirements.
+
+The legacy URI exit remains 0 for this disclosed partial answer until the
+resource-specific execution-policy adoption; this source receipt alone does not
+claim that adoption. Switching the store with `--base-path` also replaces cached
+records and their source proof.
 
 ---
 

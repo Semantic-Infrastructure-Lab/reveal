@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Claude session views now disclose skipped malformed/non-object JSONL records with source counts while retaining usable observations. Switching the store invalidates cached records and proof together; execution-policy adoption remains separate (BACK-2617).
+
 - AST and Git generated commands now accept legacy `--all` through the same declared limit value used by URI forwarding, retaining full-row parity above their default caps (BACK-2613, BACK-2616).
 
 - Codex Python API query controls now bind before SQLite and JSONL reading, preserving literal search overrides, snippet zero, date bounds and explicit false/default controls (BACK-2618).
