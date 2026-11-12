@@ -2,7 +2,7 @@
 from typing import Any, Callable
 
 from ...utils.query_binding import bind_declared_params, legacy_presence_value as presence, string_value as text
-from ...utils.query_parser import CliBinding, ParamSpec, QueryParams, peek_query_items
+from ...utils.query_parser import CliBinding, ParamSpec, QueryParams, peek_query_items, nonnegative_display_limit, nonempty_scalar
 from .schema import _SCHEMA_QUERY_PARAMS
 from .resources import SESSION_VIEW_NAMES
 
@@ -52,6 +52,11 @@ def _spec(name, schema):
 
 
 PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS.items()) + (
+    ParamSpec('limit', 'integer', 'Answer rows; zero is uncapped; source/input budgets are unchanged', None,
+              lambda value: nonnegative_display_limit(value, name='limit'), minimum=0, zero_policy='uncapped'),
+    ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', None,
+              lambda value: nonnegative_display_limit(value, name='offset'), minimum=0),
+    ParamSpec('sort', 'string', 'Answer row field; prefix - for descending; supported fields depend on the selected reader', None, nonempty_scalar),
     ParamSpec('where', 'array', 'Session catalog names only: repeat session~=TEXT for case-insensitive literal substring constraints, ANDed',
               None, name_predicates, uri_codec='percent', role='name-predicate',
               cli=CliBinding(('--where',), action='append')),
@@ -73,6 +78,8 @@ def bind_request(query, params, resource=''):
     apply_detail(runtime, resource)
     apply_match(runtime, resource)
     validate_where_scope(runtime, resource)
+    from .pagination import validate_page_scope
+    validate_page_scope(runtime, resource)
     for spec in PARAM_SPECS:
         if spec.name in dict.keys(runtime):
             runtime.set_normalized(spec, dict.__getitem__(runtime, spec.name))

@@ -132,6 +132,12 @@ def _post_process_session_list(result: Dict[str, Any], args: Any, query_params: 
     note_truncation(result, 'recent_sessions', len(sessions), total_before, 'display-selection')
     result['displayed_count'] = len(sessions)
 
+    _enrich_session_rows(result, args)
+
+
+def _enrich_session_rows(result, args):
+    """Optional row annotations shared by legacy and canonical display pages."""
+    sessions = result.get('recent_sessions', [])
     for s in sessions:
         if 'title' not in s and s.get('path'):
             s['title'] = _read_session_title(Path(s['path']))

@@ -94,14 +94,24 @@ def _proof_error(proof, result):
     counts = ('visited_sessions', 'readmes_found', 'parsed_readmes', 'failed_operations')
     if not all(type(proof.get(k)) is int and proof[k] >= 0 for k in counts):
         return 'Claude chain answer missing nonnegative source counts'
+    error = _chain_observation_error(proof, result)
+    return error or _decision_error(proof)
+
+
+def _chain_observation_error(proof, result):
+    from ...utils.observations import has_truncation_receipt
     rows = result.get('chain')
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
         return 'Claude chain answer missing session observations'
-    if proof['visited_sessions'] != len(rows) or result.get('chain_length') != len(rows):
+    total = proof['visited_sessions']
+    if result.get('chain_length') != total or proof['readmes_found'] > total:
         return 'Claude chain count disagrees with observed sessions'
-    if proof['readmes_found'] != sum(row.get('readme') is not None for row in rows):
+    if total != len(rows) and not has_truncation_receipt(result, ('chain',), len(rows), total):
+        return 'Claude chain display cut missing its source count receipt'
+    visible_readmes = sum(row.get('readme') is not None for row in rows)
+    if proof['readmes_found'] < visible_readmes or (total == len(rows) and proof['readmes_found'] != visible_readmes):
         return 'Claude chain count disagrees with observed READMEs'
-    return _decision_error(proof)
+    return None
 
 
 def _decision_error(proof):

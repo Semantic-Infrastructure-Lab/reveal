@@ -102,18 +102,6 @@ LIST_FIELDS = {'claude_plans': 'plans', 'claude_agents': 'agents',
                'claude_memory': 'memories', 'claude_hooks': 'hooks'}
 
 
-def workspace_listing_type(resource):
-    path = resource.partition('?')[0]
-    noun, _, name = path.partition('/')
-    if noun in ('memory', 'hooks'):
-        return 'claude_memory' if noun == 'memory' else 'claude_hooks'
-    if name.strip() and noun in ('plans', 'agents'):
-        return 'claude_plan' if noun == 'plans' else 'claude_agent'
-    if not name.strip():
-        return {'plans': 'claude_plans', 'agents': 'claude_agents', 'hooks': 'claude_hooks'}.get(noun)
-    return None
-
-
 def workspace_execution_facts(result):
     meta = result.get('meta', {})
     if any(e.get('code') == 'invalid_adapter_answer' for e in meta.get('errors', ())):
@@ -145,7 +133,9 @@ def workspace_requirement_error(adapter, result, expected_type, prior_facts):
     count = result.get('displayed' if expected_type in ('claude_plans', 'claude_agents') else 'total')
     if result.get('error') and not result[field]:
         return None
-    if type(count) is not int or count != len(result[field]):
+    from ...utils.observations import has_truncation_receipt
+    if type(count) is not int or count < 0 or (count != len(result[field])
+            and not has_truncation_receipt(result, (field,), len(result[field]), count)):
         return 'Claude workspace entry count disagrees with observations'
     return None
 

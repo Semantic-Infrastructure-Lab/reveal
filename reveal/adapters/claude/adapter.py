@@ -766,9 +766,14 @@ class ClaudeAdapter(ResourceAdapter):
         return None
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
-        """Return session structure based on resource path and query params."""
+        """Read the selected answer, then apply declared answer-row controls."""
         from .qualification import validate_resource
+        from .pagination import page_result
         validate_resource(self.resource, _parse_session_identifier, tuple(p for p, _ in self._RESOURCE_DISPATCH))
+        return page_result(self._read_structure(**kwargs), self.query_params)
+
+    def _read_structure(self, **kwargs) -> Dict[str, Any]:
+        """Existing analysis/resource dispatch, independent of answer-row controls."""
         # Bare claude://, sessions/, '.', '' → session list or cross-session search.
         if self._is_session_list_resource():
             return self._search_sessions() if self.query_params.get('search') else self._list_sessions()
@@ -961,11 +966,13 @@ class ClaudeAdapter(ResourceAdapter):
 
         Returns JSON schema for AI agent integration.
         """
+        from .pagination import page_schema
         return {
             'adapter': 'claude',
             'description': 'Claude Code conversation analysis with tool usage, workflow tracking, and error detection',
             'uri_syntax': 'claude://session/{name}[/resource][?query]',
             'query_params': {spec.name: spec.schema() for spec in PARAM_SPECS},
+            'pagination': page_schema(),
             'elements': _SCHEMA_ELEMENTS,
             'cli_flags': _SCHEMA_CLI_FLAGS,
             'supports_batch': False,
@@ -995,6 +1002,15 @@ class ClaudeAdapter(ResourceAdapter):
             'tail': getattr(args, 'tail', None),
             'range': getattr(args, 'range', None),
         }
+
+        from .pagination import page_requested, validate_page_display_args, update_display_counts
+        if page_requested(self.query_params):
+            validate_page_display_args(self.query_params, args)
+            if result_type == 'claude_session_list':
+                from .handlers.post_process import _enrich_session_rows
+                _enrich_session_rows(result, args)
+            update_display_counts(result)
+            return result
 
         if result_type == 'claude_session_overview' and getattr(args, 'range', None):
             raise RequestValidationError(

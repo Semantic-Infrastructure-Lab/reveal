@@ -1983,6 +1983,26 @@ values percent-decode once; typed API values stay literal. Acquisition loss
 remains exit 3 even when predicates hide every acquired row; MCP retains source
 proof and reads follow-up source state afresh.
 
+Canonical `sort`, `offset` and `limit` control supported list-shaped answers.
+Rows are sorted first (use `-FIELD` for descending), then skipped, then capped;
+`limit=0` is uncapped. Omitting sort keeps the existing source order. Recognized
+sort fields are declared per answer type in `help://schemas/claude`; nulls sort
+last in either direction using the shared result-control comparator. Aggregate
+or singular answers without a list reject these controls with exit 2.
+
+`meta.pagination` records the selected field, original row population, page size
+and request. Its counts describe the pagination stage before further output
+budgets; source counts and receipts stay intact. Explicit canonical page controls
+bypass the legacy catalog/search/history display caps. They cannot combine with
+legacy slicing/filter flags or query `tail`/`last`; equal `--all`/uncapped requests
+coalesce. Legacy `tail` ordering and zero behavior remain unchanged. Display cuts,
+including empty pages past the end, give exit 0 after complete analysis; source
+loss remains exit 3 even if the page is empty. `limit=0` does not lift source caps
+such as chain traversal's 50-session ceiling. Known chain/README acquisition
+counts remain full traversal counts when only part of the chain is displayed.
+MCP keeps usable partial pages, rejects failed acquisition and reads follow-up
+source state afresh.
+
 Store listings (`claude://` and `claude://sessions`) also qualify their required
 directory and metadata acquisition. `meta.session_catalog` counts non-agent
 JSONL-named candidates, acquired entries and failed metadata operations before

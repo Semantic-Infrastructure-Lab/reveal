@@ -2,36 +2,10 @@
 from typing import Any, Dict
 
 from ...utils.observations import count_observations, validate_observation_counts
-from ...utils.query_binding import prepare_declared_params
-from ...utils.query_parser import peek_query_items
 from ...utils.results import AnalysisCompleteness, result_execution_facts
-from .params import PARAM_SPECS
 from .analysis.records import valid_record_proof as _valid_record_proof
 
 from .resources import SESSION_VIEWS, selected_type
-
-
-def catalog_type(resource, params=None):
-    path, _, query = resource.partition('?')
-    if path in ('', '.', 'sessions') or path.startswith('sessions/'):
-        if params is None:
-            params = prepare_declared_params(PARAM_SPECS, query, 'uri')
-        return ('claude_cross_session_search' if dict(peek_query_items(params)).get('search')
-                else 'claude_session_list')
-    if path == 'search' or path.startswith('search/'):
-        return 'claude_cross_session_search'
-    if path == 'files' or path.startswith('files/'):
-        return 'claude_file_sessions'
-    return None
-
-
-def history_resource(resource):
-    return resource.partition('?')[0].rstrip('/') == 'history'
-
-
-def installation_type(resource):
-    return {'settings': 'claude_settings', 'config': 'claude_config',
-            'info': 'claude_info'}.get(resource.partition('?')[0].rstrip('/'))
 
 
 def validate_resource(resource, parse_identifier, prefixes):
@@ -50,24 +24,17 @@ def validate_resource(resource, parse_identifier, prefixes):
 
 
 def uri_result_type(resource):
+    from ...errors import RequestValidationError
     from .params import bind_request
+    from .resources import operation_type
     path, _, query = resource.partition('?')
-    path, params = bind_request(query, None, path)
-    from .workspace_scan import workspace_listing_type
-    workspace = workspace_listing_type(resource)
-    if workspace:
-        return workspace
-    installed = installation_type(resource)
-    if installed:
-        return installed
-    if history_resource(resource):
-        return 'claude_history'
-    kind = catalog_type(resource, params)
-    if kind:
-        return kind
-    if path.endswith('/chain'):
-        return 'claude_chain'
-    return selected_type(path, params)
+    try:
+        path, params = bind_request(query, None, path)
+    except (RequestValidationError, UnicodeDecodeError):
+        # Prediction must not raise outside the router's answered-call boundary.
+        # Canonical construction validates the original input and reports the error.
+        return operation_type(path, {})
+    return operation_type(path, params)
 
 
 def _count(value):
@@ -147,7 +114,8 @@ def execution_facts(result):
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
     from .controls import control_requirement_error
-    control_error = control_requirement_error(adapter, result)
+    from .pagination import page_requirement_error
+    control_error = control_requirement_error(adapter, result) or page_requirement_error(adapter, result, prior_facts)
     if control_error:
         return control_error
     if expected_type in ('claude_plan', 'claude_agent'):

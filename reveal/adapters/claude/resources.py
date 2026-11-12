@@ -85,3 +85,21 @@ def selected_type(resource, params):
 
 NON_SESSION_NAMESPACES = ('files', 'history', 'info', 'settings', 'plans', 'config', 'memory',
                           'agents', 'hooks', 'sessions', 'search')
+
+
+def operation_type(resource, params):
+    """Pure request identity shared by URI qualification and bound controls."""
+    noun, _, name = resource.partition('/')
+    if resource in ('', '.') or noun == 'sessions':
+        values = dict(peek_query_items(params))
+        return 'claude_cross_session_search' if values.get('search') else 'claude_session_list'
+    if noun in ('plans', 'agents'):
+        return 'claude_' + (noun[:-1] if name.strip() else noun)
+    kind = {'memory': 'claude_memory', 'hooks': 'claude_hooks', 'files': 'claude_file_sessions',
+            'search': 'claude_cross_session_search', 'history': 'claude_history',
+            'settings': 'claude_settings', 'config': 'claude_config', 'info': 'claude_info'}.get(noun)
+    if kind:
+        return kind
+    if resource.endswith('/chain'):
+        return 'claude_chain'
+    return selected_type(resource, params)
