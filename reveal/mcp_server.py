@@ -484,9 +484,12 @@ def reveal_element(path: str, element: str) -> str:
     if not result:
         return _tool_failure(f"element '{element}' not found in {path}")
 
+    from .utils.results import ResultBuilder
+    result = ResultBuilder.element(result, p)
+
     line_start = result.get('line_start', 1)
     line_end = result.get('line_end', line_start)
-    source = result.get('source', '')
+    source = result.get('content', '')
     name = result.get('name', element)
 
     # Several non-contiguous spans (markdown `A|B` or substring matches, JSONL
@@ -494,11 +497,11 @@ def reveal_element(path: str, element: str) -> str:
     # own start line, as the CLI renders them -- the joined `source` numbered
     # from the first start would invent line numbers.
     spans = result.get('sections') or [
-        {'line_start': line_start, 'line_end': line_end, 'source': source}
+        {'line_start': line_start, 'line_end': line_end, 'content': source}
     ]
     body = "\n\n".join(
         f"{path}:{s['line_start']}-{s['line_end']} | {name}\n\n"
-        f"{analyzer.format_with_lines(s['source'], s['line_start'])}"
+        f"{analyzer.format_with_lines(s['content'], s['line_start'])}"
         for s in spans
     )
     # BACK-1400: an ambiguous name must not silently return the first match;

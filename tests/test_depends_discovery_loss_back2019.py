@@ -154,7 +154,7 @@ def test_same_adapter_repair_and_clean_sibling_exact(tmp_path, monkeypatch):
         assert warning(owner.get_structure())
         assert other.get_structure() == sibling_baseline
     assert owner.get_structure() == baseline
-    assert 'meta' not in baseline
+    assert baseline['meta'] == {'warnings': [], 'errors': []}
 
 
 def test_policy_excluded_directory_and_noise_unchanged(tmp_path, monkeypatch):

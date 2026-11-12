@@ -153,8 +153,8 @@ class TestResultBuilderCreate:
             ResultBuilder.create('probe', 'probe', data={'scope': scope})
 
 
-    def test_v11_no_meta_if_no_metadata(self, tmp_path):
-        """Don't add meta dict in v1.1 if no metadata provided."""
+    def test_v11_empty_diagnostics_if_no_metadata(self, tmp_path):
+        """Every current envelope has explicit diagnostic arrays (BACK-2601)."""
         test_file = tmp_path / "test.py"
         test_file.write_text("# test")
 
@@ -165,7 +165,7 @@ class TestResultBuilderCreate:
         )
 
         assert result['contract_version'] == '1.1'
-        assert 'meta' not in result
+        assert result['meta'] == {'warnings': [], 'errors': []}
 
     def test_empty_data_dict(self, tmp_path):
         """Handle empty data dictionary."""
@@ -477,6 +477,16 @@ class TestEdgeCases:
                 error='oops',
                 type='collider'
             )
+
+    def test_error_preserves_composed_diagnostics(self):
+        warning = {'type': 'partial', 'message': 'one sheet unreadable'}
+        result = ResultBuilder.create_error(
+            'xlsx_workbook', 'book.xlsx', 'workbook failed',
+            contract_version='1.1', meta={'warnings': [warning]})
+        assert result['error'] == 'workbook failed'
+        assert result['meta'] == {'warnings': [warning], 'errors': []}
+        with pytest.raises(ValueError):
+            ResultBuilder.create_error('x', 'a', 'failed', meta={'warnings': 'bad'})
 
     def test_confidence_edge_values(self):
         """Test confidence boundary values."""

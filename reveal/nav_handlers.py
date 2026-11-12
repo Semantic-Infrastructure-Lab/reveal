@@ -68,11 +68,18 @@ def _nav_json(flag: str, path: str, element: str, from_line: int, to_line: int,
               warnings: Optional[List[str]] = None) -> None:
     """Serialize nav findings as a JSON envelope and print to stdout."""
     from .utils.json_utils import print_json_result  # noqa: I006
+    from .utils.results import ResultBuilder
+    from .reveal_types import CONTRACT_VERSION
     meta = {'flag': flag, 'file': str(path), 'element': element,
             'from_line': from_line, 'to_line': to_line}
     if extra_meta:
         meta.update(extra_meta)
-    print_json_result({'meta': meta, 'findings': findings, 'warnings': warnings or []})
+    meta['warnings'] = [warning if isinstance(warning, dict) else
+                        {'type': 'navigation_warning', 'message': warning}
+                        for warning in warnings or []]
+    print_json_result(ResultBuilder.create(
+        'element_view', path, source_type='file', contract_version=CONTRACT_VERSION,
+        meta=meta, data={'findings': findings, 'warnings': warnings or []}))
 
 
 def _varflow_trust_warning(analyzer) -> Optional[str]:

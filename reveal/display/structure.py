@@ -278,7 +278,12 @@ def _render_typed_structure_output(
         }
         if warning:
             result["warnings"] = [warning]
-        print(safe_json_dumps(result))
+        from ..utils.results import ResultBuilder
+        from ..reveal_types import CONTRACT_VERSION
+        print(safe_json_dumps(ResultBuilder.create(
+            result.pop('type') or 'typed_structure', analyzer.path, data=result,
+            source_type='file', contract_version=CONTRACT_VERSION,
+            meta={'warnings': [warning] if warning else [], 'errors': []})))
         return
 
     # Text output: show hierarchical structure with containment
@@ -472,7 +477,7 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
     extractable_meta = _build_extractable_meta(structure, file_path)
     fallback_type = analyzer.__class__.__name__.replace('Analyzer', '').lower()
 
-    result = {
+    result: Dict[str, Any] = {
         'file': file_path,
         'type': get_file_type_from_analyzer(analyzer) or fallback_type,
         'analyzer': {
@@ -510,6 +515,11 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
     relationships = analyzer._extract_relationships(structure)
     if relationships:
         result['relationships'] = relationships
+    from ..utils.results import ResultBuilder
+    from ..reveal_types import CONTRACT_VERSION
+    meta = result.pop('meta')
+    result = dict(ResultBuilder.create(result.pop('type'), analyzer.path, data=result,
+                                       source_type='file', contract_version=CONTRACT_VERSION, meta=meta))
     print(safe_json_dumps(result))
 
 

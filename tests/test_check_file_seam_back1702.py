@@ -70,12 +70,12 @@ class TestUnchangedWithoutACut:
 
     def test_json_without_max_items_has_no_meta(self, tmp_path):
         payload = json.loads(_check(_file(tmp_path), "--format", "json").stdout)
-        assert "meta" not in payload
+        assert payload['meta'] == {'warnings': [], 'errors': []}
         assert payload["total"] == 3
 
     def test_max_items_above_the_total_records_nothing(self, tmp_path):
         payload = json.loads(_check(_file(tmp_path), "--format", "json", "--max-items", "3").stdout)
-        assert _cuts(payload) == [] and "meta" not in payload
+        assert _cuts(payload) == [] and payload['meta'] == {'warnings': [], 'errors': []}
 
     def test_text_without_max_items_has_no_truncated_line(self, tmp_path):
         out = _check(_file(tmp_path)).stdout

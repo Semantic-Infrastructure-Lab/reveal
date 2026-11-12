@@ -447,6 +447,25 @@ def result_control_notes_of(result: Any) -> List[Dict[str, Any]]:
     return _meta_warnings_of(result, RESULT_CONTROL_WARNINGS)
 
 
+def _complete_current_meta(result: Dict[str, Any], contract_version: str) -> None:
+    """Current envelopes always name both diagnostic collections."""
+    if contract_version == CONTRACT_VERSION:
+        metadata = result.setdefault('meta', {})
+        metadata.setdefault('warnings', [])
+        metadata.setdefault('errors', [])
+
+
+def _element_meta(meta: Dict[str, Any]) -> Dict[str, Any]:
+    """Rebase cut pointers without mutating analyzer-owned span metadata."""
+    copied = dict(meta)
+    if 'warnings' in copied:
+        copied['warnings'] = [
+            {**entry, 'field': 'content', 'label': entry.get('label', 'source')}
+            if entry.get('type') == 'truncated' and entry.get('field') == 'source'
+            else dict(entry) for entry in copied['warnings']]
+    return copied
+
+
 class ResultBuilder:
     """Build Output Contract v1.x compliant results."""
 
@@ -556,7 +575,36 @@ class ResultBuilder:
                 )
             result.update(extra_fields)
 
+        _complete_current_meta(result, contract_version)
+
         return result
+
+    @staticmethod
+    def element(result: Dict[str, Any], source: Union[str, Path]) -> RevealResult:
+        """Put extracted code in content; source identifies the file (BACK-2601).
+
+        Analyzer extraction records remain internal source spans. Public CLI/API/MCP
+        consumers use this boundary without changing those records or text rendering.
+        """
+        data = dict(result)
+        already_enveloped = 'contract_version' in data and 'source_type' in data
+        body = data.pop('source', None)
+        if body is not None and not already_enveloped:
+            data['content'] = body
+        if isinstance(data.get('sections'), list):
+            data['sections'] = [
+                {**{key: value for key, value in span.items() if key != 'source'},
+                 'content': span['source']} if 'source' in span else dict(span)
+                for span in data['sections']
+            ]
+        result_type = data.pop('type', 'code_element')
+        data.pop('contract_version', None)
+        data.pop('source_type', None)
+        meta = _element_meta(data.pop('meta', {}))
+        scope = data.pop('scope', None)
+        return ResultBuilder.create(result_type, source, data=data,
+                                    contract_version=CONTRACT_VERSION, source_type='file',
+                                    meta=meta, scope=scope)
 
     @staticmethod
     def create_error(
@@ -565,6 +613,7 @@ class ResultBuilder:
         error: str,
         contract_version: str = '1.0',
         source_type: Optional[str] = None,
+        meta: Optional[Dict[str, Any]] = None,
         **extra_fields
     ) -> RevealResult:
         """Build error result dictionary.
@@ -590,25 +639,9 @@ class ResultBuilder:
             >>> result['error']
             'Directory not found'
         """
-        source_path = Path(source) if isinstance(source, str) else source
-
-        result: Dict[str, Any] = {
-            'contract_version': contract_version,
-            'type': result_type,
-            'source': _source_text(source),
-            'source_type': source_type or ('directory' if source_path.is_dir() else 'file'),
-            'error': error,
-        }
-
-        if extra_fields:
-            collision = _CONTRACT_FIELDS & extra_fields.keys()
-            if collision:
-                raise ValueError(
-                    f"extra_fields collides with contract fields: {sorted(collision)}"
-                )
-            result.update(extra_fields)
-
-        return result
+        return ResultBuilder.create(result_type, source, contract_version=contract_version,
+                                    source_type=source_type, meta=meta,
+                                    data={'error': error}, **extra_fields)
 
     @staticmethod
     def create_meta(
@@ -725,7 +758,7 @@ def add_cli_contract_fields(
     result_type: str,
     source: Union[str, Path],
     source_type: str = 'directory',
-    contract_version: str = '1.0',
+    contract_version: str = CONTRACT_VERSION,
 ) -> Dict[str, Any]:
     """Prepend Output Contract envelope fields to a `cli/commands/` JSON report.
 
@@ -741,10 +774,12 @@ def add_cli_contract_fields(
     conforms to — the argument is only the fallback for reports built by the
     command itself (check/health/review), which have no adapter version.
     """
-    return {
-        'contract_version': report.get('contract_version', contract_version),
-        'type': result_type,
-        'source': _source_text(source),
-        'source_type': source_type,
-        **report,
-    }
+    data = dict(report)
+    version = data.pop('contract_version', contract_version)
+    kind = data.pop('type', result_type)
+    origin = data.pop('source', source)
+    category = data.pop('source_type', source_type)
+    meta = data.pop('meta', {})
+    scope = data.pop('scope', None)
+    return dict(ResultBuilder.create(kind, origin, data=data, contract_version=version,
+                                     source_type=category, meta=meta, scope=scope))

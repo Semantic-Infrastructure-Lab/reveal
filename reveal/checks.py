@@ -219,7 +219,18 @@ def _detections_json(path: str, result: dict) -> str:
     """The document ``--format json`` prints for a single-file *result*: what --also-json
     writes beside a text or grep render (BACK-1248)."""
     from reveal.cli.routing.subcommand import subcommand_json
-    return subcommand_json(result, name='check', source=path, source_type='file')
+    return subcommand_json(_file_check_document(result), name='check', source=path, source_type='file')
+
+
+def _file_check_document(result: dict) -> dict:
+    """The file and directory transports share files/summary; file aliases stay additive."""
+    total = result.get('meta', {}).get('total_available', result['total'])
+    return {**result, 'files': [dict(result)], 'summary': {
+        'files_checked': 1, 'files_with_issues': int(total > 0),
+        'total_issues': total, 'files_errored': int(bool(result.get('errors'))),
+        'files_degraded': int(bool(result.get('warning'))),
+        'scan_disclosures': result.get('scan_disclosures', []),
+    }}
 
 
 @dataclass
@@ -303,7 +314,8 @@ def _emit_detections(path: str, output_format: str, detections: List[Any],
                 coverage_selected=coverage_selected,
             )
 
-    emit_subcommand_result(printed, Namespace(format=output_format), name='check', source=path,
+    document = _file_check_document(printed) if output_format == 'json' else printed
+    emit_subcommand_result(document, Namespace(format=output_format), name='check', source=path,
                            render=render, source_type='file')
     return result
 

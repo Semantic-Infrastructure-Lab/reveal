@@ -79,7 +79,7 @@ def test_readable_tree_stays_clean(tmp_path, capsys):
     """Positive control: nothing lost, no warning, exit 0."""
     (tmp_path / 'ok.py').write_text(TEXT, encoding='utf-8')
     result = grep_handler.grep_directory(str(tmp_path), 'good', Namespace(format='json'))
-    assert 'meta' not in result and result['files_searched'] == 1
+    assert result['meta'] == {'warnings': [], 'errors': []} and result['files_searched'] == 1
     assert _run(tmp_path, 'good', 'text') == 0
     assert 'could not be analyzed' not in capsys.readouterr().out
 

@@ -343,7 +343,7 @@ def test_head_slices_hits_and_json_is_not_capped_implicitly(tmp_path):
     assert 'showing 2 of 50' in r.stdout
     data = json.loads(run_reveal(str(tmp_path), '--grep', 'needle', '--format', 'json').stdout)
     assert sum(f['hits'] for f in data['files']) == data['total_hits'] == 151
-    assert 'meta' not in data
+    assert data['meta'] == {'warnings': [], 'errors': []}
     capped = json.loads(run_reveal(str(tmp_path), '--grep', 'needle', '--format', 'json',
                                    '--max-items', '5').stdout)
     assert sum(f['hits'] for f in capped['files']) == 5

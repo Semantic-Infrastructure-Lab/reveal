@@ -124,8 +124,9 @@ def _component_diagnostics(name: str, metadata: Any, meta: Dict[str, Any]) -> Di
                    if isinstance(metadata, dict) and key in metadata}
     for warning in meta.get('warnings', []):
         field = warning.get('field', '')
-        if warning.get('type') == 'truncated' and field.removeprefix('metadata.') in diagnostics:
-            target = f'analysis.components.{name}.diagnostics.{field.removeprefix("metadata.")}'
+        relative = field.removeprefix('metadata.').removeprefix('meta.')
+        if warning.get('type') == 'truncated' and relative in diagnostics:
+            target = f'analysis.components.{name}.diagnostics.{relative}'
             # Project before compose folds its own diagnostic snapshot.
             warning['field'] = target
             if isinstance(warning.get('message'), str):

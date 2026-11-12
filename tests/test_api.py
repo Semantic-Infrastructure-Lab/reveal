@@ -83,7 +83,7 @@ class TestElement:
         """)
         result = element(str(f), "add")
         assert result is not None
-        assert "add" in result.get("source", "")
+        assert "add" in result.get("content", "")
 
     def test_returns_none_for_missing_element(self, tmp_path):
         f = _write_py(tmp_path, "mod.py", "x = 1\n")
@@ -206,7 +206,7 @@ class TestPublicApiExports:
 
         elem = reveal.element(path, "greet")
         assert elem is not None
-        assert "greet" in elem.get("source", "")
+        assert "greet" in elem.get("content", "")
 
         query_result = reveal.query(f"ast://{tmp_path}/")
         assert isinstance(query_result, dict)

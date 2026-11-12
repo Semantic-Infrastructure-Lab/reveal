@@ -14,7 +14,7 @@ Usage::
     # Extract a specific named element
     func = element("myfile.py", "my_function")
     if func:
-        print(func["source"])
+        print(func["content"])
 
     # Query via URI scheme
     result = query("ast://myproject/?show=classes")
@@ -95,7 +95,8 @@ def element(
             first to determine the correct type, then common types are tried.
 
     Returns:
-        Dict with ``"source"``, ``"line_start"``, ``"line_end"``, etc.,
+        An envelope whose ``"source"`` is the path and ``"content"`` the extracted code,
+        with ``"line_start"``, ``"line_end"``, etc.,
         or ``None`` if the element was not found.
 
     Raises:
@@ -106,9 +107,10 @@ def element(
 
         func = element("mymodule.py", "load_config")
         if func:
-            print(func["source"])
+            print(func["content"])
     """
     from .registry import get_analyzer
+    from .utils.results import ResultBuilder
 
     file_path = Path(path)
     if not file_path.exists():
@@ -122,7 +124,8 @@ def element(
 
     # Fast path: caller provided the type.
     if element_type:
-        return analyzer.extract_element(element_type, name)
+        result = analyzer.extract_element(element_type, name)
+        return dict(ResultBuilder.element(result, file_path)) if result is not None else None
 
     # Slower path: scan the structure to discover the element's type, then
     # use it for a precise extraction.  This avoids ambiguous matches.
@@ -144,7 +147,7 @@ def element(
                 if isinstance(item, dict) and item.get("name") == name:
                     result = analyzer.extract_element(elem_type, name)
                     if result is not None:
-                        return result
+                        return dict(ResultBuilder.element(result, file_path))
     except Exception as e:  # boundary-ok: broad-except -- public element() returns None on a miss; a failing analyzer is logged at warning with the path and name rather than raised into the caller's lookup loop
         logger.warning("element() structure lookup failed for %s %r: %s", path, name, e)
 
@@ -153,7 +156,7 @@ def element(
                       "interface", "section", "variable", "test"):
         result = analyzer.extract_element(elem_type, name)
         if result is not None:
-            return result
+            return dict(ResultBuilder.element(result, file_path))
 
     return None
 

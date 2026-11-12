@@ -16,6 +16,24 @@ help_category: dev_guides
 - **v1.1** (2026-02-06): Added trust metadata (`meta` field)
 - **v1.0** (2026-01-17): Initial release with core contract fields
 
+### Path reads and element content
+
+File outlines, extracted elements and element views carry the current envelope
+through `ResultBuilder`, including `meta.warnings` and `meta.errors` arrays even
+when empty. `source` identifies the file. Extracted code or section text is
+`content`, including each span in a multi-section result. Scripts that read code
+from element JSON or Python `element()` must use `content` instead of `source`
+(BACK-2601). Internal analyzer extraction records are unchanged.
+
+File outlines retain their file-format `type` variant and all structure fields.
+Navigation keeps its selection in `meta` and its existing `findings` payload.
+Check JSON uses `files` and `summary` for both file and directory targets; the
+single-file `detections`, `total` and `file` aliases remain during the additive
+stage. Imports keeps analysis counts and trust diagnostics together in `meta`;
+`metadata` is a compatibility alias of that same object until the cut. Use `meta`
+in new consumers. These shape changes do not establish analysis completeness:
+the producer's execution facts still determine failures and exit codes.
+
 ---
 
 ## Purpose
@@ -172,7 +190,9 @@ These fields are OPTIONAL but recommended for common patterns:
 
 ### Trust Metadata Field
 
-**v1.1 adds the optional `meta` field** for parse quality and confidence information. This enables AI agents to know when to trust results and handle degraded parsing gracefully.
+**Current v1.1 results carry `meta`**, including explicit `warnings` and `errors`
+arrays. Legacy v1.0 results keep their qualified contract until adoption. Parse
+quality and confidence fields remain optional and require their own evidence.
 
 **`meta`** (optional, dict)
 - **Purpose**: Parse quality, confidence, warnings, errors

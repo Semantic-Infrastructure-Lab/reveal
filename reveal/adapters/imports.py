@@ -746,7 +746,7 @@ class ImportsRenderer:
         print(f"Unused Imports: {count}")
         print(f"{'='*60}\n")
 
-        ImportsRenderer._render_outside_failures(result.get('metadata', {}), 'these unused imports')
+        ImportsRenderer._render_outside_failures(result.get('meta', {}), 'these unused imports')
 
         # A language with no import extractor (e.g. Kotlin, Swift, Scala) was
         # never analyzed at all — count == 0 in that case means "not checked,"
@@ -754,12 +754,12 @@ class ImportsRenderer:
         # unused imports found!" for both cases, a false-confidence result
         # (BACK-431 feature-breadth pass); the JSON renderer already exposes
         # this via metadata.unsupported_extensions.
-        unsupported = result.get('metadata', {}).get('unsupported_extensions') or {}
+        unsupported = result.get('meta', {}).get('unsupported_extensions') or {}
         if unsupported:
             exts = ', '.join(f'{ext} ({n} file{"s" if n != 1 else ""})' for ext, n in sorted(unsupported.items()))
             print(f"  ⚠ Not analyzed — no import extractor for: {exts}\n")
 
-        not_checked = result.get('metadata', {}).get('unused_not_checked_extensions') or {}
+        not_checked = result.get('meta', {}).get('unused_not_checked_extensions') or {}
         note = unused_not_checked_line(not_checked)
         if note:
             print(f"  {note}\n")
@@ -769,7 +769,7 @@ class ImportsRenderer:
         # analyzed and still have zero imports (BACK-431: real WordPress
         # source with no `use`/`require` at all), and total_files would
         # wrongly read as "unchecked" in that case.
-        judged_files = result.get('metadata', {}).get('scanned_files', 0) - sum(not_checked.values())
+        judged_files = result.get('meta', {}).get('scanned_files', 0) - sum(not_checked.values())
         if count == 0 and judged_files > 0:
             scope = f" in the {judged_files} checked file(s)" if not_checked else ""
             ImportsRenderer._render_no_unused(result, scope)
@@ -797,9 +797,9 @@ class ImportsRenderer:
     @staticmethod
     def _render_no_cycles(result: dict) -> None:
         """Qualify zero observed cycles against the available resolution population."""
-        regime = result.get('metadata', {}).get('autoload_regime')
-        total_imports = result.get('metadata', {}).get('total_imports', 0)
-        scanned_files = result.get('metadata', {}).get('scanned_files', 0)
+        regime = result.get('meta', {}).get('autoload_regime')
+        total_imports = result.get('meta', {}).get('total_imports', 0)
+        scanned_files = result.get('meta', {}).get('scanned_files', 0)
         if _discovery_incomplete(result) or _incomplete(result):
             print("  No circular dependencies observed in the available graph; analysis is incomplete.\n")
         elif regime:
@@ -883,7 +883,7 @@ class ImportsRenderer:
     @staticmethod
     def _render_cycle_summary(result: dict, display_path: str) -> None:
         """Render observed cycles without declaring completeness after discovery loss."""
-        metadata = result.get('metadata', {})
+        metadata = result.get('meta', {})
         total_files = metadata.get('total_files', 0)
         total_imports = metadata.get('total_imports', 0)
         has_cycles = metadata.get('has_cycles', False)
@@ -914,7 +914,7 @@ class ImportsRenderer:
     @staticmethod
     def _render_import_summary(result: dict, resource: str) -> None:
         """Render import analysis summary."""
-        metadata = result.get('metadata', {})
+        metadata = result.get('meta', {})
         total_files = metadata.get('total_files', 0)
         total_imports = metadata.get('total_imports', 0)
 
@@ -979,7 +979,7 @@ class ImportsRenderer:
         for e, fpath in zip(entries, shown):
             print(f"  {fpath:<{col_w}}  {e['fan_in']:>7}  {e['fan_out']:>8}")
         print()
-        regime = result.get('metadata', {}).get('autoload_regime')
+        regime = result.get('meta', {}).get('autoload_regime')
         if regime:
             print(f"  {autoload_regime_warning(regime)}")
         else:
@@ -1052,13 +1052,13 @@ class ImportsRenderer:
     def _render_external(result: dict, resource: str, verbose: bool) -> None:
         """Render ?external: the package table, most used first (20 per list unless --verbose)."""
         external, stdlib = result.get('external_packages', []), result.get('stdlib_packages', [])
-        scope = result.get('metadata', {}).get('test_scope', {})
+        scope = result.get('meta', {}).get('test_scope', {})
         scope_note = f"\n  Test paths: {scope['basis']}; anchor {scope['anchor']}." if scope else ''
         print(f"\nPackages: {result.get('source', resource)}")
         print(f"  {result.get('total_imports', 0)} import(s) in {result.get('total_files', 0)} file(s): "
               f"{result.get('internal_imports', 0)} internal, {len(external)} unresolved package(s), "
               f"{len(stdlib)} stdlib package(s){scope_note}")
-        ImportsRenderer._render_outside_failures(result.get('metadata', {}), 'this table')
+        ImportsRenderer._render_outside_failures(result.get('meta', {}), 'this table')
         multi_stack = len({lang for entry in external for lang in entry.get('languages', [])}) > 1
         for title, entries in (('Unresolved packages (third-party or unresolved-local)', external),
                                ('Stdlib packages', stdlib)):
@@ -1102,7 +1102,7 @@ class ImportsRenderer:
         for e, fpath in zip(entries, shown):
             print(f"  {fpath:<{col_w}}  {e['fan_out']:>8}")
         print()
-        regime = result.get('metadata', {}).get('autoload_regime')
+        regime = result.get('meta', {}).get('autoload_regime')
         if regime:
             print(f"  {autoload_regime_warning(regime)}")
         else:
@@ -1404,7 +1404,7 @@ def _validate_params(params: QueryParams) -> None:
 def _incomplete(result: Dict[str, Any]) -> bool:
     """Whether an imports answer is short of its input: a file parsed with errors or lost to a dead
     worker, a walk the file cap cut short, a directory it could not list (D6: exit 3)."""
-    metadata = result.get('metadata') or {}
+    metadata = result.get('meta') or {}
     if metadata.get('files_failed_count') or metadata.get('files_lost_count'):
         return True
     if (metadata.get('scan_budget') or {}).get('capped'):
@@ -1773,20 +1773,23 @@ class ImportsAdapter(ResourceAdapter):
         if self._scope_hidden:
             warnings.append(self._scope_hidden)
         warnings.extend(self._scan_warnings())
-        response = ResultBuilder.create(
+        response: Dict[str, Any] = dict(ResultBuilder.create(
             result_type=response_type,
             source=str(self._target_path),
             source_type='directory' if self._target_path and self._target_path.is_dir() else 'file',
             contract_version=CONTRACT_VERSION,
             data=data_fields,
             warnings=warnings,
-        )
+        ))
         raw_metadata = self.get_metadata() if failures == 'scan' else self.get_metadata(failures=failures)
-        response['metadata'] = metadata = _spell_metadata_paths(raw_metadata, display)
+        metadata = _spell_metadata_paths(raw_metadata, display)
+        response['meta'].update(metadata)
+        # Additive-stage compatibility alias: one owner, not a second metadata store.
+        response['metadata'] = response['meta']
         failed = metadata.get('files_failed')
         if isinstance(failed, list):
             # get_metadata keeps the first 50 paths; the count is exact (BACK-1551).
-            note_truncation(response, 'metadata.files_failed', len(failed),
+            note_truncation(response, 'meta.files_failed', len(failed),
                             metadata['files_failed_count'], 'auto_cap',
                             hint='the first 50 by path; files_failed_count is exact')
         return response
@@ -1853,7 +1856,7 @@ class ImportsAdapter(ResourceAdapter):
         data = self._analysis_view().entrypoints()
         warnings = data.pop('metadata', {})
         response = self._build_response('entrypoints', **data)
-        response['metadata'].update(warnings)
+        response['meta'].update(warnings)
         return response
 
     def _format_components(self) -> Dict[str, Any]:
@@ -1882,7 +1885,7 @@ class ImportsAdapter(ResourceAdapter):
             top_importers=[{'file': row['file'], 'imports': row['count']} for row in table['top_importers']],
         )
         assert view.test_layout is not None
-        response['metadata']['test_scope'] = view.test_scope()
+        response['meta']['test_scope'] = view.test_scope()
         return response
 
     def _format_unused(self) -> Dict[str, Any]:

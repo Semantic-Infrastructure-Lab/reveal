@@ -273,7 +273,7 @@ def _assert_extract_parity(text: str, data: dict):
     body = [m for line in lines[lines.index(header) + 1:] if (m := _EXTRACT_BODY_RE.match(line))]
     assert [int(m.group(1)) for m in body] == list(range(int(start), int(end) + 1))
     text_source = [m.group(2) or "" for m in body]
-    json_source = data["source"].split("\n")
+    json_source = data["content"].split("\n")
     if json_source and json_source[-1] == "" and len(json_source) == len(text_source) + 1:
         json_source.pop()
     assert text_source == [line.rstrip() if not line.strip() else line for line in json_source]

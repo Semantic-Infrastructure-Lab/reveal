@@ -24,4 +24,4 @@ def test_comparable_sort_has_no_warning(tmp_path):
     data.write_text(json.dumps([{'a': 3}, {'a': 1}]), encoding='utf-8')
     result = JsonAdapter(str(data), 'sort=a').get_structure()
     assert [v['a'] for v in result['value']] == [1, 3]
-    assert 'warnings' not in result and 'meta' not in result
+    assert 'warnings' not in result and result['meta'] == {'warnings': [], 'errors': []}

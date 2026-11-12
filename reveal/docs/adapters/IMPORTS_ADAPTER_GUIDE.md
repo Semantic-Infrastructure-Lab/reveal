@@ -454,7 +454,7 @@ counted by, as a `Rule:` line in text and an `edge_rule` object in JSON (`lazy`,
 | `&lazy=` | Edges counted | Default for |
 |----------|---------------|-------------|
 | `include` | every edge | fan-in, `?entrypoints`, `?components`, `?violations` |
-| `exclude` | load-time edges only (the architecture view) | `?circular`, `metadata.has_cycles` (`metadata.cycles_lazy` says which) |
+| `exclude` | load-time edges only (the architecture view) | `?circular`, `meta.has_cycles` (`metadata.cycles_lazy` says which) |
 | `only` | function-level edges only | none |
 
 `exclude` and `only` split the edges: per file, fan-in under `include` is the sum of the other
@@ -765,7 +765,7 @@ Use `?flag` syntax for operations:
 | `lazy=include\|exclude\|only` | Function-level (lazy) import edges: include them, exclude them (load-time edges only) or show only them. Default: `?circular` excludes, every other view includes | `imports://src?rank=fan-in&lazy=exclude` |
 | `format=text\|json\|dot` | Output override for `?importers` on a directory: `dot` draws one importer -> module edge per listed importer as Graphviz | `imports://src?importers&format=dot` |
 | `verbose` | Show everything instead of a summary: every file in a cycle group, all unused imports, all violations, every package (same as the CLI `--verbose`) | `imports://src?circular&verbose` |
-| `max_files=N` | Source files the walk may keep (default 20000); a cut is `metadata.scan_budget.capped` and a `scan_capped` warning | `imports://.?importers&max_files=50000` |
+| `max_files=N` | Source files the walk may keep (default 20000); a cut is `meta.scan_budget.capped` and a `scan_capped` warning | `imports://.?importers&max_files=50000` |
 
 **Note**: `unused`, `circular`, and `violations` are flags (no `=value` needed). `rank` and `top` take values.
 
@@ -1877,7 +1877,7 @@ reveal 'imports://src?unused' --verbose
 ```bash
 # Daily import health snapshot
 reveal imports://src --format=json | \
-  jq '{date: now, files: .metadata.total_files, imports: .metadata.total_imports, cycles: .metadata.has_cycles}' \
+  jq '{date: now, files: .metadata.total_files, imports: .metadata.total_imports, cycles: .meta.has_cycles}' \
   >> import_metrics.jsonl
 ```
 

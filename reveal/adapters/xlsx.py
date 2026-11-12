@@ -939,7 +939,7 @@ class XlsxAdapter(ResourceAdapter):
         if outcome_of(structure) == 'failed':
             return dict(ResultBuilder.create_error(
                 result_type='xlsx_workbook', source=self.file_path or Path('unknown'),
-                error=structure['error'], meta=self.composed_meta() or {}))
+                error=structure['error'], meta=dict(self.composed_meta() or {})))
 
         # Enhance with sheet metadata
         enhanced_sheets = []

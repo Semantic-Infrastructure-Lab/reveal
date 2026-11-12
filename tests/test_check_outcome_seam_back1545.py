@@ -80,7 +80,7 @@ class TestUnchangedWithoutACut:
 
     def test_json_without_max_items_has_no_meta(self, tmp_path):
         payload = json.loads(_check(_tree(tmp_path), "--format", "json").stdout)
-        assert "meta" not in payload
+        assert payload['meta'] == {'warnings': [], 'errors': []}
         assert payload["summary"]["items_truncated"] is False
 
     def test_max_items_above_the_total_records_nothing(self, tmp_path):

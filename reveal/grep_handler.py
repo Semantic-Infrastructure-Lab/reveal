@@ -250,7 +250,10 @@ def _groups_for(fpath: Path, line_numbers: List[int], compiled: 're.Pattern[str]
 
 
 def _base_result(path: str, pattern: str) -> Dict[str, Any]:
-    return {'type': 'grep_results', 'path': path, 'pattern': pattern}
+    from .utils.results import ResultBuilder
+    from .reveal_types import CONTRACT_VERSION
+    return dict(ResultBuilder.create('grep_results', Path(path), contract_version=CONTRACT_VERSION,
+                                     data={'path': path, 'pattern': pattern}))
 
 
 def grep_file(path: str, pattern: str, args: Namespace) -> Dict[str, Any]:
@@ -268,8 +271,8 @@ def grep_file(path: str, pattern: str, args: Namespace) -> Dict[str, Any]:
         cause = failure_of(e).cause
         result['error'] = f"cannot read {path}: {cause}"
         # The one file the search had to read is lost: exit 3 like the directory form (BACK-2527).
-        result['meta'] = {'warnings': [analysis_skipped_warning([(path, cause)], None,
-                                                                'the search did not run')]}
+        result['meta']['warnings'] = [analysis_skipped_warning([(path, cause)], None,
+                                                              'the search did not run')]
         return result
 
     hit_lines = _hit_lines(lines, compiled)
@@ -373,7 +376,7 @@ def grep_directory(path: str, pattern: str, args: Namespace,
                                     'the search is incomplete; their matches are missing')
     result.update(scope)
     if lost:
-        result['meta'] = {'warnings': [lost]}
+        result['meta']['warnings'] = [lost]
 
     # One cut over every hit in walk order, then text + structure for the shown files only.
     pairs = [(i, n) for i, r in enumerate(file_results) for n in r['hits']]

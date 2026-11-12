@@ -154,7 +154,11 @@ def _show_directory_meta(path: Path, args: 'Namespace') -> None:
     }
     output_format = getattr(args, 'format', 'text')
     if output_format == 'json':
-        print(safe_json_dumps(meta))
+        from ...utils.results import ResultBuilder
+        from ...reveal_types import CONTRACT_VERSION
+        print(safe_json_dumps(ResultBuilder.create(
+            'directory_metadata', path, data=meta, source_type='directory',
+            contract_version=CONTRACT_VERSION)))
     else:
         _render_dir_meta_text(meta)
 

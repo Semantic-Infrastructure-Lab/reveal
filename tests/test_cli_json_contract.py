@@ -116,7 +116,7 @@ class TestAddCliContractFields(unittest.TestCase):
         enveloped = add_cli_contract_fields(
             report, result_type='architecture', source='/tmp/x',
         )
-        self.assertEqual(enveloped['contract_version'], '1.0')
+        self.assertEqual(enveloped['contract_version'], '1.1')
         self.assertEqual(enveloped['type'], 'architecture')
         self.assertEqual(enveloped['source'], '/tmp/x')  # noqa: win-path (envelope field is a plain string)
         self.assertEqual(enveloped['source_type'], 'directory')

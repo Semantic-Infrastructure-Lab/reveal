@@ -16,7 +16,7 @@ from reveal.treesitter import ELEMENT_TYPE_MAP, ALL_ELEMENT_NODE_TYPES
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import to_posix
-from reveal.utils.results import note_truncation, slice_items, truncations_of
+from reveal.utils.results import ResultBuilder, note_truncation, slice_items, truncations_of
 from ..utils.path_utils import failure_of
 
 if TYPE_CHECKING:
@@ -628,7 +628,7 @@ def _output_section_outline(analyzer, result, element: str, output_format: str,
     from .formatting import _format_markdown_headings  # noqa: I006 — circular avoidance
 
     if output_format == 'json':
-        print(safe_json_dumps(result))
+        print(safe_json_dumps(ResultBuilder.element(result, analyzer.path)))
         return
     spans = ', '.join(f"{s['line_start']}-{s['line_end']}" for s in result.get('sections', [result]))
     print(f"{to_posix(analyzer.path)}:{spans} | {element}\n")
@@ -1017,7 +1017,7 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
         config: Optional RevealConfig instance
     """
     if output_format == 'json':
-        print(safe_json_dumps(result))
+        print(safe_json_dumps(ResultBuilder.element(result, analyzer.path)))
         return
 
     path = analyzer.path

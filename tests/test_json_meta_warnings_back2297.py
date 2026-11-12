@@ -119,7 +119,7 @@ def test_renderer_leaves_a_failed_results_errors_to_the_router(capsys):
 def test_clean_sort_has_no_warnings(data):
     result = JsonAdapter(str(data / 'arr.json'), 'sort=a').get_structure()
     assert [v['a'] for v in result['value']] == [1, 2]
-    assert 'warnings' not in result and 'meta' not in result
+    assert 'warnings' not in result and result['meta'] == {'warnings': [], 'errors': []}
 
 
 def test_limit_cut_and_counts_stay_where_they_were(data):
