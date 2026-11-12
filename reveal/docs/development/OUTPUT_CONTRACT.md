@@ -529,8 +529,8 @@ of `outcome_of()`'s legacy rendering categories:
 | `2` | Invalid invocation, resource or parameter. |
 | `3` | Required analysis or requested output failed or remained incomplete. |
 
-Ordinary `ast://` filter queries use these same execution facts without generated
-parameter bindings (BACK-2338). Rejected query controls, invalid regex or missing resources
+Ordinary `ast://` filter queries use these execution facts (BACK-2338);
+BACK-2613 adds generated CLI and constructor-bound API controls over that owner. Rejected query controls, invalid regex or missing resources
 produce structured usage errors (`2`). Failed required source analysis, recovered
 parses, lost files/directories and requested-output failures give `3`. The AST owner
 classifies surviving source structures before filtering: an empty filtered result
@@ -551,7 +551,35 @@ surviving analyzed source with required loss, or any recovered type tree, means 
 even when no observations remain. Healthy empty answers and advisory language-census
 failures stay complete. Required loss omits full confidence and carries bounded source
 diagnostics. Element/check operations, stdin and mixed batches retain their legacy policy.
-This adoption adds no findings gate or generated AST subcommand.
+This adoption adds no findings gate; the generated `ast` command shares its owner.
+
+Direct Claude transcript URI views use owner execution facts (BACK-2617): overview,
+summary, messages/prompts including raw records, thinking/tools/files/workflow,
+session agents, context/timeline/errors/tokens, digest/exchanges, session search
+and composite filters. Complete and genuine empty answers and disclosed display
+cuts exit 0; healthy lookup absence and authored request rejections exit 2;
+required source/selection loss and attempted output failure exit 3. The selected
+`claude_*` view identity survives rejection and failure. No findings gate is added.
+
+`meta.transcript_analysis` counts nonblank candidate JSONL records, decoded object
+records and failed records, with their first failed physical line. These are parser
+and object-shape decisions, not universal payload validation. Candidate equals
+analyzed plus failed. `meta.transcript_selection` records distinct failure/recovery
+kinds per source during lookup and first-timestamp selection. Recovery outside a
+required timestamp field is advisory; damage to that field, failed prefix parsing
+and lookup loss remain required loss. Selection preserves the existing timestamp
+string ordering, filename tie-break and unknown-last rule. Read/decode failures
+still raise in Python; returned partial data retains its receipts. MCP keeps usable
+partial observations, rejects fully failed source and starts followups fresh.
+
+Presentation cannot erase required source proof or observed containers without a
+matching truncation receipt. The shared observation guard is also used by Git;
+legacy message/workflow display cuts record their receipt without changing their
+count fields. Indexed `/message/N`, `/message` ranges, chains, store listings/search,
+install resources, positional elements, Check, stdin and mixed batches retain their
+separate policies. Qualified postprocessing recognizes explicit request validation;
+unqualified transports preserve their prior classification.
+See the [Claude guide](../adapters/CLAUDE_ADAPTER_GUIDE.md#malformed-transcript-lines).
 
 Direct `sqlite://DB` overviews and `sqlite://DB/TABLE` views use owner execution facts
 (BACK-2521): a missing file, a file that is not a SQLite database and a missing table are

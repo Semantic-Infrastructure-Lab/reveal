@@ -51,8 +51,10 @@ import json
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from .renderer import ClaudeRenderer
 from ...utils.query_parser import ResourceSpec
+from ...errors import RequestValidationError
 from ...utils.results import ResultBuilder, note_warning
 from .params import PARAM_SPECS, bind_query
+from .discovery import ConversationDiscovery, TranscriptNotFoundError, first_timestamp as _first_timestamp
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
     search_sessions as _h_search_sessions,
@@ -112,23 +114,6 @@ from .schema import (
     _SCHEMA_EXAMPLE_QUERIES,
     _SCHEMA_NOTES,
 )
-
-
-def _first_timestamp(jsonl_path: Path) -> str:
-    """The first record timestamp in a transcript ('~' sorts last when unreadable/absent)."""
-    try:
-        with open(jsonl_path, 'r', encoding='utf-8', errors='replace') as f:
-            for line in f:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                timestamp = record.get('timestamp') if isinstance(record, dict) else None
-                if isinstance(timestamp, str):
-                    return timestamp
-    except OSError:
-        pass
-    return '~'
 
 
 def _resolve_claude_home_dir() -> Path:
@@ -400,6 +385,30 @@ class ClaudeAdapter(ResourceAdapter):
     BOUND_QUERY_CALL = True
     PARAM_SPECS = PARAM_SPECS
     RESOURCE_SPEC = ResourceSpec(walks=False, filesystem=False)
+    RESULT_TYPE = 'claude_session_overview'
+    DEFAULT_FAIL_ON = 'none'
+    FINDINGS_POLICIES = ('none',)
+
+    @classmethod
+    def uri_execution_facts(cls, resource):
+        from .qualification import direct_session
+        prefixes = tuple(prefix for prefix, _ in cls._RESOURCE_DISPATCH)
+        return cls.execution_facts if direct_session(resource, _parse_session_identifier, prefixes) else None
+
+    @staticmethod
+    def uri_result_type(resource):
+        from .qualification import uri_result_type
+        return uri_result_type(resource)
+
+    @staticmethod
+    def execution_facts(result):
+        from .qualification import execution_facts
+        return execution_facts(result)
+
+    def answer_requirement_error(self, result, expected_type, prior_facts=None):
+        from .qualification import answer_requirement_error
+        return answer_requirement_error(self, result, expected_type, prior_facts)
+
     QUICK_RANK = 3
     # --since/--until reach every claude:// view as ?since=/?until= (BACK-1549). The
     # session list and history read them in post_process from args, which nothing
@@ -519,15 +528,31 @@ class ClaudeAdapter(ResourceAdapter):
             source_type='file', contract_version=CONTRACT_VERSION))
         proof = getattr(self, '_transcript_analysis', None)
         if proof is not None:
-            result['meta']['transcript_analysis'] = dict(proof)
-            if proof['failed_records']:
-                note_warning(result, {
-                    'type': 'analysis_incomplete', 'code': 'analysis_incomplete',
-                    'message': (f"{proof['failed_records']} nonblank JSONL record(s) could not be decoded as objects; "
-                                f"counts cover {proof['analyzed_records']} decoded object records. "
-                                'Source decisions: JSON meta.transcript_analysis.'),
-                })
+            self._attach_transcript_evidence(result, proof)
         return result
+
+    def _attach_transcript_evidence(self, result, proof):
+        result['meta']['transcript_analysis'] = dict(proof)
+        reasons = []
+        if proof['failed_records']:
+            reasons.append(f"{proof['failed_records']} nonblank JSONL record(s) could not be decoded as objects")
+        lookup = getattr(self, '_conversation_lookup', None)
+        if lookup is not None:
+            result['meta']['transcript_selection'] = lookup.receipt()
+            if lookup.failures:
+                reasons.append(f"{len(lookup.failures)} transcript lookup/selection input operation(s) failed")
+            if lookup.recoveries:
+                note_warning(result, {
+                    'type': 'source_recovered', 'code': 'source_recovered', 'field': 'transcript_selection',
+                    'message': (f"{len(lookup.recoveries)} timestamp-prefix decoding recovery operation(s); "
+                                'required timestamp fields were unchanged. Decisions: JSON meta.transcript_selection.'),
+                })
+        if reasons:
+            note_warning(result, {
+                'type': 'analysis_incomplete', 'code': 'analysis_incomplete',
+                'message': ('; '.join(reasons) + f"; counts cover {proof['analyzed_records']} decoded object records. "
+                            'Source decisions: JSON meta.transcript_analysis and meta.transcript_selection.'),
+            })
 
     def _parse_session_name(self, resource: str) -> str:
         """Extract session name from URI resource string.
@@ -538,59 +563,14 @@ class ClaudeAdapter(ResourceAdapter):
         return _parse_session_identifier(resource)[0]
 
     def _find_conversation(self) -> Optional[Path]:
-        """Find conversation JSONL file for session.
-
-        Strategies, in order:
-        1. Session name matches a project directory name (named sessions)
-        2. Session name is a UUID matching a JSONL filename inside any project directory
-        3./4. Truncated UUID: suffix, then 8-char prefix, of a JSONL filename
-
-        Returns:
-            Path to conversation JSONL file, or None if not found
-        """
-        self._other_transcripts: List[Path] = []
-        if not self.session_name or not self.CONVERSATION_BASE.exists():
-            return None
-
-        dirs = [d for d in self.CONVERSATION_BASE.iterdir() if d.is_dir()]
-
-        # Strategy 1 (priority): session name appears in project dir name (named sessions).
-        # A dir whose name ends with the session name beats a mere substring hit (a
-        # scratchpad dir also carries the session's name mid-path). A dir can hold
-        # several transcripts (the session was re-entered); take the first started and
-        # disclose the rest, rather than whichever the filesystem lists first.
-        named = [d for d in dirs if self.session_name in d.name]
-        named.sort(key=lambda d: not (d.name == self.session_name or d.name.endswith('-' + self.session_name)))
-        for project_dir in named:
-            jsonl_files = [f for f in project_dir.glob('*.jsonl')
-                           if not f.stem.startswith('agent-')]
-            if jsonl_files:
-                jsonl_files.sort(key=lambda f: (_first_timestamp(f), f.name))
-                self._other_transcripts = jsonl_files[1:]
-                return jsonl_files[0]
-
-        # Strategy 2 (fallback): session name is a UUID matching a JSONL filename
-        for project_dir in dirs:
-            jsonl_file = project_dir / f"{self.session_name}.jsonl"
-            if jsonl_file.exists():
-                return jsonl_file
-
-        # Strategy 3: suffix match — handles truncated UUIDs from the session listing
-        for project_dir in dirs:
-            for jsonl_file in project_dir.glob('*.jsonl'):
-                if jsonl_file.stem.endswith(self.session_name):
-                    return jsonl_file
-
-        # Strategy 4: prefix match — truncated 8-char UUID appears at the START of full
-        # UUID filenames (e.g. 'c318161b' matches 'c318161b-xxxx-....jsonl').  Only applied
-        # when session_name looks like a short UUID to avoid over-broad matching (BACK-350).
-        if _SHORT_UUID_RE.fullmatch(self.session_name):
-            for project_dir in dirs:
-                for jsonl_file in project_dir.glob('*.jsonl'):
-                    if jsonl_file.stem.startswith(self.session_name):
-                        return jsonl_file
-
-        return None
+        """Resolve the existing named, exact UUID, suffix and short-prefix priorities."""
+        self._conversation_lookup = ConversationDiscovery(
+            self.CONVERSATION_BASE, self.session_name,
+            lambda path, failures, recoveries: _first_timestamp(path, errors_out=failures, recovered_out=recoveries),
+            bool(_SHORT_UUID_RE.fullmatch(self.session_name)))
+        found = self._conversation_lookup.find()
+        self._other_transcripts = self._conversation_lookup.other_transcripts
+        return found
 
     def _get_chain(self) -> Dict[str, Any]:
         return _h_get_chain(self.resource, self.session_name, self.SESSIONS_DIR, self._get_contract_base())
@@ -608,9 +588,11 @@ class ClaudeAdapter(ResourceAdapter):
             return self.messages
 
         if not self.conversation_path or not self.conversation_path.exists():
-            raise FileNotFoundError(
-                f"Conversation not found for session: {self.session_name}"
-            )
+            lookup = getattr(self, '_conversation_lookup', None)
+            if lookup is not None and lookup.failures:
+                raise lookup.failures[0][1]
+            missing = TranscriptNotFoundError if self.conversation_path is None else FileNotFoundError
+            raise missing(f"Conversation not found for session: {self.session_name}")
 
         messages = []
         candidates = failed = 0
@@ -1013,7 +995,7 @@ class ClaudeAdapter(ResourceAdapter):
         }
 
         if result_type == 'claude_session_overview' and getattr(args, 'range', None):
-            raise ValueError(
+            raise RequestValidationError(
                 "--range is not supported on the session overview resource — it has no "
                 "per-turn dimension to slice.\n"
                 "Did you mean /message?range=N-M (a specific message-number range)?"

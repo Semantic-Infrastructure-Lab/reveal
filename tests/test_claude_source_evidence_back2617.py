@@ -57,3 +57,72 @@ def test_reconfiguring_the_store_replaces_cached_records(transcript, tmp_path):
     answer = adapter.get_structure()
     assert answer['message_count'] == 1
     assert answer['meta']['transcript_analysis']['analyzed_records'] == 1
+
+
+def deny_scan(monkeypatch, blocked):
+    import os
+    original = os.scandir
+    def scan(path):
+        if str(path) == str(blocked):
+            raise PermissionError('injected project enumeration failure')
+        return original(path)
+    monkeypatch.setattr(os, 'scandir', scan)
+
+
+def test_failed_lookup_cannot_become_missing_session(transcript, monkeypatch):
+    deny_scan(monkeypatch, transcript.parent)
+    with pytest.raises(PermissionError, match='enumeration failure'):
+        query('claude://session/2627362f')
+
+
+def test_lookup_loss_keeps_the_selected_transcript_with_evidence(transcript, monkeypatch):
+    blocked = transcript.parent.parent / 'blocked-project'
+    blocked.mkdir()
+    deny_scan(monkeypatch, blocked)
+    answer = query('claude://session/2627362f')
+    assert answer['message_count'] == 8
+    assert answer['meta']['transcript_selection']['failed_operations'] == 1
+    assert any(w['code'] == 'analysis_incomplete' for w in answer['meta']['warnings'])
+
+
+def test_failed_start_timestamp_does_not_disappear_from_selection(transcript, monkeypatch):
+    import builtins
+    named = transcript.parent.parent / 'project-my-session'
+    named.mkdir()
+    (named / 'good.jsonl').write_bytes(transcript.read_bytes())
+    bad = named / 'bad.jsonl'
+    bad.write_bytes(transcript.read_bytes())
+    original = builtins.open
+    def read(path, *args, **kwargs):
+        if str(path) == str(bad):
+            raise PermissionError('injected timestamp read failure')
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(builtins, 'open', read)
+    answer = query('claude://session/my-session')
+    assert answer['message_count'] == 8
+    assert answer['meta']['transcript_selection']['failed_operations'] == 1
+    assert any(w['code'] == 'analysis_incomplete' for w in answer['meta']['warnings'])
+
+
+def test_timestamp_replacement_decoding_preserves_priority_but_discloses_loss(transcript):
+    named = transcript.parent.parent / 'project-my-session'
+    named.mkdir()
+    (named / 'good.jsonl').write_bytes(transcript.read_bytes())
+    (named / 'bad.jsonl').write_bytes(b'{"timestamp":"2027-01-01T00:00:00Z","type":"user","message":{"content":"bad \xff"}}\n')
+    answer = query('claude://session/my-session')
+    assert answer['message_count'] == 8
+    proof = answer['meta']['transcript_selection']
+    assert proof['failed_operations'] == 0 and proof['recovered_operations'] == 1
+    assert proof['recoveries'][0]['cause'] == 'UnicodeDecodeError'
+
+
+def test_damaged_timestamp_field_is_required_selection_loss(transcript):
+    named = transcript.parent.parent / 'project-my-session'
+    named.mkdir()
+    (named / 'good.jsonl').write_bytes(transcript.read_bytes())
+    (named / 'bad.jsonl').write_bytes(b'{"timestamp":"2027-01-\xffT00:00:00Z","type":"user"}\n')
+    answer = query('claude://session/my-session')
+    assert answer['message_count'] == 8
+    proof = answer['meta']['transcript_selection']
+    assert proof['failed_operations'] == 1 and proof['recovered_operations'] == 0
+    assert proof['failures'][0]['cause'] == 'UnicodeDecodeError'

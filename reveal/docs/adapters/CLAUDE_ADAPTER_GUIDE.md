@@ -92,8 +92,8 @@ Typed overrides apply after the original controls validate. Strings stay literal
 `None` restores omission, and typed `False` disables a presence flag. Legacy URI
 flags retain presence semantics (`?summary=false` still selects the summary).
 Legacy `tail=0` selects no turns, and snippet sizing retains its 60–500 clamp and
-120-character fallback for invalid values. These declarations do not yet add a
-Claude subcommand, new vocabulary or a new source-completeness policy.
+120-character fallback for invalid values. The adapter remains URI-only; the qualified execution-policy scope is described
+under [Malformed transcript lines](#malformed-transcript-lines).
 
 
 ### 1. Session Overview
@@ -1780,7 +1780,7 @@ reveal claude://session/my-session/tools --format json | jq '.tools | to_entries
    - **Limitation**: Session name must match directory name pattern
    - **Impact**: Non-standard session names may not be found
    - **Workaround**: Use exact session name from directory listing
-   - **Several transcripts under one name**: a session directory can hold more than one transcript (the session was re-entered). `claude://session/<name>` reads the first started and names the others in a warning; open one of them with `claude://session/<uuid>`.
+   - **Several transcripts under one name**: a session directory can hold more than one transcript (the session was re-entered). `claude://session/<name>` orders candidates by their first recorded timestamp string, then filename, and names the others in a warning; open one of them with `claude://session/<uuid>`.
 
 3. **Token estimation accuracy**
    - **Limitation**: Approximation (chars / 4), not exact tokenization
@@ -1816,7 +1816,7 @@ reveal claude://session/my-session/tools --format json | jq '.tools | to_entries
 
 #### Error: "Conversation not found for session"
 
-**Meaning** (exit 1): no transcript matched the name by directory name, full UUID, first 8 hex characters, or any trailing part of the UUID. Invalid names and empty session directories give the same message.
+**Meaning** (exit 2 for direct transcript views): no transcript matched the name by directory name, full UUID, first 8 hex characters, or any trailing part of the UUID. Invalid names and empty session directories give the same message.
 
 **Solutions**:
 ```bash
@@ -1894,10 +1894,27 @@ warning distinguishes failed input from a genuinely empty transcript. Blank
 lines are not records. These are JSON decoding/object counts, not a guarantee
 that every record payload satisfies every view's semantic requirements.
 
-The legacy URI exit remains 0 for this disclosed partial answer until the
-resource-specific execution-policy adoption; this source receipt alone does not
-claim that adoption. Switching the store with `--base-path` also replaces cached
-records and their source proof.
+Direct transcript views use these source decisions for execution outcomes: complete
+answers, genuine empty sources and declared display cuts exit 0; a missing requested
+transcript or a rejected control exits 2; required read/decode, lookup/selection or
+record loss and failed requested output exit 3. Usable partial answers survive with
+`analysis_incomplete`; fully failed source becomes a registered MCP tool error.
+The Python API retains returned partial data and its source proof, while native
+read/decode exceptions still raise.
+
+This scope covers overview/summary, messages/prompts (including raw), thinking,
+tools, files, workflow, session agents, context, timeline, errors, tokens, digest,
+exchanges and session search/composite filters. Indexed `/message/N`, `/message`
+ranges, chains, store listings/search and install resources retain their separate
+policies. Stdin and mixed batches retain legacy completeness behavior; a warning
+there is not yet guaranteed to change the exit code.
+
+`meta.transcript_selection` records lookup and first-timestamp selection decisions.
+Unknown timestamps sort last. A recovered decode in an unselected candidate does
+not make the answer incomplete when the required timestamp field is unchanged;
+it is disclosed as `source_recovered`. Damage to that field, a failed prefix parse
+or directory lookup loss remains required loss. Switching the store with
+`--base-path` replaces cached records and source proof together.
 
 ---
 

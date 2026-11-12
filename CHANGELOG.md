@@ -18,7 +18,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
-- Claude session views now disclose skipped malformed/non-object JSONL records with source counts while retaining usable observations. Switching the store invalidates cached records and proof together; execution-policy adoption remains separate (BACK-2617).
+- Direct Claude transcript URI views now classify complete/empty/display-cut answers as 0, missing requests or rejected controls as 2, and required source/selection/output loss as 3. Source receipts preserve partial observations, distinguish timestamp recovery from required loss and guard presentation cuts; MCP retains usable partial data and rejects fully failed source. Store reconfiguration resets records and proof together. Other session resources and legacy transports retain separate policies (BACK-2617).
 
 - AST and Git generated commands now accept legacy `--all` through the same declared limit value used by URI forwarding, retaining full-row parity above their default caps (BACK-2613, BACK-2616).
 

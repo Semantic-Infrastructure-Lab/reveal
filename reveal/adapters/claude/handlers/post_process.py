@@ -7,6 +7,7 @@ from typing import Dict, Any
 
 from .sessions import _read_session_title, _read_session_stats
 from ....utils.threadsafe import main_thread_gc
+from ....utils.results import note_truncation
 
 
 def _slice_list(items: list, args: Any) -> list:
@@ -46,6 +47,7 @@ def _post_process_workflow(result: Dict[str, Any], args: Any) -> None:
 
     workflow = _slice_list(workflow, args)
     result['workflow'] = workflow
+    note_truncation(result, 'workflow', len(workflow), total_before, 'display-selection')
     result['displayed_steps'] = len(workflow)
     if len(workflow) < total_before:
         result['filtered_from'] = total_before
@@ -149,8 +151,10 @@ def _post_process_messages(result: Dict[str, Any], args: Any) -> None:
     msgs = result.get('messages')
     if msgs is None:
         return
+    total_before = len(msgs)
     msgs = _slice_list(msgs, args)
     result['messages'] = msgs
+    note_truncation(result, 'messages', len(msgs), total_before, 'display-selection')
     result['total_turns'] = len(msgs)
 
 

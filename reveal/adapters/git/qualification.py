@@ -3,6 +3,8 @@ import os
 from typing import Any
 
 from ...utils.query_parser import peek_query_items
+from ...utils.observations import (count_observations, validate_observation_counts,
+                                   has_truncation_receipt as _receipted_cut)
 from ...utils.results import (AnalysisCompleteness, FailureCause, ExecutionFacts,
                              result_execution_facts, note_warning, truncations_of)
 
@@ -188,42 +190,14 @@ _OBSERVATION_FIELDS = {
 }
 
 
-def _field_at(result, path):
-    value = result
-    for part in path:
-        if not isinstance(value, dict):
-            return None
-        value = value.get(part)
-    return value
-
-
 def observation_counts(result):
     """Snapshot container kinds and sizes, without retaining or copying source rows."""
     paths = _OBSERVATION_FIELDS.get(result.get('type'), ())
     if result.get('type') == 'git_file_structure':
         paths = tuple(('structure', key) for key, value in result['structure'].items()
                       if isinstance(value, list))
-    return {path: (type(value), len(value)) if isinstance(value, (list, str)) else None
-            for path in paths for value in (_field_at(result, path),)}
-
-
-def _receipted_cut(result, path, shown, previous):
-    return any(receipt.get('field') == '.'.join(path)
-               and receipt.get('shown') == shown
-               and _count(receipt.get('total')) and receipt['total'] >= previous
-               for receipt in truncations_of(result))
+    return count_observations(result, paths)
 
 
 def presentation_observations_error(result, previous):
-    current = observation_counts(result)
-    for path, before in previous.items():
-        after = current.get(path)
-        if before is None or after is None or before[0] is not after[0]:
-            return 'Git answer missing required observation containers'
-        if after[1] > before[1]:
-            return 'Git presentation cannot create new source observations'
-        if after[1] < before[1] and not _receipted_cut(result, path, after[1], before[1]):
-            return 'Git presentation removed observations without a matching truncation receipt'
-    if any(value and value[1] for path, value in current.items() if path not in previous):
-        return 'Git presentation cannot create new source observations'
-    return None
+    return validate_observation_counts(result, previous, observation_counts(result), label='Git')

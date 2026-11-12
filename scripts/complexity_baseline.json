@@ -47,7 +47,6 @@
   "reveal/adapters/ast/surface_rules.py::_rule_literals": 17,
   "reveal/adapters/autossl/adapter.py::_apply_autossl_filters": 17,
   "reveal/adapters/calls/references.py::_count_occurrences": 20,
-  "reveal/adapters/claude/adapter.py::ClaudeAdapter._find_conversation": 21,
   "reveal/adapters/claude/adapter.py::ClaudeAdapter._route_by_resource": 21,
   "reveal/adapters/claude/analysis/messages.py::_search_block": 20,
   "reveal/adapters/claude/analysis/messages.py::get_exchanges": 18,

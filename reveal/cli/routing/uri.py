@@ -1384,7 +1384,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
     if post_process is not None:
         processed = result
         result = _call_adapter(lambda: adapter.post_process(processed, args),
-                               scheme_name, source, type(adapter))
+                               scheme_name, source, type(adapter), classify_validation=facts_of is not None)
         if facts_of is not None:
             from ...utils.results import merge_execution_facts
             result = qualify_declared_answer(result, adapter, source, expected_type, prior_facts=facts)
