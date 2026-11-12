@@ -67,6 +67,7 @@ Git history, architecture comparisons and churn need the Git extra:
 pip install "reveal-cli[git]"
 reveal --agent-help                  # agent orientation
 reveal help://quick                  # choose a tool
+reveal help://languages              # supported languages and formats (live registry)
 reveal help://schemas/ast            # one tool's exact controls
 reveal calls --help                  # this subcommand's options
 ```

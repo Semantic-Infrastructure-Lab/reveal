@@ -1,18 +1,8 @@
-"""V030: the README headline language count matches `reveal --languages`.
+"""V030 checks any quoted README language total against the live registry.
 
-BACK-1441 option (b): the README headline ("... N languages and file formats ...")
-is the ONE hand-written total of supported languages. Every other doc points at
-`reveal --languages` instead of repeating a number, so there is nothing else to
-drift. V012 only flags overclaims (floor semantics, any "N languages" in the
-current-claim docs); V030 is the exact check on the headline, so an underclaim
-fails too.
-
-Scope:
-    - README.md only, every "N languages and file formats" occurrence.
-    - The rule fails loudly if README.md is missing the claim: a rule whose target
-      text was reworded away matches nothing and reports clean (that is how
-      V030's earlier AGENT_HELP pattern went blind after 2eaf0d31). If the
-      headline is deliberately removed or reworded, update `_CLAIM` here.
+The README may instead delegate to live language discovery (BACK-2604).
+An unrecognized rewording with neither a count nor a discovery pointer still
+fails, so an accidental pattern miss cannot masquerade as a checked claim.
 """
 
 import logging
@@ -39,6 +29,7 @@ class V030(BaseRule):
 
     _README_REL_PATH = 'README.md'
     _CLAIM = re.compile(r'\b(\d+)\s+languages and file formats\b', re.IGNORECASE)
+    _DISCOVERY = re.compile(r'\breveal\s+(?:--languages|help://languages)\b')
 
     def check(self,
               file_path: str,
@@ -59,6 +50,10 @@ class V030(BaseRule):
             lines = readme_path.read_text(encoding='utf-8').split('\n')
         except (OSError, UnicodeDecodeError) as e:
             return self.unavailable(f"V030: failed to read {readme_path}: {e}")
+
+        text = '\n'.join(lines)
+        if not self._CLAIM.search(text) and self._DISCOVERY.search(text):
+            return self.not_applicable('README delegates the count to live language discovery', 'README.md')
 
         actual = self._count_supported_languages()
         if actual is None:
@@ -85,7 +80,7 @@ class V030(BaseRule):
                 file_path=self._README_REL_PATH,
                 line=1,
                 message="README headline language count not found: V030 has nothing to check",
-                suggestion="Restore the 'N languages and file formats' headline, or update V030._CLAIM to the new wording",
+                suggestion="Point to reveal help://languages, or quote a checked 'N languages and file formats' total",
                 context=f"Pattern: {self._CLAIM.pattern}"
             ))
         return detections

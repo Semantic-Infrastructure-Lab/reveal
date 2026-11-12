@@ -37,9 +37,10 @@ def actual():
     return count
 
 
-def test_readme_has_exactly_one_headline_claim():
+def test_readme_points_to_live_languages_instead_of_hand_count():
     text = README.read_text(encoding='utf-8')
-    assert len(V030._CLAIM.findall(text)) == 1
+    assert V030._CLAIM.findall(text) == []
+    assert 'reveal help://languages' in text
 
 
 def test_real_readme_is_clean():
@@ -48,14 +49,14 @@ def test_real_readme_is_clean():
 
 def test_right_total_is_clean(monkeypatch, tmp_path, actual):
     assert _check(monkeypatch, tmp_path,
-                  lambda t: V030._CLAIM.sub(f'{actual} languages and file formats', t)) == []
+                  lambda t: t + f'\n{actual} languages and file formats\n') == []
 
 
 @pytest.mark.parametrize('delta', [7, -3])
 def test_wrong_total_is_flagged(monkeypatch, tmp_path, actual, delta):
     claimed = actual + delta
     detections = _check(monkeypatch, tmp_path,
-                        lambda t: V030._CLAIM.sub(f'{claimed} languages and file formats', t))
+                        lambda t: t + f'\n{claimed} languages and file formats\n')
     assert len(detections) == 1
     assert f'claims {claimed}, actual {actual}' in detections[0].message
     assert detections[0].file_path == 'README.md'
@@ -63,9 +64,17 @@ def test_wrong_total_is_flagged(monkeypatch, tmp_path, actual, delta):
 
 def test_missing_headline_fails_loudly(monkeypatch, tmp_path):
     detections = _check(monkeypatch, tmp_path,
-                        lambda t: re.sub(r'\d+ languages and file formats', 'many languages', t))
+                        lambda t: 'Many languages supported.\n')
     assert len(detections) == 1
     assert 'not found' in detections[0].message
+
+
+def test_live_pointer_is_an_explicit_not_applicable_outcome(monkeypatch, tmp_path):
+    root = _tree_with_readme(tmp_path, lambda _: 'Languages: `reveal help://languages`\n')
+    monkeypatch.setattr(v030_module, 'find_reveal_root', lambda: root)
+    rule = V030()
+    assert rule.check('reveal://', None, '') == []
+    assert any('live' in outcome['reason'] for outcome in rule.outcomes)
 
 
 def test_other_docs_carry_no_language_total():

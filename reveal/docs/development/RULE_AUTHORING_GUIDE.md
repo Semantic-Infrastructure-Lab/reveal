@@ -13,7 +13,7 @@ without registering it anywhere.
 
 This covers the two *external* discovery locations (user-global and
 project-local). For rules meant to ship inside reveal itself, see
-[SCAFFOLDING_GUIDE.md](SCAFFOLDING_GUIDE.md#reveal-scaffold-rule) — built-in
+[SCAFFOLDING_GUIDE.md](SCAFFOLDING_GUIDE.md#reveal-dev-new-rule) — built-in
 rules use the identical file layout and are discovered the same way.
 
 ## Where files go
