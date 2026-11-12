@@ -77,34 +77,33 @@ Two problems shape the current work.
   figure) or *structure-only* (graph and judgment claims decline in the output).
 - **The help moves with the code** and is run in CI.
 
+Command mapping (BACK-2595), the path/element JSON envelope (BACK-2601), and the
+severity defaults for `check` (BACK-2602) are implemented locally. Paid first-call
+evaluation against the preserved baseline remains deferred (BACK-2596); no
+agent-effectiveness acceptance is claimed.
+
 **Next, in priority order**
 
-1. **Make the first request work.** Evaluate the fixed first-call questions (BACK-2596)
-   against the preserved baseline before command-model implementation.
-2. **One structure for every command.** Every noun gets both spellings (`reveal NOUN
+1. **One structure for every command.** Every noun gets both spellings (`reveal NOUN
    TARGET --option` and `NOUN://TARGET?option=value`) generated from one declaration, and a
-   shared idea gets one option name with one meaning on every noun (BACK-2595, BACK-2597,
+   shared idea gets one option name with one meaning on every noun (BACK-2597,
    BACK-2598). Counting rules shrink to one line in text output and stay in full in the
-   JSON (BACK-2599). The model is accepted when a fresh agent, given one help screen, forms
-   the right command on a fixed question set (BACK-2596). Every answer, path reads
-   included, carries the same JSON envelope (BACK-2601). `check` shows medium and above,
-   counts low findings in one line and exits 1 on high only, in a minor release before 1.0
-   (BACK-2602). Old names keep working with a note until 1.0.
-3. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
+   JSON (BACK-2599). Old names keep working with a note until 1.0.
+2. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
    through `imports`; finish per-language parity before the old names stop working (BACK-2079, BACK-2063);
    the public-path recall gate and the oracle-free graph invariants run in CI and stay green
    in every language.
-4. **One quality family.** `metrics` absorbs the retiring `hotspots` noun (BACK-2149). Compact overview
+3. **One quality family.** `metrics` absorbs the retiring `hotspots` noun (BACK-2149). Compact overview
    already uses one import analysis; the old dashboard assessment passes were removed.
-5. **The rest of the result contract.** Typed outcomes at the remaining adapter and analyzer
+4. **The rest of the result contract.** Typed outcomes at the remaining adapter and analyzer
    boundaries (BACK-2325, BACK-1857), one rendering layer (BACK-916), one scan-budget policy
    (BACK-1052).
-6. **Measure what is still judgment.** Each heuristic output is measured, narrowed or
+5. **Measure what is still judgment.** Each heuristic output is measured, narrowed or
    retired, starting with the file hotspot score (BACK-2593);
    precision oracles for the element flags from independent tools (BACK-2203); rule precision beyond Python (BACK-1095); more languages
    in the recall gate (BACK-2079); each answer names its tier, and the language scorecard
    is generated from the same data (BACK-1900).
-7. **Docs that cannot drift.** Every example in the README, the agent guide, the guides and
+6. **Docs that cannot drift.** Every example in the README, the agent guide, the guides and
    `help://examples` now runs in CI; the ones that need a live host still skip until recorded
    host fixtures exist (BACK-1615). Help discovery folds into `help://` (BACK-1055). Consumers,
    the MCP tools included, move to the new names before the cut (BACK-2071).
