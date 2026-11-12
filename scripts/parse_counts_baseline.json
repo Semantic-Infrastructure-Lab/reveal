@@ -1365,6 +1365,12 @@
               ]
             }
           },
+          "population": {
+            "analyzed_files": 3,
+            "displayed_files": 3,
+            "filtered_files": 3,
+            "summary": "filtered_analyzed_files"
+          },
           "source": "<corpus>",
           "source_type": "directory",
           "summary": {
