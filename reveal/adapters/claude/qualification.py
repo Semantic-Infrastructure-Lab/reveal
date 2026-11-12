@@ -85,6 +85,10 @@ def selected_type(resource, params):
 
 
 def uri_result_type(resource):
+    from .workspace_scan import workspace_listing_type
+    workspace = workspace_listing_type(resource)
+    if workspace:
+        return workspace
     installed = installation_type(resource)
     if installed:
         return installed
@@ -145,6 +149,9 @@ _COUNTS = {
 
 
 def execution_facts(result):
+    if result.get('type') in ('claude_plans', 'claude_agents', 'claude_memory', 'claude_hooks'):
+        from .workspace_scan import workspace_execution_facts
+        return workspace_execution_facts(result)
     if result.get('type') == 'claude_info':
         from .info import info_execution_facts
         return info_execution_facts(result)
@@ -173,6 +180,8 @@ def execution_facts(result):
 
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
+    if expected_type in ('claude_plans', 'claude_agents', 'claude_memory', 'claude_hooks'):
+        return _workspace_answer_error(adapter, result, expected_type, prior_facts)
     if expected_type == 'claude_info':
         from .info import info_requirement_error
         return info_requirement_error(adapter, result, prior_facts)
@@ -222,6 +231,12 @@ def _installation_answer_error(adapter, result, expected_type, prior_facts):
     error = installation_scalar_error(adapter, result, fields, prior_facts)
     containers = {key: kind for key, kind in fields.items() if isinstance(result.get(key), (list, str, dict))}
     return error or _presentation_error(adapter, result, containers, prior_facts)
+
+
+def _workspace_answer_error(adapter, result, expected_type, prior_facts):
+    from .workspace_scan import LIST_FIELDS, workspace_requirement_error
+    error = workspace_requirement_error(adapter, result, expected_type, prior_facts)
+    return error or _presentation_error(adapter, result, {LIST_FIELDS[expected_type]: list}, prior_facts)
 
 
 _RESOURCE_FIELDS = {'claude_session_list': 'recent_sessions',

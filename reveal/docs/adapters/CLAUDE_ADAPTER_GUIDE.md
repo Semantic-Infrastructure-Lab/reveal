@@ -1918,7 +1918,8 @@ Settings/config JSON also qualify acquisition and preserve scalar values; see
 [User Settings](#claudesettings--user-settings) and
 [Install Config](#claudeconfig--install-config).
 [Path Diagnostics](#claudeinfo--path-diagnostics) qualifies path inventory.
-Other install resources retain their separate
+Ordinary workspace catalogs also qualify named-entry acquisition, as described
+below. Singular lookups, hook-event detail and non-session `/chain` routes retain their separate
 policies. Stdin and mixed batches retain legacy completeness behavior; a warning
 there is not yet guaranteed to change the exit code.
 
@@ -2540,6 +2541,18 @@ reveal 'claude://plans/<name>'      # Exact name or unambiguous prefix
 Name matching: `.md` extension is optional. If the name is a unique prefix, it resolves automatically. If ambiguous, returns a list of matches.
 
 **Returns (list)**: Name, modified timestamp, size, first-line title — sorted by most recent.
+
+The ordinary plan, agent and hook catalogs and memory listings carry
+`meta.workspace_analysis`. Named entries are counted before content/display
+filters, with analyzed/failed entries, discovery loss, required ordering failures
+and replacement-decoded entries distinguished. Missing required roots give exit
+2; valid empty catalogs give 0; required input loss gives 3 while retaining known
+entries. Memory project-name scope precedes file acquisition. Ordering failures
+for entries proven outside the content filter are advisory. Existing list fields
+and replacement values are preserved. MCP retains usable partial catalogs,
+rejects fully failed input and re-reads on follow-up requests. Source proof and
+entry observations survive presentation. This adoption covers catalog views;
+singular plan/agent lookup and hook-event detail remain separate.
 
 **Returns (single plan)**: Full Markdown content with name and modified timestamp.
 

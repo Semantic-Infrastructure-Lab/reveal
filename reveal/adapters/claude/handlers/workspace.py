@@ -1,5 +1,6 @@
 """Workspace resource handlers for the claude:// adapter — plans, memory, agents, hooks."""
 import logging
+import stat as stat_module
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from datetime import datetime
@@ -7,6 +8,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder, note_warning
 from reveal.utils.lines import split_lines
+from ..workspace_scan import WorkspaceScan
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +18,14 @@ logger = logging.getLogger(__name__)
 _ENTRY_ERRORS = (OSError, ValueError, OverflowError)
 
 
-def _mtime(path: Path) -> float:
+def _mtime(path: Path, errors_out=None) -> float:
     """Sort key: a file's mtime, 0 for one that vanished between the glob and the sort
     (it then lists last and the per-file read that follows reports it; BACK-1851)."""
     try:
         return path.stat().st_mtime
-    except OSError:
+    except OSError as exc:
+        if errors_out is not None:
+            errors_out.append((path, exc))
         return 0.0
 
 
@@ -89,12 +93,12 @@ def _parse_agent_frontmatter(content: str) -> Dict[str, Any]:
 
 def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """List or read plans from ~/.claude/plans/."""
-    base: Dict[str, Any] = ResultBuilder.create(
+    base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_plans',
         source=str(plans_dir),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
-    )
+    ))
 
     # claude://plans/<name> — read specific plan
     parts = resource.split('/', 1)
@@ -122,20 +126,28 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
             'content': content,
         }
 
-    # claude://plans — list all plans
-    if not plans_dir.exists():
-        return {**base, 'plans': [], 'total': 0, 'error': f'Plans directory not found: {plans_dir}'}
+    return _list_plans(plans_dir, query_params, base)
+
+
+def _list_plans(plans_dir: Path, query_params: Dict[str, Any], base: Dict[str, Any]) -> Dict[str, Any]:
+    """Collect the existing plan catalog before content/display selection."""
+    scan = WorkspaceScan()
+    if not scan.directory(plans_dir, required=True):
+        error = f'Plans directory not found: {plans_dir}' if scan.request_rejected else scan.root_error
+        return scan.attach({**base, 'plans': [], 'total': 0, 'error': error})
 
     search = query_params.get('search', '').lower()
-    all_files = sorted(plans_dir.glob('*.md'), key=_mtime, reverse=True)
+    all_files = sorted(scan.markdown(plans_dir), key=lambda p: _mtime(p, scan.ordering_errors), reverse=True)
     plans = []
     skipped: List[Tuple[Path, BaseException]] = []
+    scan.entry_errors = skipped
     for plan_file in all_files:
         try:
             stat = plan_file.stat()
             modified = datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds')
-            content = plan_file.read_text(encoding='utf-8', errors='replace')
+            content = scan.read_text(plan_file)
             if search and search not in content.lower():
+                scan.complete(plan_file, filtered=True)
                 continue
             title = ''
             for raw_line in split_lines(content):
@@ -152,6 +164,7 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
                 'size_kb': round(stat.st_size / 1024, 1),
                 'title': title,
             })
+            scan.complete(plan_file)
         except _ENTRY_ERRORS as e:
             logger.warning("skipping unreadable plan %s: %s", plan_file, e)
             skipped.append((plan_file, e))
@@ -164,43 +177,46 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
         'search': search or None,
     }
     note_warning(result, skipped_entries_warning('plans', skipped))
-    return result
+    return scan.attach(result)
 
 
 def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """Walk ~/.claude/projects/ for memory/ subdirs and list memory files."""
-    base: Dict[str, Any] = ResultBuilder.create(
+    base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_memory',
         source=str(conversation_base),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
-    )
+    ))
 
     # claude://memory/<project-fragment> — filter to matching projects
     parts = resource.split('/', 1)
     filter_project = parts[1].strip() if len(parts) > 1 else ''
     search = query_params.get('search', '').lower()
 
-    if not conversation_base.exists():
-        return {**base, 'memories': [], 'total': 0,
-                'error': f'Projects dir not found: {conversation_base}'}
+    scan = WorkspaceScan(legacy_discovery_error=True)
+    if not scan.directory(conversation_base, required=True):
+        error = f'Projects dir not found: {conversation_base}' if scan.request_rejected else scan.root_error
+        return scan.attach({**base, 'memories': [], 'total': 0, 'error': error})
 
     memories = []
     skipped: List[Tuple[Path, BaseException]] = []
-    for project_dir in sorted(conversation_base.iterdir()):
-        if not project_dir.is_dir():
-            continue
+    scan.entry_errors = skipped
+    for project_dir in sorted(scan.entries(conversation_base, legacy_error=True)):
         project_name = project_dir.name
         if filter_project and filter_project not in project_name:
             continue
-        memory_dir = project_dir / 'memory'
-        if not memory_dir.is_dir():
+        if not scan.directory(project_dir):
             continue
-        for mem_file in sorted(memory_dir.glob('*.md'),
-                               key=_mtime, reverse=True):
+        memory_dir = project_dir / 'memory'
+        if not scan.directory(memory_dir):
+            continue
+        for mem_file in sorted(scan.markdown(memory_dir),
+                               key=lambda p: _mtime(p, scan.ordering_errors), reverse=True):
             try:
-                content = mem_file.read_text(encoding='utf-8', errors='replace')
+                content = scan.read_text(mem_file)
                 if search and search not in content.lower():
+                    scan.complete(mem_file, filtered=True)
                     continue
                 stat = mem_file.stat()
                 fm = _parse_agent_frontmatter(content)
@@ -213,6 +229,7 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
                     'size_bytes': stat.st_size,
                     'path': str(mem_file),
                 })
+                scan.complete(mem_file)
             except _ENTRY_ERRORS as e:
                 logger.warning("skipping unreadable memory file %s: %s", mem_file, e)
                 skipped.append((mem_file, e))
@@ -225,17 +242,17 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
         'search': search or None,
     }
     note_warning(result, skipped_entries_warning('memory', skipped))
-    return result
+    return scan.attach(result)
 
 
 def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """List or read agent definitions from ~/.claude/agents/."""
-    base: Dict[str, Any] = ResultBuilder.create(
+    base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_agents',
         source=str(agents_dir),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
-    )
+    ))
 
     # claude://agents/<name> — read specific agent
     parts = resource.split('/', 1)
@@ -268,18 +285,21 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
         }
 
     # claude://agents — list all agents
-    if not agents_dir.exists():
-        return {**base, 'agents': [], 'total': 0,
-                'error': f'Agents directory not found: {agents_dir}'}
+    scan = WorkspaceScan()
+    if not scan.directory(agents_dir, required=True):
+        error = f'Agents directory not found: {agents_dir}' if scan.request_rejected else scan.root_error
+        return scan.attach({**base, 'agents': [], 'total': 0, 'error': error})
 
     search = query_params.get('search', '').lower()
-    all_files = sorted(agents_dir.glob('*.md'), key=_mtime, reverse=True)
+    all_files = sorted(scan.markdown(agents_dir), key=lambda p: _mtime(p, scan.ordering_errors), reverse=True)
     agents = []
     skipped: List[Tuple[Path, BaseException]] = []
+    scan.entry_errors = skipped
     for agent_file in all_files:
         try:
-            content = agent_file.read_text(encoding='utf-8', errors='replace')
+            content = scan.read_text(agent_file)
             if search and search not in content.lower():
+                scan.complete(agent_file, filtered=True)
                 continue
             stat = agent_file.stat()
             fm = _parse_agent_frontmatter(content)
@@ -291,6 +311,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
                 'tools': fm.get('tools', []),
                 'model': fm.get('model', ''),
             })
+            scan.complete(agent_file)
         except _ENTRY_ERRORS as e:
             logger.warning("skipping unreadable agent file %s: %s", agent_file, e)
             skipped.append((agent_file, e))
@@ -303,26 +324,25 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
         'search': search or None,
     }
     note_warning(result, skipped_entries_warning('agents', skipped))
-    return result
+    return scan.attach(result)
 
 
 def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
     """List or read hook scripts from ~/.claude/hooks/."""
-    base: Dict[str, Any] = ResultBuilder.create(
+    base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_hooks',
         source=str(hooks_dir),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
-    )
-
-    if not hooks_dir.exists():
-        return {**base, 'hooks': [], 'total': 0,
-                'error': f'Hooks directory not found: {hooks_dir}'}
+    ))
 
     # claude://hooks/<event> — read or list scripts for a specific event
     parts = resource.split('/', 1)
     event_name = parts[1].strip() if len(parts) > 1 else ''
     if event_name:
+        if not hooks_dir.exists():
+            return {**base, 'hooks': [], 'total': 0,
+                    'error': f'Hooks directory not found: {hooks_dir}'}
         event_path = hooks_dir / event_name
         if not event_path.exists():
             return {**base, 'error': f'Hook event not found: {event_name}', 'event': event_name}
@@ -365,13 +385,24 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
         note_warning(result, skipped_entries_warning('hook scripts', skipped))
         return result
 
-    # claude://hooks — list all event types
+    return _list_hook_events(hooks_dir, base)
+
+
+def _list_hook_events(hooks_dir: Path, base: Dict[str, Any]) -> Dict[str, Any]:
+    """Collect event metadata with measured source loss at the existing root view."""
+    scan = WorkspaceScan(legacy_discovery_error=True)
+    if not scan.directory(hooks_dir, required=True):
+        error = f'Hooks directory not found: {hooks_dir}' if scan.request_rejected else scan.root_error
+        return scan.attach({**base, 'hooks': [], 'total': 0, 'error': error})
     hooks = []
-    skipped = []  # typed at the directory branch above
-    for entry in sorted(hooks_dir.iterdir(), key=lambda p: p.name):
+    skipped: List[Tuple[Path, BaseException]] = []
+    scan.entry_errors = skipped
+    entries = sorted(scan.entries(hooks_dir, legacy_error=True), key=lambda p: p.name)
+    scan.candidates.update(str(p) for p in entries)
+    for entry in entries:
         try:
             stat = entry.stat()
-            if entry.is_file():
+            if stat_module.S_ISREG(stat.st_mode):
                 is_exec = bool(stat.st_mode & 0o111)
                 hooks.append({
                     'event': entry.name,
@@ -381,8 +412,8 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
                     'executable': is_exec,
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
                 })
-            elif entry.is_dir():
-                script_count = sum(1 for _ in entry.iterdir())
+            elif stat_module.S_ISDIR(stat.st_mode):
+                script_count = scan.count_directory(entry)
                 hooks.append({
                     'event': entry.name,
                     'kind': 'directory',
@@ -390,6 +421,7 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
                     'script_count': script_count,
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
                 })
+            scan.complete(entry)
         except _ENTRY_ERRORS as e:
             logger.warning("skipping unreadable hook entry %s: %s", entry, e)
             skipped.append((entry, e))
@@ -400,4 +432,4 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
         'total': len(hooks),
     }
     note_warning(result, skipped_entries_warning('hook entries', skipped))
-    return result
+    return scan.attach(result)

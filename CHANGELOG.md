@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Claude workspace catalogs now measure named-entry acquisition before content filters and disclose read, discovery, ordering and decoding loss. Missing roots give exit 2; required source loss gives 3 while retaining known entries and existing list fields. Singular lookups and hook-event detail retain their separate policies (BACK-2617).
+
 - Claude installation `info` now distinguishes confirmed absence from denied metadata, retains partial directory counts and known paths, and exits 3 for required inspection loss. Qualified partial MCP answers omit duplicate legacy stderr error announcements, keeping requested JSON parseable (BACK-2617).
 
 - Claude settings/config reads now distinguish missing files and settings keys (exit 2) from unreadable, malformed or repaired source (exit 3), with public request diagnostics and acquisition receipts. Config retains missing-key `null` and replacement-decoding behavior; valid `null`, `false` and zero observations survive presentation and fresh MCP requests (BACK-2617).

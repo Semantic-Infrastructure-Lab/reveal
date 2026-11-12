@@ -392,8 +392,10 @@ class ClaudeAdapter(ResourceAdapter):
     @classmethod
     def uri_execution_facts(cls, resource):
         from .qualification import direct_session, catalog_type, chain_resource, history_resource, installation_type
+        from .workspace_scan import workspace_listing_type
         prefixes = tuple(prefix for prefix, _ in cls._RESOURCE_DISPATCH)
         return (cls.execution_facts if catalog_type(resource)
+                or workspace_listing_type(resource)
                 or installation_type(resource)
                 or history_resource(resource)
                 or chain_resource(resource, _parse_session_identifier)
@@ -420,7 +422,9 @@ class ClaudeAdapter(ResourceAdapter):
             return None
         fields = {'claude_history': ('history_analysis', 'request_absent'),
                   'claude_settings': ('installation_analysis', 'request_rejected'),
-                  'claude_config': ('installation_analysis', 'request_rejected')}.get(kind)
+                  'claude_config': ('installation_analysis', 'request_rejected'),
+                  **dict.fromkeys(('claude_plans', 'claude_agents', 'claude_memory', 'claude_hooks'),
+                                  ('workspace_analysis', 'request_rejected'))}.get(kind)
         if fields is None:
             return None
         name, flag = fields
