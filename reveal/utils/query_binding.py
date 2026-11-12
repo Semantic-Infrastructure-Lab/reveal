@@ -169,6 +169,8 @@ def _validate_binding(spec: ParamSpec, raw: Any, transport: str) -> Any:
             raise ValueError(f'{spec.name} lists require nonempty string elements')
     try:
         return spec.validate(decoded)
+    except UnicodeDecodeError:
+        raise
     except ValueError as exc:
         raise RequestValidationError(str(exc)) from exc
 

@@ -40,6 +40,31 @@ category: guide
 
 ## Quick Start
 
+Python `query()` binds declared controls before calling the existing Git owners:
+
+```python
+from reveal.api import query
+
+history = query("git://.", view="history", where=["author~=Scott", "timestamp>1700000000"], limit=5)
+empty = query("git://.?type=history&limit=5", limit=0)
+raw_file = query("git://src/app.py@HEAD~1", detail="raw")
+```
+
+`where` repeats to AND predicates and retains the existing Git predicate language,
+including percent-decoded predicate values. `since` and `until` also preserve repeated
+bounds. Typed overrides validate the original URI first; `None` restores omitted
+control defaults. `view` is an alias of the existing `type` selector, with `log`
+retained as history. URI `view=history&where=author%3DScott` uses the same owner.
+
+Typed `merges=True/False` and URI `merges=on/off` explicitly include/exclude merge
+commits. Omission preserves each view's default. Existing numeric/string boolean
+`merges=1` remains ownership-only, including its unused-control note on other views.
+The existing per-view cap scopes remain: timeline `limit` still bounds commit input;
+separating that input budget from answer-row limits belongs to the remaining command
+migration. This foundation adds typed bindings; the generated Git CLI and expanded
+execution qualification are still pending.
+
+
 ```bash
 # 1. Install dependency (if not already installed)
 pip install "reveal-cli[git]"

@@ -18,13 +18,15 @@ from ...utils.query import (
     ResultControl
 )
 from ...utils.query_eval import find_unknown_filter_fields
-from ...utils.query_parser import QueryParams, filter_expression, mark_query_keys, peek_query_items, query_key
+from ...utils.query_binding import bind_declared_params
+from ...utils.query_parser import ResourceSpec, param_schema, QueryParams, filter_expression, mark_query_keys, peek_query_items, query_key
 from ...utils.results import note_warning
 
 # Import modular components
 from ...utils.path_utils import to_posix
 from .renderer import GitRenderer
 from . import refs, commits, files, queries
+from .params import PARAM_SPECS, runtime_query
 
 _SCHEMA_QUERY_PARAMS = {
     'type': {'type': 'string', 'description': 'Query type for file operations', 'values': ['history', 'blame', 'diff', 'ownership'], 'examples': ['?type=history', '?type=blame', '?type=ownership']},
@@ -209,6 +211,9 @@ class GitAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = ('commits', 'history')  # path views / repo and ref views (BACK-1645)
     LEGACY_INIT = False
+    BOUND_QUERY_CALL = True
+    PARAM_SPECS = PARAM_SPECS
+    RESOURCE_SPEC = ResourceSpec(walks=False)
     CLI_QUERY_FLAGS = {
         'since': 'since={value}', 'until': 'until={value}',  # BACK-1192
         'all': 'limit=1000000',  # lifts the 50-commit log default (BACK-1379)
@@ -351,7 +356,7 @@ class GitAdapter(ResourceAdapter):
     def __init__(self, resource: Optional[str] = None,
                  query: Optional[Union[str, Dict[str, Any]]] = None, *,
                  ref: Optional[str] = None, subpath: Optional[str] = None,
-                 path: Optional[str] = None):
+                 path: Optional[str] = None, params=None):
         """
         Initialize Git adapter.
 
@@ -382,6 +387,14 @@ class GitAdapter(ResourceAdapter):
 
         # Parse and initialize attributes
         self._parse_and_initialize_attributes(resource, ref, subpath, query)
+        if params is None:
+            legacy_query = '&'.join(filter_expression(key, value) for key, value in self._query_items)
+            params = bind_declared_params(PARAM_SPECS, legacy_query, transport='uri')
+        elif not isinstance(params, QueryParams):
+            params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        self.query_params = params
+        self.query, self._query_items = runtime_query(params)
+
 
         self.repo: Optional['pygit2.Repository'] = None
 
@@ -828,7 +841,7 @@ class GitAdapter(ResourceAdapter):
             'adapter': 'git',
             'description': 'Git repository inspection with history, blame, and file tracking',
             'uri_syntax': 'git://<path>[/<subpath>][@<ref>][?<query>]',
-            'query_params': _SCHEMA_QUERY_PARAMS,
+            'query_params': {**_SCHEMA_QUERY_PARAMS, **param_schema(PARAM_SPECS)},
             'elements': {},
             'cli_flags': [],
             'supports_batch': False,

@@ -365,7 +365,7 @@ class ParamSpec:
         else:
             try:
                 value = self.convert(raw)
-            except ParamValueError:
+            except (ParamValueError, UnicodeDecodeError):
                 raise
             except (TypeError, ValueError):
                 what = 'a whole number' if self.type == 'integer' else f'a valid {self.type}'

@@ -115,3 +115,9 @@ def test_encoded_source_selector_and_literal_typed_question_mark(data):
     canonical = answer(data, 'json', str(literal) + '/answer')
     encoded = quote(str(literal), safe='/')
     assert query('json://' + encoded + '/answer')['value'] == canonical['value'] == 42
+
+
+def test_typed_override_cannot_hide_an_invalid_original_predicate(data):
+    from reveal.api import query
+    with pytest.raises(ValueError, match='regular expression'):
+        query(f'json://{data / "data.json"}/items?n~=[', where=['n>1'])

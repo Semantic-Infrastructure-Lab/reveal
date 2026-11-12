@@ -154,6 +154,7 @@ class JsonAdapter(ResourceAdapter):
             for key in ('sort', 'limit', 'offset'):
                 dict.pop(params, key, None)  # legacy inspection ignores array controls
         params = bind_prepared_params(PARAM_SPECS, params, transport=params._transport)
+        validate_request(params)
         params = apply_declared_overrides(PARAM_SPECS, params, overrides)
         validate_request(params)
         self.query_params = params
