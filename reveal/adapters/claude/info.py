@@ -1,6 +1,7 @@
 """Measured path-slot inventory for the existing installation diagnostic view."""
 from copy import deepcopy
 from typing import Any, Dict
+from ...utils.path_inventory import valid_path_info as _valid_path, path_counts as _counts
 
 from ...utils.results import (AnalysisCompleteness, ExecutionFacts, note_warning,
                               result_execution_facts)
@@ -9,11 +10,6 @@ PATH_KEYS = ('claude_home', 'projects', 'history', 'plans', 'settings', 'config'
 ENV_KEYS = ('REVEAL_CLAUDE_HOME', 'REVEAL_CLAUDE_JSON', 'REVEAL_CLAUDE_DIR', 'REVEAL_SESSIONS_DIR')
 
 
-def _counts(paths):
-    failed = sum(bool(row.get('error')) for row in paths.values())
-    return {'candidate_paths': len(paths), 'analyzed_paths': len(paths) - failed,
-            'failed_paths': failed,
-            'usable_paths': sum(type(row.get('exists')) is bool for row in paths.values())}
 
 
 def attach_info_evidence(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -66,18 +62,6 @@ def info_requirement_error(adapter, result, prior_facts):
     return None
 
 
-def _valid_path(row):
-    if not isinstance(row, dict) or not isinstance(row.get('path'), str):
-        return False
-    exists = row.get('exists')
-    if row.get('error'):
-        return exists is None or exists is True
-    if type(exists) is not bool:
-        return False
-    if not exists:
-        return True
-    key = 'count' if row.get('kind') == 'dir' else 'size_bytes'
-    return type(row.get(key)) is int and row[key] >= 0
 
 
 def _proof_error(proof, paths):

@@ -22,6 +22,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Codex installation inspection now distinguishes confirmed absence from unknown metadata, retains interrupted directory counts and read-only SQLite observations, and exits 3 for required inspection/output loss. Shared path inspection preserves Claude behavior; Codex shows unknown paths as `?` and keeps usable partial MCP inventory with source receipts (BACK-2618).
+
 - Codex history now discloses parsing/decoding/read loss and retains acquired prefixes through I/O failure. Existing JSON scalars, nulls and raw malformed-line fallbacks are preserved through explicit shared-reader policies; transcript defaults remain object-only. Qualified history gives complete 0, missing input 2 and source/output loss 3, with usable partial MCP results and failed-analysis errors (BACK-2618).
 
 - Codex TOML configuration reads now measure selection, loading and masking, distinguishing missing files/keys (2) from source/output loss (3). Masked data survives a close failure after parsing; falsy, nested, NaN and datetime observations retain their types through presentation. Native missing-key null dictionaries remain available, with public diagnostics on qualified CLI/MCP requests. Claude and Codex share one document-acquisition mechanism (BACK-2618).
@@ -30,7 +32,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - Codex session catalogs and metadata filters now retain interrupted SQLite row prefixes, disclose timestamp/source failures, and distinguish healthy emptiness (0), a missing index (2), and required acquisition/output loss (3). Source and selection receipts survive presentation and display cuts; failed catalog analysis is an MCP error (BACK-2618).
 
-- Direct Codex UUID transcript views now distinguish complete answers (0), healthy invalid targets or indices (2), and required SQLite/JSONL or output loss (3). Read-only index lookup preserves source decisions and acquired rows, and failed required analysis is an MCP error. Goal reads also qualify optional-database absence versus acquisition failure, retain acquired goals after close loss, and skip unrelated rollout reads. Installation info and remaining resource transports retain their separate policies (BACK-2618).
+- Direct Codex UUID transcript views now distinguish complete answers (0), healthy invalid targets or indices (2), and required SQLite/JSONL or output loss (3). Read-only index lookup preserves source decisions and acquired rows, and failed required analysis is an MCP error. Goal reads also qualify optional-database absence versus acquisition failure, retain acquired goals after close loss, and skip unrelated rollout reads. Memory and workspace resource transports retain their separate policies (BACK-2618).
 
 - Claude plan, agent, hook, memory and file-tracking paths beginning with `chain` now reach their namespace reader instead of being intercepted as a session continuation chain (BACK-2617).
 

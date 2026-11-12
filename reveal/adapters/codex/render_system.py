@@ -8,14 +8,17 @@ def _render_codex_info(result: dict) -> None:
     paths = result.get('paths', {})
     for name, info in paths.items():
         exists = info.get('exists', False)
-        marker = '✓' if exists else '✗'
+        marker = '?' if exists is None else ('✓' if exists else '✗')
         path = info.get('path', '')
         extra = ''
         if exists:
             if info.get('kind') == 'dir':
-                extra = f"  ({info.get('count', 0)} items)"
+                count = info.get('count')
+                extra = f'  ({count} items)' if count is not None else f"  (count unknown; {info.get('entries_seen', 0)} seen)"
             else:
                 extra = f"  ({info.get('size_bytes', 0)} bytes)"
+        if info.get('error'):
+            extra += f"  [{info['error']}]"
         print(f"  {marker} {name}: {path}{extra}")
     print()
     db_stats = result.get('db_stats', {})

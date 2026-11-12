@@ -8,6 +8,7 @@ from ...utils.query_parser import peek_query_items
 from ...utils.results import (AnalysisCompleteness, FailureCause, failure_execution_facts,
                               result_execution_facts)
 from .params import bind_query
+from .info import execution_facts as info_facts, answer_requirement_error as info_error
 from .history import execution_facts as history_facts, answer_requirement_error as history_error
 from .configuration import execution_facts as config_facts, answer_requirement_error as config_error
 from .content import execution_facts as content_facts, answer_requirement_error as content_error
@@ -16,6 +17,7 @@ from .catalog import (CATALOG_PATHS, execution_facts as catalog_facts,
                       answer_requirement_error as catalog_error)
 
 RESOURCE_OWNERS: Dict[str, Tuple[Callable[..., Any], Callable[..., Any]]] = {
+    'codex_info': (info_facts, info_error),
     'codex_history': (history_facts, history_error),
     'codex_config': (config_facts, config_error),
     'codex_content_search': (content_facts, content_error),
@@ -40,7 +42,7 @@ RESULT_VARIANTS = {kind: ('codex_error', 'codex_not_installed') for kind in (*CO
 
 
 def selected_type(resource, params):
-    if resource in ('config', 'history'):
+    if resource in ('config', 'history', 'info'):
         return 'codex_' + resource
     values = dict(peek_query_items(params))
     if resource in CATALOG_PATHS:

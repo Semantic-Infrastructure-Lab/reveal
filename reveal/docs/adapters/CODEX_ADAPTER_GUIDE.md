@@ -45,7 +45,7 @@ semantics remain unchanged (`?last=false` still selects the last agent message).
 `full=False` or `full=None` restores bounded exchange text while JSON retains the
 complete strings. The Codex subcommand and vocabulary migration remain open. Direct transcript
 URI execution, optional goals and SQLite catalog reads are qualified below;
-installation info and remaining resource policies remain separate.
+memory and workspace resource policies remain separate.
 
 
 ```bash
@@ -381,6 +381,23 @@ queries. Source failures report their actual phase instead of claiming no
 session exists. This evidence covers UUID lookup, including the index used to
 select a thread goal. Direct transcript views consume these decisions for
 outcome policy; goal reads also qualify their optional database as described below.
+
+---
+
+## Installation Inspection Outcomes
+
+`codex://info` measures seven named path slots and read-only SQLite aggregate
+queries in `meta.info_analysis`. Confirmed absence is a complete inspection
+answer and exits **0**. Unknown metadata is shown as `?`, with its reason;
+interrupted directory counts retain the number of entries seen. SQLite open,
+query and close failures retain acquired counts and known path observations.
+The count queries are sequential reads, not an atomic cross-query census.
+
+Required inspection or output loss exits **3**. MCP preserves usable partial
+inventory; entirely failed inspection is an error. The path inventory helper is
+shared with Claude, while each adapter owns its named slots and DB queries.
+Owned counts, path observations and source/operation receipts survive
+presentation, and fresh requests refresh all inspection decisions.
 
 ---
 

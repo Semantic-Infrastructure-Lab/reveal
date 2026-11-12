@@ -1,35 +1,15 @@
 """System-level resource handlers for the claude:// adapter — history, settings, info, config."""
 import json
 import os
-import stat as stat_module
 from pathlib import Path
 from typing import Any, Dict, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
-from ....utils.path_utils import failure_of
+from ....utils.path_inventory import path_info as _path_info
 from ..installation import JsonDocumentRead
 
 
-def _path_info(p: Path) -> Dict[str, Any]:
-    try:
-        metadata = p.stat()
-    except (FileNotFoundError, NotADirectoryError):
-        return {'path': str(p), 'exists': False}
-    except OSError as exc:
-        return {'path': str(p), 'exists': None, 'error_phase': 'metadata', 'cause': type(exc).__name__,
-                'error': f'metadata unreadable: {failure_of(exc).cause}'}
-    if stat_module.S_ISDIR(metadata.st_mode):
-        count = 0
-        try:
-            for _ in p.iterdir():
-                count += 1
-        except OSError as exc:
-            return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': None,
-                    'entries_seen': count, 'error_phase': 'directory-count', 'cause': type(exc).__name__,
-                    'error': f'directory unreadable: {failure_of(exc).cause}'}
-        return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': count}
-    return {'path': str(p), 'exists': True, 'kind': 'file', 'size_bytes': metadata.st_size}
 
 
 def get_history(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:

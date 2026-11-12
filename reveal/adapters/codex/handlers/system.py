@@ -10,23 +10,12 @@ from ....utils.results import ResultBuilder
 from ....utils.document_read import DocumentRead
 from ..history import read_history
 from ....utils.secrets import redact_secrets
-from ....utils.path_utils import failure_of
+from ....utils.path_inventory import path_info as _path_info
+from ..info import read_db_stats, attach_info_evidence
 
 import tomllib
 
 
-def _path_info(p: Path) -> Dict[str, Any]:
-    if not p.exists():
-        return {'path': str(p), 'exists': False}
-    if p.is_dir():
-        try:
-            count = sum(1 for _ in p.iterdir())
-        except OSError as exc:
-            return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': None,
-                    'error': f'directory unreadable: {failure_of(exc).cause}'}
-        return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': count}
-    stat = p.stat()
-    return {'path': str(p), 'exists': True, 'kind': 'file', 'size_bytes': stat.st_size}
 
 
 def get_info(codex_home: Path, db_path: Path) -> Dict[str, Any]:
@@ -48,24 +37,8 @@ def get_info(codex_home: Path, db_path: Path) -> Dict[str, Any]:
         'rules': _path_info(codex_home / 'rules'),
     }
 
-    db_stats: Dict[str, Any] = {}
-    if db_path.exists():
-        try:
-            conn = sqlite3.connect(str(db_path))
-            try:
-                row = conn.execute("SELECT COUNT(*) FROM threads").fetchone()
-                db_stats['total_threads'] = row[0] if row else 0
-                row2 = conn.execute(
-                    "SELECT COUNT(*) FROM threads "
-                    "WHERE (thread_source IS NULL OR thread_source = 'user') AND archived = 0"
-                ).fetchone()
-                db_stats['user_sessions'] = row2[0] if row2 else 0
-            finally:
-                conn.close()
-        except sqlite3.Error as exc:
-            db_stats['error'] = str(exc)
-
-    return {**base, 'paths': paths, 'db_stats': db_stats}
+    db_stats, operations = read_db_stats(db_path, paths['db']['exists'], connector=sqlite3.connect)
+    return attach_info_evidence({**base, 'paths': paths, 'db_stats': db_stats}, operations)
 
 
 def get_history(codex_home: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:

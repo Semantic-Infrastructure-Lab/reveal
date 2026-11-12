@@ -105,7 +105,7 @@ class CodexAdapter(ResourceAdapter):
     def uri_execution_facts(cls, resource):
         path = resource.partition('?')[0]
         identifier, _, sub = path.partition('/')
-        if path in ('config', 'history') or path in CATALOG_PATHS:
+        if path in ('config', 'history', 'info') or path in CATALOG_PATHS:
             return cls.execution_facts
         if not _UUID_RE.match(identifier):
             return None
@@ -541,7 +541,9 @@ class CodexAdapter(ResourceAdapter):
     # ------------------------------------------------------------------
 
     def _get_info(self) -> Dict[str, Any]:
-        return _h_get_info(self.CODEX_HOME, self.CODEX_DB)
+        result = _h_get_info(self.CODEX_HOME, self.CODEX_DB)
+        self._info_answer = deepcopy(result)
+        return result
 
     def _get_history(self) -> Dict[str, Any]:
         result = _h_get_history(self.CODEX_HOME, self.query_params)
