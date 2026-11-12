@@ -86,7 +86,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - Check now displays medium and above and gates on high by default. Low findings have one count; `--severity low` shows their rows. `--fail-on none|low|medium|high` controls the full-population gate independently of display filters and pagination; `findings` retains the displayed-findings gate. Incomplete analysis and required output failure still exit 3 (BACK-2602).
 
-- File outlines and element views now carry the shared JSON envelope. Extracted code is `content`; `source` identifies the file, in CLI JSON and Python `element()`. Update code-reading consumers from `result["source"]` to `result["content"]`. Check file/directory JSON shares `files` and `summary`; Imports analysis metadata is in `meta`, with `metadata` retained as an additive-stage alias (BACK-2601).
+- File outlines and element views now carry the shared JSON envelope. Extracted code is `content`; `source` identifies the file, in CLI JSON and Python `element()`. Update code-reading consumers from `result["source"]` to `result["content"]`. Element-view envelopes preserve depth and ownership warnings alongside additional coverage notes (BACK-2630). Check file/directory JSON shares `files` and `summary`; Imports analysis metadata is in `meta`, with `metadata` retained as an additive-stage alias (BACK-2601).
 
 - Python import resolution now continues past namespace-directory candidates to a regular package
   on a later import root, and prefers packages over same-named module files in `from` imports too.

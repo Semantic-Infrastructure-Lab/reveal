@@ -10,6 +10,20 @@ from conftest import _run_reveal_in
 SOURCE = 'def add(x):\n    y = x + 1\n    if y:\n        return y\n    return 0\n'
 
 
+def test_navigation_envelope_preserves_existing_and_additional_diagnostics(capsys):
+    """BACK-2630: enveloping cannot replace producer uncertainty with clean arrays."""
+    from reveal.nav_handlers import _nav_json
+    original = {'warnings': [{'type': 'depth_limited', 'message': 'not expanded'}],
+                'errors': [{'code': 'source_loss', 'message': 'known source loss'}]}
+    _nav_json('flow', 'a.py', 'add', 1, 5, [], extra_meta=original,
+              warnings=['additional coverage limit'])
+    answer = json.loads(capsys.readouterr().out)
+    assert answer['meta']['warnings'] == [original['warnings'][0],
+        {'type': 'navigation_warning', 'message': 'additional coverage limit'}]
+    assert answer['meta']['errors'] == original['errors']
+    assert len(original['warnings']) == 1
+
+
 @pytest.fixture
 def tree(tmp_path):
     (tmp_path / 'a.py').write_text(SOURCE, encoding='utf-8')
