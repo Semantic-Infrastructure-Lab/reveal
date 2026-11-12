@@ -79,7 +79,7 @@ def _post_process_history(result: Dict[str, Any], args: Any, query_params: Dict[
         lower = search_term.lower()
         entries = [e for e in entries if lower in e.get('prompt', '').lower()]
 
-    since = query_params.get('since')
+    since = result.get('since') or query_params.get('since')
     if since:
         since = _normalize_date(str(since))
         entries = [e for e in entries if e.get('timestamp', '') >= since]
@@ -100,6 +100,34 @@ def _normalize_date(val: str) -> str:
     return date.today().isoformat() if val == 'today' else val
 
 
+def _select_session_dates(result, query_params):
+    """Select metadata rows once, before canonical where/page or legacy display cuts."""
+    requested = {key: str(value) if value else None for key in ('since', 'until')
+                 for value in (query_params.get(key),)}
+    if not any(requested.values()):
+        return
+    scope = result.setdefault('scope', {})
+    if scope.get('date_window', {}).get('requested') == requested:
+        return
+    today = _normalize_date('today') if 'today' in requested.values() else None
+    bounds = {key: today if value == 'today' else value for key, value in requested.items()}
+    rows = result['recent_sessions']
+    selected = _rows_in_date_window(rows, bounds)
+    result.update(recent_sessions=selected, session_count=len(selected))
+    scope['date_window'] = {
+        'requested': requested, **bounds, 'before': len(rows), 'selected': len(selected),
+        'count_rule': 'Catalog metadata rows after the legacy query name filter, before canonical predicates/pages/display cuts; modified ISO strings compare lexically; until includes the whole day',
+    }
+
+
+def _rows_in_date_window(rows, bounds):
+    if bounds['since']:
+        rows = [row for row in rows if row.get('modified', '') >= bounds['since']]
+    if bounds['until']:
+        rows = [row for row in rows if row.get('modified', '') <= bounds['until'] + 'T23:59:59.999999']
+    return rows
+
+
 def _post_process_session_list(result: Dict[str, Any], args: Any, query_params: Dict[str, Any]) -> None:
     """Apply --name/--search, ?since=/?until= (--since/--until), --head/--all filters to
     claude_session_list results."""
@@ -113,15 +141,9 @@ def _post_process_session_list(result: Dict[str, Any], args: Any, query_params: 
         lower = search_term.lower()
         sessions = [s for s in sessions if lower in s.get('session', '').lower()]
 
-    since = query_params.get('since')
-    if since:
-        since = _normalize_date(str(since))
-        sessions = [s for s in sessions if s.get('modified', '') >= since]
-
-    until = query_params.get('until')
-    if until:
-        until = _normalize_date(str(until))
-        sessions = [s for s in sessions if s.get('modified', '') <= until + 'T23:59:59.999999']
+    result['recent_sessions'] = sessions
+    _select_session_dates(result, query_params)
+    sessions = result['recent_sessions']
 
     result['session_count'] = len(sessions)  # of the filtered set (BACK-1549)
     if not getattr(args, 'all', False):

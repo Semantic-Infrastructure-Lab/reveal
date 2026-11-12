@@ -350,17 +350,24 @@ class ClaudeAdapter(ResourceAdapter):
     LEGACY_INIT = False
     BOUND_QUERY_CALL = True
     PARAM_SPECS = PARAM_SPECS
-    RESOURCE_SPEC = ResourceSpec(walks=False, filesystem=False)
+    RESOURCE_SPEC = ResourceSpec(name='resource', walks=False, filesystem=False)
     RESULT_TYPE = 'claude_session_overview'
     RESULT_TYPE_VARIANTS = {'claude_plan': ('claude_plans',), 'claude_agent': ('claude_agents',)}
     DEFAULT_FAIL_ON = 'none'
     FINDINGS_POLICIES = ('none',)
+    LEGACY_CHECK_TRANSPORT = True
+    CLI_PRESENTATION_FLAGS = ('with_stats',)
 
     @classmethod
     def uri_execution_facts(cls, resource):
         # Every structure resource is now qualified, including authored scope rejection.
         # Element, batch, stdin and check transports retain the shared router's exclusions.
         return cls.execution_facts
+
+    @staticmethod
+    def result_type_at(params, resource):
+        from .qualification import predicted_result_type
+        return predicted_result_type(resource, params=params)
 
     @staticmethod
     def uri_result_type(resource):
@@ -380,6 +387,15 @@ class ClaudeAdapter(ResourceAdapter):
     def validate_original_request(cls, params, resource):
         # Resource-sensitive canonical controls validate before API overrides.
         bind_query(None, params, resource)
+
+    @classmethod
+    def validate_request_at(cls, params, resource, args):
+        from .controls import validate_display_scope
+        from .pagination import validate_page_display_args
+        from .resources import operation_type
+        effective, runtime = bind_request(None, params, resource)
+        validate_display_scope(args, operation_type(effective, runtime))
+        validate_page_display_args(runtime, args)
 
     @staticmethod
     def public_diagnostic(result: Dict[str, Any]) -> Optional[str]:
@@ -497,7 +513,7 @@ class ClaudeAdapter(ResourceAdapter):
             if projects_subdir.is_dir():
                 path = projects_subdir
             elif next(path.glob('*.jsonl'), None) is not None:
-                raise ValueError(
+                raise RequestValidationError(
                     f"--base-path looks like a session directory (contains .jsonl files directly).\n"
                     f"If pointing to a .claude home, use REVEAL_CLAUDE_HOME instead:\n"
                     f"  REVEAL_CLAUDE_HOME={path.parent} reveal 'claude://...'  # .claude home\n"
@@ -830,7 +846,7 @@ class ClaudeAdapter(ResourceAdapter):
         return len(self._composite_filter_names()) > 1
 
     def _composite_filter_names(self):
-        return [key for key in self.query_params.keys() if key in ('tools', 'errors', 'contains')]
+        return [key for key in ('tools', 'errors', 'contains') if key in self.query_params]
 
     def _handle_composite_query(self, messages: List[Dict]) -> Dict[str, Any]:
         """Handle composite queries with multiple filters.
@@ -865,9 +881,11 @@ class ClaudeAdapter(ResourceAdapter):
             pattern = self.query_params['contains'].lower()
             results = [r for r in results if pattern in r.get('content', '').lower()]
 
+        from .controls import composite_query_receipt, COMPOSITE_QUERY_RULE
+        base['meta']['query_rule'] = COMPOSITE_QUERY_RULE
         base.update({
             'session': self.session_name,
-            'query': self.query,
+            'query': composite_query_receipt(self.query_params),
             'filters_applied': self._composite_filter_names(),
             'result_count': len(results),
             'results': results
@@ -876,8 +894,13 @@ class ClaudeAdapter(ResourceAdapter):
         return base
 
     def _list_sessions(self) -> Dict[str, Any]:
+        from copy import deepcopy
         from .controls import filter_session_names
-        return filter_session_names(_h_list_sessions(self.CONVERSATION_BASE, self.query_params), self.query_params)
+        from .handlers.post_process import _select_session_dates
+        result = _h_list_sessions(self.CONVERSATION_BASE, self.query_params)
+        _select_session_dates(result, self.query_params)
+        self._catalog_date_scope = deepcopy(result.get('scope', {}).get('date_window'))
+        return filter_session_names(result, self.query_params)
 
     def _search_sessions(self) -> Dict[str, Any]:
         return _h_search_sessions(self.CONVERSATION_BASE, self.query_params)
@@ -1055,6 +1078,14 @@ class ClaudeAdapter(ResourceAdapter):
                 'claude://memory                                    # memory files\n'
                 'claude://agents                                    # agent definitions\n'
                 'claude://hooks                                     # hook configurations'
+            ),
+            'epilog': (
+                'Examples:\n'
+                "  reveal claude sessions --where 'session~=auth' --limit 10\n"
+                '  reveal claude session/NAME --view messages --sort=-message_index --limit 3\n'
+                '  reveal claude session/NAME --view errors --match failed\n'
+                'One-string form: claude://session/NAME?view=messages&limit=3\n'
+                'Input/source budgets remain separate from row pagination.'
             ),
             'examples': _HELP_EXAMPLES,
             'features': [

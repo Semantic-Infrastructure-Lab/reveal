@@ -166,6 +166,7 @@ KNOWN_VIOLATIONS: dict = {}
 # How to run each `reveal <name>` against the fixture (invariant 6). Every COMMANDS entry
 # needs a row here or a NOT_A_QUERY reason.
 SUBCOMMAND_ARGV = {
+    'claude': ['sessions', '--base-path', 'home/.claude/projects'],
     'git': ['.'],
     'ast': ['proj'],
     'json': ['proj/data.json'],
@@ -797,6 +798,9 @@ def test_subcommand_result_leaves_through_the_seam(harness, name):
     assert [f for f in _REQUIRED_FIELDS if f not in payload] == []
     declared = COMMANDS[name].declared_adapter
     expected = adapters_base.get_adapter_class(declared).RESULT_TYPE if declared else name
+    # This fixture selects the catalog, rather than Claude's single-session default.
+    if name == 'claude':
+        expected = 'claude_session_list'
     assert payload['type'] == expected
     if name in FIXTURE_URIS:
         _, twin, _ = harness.run_fixture(name)

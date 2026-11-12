@@ -191,6 +191,9 @@ class ResourceAdapter(ABC):
     # Flags the router knows: see cli/routing/flag_specs.py. Empty = the adapter reads none
     # (it may still handle a flag itself, e.g. claude:// and overview:// handle --all).
     CLI_QUERY_FLAGS: Mapping[str, str] = MappingProxyType({})
+    # Shared CLI presentation controls; these do not become native API query parameters.
+    CLI_PRESENTATION_FLAGS: tuple[str, ...] = ()
+
 
     # help://relationships cluster membership, declared at the adapter
     # definition site so it can't drift from help.py's hand-maintained

@@ -21,6 +21,7 @@ CASES = {
     'ast': ([], ''),
     'architecture': ([], ''),
     'calls': (['--callers', 'serve'], '?callers=serve'),
+    'claude': ([], ''),
     'contracts': ([], ''),
     'deps': ([], ''),
     'hotspots': ([], ''),
@@ -136,6 +137,11 @@ def project(tmp_path, monkeypatch):
     for key in RETIRED_NOUN_ROWS:
         monkeypatch.delitem(RETIREMENTS, key)
     monkeypatch.chdir(tmp_path)
+    from claude_session_fixture import build_claude_home
+    from reveal.adapters.claude import ClaudeAdapter
+    claude = build_claude_home(tmp_path / 'home')
+    monkeypatch.setattr(ClaudeAdapter, 'CLAUDE_HOME', claude)
+    monkeypatch.setattr(ClaudeAdapter, 'CONVERSATION_BASE', claude / 'projects')
     root = tmp_path / 'proj'
     (root / 'tests').mkdir(parents=True)
     (root / 'app.py').write_text(APP, encoding='utf-8')
@@ -154,6 +160,8 @@ def project(tmp_path, monkeypatch):
 
 def argv_for(noun, spelling, resource='proj'):
     cli, query = CASES[noun]
+    if noun == 'claude' and resource == 'proj':
+        resource = 'sessions'
     if noun == 'json':
         resource += '/data.json'
     if spelling == 'cli':
@@ -286,7 +294,7 @@ def test_missing_resource_is_rejected_alike(project, noun, fmt):
 def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
     """The project carries an unused import and a branchy function, so a declared gate has something to match."""
     cli, query = FINDINGS_VIEWS.get(noun, CASES[noun])
-    target = 'proj/data.json' if noun == 'json' else 'proj'
+    target = 'proj/data.json' if noun == 'json' else ('sessions' if noun == 'claude' else 'proj')
     walk_flags = ['--no-gitignore'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
     spellings = {
         'after': [noun, target, *cli, '--fail-on', gate],

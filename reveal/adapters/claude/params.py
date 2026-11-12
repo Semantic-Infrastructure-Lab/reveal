@@ -47,24 +47,26 @@ def _spec(name, schema):
     elif name == 'snippet':
         convert = snippet
     kind = 'integer' if name in ('tail', 'last') else schema['type']
+    retired = {'summary', 'search', 'contains', 'filter', 'tail', 'last', 'full', 'raw'}
+    cli = None if name in retired else CliBinding(('--' + name,), action='store_true' if kind == 'flag' else None)
     return ParamSpec(name, kind, schema['description'], None, convert,
-                     examples=tuple(schema.get('examples', ())))
+                     examples=tuple(schema.get('examples', ())), cli=cli)
 
 
 PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS.items()) + (
     ParamSpec('limit', 'integer', 'Answer rows; zero is uncapped; source/input budgets are unchanged', None,
-              lambda value: nonnegative_display_limit(value, name='limit'), minimum=0, zero_policy='uncapped'),
+              lambda value: nonnegative_display_limit(value, name='limit'), minimum=0, zero_policy='uncapped', cli=CliBinding(('--limit',))),
     ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', None,
-              lambda value: nonnegative_display_limit(value, name='offset'), minimum=0),
-    ParamSpec('sort', 'string', 'Answer row field; prefix - for descending; supported fields depend on the selected reader', None, nonempty_scalar),
+              lambda value: nonnegative_display_limit(value, name='offset'), minimum=0, cli=CliBinding(('--offset',))),
+    ParamSpec('sort', 'string', 'Answer row field; prefix - for descending; supported fields depend on the selected reader', None, nonempty_scalar, cli=CliBinding(('--sort',))),
     ParamSpec('where', 'array', 'Session catalog names only: repeat session~=TEXT for case-insensitive literal substring constraints, ANDed',
               None, name_predicates, uri_codec='percent', role='name-predicate',
               cli=CliBinding(('--where',), action='append')),
-    ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence),
-    ParamSpec('detail', 'string', 'summary, normal, full or raw; levels are qualified by the existing reader', None, text, choices=('summary', 'normal', 'full', 'raw')),
-    ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES),
+    ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence, cli=CliBinding(('--timeline',), action='store_true')),
+    ParamSpec('detail', 'string', 'summary, normal, full or raw; levels are qualified by the existing reader', None, text, choices=('summary', 'normal', 'full', 'raw'), cli=CliBinding(('--detail',))),
+    ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES, cli=CliBinding(('--view',))),
     ParamSpec('match', 'string', 'Match text in this resource: session content, narrative messages, tool results, cross-session content, workspace lists or history; unsupported views reject',
-              None, text, uri_codec='percent'),
+              None, text, uri_codec='percent', cli=CliBinding(('--match',))),
 )
 
 

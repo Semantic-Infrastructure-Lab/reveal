@@ -24,17 +24,21 @@ def validate_resource(resource, parse_identifier, prefixes):
 
 
 def uri_result_type(resource):
+    path, _, query = resource.partition('?')
+    return predicted_result_type(path, query=query)
+
+
+def predicted_result_type(resource, *, query=None, params=None):
     from ...errors import RequestValidationError
     from .params import bind_request
     from .resources import operation_type
-    path, _, query = resource.partition('?')
     try:
-        path, params = bind_request(query, None, path)
+        effective, runtime = bind_request(query, params, resource)
     except (RequestValidationError, UnicodeDecodeError):
         # Prediction must not raise outside the router's answered-call boundary.
         # Canonical construction validates the original input and reports the error.
-        return operation_type(path, {})
-    return operation_type(path, params)
+        return operation_type(resource, {})
+    return operation_type(effective, runtime)
 
 
 def _count(value):

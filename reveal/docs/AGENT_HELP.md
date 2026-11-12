@@ -237,6 +237,11 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 
 | Subcommand | One-liner | Discover details |
 |------------|-----------|------------------|
+| `reveal ast [path] [--where EXPR] [--kind KIND]` | Find code elements by properties; repeated --where expressions are ANDed | `reveal ast --help` |
+| `reveal git [path[@REF]] [--view VIEW] [--where EXPR]` | Inspect repository history and historical files | `reveal git --help` |
+| `reveal json FILE[/KEY] [--where EXPR] [--view VIEW]` | Navigate JSON data, filter array elements or inspect schema, keys and types | `reveal json --help` |
+| `reveal markdown [path] [--where EXPR] [--match TEXT]` | Find documents by frontmatter/body; inspect links and aggregate fields | `reveal markdown --help` |
+| `reveal claude [RESOURCE] [--view VIEW] [--match TEXT]` | Inspect Claude sessions and installation resources through declared controls | `reveal claude --help` |
 | `reveal overview [path]` | Compact project map: scope, components, import relationships | `reveal overview --help` |
 | `reveal architecture [path] [--against REF]` | Retired: use reveal overview [path] [--against REF] | `reveal architecture --help` |
 | `reveal imports [path]` | Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations | `reveal imports --help` |

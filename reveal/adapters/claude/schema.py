@@ -92,6 +92,10 @@ _SCHEMA_QUERY_PARAMS = {
 }
 
 _SCHEMA_CLI_FLAGS = {
+    '--with-stats': {
+        'description': 'Optional duration/count annotations for displayed session listing rows; reads the session files',
+        'applies_to': ['reveal claude sessions', 'claude://sessions'],
+    },
     '--all': {
         'description': 'Return all results (cross-session search: disable default 20-result cap)',
         'applies_to': ['claude://sessions/?search='],
@@ -197,7 +201,7 @@ _SCHEMA_OUTPUT_TYPES = [
         'total_agent_duration_ms': {'type': 'integer'}, 'agents': {'type': 'array'},
     }),
     _make_output_type('claude_filtered_results', 'Tool results matching a composite query (?tools=, ?errors, ?contains= combined)', {
-        'query': {'type': 'string'}, 'filters_applied': {'type': 'array'},
+        'query': {'type': 'string', 'description': 'Canonical JSON receipt of applied bound filters, not an executable URI'}, 'filters_applied': {'type': 'array'},
         'result_count': {'type': 'integer'}, 'results': {'type': 'array'},
     }),
     _make_output_type('claude_token_breakdown', 'Token usage per API message with running input total and session totals (?tokens)', {

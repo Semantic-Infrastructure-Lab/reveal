@@ -490,8 +490,24 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                         help='Filter results since date (YYYY-MM-DD, e.g., reveal claude:// --since 2026-02-27)')
     parser.add_argument('--until', type=str, metavar='DATE',
                         help='Filter results until date (YYYY-MM-DD, e.g., reveal claude:// --until 2026-06-18)')
+    _add_session_stats_option(parser)
+    _add_base_path_option(parser)
+
+
+def _add_session_stats_option(parser):
+    """Existing optional session-row annotation flag, shared by both spellings."""
     parser.add_argument('--with-stats', dest='with_stats', action='store_true',
                         help='Show duration and message count for each listed session (reads session files)')
+
+
+def add_declared_presentation_options(parser, names):
+    adders = {'with_stats': _add_session_stats_option}
+    for name in names:
+        adders[name](parser)
+
+
+def _add_base_path_option(parser):
+    """The store override shared by URI navigation and capable declared nouns."""
     parser.add_argument('--base-path', dest='base_path', type=_strip_path_quotes, metavar='DIR',
                         help='Point claude:// at a different Claude install — pass the projects dir and all paths (history, config, plans) derive from it (e.g., --base-path /mnt/wsl/.claude/projects)')
 

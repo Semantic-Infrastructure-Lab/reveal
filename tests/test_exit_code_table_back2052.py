@@ -36,7 +36,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'flag:--returns', 'flag:--search', 'flag:--sideeffects', 'flag:--statewrites',
                                    'flag:--writes', 'param:ast.callee_of', 'param:ast.calls',
                                    'param:calls.external', 'param:calls.modules', 'param:calls.root', 'param:calls.target', 'param:calls.uncalled',
-                                   'param:hotspots.files_only', 'param:hotspots.functions_only', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:hotspots', 'scheme:python', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:hotspots', 'subcommand:review', 'subcommand:testability',
+                                   'param:hotspots.files_only', 'param:hotspots.functions_only', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:hotspots', 'scheme:python', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:hotspots', 'subcommand:review', 'subcommand:scaffold', 'subcommand:testability',
                                    'subcommand:trace', 'target:health.code', 'target:nav.outline', 'value:ast.show=calls']
 
 

@@ -123,6 +123,32 @@ subcommands:
       review: not-applicable
       via:
       - declared-unused
+  claude:
+    all:
+      reason: --all is not declared on `reveal claude`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    respect_gitignore:
+      reason: --respect_gitignore is not declared on `reveal claude`'s own parser
+        -- argparse rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    since:
+      reason: Positive Claude output probe compares the flag with the same hermetic store.
+      review: honored
+      via:
+      - declared-read
+    until:
+      reason: Positive Claude output probe compares the flag with the same hermetic store.
+      review: honored
+      via:
+      - declared-read
+    verbose:
+      reason: Positive Claude output probe compares the flag with the same hermetic store.
+      review: honored
+      via:
+      - declared-read
   contracts:
     all:
       reason: --all is not declared on `reveal contracts`'s own parser -- argparse

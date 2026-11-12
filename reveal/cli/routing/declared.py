@@ -26,7 +26,7 @@ def declared_adapter_class(name: str):
 
 
 def create_declared_parser(name: str) -> argparse.ArgumentParser:
-    from ..parser import _build_global_options_parser, _add_universal_filter_flags
+    from ..parser import _build_global_options_parser, _add_universal_filter_flags, _add_base_path_option, add_declared_presentation_options
     from ..global_flags import add_exclude_argument, add_gitignore_arguments
     from ...utils.query_binding import add_declared_arguments
     adapter = declared_adapter_class(name)
@@ -40,6 +40,9 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter)
     _describe_fail_on(parser, tuple(getattr(adapter, 'FINDINGS_POLICIES', ('none',))))
     add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC)
+    add_declared_presentation_options(parser, getattr(adapter, 'CLI_PRESENTATION_FLAGS', ()))
+    if callable(getattr(adapter, 'reconfigure_base_path', None)):
+        _add_base_path_option(parser)
     if name == 'overview':
         parser.add_argument('--all', action='store_true',
                             help='Show every entry in capped sections (same expansion as --verbose)')
@@ -278,21 +281,28 @@ def _scope_path(adapter_class, path: str) -> str:
     return str(resolve(path)) if resolve is not None else path
 
 
+def _validate_bound_request(adapter_class, params, path, args):
+    validate = getattr(adapter_class, 'validate_request', None)
+    if validate is not None:
+        validate(params, args)
+    validate_at = getattr(adapter_class, 'validate_request_at', None)
+    if validate_at is not None:
+        validate_at(params, path, args)
+
+
 def _declared_answer(adapter_class, name: str, path: str, source: Any, transport: str, args, expected_type: str,
                      *, scope_path: str | None = None):
     from ...adapters.factory import _canonical_init
     from ...utils.query_binding import bind_prepared_params
     from ...utils.path_utils import to_posix
     from ...utils.results import FailureCause
-    from .uri import _answer, _call_adapter, _renderer_class_of, _structure_answer
+    from .uri import _answer, _call_adapter, _renderer_class_of, _structure_answer, _configure_base_path
     scope = path if scope_path is None else scope_path
     try:
         params = source
         if not getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
             params = bind_prepared_params(adapter_class.PARAM_SPECS, source, transport=transport)
-            validate = getattr(adapter_class, 'validate_request', None)
-            if validate is not None:
-                validate(params, args)
+            _validate_bound_request(adapter_class, params, path, args)
         # stat distinguishes absence from inaccessible required work.
         if adapter_class.RESOURCE_SPEC.filesystem:
             Path(scope).stat()
@@ -306,6 +316,7 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
     def resolve():
         adapter = _call_adapter(lambda: _canonical_init(adapter_class, path, params=params),
                                 name, scope, adapter_class, classify_validation=True)
+        _configure_base_path(adapter, args, name, scope, adapter_class, qualified=True)
         return _structure_answer(adapter, _renderer_class_of(name), args, name, scope,
                                  source_path=scope, facts_of=adapter_class.execution_facts, expected_type=expected_type)
 

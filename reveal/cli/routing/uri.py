@@ -678,14 +678,7 @@ def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resour
         adapter = _call_adapter(lambda: _default_from_uri(adapter_class, scheme, resource, element),
                                 scheme, resource, adapter_class, classify_validation=facts_of is not None)
 
-    # Apply --base-path override for adapters that support it (e.g., claude://)
-    # REVEAL_CLAUDE_BASE_PATH env var acts as a persistent default for --base-path.
-    path_override = peek(args, 'base_path') or os.environ.get('REVEAL_CLAUDE_BASE_PATH')
-    if path_override and hasattr(adapter, 'reconfigure_base_path'):
-        mark(args, 'base_path')
-        from pathlib import Path as _Path
-        _call_adapter(lambda: adapter.reconfigure_base_path(_Path(path_override)),
-                      scheme, resource, adapter_class)
+    _configure_base_path(adapter, args, scheme, resource, adapter_class, qualified=facts_of is not None)
 
     if _check_mode(adapter, args):
         mark(args, 'check')
@@ -698,6 +691,19 @@ def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resour
 
     return _view_answer(adapter, renderer_class, scheme, resource, element, args,
                         facts_of=facts_of, default_fail_on=default_fail_on)
+
+
+def _configure_base_path(adapter, args, scheme, resource, adapter_class, *, qualified=False):
+    """Apply the shared explicit/environment store override before reading an answer."""
+    # Apply --base-path override for adapters that support it (e.g., claude://)
+    # REVEAL_CLAUDE_BASE_PATH env var acts as a persistent default for --base-path.
+    path_override = peek(args, 'base_path') or os.environ.get('REVEAL_CLAUDE_BASE_PATH')
+    if path_override and hasattr(adapter, 'reconfigure_base_path'):
+        mark(args, 'base_path')
+        from pathlib import Path as _Path
+        _call_adapter(lambda: adapter.reconfigure_base_path(_Path(path_override)),
+                      scheme, resource, adapter_class, classify_validation=qualified)
+
 
 
 def _build_check_kwargs(adapter, args: 'Namespace') -> dict:

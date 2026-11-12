@@ -1,5 +1,6 @@
 """Canonical controls translate to the existing, resource-specific readers."""
 from typing import Any, Dict
+import json
 from ...errors import RequestValidationError
 from .resources import _parse_session_identifier, selected_type, NON_SESSION_NAMESPACES
 
@@ -101,7 +102,42 @@ def where_requirement_error(adapter, result):
 
 
 def control_requirement_error(adapter, result):
-    return detail_requirement_error(adapter, result) or where_requirement_error(adapter, result)
+    return (detail_requirement_error(adapter, result) or where_requirement_error(adapter, result)
+            or composite_requirement_error(adapter, result) or date_requirement_error(adapter, result))
+
+
+COMPOSITE_QUERY_RULE = 'Canonical JSON receipt of applied bound filters; independent of transport syntax'
+
+
+def composite_query_receipt(params):
+    """Describe the filters actually applied, including literal API overlays."""
+    values = {name: params[name] for name in ('tools', 'errors', 'contains') if name in params}
+    return json.dumps(values, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+
+
+def composite_requirement_error(adapter, result):
+    if result.get('type') != 'claude_filtered_results':
+        return None
+    expected = composite_query_receipt(adapter.query_params)
+    if result.get('query') != expected or result.get('meta', {}).get('query_rule') != COMPOSITE_QUERY_RULE:
+        return 'Claude answer missing the applied composite-filter receipt'
+    return None
+
+
+def validate_display_scope(args, kind):
+    if getattr(args, 'with_stats', False) and kind != 'claude_session_list':
+        raise RequestValidationError('--with-stats requires a session listing')
+
+
+def date_requirement_error(adapter, result):
+    if result.get('type') != 'claude_session_list':
+        return None
+    if not (adapter.query_params.get('since') or adapter.query_params.get('until')):
+        return None
+    observed = getattr(adapter, '_catalog_date_scope', None)
+    if not isinstance(observed, dict) or result.get('scope', {}).get('date_window') != observed:
+        return 'Claude presentation cannot change the measured catalog date window'
+    return None
 
 
 def apply_match(params, resource):

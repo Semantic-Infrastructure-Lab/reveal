@@ -90,6 +90,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Run quality rules on a file or directory',
                      ('text', 'json', 'grep'),  # also PATH --check (BACK-1644)
                      help_guide=_SUBCOMMANDS_GUIDE, also_json=True),
+    'claude':       _declared('claude', 'reveal claude [RESOURCE] [--view VIEW] [--match TEXT]',
+                     'Inspect Claude sessions and installation resources through declared controls'),
     'contracts':    _declared('contracts',
                      'reveal contracts [path]',
                      'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses'),
@@ -158,7 +160,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
-EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'json', 'markdown', 'metrics', 'contracts', 'surface',
+EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'claude', 'json', 'markdown', 'metrics', 'contracts', 'surface',
                 'patches', 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline', 'architecture')
 

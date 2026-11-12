@@ -4,7 +4,7 @@ category: guide
 ---
 # Claude Adapter Guide (claude://)
 
-**Last Updated**: 2026-07-09
+**Last Updated**: 2026-11-12
 **Version**: 1.1
 **Adapter Version**: reveal 0.68.0+
 
@@ -38,6 +38,29 @@ category: guide
 ## Overview
 
 The **claude://** adapter provides two families of resources: **session analysis** for inspecting individual Claude Code conversations, and **install introspection** for exploring your Claude Code installation (history, settings, plans, config, memory, agents, hooks).
+
+Use the named command for interactive work:
+
+```bash
+reveal claude sessions --where 'session~=refactor' --limit 10
+reveal claude session/NAME --view messages --sort=-message_index --limit 3
+reveal claude session/NAME --view errors --match failed
+reveal claude history --match auth --limit 10
+reveal claude sessions --with-stats --limit 5
+reveal claude info --base-path /path/to/.claude/projects
+```
+
+The one-string form, such as
+`claude://session/NAME?view=messages&sort=-message_index&limit=3`, uses the same
+bound controls, readers, JSON and exit policy for composition and MCP. The native
+API accepts literal keyword values: `query('claude://session/NAME', view='messages',
+match='Fixed', limit=1)`. `--base-path` and the optional displayed-row
+`--with-stats` annotation remain shared CLI presentation/configuration controls,
+not API query parameters. `--with-stats` applies only to session listings.
+The composite result's `query` string is a canonical JSON receipt of applied
+bound filters, including API overlays; it is not an executable URI.
+Existing `/digest` and `/exchanges` paths remain available as `--view digest`
+and `--view exchanges`.
 
 **Session Analysis** (`claude://<session-name>[/element][?params]`):
 - Post-session review and analysis
@@ -1944,7 +1967,7 @@ message content. Raw records and views without an existing text matcher reject
 equal controls for the same population coalesce. URI `match` values percent-decode
 once, preserving literal plus signs; API values remain literal,
 and original URI conflicts validate before API overrides. Legacy names retain
-their existing populations. Generated command and retirement work is ongoing.
+their existing populations. Legacy parameter retirements are recorded separately.
 
 The canonical session `view` control selects an existing reader without adding
 another analysis path: `claude://session/my-session?view=messages` is the same
@@ -2002,6 +2025,13 @@ such as chain traversal's 50-session ceiling. Known chain/README acquisition
 counts remain full traversal counts when only part of the chain is displayed.
 MCP keeps usable partial pages, rejects failed acquisition and reads follow-up
 source state afresh.
+
+Catalog `since`/`until` bounds apply in the native reader before canonical
+predicates and pages. `scope.date_window` records the normalized window, original
+request and stage counts; `today` is resolved once for that selection. Existing
+lexical ISO-string bounds and inclusive end-of-day behavior remain. Presentation
+cannot remove or rewrite the measured window, and original metadata acquisition
+receipts still cover entries before date filtering.
 
 Store listings (`claude://` and `claude://sessions`) also qualify their required
 directory and metadata acquisition. `meta.session_catalog` counts non-agent

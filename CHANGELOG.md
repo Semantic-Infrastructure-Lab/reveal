@@ -16,6 +16,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
+### Added
+
+- `reveal claude` is generated from the same declarations as `claude://`: canonical view/detail/match/where and answer-row pagination use existing readers, preserve source-loss outcomes, and retain base-path configuration and optional session statistics. Composite query receipts describe applied bound filters, including API overlays (BACK-2617).
+
 ### Fixed
 
 - Claude plan, agent, hook, memory and file-tracking paths beginning with `chain` now reach their namespace reader instead of being intercepted as a session continuation chain (BACK-2617).

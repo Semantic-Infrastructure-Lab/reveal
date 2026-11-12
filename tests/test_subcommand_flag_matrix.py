@@ -63,12 +63,16 @@ from reveal.cli.invocation import COMMANDS as SUBCOMMANDS  # noqa: E402
 # Extend this, don't guess at cross-file wiring by other means.
 _CROSS_FILE_READERS = {
     'check': ('reveal/cli/file_checker.py',),
+    'claude': ('reveal/adapters/claude/adapter.py',),
 }
 
 # Cells provably honored by an observable output difference (mirrors PROBES in
 # test_flag_routing_matrix.py). (subcommand, flag) -> (extra argv, value for the flag).
 # `{pkg}`/`{tests}` are conftest's flag_probe_corpus (BACK-1451), `{tree}` probe_tree below.
 PROBES = {
+    ('claude', 'verbose'): (['session/my-session', '--view', 'messages', '--base-path', '{claude}'], True),
+    ('claude', 'since'): (['sessions', '--base-path', '{claude}'], '2099-01-01'),
+    ('claude', 'until'): (['sessions', '--base-path', '{claude}'], '1900-01-01'),
     ('architecture', 'verbose'): (['{pkg}'], True),
     ('deps', 'verbose'): (['{pkg}'], True),
     ('hotspots', 'verbose'): (['{pkg}'], True),
@@ -162,6 +166,8 @@ def _reads_via_shared_seam(name, flag):
             return True
         # A declared parameter bound to the flag's dest is read where the adapter applies it.
         if any(_declared_spec_carries_flag(spec, flag) for spec in adapter_cls.PARAM_SPECS):
+            return True
+        if any(_module_reads_flag(path, flag) for path in _CROSS_FILE_READERS.get(name, ())):
             return True
         # The declared runner uses the URI owner's named-argument forwarding.
         return flag in inspect.signature(adapter_cls.get_structure).parameters
@@ -287,12 +293,22 @@ def probe_tree(tmp_path_factory):
     return root
 
 
+@pytest.fixture(scope='module')
+def claude_store(tmp_path_factory):
+    from claude_session_fixture import build_claude_home
+    home = build_claude_home(tmp_path_factory.mktemp('claude-flags'))
+    for path in (home / 'projects').rglob('*.jsonl'):
+        text = path.read_text(encoding='utf-8')
+        path.write_text(text.replace('Fixed', 'Fixed ' + 'explanation ' * 100), encoding='utf-8')
+    return home / 'projects'
+
+
 @pytest.mark.parametrize('name,flag', sorted(PROBES))
-def test_honored_cell_changes_output(name, flag, probe_tree, flag_probe_corpus, monkeypatch):
+def test_honored_cell_changes_output(name, flag, probe_tree, flag_probe_corpus, claude_store, monkeypatch):
     argv, value = PROBES[name, flag]
     # Relative {pkg}/{tests}, as the reveal/ probes were (see test_flag_routing_matrix.py).
     monkeypatch.chdir(flag_probe_corpus)
-    argv = [a.replace('{tree}', str(probe_tree)).replace('{pkg}', 'pkg').replace('{tests}', 'tests')
+    argv = [a.replace('{tree}', str(probe_tree)).replace('{pkg}', 'pkg').replace('{tests}', 'tests').replace('{claude}', str(claude_store))
             for a in argv]
     baseline = _run_subcommand(name, argv)
     cli_flag = _FLAG_TO_CLI[flag]
