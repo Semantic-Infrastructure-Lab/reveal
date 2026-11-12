@@ -11,7 +11,7 @@ from ....utils.results import ResultBuilder, note_truncation
 from ..analysis.normalize import normalize_record
 from reveal.utils.lines import split_lines
 
-_USER_FILTER = "(thread_source IS NULL OR thread_source = 'user') AND archived = 0"
+from ..lookup import USER_FILTER as _USER_FILTER
 
 
 def _resolve_date_bound(value: str) -> str:

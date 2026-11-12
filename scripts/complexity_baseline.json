@@ -56,7 +56,7 @@
   "reveal/adapters/claude/render_messages.py::_render_raw_block": 16,
   "reveal/adapters/claude/render_sessions.py::_render_claude_history": 18,
   "reveal/adapters/claude/render_sessions.py::_render_claude_session_overview": 18,
-  "reveal/adapters/codex/adapter.py::CodexAdapter._handle_session": 19,
+  "reveal/adapters/codex/adapter.py::CodexAdapter._handle_session": 18,
   "reveal/adapters/codex/analysis/normalize.py::normalize_record": 21,
   "reveal/adapters/codex/analysis/tools.py::_commands_from_exec_calls": 18,
   "reveal/adapters/codex/render_analytics.py::_render_codex_shell": 18,

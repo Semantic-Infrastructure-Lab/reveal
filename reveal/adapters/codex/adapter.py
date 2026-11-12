@@ -1,6 +1,7 @@
 """OpenAI Codex CLI session adapter implementation."""
 
 import logging
+from copy import deepcopy
 import os
 import re
 import sqlite3
@@ -15,6 +16,8 @@ from ...utils.jsonl_records import TranscriptRecords
 from ...utils.results import note_warning
 from ...utils.query_parser import ResourceSpec, param_schema, peek_query_items
 from .params import PARAM_SPECS, _MATCHES, _FULL, bind_query
+from .lookup import SessionLookup, attach_lookup_evidence
+from .qualification import (RESULT_VARIANTS, VIEW_TYPES, ROLLOUT_RULE, selected_type, index_request_error, unavailable_rollout)
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
     filter_sessions as _h_filter_sessions,
@@ -49,7 +52,6 @@ _UUID_RE = re.compile(
     r'|^[0-9a-f]{7,}$'
 )
 
-_USER_FILTER = "(thread_source IS NULL OR thread_source = 'user') AND archived = 0"
 
 
 def _disclose_unrecorded_exec_scripts(result: Dict[str, Any], records: List[Dict[str, Any]]) -> None:
@@ -91,6 +93,42 @@ class CodexAdapter(ResourceAdapter):
     BOUND_QUERY_CALL = True
     PARAM_SPECS = PARAM_SPECS
     RESOURCE_SPEC = ResourceSpec(walks=False, filesystem=False)
+    RESULT_TYPE = 'codex_session_overview'
+    RESULT_TYPE_VARIANTS = RESULT_VARIANTS
+    DEFAULT_FAIL_ON = 'none'
+    FINDINGS_POLICIES = ('none',)
+    LEGACY_CHECK_TRANSPORT = True
+
+    @classmethod
+    def uri_execution_facts(cls, resource):
+        path = resource.partition('?')[0]
+        identifier, _, sub = path.partition('/')
+        if not _UUID_RE.match(identifier):
+            return None
+        kind = cls.uri_result_type(resource)
+        supported = sub in VIEW_TYPES or sub.startswith('message/') or kind in ('codex_messages', 'codex_tokens')
+        return cls.execution_facts if supported and kind != 'codex_goal' else None
+
+    @staticmethod
+    def uri_result_type(resource):
+        from .qualification import uri_result_type
+        return uri_result_type(resource)
+
+    @staticmethod
+    def execution_facts(result):
+        from .qualification import execution_facts
+        return execution_facts(result)
+
+    def answer_requirement_error(self, result, expected_type, prior_facts=None):
+        from .qualification import answer_requirement_error
+        return answer_requirement_error(self, result, expected_type, prior_facts)
+
+    @staticmethod
+    def public_diagnostic(result):
+        from .qualification import execution_facts
+        from ...utils.results import FailureCause
+        return result.get('error') if FailureCause.INVALID_REQUEST in execution_facts(result).failures else None
+
     # BACK-1379: get_structure already reads since/until from query_params and
     # threads them into _h_search_sessions/_h_filter_sessions (below), but nothing
     # declared the flag, so --since/--until were silently dropped on the CLI path
@@ -121,6 +159,9 @@ class CodexAdapter(ResourceAdapter):
             raise TypeError(f'resource must be a string, got {type(resource).__name__}')
         self.resource = resource
         self._rollout_analysis: Optional[Dict[str, Any]] = None
+        self._session_lookup: Optional[SessionLookup] = None
+        self._lookup_error_message = None
+        self._request_index_error = None
         self.query = query if query is not None else getattr(params, '_source_query', None)
         self.query_params = bind_query(query, params)
         known = set(self.get_schema()['query_params'])
@@ -164,36 +205,9 @@ class CodexAdapter(ResourceAdapter):
     # ------------------------------------------------------------------
 
     def _find_session_row(self, session_id: str) -> Tuple[Optional[Dict[str, Any]], List[str]]:
-        """Look up a session row by full or prefix UUID.
-
-        Returns ``(row, [])`` for a unique match, ``(None, [])`` for none, and
-        ``(None, candidate_ids)`` when a prefix matches several sessions: picking
-        one of them silently opened an arbitrary session (BACK-2213 lane C B3).
-        """
-        if not self.CODEX_DB.exists():
-            return None, []
-        try:
-            conn = sqlite3.connect(str(self.CODEX_DB))
-            conn.row_factory = sqlite3.Row
-            try:
-                # Try exact match first
-                row = conn.execute(
-                    f'SELECT * FROM threads WHERE id = ? AND {_USER_FILTER}',
-                    (session_id,)
-                ).fetchone()
-                if row is None and len(session_id) < 36:
-                    rows = conn.execute(
-                        f'SELECT * FROM threads WHERE id LIKE ? AND {_USER_FILTER} ORDER BY id LIMIT 6',
-                        (session_id + '%',)
-                    ).fetchall()
-                    if len(rows) > 1:
-                        return None, [r['id'] for r in rows]
-                    row = rows[0] if rows else None
-                return (dict(row) if row else None), []
-            finally:
-                conn.close()
-        except sqlite3.Error:
-            return None, []
+        """Resolve the existing exact/prefix rules with read-only source evidence."""
+        self._session_lookup = SessionLookup(self.CODEX_DB, session_id, connector=sqlite3.connect)
+        return self._session_lookup.find()
 
     # ------------------------------------------------------------------
     # JSONL loading
@@ -218,17 +232,16 @@ class CodexAdapter(ResourceAdapter):
             pass
         self._rollout_analysis = {
             **reader.receipt(), 'opened': reader.opened,
-            'count_rule': 'Consumed nonblank JSONL lines before Codex normalization, rollback marking and view selection; object decoding does not validate every payload',
+            'count_rule': ROLLOUT_RULE,
         }
         return mark_rolled_back(records)
 
     def _find_jsonl_for_session(self, session_row: Dict[str, Any]) -> Optional[Path]:
         """Resolve the JSONL file path from the session row's rollout_path."""
         rollout_path = session_row.get('rollout_path')
-        if rollout_path:
-            p = Path(rollout_path)
-            if p.exists():
-                return p
+        if isinstance(rollout_path, str) and rollout_path and '\x00' not in rollout_path:
+            return Path(rollout_path)
+        self._rollout_analysis = unavailable_rollout(rollout_path)
         return None
 
     # ------------------------------------------------------------------
@@ -257,6 +270,7 @@ class CodexAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Route codex:// resource to the appropriate handler."""
+        self._request_index_error = None
         # Bare or sessions/ → list, search, or content search
         if self._is_session_list_resource():
             search = self.query_params.get('search')
@@ -286,7 +300,7 @@ class CodexAdapter(ResourceAdapter):
         # UUID → session analysis
         session_id = self._session_id_from_resource()
         if session_id:
-            return self._handle_session(session_id)
+            return self._session_answer(session_id)
 
         # Unknown resource
         base = self._get_contract_base()
@@ -294,20 +308,35 @@ class CodexAdapter(ResourceAdapter):
         base['error'] = f'Unknown codex:// resource: {self.resource!r}'
         return base
 
+    def _session_answer(self, session_id: str) -> Dict[str, Any]:
+        if selected_type(self.resource, self.query_params) == 'codex_message':
+            self._request_index_error = index_request_error(self.resource)
+            if self._request_index_error is not None:
+                return {**self._get_contract_base(), 'type': 'codex_message', 'session_id': session_id,
+                        'error': self._request_index_error, 'scope': {'request_rejected': self._request_index_error},
+                        'meta': {'warnings': [], 'errors': []}}
+        result = self._handle_session(session_id)
+        return attach_lookup_evidence(result, self._session_lookup)
+
+    def _lookup_failure_result(self, session_id: str, candidates: List[str]) -> Dict[str, Any]:
+        base = self._get_contract_base()
+        lookup = self._session_lookup
+        if lookup is not None and lookup.source_present is False:
+            base.update(type='codex_not_installed', error=f'Codex DB not found: {self.CODEX_DB}')
+        elif lookup is not None and lookup.failures:
+            failure = lookup.failures[0]
+            base.update(type='codex_error',
+                        error=f"Codex session lookup incomplete ({failure['phase']}): {failure['message']}")
+        else:
+            base.update(type='codex_error', error=_session_lookup_error(session_id, candidates))
+        self._lookup_error_message = base['error']
+        return base
+
     def _handle_session(self, session_id: str) -> Dict[str, Any]:
         """Handle codex://<UUID>[/sub] requests."""
-        if not self.CODEX_DB.exists():
-            base = self._get_contract_base()
-            base['type'] = 'codex_not_installed'
-            base['error'] = f'Codex DB not found: {self.CODEX_DB}'
-            return base
-
         session_row, candidates = self._find_session_row(session_id)
         if session_row is None:
-            base = self._get_contract_base()
-            base['type'] = 'codex_error'
-            base['error'] = _session_lookup_error(session_id, candidates)
-            return base
+            return self._lookup_failure_result(session_id, candidates)
 
         self._rollout_analysis = None
         jsonl_path = self._find_jsonl_for_session(session_row)
@@ -356,7 +385,7 @@ class CodexAdapter(ResourceAdapter):
         b['type'] = result_type
         b['session_id'] = session_row.get('id', '')
         if self._rollout_analysis is not None:
-            proof = dict(self._rollout_analysis)
+            proof = deepcopy(self._rollout_analysis)
             b.setdefault('meta', {'warnings': [], 'errors': []})['rollout_analysis'] = proof
             if proof['failed_records'] or proof['recovered_records'] or proof['failures']:
                 note_warning(b, {

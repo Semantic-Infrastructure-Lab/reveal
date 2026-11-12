@@ -22,6 +22,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Direct Codex UUID transcript views now distinguish complete answers (0), healthy invalid targets or indices (2), and required SQLite/JSONL or output loss (3). Read-only index lookup preserves source decisions and acquired rows, and failed required analysis is an MCP error. Goal, catalog and install transports retain their separate policies (BACK-2618).
+
 - Claude plan, agent, hook, memory and file-tracking paths beginning with `chain` now reach their namespace reader instead of being intercepted as a session continuation chain (BACK-2617).
 
 - Claude workspace catalogs now measure named-entry acquisition before content filters and disclose read, discovery, ordering and decoding loss. Missing roots give exit 2; required source loss gives 3 while retaining known entries and existing list fields. Singular lookups and hook-event detail retain their separate policies (BACK-2617).

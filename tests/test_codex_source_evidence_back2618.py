@@ -89,11 +89,11 @@ def test_read_failure_keeps_acquired_prefix_and_operation_proof(codex, monkeypat
     assert proof['failures'][0]['phase'] == 'read'
 
 
-def test_source_evidence_does_not_claim_execution_policy_adoption(codex):
+def test_qualified_transcript_source_loss_exits_three(codex):
     with rollout(codex).open('a', encoding='utf-8') as handle:
         handle.write('{broken\n')
     result = _run_reveal_in(codex.parent, 'codex://' + DOC_SESSION_ID + '/messages', '--format', 'json')
-    assert result.returncode == 0  # D6 adoption is a separate package step.
+    assert result.returncode == 3  # Qualified direct transcript policy (BACK-2618).
     assert json.loads(result.stdout)['meta']['rollout_analysis']['failed_records'] == 1
 
 

@@ -42,8 +42,9 @@ restores omission, and typed `False` disables a legacy presence flag. URI presen
 semantics remain unchanged (`?last=false` still selects the last agent message).
 `matches=0` keeps every snippet per matching session; it does not cap session input.
 `full=False` or `full=None` restores bounded exchange text while JSON retains the
-complete strings. These declarations do not yet add a Codex subcommand, new
-vocabulary or a new source-completeness policy.
+complete strings. The Codex subcommand and vocabulary migration remain open. Direct transcript
+URI execution is qualified below; catalog, install and goal policies remain
+separate.
 
 
 ```bash
@@ -152,7 +153,7 @@ reveal 'codex://memories/pipeline'
 
 Exchange text previews show at most 300 characters per prompt and 600 per answer, with a `?full` hint when cut. Add `?full` or `?full=true` to show complete paired text; `?full=false` keeps the compact preview. JSON always contains complete prompt and answer strings. Existing `--head`, `--tail`, `--range` and `--max-items` controls still limit the number of exchanges; `?limit=0` is unsupported and warns rather than expanding text.
 
-**UUID prefix**: A unique prefix of 7+ hex characters works instead of the full UUID: `reveal 'codex://019e5cc5'` resolves to the matching session. A prefix several sessions share exits 1 with `Ambiguous session prefix ...: matches <ids>; use more characters`; the first UUID group (8 characters) is usually enough.
+**UUID prefix**: A unique prefix of 7+ hex characters works instead of the full UUID: `reveal 'codex://019e5cc5'` resolves to the matching session. A prefix several sessions share exits 2 with `Ambiguous session prefix ...: matches <ids>; use more characters`; the first UUID group (8 characters) is usually enough.
 
 **`/digest` vs `/exchanges` vs `/messages`**: `/digest` composes a whole-session readable summary in one call (start here for "what happened in this session"); `/exchanges` pairs each prompt with its final answer (for "what did I ask, what did it finally say," one pair at a time); `/messages` is the flat chronological list of every user/agent turn with no pairing or composition.
 
@@ -353,6 +354,26 @@ reveal 'codex://sessions/?search=authentication&since=2026-07-01'
 
 ---
 
+## Session Lookup Evidence
+
+UUID-scoped requests retain `meta.session_lookup`: source metadata/opening
+state, observed exact/prefix query rows, the selected UUID, bounded candidate
+suggestions and phased operation failures. Exact lookup still precedes prefix
+lookup; user-visible, non-archived threads retain the existing selection rules.
+Prefix suggestions stop at six observed rows and do not claim a total census.
+An interrupted one-row prefix result cannot establish uniqueness. Acquired rows
+survive a close failure. Requests refresh this evidence on each lookup.
+
+Connections open read-only, so a disappearance between metadata and opening
+cannot create an empty database. Missing installations and healthy missing
+UUIDs are distinguished from denied metadata, corrupt SQLite and interrupted
+queries. Source failures report their actual phase instead of claiming no
+session exists. This evidence covers UUID lookup, including the index used to
+select a thread goal. Direct transcript views consume these decisions for
+outcome policy; catalog/search and goal-input qualification remain separate.
+
+---
+
 ## Rollout Source Evidence
 
 Session views that consume a resolved rollout retain `meta.rollout_analysis`:
@@ -365,10 +386,25 @@ interrupted read. Object decoding does not validate every event payload.
 
 The measured reader is shared with Claude; each adapter retains its own event
 interpretation. Required record/decode/read loss is disclosed as an
-`analysis_incomplete` warning. This evidence does **not** adopt D6 execution
-policy: the legacy Codex URI exit remains unchanged. SQLite lookup/discovery,
-unresolved rollout paths, non-rollout resources and per-view required-input
-qualification remain separate work.
+`analysis_incomplete` warning. Direct UUID transcript views now use the shared
+execution policy: complete answers, including genuine emptiness and disclosed
+display cuts, exit **0**; healthy missing installations/targets, ambiguous prefixes
+and invalid indices exit **2**; required SQLite, rollout, decoding or output loss
+exits **3**. Known records survive partial acquisition. Missing or unusable rollout
+paths are required source failures, rather than proof of an empty transcript.
+
+Source receipts, selected UUIDs, view counts and observations remain checked
+through presentation. Indexed records are still zero-based over decoded object
+records, with negative indexing retained. A malformed index rejects before
+SQLite acquisition; source loss cannot establish clean out-of-range absence.
+The native API retains its error dictionaries and source evidence. MCP uses the
+same execution facts: usable partial data is returned with its disclosures;
+failed required analysis is an error using the existing private-failure wording.
+
+This policy covers overview, messages/last, tools, errors, shell, tokens, workflow,
+timeline, digest, exchanges and indexed records. Goal, catalog/search, install,
+unknown legacy suffixes, element, batch, stdin and check transports remain
+separately scoped; this is no complete Codex migration claim.
 
 ---
 
