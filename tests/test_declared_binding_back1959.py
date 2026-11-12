@@ -212,3 +212,21 @@ def test_alias_read_accounting_and_conflicts(binding):
         assert 'old' in log.used
     with pytest.raises(ValueError, match='conflicting spellings'):
         binding.bind_declared_params((declaration,), 'old=x&canonical=y', transport='uri')
+
+
+@pytest.mark.parametrize('transport,source', [
+    ('uri', 'old=hello&canonical=hello'),
+    ('typed', {'old': 'hello', 'canonical': 'hello'}),
+])
+def test_equal_aliases_share_one_conversion_and_read(binding, transport, source):
+    conversions = []
+    def convert(value):
+        conversions.append(value)
+        return value.upper()
+    declaration = query.ParamSpec('canonical', 'string', 'Alias control', '', convert, aliases=('old',))
+    with query.collect_query_keys() as log:
+        params = binding.bind_declared_params((declaration,), source, transport=transport)
+        assert declaration.read(params) == 'HELLO'
+        assert declaration.read(params) == 'HELLO'
+        assert 'old' in log.used and 'canonical' in log.used
+    assert conversions == ['hello']

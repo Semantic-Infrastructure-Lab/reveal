@@ -96,3 +96,11 @@ def test_original_semantic_predicate_is_validated_before_typed_override(tree):
     from reveal.api import query
     with pytest.raises(ValueError, match='number'):
         query(f'ast://{tree / "a.py"}?complexity>not-a-number', where=['name=a'])
+
+
+def test_conflicting_cli_aliases_reject_instead_of_last_wins(tree):
+    result = _run_reveal_in(tree, 'ast', str(tree), '--kind', 'function', '--type', 'class', '--format', 'json')
+    assert result.returncode == 2
+    assert 'conflicting spellings' in result.stderr
+    same = _run_reveal_in(tree, 'ast', str(tree), '--kind', 'function', '--type', 'function', '--format', 'json')
+    assert same.returncode == 0

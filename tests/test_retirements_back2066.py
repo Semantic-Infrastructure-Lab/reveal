@@ -255,7 +255,8 @@ def test_every_production_row_is_well_formed():
 
 
 def test_every_production_row_is_exercised_and_prints_once(source):
-    assert set(RETIREMENTS) == set(PRODUCTION_CASES)
+    # Tooling prints help rather than a data envelope; exercised separately below.
+    assert set(RETIREMENTS) == set(PRODUCTION_CASES) | {'subcommand:scaffold'}
     for key, argv in PRODUCTION_CASES.items():
         if RETIREMENTS[key].stage == 'error':
             continue  # no answer to note on: the error-stage test below runs it
@@ -352,3 +353,25 @@ def test_a_production_row_at_the_error_stage_exits_2_with_its_text(monkeypatch, 
     assert result.returncode == 2
     assert f'error: {RETIREMENTS[key].text}' in result.stderr
     assert result.stdout == ''
+
+
+def test_declared_alias_flag_notes_the_spelling_used(monkeypatch, source):
+    text = _retire(monkeypatch, 'param:ast.type', 'ast ?type= (--type)', 'kind= (--kind)')
+    alias = _run_reveal_direct('ast', str(source), '--type', 'function', '--format', 'json')
+    canonical = _run_reveal_direct('ast', str(source), '--kind', 'function', '--format', 'json')
+    assert alias.returncode == canonical.returncode == 0
+    assert _notes(alias.stderr, text) == 1
+    assert not _warnings(json.loads(canonical.stdout))
+    assert _warnings(json.loads(alias.stdout))[0]['field'] == 'param:ast.type'
+    assert _without_retirement_warning(json.loads(alias.stdout)) == _without_retirement_warning(json.loads(canonical.stdout))
+
+
+@pytest.mark.parametrize('stage', ['note', 'error'])
+def test_scaffold_retirement_on_its_text_help_path(monkeypatch, stage):
+    row = replace(RETIREMENTS['subcommand:scaffold'], stage=stage)
+    monkeypatch.setitem(RETIREMENTS, 'subcommand:scaffold', row)
+    result = _run_reveal_direct('scaffold', '--help')
+    assert result.returncode == (0 if stage == 'note' else 2)
+    assert result.stderr.count(row.text) == 1
+    if stage == 'note':
+        assert 'Scaffold new reveal components' in result.stdout

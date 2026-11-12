@@ -104,7 +104,8 @@ def _note_retired_flags(name: str, adapter) -> None:
     invocation = current_invocation()
     if invocation is None:
         return
-    params = {flag: spec.name for spec in adapter.PARAM_SPECS if spec.cli is not None for flag in spec.cli.flags}
+    params = {flag: flag[2:] if flag[2:] in spec.aliases else spec.name
+              for spec in adapter.PARAM_SPECS if spec.cli is not None for flag in spec.cli.flags}
     for token in invocation.command_argv:
         if token == '--':
             break

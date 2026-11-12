@@ -64,10 +64,14 @@ def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str,
     result = dict(peek_query_items(supplied))
     for spec in declarations:
         present = [name for name in (spec.name, *spec.aliases) if name in result]
-        if len(present) > 1:
+        if not present:
+            continue
+        value = result[present[0]]
+        if any(type(result[name]) is not type(value) or result[name] != value for name in present[1:]):
             raise ValueError(f'{spec.name}: conflicting spellings: ' + ', '.join(present))
-        if present and present[0] != spec.name:
-            result[spec.name] = result.pop(present[0])
+        for name in present:
+            result.pop(name)
+        result[spec.name] = value
     return result
 
 
@@ -151,6 +155,7 @@ def prepare_declared_params(declarations: Iterable[ParamSpec],
         raise TypeError('Typed parameters must be a mapping')
     supplied = _normalize_aliases(declarations, source)
     params = QueryParams()
+    params._aliases = {spec.name: spec.aliases for spec in declarations}
     params._supplied_aliases = {alias for spec in declarations for alias in spec.aliases if alias in source}
     for spec in declarations:
         destination = spec.cli.dest if spec.cli and spec.cli.dest else spec.name
@@ -236,6 +241,19 @@ def bind_prepared_params(declarations: Iterable[ParamSpec], params: QueryParams,
     return params
 
 
+class _ScalarAliasAction(argparse.Action):
+    """Keep argparse's repeated-key policy without letting aliases hide conflicts."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        submitted = getattr(namespace, '_declared_alias_values', {})
+        previous = submitted.setdefault(self.dest, {})
+        if any(flag != option_string and value != values for flag, value in previous.items()):
+            raise argparse.ArgumentError(self, 'conflicting spellings: ' + ', '.join((*previous, option_string)))
+        previous[option_string] = values
+        setattr(namespace, '_declared_alias_values', submitted)
+        setattr(namespace, self.dest, values)
+
+
 def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[ParamSpec],
                            resource: ResourceSpec) -> None:
     """Generate local arguments; global presentation/exclusion owners remain unchanged."""
@@ -250,6 +268,8 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
         if cli.action is not None:
             options['action'] = cli.action
         else:
+            if len(cli.flags) > 1:
+                options['action'] = _ScalarAliasAction
             if cli.nargs is not None:
                 options['nargs'] = cli.nargs
             if cli.metavar is not None:
