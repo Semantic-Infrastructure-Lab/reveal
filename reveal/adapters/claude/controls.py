@@ -224,6 +224,9 @@ def validate_selectors(params, resource):
         misplaced = selected.intersection(SESSION_SELECTORS)
         if misplaced:
             raise RequestValidationError('Session selectors require a session resource: ' + ', '.join(sorted(misplaced)))
+    # Empty root search historically selects the session listing.
+    if resource.rstrip('/') in ('', '.') and params.get('search') == '':
+        selected.discard('search')
     if 'search' in selected and operation_type(resource, params) not in SEARCH_POPULATIONS:
         raise RequestValidationError('search selector is unsupported on this resource')
     if {'tail', 'last'} <= selected:
