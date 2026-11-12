@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 from reveal.adapters.help import HelpAdapter
-from reveal.cli.invocation import COMMANDS, EPILOG_ORDER, render_subcommand_lines, subcommand_help_guides
+from reveal.cli.invocation import COMMANDS, EPILOG_ORDER, RETIREMENTS, render_subcommand_lines, subcommand_help_guides
 from reveal.cli.parser import build_help_epilog
 
 DOCS = Path(__file__).resolve().parent.parent / 'reveal' / 'docs'
@@ -53,7 +53,8 @@ def test_catalog_agrees_with_agent_help():
 def test_help_all_lists_every_command_from_the_catalog():
     epilog = build_help_epilog(full=True)
     assert render_subcommand_lines() in epilog
-    assert render_subcommand_lines().count('\n') == len(COMMANDS) - 1
+    current = [name for name in COMMANDS if f'subcommand:{name}' not in RETIREMENTS]
+    assert len(render_subcommand_lines().split('\n')) == len(current)
 
 
 def test_catalog_gate_bites():

@@ -51,7 +51,7 @@ def handle_languages(fmt: str = 'text'):
 
 
 # The hosting-ops family: adapters that inspect a server, not the user's code (BACK-2197, the cheap part of BACK-1055).
-OPS_SCHEMES = ('autossl', 'cpanel', 'domain', 'letsencrypt', 'mysql', 'nginx', 'ssl')
+from ...adapters.registry import OPS_SCHEMES
 
 def retired_schemes() -> 'Dict[str, Retirement]':
     """The scheme:* rows of RETIREMENTS, keyed by scheme: the one place a scheme is called retired."""

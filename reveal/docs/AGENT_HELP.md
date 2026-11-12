@@ -247,14 +247,14 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
 | `reveal patches [path]` | Mock/patch pressure in tests, grouped by target; --view pressure joins it with production boundary fan-out *(Python and TS/JS test suites)* | `reveal patches --help` |
 | `reveal testability [path]` | Retired: use reveal patches <path> --view pressure (the same answer); test patch pressure joined with production boundary fan-out | `reveal testability --help` |
-| `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --rank callers, --modules | `reveal calls --help` |
+| `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --rank callers | `reveal calls --help` |
 | `reveal trace --from FUNC` | Retired: use reveal calls --callees FUNC --depth N --detail (the same walk); depth-indented narrative with side effects | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
 | `reveal review <path>` | Retired: use reveal check --changed RANGE and the diff:// adapter (structure: reveal 'diff://git://A/.:git://B/.'); still answers and prints a replaced-by note | `reveal review --help` |
-| `reveal health [path]` | Ops health: SSL + databases + DNS + nginx | `reveal health --help` |
+| `reveal health [URI...]` | Ops health: SSL + databases + DNS + nginx | `reveal health --help` |
 | `reveal pack <path>` | Token-budgeted context snapshot for LLM consumption (use `--budget`, `--focus`, `--since`) | `reveal pack --help` |
 | `reveal dev <command>` | Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config | `reveal dev --help` |
-| `reveal scaffold <kind>` | Older alias of `reveal dev new-*` — prefer `reveal dev` for new work (compatibility reference) | `reveal scaffold --help` |
+| `reveal scaffold <kind>` | Retired: use `reveal dev new-*` (compatibility reference) | `reveal scaffold --help` |
 | `reveal offline` | Pre-download tree-sitter grammars for offline/air-gapped use | `reveal offline --help` |
 
 **Rule of thumb:**

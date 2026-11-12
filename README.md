@@ -1,219 +1,105 @@
 # Reveal
 
-**Reveal is how AI agents understand codebases without wasting tokens.**
-
-A local-first, adapter-driven semantic inspection layer — progressive disclosure enforced by design. One CLI, 26 URI adapters, 51 languages and file formats. Structure before content, always. Engineers and AI systems use the same tool, the same syntax, the same progressive drill-down.
-
-```bash
-reveal src/auth.py validate_token           # What does this function do?
-reveal 'calls://src/?callers=validate_token' # Who calls it? (cross-file)
-reveal overview .                           # compact project map: scope, components, imports
-reveal 'ast://src/?complexity>10'           # What's too complex?
-reveal check src/                           # What needs fixing? (rules, complexity, links)
-reveal pack src/ --since main --budget 8000 # PR context snapshot for AI agents
-```
-
-## Installation
+Reveal shows the structure of code, documents and data before their content,
+so engineers and AI agents can read only what a question needs. It runs locally.
 
 ```bash
 pip install reveal-cli
+reveal src/                         # what is here?
+reveal src/app.py                   # what does this file contain?
+reveal src/app.py main             # read this function
+reveal calls src/ --callers main   # what connects to it?
+reveal src/app.py main --boundary  # what does it read and touch?
+reveal check src/                   # which rules find problems?
 ```
 
-Git history and comparisons (`git://`, `overview --against`, and churn ranking in `metrics --hotspots`) needs the `git` extra: `pip install "reveal-cli[git]"`. Without it those parts are left out and a warning says so.
+## Start with the question
 
-**Windows on a managed/locked-down machine?** If Application Control Policy blocks the pip-generated `reveal.exe` launcher, run `python -m reveal` instead — it uses the same install, just skips the blocked wrapper.
+| Step | Question | Command |
+|---|---|---|
+| Orient | What is here? | `reveal DIR` or `reveal overview DIR` |
+| Structure | What does this contain? | `reveal FILE` |
+| Content | Show me one thing | `reveal FILE FUNCTION`, `reveal DOC.md "Heading"`, `reveal FILE :20-40` |
+| Relations | What connects to it? | `reveal calls DIR --callers NAME`, `reveal imports DIR --importers FILE` |
+| Behavior | What does this function touch? | `reveal FILE FUNCTION --boundary` or `--effects` |
+| Judgment inputs | Where should I look closer? | `reveal metrics DIR --hotspots`, `reveal check DIR` |
 
-## What Makes It Different
+Search with enclosing structural context: `reveal src/ --grep 'timeout'`.
+Use `--format json` for machine-readable results. Counts name their scope and
+counting rule; warnings disclose incomplete analysis and coverage limits.
+Static name candidates and classified effects do not prove runtime behavior.
 
-**Progressive disclosure is the default.** `dir → file → element`: a directory shows its tree, a file its outline, an element its code. Raw source comes back only when you name an element or a line range.
+## One tool per question
+
+These are current spellings. Where a noun has a subcommand, it and its URI form
+use the same execution path. Quote URI arguments containing shell operators.
+
+| Tool | Question / example |
+|---|---|
+| `overview` | Compact project map: `reveal overview .`; compare with `--against REF` |
+| `ast://` | Code elements: `reveal 'ast://src/?complexity>10&sort=-complexity&limit=10'` |
+| `calls` | Callers/callees: `reveal calls src/ --callees main --depth 2 --detail` |
+| `imports` | Import relationships: `reveal imports src/ --importers app.py` |
+| `git://` | History: `reveal 'git://.?type=history&message~=fix'` |
+| `markdown://` | Documents: `reveal 'markdown://docs/?body-contains=retry'` |
+| `metrics` | File size, complexity and churn: `reveal metrics src/` |
+| `check` | Rule findings: `reveal check src/`; a change: `reveal check --changed main..HEAD` |
+| `surface` | Recognized external boundaries: `reveal surface src/` |
+| `contracts` | Interfaces and data contracts: `reveal contracts src/` |
+| `patches` | Test patch pressure: `reveal patches tests/` |
+| `diff://` | Structural comparison: `reveal diff://before.py:after.py` |
+| `pack` | Context within a budget: `reveal pack src/ --budget 8000` |
+| `json://` | Nested JSON: `reveal json://config.json/service/mode` |
+| `sqlite://` | Database structure: `reveal sqlite:///path/to/app.db` |
+| `xlsx://` | Workbook structure: `reveal xlsx://book.xlsx` |
+| `env://` | Environment inspection with secret redaction: `reveal env://NAME` |
+
+Other resources: `reveal help://adapters` lists session exploration and hosting
+operations. Hosting adapters remain available and are planned to move to
+`reveal-ops`; nginx configuration analysis stays in core. No server or API key
+is required for local file inspection.
+
+## Install and discover
+
+Git history, architecture comparisons and churn need the Git extra:
 
 ```bash
-reveal src/                          # tree structure (~100-3,000 tokens, by size)
-reveal src/auth.py                   # imports, functions, classes (~150-750 tokens)
-reveal src/auth.py validate_token    # exact code (~100-600 tokens)
+pip install "reveal-cli[git]"
+reveal --agent-help                  # agent orientation
+reveal help://quick                  # choose a tool
+reveal help://schemas/ast            # one tool's exact controls
+reveal calls --help                  # this subcommand's options
 ```
 
-**Local-first.** No backend, no API keys, no data leaving the machine. Runs in CI/CD pipelines, air-gapped environments, and anywhere you'd use a Unix tool.
+If a managed Windows machine blocks the generated executable, use
+`python -m reveal`. To pre-download grammars for offline use, run `reveal offline`.
 
-**Everything is a URI.** `ast://`, `calls://`, `ssl://`, `mysql://`, `markdown://`, `claude://` — same query operators, same output format, same piping model across all of them.
-
-**Cross-file call graph analysis:**
-```bash
-reveal 'calls://src/?callers=fn&depth=3'  # full impact radius before a refactor
-reveal 'calls://src/?rank=callers&top=20'  # most-called functions and classes defined in src/
-```
-
-**Deep-dive code navigation (works on Python, PHP, and the other tree-sitter languages; see `reveal --languages`):**
-```bash
-reveal app.py process_batch --boundary       # inputs read, outputs/effects produced
-reveal app.py process_batch --effects    # DB / HTTP / FS / logging calls, classified
-reveal app.py process_batch --inputs         # candidate inputs; builtins marked separately
-reveal app.py process_batch --outputs        # read-after-write hazards; use --range for a block
-reveal app.py process_batch --callsites      # calls within the selected function
-reveal app.py :123 --around                  # nearby context from a line number / stack trace
-reveal app.py process_batch --flow=if          # recognized branch skeleton
-reveal legacy.php :120-340 --boundary        # same flags work on flat PHP, not just OO
-```
-Pinpoint inspection inside a single function or line range — built for triaging giant handlers, legacy files, and stack traces without reading top-to-bottom. See [`AGENT_HELP.md`](reveal/docs/AGENT_HELP.md) for the full nav-flag family.
-
-**PR-aware context snapshots for AI agents:**
-```bash
-reveal pack src/ --since main --budget 8000   # changed files first, then key dependencies
-reveal pack src/ --focus "auth" --budget 6000 # topic-focused snapshot
-```
-
-**Composable pipelines:**
-```bash
-# nginx config → extract all domains → check each SSL cert
-reveal nginx.conf --extract domains | sed 's/^/ssl:\/\//' | reveal --stdin --check
-
-# Find functions that got more complex in this PR
-reveal diff://git://main/.:git://HEAD/. --format json | \
-  jq '.diff.functions[] | select(.complexity_delta > 5)'
-
-# Batch SSL check from a file of domains
-reveal @domains.txt --check
-```
-
-**Native MCP server (`reveal-mcp`) for AI agent integration:**
-```bash
-# Install once, works in Claude Code, Cursor, Windsurf, any MCP-compatible agent
-pip install reveal-cli
-reveal-mcp  # starts the server
-# 10 tools: reveal_structure, reveal_element, reveal_nav, reveal_query, reveal_pack, reveal_check,
-#   reveal_grep, reveal_trace, reveal_health, reveal_review
-# Agents get progressive disclosure, deep-dive nav, and call-graph analysis — no subprocess overhead
-```
-
-**Hosting health checks across categories:**
-```bash
-reveal health ssl://api.example.com domain://example.com mysql://prod
-# → cert expiry + DNS health + DB replication, one exit code
-```
-
-**Documentation as a queryable graph:**
-```bash
-reveal 'markdown://docs/?aggregate=type'         # taxonomy frequency table
-reveal 'markdown://docs/?link-graph'             # bidirectional link analysis + orphan detection
-reveal 'markdown://docs/?body-contains=retry&type=procedure'  # full-text + metadata
-```
-
-**AI session history as structured data** *(useful for workflows built on Claude Code)*:
-```bash
-reveal claude://sessions/                          # list all sessions
-reveal 'claude://sessions/?search=validate_token' # cross-session search
-```
-
-## Using Reveal with AI Agents
-
-Add to your `CLAUDE.md` or `AGENTS.md` so agents discover all adapters at setup time, not mid-task:
-
-```md
-## Reveal Usage
-
-Reveal is a structured resource explorer. Before broad discovery searches over
-a supported resource, check whether Reveal has an adapter — not just for source
-code, but for sessions, git history, documents, data stores, and runtime state.
-
-| Need | Adapter | Example |
-|------|---------|---------|
-| Code structure / functions | `ast://` | `reveal 'ast://src/?type=function'` |
-| Call relationships | `calls://` | `reveal 'calls://src/?callers=my_fn'` |
-| Imports / change impact | `imports://` | `reveal imports://src/` |
-| Git history / diffs | `git://` `diff://` | `reveal 'git://.?message~=fix'` |
-| Claude sessions / prompts | `claude://` | `reveal 'claude://sessions/?search=auth-refactor'` |
-| Codex CLI sessions | `codex://` | `reveal 'codex://sessions/?search=auth-refactor'` |
-| Markdown / docs | `markdown://` | `reveal docs/ --grep 'decision'` |
-| Databases / workbooks | `sqlite://` `mysql://` `xlsx://` | `reveal sqlite:///app.db` |
-| Environment variables | `env://` | `reveal env://` |
-| Project-specific tools | live plugins | `reveal help://adapters` |
-
-When adapter syntax is uncertain:
-1. `reveal help://quick` — compact intent router (~1,600 tokens)
-2. `reveal 'help://schemas/<adapter>' --format=json` — exact query params
-3. Prefer scoped, bounded queries first; drill down as needed.
-4. Confirm consequential findings by reading source or running targeted checks.
-```
-
----
-
-## What Reveal Does (and Doesn't)
-
-| Reveal does | Reveal does not |
-|-------------|-----------------|
-| Inspect / read | Modify / write |
-| Evaluate quality | Auto-fix issues |
-| Package for LLMs | Run LLM inference |
-| Compose workflows | Orchestrate pipelines |
-| Describe itself | Require external config |
-
-## Subcommands
+## Scripting and agents
 
 ```bash
-reveal check src/              # quality check (complexity, maintainability, links)
-reveal check --changed main..HEAD  # PR review: rules on the files the range changed
-reveal health ssl://site.com   # health check: exit 0 pass, 1 findings, 3 incomplete/failed
-reveal pack src/ --budget 8000 # token-budgeted snapshot for LLM context
-reveal pack src/ --architecture # pack + entry points + core abstractions brief
-reveal metrics src/ --hotspots # worst files by complexity and size
-reveal overview .              # compact project map: scope, components, imports
-reveal overview . --against HEAD  # compare the live working tree with a ref
-reveal imports . --external    # third-party and stdlib packages (--circular, --unused)
-reveal calls src/ --callees main --depth 2 --detail  # what main calls, level by level, with side effects
-reveal contracts src/          # ABC/Protocol/TypedDict/Pydantic inventory
-reveal surface src/            # external boundary map: CLI args, routes, env vars, I/O
-reveal dev new-adapter <name>  # scaffold new adapters/rules
+reveal src/app.py main --format json
+git ls-files '*.py' | reveal --stdin
+reveal pack src/ --since main --budget 8000
 ```
 
-`overview` presents a bounded import map with counting rules, coverage and drill-down commands; `overview --against REF` compares a tracked ref with the live working tree. The retired `architecture` spelling returns canonical overview answers. `pack --architecture` uses import fan-in to select context; its ranking remains a separate capability.
+Exit codes on qualified operations: **0** completed, **1** a findings gate
+matched, **2** invalid invocation/resource, **3** required analysis or output
+failed or was incomplete. Incompleteness takes priority over findings.
+See [output diagnostics](reveal/docs/OUTPUT_DIAGNOSTICS_GUIDE.md) and each
+tool's help for its supported controls and remaining legacy exceptions.
 
-## Adapters
+The optional `reveal-mcp` server exposes inspection tools to MCP clients;
+[setup and transport details](reveal/docs/guides/MCP_SETUP.md) describe its scope.
+Reveal reads, checks and packages context; it does not edit source or run an LLM.
 
-The most-used adapters; `reveal --adapters` lists every one.
+## Evidence and documentation
 
-| Adapter | What it queries |
-|---------|-----------------|
-| `ast://` | Functions, classes, complexity, decorators — every language `reveal --languages` lists |
-| `calls://` | Cross-file call graph: callers, callees, coupling metrics |
-| `diff://` | Structural diff between branches or commits (with per-function complexity delta) |
-| `imports://` | Dependency graph, importers (who imports this module), circular imports, unused imports |
-| `metrics://` | Per-file size, complexity, churn and provenance; file hotspots |
-| `git://` | Commits, blame, branches, tags, function-level history |
-| `ssl://` | Certificate expiry, chain validation, hostname match |
-| `autossl://` | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |
-| `letsencrypt://` | Let's Encrypt certbot live certificates — expiry, multi-domain, renewal status |
-| `domain://` | DNS, WHOIS, registrar, HTTP redirect chain, email DNS |
-| `nginx://` | Config parsing, ACL rules, upstream routing, ACME validation |
-| `cpanel://` | User environment, domains, SSL health, ACL audit |
-| `mysql://` | Schema, replication status, table analysis |
-| `sqlite://` | Schema, query analysis |
-| `markdown://` | Frontmatter, headings, link graphs, full-text search |
-| `json://` | JMESPath queries, nested navigation, flatten |
-| `env://` | Environment variable analysis, `.env` validation |
-| `patches://` | Test patch pressure: repeated mocks, private patches, patch-heavy tests; `?view=pressure` joins it with production boundary fan-out (was `testability://`) |
-| `xlsx://` | Excel data extraction and analysis |
-| `claude://` | AI session history, tool usage, file access patterns |
-| `codex://` | OpenAI Codex CLI session history, tool usage, per-session analysis |
-| `reveal://` | Reveal introspects itself: adapters, rules, config |
-| `help://` | Built-in documentation, searchable from the CLI |
-
-## Documentation
-
-- **[Why Reveal](reveal/docs/WHY_REVEAL.md)** — what makes it powerful
-- **[Quick Start](reveal/docs/QUICK_START.md)** — 5-minute introduction
-- **[What Reveal Is Good For](reveal/docs/guides/WHAT_IS_REVEAL_GOOD_FOR.md)** — organized use cases and best-fit workflows
-- **[MCP Server](reveal/docs/guides/MCP_SETUP.md)** — native integration with Claude Code, Cursor, Windsurf
-- **[CI/CD Recipes](reveal/docs/guides/CI_RECIPES.md)** — GitHub Actions and GitLab CI ready-to-paste YAML
-- **[Benchmarks](reveal/docs/BENCHMARKS.md)** — measured 3.9–15x token reduction on real scenarios
-- **[Recipes](reveal/docs/guides/RECIPES.md)** — task-based workflows
-- **[Validation](VALIDATION.md)** — per-language recall of reveal's DD signals (import/dependency graph and side-effect/boundary classification) measured against independent oracles on real corpora, with a supported-vs-validated status table and reproducible harnesses
-- **[All Docs](reveal/docs/INDEX.md)** — complete documentation index
-- **AI Agents**: `reveal --agent-help`
+- [Validation](VALIDATION.md): measured populations, independent oracles and limits.
+- [Roadmap](ROADMAP.md): command consolidation and planned behavior changes.
+- [Quick start](reveal/docs/QUICK_START.md) and [recipes](reveal/docs/guides/RECIPES.md).
+- [Agent reference](reveal/docs/AGENT_HELP.md) and [all documentation](reveal/docs/INDEX.md).
+- [Contributing](CONTRIBUTING.md).
 
 ## License
 
-See [LICENSE](LICENSE) for details.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+MIT; see [LICENSE](LICENSE).

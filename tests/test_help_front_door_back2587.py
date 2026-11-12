@@ -65,3 +65,34 @@ def test_limit_and_sort_help_name_no_retired_adapter():
     assert '--limit N' in flags  # the slice holds both flags
     for scheme in retired_schemes():
         assert not re.search(rf'\b{scheme}\b', flags), scheme
+
+
+def test_first_screen_routes_code_before_other_resources():
+    from reveal.adapters.help import HelpAdapter
+    from reveal.cli.handlers.introspection import OPS_SCHEMES
+    page = HelpAdapter().get_element('quick')
+    commands = '\n'.join(row['cmd'] for row in page['commands'])
+    for scheme in (*OPS_SCHEMES, 'claude', 'codex'):
+        assert f'{scheme}://' not in commands
+    for noun in ('overview', 'calls', 'imports', 'metrics', 'check'):
+        assert f'reveal {noun} ' in commands
+    other = [row for row in page['decision_tree'] if row['want'].startswith('Other resources')]
+    assert len(other) == 2
+    assert all(row['use'] == 'help://adapters' for row in other)
+
+
+def test_help_subcommands_teach_current_names_only():
+    from reveal.cli.invocation import RETIREMENTS
+    out = _reveal('--help')
+    for key in RETIREMENTS:
+        if key.startswith('subcommand:'):
+            assert not re.search(rf'^\s+reveal {key.split(":", 1)[1]}\b', out, re.MULTILINE)
+
+
+def test_unknown_scheme_lists_core_and_points_to_other_adapters():
+    proc = subprocess.run([sys.executable, '-m', 'reveal', 'missingzz://'],
+                          capture_output=True, text=True, encoding='utf-8')
+    assert proc.returncode == 2
+    assert 'calls://' in proc.stderr
+    assert 'ssl://' not in proc.stderr and 'reveal://' not in proc.stderr
+    assert 'help://adapters' in proc.stderr

@@ -19,6 +19,13 @@ when their rows land (BACK-2149).
 """
 import pytest
 
+
+def test_health_usage_summary_is_not_a_code_target():
+    from scripts.check_retired_names import scan
+    assert scan('  reveal health [URI...]      Ops health: SSL and DNS') == []
+    assert any(key == 'target:health.code' for _, key, _ in
+               scan('  reveal health src/      Inspect source'))
+
 from scripts.check_retired_names import RETIREMENTS, SURFACES, _patterns, _sample, scan, surface_hits
 
 # --- the scanner itself: patterns exist, find their spelling, and spare the live ones ----------

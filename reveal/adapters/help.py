@@ -7,7 +7,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY, list_public_schemes
-from .registry import _SCAFFOLD_SCHEMES, is_internal_scheme
+from .registry import OPS_SCHEMES, _SCAFFOLD_SCHEMES, is_internal_scheme
 from ..utils.formatting import shell_command
 from ..utils.query_parser import ParamSpec, param_schema, whole_number
 from ..utils.results import ResultBuilder, note_truncation, note_warning
@@ -1474,6 +1474,7 @@ class HelpAdapter(ResourceAdapter):
         with a QUICK_RANK class attribute), each represented by its own
         get_help() description + first example.
         """
+        from ..cli.invocation import COMMANDS, RETIREMENTS
         commands = [
             {
                 'cmd': 'reveal <file.py>',
@@ -1483,12 +1484,17 @@ class HelpAdapter(ResourceAdapter):
                 'cmd': 'reveal <dir/>',
                 'description': 'Directory tree with file sizes and types',
             },
+            {
+                'cmd': 'reveal FILE ELEMENT',
+                'description': 'Read one named function, class or Markdown section',
+            },
         ]
 
         candidates = []
         for scheme in list_public_schemes():
             adapter_class = _ADAPTER_REGISTRY[scheme]
-            if scheme == 'help':
+            if (scheme in (*OPS_SCHEMES, 'help', 'claude', 'codex')
+                    or f'scheme:{scheme}' in RETIREMENTS):
                 continue
             rank = getattr(adapter_class, 'QUICK_RANK', None)
             if rank is None:
@@ -1504,8 +1510,12 @@ class HelpAdapter(ResourceAdapter):
             candidates.append((rank, scheme, uri, description))
 
         candidates.sort(key=lambda c: (c[0], c[1]))
-        for _rank, _scheme, uri, description in candidates:
-            commands.append({'cmd': shell_command(uri), 'description': description})
+        for _rank, scheme, uri, description in candidates:
+            command = COMMANDS[scheme].usage if scheme in COMMANDS else shell_command(uri)
+            commands.append({'cmd': command, 'description': description})
+
+        commands.append({'cmd': COMMANDS['check'].usage,
+                         'description': COMMANDS['check'].summary})
 
         commands.append({
             'cmd': 'reveal help://adapters',
@@ -1561,8 +1571,8 @@ class HelpAdapter(ResourceAdapter):
          'use': 'markdown://', 'example': "reveal 'markdown://docs/?body-contains=keyword'"},
         {'want': 'read one section of a markdown document',
          'use': 'reveal FILE --section HEADING', 'example': 'reveal README.md --section "Building"'},
-        {'want': 'inspect a SQLite, MySQL database, or Excel workbook',
-         'use': 'sqlite:// / mysql:// / xlsx://', 'example': "reveal sqlite:///path/to/app.db"},
+        {'want': 'inspect a SQLite database or Excel workbook',
+         'use': 'sqlite:// / xlsx://', 'example': "reveal sqlite:///path/to/app.db"},
         {'want': 'inspect environment variables',
          'use': 'env://', 'example': "reveal env://"},
         {'want': 'search prior Claude sessions by topic or project',
@@ -1592,6 +1602,8 @@ class HelpAdapter(ResourceAdapter):
         # 'help' is the page being read — pointing help://quick at itself
         # via help://relationships is circular, not a useful discovery path.
         mentioned.add('help')
+        mentioned.update(OPS_SCHEMES)
+        mentioned.update(('claude', 'codex'))
         # A retired scheme still answers but is not a tool to point a new reader at.
         from ..cli.handlers.introspection import retired_schemes
         mentioned.update(retired_schemes())
@@ -1614,11 +1626,10 @@ class HelpAdapter(ResourceAdapter):
             'type': 'help_quick',
             'title': 'Reveal — Quick Reference',
             'commands': self._get_quick_commands(),
-            'decision_tree': self._CURATED_DECISION_TREE + self._decision_tree_coverage_gaps(),
+            'decision_tree': self._core_decision_tree() + self._decision_tree_coverage_gaps(),
             'next_steps': [
                 'reveal help://adapters          # full adapter list',
                 'reveal help://ast               # AST queries (every tree-sitter language)',
-                'reveal help://ssl               # TLS cert adapter guide',
                 'reveal help://examples          # browse all task-based query recipes',
                 'reveal help://examples/security # security query recipes',
                 'reveal help://agent             # AI agent usage guide',
@@ -1630,6 +1641,18 @@ class HelpAdapter(ResourceAdapter):
                 "reveal 'help://search?search=<term>' # full-text search when nothing above matches your phrasing",
             ],
         }
+
+    def _core_decision_tree(self) -> List[Dict[str, str]]:
+        """Keep family discovery one step away from the core task ladder."""
+        other = set(OPS_SCHEMES) | {'claude', 'codex'}
+        rows = [row for row in self._CURATED_DECISION_TREE
+                if not (set(re.findall(r'([a-zA-Z_]+)://', row['use'])) & other)]
+        return rows + [
+            {'want': 'Other resources: hosting operations', 'use': 'help://adapters',
+             'example': 'reveal help://adapters'},
+            {'want': 'Other resources: Claude and Codex sessions', 'use': 'help://adapters',
+             'example': 'reveal help://adapters'},
+        ]
 
     def _get_adapter_relationships(self) -> Dict[str, Any]:
         """Return the adapter ecosystem map (help://relationships)."""

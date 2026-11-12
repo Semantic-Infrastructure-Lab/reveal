@@ -19,6 +19,9 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+# Resource probes are discoverable separately from the code/docs/data first screen.
+OPS_SCHEMES = ('autossl', 'cpanel', 'domain', 'letsencrypt', 'mysql', 'nginx', 'ssl')
+
 # The adapters reveal ships, in registration order; each is the module
 # reveal.adapters.<scheme>. tests/test_adapter_registry_lazy_back1870.py checks this
 # tuple against what a full import registers, so it cannot drift.

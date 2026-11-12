@@ -89,7 +89,10 @@ def _health_names_a_code_path(line):
     match = HEALTH_ARG.search(line)
     if not match:
         return False
-    for token in match.group(1).split():
+    # Generated help aligns a prose description after the usage with two or
+    # more spaces. Its words are not positional health targets.
+    arguments = re.split(r'\s{2,}', match.group(1).strip(), maxsplit=1)[0]
+    for token in arguments.split():
         if token.startswith(('-', '[', '<')) or '://' in token or token.endswith('.conf'):  # a flag, a placeholder, an ops target
             continue
         return True
@@ -220,6 +223,15 @@ def _help_quick():
     return out.stdout
 
 
+def _cli_help():
+    out = subprocess.run([sys.executable, '-m', 'reveal', '--help'], capture_output=True,
+                         text=True, encoding='utf-8', cwd=ROOT, check=False)
+    assert out.returncode == 0, out.stderr
+    # Argparse's usage inventory includes accepted compatibility flags; the
+    # descriptions below it disclose their replacement. Scan the teaching text.
+    return out.stdout.partition('\n\n')[2]
+
+
 def _example_recipes():
     adapter = HelpAdapter()
     lines = []
@@ -234,6 +246,7 @@ SURFACES = {
     'ROADMAP.md (without release history)': _roadmap_without_release_history,
     'AGENT_HELP.md (first section)': _agent_help_first_section,
     'help://quick': _help_quick,
+    '--help': _cli_help,
     'help://examples': _example_recipes,
 }
 

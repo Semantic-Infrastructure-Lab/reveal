@@ -858,13 +858,10 @@ def create_argument_parser(
 
     # ── Adapter-specific ──────────────────────────────────────────────────────
     # Only meaningful for a specific URI adapter. Silently ignored on wrong targets.
-    g_ssl = parser.add_argument_group('SSL adapter  [adapter-specific — ssl:// only]')
-    _add_ssl_options(g_ssl)
-
-    g_nginx = parser.add_argument_group(
-        'Nginx / cPanel  [adapter-specific — nginx config files and cpanel:// URIs]'
-    )
-    _add_extraction_options(g_nginx)
+    g_resources = parser.add_argument_group(
+        'Other resources  [hosting operations and nginx config; reveal help://adapters]')
+    _add_ssl_options(g_resources)
+    _add_extraction_options(g_resources)
 
     if not full_help:
         _collapse_specialized_groups(parser)

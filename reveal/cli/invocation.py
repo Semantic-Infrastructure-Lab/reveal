@@ -82,7 +82,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Retired: use reveal overview [path] [--against REF]'),
     'calls':        _declared('calls',
                      'reveal calls --callers FUNC',
-                     'Call graph: callers, callees (--depth N, --detail), --rank callers, --modules'),
+                     'Call graph: callers, callees (--depth N, --detail), --rank callers'),
     'check':        _spec('check',
                      'reveal check <path>',
                      'Run quality rules on a file or directory',
@@ -100,7 +100,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config',
                      help_guide=_SUBCOMMANDS_GUIDE),
     'health':       _spec('health',
-                     'reveal health [path]',
+                     'reveal health [URI...]',
                      'Ops health: SSL + databases + DNS + nginx',
                      ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
     'hotspots':     _declared('hotspots',
@@ -132,7 +132,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
     'scaffold':     _spec('scaffold',
                      'reveal scaffold <kind>',
-                     'Older alias of `reveal dev new-*` — prefer `reveal dev`',
+                     'Retired: use `reveal dev new-*`',
                      help_guide=_SUBCOMMANDS_GUIDE),
     'surface':      _declared('surface',
                      'reveal surface [path]',
@@ -238,6 +238,7 @@ class Retirement:
 # The two older BACK-1906 notes, then Phase 2b's call-graph spellings (BACK-2066). A param:
 # row covers the URI parameter and the same parameter typed as a declared subcommand's flag.
 RETIREMENTS: Dict[str, Retirement] = {
+    'subcommand:scaffold': Retirement('reveal scaffold', 'reveal dev new-adapter NAME (or new-analyzer/new-rule)'),
     # D9: one compact map and comparison owner; pack --architecture is a separate live control.
     'subcommand:architecture': Retirement('reveal architecture', 'reveal overview <path> [--against REF]'),
     'scheme:architecture': Retirement('architecture://', 'overview://<path>[?against=REF]'),
@@ -336,14 +337,16 @@ RETIREMENTS: Dict[str, Retirement] = {
 }
 
 
-def current_schemes() -> list:
+def current_schemes(*, core_only: bool = False) -> list:
     """Registered schemes to teach a reader: every one the RETIREMENTS table does not retire.
 
     Retired schemes stay registered (they answer with a note until the cut), so registry
     consumers that check adapters keep the full list; hints and listings use this one (BACK-2532).
     """
-    from ..adapters.registry import list_supported_schemes
-    return [scheme for scheme in list_supported_schemes() if f'scheme:{scheme}' not in RETIREMENTS]
+    from ..adapters.registry import OPS_SCHEMES, is_internal_scheme, list_supported_schemes
+    return [scheme for scheme in list_supported_schemes()
+            if f'scheme:{scheme}' not in RETIREMENTS
+            and (not core_only or (scheme not in OPS_SCHEMES and not is_internal_scheme(scheme)))]
 
 
 class RetiredSpellingError(Exception):
@@ -547,7 +550,8 @@ def subcommand_help_guides() -> Dict[str, str]:
 
 def render_subcommand_lines() -> str:
     """The `--help-all` subcommand rows, generated from COMMANDS."""
-    return '\n'.join(f'  {COMMANDS[n].usage:<26}  {COMMANDS[n].summary}' for n in EPILOG_ORDER)
+    return '\n'.join(f'  {COMMANDS[n].usage:<26}  {COMMANDS[n].summary}' for n in EPILOG_ORDER
+                     if f'subcommand:{n}' not in RETIREMENTS)
 
 
 _DESC_SORT = re.compile(r'^-[a-zA-Z_][a-zA-Z0-9_]*$')

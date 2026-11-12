@@ -994,13 +994,17 @@ class TestHelpQuick(unittest.TestCase):
         from reveal import __version__
 
         result = self._get_quick()
-        parser = create_argument_parser(__version__)
-        known_flags = {opt for action in parser._actions for opt in action.option_strings}
+        from reveal.cli.invocation import COMMANDS, Invocation
 
         sources = [(item['cmd'], 'commands') for item in result.get('commands', [])]
         sources += [(item['example'], 'decision_tree') for item in result.get('decision_tree', [])]
 
         for cmd, section in sources:
+            import shlex
+            invocation = Invocation.parse(['reveal', *shlex.split(cmd)[1:]])
+            parser = (COMMANDS[invocation.command].load()[0] if invocation.command
+                      else create_argument_parser(__version__))
+            known_flags = {opt for action in parser._actions for opt in action.option_strings}
             for flag in re.findall(r'(--[\w-]+)', cmd):
                 self.assertIn(
                     flag, known_flags,
@@ -1076,6 +1080,10 @@ class TestDecisionTreeClusterCoverage(unittest.TestCase):
             entry['want'] + ' ' + entry['use'] + ' ' + entry['example']
             for entry in result['decision_tree']
         )
+        # A family pointer is a real discovery hop; inspect its destination,
+        # rather than requiring every ops/session name on the first screen.
+        if any(entry['use'] == 'help://adapters' for entry in result['decision_tree']):
+            text += ' ' + str(a.get_element('adapters'))
         # decision_tree's cluster-coverage lines name adapters as bare,
         # comma-separated scheme words ("...not named above: json, reveal"),
         # not scheme:// URIs — match against real registered scheme names
@@ -1395,16 +1403,19 @@ class TestClaudeRowInQuickHelp(unittest.TestCase):
         from reveal.adapters.help import HelpAdapter
         return HelpAdapter('help://quick').get_element('quick')
 
-    def test_claude_row_example_uses_sessions_search(self):
+    def test_claude_family_is_reachable_via_adapter_index(self):
         result = self._get_quick()
-        claude_rows = [r for r in result['decision_tree'] if r['use'] == 'claude://']
-        self.assertEqual(len(claude_rows), 1, 'Expected exactly one claude:// row in decision_tree')
-        self.assertIn('?search=', claude_rows[0]['example'])
+        rows = [r for r in result['decision_tree'] if 'sessions' in r['want']]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['use'], 'help://adapters')
+        from reveal.adapters.help import HelpAdapter
+        self.assertIn('claude', str(HelpAdapter().get_element('adapters')))
 
     def test_claude_row_want_describes_search(self):
         result = self._get_quick()
-        claude_rows = [r for r in result['decision_tree'] if r['use'] == 'claude://']
-        self.assertIn('search', claude_rows[0]['want'].lower())
+        rows = [r for r in result['decision_tree'] if 'sessions' in r['want']]
+        self.assertIn('Claude', rows[0]['want'])
+        self.assertIn('Codex', rows[0]['want'])
 
 
 class TestNoStaleAgentHelpDescriptions(unittest.TestCase):

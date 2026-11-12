@@ -7,7 +7,7 @@ help_category: dev_guides
 ---
 # CLI Integration Guide
 
-**When you need this**: Adding a new top-level command to reveal (like `reveal scaffold`)
+**When you need this**: Adding a new top-level command to reveal (like `reveal dev`)
 
 **When you DON'T need this**:
 - Creating adapters (use `@register_adapter` decorator - auto-discovered)

@@ -146,5 +146,5 @@ full traceback via `logger.error(..., exc_info=True)`.
 
 ## See Also
 
-- [SCAFFOLDING_GUIDE.md](SCAFFOLDING_GUIDE.md) — `reveal scaffold rule` generates this same file layout plus tests, for both built-in and external rules
+- [SCAFFOLDING_GUIDE.md](SCAFFOLDING_GUIDE.md) — `reveal dev new-rule` generates this same file layout plus tests, for both built-in and external rules
 - [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) — the equivalent guide for external adapters (`.reveal/adapters/`, `~/.reveal/adapters/`)

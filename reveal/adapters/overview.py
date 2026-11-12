@@ -424,6 +424,7 @@ def _distinct_owner_warnings(meta: Optional[RevealMeta]) -> Optional[RevealMeta]
 class OverviewAdapter(ResourceAdapter):
     """Compact project scope and static import map."""
     HELP_CLUSTER = 'Code Analysis'
+    QUICK_RANK = -1
     LEGACY_INIT = False
     BOUND_QUERY_CALL = True
     RESOURCE_IS_PATH = True

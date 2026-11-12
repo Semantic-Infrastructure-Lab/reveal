@@ -1418,6 +1418,7 @@ def _incomplete(result: Dict[str, Any]) -> bool:
 class ImportsAdapter(ResourceAdapter):
     """Analyze import relationships in codebases."""
     HELP_CLUSTER = 'Code Analysis'
+    QUICK_RANK = 2
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     # --head/--tail/--range cut the module rows of ?importers (and the other ranked views) and say so;

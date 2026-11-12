@@ -467,9 +467,9 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:
-        schemes = ', '.join(f"{s}://" for s in current_schemes())
+        schemes = ', '.join(f"{s}://" for s in current_schemes(core_only=True))
         raise UriUsageError(f"Unsupported URI scheme: {scheme}://",
-                            f"Supported schemes: {schemes}")
+                            f"Supported schemes: {schemes}\nOther resources: reveal help://adapters")
     from ...utils.exclusions import clear_active_exclusions
     from ...utils.gitignore import gitignore_scope, split_respect_gitignore
     try:

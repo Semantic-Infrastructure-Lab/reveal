@@ -37,13 +37,13 @@ pytest tests/
 
 ```bash
 # Generate new adapter (2-4 hours → 30 minutes)
-reveal scaffold adapter github github://
+reveal dev new-adapter github --uri github://
 
 # Generate new analyzer (1-3 hours → 20 minutes)
-reveal scaffold analyzer kotlin .kt
+reveal dev new-analyzer kotlin --ext .kt
 
 # Generate new quality rule (2-3 hours → 30 minutes)
-reveal scaffold rule C999 "excessive-nesting" --category complexity
+reveal dev new-rule C999 "excessive-nesting" --category complexity
 ```
 
 Each command generates:
@@ -52,7 +52,7 @@ Each command generates:
 - Documentation template
 - Next steps guide
 
-See the scaffolding commands (`reveal scaffold --help`) for full documentation.
+See the scaffolding commands (`reveal dev --help`) for full documentation.
 
 ---
 
@@ -165,7 +165,7 @@ class MySchemeAdapter(ResourceAdapter):
 **Single-file vs package layout**: `reveal/adapters/` mixes both shapes with no
 enforced rule, which drifts (BACK-917). Use this one: package layout
 (`reveal/adapters/<scheme>/` with `__init__.py`, `adapter.py`, `renderer.py`)
-is the default for any new adapter — it's what `reveal scaffold adapter`
+is the default for any new adapter — it's what `reveal dev new-adapter`
 generates and what most existing adapters (`git/`, `nginx/`, `patches/`, ...)
 use. A single file (`reveal/adapters/<scheme>.py`) is acceptable only when
 you're confident the adapter will stay under ~300 lines with no dedicated
@@ -175,7 +175,7 @@ see BACK-590).
 
 **Adapter checklist** (full details in ARCHITECTURE.md):
 1. Create `reveal/adapters/<scheme>/` with `__init__.py`, `adapter.py`, `renderer.py`
-   — or `reveal scaffold adapter <scheme> <scheme>://` to generate it
+   — or `reveal dev new-adapter <scheme> --uri <scheme>://` to generate it
 2. Implement `get_structure()` with all four Output Contract fields
 3. Implement `get_schema()` — required for `--discover` and contract compliance tests
 4. Add `get_help()` or `reveal/adapters/help_data/<scheme>.yaml`
@@ -199,7 +199,7 @@ see BACK-590).
 
 **Note**: Most components (adapters, analyzers, rules) use auto-registration and don't need CLI wiring!
 
-**Only needed for**: Top-level commands like `reveal scaffold`, `reveal stats`, etc.
+**Only needed for**: Top-level commands like `reveal dev`, `reveal stats`, etc.
 
 ```bash
 # New top-level command example

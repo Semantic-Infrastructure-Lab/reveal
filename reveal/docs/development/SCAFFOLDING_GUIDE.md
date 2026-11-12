@@ -2,7 +2,7 @@
 title: Reveal Scaffolding System
 category: guide
 help_topic: scaffolding
-help_description: "Generate production-ready adapters/analyzers/rules via reveal scaffold"
+help_description: "Generate production-ready adapters/analyzers/rules via reveal dev"
 help_category: dev_guides
 ---
 # Reveal Scaffolding System
@@ -19,7 +19,7 @@ The scaffolding system generates complete, tested code for new reveal components
 ### Scaffold an Adapter
 
 ```bash
-reveal scaffold adapter github github://
+reveal dev new-adapter github --uri github://
 ```
 
 Creates:
@@ -32,7 +32,7 @@ Creates:
 ### Scaffold an Analyzer
 
 ```bash
-reveal scaffold analyzer kotlin .kt
+reveal dev new-analyzer kotlin --ext .kt
 ```
 
 Creates:
@@ -45,7 +45,7 @@ Creates:
 ### Scaffold a Quality Rule
 
 ```bash
-reveal scaffold rule C999 "excessive-nesting" --category complexity
+reveal dev new-rule C999 "excessive-nesting" --category complexity
 ```
 
 Creates:
@@ -57,12 +57,12 @@ Creates:
 
 ## Command Reference
 
-### `reveal scaffold adapter`
+### `reveal dev new-adapter`
 
 Generate a new URI adapter.
 
 ```bash
-reveal scaffold adapter <name> <uri> [--force]
+reveal dev new-adapter <name> --uri <uri> [--force]
 
 Arguments:
   name        Adapter name (e.g., "github", "docker")
@@ -72,9 +72,9 @@ Options:
   --force     Overwrite existing files
 
 Examples:
-  reveal scaffold adapter github github://
-  reveal scaffold adapter docker docker://
-  reveal scaffold adapter npm npm://
+  reveal dev new-adapter github --uri github://
+  reveal dev new-adapter docker --uri docker://
+  reveal dev new-adapter npm --uri npm://
 ```
 
 **What you get**:
@@ -96,12 +96,12 @@ Examples:
 4. Document usage
 5. **If this adapter is domain-specific** (only useful for one project, not general-purpose): place it in `<project>/.reveal/adapters/<name>/` or `~/.reveal/adapters/<name>/` instead of reveal core. Change `from ..base import` to `from reveal.adapters.base import` in the adapter file — reveal will auto-discover it (BACK-256).
 
-### `reveal scaffold analyzer`
+### `reveal dev new-analyzer`
 
 Generate a new language analyzer.
 
 ```bash
-reveal scaffold analyzer <name> <extension> [--force]
+reveal dev new-analyzer <name> --ext <extension> [--force]
 
 Arguments:
   name        Analyzer name (e.g., "kotlin", "elixir")
@@ -111,9 +111,9 @@ Options:
   --force     Overwrite existing files
 
 Examples:
-  reveal scaffold analyzer kotlin .kt
-  reveal scaffold analyzer elixir .ex
-  reveal scaffold analyzer dart .dart
+  reveal dev new-analyzer kotlin --ext .kt
+  reveal dev new-analyzer elixir --ext .ex
+  reveal dev new-analyzer dart --ext .dart
 ```
 
 **What you get**:
@@ -133,12 +133,12 @@ Examples:
 3. Run tests: `pytest tests/test_<name>_analyzer.py`
 4. Test manually: `reveal file<extension>`
 
-### `reveal scaffold rule`
+### `reveal dev new-rule`
 
 Generate a new quality rule.
 
 ```bash
-reveal scaffold rule <code> <name> [--category <cat>] [--force]
+reveal dev new-rule <code> <name> [--category <cat>] [--force]
 
 Arguments:
   code        Rule code (e.g., "C999", "X001")
@@ -149,9 +149,9 @@ Options:
   --force     Overwrite existing files
 
 Examples:
-  reveal scaffold rule C999 "excessive-nesting" --category complexity
-  reveal scaffold rule X001 "custom-pattern" --category custom
-  reveal scaffold rule S999 "security-check" --category security
+  reveal dev new-rule C999 "excessive-nesting" --category complexity
+  reveal dev new-rule X001 "custom-pattern" --category custom
+  reveal dev new-rule S999 "security-check" --category security
 ```
 
 **What you get**:
@@ -318,7 +318,7 @@ reveal check file --select=<PREFIX>
 By default, scaffolding will not overwrite existing files:
 
 ```bash
-$ reveal scaffold adapter github github://
+$ reveal dev new-adapter github --uri github://
 Error: Files already exist (use --force to overwrite)
 Existing files: reveal/adapters/github.py, ...
 ```
@@ -326,7 +326,7 @@ Existing files: reveal/adapters/github.py, ...
 Use `--force` to overwrite:
 
 ```bash
-$ reveal scaffold adapter github github:// --force
+$ reveal dev new-adapter github --uri github:// --force
 ✓ Created adapter scaffolding for 'github'
 ```
 
@@ -376,7 +376,7 @@ See the demo adapter created by scaffolding:
 
 ```bash
 # Generate a new adapter (e.g. myapp://)
-reveal scaffold adapter myapp myapp://
+reveal dev new-adapter myapp --uri myapp://
 
 # Test it
 pytest tests/test_myapp_adapter.py  # 17/17 pass

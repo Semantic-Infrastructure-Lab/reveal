@@ -863,24 +863,24 @@ A requested `--output json=PATH` that cannot be written (the path is a directory
 
 ---
 
-## reveal scaffold — Component Generator
+## reveal scaffold — Retired component-generator alias
 
 Scaffold new reveal components (adapters, analyzers, rules) with correct structure and boilerplate.
 
 ### Usage
 
 ```
-reveal scaffold adapter NAME URI       # e.g. mydb mydb://
-reveal scaffold analyzer NAME EXT      # e.g. toml .toml
-reveal scaffold rule CODE NAME         # e.g. B007 "too-long"
+reveal dev new-adapter NAME --uri URI       # e.g. mydb mydb://
+reveal dev new-analyzer NAME --ext EXT      # e.g. toml .toml
+reveal dev new-rule CODE NAME         # e.g. B007 "too-long"
 ```
 
 ### Examples
 
 ```bash
-reveal scaffold adapter mydb mydb://          # new URI adapter skeleton
-reveal scaffold analyzer toml .toml           # new file type analyzer
-reveal scaffold rule B007 "too-long"          # new quality rule stub
+reveal dev new-adapter mydb --uri mydb://          # new URI adapter skeleton
+reveal dev new-analyzer toml --ext .toml           # new file type analyzer
+reveal dev new-rule B007 "too-long"          # new quality rule stub
 ```
 
 ### See Also
