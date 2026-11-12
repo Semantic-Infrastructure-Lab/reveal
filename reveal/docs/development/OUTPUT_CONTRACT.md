@@ -575,7 +575,13 @@ partial observations, rejects fully failed source and starts followups fresh.
 Presentation cannot erase required source proof or observed containers without a
 matching truncation receipt. The shared observation guard is also used by Git;
 legacy message/workflow display cuts record their receipt without changing their
-count fields. Indexed `/message/N`, `/message` ranges, chains, store listings/search,
+count fields. Store listings qualify directory and metadata acquisition before
+name/date filters using `meta.session_catalog`: candidate entries equal acquired
+plus failed metadata entries; directory discovery failures are counted separately.
+Partial acquisition exits 3 even when filtering leaves no rows; a genuinely empty
+catalog and receipted display cuts exit 0. Search and file tracking carry the same
+catalog receipt without yet qualifying their content-read outcomes.
+Indexed `/message/N`, `/message` ranges, chains, store content search,
 install resources, positional elements, Check, stdin and mixed batches retain their
 separate policies. Qualified postprocessing recognizes explicit request validation;
 unqualified transports preserve their prior classification.

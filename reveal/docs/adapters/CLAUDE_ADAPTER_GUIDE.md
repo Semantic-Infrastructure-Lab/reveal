@@ -1905,9 +1905,18 @@ read/decode exceptions still raise.
 This scope covers overview/summary, messages/prompts (including raw), thinking,
 tools, files, workflow, session agents, context, timeline, errors, tokens, digest,
 exchanges and session search/composite filters. Indexed `/message/N`, `/message`
-ranges, chains, store listings/search and install resources retain their separate
+ranges, chains, store content search and install resources retain their separate
 policies. Stdin and mixed batches retain legacy completeness behavior; a warning
 there is not yet guaranteed to change the exit code.
+
+Store listings (`claude://` and `claude://sessions`) also qualify their required
+directory and metadata acquisition. `meta.session_catalog` counts non-agent
+JSONL-named candidates, acquired entries and failed metadata operations before
+name/date filters, plus directory discovery failures. Known entries survive
+partial acquisition; filtering all of them away still exits 3 when acquisition
+was incomplete. A genuinely empty catalog and disclosed display cuts exit 0.
+Content search and file tracking carry this catalog evidence too, but their
+content-read outcomes remain under their separate policies.
 
 `meta.transcript_selection` records lookup and first-timestamp selection decisions.
 Unknown timestamps sort last. A recovered decode in an unselected candidate does

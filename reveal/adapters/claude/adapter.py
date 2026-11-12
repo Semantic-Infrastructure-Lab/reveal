@@ -391,9 +391,10 @@ class ClaudeAdapter(ResourceAdapter):
 
     @classmethod
     def uri_execution_facts(cls, resource):
-        from .qualification import direct_session
+        from .qualification import direct_session, catalog_listing
         prefixes = tuple(prefix for prefix, _ in cls._RESOURCE_DISPATCH)
-        return cls.execution_facts if direct_session(resource, _parse_session_identifier, prefixes) else None
+        return (cls.execution_facts if catalog_listing(resource)
+                or direct_session(resource, _parse_session_identifier, prefixes) else None)
 
     @staticmethod
     def uri_result_type(resource):
@@ -475,9 +476,11 @@ class ClaudeAdapter(ResourceAdapter):
         self.query_params = bind_query(query, params)
         self._warn_unknown_query_params(self.query_params)  # BACK-507
         self.session_name = self._parse_session_name(resource) or "unknown"
-        self.conversation_path = self._find_conversation()
+        self.conversation_path: Optional[Path] = None
         self.messages: Optional[List[Dict]] = None  # Lazy load
         self._transcript_analysis: Optional[Dict[str, Any]] = None
+        self._conversation_lookup: Optional[ConversationDiscovery] = None
+        self._refresh_conversation()
 
     def reconfigure_base_path(self, path: Path) -> None:
         """Update all Claude install paths derived from the given projects directory.
@@ -516,10 +519,18 @@ class ClaudeAdapter(ResourceAdapter):
         self.PLANS_DIR = path.parent / 'plans'
         self.AGENTS_DIR = path.parent / 'agents'
         self.HOOKS_DIR = path.parent / 'hooks'
+        self._refresh_conversation()
+
+    def _refresh_conversation(self):
         self.messages = None
         self._transcript_analysis = None
         self.conversation_path = None
-        self.conversation_path = self._find_conversation()
+        self._conversation_lookup = None
+        self._other_transcripts = []
+        namespace = (self._is_session_list_resource() or self.resource == 'search'
+                     or self.resource.startswith('search/') or self._resolve_resource_handler() is not None)
+        if not namespace:
+            self.conversation_path = self._find_conversation()
 
     def _get_contract_base(self) -> Dict[str, Any]:
         """Build the shared envelope; each view supplies its own type and observations."""

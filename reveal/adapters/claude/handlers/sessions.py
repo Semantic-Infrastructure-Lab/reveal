@@ -2,6 +2,7 @@
 import json
 import logging
 import re
+import stat as stat_module
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, date as _date
@@ -11,6 +12,8 @@ from reveal.utils.lines import split_lines
 from ..analysis import search_sessions_for_term, get_files_touched
 from ....utils.results import ResultBuilder, note_warning
 from .workspace import skipped_entries_warning
+from ..catalog import SessionEntries, collect_session_entries, attach_catalog_evidence
+from ..discovery import directory_entries
 
 logger = logging.getLogger(__name__)
 
@@ -159,13 +162,14 @@ def _extract_project_from_dir(dir_name: str) -> str:
     return parts[-1] if parts else ''
 
 
-def _collect_sessions_from_dir(project_dir: Path) -> List[Dict[str, Any]]:
+def _collect_sessions_from_dir(project_dir: Path) -> SessionEntries:
     """Collect session entry dicts from one project directory."""
-    sessions = []
-    readme_present = bool(list(project_dir.glob('README*.md'))[:1])
+    sessions = SessionEntries()
+    paths = directory_entries(project_dir, sessions.discovery_failures)
+    readme_present = any(p.match('README*.md') for p in paths)
     project = _extract_project_from_dir(project_dir.name)
-    for jsonl_file in project_dir.glob('*.jsonl'):
-        if jsonl_file.stem.startswith('agent-'):
+    for jsonl_file in paths:
+        if not jsonl_file.match('*.jsonl') or jsonl_file.stem.startswith('agent-'):
             continue
         dir_name = project_dir.name
         file_stem = jsonl_file.stem
@@ -176,16 +180,19 @@ def _collect_sessions_from_dir(project_dir: Path) -> List[Dict[str, Any]]:
             session_name = file_stem
         else:
             session_name = dir_name
+        sessions.candidate_entries += 1
         try:
             stat = jsonl_file.stat()
-        except FileNotFoundError:
-            # Deleted between the glob and the stat: not a session any more, and it must not
-            # end the listing for every session after it (BACK-1851).
+            if not stat_module.S_ISREG(stat.st_mode):
+                raise ValueError('JSONL-named entry is not a regular transcript file')
+            modified = datetime.fromtimestamp(stat.st_mtime).isoformat()
+        except _SCAN_ERRORS as exc:
+            sessions.metadata_failures.append((jsonl_file, exc))
             continue
         sessions.append({
             'session': session_name,
             'path': str(jsonl_file),
-            'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            'modified': modified,
             'size_kb': stat.st_size // 1024,
             'project': project,
         })
@@ -245,16 +252,8 @@ def list_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Dict
 
     name_filter = (query_params.get('filter') or query_params.get('search', '')).lower()
 
-    sessions = []
-    try:
-        for project_dir in conversation_base.iterdir():
-            if not project_dir.is_dir():
-                continue
-            sessions.extend(_collect_sessions_from_dir(project_dir))
-        sessions.sort(key=lambda x: x['modified'], reverse=True)  # type: ignore[arg-type, return-value]
-    except _SCAN_ERRORS as e:
-        base['error'] = str(e)
-
+    catalog = collect_session_entries(conversation_base, _collect_sessions_from_dir)
+    sessions = sorted(catalog, key=lambda x: x['modified'], reverse=True)
     if name_filter:
         sessions = [s for s in sessions if name_filter in str(s['session']).lower()]
 
@@ -275,7 +274,7 @@ def list_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Dict
         }
     })
 
-    return base
+    return attach_catalog_evidence(base, catalog)
 
 
 def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -295,26 +294,8 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
     if until == 'today':
         until = _date.today().isoformat()
 
-    all_sessions: List[Dict[str, Any]] = []
-    try:
-        for project_dir in conversation_base.iterdir():
-            if project_dir.is_dir():
-                all_sessions.extend(_collect_sessions_from_dir(project_dir))
-    except _SCAN_ERRORS as e:
-        return ResultBuilder.create(
-            result_type='claude_cross_session_search',
-            source=str(conversation_base),
-            source_type='directory',
-            contract_version=CONTRACT_VERSION,
-            data={
-                'term': term,
-                'error': str(e),
-                'sessions_scanned': 0,
-                'match_count': 0,
-                'matches': [],
-            }
-        )
-
+    catalog = collect_session_entries(conversation_base, _collect_sessions_from_dir)
+    all_sessions = list(catalog)
     if since:
         all_sessions = [s for s in all_sessions if s.get('modified', '') >= since]
     if until:
@@ -346,7 +327,7 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
     )
     note_warning(result, skipped_entries_warning(
         'sessions', skipped, "they were not searched, so matches may be missing"))
-    return result
+    return attach_catalog_evidence(result, catalog)
 
 
 def _extract_session_ops(session: Dict[str, Any], file_path: str) -> Optional[Dict[str, Any]]:
@@ -411,14 +392,8 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
     if not file_path:
         return {**_error_base, 'error': 'No file path provided. Usage: claude://files/path/to/file.py'}
 
-    all_sessions: List[Dict[str, Any]] = []
-    try:
-        for project_dir in conversation_base.iterdir():
-            if project_dir.is_dir():
-                all_sessions.extend(_collect_sessions_from_dir(project_dir))
-    except _SCAN_ERRORS as e:
-        return {**_error_base, 'error': str(e)}
-
+    catalog = collect_session_entries(conversation_base, _collect_sessions_from_dir)
+    all_sessions = list(catalog)
     if since:
         all_sessions = [s for s in all_sessions if s.get('modified', '') >= since]
 
@@ -453,7 +428,7 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
     )
     note_warning(result, skipped_entries_warning(
         'sessions', skipped, "they were not checked, so matches may be missing"))
-    return result
+    return attach_catalog_evidence(result, catalog)
 
 
 def get_chain(

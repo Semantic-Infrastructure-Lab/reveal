@@ -23,6 +23,14 @@ RESOURCE_VIEWS = (('thinking', 'claude_thinking'), ('tools', 'claude_tool_summar
                   ('tokens', 'claude_token_breakdown'), ('messages', 'claude_messages'))
 
 
+def catalog_listing(resource):
+    path, _, query = resource.partition('?')
+    if path not in ('', '.', 'sessions', 'sessions/'):
+        return False
+    params = prepare_declared_params(PARAM_SPECS, query, 'uri')
+    return not dict(peek_query_items(params)).get('search')
+
+
 def direct_session(resource, parse_identifier, prefixes):
     path = resource.partition('?')[0]
     if not path or path in ('.', 'sessions', 'sessions/') or path.startswith(('sessions/', 'search/')) or path == 'search':
@@ -53,6 +61,8 @@ def selected_type(resource, params):
 
 
 def uri_result_type(resource):
+    if catalog_listing(resource):
+        return 'claude_session_list'
     path, _, query = resource.partition('?')
     params = prepare_declared_params(PARAM_SPECS, query, 'uri')
     return selected_type(path, params)
@@ -111,6 +121,9 @@ def _valid_record_proof(proof):
 
 
 def execution_facts(result):
+    if result.get('type') == 'claude_session_list':
+        from .catalog import catalog_execution_facts
+        return catalog_execution_facts(result)
     state = AnalysisCompleteness.COMPLETE
     meta = result.get('meta', {})
     proof = meta.get('transcript_analysis', {})
@@ -123,6 +136,10 @@ def execution_facts(result):
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
     if result.get('error') or result.get('applicable') is False:
         return None
+    if expected_type == 'claude_session_list':
+        from .catalog import catalog_requirement_error
+        error = catalog_requirement_error(adapter, result, prior_facts)
+        return error or _presentation_error(adapter, result, {'recent_sessions': list}, prior_facts)
     error = _source_decision_error(adapter, result)
     if error:
         return error

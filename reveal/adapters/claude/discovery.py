@@ -16,6 +16,18 @@ Failures = List[Tuple[Path, BaseException]]
 TimestampReader = Callable[[Path, Failures, Failures], str]
 
 
+def directory_entries(directory: Path, failures: Failures) -> List[Path]:
+    """Keep acquired names when directory enumeration fails partway through."""
+    paths: List[Path] = []
+    try:
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                paths.append(directory / entry.name)
+    except OSError as exc:
+        failures.append((directory, exc))
+    return paths
+
+
 class ConversationDiscovery:
     """Retain discovery loss instead of letting glob suppression prove absence."""
 
@@ -39,16 +51,8 @@ class ConversationDiscovery:
 
     def _files(self, directory: Path) -> List[Path]:
         if directory not in self._file_lists:
-            files: List[Path] = []
-            try:
-                with os.scandir(directory) as entries:
-                    for entry in entries:
-                        path = directory / entry.name
-                        if path.match('*.jsonl'):
-                            files.append(path)
-            except OSError as exc:
-                self.failures.append((directory, exc))
-            self._file_lists[directory] = files
+            self._file_lists[directory] = [p for p in directory_entries(directory, self.failures)
+                                           if p.match('*.jsonl')]
         return self._file_lists[directory]
 
     def _named_match(self, projects: List[Path]) -> Optional[Path]:

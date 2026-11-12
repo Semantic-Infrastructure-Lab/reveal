@@ -102,6 +102,7 @@ def _post_process_session_list(result: Dict[str, Any], args: Any, query_params: 
     sessions = result.get('recent_sessions')
     if sessions is None:
         return
+    total_before = len(sessions)
 
     search_term = getattr(args, 'name', None)
     if search_term:
@@ -124,6 +125,7 @@ def _post_process_session_list(result: Dict[str, Any], args: Any, query_params: 
         sessions = sessions[:head if head else 20]
 
     result['recent_sessions'] = sessions
+    note_truncation(result, 'recent_sessions', len(sessions), total_before, 'display-selection')
     result['displayed_count'] = len(sessions)
 
     for s in sessions:
