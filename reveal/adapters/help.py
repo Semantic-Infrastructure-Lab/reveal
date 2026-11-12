@@ -238,7 +238,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'description': 'Claude Code and Codex CLI session analysis — tool usage, files, errors, prompt/answer pairs, search',
         'recipes': [
             {'goal': 'Session overview', 'query': 'reveal claude://session/my-session', 'description': 'Message count, tool calls, duration, tool summary', 'output_type': 'claude_session_overview'},
-            {'goal': 'Search across all sessions', 'query': "reveal 'claude://sessions/?search=validate_token'", 'description': 'Cross-session content search', 'output_type': 'claude_cross_session_search'},
+            {'goal': 'Search across all sessions', 'query': "reveal 'claude://sessions/?match=validate_token'", 'description': 'Cross-session content search', 'output_type': 'claude_cross_session_search'},
             {'goal': 'Session tool usage', 'query': 'reveal claude://session/my-session/tools', 'description': 'Tool call counts and success rates', 'output_type': 'claude_tool_summary'},
             {'goal': 'Files touched in a session', 'query': 'reveal claude://session/my-session/files', 'description': 'All Read/Write/Edit operations', 'output_type': 'claude_files'},
             {'goal': 'Session errors', 'query': "reveal 'claude://session/my-session?errors'", 'description': 'All errors with context', 'output_type': 'claude_errors'},
@@ -254,7 +254,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'description': 'Prompt history and session discovery across all projects',
         'recipes': [
             {'goal': 'Recent prompts', 'query': 'reveal claude://history', 'description': 'Last 50 prompts across all projects', 'output_type': 'claude_history'},
-            {'goal': 'Search prompt history', 'query': "reveal 'claude://history?search=deploy&since=2026-03-01'", 'description': 'Filter prompts by keyword and date', 'output_type': 'claude_history'},
+            {'goal': 'Search prompt history', 'query': "reveal 'claude://history?match=deploy&since=2026-03-01'", 'description': 'Filter prompts by keyword and date', 'output_type': 'claude_history'},
             {'goal': 'Prompts for a specific project', 'query': "reveal 'claude://history?project=my-project'", 'description': 'Scope history to one project', 'output_type': 'claude_history'},
             {'goal': 'List all sessions', 'query': 'reveal claude://sessions/', 'description': 'All sessions with metadata', 'output_type': 'claude_session_list'},
         ]

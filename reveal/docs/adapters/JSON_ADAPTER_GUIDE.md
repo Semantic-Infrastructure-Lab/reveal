@@ -34,13 +34,14 @@ category: guide
 
 ## Quick Start
 
-The CLI and URI forms share declared controls over the same JSON loader:
+The CLI and URI forms share declared controls over the same JSON loader. These
+examples assume `data.json` is an array of objects:
 
 ```bash
-reveal json data.json/items --where 'type=book' --where 'price>10' --sort=-price --limit 5
+reveal json data.json --where 'type=book' --where 'price>10' --sort=-price --limit 5
 reveal json data.json --view schema
 reveal json data.json --view flatten --detail raw
-reveal 'json://data.json/items?where=price%3E10&limit=5'
+reveal 'json://data.json?where=price%3E10&limit=5'
 ```
 
 `view` selects `value` (default), `schema`, `flatten`, `type`, `keys`, or `length`.
