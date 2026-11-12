@@ -62,7 +62,7 @@ def selected_view(params: Any, *, apply: bool = False) -> str:
     values = params if apply else dict(peek_query_items(params))
     if values.get('view'):
         return str(values['view'])
-    if _enabled(values.get('link-graph')):
+    if any(_enabled(values.get(name)) for name in (LINKS.name, *LINKS.aliases)):
         return 'links'
     if _enabled(values.get('lint')):
         return 'lint'

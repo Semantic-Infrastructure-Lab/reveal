@@ -211,6 +211,9 @@ def test_sibling_views_now_record_source_completeness(tmp_path, query):
     answer = resolved(tmp_path, query)
     assert answer.execution_facts.completeness is AnalysisCompleteness.COMPLETE
     assert answer.result['analysis']['failed_files'] == 0
+    if 'link-graph' in query or 'link_graph' in query:
+        assert answer.result['type'] == 'markdown_link_graph'
+        assert len(answer.result['nodes']) == 1 and answer.result['total_edges'] == 0
 
 
 def test_malformed_frontmatter_is_completed_content_and_lint_keeps_its_verdict(tmp_path):
