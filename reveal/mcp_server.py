@@ -783,19 +783,19 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
 
     Args:
         path: File or directory to check (recurses into directories)
-        severity: Minimum severity to show: 'low', 'medium', 'high', or 'critical'
+        severity: Display threshold: 'low', 'medium' (default), 'high', or 'critical'; low findings are counted
         select: Comma-separated rule codes/series to run, e.g. 'M' or 'B006,S701'
             (same as CLI --select; see reveal_query('help://rules') for the list)
         ignore: Comma-separated rule codes/series to exclude, e.g. 'N'
     """
     from pathlib import Path
-    from .cli.file_checker import _check_files_json
+    from .cli.file_checker import _check_json, _tally, _json_file_entries
 
     p = Path(path)
     if not p.exists():
         return _tool_failure(f"{path}: no such file or directory")
 
-    severity_filter = severity or None
+    severity_filter = severity or 'medium'
     # BACK-1605: an unknown code is an error, as on the CLI, not a clean result.
     from .rules import parse_rule_patterns
     try:
@@ -810,16 +810,19 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     directory, collection, files = inputs
 
     try:
-        total_issues, _, file_results, _, _ = _check_files_json(
-            files, directory, select_list, ignore_list, severity=severity_filter
-        )
+        checked = _check_json(files, directory, select_list, ignore_list, severity_filter)
+        tally = _tally(checked)
+        total_issues = tally.total_issues
+        file_results, _ = _json_file_entries(checked)
     except (TestLayoutValidationError, TestLayoutConfigError) as exc:
         return _tool_failure(str(exc), exception=exc)
     notes, incomplete = _check_notes(
         files, select_list, ignore_list, file_results, collection=collection, directory=directory)
 
+    zero_verdict = _check_zero_verdict(notes, incomplete)
+    notes += _check_low_notes(tally.severity_totals)
     if total_issues == 0:
-        return "\n".join(notes + [_check_zero_verdict(notes, incomplete)])
+        return "\n".join(notes + [zero_verdict])
 
     lines = list(notes)
     for fr in file_results:
@@ -837,6 +840,12 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
 
     lines.append(f"\n{total_issues} issue{'s' if total_issues != 1 else ''} found.")
     return "\n".join(lines)
+
+
+def _check_low_notes(counts: dict) -> list[str]:
+    """One count line, separate from coverage/discovery notes used for the verdict."""
+    low = counts.get('low', 0)
+    return [f'Low findings: {low}'] if low else []
 
 
 def _check_inputs(path) -> tuple | None:

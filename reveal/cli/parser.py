@@ -239,8 +239,8 @@ def _add_global_options(target) -> None:
                              'human-readable report and a machine-readable artifact. '
                              'scheme://resource URIs, `reveal check` and declared adapter commands only; '
                              'also written when --format is json. A write that fails exits 3.')
-    target.add_argument('--fail-on', choices=['none', 'findings'], default=None,
-                        help='Findings gate for qualified commands. none suppresses findings only; '
+    target.add_argument('--fail-on', choices=['none', 'findings', 'low', 'medium', 'high'], default=None,
+                        help='Findings gate: Check defaults to high (low/medium/high); other qualified commands use findings. none suppresses findings only; '
                              'required analysis/output failures remain errors. Unsupported operations reject it.')
     target.add_argument('--copy', '-c', action='store_true',
                         help='Copy output to clipboard (also prints normally)')
@@ -433,7 +433,7 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--explain', type=str, metavar='CODE',
                         help='Explain a specific rule (e.g., "B001")')
     parser.add_argument('--severity', type=str, metavar='LEVEL',
-                        help='Minimum severity level to report: low, medium, high, critical. Default: show all')
+                        help='Minimum severity level to report: low, medium, high, critical. Default: medium and above')
 
 
 def _strip_path_quotes(value: str) -> str:

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
+from ...utils.severity import CHECK_GATES
 
 
 def declared_adapter_class(name: str):
@@ -81,6 +82,8 @@ def validate_execution_policy(args, command: str | None = None) -> None:
     supported = getattr(adapter, 'FINDINGS_POLICIES', ()) if adapter is not None else ()
     if adapter is None and _has_findings_gate(args, command):
         from ...utils.results import FINDINGS_GATES as supported
+        if command == 'check' or (command is None and peek(args, 'check', False)):
+            supported = CHECK_GATES
     if peek(args, 'stdin', False) or peek(args, 'batch', False) or policy not in supported:
         print(f'Error: --fail-on {policy} is not supported for this operation/transport.', file=sys.stderr)
         sys.exit(2)

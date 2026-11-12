@@ -69,7 +69,7 @@ def collection_fault(monkeypatch):
 
 
 def check(root, *flags):
-    return run('check', str(root), '--select', 'E501', *flags)
+    return run('check', str(root), '--select', 'E501', '--severity', 'low', *flags)
 
 
 def disclosure(data, root):
@@ -188,7 +188,7 @@ def test_decorated_check_keeps_ordinary_incomplete_narrative_even_with_no_surviv
         write(project / 'visible.py', LONG)
     collection_fault.update(denied={project if population in ('all_lost', 'unknown_root') else project / 'included'},
                             unknown=population == 'unknown_root')
-    answer = mcp_server.reveal_check(str(project), select='E501')
+    answer = mcp_server.reveal_check(str(project), select='E501', severity='low')
     assert type(answer) is str and len(collection_fault['events']) == 1
     assert len(collection_fault['checked']) == (0 if population in ('all_lost', 'unknown_root') else 1)
     assert 'director' in answer.lower() and 'incomplete' in answer.lower(), answer

@@ -73,7 +73,7 @@ def _seven(project):
 
 
 def _run(root, *flags):
-    return run('check', str(root), '--select', 'E501', *flags)
+    return run('check', str(root), '--select', 'E501', '--severity', 'low', *flags)
 
 
 @pytest.mark.parametrize('unknown', [False, True])
@@ -143,7 +143,7 @@ def test_ordinary_mcp_notes_disclose_loss_before_zero_or_positive_verdict(projec
         _write(root / 'visible.py', LONG)
     observed.update(denied={root} if population == 'root-unknown' else {hidden},
                     unknown=population == 'root-unknown')
-    answer = reveal_check(str(root), select='E501', severity='critical' if population == 'filtered' else '')
+    answer = reveal_check(str(root), select='E501', severity='critical' if population == 'filtered' else 'low')
     assert type(answer) is str, 'Check preserves ordinary incomplete MCP answers'
     assert len(observed['events']) == 1 and len(observed['collections']) == 1
     assert all(status['status'] == 'ok' for _, _, status in observed['checks'])
@@ -212,7 +212,7 @@ def test_healthy_policy_and_unavailable_analyzer_controls_do_not_become_loss(pro
         assert observed['collections'][0]['files'] == [] and observed['collections'][0]['no_analyzer'] == 1
 
 
-@pytest.mark.parametrize('flags', [['--fields', 'files'], ['--format', 'grep', '--max-items', '0']])
+@pytest.mark.parametrize('flags', [['--fields', 'files'], ['--format', 'grep', '--max-items', '0', '--fail-on', 'low']])
 def test_explicit_legacy_flag_limits_are_preserved(project, observed, flags):
     root, _ = project
     response = _run(root, *flags)

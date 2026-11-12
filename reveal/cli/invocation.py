@@ -164,7 +164,8 @@ EXIT_CODES: Dict[int, str] = {
     3: 'required analysis or output failed or was incomplete',
 }
 EXIT_CODE_WORDING: Dict[str, Dict[int, str]] = {
-    'check': {0: 'no issues', 1: 'issues found',
+    'check': {0: 'no enabled severity gate matched (default: high)',
+              1: 'findings at or above --fail-on (default: high)',
               3: 'scan incomplete (a file could not be parsed/checked), or a requested '
                  '--output json=PATH artifact could not be written'},
     'review': {0: 'pass',

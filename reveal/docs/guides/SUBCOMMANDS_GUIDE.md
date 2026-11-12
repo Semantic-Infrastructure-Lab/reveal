@@ -27,6 +27,11 @@ reveal dev inspect-config                         # Show effective .reveal.yaml 
 
 ### CLI Flags
 
+Check displays medium and above by default. Low findings are counted once in text and
+in JSON `summary.low_count`; `summary.severity_counts` includes the full finding set.
+`--max-items`, `--limit` and `--severity` change displayed rows, while severity gates
+use the full set. Incomplete analysis or required output failure still exits 3.
+
 | Flag | Description |
 |------|-------------|
 | `--uri SCHEME` | URI scheme for new adapter (e.g., `mydb`) |
@@ -804,7 +809,8 @@ reveal check [path] [flags]
 | `--only-failures` | Hide passing checks; show violations only |
 | `--recursive, -r` | Recurse into directories (default: on) |
 | `--advanced` | Enable deeper validation checks |
-| `--severity LEVEL` | Minimum level: `low`, `medium`, `high`, `critical` |
+| `--severity LEVEL` | Display threshold: `low`, `medium` (default), `high`, `critical`; does not narrow the severity gate |
+| `--fail-on LEVEL` | Exit 1 at `low`, `medium`, or `high` (default), including critical findings. `none` suppresses findings only; `findings` gates on displayed rows before pagination |
 | `--format` | `text` (default), `json`, `typed`, `grep` |
 | `--rules` | List all available rules with descriptions |
 | `--explain CODE` | Explain a specific rule (e.g., `--explain B001`) |

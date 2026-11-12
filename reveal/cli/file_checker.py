@@ -15,10 +15,11 @@ from concurrent.futures import ProcessPoolExecutor
 from ..logging_setup import worker_bootstrap
 from ..utils.parallel import pool_worker_count, submit_each
 from ..utils.json_utils import attach_provenance, file_sinks, write_also_json, write_requested_artifact, write_text_artifact
-from ..utils.results import note_truncation, requested_fail_on
+from ..utils.results import note_truncation
+from ..utils.severity import check_exit_code, check_fail_on, check_gate_count, severity_counts
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Dict, Literal, Set, Tuple, TYPE_CHECKING
+from typing import Optional, List, Dict, Set, Tuple, TYPE_CHECKING
 
 from ..utils.path_utils import (
     ScopeCensus,
@@ -542,7 +543,9 @@ def _handle_no_files_found(directory: Path, args: 'Namespace', changed: Optional
             "files_checked": 0,
             "files_with_issues": 0,
             "total_issues": 0,
-            "exit_code": 0
+            "exit_code": 0,
+            "severity_counts": severity_counts([]),
+            "low_count": 0,
         }
     }
     if changed:
@@ -557,66 +560,9 @@ def _handle_no_files_found(directory: Path, args: 'Namespace', changed: Optional
         sys.exit(3)
 
 
-_SEVERITY_ORDER = ['low', 'medium', 'high', 'critical']
+from ..utils.severity import (SEVERITY_ORDER as _SEVERITY_ORDER,
+                              filter_detections_by_severity as _apply_severity_filter)
 
-
-def _apply_severity_filter(detections: list, severity: Optional[str]) -> list:
-    """Filter detections to only those at or above the given severity level."""
-    if not severity:
-        return detections
-    level = severity.lower()
-    if level not in _SEVERITY_ORDER:
-        return detections
-    min_idx = _SEVERITY_ORDER.index(level)
-    return [d for d in detections if _SEVERITY_ORDER.index(d.severity.value.lower()) >= min_idx]
-
-
-def check_exit_code(
-    total_issues: int, files_errored: int = 0, files_degraded: int = 0,
-    exit_zero: bool = False, *, scan_incomplete: bool = False,
-    fail_on: Literal['none', 'findings'] = 'findings', output_failed: bool = False,
-) -> int:
-    """Compute `reveal check`'s process exit code (BACK-1099's contract).
-
-    0 = clean: ran to completion, zero issues, every file parsed and every
-        rule ran without raising.
-    1 = issues found: ran to completion, no degraded/errored files, but at
-        least one rule violation was reported.
-    3 = incomplete scan: one or more files could not be checked at all
-        (files_errored -- analyzer/parse pipeline raised) or were checked
-        against a degraded/error-recovery parse (files_degraded) or a rule
-        itself raised, or a rule-wide scan was capped/skipped. Takes priority over 1 even when issues were also
-        found, because a degraded scan means the issue *count* itself may
-        be wrong or incomplete.
-
-    fail_on (BACK-2051, D6): ``findings`` (the default) keeps 1 for issues; ``none``
-    reports them without failing but never hides lost or degraded analysis (3).
-    It is mutually exclusive with exit_zero at the CLI (usage error, 2).
-
-    output_failed (BACK-1939, D6): a requested artifact (``--also-json``) could not be
-    written. Required output failure is 3 over findings (1) and over exit_zero, like the
-    declared nouns (``execution_exit_code``).
-
-    (2 is reserved for usage/invocation errors -- bad args, unsupported
-    path -- raised directly by the CLI layer before a scan starts, not
-    computed here.)
-
-    exit_zero (BACK-1186): once the scan itself completed (this function
-    was reached at all -- a real usage error still exits 2 upstream of
-    here), always return 0 regardless of findings or degraded files. "Were
-    there issues" stays fully recorded in the JSON/text summary; this only
-    changes the process exit code, matching how every other reveal adapter
-    (overview://, hotspots://, ...) already behaves -- makes `check` safe
-    to drop into a `set -e` / CI pipeline without the caller needing to
-    know this one adapter's special exit-code convention.
-    """
-    from ..utils.results import (AnalysisCompleteness, ExecutionFacts, FailureCause,
-                                 execution_exit_code)
-    incomplete = bool(files_errored or files_degraded or scan_incomplete)
-    facts = ExecutionFacts(AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE,
-                           findings=total_issues > 0,
-                           failures=frozenset({FailureCause.OUTPUT}) if output_failed else frozenset())
-    return execution_exit_code(facts, fail_on=fail_on, legacy_scan_override=exit_zero)
 
 
 def _build_file_entry(
@@ -699,12 +645,13 @@ class _ItemBudget:
 
 @dataclass
 class _CheckedFile:
-    """One file's check result after the --severity filter: the plain data every
+    """One file's check result with display rows and unfiltered severity counts: the data every
     render of a directory check is built from (BACK-1534)."""
 
     relative: str
     detections: list
     status: dict
+    severity_totals: Optional[Dict[str, int]] = None
 
     @property
     def state(self) -> str:
@@ -724,6 +671,7 @@ class _CheckTally:
     files_with_issues: int = 0
     files_errored: int = 0
     files_degraded: int = 0
+    severity_totals: Dict[str, int] = field(default_factory=dict)
 
     def add(self, checked: _CheckedFile) -> None:
         # A rule that raised left its file only partly checked, exactly the single-file
@@ -733,6 +681,9 @@ class _CheckTally:
             self.files_errored += 1
         elif checked.state == "warning":
             self.files_degraded += 1
+        counts = checked.severity_totals or severity_counts(checked.detections)
+        for level, count in counts.items():
+            self.severity_totals[level] = self.severity_totals.get(level, 0) + count
         if checked.detections:
             self.total_issues += len(checked.detections)
             self.files_with_issues += 1
@@ -740,12 +691,11 @@ class _CheckTally:
 
 def _filter_results(results, directory: Path, severity: Optional[str]) -> List[_CheckedFile]:
     """Apply --severity to each (file_path, issue_count, detections, status) result.
-    A file's issue count is its filtered detections, so the summary and exit code
-    agree with what is shown."""
+    Display totals count filtered rows; severity gates retain the unfiltered census."""
     cwd = Path.cwd()
     return [
         _CheckedFile(_cwd_relative(file_path, directory, cwd),
-                     _apply_severity_filter(detections, severity), status)
+                     _apply_severity_filter(detections, severity), status, severity_counts(detections))
         for file_path, _issue_count, detections, status in results
     ]
 
@@ -1011,7 +961,7 @@ def _check_report(
     scan_disclosures: Optional[List[str]] = None,
     exit_zero: bool = False,
     scan_incomplete: bool = False,
-    fail_on: Literal['none', 'findings'] = 'findings',
+    fail_on: str = 'findings',
     coverage: Optional[dict] = None,
 ) -> dict:
     """check's result as plain data; the subcommand seam (emit_subcommand_result /
@@ -1055,8 +1005,13 @@ def _check_report(
         "files_errored": tally.files_errored,
         "files_degraded": tally.files_degraded,
         "total_issues": tally.total_issues,
+        "severity_counts": tally.severity_totals,
+        "low_count": tally.severity_totals.get("low", 0),
+        "fail_on": fail_on,
+        "gated_issues": check_gate_count(tally.severity_totals, tally.total_issues, fail_on),
         "exit_code": check_exit_code(
-            tally.total_issues, tally.files_errored, tally.files_degraded, exit_zero=exit_zero,
+            check_gate_count(tally.severity_totals, tally.total_issues, fail_on),
+            tally.files_errored, tally.files_degraded, exit_zero=exit_zero,
             scan_incomplete=scan_incomplete, fail_on=fail_on),
         "scan_disclosures": scan_disclosures or [],
         "items_truncated": budget.truncated,
@@ -1238,7 +1193,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     sinks = file_sinks(args)
     select, ignore = _rule_filters(args)
     outcomes = CoverageTally()
-    checked = _check_json(files_to_check, directory, select, ignore, getattr(args, 'severity', None), outcomes)
+    checked = _check_json(files_to_check, directory, select, ignore, getattr(args, 'severity', None) or 'medium', outcomes)
     views = _check_views({output_format, *(fmt for fmt, _ in sinks)}, checked, files_to_check, directory,
                          collection, config, args, outcomes)
     result, render = views[output_format]
@@ -1297,7 +1252,7 @@ def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Na
             select=select, ignore=ignore, scan_disclosures=disclosures,
             exit_zero=getattr(args, 'exit_zero', False),
             scan_incomplete=scan_incomplete,
-            fail_on=requested_fail_on(args),
+            fail_on=check_fail_on(args),
             coverage=coverage,
         )
         if collection.changed and 'scope' in result:
@@ -1349,6 +1304,9 @@ def _check_views(formats, checked: List[_CheckedFile], files: List[Path], direct
                 _print_text_report(text, limit, no_group=getattr(args, 'no_group', False),
                                    no_snippets=no_snippets, max_snippet_chars=max_snippet_chars)
                 render_check_coverage(coverage, selected=bool(select), said=disclosures)
+                low = tally.severity_totals.get('low', 0)
+                if low:
+                    print(f'Low findings: {low}')
                 _print_text_summary(
                     len(files), tally.files_with_issues, tally.total_issues, directory, config,
                     files_errored=tally.files_errored, files_degraded=tally.files_degraded,

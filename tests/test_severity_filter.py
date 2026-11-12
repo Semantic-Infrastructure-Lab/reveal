@@ -39,6 +39,8 @@ def _make_args(severity=None, select=None, ignore=None, no_group=False):
     args.ignore = ignore
     args.no_group = no_group
     args.severity = severity
+    args.fail_on = None
+    args.exit_zero = False
     args.no_snippets = False
     args.max_items = None
     args.max_snippet_chars = None
@@ -66,15 +68,16 @@ class TestSeverityFilter:
                         run_pattern_detection(mock_analyzer, 'example.py', 'text', args)
         return captured.getvalue()
 
-    def test_no_severity_arg_shows_all(self):
-        """Without --severity, all detections are shown."""
+    def test_default_shows_medium_and_above(self):
+        """Without --severity, low detections are counted without displaying their rows."""
         detections = [
             _make_detection(Severity.LOW, 'L001'),
             _make_detection(Severity.MEDIUM, 'M001'),
             _make_detection(Severity.HIGH, 'H001'),
         ]
         output = self._run_with_detections(detections, None)
-        assert 'L001' in output
+        assert 'L001' not in output
+        assert 'Low findings: 1' in output
         assert 'M001' in output
         assert 'H001' in output
 

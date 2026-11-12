@@ -1126,11 +1126,14 @@
           "source_type": "directory",
           "summary": {
             "exit_code": 0,
+            "fail_on": "high",
             "files_checked": 3,
             "files_degraded": 0,
             "files_errored": 0,
             "files_with_issues": 0,
+            "gated_issues": 0,
             "items_truncated": false,
+            "low_count": 0,
             "scan_budgets": [
               {
                 "analyzed_files": 3,
@@ -1160,6 +1163,12 @@
             "scan_disclosures": [
               "W-CAP-1: T006 analyzes Python only; 2 file(s) in other languages were not checked by it: typescript (2)."
             ],
+            "severity_counts": {
+              "critical": 0,
+              "high": 0,
+              "low": 0,
+              "medium": 0
+            },
             "total_issues": 0
           },
           "type": "check"

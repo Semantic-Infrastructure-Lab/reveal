@@ -420,14 +420,14 @@ class TestRevealCheckTool(unittest.TestCase):
             unfiltered_calls = {}
             from reveal.cli import file_checker as fc
 
-            original = fc._check_files_json
+            original = fc._check_json
 
             def spy(*args, **kwargs):
                 unfiltered_calls['select'] = args[2] if len(args) > 2 else kwargs.get('select')
                 unfiltered_calls['ignore'] = args[3] if len(args) > 3 else kwargs.get('ignore')
                 return original(*args, **kwargs)
 
-            with patch.object(fc, '_check_files_json', side_effect=spy):
+            with patch.object(fc, '_check_json', side_effect=spy):
                 self.reveal_check(str(d), select='M', ignore='N')
             self.assertEqual(unfiltered_calls['select'], ['M'])
             self.assertEqual(unfiltered_calls['ignore'], ['N'])

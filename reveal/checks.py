@@ -17,6 +17,8 @@ from .utils import get_file_type_from_analyzer, print_breadcrumbs
 from reveal.utils.json_utils import (ARTIFACT_WRITE_ERRORS, attach_provenance, file_sinks,
                                      write_requested_artifact, write_text_artifact)
 from reveal.utils.lines import split_lines
+from .utils.severity import (SEVERITY_ORDER, check_fail_on, check_gate_count,
+                            severity_counts, filter_detections_by_severity, check_exit_code)
 
 # When a single rule fires this many times in one file, collapse to a summary line.
 # Users can disable with --no-group.
@@ -150,6 +152,8 @@ def _detections_result(
     disclosures: Optional[List[str]] = None,
     parse_error_reason: Optional[str] = None,
     coverage: Optional[dict] = None,
+    severity_totals: Optional[Dict[str, int]] = None,
+    verdict: Optional[dict] = None,
 ) -> dict:
     """The single-file check result as plain data; the subcommand seam
     (emit_subcommand_result / subcommand_json) adds the Output Contract envelope
@@ -210,6 +214,11 @@ def _detections_result(
         )
     if rule_errors:
         result['errors'] = rule_errors
+    if verdict is not None:
+        result['summary'] = verdict
+    if severity_totals is not None:
+        result['severity_counts'] = severity_totals
+        result['low_count'] = severity_totals['low']
     if coverage is not None:
         result['coverage'] = coverage
     return result
@@ -230,6 +239,9 @@ def _file_check_document(result: dict) -> dict:
         'total_issues': total, 'files_errored': int(bool(result.get('errors'))),
         'files_degraded': int(bool(result.get('warning'))),
         'scan_disclosures': result.get('scan_disclosures', []),
+        **result.get('summary', {}),
+        **({key: result[key] for key in ('low_count', 'severity_counts')}
+           if 'severity_counts' in result else {}),
     }}
 
 
@@ -313,6 +325,10 @@ def _emit_detections(path: str, output_format: str, detections: List[Any],
                 coverage=result_fields.get('coverage'),
                 coverage_selected=coverage_selected,
             )
+            low = result_fields.get('severity_totals', {}).get('low', 0)
+            if low:
+                # boundary-ok: print -- one count in the existing single-file text renderer.
+                print(f'Low findings: {low}')
 
     document = _file_check_document(printed) if output_format == 'json' else printed
     emit_subcommand_result(document, Namespace(format=output_format), name='check', source=path,
@@ -516,7 +532,9 @@ def run_pattern_detection(
             per destination at the end of the invocation (BACK-2095).
 
     Returns:
-        (detection_count, degraded, artifact_failed) tuple. `degraded` is True when the file
+        (gated_count, degraded, artifact_failed) tuple. The count uses the full severity
+        census for severity gates, or displayed findings before pagination for findings.
+        `degraded` is True when the file
         did not parse cleanly (BACK-1083's parse_degraded, tree-sitter
         error-recovery) or a rule raised (rule_errors) -- meaning
         `detection_count` may be incomplete/wrong, not a trustworthy
@@ -556,17 +574,13 @@ def run_pattern_detection(
     scan_disclosures = get_scan_disclosures([Path(path)], select, ignore)
     disclosures = scan_disclosures + capability_disclosures([path], select, ignore)
 
-    # Apply severity filter if requested
-    if severity_arg:
-        _SEVERITY_ORDER = ['low', 'medium', 'high', 'critical']
-        level = severity_arg.lower()
-        if level not in _SEVERITY_ORDER:
-            print(f"Warning: unknown --severity '{severity_arg}'. Valid levels: {', '.join(_SEVERITY_ORDER)}",
-                  file=sys.stderr)
-        else:
-            min_idx = _SEVERITY_ORDER.index(level)
-            detections = [d for d in detections
-                          if _SEVERITY_ORDER.index(d.severity.value) >= min_idx]
+    counts = severity_counts(detections)
+    severity_arg = severity_arg or 'medium'
+    # Presentation filtering never changes the severity gate population.
+    if severity_arg.lower() not in SEVERITY_ORDER:
+        print(f"Warning: unknown --severity '{severity_arg}'. Valid levels: {', '.join(SEVERITY_ORDER)}",
+              file=sys.stderr)
+    detections = filter_detections_by_severity(detections, severity_arg)
 
     # BACK-1181: --max-items caps what's RENDERED, not the true count -- the
     # return value below (and thus check_exit_code's total_issues) must
@@ -579,6 +593,13 @@ def run_pattern_detection(
     if max_items is not None and total_available > max_items:
         rendered_detections = detections[:max_items]
 
+    degraded = parse_degraded or bool(rule_errors) or bool(scan_disclosures)
+    policy = check_fail_on(args)
+    gated_count = check_gate_count(counts, len(detections), policy)
+    verdict = {'fail_on': policy, 'gated_issues': gated_count,
+               'exit_code': check_exit_code(
+                   gated_count, files_degraded=int(degraded), fail_on=policy,
+                   exit_zero=getattr(args, 'exit_zero', False))}
     artifact_failed = _emit_check_outputs(
         analyzer, path, output_format, args, config, detections, rendered_detections, collect,
         no_group=no_group, parse_degraded=parse_degraded, rule_errors=rule_errors,
@@ -587,11 +608,10 @@ def run_pattern_detection(
         parse_error_reason=structure.get('error'), max_snippet_chars=max_snippet_chars,
         total_available=total_available, disclosures=disclosures,
         scan_incomplete=bool(scan_disclosures), coverage=outcomes.report(len(rule_errors)),
-        coverage_selected=bool(select),
+        coverage_selected=bool(select), severity_totals=counts, verdict=verdict,
     )
 
-    degraded = parse_degraded or bool(rule_errors) or bool(scan_disclosures)
-    return len(detections), degraded, artifact_failed
+    return gated_count, degraded, artifact_failed
 
 
 def run_schema_validation(

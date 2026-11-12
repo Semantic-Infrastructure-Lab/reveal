@@ -54,6 +54,9 @@ def create_check_parser() -> argparse.ArgumentParser:
         ),
     )
     add_arguments(parser)
+    parser._option_string_actions['--fail-on'].help = (
+        'Exit 1 at or above this severity (default: high); none disables findings only. '
+        'findings gates on displayed findings before pagination. Incomplete analysis/output exits 3.')
     return parser
 
 
@@ -107,7 +110,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         '--severity', type=str, metavar='LEVEL',
-        help='Minimum severity level to report: low, medium, high, critical. Default: show all',
+        help='Minimum severity level to report: low, medium, high, critical. Default: medium and above',
     )
     parser.add_argument(
         '--limit', type=int, metavar='N', default=50,
@@ -276,12 +279,12 @@ def run_check(args: Namespace) -> None:
         # that distinguishable from clean (0) and from real issues (1) at
         # the shell level.
         from reveal.cli.file_checker import check_exit_code
-        from reveal.utils.results import requested_fail_on
+        from reveal.utils.severity import check_fail_on
         complete(args)  # the exit code is the result: the flag ledger still reports
         sys.exit(check_exit_code(
             violations,
             files_degraded=1 if degraded else 0,
             exit_zero=getattr(args, 'exit_zero', False),
-            fail_on=requested_fail_on(args),
+            fail_on=check_fail_on(args),
             output_failed=artifact_failed,
         ))
