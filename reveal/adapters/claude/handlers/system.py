@@ -3,7 +3,6 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
-from datetime import date as _date
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
@@ -25,100 +24,9 @@ def _path_info(p: Path) -> Dict[str, Any]:
 
 
 def get_history(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:
-    """Read and filter ~/.claude/history.jsonl prompt history.
-
-    Streams the file line-by-line to handle large files without loading
-    everything into memory.
-
-    Supports query params:
-        ?search=term    - substring match against prompt text (case-insensitive)
-        ?project=path   - substring match against project path (case-insensitive)
-        ?since=DATE     - ISO date (e.g. 2026-03-01) or 'today'
-
-    Returns:
-        Dict of type ``claude_history`` with ``entries`` list.
-        Entries are newest-first.
-    """
-    from datetime import datetime as _dt
-
-    history_path = claude_home / 'history.jsonl'
-    search = query_params.get('search', '').lower()
-    project_filter = query_params.get('project', '').lower()
-    since = query_params.get('since', '')
-
-    if since == 'today':
-        since = _date.today().isoformat()
-
-    base: Dict[str, Any] = ResultBuilder.create(
-        result_type='claude_history',
-        source=str(history_path),
-        source_type='file',
-        contract_version=CONTRACT_VERSION,
-        data={
-            'search': search or None,
-            'project': project_filter or None,
-            'since': since or None,
-        }
-    )
-
-    if not history_path.exists():
-        return {**base, 'total_entries': 0, 'match_count': 0, 'entries': [],
-                'error': f'History file not found: {history_path}'}
-
-    entries = []
-    total = 0
-
-    try:
-        with open(history_path, 'r', encoding='utf-8', errors='replace') as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(obj, dict):
-                    continue  # valid JSON that is not an entry: skipped like a malformed line
-                total += 1
-
-                prompt = obj.get('display', '')
-                project = obj.get('project', '')
-                ts_ms = obj.get('timestamp', 0)
-                session_id = obj.get('sessionId')
-
-                ts_iso = (
-                    _dt.fromtimestamp(ts_ms / 1000).isoformat(timespec='seconds')
-                    if ts_ms else ''
-                )
-
-                if since and ts_iso[:10] < since:
-                    continue
-                if search and search not in prompt.lower():
-                    continue
-                if project_filter and project_filter not in project.lower():
-                    continue
-
-                entries.append({
-                    'prompt': prompt,
-                    'project': project,
-                    'timestamp': ts_iso,
-                    'session_id': session_id,
-                })
-    # absent/unreadable file (OSError), or a timestamp that is not a representable
-    # date (ValueError/OverflowError); a bug in reveal is not one of them
-    except (OSError, ValueError, OverflowError) as e:
-        return {**base, 'total_entries': total, 'match_count': 0, 'entries': [],
-                'error': str(e)}
-
-    entries.reverse()  # file is oldest-first; return newest-first
-
-    return {
-        **base,
-        'total_entries': total,
-        'match_count': len(entries),
-        'entries': entries,
-    }
+    """Read prompt history with measured source and payload decisions."""
+    from ..history import read_history
+    return read_history(claude_home, query_params, opener=open)
 
 
 def get_settings(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:

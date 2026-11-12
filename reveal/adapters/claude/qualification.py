@@ -52,6 +52,10 @@ def chain_resource(resource, parse_identifier):
     return bool(name) and '/' not in name and subpath == 'chain'
 
 
+def history_resource(resource):
+    return resource.partition('?')[0] == 'history'
+
+
 def _active(params):
     return {key for key, value in peek_query_items(params) if value is not None and value is not False}
 
@@ -76,6 +80,8 @@ def selected_type(resource, params):
 
 
 def uri_result_type(resource):
+    if history_resource(resource):
+        return 'claude_history'
     kind = catalog_type(resource)
     if kind:
         return kind
@@ -131,6 +137,9 @@ _COUNTS = {
 
 
 def execution_facts(result):
+    if result.get('type') == 'claude_history':
+        from .history import history_execution_facts
+        return history_execution_facts(result)
     if result.get('type') == 'claude_chain':
         from .chain import chain_execution_facts
         return chain_execution_facts(result)
@@ -150,10 +159,12 @@ def execution_facts(result):
 
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
+    if expected_type == 'claude_history':
+        return _resource_answer_error(adapter, result, expected_type, prior_facts)
     if result.get('error') or result.get('applicable') is False:
         return None
-    if expected_type in _CATALOG_FIELDS:
-        return _catalog_answer_error(adapter, result, expected_type, prior_facts)
+    if expected_type in _RESOURCE_FIELDS:
+        return _resource_answer_error(adapter, result, expected_type, prior_facts)
     error = _source_decision_error(adapter, result)
     if error:
         return error
@@ -179,19 +190,21 @@ def _indexed_observation_error(result, proof, expected_type):
     return None
 
 
-_CATALOG_FIELDS = {'claude_session_list': 'recent_sessions',
+_RESOURCE_FIELDS = {'claude_session_list': 'recent_sessions',
                    'claude_cross_session_search': 'matches', 'claude_file_sessions': 'sessions',
-                   'claude_chain': 'chain'}
+                   'claude_chain': 'chain', 'claude_history': 'entries'}
 
 
-def _catalog_answer_error(adapter, result, expected_type, prior_facts):
+def _resource_answer_error(adapter, result, expected_type, prior_facts):
     from .catalog import catalog_requirement_error
     from .content import content_requirement_error
     from .chain import chain_requirement_error
+    from .history import history_requirement_error
     qualify = {'claude_session_list': catalog_requirement_error,
-               'claude_chain': chain_requirement_error}.get(expected_type, content_requirement_error)
+               'claude_chain': chain_requirement_error,
+               'claude_history': history_requirement_error}.get(expected_type, content_requirement_error)
     error = qualify(adapter, result, prior_facts)
-    return error or _presentation_error(adapter, result, {_CATALOG_FIELDS[expected_type]: list}, prior_facts)
+    return error or _presentation_error(adapter, result, {_RESOURCE_FIELDS[expected_type]: list}, prior_facts)
 
 
 def _source_decision_error(adapter, result):

@@ -61,6 +61,15 @@ class ClaudeRenderer(TypeDispatchRenderer):
     and render_analytics submodules.
     """
 
+    @classmethod
+    def render_structure(cls, result: dict, format: str = 'text') -> str | None:
+        from ...utils.results import AnalysisCompleteness
+        from .history import history_execution_facts
+        if (format == 'text' and result.get('type') == 'claude_history'
+                and history_execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE):
+            return cls._render_text(result)
+        return super().render_structure(result, format)
+
     # Session renderers
     _render_claude_session_list = staticmethod(_render_claude_session_list)
     _render_claude_session_overview = staticmethod(_render_claude_session_overview)

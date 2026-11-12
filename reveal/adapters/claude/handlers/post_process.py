@@ -72,6 +72,7 @@ def _post_process_history(result: Dict[str, Any], args: Any, query_params: Dict[
     entries = result.get('entries')
     if entries is None:
         return
+    total_before = len(entries)
 
     search_term = getattr(args, 'name', None)
     if search_term:
@@ -91,6 +92,7 @@ def _post_process_history(result: Dict[str, Any], args: Any, query_params: Dict[
         entries = entries[:head if head else 50]
 
     result['entries'] = entries
+    note_truncation(result, 'entries', len(entries), total_before, 'display-selection')
     result['displayed_count'] = len(entries)
 
 

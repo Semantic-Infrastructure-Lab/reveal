@@ -181,7 +181,6 @@ def _render_claude_history(result: dict) -> None:
     search = result.get('search')
     project = result.get('project')
     since = result.get('since')
-    error = result.get('error')
 
     if matched < total:
         count_str = f'{matched:,} matches from {total:,} entries'
@@ -201,9 +200,6 @@ def _render_claude_history(result: dict) -> None:
         filters.append(f'since: {since}')
     if filters:
         print('Filters: ' + ' | '.join(filters))
-
-    if error:
-        return
 
     entries = result.get('entries', [])
     if not entries:

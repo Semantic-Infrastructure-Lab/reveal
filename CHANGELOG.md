@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Claude prompt history now discloses malformed records, decoding repairs and required read or timestamp failures before filters and display cuts. Failed reads retain preceding entries; missing history gives exit 2 with a public MCP diagnostic, while loss after opening remains an analysis failure (BACK-2617).
+
 - Claude continuation chains now distinguish missing optional READMEs from failed discovery, decoding or frontmatter/link parsing. Source receipts retain known metadata, disclose the 50-session traversal cap as incomplete input and survive MCP follow-ups. Chains no longer depend on unrelated transcript lookup (BACK-2617).
 
 - Claude indexed messages and conversation-turn ranges now preserve transcript source loss in their execution outcomes and MCP answers. Healthy invalid indices give exit 2; failed input cannot establish absence. Range display cuts retain source counts and raw record indices (BACK-2617).

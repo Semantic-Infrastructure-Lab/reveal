@@ -391,9 +391,10 @@ class ClaudeAdapter(ResourceAdapter):
 
     @classmethod
     def uri_execution_facts(cls, resource):
-        from .qualification import direct_session, catalog_type, chain_resource
+        from .qualification import direct_session, catalog_type, chain_resource, history_resource
         prefixes = tuple(prefix for prefix, _ in cls._RESOURCE_DISPATCH)
         return (cls.execution_facts if catalog_type(resource)
+                or history_resource(resource)
                 or chain_resource(resource, _parse_session_identifier)
                 or direct_session(resource, _parse_session_identifier, prefixes) else None)
 
@@ -410,6 +411,14 @@ class ClaudeAdapter(ResourceAdapter):
     def answer_requirement_error(self, result, expected_type, prior_facts=None):
         from .qualification import answer_requirement_error
         return answer_requirement_error(self, result, expected_type, prior_facts)
+
+    @staticmethod
+    def public_diagnostic(result: Dict[str, Any]) -> Optional[str]:
+        proof = result.get('meta', {}).get('history_analysis', {})
+        error = result.get('error')
+        if result.get('type') == 'claude_history' and proof.get('request_absent') and isinstance(error, str):
+            return error
+        return None
 
     QUICK_RANK = 3
     # --since/--until reach every claude:// view as ?since=/?until= (BACK-1549). The

@@ -1,6 +1,7 @@
 """One JSONL object reader with decisions bounded to the consumed record prefix."""
 import json
 from pathlib import Path
+from typing import Callable, TextIO
 
 
 def valid_record_proof(proof):
@@ -16,8 +17,11 @@ def valid_record_proof(proof):
 
 
 class TranscriptRecords:
-    def __init__(self, path: Path, *, replace_decode: bool = False):
+    def __init__(self, path: Path, *, replace_decode: bool = False,
+                 opener: Callable[..., TextIO] | None = None):
         self.path, self.replace_decode = path, replace_decode
+        self.opener = opener
+        self.opened = False
         self.candidates = self.analyzed = self.failed = self.recovered = 0
         self.first_failed: int | None = None
         self.failures: list[dict[str, str]] = []
@@ -42,7 +46,10 @@ class TranscriptRecords:
     def records(self):
         errors = 'surrogateescape' if self.replace_decode else 'strict'
         try:
-            with open(self.path, encoding='utf-8', errors=errors) as handle:
+            handle = (self.opener(self.path, encoding='utf-8', errors=errors) if self.opener is not None
+                      else open(self.path, encoding='utf-8', errors=errors))
+            with handle:
+                self.opened = True
                 for number, line in enumerate(handle, 1):
                     if line.strip():
                         record = self._record(line, number)

@@ -598,7 +598,16 @@ unconfigured runtime resource. Healthy missing/unconfigured optional READMEs
 retain null terminal entries and give 0; cycles are measured termination. Required
 discovery, decoding, frontmatter/link loss and the 50-session source cap give 3.
 Known metadata survives partial acquisition; MCP rejects fully failed source.
-Install resources, positional elements, Check, stdin and mixed batches retain their
+Prompt history qualifies consumed JSONL and payload decisions through
+`meta.history_analysis`, before date/project/text/display filters. Malformed
+records, decoding repair and required read/payload loss give 3 and retain preceding
+entries; source receipts disclose interrupted scans. A genuine empty source and
+receipted cuts give 0; a missing requested file gives 2 and a public MCP diagnostic.
+Failure after opening remains source loss. The legacy `total_entries` counts
+decoded objects consumed; receipts distinguish successfully interpreted payloads.
+Operational failures retain their legacy error marker; measured owner facts keep
+usable prefixes incomplete for qualified URI/MCP answers, including text output.
+Other install resources, positional elements, Check, stdin and mixed batches retain their
 separate policies. Qualified postprocessing recognizes explicit request validation;
 unqualified transports preserve their prior classification.
 See the [Claude guide](../adapters/CLAUDE_ADAPTER_GUIDE.md#malformed-transcript-lines).
