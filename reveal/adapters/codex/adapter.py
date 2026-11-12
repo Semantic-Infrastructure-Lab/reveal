@@ -17,6 +17,7 @@ from ...utils.results import note_warning
 from ...utils.query_parser import ResourceSpec, param_schema, peek_query_items
 from .params import PARAM_SPECS, _MATCHES, _FULL, bind_query
 from .lookup import SessionLookup, attach_lookup_evidence
+from .catalog import CATALOG_PATHS
 from .qualification import (RESULT_VARIANTS, VIEW_TYPES, ROLLOUT_RULE, selected_type, index_request_error, unavailable_rollout)
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
@@ -103,6 +104,8 @@ class CodexAdapter(ResourceAdapter):
     def uri_execution_facts(cls, resource):
         path = resource.partition('?')[0]
         identifier, _, sub = path.partition('/')
+        if path in CATALOG_PATHS:
+            return cls.execution_facts if cls.uri_result_type(resource) == 'codex_session_list' else None
         if not _UUID_RE.match(identifier):
             return None
         kind = cls.uri_result_type(resource)
@@ -273,19 +276,9 @@ class CodexAdapter(ResourceAdapter):
         self._request_index_error = None
         # Bare or sessions/ → list, search, or content search
         if self._is_session_list_resource():
-            search = self.query_params.get('search')
-            filter_term = self.query_params.get('filter')
-            # Date bounds belong to filtered/search views. Reading them in the
-            # bare list view hid the unapplied flags from the shared ledger.
-            if search or filter_term:
-                since = self.query_params.get('since', '')
-                until = self.query_params.get('until', '')
-            if search:
-                return _h_search_sessions(self.CODEX_DB, search, _MATCHES.read(self.query_params),
-                                          since=since, until=until)
-            if filter_term:
-                return _h_filter_sessions(self.CODEX_DB, filter_term, since=since, until=until)
-            return _h_list_sessions(self.CODEX_DB)
+            result = self._catalog_result()
+            self._catalog_answer = deepcopy(result)
+            return result
 
         # memories/pipeline — check before generic memories
         if self.resource == self._MEMORIES_PIPELINE:
@@ -307,6 +300,18 @@ class CodexAdapter(ResourceAdapter):
         base['type'] = 'codex_error'
         base['error'] = f'Unknown codex:// resource: {self.resource!r}'
         return base
+
+    def _catalog_result(self) -> Dict[str, Any]:
+        search = self.query_params.get('search')
+        filter_term = self.query_params.get('filter')
+        if search or filter_term:
+            since = self.query_params.get('since', '')
+            until = self.query_params.get('until', '')
+        if search:
+            return _h_search_sessions(self.CODEX_DB, search, _MATCHES.read(self.query_params), since=since, until=until)
+        if filter_term:
+            return _h_filter_sessions(self.CODEX_DB, filter_term, since=since, until=until)
+        return _h_list_sessions(self.CODEX_DB)
 
     def _session_answer(self, session_id: str) -> Dict[str, Any]:
         if selected_type(self.resource, self.query_params) == 'codex_message':

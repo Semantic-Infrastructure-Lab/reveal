@@ -43,8 +43,8 @@ semantics remain unchanged (`?last=false` still selects the last agent message).
 `matches=0` keeps every snippet per matching session; it does not cap session input.
 `full=False` or `full=None` restores bounded exchange text while JSON retains the
 complete strings. The Codex subcommand and vocabulary migration remain open. Direct transcript
-URI execution and optional goals are qualified below; catalog and install policies
-remain separate.
+URI execution, optional goals and SQLite catalog reads are qualified below;
+content search and install policies remain separate.
 
 
 ```bash
@@ -383,6 +383,22 @@ outcome policy; goal reads also qualify their optional database as described bel
 
 ---
 
+## SQLite Catalog Outcomes
+
+Bare `codex://`, `codex://sessions` and metadata `?filter=` reads retain
+`meta.session_catalog`: required-source presence, opening, observed rows,
+query completion and phased failures. Connections open read-only. Interrupted
+reads retain acquired rows, and metadata/date filtering follows acquisition.
+Invalid source timestamps retain their existing fallback text and disclose the
+formatting failure before date filtering. Healthy lists and filtered emptiness
+exit **0**, a confirmed missing index exits **2**, and required source or output
+loss exits **3**. Partial results carry warnings; completely failed acquisition
+is an MCP error. Source receipts, selection claims and population counts remain
+checked through display cuts and presentation. Content search retains its
+separate rollout-scanning policy pending qualification.
+
+---
+
 ## Rollout Source Evidence
 
 Session views that consume a resolved rollout retain `meta.rollout_analysis`:
@@ -411,7 +427,7 @@ same execution facts: usable partial data is returned with its disclosures;
 failed required analysis is an error using the existing private-failure wording.
 
 This policy covers overview, messages/last, tools, errors, shell, tokens, workflow,
-timeline, digest, exchanges, indexed records and goals. Catalog/search, install,
+timeline, digest, exchanges, indexed records and goals. Content search, install,
 unknown legacy suffixes, element, batch, stdin and check transports remain
 separately scoped; this is no complete Codex migration claim.
 

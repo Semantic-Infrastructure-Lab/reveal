@@ -101,13 +101,18 @@ def test_claude_without_a_projects_dir_exits_nonzero(proj, fmt, monkeypatch):
 
 @pytest.mark.parametrize('fmt', FORMATS)
 def test_codex_without_a_db_exits_nonzero(proj, fmt, monkeypatch):
-    """BACK-1525: the same for codex:// with no state DB."""
+    """BACK-2618: confirmed missing required Codex index is invalid input (2)."""
     monkeypatch.setattr(get_adapter_class('codex'), 'CODEX_DB',
                         proj / 'no-codex' / 'state_5.sqlite')
     r = _run_reveal_direct('codex://', '--format', fmt)
-    assert r.returncode == 1
+    assert r.returncode == 2
     assert 'Codex DB not found' in r.stdout + r.stderr
 
+    if fmt == 'json':
+        payload = _json(r)
+        assert payload['meta']['session_catalog']['source_present'] is False
+        assert payload['meta']['session_catalog']['failed_operations'] == 0
+        assert payload['meta']['errors'] == []
 
 @pytest.mark.parametrize('fmt', FORMATS)
 def test_help_unknown_schema_exits_nonzero(proj, fmt):

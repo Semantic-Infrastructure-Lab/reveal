@@ -11,7 +11,8 @@ from ....utils.results import ResultBuilder, note_truncation
 from ..analysis.normalize import normalize_record
 from reveal.utils.lines import split_lines
 
-from ..lookup import USER_FILTER as _USER_FILTER
+from ..lookup import USER_FILTER as _USER_FILTER, connect_readonly
+from ..catalog import CatalogRead
 
 
 def _resolve_date_bound(value: str) -> str:
@@ -29,21 +30,21 @@ def _apply_date_range(sessions: List[Dict[str, Any]], since: str, until: str) ->
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return connect_readonly(db_path)
 
 
 def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
     return dict(row)
 
 
-def _format_ts(unix_sec: Optional[int]) -> str:
+def _format_ts(unix_sec: Optional[int], on_failure=None) -> str:
     if unix_sec is None:
         return ''
     try:
         return datetime.utcfromtimestamp(unix_sec).strftime('%Y-%m-%dT%H:%M:%SZ')
-    except (ValueError, OverflowError, OSError):
+    except (TypeError, ValueError, OverflowError, OSError) as exc:
+        if on_failure is not None:
+            on_failure(exc)
         return str(unix_sec)
 
 
@@ -59,28 +60,12 @@ def list_sessions(db_path: Path) -> Dict[str, Any]:
         contract_version=CONTRACT_VERSION,
     )
 
-    if not db_path.exists():
-        return {**base, 'sessions': [], 'total': 0,
-                'error': f'Codex DB not found: {db_path}'}
-
-    try:
-        conn = _connect(db_path)
-        try:
-            rows = conn.execute(
-                f"SELECT id, title, first_user_message, model, model_provider, "
-                f"reasoning_effort, tokens_used, cwd, created_at, updated_at, "
-                f"cli_version, git_branch, approval_mode "
-                f"FROM threads WHERE {_USER_FILTER} "
-                f"ORDER BY updated_at DESC"
-            ).fetchall()
-        finally:
-            conn.close()
-    except sqlite3.Error as exc:
-        return {**base, 'sessions': [], 'total': 0, 'error': str(exc)}
+    acquisition = CatalogRead(db_path, _connect)
+    acquisition.read()
+    rows = acquisition.rows
 
     sessions = []
-    for row in rows:
-        d = _row_to_dict(row)
+    for d in rows:
         sessions.append({
             'id': d['id'],
             'title': d.get('title', ''),
@@ -90,14 +75,14 @@ def list_sessions(db_path: Path) -> Dict[str, Any]:
             'reasoning_effort': d.get('reasoning_effort'),
             'tokens_used': d.get('tokens_used'),
             'cwd': d.get('cwd'),
-            'created_at': _format_ts(d.get('created_at')),
-            'updated_at': _format_ts(d.get('updated_at')),
+            'created_at': _format_ts(d.get('created_at'), lambda exc: acquisition.failure('created_at', exc)),
+            'updated_at': _format_ts(d.get('updated_at'), lambda exc: acquisition.failure('updated_at', exc)),
             'cli_version': d.get('cli_version'),
             'git_branch': d.get('git_branch'),
             'approval_mode': d.get('approval_mode'),
         })
 
-    return {**base, 'sessions': sessions, 'total': len(sessions)}
+    return acquisition.attach({**base, 'sessions': sessions, 'total': len(sessions)})
 
 
 def filter_sessions(db_path: Path, filter_term: str, since: str = '', until: str = '') -> Dict[str, Any]:

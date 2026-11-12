@@ -22,7 +22,9 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
-- Direct Codex UUID transcript views now distinguish complete answers (0), healthy invalid targets or indices (2), and required SQLite/JSONL or output loss (3). Read-only index lookup preserves source decisions and acquired rows, and failed required analysis is an MCP error. Goal reads also qualify optional-database absence versus acquisition failure, retain acquired goals after close loss, and skip unrelated rollout reads. Catalog and install transports retain their separate policies (BACK-2618).
+- Codex session catalogs and metadata filters now retain interrupted SQLite row prefixes, disclose timestamp/source failures, and distinguish healthy emptiness (0), a missing index (2), and required acquisition/output loss (3). Source and selection receipts survive presentation and display cuts; failed catalog analysis is an MCP error (BACK-2618).
+
+- Direct Codex UUID transcript views now distinguish complete answers (0), healthy invalid targets or indices (2), and required SQLite/JSONL or output loss (3). Read-only index lookup preserves source decisions and acquired rows, and failed required analysis is an MCP error. Goal reads also qualify optional-database absence versus acquisition failure, retain acquired goals after close loss, and skip unrelated rollout reads. Install and content-search transports retain their separate policies (BACK-2618).
 
 - Claude plan, agent, hook, memory and file-tracking paths beginning with `chain` now reach their namespace reader instead of being intercepted as a session continuation chain (BACK-2617).
 

@@ -8,6 +8,8 @@ from ...utils.query_parser import peek_query_items
 from ...utils.results import (AnalysisCompleteness, FailureCause, failure_execution_facts,
                               result_execution_facts)
 from .params import bind_query
+from .catalog import (CATALOG_PATHS, execution_facts as catalog_facts,
+                      answer_requirement_error as catalog_error)
 
 VIEW_TYPES = {'': 'codex_session_overview', 'messages': 'codex_messages', 'tools': 'codex_tools',
               'errors': 'codex_errors', 'shell': 'codex_shell', 'workflow': 'codex_workflow',
@@ -29,6 +31,8 @@ ROLLOUT_RULE = 'Consumed nonblank JSONL lines before Codex normalization, rollba
 
 def selected_type(resource, params):
     values = dict(peek_query_items(params))
+    if resource in CATALOG_PATHS:
+        return 'codex_content_search' if values.get('search') else 'codex_session_list'
     for name, kind in (('last', 'codex_messages'), ('tokens', 'codex_tokens'), ('goal', 'codex_goal')):
         if name in values and values[name] is not None and values[name] is not False:
             return kind
@@ -93,6 +97,8 @@ def _goal_state(lookup, goal):
 def execution_facts(result):
     if _invalid_envelope(result):
         return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+    if result.get('type') == 'codex_session_list':
+        return catalog_facts(result)
     if result.get('scope', {}).get('request_rejected'):
         return failure_execution_facts(FailureCause.INVALID_REQUEST)
     meta = result.get('meta', {})
@@ -200,6 +206,8 @@ def _rejected_index_error(adapter, result, expected_type):
 
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
+    if expected_type == 'codex_session_list':
+        return catalog_error(adapter, result, prior_facts)
     goal = expected_type == 'codex_goal' and result.get('type') == 'codex_goal'
     source = adapter.CODEX_HOME / 'goals_1.sqlite' if goal else adapter.CODEX_DB
     if result.get('source') != str(source) or result.get('source_type') != 'database':
