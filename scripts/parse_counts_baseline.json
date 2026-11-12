@@ -7,7 +7,7 @@
         "files_degraded": 0,
         "files_errored": 0,
         "result": {
-          "contract_version": "1.0",
+          "contract_version": "1.1",
           "coverage": {
             "failed": 0,
             "files_covered": 3,
@@ -1086,6 +1086,10 @@
             "unavailable": 0
           },
           "files": [],
+          "meta": {
+            "errors": [],
+            "warnings": []
+          },
           "scope": {
             "languages": [
               {
@@ -1320,6 +1324,7 @@
           ],
           "hotspots": [],
           "meta": {
+            "errors": [],
             "issue_count": {
               "field": "local_check_issues",
               "rule": "file-local rules only",
@@ -1363,7 +1368,8 @@
                 "V016",
                 "V023"
               ]
-            }
+            },
+            "warnings": []
           },
           "population": {
             "analyzed_files": 3,
@@ -1582,6 +1588,10 @@
             }
           },
           "map_status": "complete",
+          "meta": {
+            "errors": [],
+            "warnings": []
+          },
           "next_steps": [
             {
               "command": "reveal 'imports://<corpus>?rank=fan-in&scope=path'",
