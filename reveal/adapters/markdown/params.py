@@ -35,7 +35,7 @@ BACKLINKS = ParamSpec('backlinks', 'string', 'Reverse link target, relative to t
 AGGREGATE = ParamSpec('aggregate', 'string', 'Legacy aggregate field; use --view aggregate --field FIELD',
                       None, str, cli=CliBinding(('--aggregate',)))
 LINKS = ParamSpec('link-graph', 'boolean', 'Legacy link graph selector; use --view links', False,
-                  boolean_value, cli=CliBinding(('--link-graph',), action='store_true'))
+                  boolean_value, aliases=('link_graph',), cli=CliBinding(('--link-graph',), action='store_true'))
 LINT = ParamSpec('lint', 'boolean', 'Legacy frontmatter lint selector', False, boolean_value,
                  cli=CliBinding(('--lint',), action='store_true'))
 LINT_FIELDS = ParamSpec('lint-fields', 'array', 'Required frontmatter fields for legacy lint', None, fields,
