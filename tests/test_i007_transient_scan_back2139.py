@@ -63,7 +63,7 @@ def lookup_fails_once(monkeypatch):
 
 
 def _check(root):
-    return mcp_server.reveal_check(str(root / 'pyproject.toml'), select='I007')
+    return mcp_server.reveal_check(str(root / 'pyproject.toml'), select='I007', severity='low')
 
 
 def test_a_transient_scan_failure_is_not_kept_for_the_next_host_request(project, lookup_fails_once):

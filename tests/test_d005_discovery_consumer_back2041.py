@@ -110,7 +110,8 @@ def observed(monkeypatch):
 
 
 def _check(root, *flags):
-    return run('check', str(root), '--select', 'D005', *flags)
+    gate = () if '--exit-zero' in flags else ('--fail-on', 'findings')
+    return run('check', str(root), '--select', 'D005', *gate, *flags)
 
 
 def _budget(data):

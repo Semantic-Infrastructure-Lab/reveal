@@ -103,11 +103,11 @@ def disclosure(messages):
 @pytest.mark.parametrize('already_used', [False, True])
 def test_modern_check_directory_loss_is_disclosed_and_incomplete_before_findings(tmp_path, fault, language, already_used):
     manifest, hidden, _helper, used, missing, _ext = project(tmp_path, language, already_used=already_used)
-    clean = run('check', str(manifest), '--select', 'I007', '--format', 'json')
+    clean = run('check', str(manifest), '--select', 'I007', '--severity', 'low', '--fail-on', 'findings', '--format', 'json')
     assert clean.returncode == 0 and json.loads(clean.stdout)['total'] == 0
     dep._evict_root(tmp_path)  # explicitly fresh loss and repair controls, not a host-lifetime claim
     fault['mode'] = 'directory'
-    lost = run('check', str(manifest), '--select', 'I007', '--format', 'json')
+    lost = run('check', str(manifest), '--select', 'I007', '--severity', 'low', '--fail-on', 'findings', '--format', 'json')
     data = json.loads(lost.stdout)
     assert fault['events'] == [str(hidden.parent)]
     observed = fault['builds'][-1][1]
@@ -115,7 +115,7 @@ def test_modern_check_directory_loss_is_disclosed_and_incomplete_before_findings
     assert (missing in observed.names) == already_used
     assert data['total'] == (0 if already_used else 1)
     dep._evict_root(tmp_path); fault['mode'] = 'healthy'
-    repaired = run('check', str(manifest), '--select', 'I007', '--format', 'json')
+    repaired = run('check', str(manifest), '--select', 'I007', '--severity', 'low', '--fail-on', 'findings', '--format', 'json')
     assert repaired.returncode == 0 and repaired.stdout == clean.stdout
     assert lost.returncode == 3
     disclosure(data['scan_disclosures'])
@@ -145,17 +145,17 @@ def test_transient_build_loss_repairs_next_normal_decorated_request_without_clea
     root = tmp_path / 'project'; sibling = tmp_path / 'sibling'
     manifest, hidden, _helper, _used, missing, extension = project(root, language)
     sibling_manifest, *_ = project(sibling, language)
-    clean = mcp_server.reveal_check(str(manifest), select='I007')
-    sibling_clean = mcp_server.reveal_check(str(sibling_manifest), select='I007')
+    clean = mcp_server.reveal_check(str(manifest), select='I007', severity='low')
+    sibling_clean = mcp_server.reveal_check(str(sibling_manifest), select='I007', severity='low')
     # Actual edit invalidates healthy memo through the normal validator, no manual clear.
     write(root / ('added' + extension), 'x = 1\n' if language == 'python' else 'fn added() {}\n')
     fault['mode'] = 'transient'
-    lost = mcp_server.reveal_check(str(manifest), select='I007')
+    lost = mcp_server.reveal_check(str(manifest), select='I007', severity='low')
     assert missing in lost and fault['events'] == [str(hidden.parent)]
     assert fault['mode'] == 'healthy'
     before = len(fault['builds'])
-    repaired = mcp_server.reveal_check(str(manifest), select='I007')
-    assert mcp_server.reveal_check(str(sibling_manifest), select='I007') == sibling_clean
+    repaired = mcp_server.reveal_check(str(manifest), select='I007', severity='low')
+    assert mcp_server.reveal_check(str(sibling_manifest), select='I007', severity='low') == sibling_clean
     assert repaired == clean
     assert len(fault['builds']) == before + 1
     assert 'missing file population is unknown' in lost
@@ -204,7 +204,7 @@ def test_zero_declarations_no_scan_or_disclosure(tmp_path, fault, language):
     manifest, _hidden, helper, *_ = project(tmp_path, language, declarations=False)
     fault['mode'] = 'directory'
     result = helper(tmp_path)
-    response = run('check', str(manifest), '--select', 'I007', '--format', 'json')
+    response = run('check', str(manifest), '--select', 'I007', '--severity', 'low', '--fail-on', 'findings', '--format', 'json')
     assert result == (frozenset(), ()) and fault['events'] == fault['builds'] == []
     assert response.returncode == 0 and json.loads(response.stdout)['total'] == 0
     assert get_scan_disclosures([manifest], ['I007'], None) == []
@@ -228,7 +228,7 @@ def test_skipped_source_only_existing_public_policy_is_separate_control(tmp_path
     assert [d.context.split(': ')[-1] for d in found] == [missing]
     assert len(rule.outcomes) == 1 and rule.outcomes[0]['status'] == 'unavailable'
     assert str(hidden) in rule.outcomes[0]['reason']
-    response = run('check', str(manifest), '--select', 'I007', '--format', 'json')
+    response = run('check', str(manifest), '--select', 'I007', '--severity', 'low', '--fail-on', 'findings', '--format', 'json')
     data = json.loads(response.stdout)
     assert response.returncode == 1 and data['total'] == 1 and data['scan_disclosures'] == []
     assert fault['events'] == [] and get_scan_disclosures([manifest], ['I007'], None) == []

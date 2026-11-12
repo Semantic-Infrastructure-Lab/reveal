@@ -150,11 +150,11 @@ def test_native_matches_lost_only_in_evidence_walk_are_not_clean(tmp_path, fault
     survivor = population in ('partial', 'root')
     checked, hidden = _project(tmp_path / 'project', survivor)
     healthy, _ = _project(tmp_path / 'sibling', survivor)
-    baseline = run('check', healthy, '--select', 'T006', '--format', 'json')
+    baseline = run('check', healthy, '--select', 'T006', '--severity', 'low', '--format', 'json')
     assert json.loads(baseline.stdout)['total'] == (2 if survivor else 1)
     fault.update(denied={checked.parent.resolve()} if population == 'root' else set(hidden),
                  unknown=population == 'unknown', events=[], reached=[], parsed=[])
-    response = run('check', checked, '--select', 'T006', '--format', 'json')
+    response = run('check', checked, '--select', 'T006', '--severity', 'low', '--format', 'json')
     data = json.loads(response.stdout)
     assert fault['events'] and data['total'] == (1 if population == 'partial' else 0)
     assert checked.resolve() in fault['reached'] or population == 'root'
@@ -172,7 +172,7 @@ def test_native_matches_lost_only_in_evidence_walk_are_not_clean(tmp_path, fault
 def test_text_and_recursive_check_qualify_zero_evidence_result(tmp_path, fault, recursive):
     checked, hidden = _project(tmp_path / 'project', False)
     fault['denied'] = set(hidden)
-    response = run('check', checked.parent if recursive else checked, '--select', 'T006')
+    response = run('check', checked.parent if recursive else checked, '--select', 'T006', '--severity', 'low')
     assert fault['events'] == hidden
     assert response.returncode == 3
     output = response.stdout + response.stderr
@@ -202,7 +202,7 @@ def test_actual_loss_before_later_ceiling_retains_both_diagnostics(tmp_path, fau
     monkeypatch.setenv('REVEAL_T006_MAX_FILES', '1')
     empty_before = pickle.dumps(rule._EMPTY_FACTS)
     fault['denied'] = set(hidden)
-    response = run('check', checked, '--select', 'T006', '--format', 'json')
+    response = run('check', checked, '--select', 'T006', '--severity', 'low', '--format', 'json')
     data = json.loads(response.stdout)
     assert fault['events'] == hidden and response.returncode == 3 and data['total'] == 0
     assert any('REVEAL_T006_MAX_FILES' in note for note in data['scan_disclosures'])
@@ -226,10 +226,10 @@ def test_local_match_and_invocation_partial_memo_survive_loss(tmp_path, fault):
 def test_evidence_ignores_report_exclusion_and_disclosures_scope_to_reached_root(tmp_path, fault):
     checked, hidden = _project(tmp_path / 'project', False)
     sibling, _ = _project(tmp_path / 'sibling', False)
-    clean = run('check', sibling, '--select', 'T006', '--exclude', 'a_hidden_0', '--format', 'json')
+    clean = run('check', sibling, '--select', 'T006', '--severity', 'low', '--exclude', 'a_hidden_0', '--format', 'json')
     assert json.loads(clean.stdout)['total'] == 1
     fault['denied'] = set(hidden)
-    response = run('check', checked, '--select', 'T006', '--exclude', 'a_hidden_0', '--format', 'json')
+    response = run('check', checked, '--select', 'T006', '--severity', 'low', '--exclude', 'a_hidden_0', '--format', 'json')
     assert fault['events'] == hidden and json.loads(response.stdout)['total'] == 0
     _directory_note(scan_caches.get_scan_disclosures([checked], ['T006'], None))
     assert not scan_caches.get_scan_disclosures([sibling], ['T006'], None)
@@ -266,25 +266,25 @@ def test_normal_request_rebuilds_partial_evidence_and_recovers_without_clears(tm
     from reveal.mcp_server import reveal_check
     checked, hidden = _project(tmp_path / 'project', survivor)
     fault.update(denied=set(hidden), unknown=unknown)
-    first = reveal_check(str(checked), select='T006')
+    first = reveal_check(str(checked), select='T006', severity='low')
     assert type(first) is str and len(fault['events']) == 1
     cached = rule._project_index[checked.parent]
     # The real sealing census is healthy even though the earlier index build was denied.
     assert any(root == checked.parent and sealing and stamp and not active
                for root, sealing, stamp, active in fault['stamps']), fault['untrusted']
-    second = reveal_check(str(checked), select='T006')
+    second = reveal_check(str(checked), select='T006', severity='low')
     assert len(fault['events']) == 2, 'A recovered sealing walk must not bless incomplete evidence'
     assert rule._project_index[checked.parent] is not cached
     assert 'incomplete' in first.lower() and first == second
     fault['denied'] = set()
-    repaired = reveal_check(str(checked), select='T006')
+    repaired = reveal_check(str(checked), select='T006', severity='low')
     assert len(fault['builds']) == 3 and 'incomplete' not in repaired.lower()
     assert f'{2 if survivor else 1} issue' in repaired
     healthy_cache = rule._project_index[checked.parent]
-    assert reveal_check(str(checked), select='T006') == repaired
+    assert reveal_check(str(checked), select='T006', severity='low') == repaired
     assert rule._project_index[checked.parent] is healthy_cache and len(fault['builds']) == 3
     sibling, _ = _project(tmp_path / 'sibling', survivor)
-    sibling_result = reveal_check(str(sibling), select='T006')
+    sibling_result = reveal_check(str(sibling), select='T006', severity='low')
     assert f'{2 if survivor else 1} issue' in sibling_result and 'incomplete' not in sibling_result.lower()
 
 
@@ -292,10 +292,10 @@ def test_clean_unchanged_request_reuses_healthy_index_and_exact_output(tmp_path,
     pytest.importorskip('mcp')
     from reveal.mcp_server import reveal_check
     checked, _ = _project(tmp_path / 'project')
-    first = reveal_check(str(checked), select='T006')
+    first = reveal_check(str(checked), select='T006', severity='low')
     cached = rule._project_index[checked.parent]
     assert '2 issues found.' in first and not _notes(checked)
-    assert reveal_check(str(checked), select='T006') == first
+    assert reveal_check(str(checked), select='T006', severity='low') == first
     assert rule._project_index[checked.parent] is cached and len(fault['builds']) == 1
 
 
@@ -304,7 +304,7 @@ def test_hard_noise_not_attempted_and_clean_default_facts_unchanged(tmp_path, fa
     noise = checked.parent / '.venv'
     hidden[0].rename(noise)
     fault['denied'] = {noise.resolve()}
-    response = run('check', checked, '--select', 'T006', '--format', 'json')
+    response = run('check', checked, '--select', 'T006', '--severity', 'low', '--format', 'json')
     data = json.loads(response.stdout)
     assert response.returncode == 0 and data['total'] == 0 and not data['scan_disclosures']
     assert not fault['events'] and not _notes(checked)
@@ -314,7 +314,7 @@ def test_cap_only_existing_incomplete_contract_and_empty_singleton_not_contamina
     checked, _ = _project(tmp_path / 'project')
     before = pickle.dumps(rule._EMPTY_FACTS)
     monkeypatch.setenv('REVEAL_T006_MAX_FILES', '1')
-    response = run('check', checked, '--select', 'T006', '--format', 'json')
+    response = run('check', checked, '--select', 'T006', '--severity', 'low', '--format', 'json')
     data = json.loads(response.stdout)
     assert response.returncode == 3 and len(data['scan_disclosures']) == 1
     assert 'REVEAL_T006_MAX_FILES' in data['scan_disclosures'][0]
@@ -326,9 +326,9 @@ def test_cap_only_request_retains_existing_validated_cache_policy(tmp_path, faul
     from reveal.mcp_server import reveal_check
     checked, _ = _project(tmp_path / 'project')
     monkeypatch.setenv('REVEAL_T006_MAX_FILES', '1')
-    first = reveal_check(str(checked), select='T006')
+    first = reveal_check(str(checked), select='T006', severity='low')
     cached = rule._project_index[checked.parent]
     assert 'REVEAL_T006_MAX_FILES' in first and 'incomplete' in first.lower()
-    assert reveal_check(str(checked), select='T006') == first
+    assert reveal_check(str(checked), select='T006', severity='low') == first
     assert rule._project_index[checked.parent] is cached and len(fault['builds']) == 1, fault['untrusted']
     assert not fault['events']

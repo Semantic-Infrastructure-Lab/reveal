@@ -145,28 +145,28 @@ def test_normal_host_boundary_rebuilds_lost_evidence_despite_healthy_seal_and_re
     checked, hidden = _project(tmp_path / 'lost')
     sibling, _ = _project(tmp_path / 'sibling')
     fault.update(denied={hidden}, unknown=unknown)
-    lost = reveal_check(str(checked), select='T006')
+    lost = reveal_check(str(checked), select='T006', severity='low')
     assert type(lost) is str and fault['events'] == [hidden]
     first = rule._project_index[checked.parent]
     assert request_cache._STAMPS.get((rule.__name__, checked.parent))
     assert all(value and not active for _, value, active in fault['stamps'])
     # Keep the same actual source fault: the second ordinary request must rebuild.
-    persistent = reveal_check(str(checked), select='T006')
+    persistent = reveal_check(str(checked), select='T006', severity='low')
     assert persistent == lost
     assert fault['builds'].count(checked.parent) == 2, fault
     assert rule._project_index[checked.parent] is not first
     assert len(fault['events']) == 2 and 'scan incomplete' in lost.lower()
     assert 'PermissionError' in lost and 'No issues found.' not in lost
     fault['denied'] = set()
-    repaired = reveal_check(str(checked), select='T006')
+    repaired = reveal_check(str(checked), select='T006', severity='low')
     assert "TypedDict 'Hidden'" in repaired and 'scan incomplete' not in repaired.lower()
     assert fault['builds'].count(checked.parent) == 3
     healthy = rule._project_index[checked.parent]
-    assert reveal_check(str(checked), select='T006') == repaired
+    assert reveal_check(str(checked), select='T006', severity='low') == repaired
     assert rule._project_index[checked.parent] is healthy and fault['builds'].count(checked.parent) == 3
-    sibling_clean = reveal_check(str(sibling), select='T006')
+    sibling_clean = reveal_check(str(sibling), select='T006', severity='low')
     sibling_index = rule._project_index[sibling.parent]
-    assert reveal_check(str(sibling), select='T006') == sibling_clean
+    assert reveal_check(str(sibling), select='T006', severity='low') == sibling_clean
     assert rule._project_index[sibling.parent] is sibling_index
 
 
@@ -174,7 +174,7 @@ def test_normal_host_boundary_rebuilds_lost_evidence_despite_healthy_seal_and_re
 def test_single_file_cut_zero_json_and_artifact_keep_evidence_loss_status(tmp_path, fault, exit_zero):
     checked, hidden = _project(tmp_path)
     fault['denied'] = {hidden}
-    args = ['check', str(checked), '--select', 'T006', '--max-items', '0']
+    args = ['check', str(checked), '--select', 'T006', '--severity', 'low', '--max-items', '0']
     if exit_zero:
         args.append('--exit-zero')
     response = run(*args, '--format', 'json')
@@ -207,10 +207,10 @@ def test_healthy_or_cap_only_indexes_retain_existing_cross_request_lifetime(tmp_
     checked, _ = _project(tmp_path)
     if capped:
         monkeypatch.setenv('REVEAL_T006_MAX_FILES', '1')
-    first = reveal_check(str(checked), select='T006')
+    first = reveal_check(str(checked), select='T006', severity='low')
     index = rule._project_index[tmp_path]
     assert request_cache._STAMPS.get((rule.__name__, tmp_path))
-    assert reveal_check(str(checked), select='T006') == first
+    assert reveal_check(str(checked), select='T006', severity='low') == first
     assert rule._project_index[tmp_path] is index and fault['builds'] == [tmp_path]
     assert not fault['events']
     if capped:

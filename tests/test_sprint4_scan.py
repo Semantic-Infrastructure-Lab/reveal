@@ -86,7 +86,7 @@ def test_d005_multi_root_cap_and_duplicate_positive_control(tmp_path, monkeypatc
     projects(tmp_path)
     monkeypatch.setenv('REVEAL_D005_MAX_FILES', '6')
     for fmt in ('text', 'json'):
-        result = _run_reveal_direct('check', str(tmp_path), '--select', 'D005', '--format', fmt)
+        result = _run_reveal_direct('check', str(tmp_path), '--select', 'D005', '--fail-on', 'findings', '--format', fmt)
         assert result.returncode == 3
         if fmt == 'json':
             summary = json.loads(result.stdout)['summary']
@@ -96,7 +96,7 @@ def test_d005_multi_root_cap_and_duplicate_positive_control(tmp_path, monkeypatc
             assert all(p in result.stdout for p in ('p1', 'p2'))
     monkeypatch.delenv('REVEAL_D005_MAX_FILES')
     _clear_index()
-    control = _run_reveal_direct('check', str(tmp_path), '--select', 'D005', '--format', 'json')
+    control = _run_reveal_direct('check', str(tmp_path), '--select', 'D005', '--fail-on', 'findings', '--format', 'json')
     assert json.loads(control.stdout)['summary']['total_issues'] > 0
     assert control.returncode == 1
 
