@@ -391,9 +391,10 @@ class ClaudeAdapter(ResourceAdapter):
 
     @classmethod
     def uri_execution_facts(cls, resource):
-        from .qualification import direct_session, catalog_type
+        from .qualification import direct_session, catalog_type, chain_resource
         prefixes = tuple(prefix for prefix, _ in cls._RESOURCE_DISPATCH)
         return (cls.execution_facts if catalog_type(resource)
+                or chain_resource(resource, _parse_session_identifier)
                 or direct_session(resource, _parse_session_identifier, prefixes) else None)
 
     @staticmethod
@@ -528,7 +529,8 @@ class ClaudeAdapter(ResourceAdapter):
         self._conversation_lookup = None
         self._other_transcripts = []
         namespace = (self._is_session_list_resource() or self.resource == 'search'
-                     or self.resource.startswith('search/') or self._resolve_resource_handler() is not None)
+                     or self.resource.startswith('search/') or '/chain' in self.resource
+                     or self._resolve_resource_handler() is not None)
         if not namespace:
             self.conversation_path = self._find_conversation()
 

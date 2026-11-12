@@ -47,6 +47,11 @@ def direct_session(resource, parse_identifier, prefixes):
     return bool(name) and '/' not in name and (subpath in SESSION_VIEWS or subpath.startswith('message/'))
 
 
+def chain_resource(resource, parse_identifier):
+    name, subpath = parse_identifier(resource.partition('?')[0])
+    return bool(name) and '/' not in name and subpath == 'chain'
+
+
 def _active(params):
     return {key for key, value in peek_query_items(params) if value is not None and value is not False}
 
@@ -75,6 +80,8 @@ def uri_result_type(resource):
     if kind:
         return kind
     path, _, query = resource.partition('?')
+    if path.endswith('/chain'):
+        return 'claude_chain'
     params = prepare_declared_params(PARAM_SPECS, query, 'uri')
     return selected_type(path, params)
 
@@ -124,6 +131,9 @@ _COUNTS = {
 
 
 def execution_facts(result):
+    if result.get('type') == 'claude_chain':
+        from .chain import chain_execution_facts
+        return chain_execution_facts(result)
     if result.get('type') in ('claude_cross_session_search', 'claude_file_sessions'):
         from .content import content_execution_facts
         return content_execution_facts(result)
@@ -170,13 +180,16 @@ def _indexed_observation_error(result, proof, expected_type):
 
 
 _CATALOG_FIELDS = {'claude_session_list': 'recent_sessions',
-                   'claude_cross_session_search': 'matches', 'claude_file_sessions': 'sessions'}
+                   'claude_cross_session_search': 'matches', 'claude_file_sessions': 'sessions',
+                   'claude_chain': 'chain'}
 
 
 def _catalog_answer_error(adapter, result, expected_type, prior_facts):
     from .catalog import catalog_requirement_error
     from .content import content_requirement_error
-    qualify = catalog_requirement_error if expected_type == 'claude_session_list' else content_requirement_error
+    from .chain import chain_requirement_error
+    qualify = {'claude_session_list': catalog_requirement_error,
+               'claude_chain': chain_requirement_error}.get(expected_type, content_requirement_error)
     error = qualify(adapter, result, prior_facts)
     return error or _presentation_error(adapter, result, {_CATALOG_FIELDS[expected_type]: list}, prior_facts)
 

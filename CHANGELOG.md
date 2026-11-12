@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Claude continuation chains now distinguish missing optional READMEs from failed discovery, decoding or frontmatter/link parsing. Source receipts retain known metadata, disclose the 50-session traversal cap as incomplete input and survive MCP follow-ups. Chains no longer depend on unrelated transcript lookup (BACK-2617).
+
 - Claude indexed messages and conversation-turn ranges now preserve transcript source loss in their execution outcomes and MCP answers. Healthy invalid indices give exit 2; failed input cannot establish absence. Range display cuts retain source counts and raw record indices (BACK-2617).
 
 - Claude cross-session search and file tracking now disclose malformed records, repaired decoding and required read failures, retain usable results and exit 3 for incomplete input. Search measures only the prefix through its first content match; display cuts preserve match counts and source receipts. Missing file-tracking paths are usage errors (exit 2) (BACK-2617).

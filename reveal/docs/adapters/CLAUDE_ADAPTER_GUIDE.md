@@ -806,13 +806,15 @@ reveal 'claude://session/<session-name>/chain'
 REVEAL_SESSIONS_DIR=~/projects/my-sessions reveal claude://session/revealed-sphinx-0407/chain
 ```
 
-**Output**: Ordered list of sessions from HEAD back to the root, each showing `session`, `date`, `badge`, `continuing_from`, `tests_start`, `tests_end`, and `commits`. Chain length capped at 50 to prevent cycles.
+**Output**: Ordered list of sessions from HEAD toward the root, each showing `session`, `date`, `badge`, `continuing_from`, `tests_start`, `tests_end`, and `commits`. Traversal stops at 50 unique sessions or an observed cycle.
 
 **Notes**:
 - Follows `continuing_from:` frontmatter in `README*.md` files (most recent README wins if multiple exist)
 - Cycle detection prevents infinite loops
 - Missing README → entry still included with `null` fields; `readme: null` shown in output
 - Set `REVEAL_SESSIONS_DIR` so the adapter can locate sibling sessions (`--base-path` locates the transcript but does not feed the chain walk)
+- `meta.chain_analysis` records visited sessions, selected/parsed READMEs, source failures and the termination reason. Missing READMEs and an unconfigured optional source retain the null terminal entry and exit 0; cycles are measured results. Failed discovery, read/decode or frontmatter/link parsing and the 50-session source cap give exit 3, retaining known entries. An unreadable newest README does not fall back to an older one.
+- Chains read README metadata independently of transcript discovery. The envelope identifies the configured sessions directory, or the runtime chain resource when no directory is configured. MCP retains usable partial metadata, rejects fully failed reads and re-reads on follow-up requests.
 
 **Use when**: Understand a session's development lineage, audit what changed across a multi-session feature, verify test count progression over time
 
@@ -1909,7 +1911,8 @@ ranges. Invalid or out-of-range indices after a healthy read give exit 2; lost
 records cannot prove an index absent and retain exit 3. Negative indices count
 backward from the decoded object records. Ranges remain 1-indexed over user and
 assistant turns and preserve their raw record indices through display cuts.
-Chains and install resources retain their separate
+Continuation chains qualify their optional README source separately, as described
+under [chain](#13-chain). Install resources retain their separate
 policies. Stdin and mixed batches retain legacy completeness behavior; a warning
 there is not yet guaranteed to change the exit code.
 

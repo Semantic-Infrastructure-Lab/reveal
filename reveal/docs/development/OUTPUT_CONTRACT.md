@@ -591,8 +591,14 @@ Indexed `/message/N` and `/message` ranges share transcript source qualification
 Raw indices are 0-based decoded-object positions (metadata included); negative
 indices count backward. Ranges are 1-based user/assistant turns and retain raw
 indices. A healthy out-of-range request gives 2; lost records cannot establish
-absence and give 3. Range cuts require receipts. Chains,
-install resources, positional elements, Check, stdin and mixed batches retain their
+absence and give 3. Range cuts require receipts. Continuation chains qualify
+README discovery and metadata through `meta.chain_analysis`, independently of
+transcript lookup. Their envelope identifies the configured directory or the
+unconfigured runtime resource. Healthy missing/unconfigured optional READMEs
+retain null terminal entries and give 0; cycles are measured termination. Required
+discovery, decoding, frontmatter/link loss and the 50-session source cap give 3.
+Known metadata survives partial acquisition; MCP rejects fully failed source.
+Install resources, positional elements, Check, stdin and mixed batches retain their
 separate policies. Qualified postprocessing recognizes explicit request validation;
 unqualified transports preserve their prior classification.
 See the [Claude guide](../adapters/CLAUDE_ADAPTER_GUIDE.md#malformed-transcript-lines).

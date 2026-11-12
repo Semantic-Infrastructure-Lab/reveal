@@ -204,29 +204,40 @@ def _collect_sessions_from_dir(project_dir: Path) -> SessionEntries:
     return sessions
 
 
-def _find_session_readme(session_name: str, sessions_dir: Optional[Path]) -> Optional[Path]:
+def _find_session_readme(session_name: str, sessions_dir: Optional[Path], failures=None) -> Optional[Path]:
     """Find the most recent README for a session in the sessions directory."""
-    if not sessions_dir or not sessions_dir.exists():
+    if sessions_dir is None:
         return None
+    failures = [] if failures is None else failures
     session_dir = sessions_dir / session_name
-    if not session_dir.exists():
+    try:
+        if not stat_module.S_ISDIR(session_dir.stat().st_mode):
+            raise NotADirectoryError(str(session_dir))
+    except FileNotFoundError:
         return None
-    readmes = sorted(session_dir.glob('README*.md'), reverse=True)
+    except OSError as exc:
+        failures.append((session_dir, exc))
+        return None
+    readmes = sorted((p for p in directory_entries(session_dir, failures) if p.match('README*.md')), reverse=True)
     return readmes[0] if readmes else None
 
 
-def _parse_readme_frontmatter(readme_path: Path) -> Dict[str, Any]:
+def _parse_readme_frontmatter(readme_path: Path, failures=None) -> Dict[str, Any]:
     """Parse YAML frontmatter from a README file."""
     import yaml
     try:
         text = readme_path.read_text(encoding='utf-8')
         if text.startswith('---'):
             end = text.find('\n---', 3)
-            if end != -1:
-                loaded = yaml.safe_load(text[3:end].strip())
-                return loaded if isinstance(loaded, dict) else {}
-    except (OSError, ValueError, yaml.YAMLError):  # absent, not UTF-8, or malformed YAML
-        pass
+            if end == -1:
+                raise ValueError('README frontmatter has no closing delimiter')
+            loaded = yaml.safe_load(text[3:end].strip())
+            if loaded is not None and not isinstance(loaded, dict):
+                raise ValueError('README frontmatter is not a mapping')
+            return loaded if isinstance(loaded, dict) else {}
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        if failures is not None:
+            failures.append((readme_path, exc))
     return {}
 
 
@@ -436,33 +447,16 @@ def get_chain(
     Returns:
         Output Contract v1.0 dict with type 'claude_chain' and chain list
     """
-    chain: List[Dict[str, Any]] = []
-    seen: set = set()
-    current_name: Optional[str] = session_name
-
-    while current_name and current_name not in seen and len(chain) < 50:
-        seen.add(current_name)
-        readme_path = _find_session_readme(current_name, sessions_dir)
-        frontmatter = _parse_readme_frontmatter(readme_path) if readme_path else {}
-
-        entry: Dict[str, Any] = {
-            'session': current_name,
-            'readme': str(readme_path) if readme_path else None,
-            'date': frontmatter.get('date') or frontmatter.get('session_date'),
-            'badge': frontmatter.get('badge'),
-            'continuing_from': frontmatter.get('continuing_from'),
-            'tests_start': frontmatter.get('tests_start'),
-            'tests_end': frontmatter.get('tests_end'),
-            'commits': frontmatter.get('commits'),
-        }
-        chain.append(entry)
-        current_name = frontmatter.get('continuing_from')
-
-    return {
+    from ..chain import ChainTraversal
+    traversal = ChainTraversal(sessions_dir, _find_session_readme, _parse_readme_frontmatter)
+    chain = traversal.walk(session_name)
+    return traversal.attach({
         **contract_base,
         'type': 'claude_chain',
+        'source': str(sessions_dir) if sessions_dir else f'claude://session/{session_name}/chain',
+        'source_type': 'directory' if sessions_dir else 'runtime',
         'session': session_name,
         'chain': chain,
         'chain_length': len(chain),
         'sessions_dir': str(sessions_dir) if sessions_dir else None,
-    }
+    })
