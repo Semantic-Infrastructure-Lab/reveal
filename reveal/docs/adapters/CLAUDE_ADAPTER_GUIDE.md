@@ -1946,6 +1946,18 @@ once, preserving literal plus signs; API values remain literal,
 and original URI conflicts validate before API overrides. Legacy names retain
 their existing populations. Generated command and retirement work is ongoing.
 
+The canonical session `view` control selects an existing reader without adding
+another analysis path: `claude://session/my-session?view=messages` is the same
+reader as `/messages`. Supported names are `overview`, `messages`, `prompts`,
+`thinking`, `tools`, `files`, `workflow`, `agents`, `context`, `timeline`, `errors`,
+`tokens`, `digest`, `exchanges`, `message`, `search` and `chain`. `view=search`
+uses content search, with `match` supplying the text; `view=chain` reads the
+optional continuation metadata independently of transcripts. Equal path/view
+selectors coalesce; conflicting path or legacy query selectors reject with 2.
+Non-session namespaces reject `view`. API `view=None` clears a valid URI view,
+and invalid original views cannot be hidden by API overrides. Existing path
+spellings retain their readers, scopes and source receipts.
+
 Store listings (`claude://` and `claude://sessions`) also qualify their required
 directory and metadata acquisition. `meta.session_catalog` counts non-agent
 JSONL-named candidates, acquired entries and failed metadata operations before

@@ -1,5 +1,37 @@
 """Canonical controls translate to the existing, resource-specific readers."""
 from ...errors import RequestValidationError
+from .resources import _parse_session_identifier
+
+
+def apply_view(params, resource):
+    view = params.pop('view', None)
+    if view is None:
+        return resource
+    noun = resource.partition('/')[0]
+    namespaces = ('files', 'history', 'info', 'settings', 'plans', 'config', 'memory',
+                  'agents', 'hooks', 'sessions', 'search')
+    if resource in ('', '.') or noun in namespaces:
+        raise RequestValidationError('view is supported only on session resources')
+    name, previous = _parse_session_identifier(resource)
+    if not name or '/' in name:
+        raise RequestValidationError('view requires a session identifier')
+    target = '' if view in ('overview', 'search') else view
+    if previous and previous != target:
+        raise RequestValidationError(f'view={view} conflicts with resource view {previous}')
+    _validate_view_selectors(params, view)
+    base = 'session/' + name if resource.startswith('session/') else name
+    if view == 'search' and 'match' not in params:
+        params.setdefault('search', '')
+    return base + '/' + target if target else base
+
+
+def _validate_view_selectors(params, view):
+    compatible = {'summary': ('overview',), 'digest': ('digest',), 'timeline': ('timeline',),
+                  'errors': ('errors',), 'tokens': ('tokens',), 'tools': ('tools',),
+                  'search': ('search',), 'tail': ('messages',), 'last': ('messages',)}
+    for selector, views in compatible.items():
+        if selector in params and view not in views:
+            raise RequestValidationError(f'view={view} conflicts with {selector}')
 
 
 def apply_match(params, resource):

@@ -4,6 +4,7 @@ from typing import Any, Callable
 from ...utils.query_binding import bind_declared_params, legacy_presence_value as presence, string_value as text
 from ...utils.query_parser import ParamSpec, QueryParams, peek_query_items
 from .schema import _SCHEMA_QUERY_PARAMS
+from .resources import SESSION_VIEW_NAMES
 
 
 PRESENCE_FLAGS = frozenset(('summary', 'errors', 'word', 'tokens', 'digest', 'full', 'raw', 'timeline'))
@@ -41,19 +42,26 @@ def _spec(name, schema):
 
 PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS.items()) + (
     ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence),
+    ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES),
     ParamSpec('match', 'string', 'Match text in this resource: session content, narrative messages, tool results, cross-session content, workspace lists or history; unsupported views reject',
               None, text, uri_codec='percent'),
 )
 
 
-def bind_query(query, params, resource=''):
+def bind_request(query, params, resource=''):
     bound = bind_declared_params(PARAM_SPECS, query or '', transport='uri') if params is None else params
     # Presence readers must not mistake an explicit False/None override for a flag.
     runtime = QueryParams({key: value for key, value in peek_query_items(bound)
                            if value is not None and not (key in PRESENCE_FLAGS and value is False)})
-    from .controls import apply_match
+    from .controls import apply_view, apply_match
+    resource = apply_view(runtime, resource)
     apply_match(runtime, resource)
     for spec in PARAM_SPECS:
         if spec.name in dict.keys(runtime):
             runtime.set_normalized(spec, dict.__getitem__(runtime, spec.name))
-    return runtime
+    return resource, runtime
+
+
+def bind_query(query, params, resource=''):
+    """Compatibility entry point for callers that only need the runtime parameters."""
+    return bind_request(query, params, resource)[1]

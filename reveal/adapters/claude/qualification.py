@@ -86,9 +86,9 @@ def selected_type(resource, params):
 
 
 def uri_result_type(resource):
-    from .params import bind_query
+    from .params import bind_request
     path, _, query = resource.partition('?')
-    params = bind_query(query, None, path)
+    path, params = bind_request(query, None, path)
     from .workspace_scan import workspace_listing_type
     workspace = workspace_listing_type(resource)
     if workspace:
