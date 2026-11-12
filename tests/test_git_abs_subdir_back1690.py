@@ -80,7 +80,7 @@ def _answer(result, typed: str):
     """(exit, JSON, stderr); an error envelope's ``source`` echoes the typed resource, so it is checked and dropped."""
     data = json.loads(result.stdout)
     if 'error' in data:
-        assert data.pop('source') == typed
+        assert data.pop('source') == typed.partition('?')[0]
     return result.returncode, data, result.stderr
 
 
@@ -134,8 +134,14 @@ def test_work_tree_root_keeps_the_repository_view(layout, spelling, view):
     target = _abs(repo) + spelling[len('root'):]
     expected = _reveal(repo, f'git://.{view}')
     actual = _reveal(parent, f'git://{target}{view}')
-    assert (actual.returncode, actual.stdout, actual.stderr) == \
-        (expected.returncode, expected.stdout, expected.stderr)
+    actual_text, expected_text = actual.stdout, expected.stdout
+    if not view:
+        actual_heading, _, actual_text = actual_text.partition('\n')
+        expected_heading, _, expected_text = expected_text.partition('\n')
+        assert actual_heading.removeprefix('Repository: ').rstrip('/\\') == str(repo)
+        assert expected_heading == 'Repository: .'
+    assert (actual.returncode, actual_text, actual.stderr) == \
+        (expected.returncode, expected_text, expected.stderr)
 
 
 def test_repository_view_counts_every_commit(layout):

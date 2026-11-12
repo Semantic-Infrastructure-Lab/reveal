@@ -90,3 +90,9 @@ def test_repeated_where_and_per_call_overrides_are_isolated(tree):
     assert query(uri)['total_results'] == 1
     with pytest.raises(TypeError, match='Unsupported'):
         query(uri, nonexistent_control=True)
+
+
+def test_original_semantic_predicate_is_validated_before_typed_override(tree):
+    from reveal.api import query
+    with pytest.raises(ValueError, match='number'):
+        query(f'ast://{tree / "a.py"}?complexity>not-a-number', where=['name=a'])

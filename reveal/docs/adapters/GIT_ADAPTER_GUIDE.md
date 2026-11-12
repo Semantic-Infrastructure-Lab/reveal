@@ -40,6 +40,29 @@ category: guide
 
 ## Quick Start
 
+The generated CLI, URI spelling and typed API use the same existing Git owners:
+
+```bash
+reveal git . --view history --where 'author~=Scott' --limit 5
+reveal git src/app.py@HEAD~1 --detail raw
+reveal git src/app.py@HEAD~1 --view blame --element load_config
+reveal git . --view ownership --sort=-commits --limit 5
+reveal git . --view history --bucket month --scan-limit 1000 --limit 6
+```
+
+Git resources belong to the repository namespace. A file deleted from the working
+tree can still be read at an earlier ref. Named semantic blame resolves bounds
+from that revision, and element-history parser loss is never treated as absence.
+Typed CLI paths are passed literally, including supported filesystem punctuation;
+URI resource bytes retain their legacy codec. Directory-walking flags do not apply.
+
+All direct views carry execution evidence. Invalid requests exit 2; required source
+or output loss exits 3. Recovered structures, replacement decoding, unreadable
+enumerated refs and failed changed-content searches retain useful observations with
+an incomplete diagnostic. Missing analyzer support is distinct from a measured
+empty structure. Registered MCP retains partial evidence, rejects fully failed
+required work, and keeps a healthy followup independent of earlier failures.
+
 Python `query()` binds declared controls before calling the existing Git owners:
 
 ```python
@@ -51,7 +74,10 @@ raw_file = query("git://src/app.py@HEAD~1", detail="raw")
 ```
 
 `where` repeats to AND predicates and retains the existing Git predicate language,
-including percent-decoded predicate values. `since` and `until` also preserve repeated
+including percent-decoded commit-metadata predicate values. `content~=TEXT` retains
+literal changed-line substring matching, separate from metadata regex predicates.
+That predicate is supported by flat history and repository recent-commit views;
+aggregate, blame, diff and file-content requests reject it. `since` and `until` also preserve repeated
 bounds. Typed overrides validate the original URI first; `None` restores omitted
 control defaults. `view` is an alias of the existing `type` selector, with `log`
 retained as history. URI `view=history&where=author%3DScott` uses the same owner.
@@ -59,10 +85,15 @@ retained as history. URI `view=history&where=author%3DScott` uses the same owner
 Typed `merges=True/False` and URI `merges=on/off` explicitly include/exclude merge
 commits. Omission preserves each view's default. Existing numeric/string boolean
 `merges=1` remains ownership-only, including its unused-control note on other views.
-The existing per-view cap scopes remain: timeline `limit` still bounds commit input;
-separating that input budget from answer-row limits belongs to the remaining command
-migration. This foundation adds typed bindings; the generated Git CLI and expanded
-execution qualification are still pending.
+Canonical `limit` and `offset` cap returned authors or time buckets after aggregation;
+aggregate totals retain the input population. `scan-limit` bounds aggregate commit
+input (timeline default 20,000; ownership default unbounded). A known input-window
+cut exits 3; a display page remains complete. Python also accepts `scan_limit`.
+Legacy `type=ownership&limit=N` and `type=history&bucket=...&limit=N` preserve their
+input-window meaning until that spelling retires; legacy ownership zero is unbounded.
+Using canonical `view`, an explicit `scan-limit`, or typed view/sort/limit/offset/scan_limit overrides
+selects the separated controls. Retirement notes and final help compression remain
+part of the pre-1.0 command migration.
 
 
 ```bash
@@ -737,6 +768,7 @@ key (`?authr`, `?authr=Scott`) gets the stderr warning "Unknown query param" ins
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `limit` | integer | 20 (refs), 50 (history) | Maximum results |
+| `verbose` | boolean | false | Legacy full blame detail; use `detail=full` |
 | `offset` | integer | 0 | Skip N results |
 | `sort` | string | `date` | Sort order (date, author, message) |
 

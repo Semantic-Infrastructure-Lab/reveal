@@ -465,6 +465,10 @@ class AstAdapter(ResourceAdapter):
         ast_query(params)
 
     @staticmethod
+    def validate_original_request(params, resource):
+        ast_query(params)
+
+    @staticmethod
     def result_type_for(params):
         view = dict(params.peek_items()).get('view')
         if view in ('dict-heatmap', 'dict-schemas'):

@@ -26,7 +26,8 @@ from ...utils.results import note_warning
 from ...utils.path_utils import to_posix
 from .renderer import GitRenderer
 from . import refs, commits, files, queries
-from .params import PARAM_SPECS, runtime_query
+from .params import PARAM_SPECS, runtime_query, apply_aggregate_rows, validate_resource_controls
+from .qualification import execution_facts, answer_requirement_error, qualify_source_evidence, portable_repository_paths
 
 _SCHEMA_QUERY_PARAMS = {
     'type': {'type': 'string', 'description': 'Query type for file operations', 'values': ['history', 'blame', 'diff', 'ownership'], 'examples': ['?type=history', '?type=blame', '?type=ownership']},
@@ -47,7 +48,7 @@ _SCHEMA_QUERY_PARAMS = {
     'until': {'type': 'string', 'description': 'Ergonomic alias for date<=YYYY-MM-DD (rewritten into a date filter)', 'examples': ['?until=2026-01-01']},
     'ignore': {'type': 'string', 'description': 'For blame: comma-separated commit hash prefixes to suppress', 'examples': ['?type=blame&ignore=69b0093,f5fcac0']},
     'raw': {'type': 'string', 'description': 'For file-at-ref: "1" returns raw file contents instead of structural view', 'examples': ['?raw=1']},
-    'content~': {'type': 'string', 'description': 'Pickaxe search: only commits where the diff added or removed the given string (regex)', 'examples': ['?content~=TODO']},
+    'content~': {'type': 'string', 'description': 'Pickaxe search: only commits where a changed diff line contains the literal string', 'examples': ['?content~=TODO']},
 }
 
 def _git_output_type(type_name: str, description: str, extra_props: dict) -> dict:
@@ -56,13 +57,16 @@ def _git_output_type(type_name: str, description: str, extra_props: dict) -> dic
         'type': {'type': 'string', 'const': type_name},
         'source': {'type': 'string'},
         'source_type': {'type': 'string'},
+        'meta': {'type': 'object'},
     }
     base.update(extra_props)
-    return {'type': type_name, 'description': description, 'schema': {'type': 'object', 'properties': base}}
+    return {'type': type_name, 'description': description,
+            'schema': {'type': 'object', 'properties': base,
+                       'required': ['contract_version', 'type', 'source', 'source_type', 'meta']}}
 
 _SCHEMA_OUTPUT_TYPES = [
     _git_output_type('git_repository', 'Repository overview with branches, tags, and recent commits', {
-        'source_type': {'type': 'string', 'const': 'repository'},
+        'source_type': {'type': 'string', 'const': 'directory'},
         'path': {'type': 'string'}, 'head': {'type': 'object'},
         'branches': {'type': 'object'}, 'tags': {'type': 'object'}, 'commits': {'type': 'object'}
     }),
@@ -82,6 +86,14 @@ _SCHEMA_OUTPUT_TYPES = [
     _git_output_type('git_file_history', 'File commit history', {
         'path': {'type': 'string'}, 'ref': {'type': 'string'},
         'count': {'type': 'integer'}, 'commits': {'type': 'array'}
+    }),
+    _git_output_type('git_directory_history', 'Directory commit history', {
+        'path': {'type': 'string'}, 'ref': {'type': 'string'},
+        'count': {'type': 'integer'}, 'commits': {'type': 'array'}
+    }),
+    _git_output_type('git_file_diff', 'Unified changed-line diff at a ref versus its parent', {
+        'path': {'type': 'string'}, 'ref': {'type': 'string'},
+        'diff_text': {'type': 'string'}, 'commit': {'type': 'string'}
     }),
     _git_output_type('git_timeline', 'Bucketed commit/author counts over time for a file, directory, or repo', {
         'source_type': {'type': 'string', 'enum': ['file', 'directory', 'repository']},
@@ -213,7 +225,21 @@ class GitAdapter(ResourceAdapter):
     LEGACY_INIT = False
     BOUND_QUERY_CALL = True
     PARAM_SPECS = PARAM_SPECS
-    RESOURCE_SPEC = ResourceSpec(walks=False)
+    RESOURCE_SPEC = ResourceSpec(walks=False, filesystem=False)
+    RESULT_TYPE = 'git_repository'
+    DEFAULT_FAIL_ON = 'none'
+    FINDINGS_POLICIES = ('none',)
+    LEGACY_CHECK_TRANSPORT = True
+    execution_facts = staticmethod(execution_facts)
+    def answer_requirement_error(self, result, expected_type, prior_facts=None):
+        from .qualification import observation_counts, presentation_observations_error
+        error = answer_requirement_error(result, expected_type, prior_facts)
+        if error or result.get('error') or result.get('applicable') is False:
+            return error
+        if prior_facts is None:
+            self._source_observations = observation_counts(result)
+        return presentation_observations_error(result, self._source_observations)
+
     CLI_QUERY_FLAGS = {
         'since': 'since={value}', 'until': 'until={value}',  # BACK-1192
         'all': 'limit=1000000',  # lifts the 50-commit log default (BACK-1379)
@@ -221,6 +247,27 @@ class GitAdapter(ResourceAdapter):
         # below) -- --verbose is a no-op on any other type=, same as detail= itself.
         'verbose': 'detail=full',
     }
+
+    @classmethod
+    def result_type_at(cls, params, resource):
+        from .qualification import selected_type
+        parsed = cls._parse_resource_string(resource, inline_query=False,
+                                            literal_paths=params._transport == 'typed')
+        return selected_type(parsed, params)
+
+    @classmethod
+    def uri_result_type(cls, resource):
+        from ...utils.query_binding import prepare_declared_params
+        path, _, query = resource.partition('?')
+        return cls.result_type_at(prepare_declared_params(PARAM_SPECS, query, 'uri'), path)
+
+    @classmethod
+    def validate_original_request(cls, params, resource):
+        validate_resource_controls(params, cls._parse_resource_string(resource, inline_query=False)['subpath'])
+
+    @classmethod
+    def uri_execution_facts(cls, resource):
+        return cls.execution_facts
 
     def _normalize_resource_parameter(self, resource: Optional[str],
                                        path: Optional[str]) -> str:
@@ -249,7 +296,7 @@ class GitAdapter(ResourceAdapter):
 
     def _parse_and_initialize_attributes(self, resource: str, ref: Optional[str],
                                           subpath: Optional[str],
-                                          query: Optional[Dict[str, Any]]) -> None:
+                                          query: Optional[Dict[str, Any]], *, inline_query=True, literal_paths=False) -> None:
         """Parse resource string or use explicit args to initialize attributes.
 
         Args:
@@ -263,7 +310,7 @@ class GitAdapter(ResourceAdapter):
         # Also handles empty string from bare URIs like "git://"
         if subpath is None and resource is not None:
             # Parse resource string to extract path/subpath/ref
-            parsed = self._parse_resource_string(resource)
+            parsed = self._parse_resource_string(resource, inline_query=inline_query, literal_paths=literal_paths)
             self.path = parsed['path']
             # A ref= keyword wins over an @ref in the resource string
             if ref is None:
@@ -377,7 +424,7 @@ class GitAdapter(ResourceAdapter):
         """
         # Normalize resource parameter
         resource = self._normalize_resource_parameter(resource, path)
-        inline_query = resource.rsplit('?', 1)[1] if subpath is None and '?' in resource else ''
+        inline_query = resource.rsplit('?', 1)[1] if params is None and subpath is None and '?' in resource else ''
         explicit_items = _query_parameter_items(query)
         overridden = {key for key, _ in explicit_items}
         self._query_items = [(key, value) for key, value in _query_parameter_items(inline_query)
@@ -386,14 +433,16 @@ class GitAdapter(ResourceAdapter):
             query = parse_query_params(query)
 
         # Parse and initialize attributes
-        self._parse_and_initialize_attributes(resource, ref, subpath, query)
+        self._parse_and_initialize_attributes(resource, ref, subpath, query, inline_query=params is None,
+                                              literal_paths=params is not None and getattr(params, '_transport', 'typed') == 'typed')
         if params is None:
             legacy_query = '&'.join(filter_expression(key, value) for key, value in self._query_items)
             params = bind_declared_params(PARAM_SPECS, legacy_query, transport='uri')
         elif not isinstance(params, QueryParams):
             params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        validate_resource_controls(params, self.subpath)
         self.query_params = params
-        self.query, self._query_items = runtime_query(params)
+        self.query, self._query_items, self.aggregate_control = runtime_query(params)
 
 
         self.repo: Optional['pygit2.Repository'] = None
@@ -511,7 +560,7 @@ class GitAdapter(ResourceAdapter):
                 )
 
     @staticmethod
-    def _parse_resource_string(resource: str) -> Dict[str, Any]:
+    def _parse_resource_string(resource: str, *, inline_query=True, literal_paths=False) -> Dict[str, Any]:
         """Parse git resource string.
 
         Handles various git:// URI formats:
@@ -537,12 +586,12 @@ class GitAdapter(ResourceAdapter):
             return {'path': path, 'ref': ref, 'subpath': subpath, 'query': query}
 
         # Extract query parameters first (?key=value)
-        if '?' in resource:
+        if inline_query and '?' in resource:
             resource, query_string = resource.rsplit('?', 1)
             query = parse_query_params(query_string)
 
         # Extract ref (@branch or @tag or @commit)
-        if '@' in resource:
+        if '@' in resource and not (literal_paths and os.path.exists(resource)):
             resource, ref = resource.rsplit('@', 1)
 
         # What's left is path or subpath
@@ -664,7 +713,8 @@ class GitAdapter(ResourceAdapter):
         """The view of :meth:`_view_structure`, with the filter fields no commit has."""
         result = self._view_structure(**kwargs)
         note_warning(result, self._unknown_filter_field_warning())
-        return result
+        result = qualify_source_evidence(portable_repository_paths(result, self.path))
+        return apply_aggregate_rows(result, self.aggregate_control)
 
     def _view_structure(self, **kwargs) -> Dict[str, Any]:
         """
@@ -694,7 +744,7 @@ class GitAdapter(ResourceAdapter):
             # Normalize subpath to be relative to the repo root, not CWD.
             # pygit2 tree/blame APIs require repo-root-relative paths.
             # self.path and self.subpath remain CWD-relative for filesystem ops
-            # (e.g. get_element_line_range reads the actual file on disk).
+            # (historical semantic element reads resolve the selected Git blob).
             git_subpath = self._repo_relative_subpath(repo)
 
             # BACK-1225: 'log' (what overview:// sends for its "Recent changes"
@@ -742,7 +792,7 @@ class GitAdapter(ResourceAdapter):
             elif query_type == 'blame':
                 return files.get_file_blame(
                     repo, self.ref, git_subpath, self.query, self.path,
-                    lambda en, _path, _sub: files.get_element_line_range(en, self.path, self.subpath)
+                    lambda en, _path, _sub: files.get_element_line_range_at_ref(repo, self.ref, git_subpath, en)
                 )
             elif query_type == 'diff':
                 return files.get_file_diff(repo, self.ref, git_subpath, self.query)
@@ -842,6 +892,7 @@ class GitAdapter(ResourceAdapter):
             'description': 'Git repository inspection with history, blame, and file tracking',
             'uri_syntax': 'git://<path>[/<subpath>][@<ref>][?<query>]',
             'query_params': {**_SCHEMA_QUERY_PARAMS, **param_schema(PARAM_SPECS)},
+            'resource': GitAdapter.RESOURCE_SPEC.schema(),
             'elements': {},
             'cli_flags': [],
             'supports_batch': False,
@@ -857,7 +908,13 @@ class GitAdapter(ResourceAdapter):
         return {
             'name': 'git',
             'description': 'Explore Git repositories with progressive disclosure',
-            'syntax': 'git://<path>[/<subpath>][@<ref>][?<query>]',
+            'syntax': 'reveal git [path[@REF]] [--view VIEW] [--where EXPR]',
+            'epilog': ('Views: history, blame, diff, ownership; omit view for repository/file inspection.\n'
+                       'where repeats to AND commit predicates; content~=TEXT matches literal changed-line text.\n'
+                       'limit/offset cap returned rows; scan-limit bounds aggregate commit input (loss exits 3).\n'
+                       'Legacy type= aggregate limits retain input-window meaning during migration.\n'
+                       'detail=raw reads historical file text. Git resolves paths in the requested revision.\n'
+                       'URI: git://PATH[@REF]?view=VIEW&where=EXPR.'),
             'examples': [
                 {'uri': 'git://.', 'description': 'Repository overview (branches, tags, commits)'},
                 {'uri': 'git://.@main', 'description': 'Branch/commit history'},

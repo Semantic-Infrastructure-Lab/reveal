@@ -157,8 +157,10 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
                                   resolve=getattr(adapter_class, 'resource_path', None))
         if getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
             return adapter_class(path, query, overrides=overrides)
+        validate = getattr(adapter_class, 'validate_original_request', None)
         bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
-                                     overrides=overrides)
+                                     overrides=overrides,
+                                     validate=(lambda bound: validate(bound, path)) if validate else None)
         return adapter_class(path, params=bound)
     spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
     if spec is not None:

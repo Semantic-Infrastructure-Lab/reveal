@@ -79,6 +79,9 @@ def _answer(result):
     """(exit, JSON, stderr) without ``source``, which echoes the typed resource for some views."""
     data = json.loads(result.stdout)
     data.pop('source', None)
+    if data.get('type') == 'git_repository':
+        # Repository path, like source, now retains the caller's spelling.
+        assert isinstance(data.pop('path'), str)
     return result.returncode, data, result.stderr
 
 

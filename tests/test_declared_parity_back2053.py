@@ -25,6 +25,7 @@ CASES = {
     'deps': ([], ''),
     'hotspots': ([], ''),
     'imports': ([], ''),
+    'git': ([], ''),
     'json': ([], ''),
     'markdown': ([], ''),
     'metrics': ([], ''),
@@ -141,6 +142,13 @@ def project(tmp_path, monkeypatch):
     (root / 'data.json').write_text('{"items": [1, 2]}', encoding='utf-8')
     (root / 'tests' / 'test_app.py').write_text(
         'from app import serve\n\n\ndef test_serve():\n    assert serve("") is None\n', encoding='utf-8')
+    import pygit2
+    repo = pygit2.init_repository(str(root))
+    for file in ('app.py', 'data.json', 'tests/test_app.py'):
+        repo.index.add(file)
+    repo.index.write()
+    sig = pygit2.Signature('Fixture', 'fixture@example.com', 1700000000, 0)
+    repo.create_commit('HEAD', sig, sig, 'fixture', repo.index.write_tree(), [])
     return root
 
 
@@ -265,8 +273,9 @@ def test_failed_artifact_write_keeps_the_answer_and_exits_three(project, tmp_pat
 @pytest.mark.parametrize('fmt', ['text', 'json'])
 @pytest.mark.parametrize('noun', NOUNS)
 def test_missing_resource_is_rejected_alike(project, noun, fmt):
-    a = run(noun, 'cli', '--format', fmt, resource='absent')
-    b = run(noun, 'uri', '--format', fmt, resource='absent')
+    resource = 'proj/absent.py' if noun == 'git' else 'absent'
+    a = run(noun, 'cli', '--format', fmt, resource=resource)
+    b = run(noun, 'uri', '--format', fmt, resource=resource)
     assert a.returncode == b.returncode == 2, (a.stderr, b.stderr)
     assert_equal_stdout(noun, a.stdout, b.stdout)
     assert parity_stderr(noun, a.stderr, 'cli') == parity_stderr(noun, b.stderr, 'uri')

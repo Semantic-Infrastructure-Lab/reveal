@@ -46,7 +46,7 @@ def test_adapter_names_the_safe_directory_fix(repo_dir, not_owned):
 @pytest.mark.parametrize('query', ['', '?type=history'])
 def test_cli_fails_with_the_fix_and_no_empty_answer(repo_dir, not_owned, query):
     proc = _run_reveal_direct(f"git://{repo_dir}{query}", '--format', 'json')
-    assert proc.returncode == 1
+    assert proc.returncode == 3
     data = json.loads(proc.stdout)
     assert 'safe.directory' in data['error']
     assert not data.get('history') and not data.get('commits')

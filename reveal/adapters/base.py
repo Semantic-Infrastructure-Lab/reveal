@@ -137,6 +137,8 @@ class ResourceAdapter(ABC):
 
     # Explicit class-local adoption: constructor-bound query controls and a zero-argument
     # get_structure call. Subclasses must opt in themselves; plugin from_uri stays legacy.
+    # Optional validate_original_request(params, resource) checks semantic URI constraints
+    # before typed API overrides; source-before-controls readers retain their own loading order.
     BOUND_QUERY_CALL: bool = False
 
     # Some source readers must load once before interpreting query controls.

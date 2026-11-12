@@ -165,9 +165,14 @@ def _validate_walk_policy(adapter, args, query_policy) -> None:
         raise ValueError('--no-gitignore / respect-gitignore requires a directory-walking operation')
 
 
+
+def _walk_scope(adapter, path, args):
+    from ...utils.exclusions import dispatch_scope
+    return dispatch_scope(path, peek(args, 'exclude')) if adapter.RESOURCE_SPEC.walks else (None, [])
+
 def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=(), *,
                   answer_consumer=None) -> None:
-    from ...utils.exclusions import dispatch_scope, exclusion_scope
+    from ...utils.exclusions import exclusion_scope
     from ...utils.gitignore import gitignore_scope, split_respect_gitignore
     from ...utils.query_binding import bind_resource_path, prepare_declared_params
     adapter = declared_adapter_class(name)
@@ -216,7 +221,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             scope_path = _scope_path(adapter, path)
             expected_type = _result_type_at(adapter, expected_type, source, scope_path)
             try:
-                root, excludes = dispatch_scope(scope_path, peek(args, 'exclude'))
+                root, excludes = _walk_scope(adapter, scope_path, args)
             except (OSError, ValueError) as exc:
                 from ...utils.results import FailureCause
                 consume(_invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS,
@@ -278,7 +283,8 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
             if validate is not None:
                 validate(params, args)
         # stat distinguishes absence from inaccessible required work.
-        Path(scope).stat()
+        if adapter_class.RESOURCE_SPEC.filesystem:
+            Path(scope).stat()
     except (FileNotFoundError, NotADirectoryError):
         return _invalid_answer(adapter_class, name, scope, f'Path not found: {to_posix(path)}', args, result_type=expected_type)
     except ValueError as exc:

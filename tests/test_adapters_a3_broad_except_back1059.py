@@ -209,7 +209,7 @@ def _stats_adapter(tmp_path):
 
 _FILTER_ADAPTERS = [
     pytest.param(_git_adapter, 'reveal.adapters.git.adapter', id='git'),
-    pytest.param(_markdown_adapter, 'reveal.adapters.markdown.adapter', id='markdown'),
+    pytest.param(_markdown_adapter, 'reveal.adapters.markdown.params', id='markdown'),
     pytest.param(_stats_adapter, 'reveal.adapters.stats.adapter', id='stats'),
 ]
 

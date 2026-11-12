@@ -32,6 +32,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- Git gains a generated CLI over its existing owners, with request/source/output exits 2/3 and source evidence across direct views. Historical semantic blame uses the selected blob; element-parser failures, decoding loss, unreadable refs and failed content searches cannot become clean absence. Canonical aggregate `limit` caps authors/buckets after counting; `scan-limit` bounds commit input, while legacy `type=` aggregate windows keep their meaning. Earlier search failures no longer contaminate healthy followups. Original semantic URI constraints are validated before typed API overrides, including AST predicates (BACK-2616, BACK-2613).
+
 - Git Python queries now bind declared controls before execution: `view`, repeated `where` and time bounds, pagination, ref, detail and merge policy reach the existing owners. Typed booleans and `merges=on/off` give an explicit positive switch; legacy numeric merges remains ownership-only. Original invalid predicates cannot be hidden by typed overrides (BACK-2616).
 
 - JSON gains a generated CLI and typed API controls using the existing loader and predicate engine. `where` filters arrays; `view` selects inspection; raw flatten text keeps canonical JSON enveloped while the legacy data-only spelling retains its array. All direct views carry execution evidence and use usage/source-failure exits 2/3. File-only commands reject walking flags (BACK-2615).

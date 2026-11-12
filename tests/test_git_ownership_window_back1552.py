@@ -29,11 +29,11 @@ def repo(tmp_path_factory):
     return path
 
 
-def run(repo, uri, fmt):
+def run(repo, uri, fmt, expected_code=0):
     proc = subprocess.run([sys.executable, '-m', 'reveal.main', uri, '--format', fmt],
                           cwd=repo, capture_output=True, text=True, encoding='utf-8',
                           timeout=120)
-    assert proc.returncode == 0, proc.stderr
+    assert proc.returncode == expected_code, proc.stderr
     return proc
 
 
@@ -42,7 +42,7 @@ def cuts(data):
 
 
 def test_limit_below_history_discloses_window_in_json(repo):
-    data = json.loads(run(repo, 'git://.?type=ownership&limit=2', 'json').stdout)
+    data = json.loads(run(repo, 'git://.?type=ownership&limit=2', 'json', expected_code=3).stdout)
     assert data['total_commits'] == 2
     [cut] = cuts(data)
     assert (cut['field'], cut['shown'], cut['total'], cut['exact']) == ('commits', 2, 3, False)
@@ -51,7 +51,7 @@ def test_limit_below_history_discloses_window_in_json(repo):
 
 
 def test_limit_below_history_discloses_window_in_text(repo):
-    out = run(repo, 'git://.?type=ownership&limit=2', 'text').stdout
+    out = run(repo, 'git://.?type=ownership&limit=2', 'text', expected_code=3).stdout
     assert 'newest 2 commits' in out
     assert 'Truncated commits: showing 2 of 3+' in out
 
@@ -87,5 +87,5 @@ def test_window_holds_the_newest_commits_among_same_second_ones(tmp_path):
         subprocess.run(['git', 'add', 'f.txt'], cwd=tmp_path, check=True, env=env, timeout=60)
         subprocess.run(['git', 'commit', '-qm', f"c{i}"], cwd=tmp_path, check=True,
                        capture_output=True, env=env, timeout=60)
-    data = json.loads(run(tmp_path, 'git://.?type=ownership&limit=3', 'json').stdout)
+    data = json.loads(run(tmp_path, 'git://.?type=ownership&limit=3', 'json', expected_code=3).stdout)
     assert sorted(a['name'] for a in data['authors']) == ['a6', 'a7', 'a8']

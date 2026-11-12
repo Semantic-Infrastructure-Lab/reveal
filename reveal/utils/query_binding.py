@@ -129,6 +129,8 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     prepared = QueryParams(_normalize_aliases(declarations, params))
     prepared._aliases = {spec.name: spec.aliases for spec in declarations}
     prepared._selectors = selectors
+    prepared._supplied_aliases = {alias for spec in declarations for alias in spec.aliases
+                                  if alias in dict.keys(params)}
     for name, selector in selectors.items():
         prepared._aliases[name] += (selector,)
     return prepared
@@ -149,6 +151,7 @@ def prepare_declared_params(declarations: Iterable[ParamSpec],
         raise TypeError('Typed parameters must be a mapping')
     supplied = _normalize_aliases(declarations, source)
     params = QueryParams()
+    params._supplied_aliases = {alias for spec in declarations for alias in spec.aliases if alias in source}
     for spec in declarations:
         destination = spec.cli.dest if spec.cli and spec.cli.dest else spec.name
         if destination in supplied:
@@ -176,18 +179,22 @@ def _validate_binding(spec: ParamSpec, raw: Any, transport: str) -> Any:
 
 
 def bind_declared_params(specs: Iterable[ParamSpec], source: Union[str, Mapping[str, Any]],
-                         *, transport: str, overrides: Optional[Mapping[str, Any]] = None) -> QueryParams:
+                         *, transport: str, overrides: Optional[Mapping[str, Any]] = None,
+                         validate: Optional[Callable[[QueryParams], None]] = None) -> QueryParams:
     """Validate supplied values without consuming them; conversion/decoding occurs once.
 
     CLI binding preserves original typed values. URI parsing retains legacy
     trimming/last-wins/presence rules and decodes only explicitly opted-in keys.
     Omitted controls remain omitted, so defaults do not become submitted flags.
+    An optional owner validator checks original semantic constraints before typed overrides.
     Explicit typed overrides use canonical declaration names and apply only after
     original-source validation. They never undergo URI decoding or count as reads.
     """
     declarations = tuple(specs)
     params = prepare_declared_params(declarations, source, transport)
     params = bind_prepared_params(declarations, params, transport=transport)
+    if validate is not None:
+        validate(params)
     return apply_declared_overrides(declarations, params, overrides)
 
 
@@ -206,6 +213,7 @@ def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryPar
                             ', '.join(repr(key) for key in unknown))
         from .query_parser import query_key_recorder
         query_key_recorder(*supplied)
+        params._overrides.update(supplied)
         for spec in declarations:
             if spec.name in supplied:
                 raw = supplied[spec.name]

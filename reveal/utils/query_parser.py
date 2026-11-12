@@ -118,6 +118,8 @@ class QueryParams(Dict[str, Any]):
         self._reads = query_key_recorder()
         self._aliases: Dict[str, Tuple[str, ...]] = {}
         self._selectors: Dict[str, str] = {}
+        self._supplied_aliases: set[str] = set()
+        self._overrides: set[str] = set()
         self._transport = "typed"
         self._normalized: Dict[str, Tuple[Any, Any, Any]] = {}
 
@@ -307,6 +309,7 @@ class ResourceSpec:
     uri_codec: str = 'raw'
     kind: Optional[str] = None
     walks: bool = True
+    filesystem: bool = True
 
     def schema(self) -> Dict[str, Any]:
         result = {'name': self.name, 'required': self.required,
@@ -314,6 +317,8 @@ class ResourceSpec:
                   'uri_codec': self.uri_codec}
         if not self.walks:
             result['walks'] = False
+        if not self.filesystem:
+            result['filesystem'] = False
         if self.kind is not None:
             result['kind'] = self.kind
         return result

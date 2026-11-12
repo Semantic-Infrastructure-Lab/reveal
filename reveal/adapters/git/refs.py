@@ -127,6 +127,13 @@ def _get_branch_info(repo, branch_name) -> 'Dict[str, Any] | None':
         return None
 
 
+
+class RefList(list):
+    """Read ref records and the names enumeration reached but could not analyze."""
+    def __init__(self):
+        super().__init__()
+        self.failures: List[str] = []
+
 def list_branches(repo: 'pygit2.Repository') -> List[Dict[str, Any]]:
     """List repository branches, newest first. The caller cuts (BACK-1551).
 
@@ -134,12 +141,15 @@ def list_branches(repo: 'pygit2.Repository') -> List[Dict[str, Any]]:
     branches at all propagates, rather than returning a partial list as if whole
     (BACK-1614).
     """
-    branches = []
+    branches = RefList()
     for branch_name in repo.branches.local:
         info = _get_branch_info(repo, branch_name)
         if info:
             branches.append(info)
-    return sorted(branches, key=lambda b: cast(int, b.get('timestamp', 0)), reverse=True)
+        else:
+            branches.failures.append(branch_name)
+    branches.sort(key=lambda b: cast(int, b.get('timestamp', 0)), reverse=True)
+    return branches
 
 
 def _get_tag_info(repo, ref_name) -> 'Dict[str, Any] | None':
@@ -173,11 +183,14 @@ def list_tags(repo: 'pygit2.Repository') -> List[Dict[str, Any]]:
     Same contract as list_branches: one unreadable tag is skipped, a failure to
     list them propagates (BACK-1614).
     """
-    tags = []
+    tags = RefList()
     for ref_name in repo.references:
         if not ref_name.startswith('refs/tags/'):
             continue
         info = _get_tag_info(repo, ref_name)
         if info:
             tags.append(info)
-    return sorted(tags, key=lambda t: cast(int, t.get('timestamp', 0)), reverse=True)
+        else:
+            tags.failures.append(ref_name)
+    tags.sort(key=lambda t: cast(int, t.get('timestamp', 0)), reverse=True)
+    return tags

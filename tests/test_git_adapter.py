@@ -2282,7 +2282,7 @@ class TestLineRangeElementSyntax:
         from unittest.mock import patch, MagicMock
         mock_func = MagicMock(return_value=None)
         from reveal.adapters.git import files as git_files
-        with patch.object(git_files, 'get_element_line_range', mock_func):
+        with patch.object(git_files, 'get_element_line_range_at_ref', mock_func):
             adapter = GitAdapter(
                 path=str(git_repo),
                 subpath='README.md',
@@ -2293,50 +2293,21 @@ class TestLineRangeElementSyntax:
         assert 'element' in result
 
 
-class TestProceduralFileFallback(unittest.TestCase):
-    """_apply_element_blame_filter emits a better message for procedural files."""
+class TestNamedElementRejection(unittest.TestCase):
+    """A proven absent named element rejects instead of returning unfiltered blame."""
 
     def _make_hunks(self):
         return [{'lines': {'start': 1, 'count': 5}, 'commit': {
             'hash': 'abc1234', 'author': 'A', 'date': '2026-01-01', 'message': 'init'
         }}]
 
-    def test_procedural_file_suggestion_in_message(self):
-        """When file has no named elements, stderr includes L<start>-L<end> suggestion."""
-        import io
-        from reveal.adapters.git.files import _apply_element_blame_filter, _file_has_no_named_elements
-        from unittest.mock import patch
-
-        hunks = self._make_hunks()
-        buf = io.StringIO()
-        with patch('reveal.adapters.git.files._file_has_no_named_elements', return_value=True):
-            with patch('sys.stderr', buf):
-                element_info, result_hunks = _apply_element_blame_filter(
-                    'process_data', hunks, '/some/path', 'script.c',
-                    lambda name, path, sub: None
-                )
-        assert element_info is None
-        assert result_hunks is hunks
-        msg = buf.getvalue()
-        assert 'L<start>-L<end>' in msg
-        assert 'procedural' in msg.lower()
-
-    def test_normal_not_found_message_when_file_has_elements(self):
-        """When file has elements but the name is wrong, show the original note."""
-        import io
+    def test_missing_named_element_rejects_with_line_range_hint(self):
+        from reveal.errors import MissingResourceError
         from reveal.adapters.git.files import _apply_element_blame_filter
-
-        hunks = self._make_hunks()
-        buf = io.StringIO()
-        with patch('reveal.adapters.git.files._file_has_no_named_elements', return_value=False):
-            with patch('sys.stderr', buf):
-                element_info, _ = _apply_element_blame_filter(
-                    'nonexistent_func', hunks, '/p', 'f.py',
-                    lambda name, path, sub: None
-                )
-        msg = buf.getvalue()
-        assert 'not found' in msg
-        assert 'L<start>-L<end>' not in msg
+        with pytest.raises(MissingResourceError, match='Element not found') as raised:
+            _apply_element_blame_filter('absent', self._make_hunks(), '/some/path', 'script.c',
+                                        lambda name, path, sub: None)
+        assert 'L<start>-L<end>' in str(raised.value)
 
 
 # ---------------------------------------------------------------------------
@@ -2475,7 +2446,7 @@ class TestReadBlobLines:
         from reveal.adapters.git.files import resolve_commit, _read_blob_lines
         repo = pygit2.Repository(str(git_repo))
         commit = resolve_commit(repo, 'HEAD')
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError, match='File not found'):
             _read_blob_lines(repo, commit, 'nonexistent.txt')
 
 

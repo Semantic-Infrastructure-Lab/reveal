@@ -5,7 +5,8 @@ from datetime import datetime
 from typing import Callable, Dict, Any, List, Optional, cast, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
 
-from ...errors import MissingResourceError
+from ...errors import MissingResourceError, RequestValidationError
+from .qualification import ref_sources
 from ...utils.query import ResultControl, apply_result_control, unknown_sort_field_warning
 from ...utils.results import ResultBuilder, note_truncation, note_warning
 
@@ -22,14 +23,31 @@ def resolve_commit(repo: 'pygit2.Repository', ref: str) -> 'pygit2.Commit':
     import pygit2
     try:
         obj = repo.revparse_single(ref)
-        while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-            obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-    except (KeyError, pygit2.GitError) as e:
+    except KeyError as e:
+        if _known_named_ref(repo, ref):
+            raise ValueError(f"Cannot read object behind ref: {ref}") from e
         raise MissingResourceError(f"Cannot resolve ref: {ref}") from e
+    except pygit2.GitError as e:
+        raise ValueError(f'Cannot read ref: {ref}') from e
+    while isinstance(obj, pygit2.Tag):
+        try:
+            obj = repo[obj.target]
+        except (KeyError, pygit2.GitError) as e:
+            raise ValueError(f'Cannot read tag target: {ref}') from e
     if not isinstance(obj, pygit2.Commit):
-        raise ValueError(f"Cannot resolve ref to commit: {ref}")
+        raise RequestValidationError(f"Cannot resolve ref to commit: {ref}")
     return cast('pygit2.Commit', obj)
 
+
+
+def _known_named_ref(repo, ref):
+    lookup = getattr(repo, 'lookup_reference_dwim', None)
+    if lookup is None:
+        return False
+    try:
+        return lookup(ref) is not None
+    except (KeyError, ValueError):  # absent name, or a revision expression rather than a reference name
+        return False
 
 def history_sort() -> int:
     """pygit2 walk order for every user-visible history listing (BACK-1426).
@@ -124,9 +142,8 @@ def commit_filter(
     Cheapest test first: merges, then the path touch check, then the formatted commit's
     filters, then the diff search (``?content~=``), which reads blobs.
     """
-    if content_pattern:
-        from .files import _commit_diff_contains, _reset_content_search_error
-        _reset_content_search_error()
+    from .files import _commit_diff_contains, _reset_content_search_error
+    _reset_content_search_error()
 
     def keep(commit: 'pygit2.Commit') -> Optional[Dict[str, Any]]:
         if no_merges and len(commit.parents) > 1:
@@ -172,6 +189,7 @@ def get_repository_overview(
         contract_version=CONTRACT_VERSION,
         path=repo.workdir or repo.path,
         head=head_info,
+        meta={'ref_sources': ref_sources(branches, tags)},
         branches={
             'count': len(list(repo.branches.local)),
             'recent': branches[:recent_limit],
@@ -216,10 +234,10 @@ def get_recent_commits(
     content_pattern: Optional[str] = None,
 ) -> HistoryWalk:
     """Get recent commits from HEAD."""
-    if repo.is_empty:
-        return HistoryWalk([], 0, True)
     keep = commit_filter(repo, format_commit_func, matches_all_filters_func,
                          no_merges=no_merges, content_pattern=content_pattern)
+    if repo.is_empty:
+        return HistoryWalk([], 0, True)
     return walk_history(repo, repo.head.target, keep, limit, result_control)
 
 

@@ -3,14 +3,14 @@
 import logging
 import os
 import re
-import sys
 from datetime import datetime
-from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
+from typing import Dict, Any, List, Optional, Tuple, cast, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
 
-from ...errors import MissingResourceError
+from ...errors import MissingResourceError, RequestValidationError
 from ...utils.path_utils import failure_of
 from ...utils.results import ResultBuilder, note_truncation
+from .qualification import text_evidence
 from .commits import (commit_filter, resolve_commit, disclose_timeline_cut, history_sort, timeline_fields,
                       walk_history)
 from reveal.utils.lines import normalize_newlines, split_lines
@@ -35,6 +35,20 @@ if TYPE_CHECKING:
     import pygit2
 
 
+
+def _decode_blob(data: bytes) -> Tuple[str, bool]:
+    try:
+        return data.decode('utf-8'), False
+    except UnicodeDecodeError:
+        return data.decode('utf-8', errors='replace'), True
+
+
+class BlobLines(list):
+    """The existing list of lines with read evidence retained until the result is built."""
+    def __init__(self, content: str, decoding_loss: bool):
+        super().__init__(split_lines(content))
+        self.decoding_loss = decoding_loss
+
 def get_file_at_ref(
     repo: 'pygit2.Repository',
     ref: str,
@@ -53,7 +67,7 @@ def get_file_at_ref(
 
         if entry.type_str == 'blob':
             blob = cast('pygit2.Blob', repo[entry.id])
-            content = blob.data.decode('utf-8', errors='replace')
+            content, decoding_loss = _decode_blob(blob.data)
             short_hash = str(commit.id)[:7]
             line_count = len(split_lines(content))
             commit_info = {
@@ -76,9 +90,10 @@ def get_file_at_ref(
                     size=blob.size,
                     content=content,
                     lines=line_count,
+                    meta=text_evidence(decoding_loss),
                 )
 
-            structure = _analyze_blob_content(content, subpath)
+            structure, available = _analyze_blob_content(content, subpath)
             return ResultBuilder.create(
                 result_type='git_file_structure',
                 source=f"{subpath}@{ref}",
@@ -91,9 +106,10 @@ def get_file_at_ref(
                 size=blob.size,
                 lines=line_count,
                 structure=structure,
+                meta={**text_evidence(decoding_loss), 'blob_analysis': {'available': available}},
             )
         else:
-            raise ValueError(
+            raise RequestValidationError(
                 f"Path is not a file: {subpath}\n"
                 f"  git:// expects a file path, not a directory.\n"
                 f"  For repo overview: reveal git://\n"
@@ -111,7 +127,7 @@ def get_file_at_ref(
         raise ValueError(f"File not found at {ref}: {subpath}") from e
 
 
-def _analyze_blob_content(content: str, subpath: str) -> Dict[str, Any]:
+def _analyze_blob_content(content: str, subpath: str) -> Tuple[Dict[str, Any], bool]:
     """Write blob content to a temp file and run the reveal analyzer on it."""
     import tempfile
     from pathlib import Path
@@ -128,9 +144,9 @@ def _analyze_blob_content(content: str, subpath: str) -> Dict[str, Any]:
     try:
         analyzer_class = get_analyzer(temp_path, allow_fallback=False)
         if not analyzer_class:
-            return {}
+            return {}, False
         structure = analyzer_class(temp_path).get_structure()
-        return cast(Dict[str, Any], structure.get('structure', structure))
+        return cast(Dict[str, Any], structure.get('structure', structure)), True
     finally:
         os.unlink(temp_path)
 
@@ -150,6 +166,8 @@ def get_file_diff(
     import subprocess
 
     commit = resolve_commit(repo, ref)
+    if not _diff_target_exists(commit, subpath):
+        raise MissingResourceError(f'Path not found at {ref} or its parent: {subpath}')
 
     short_hash = str(commit.id)[:7]
     context = int(query.get('context', 3))
@@ -166,7 +184,7 @@ def get_file_diff(
                empty_tree, str(commit.id), '--', subpath]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace', encoding='utf-8',
+        result = subprocess.run(cmd, capture_output=True, text=True, errors='strict', encoding='utf-8',
                                 timeout=_GIT_DIFF_TIMEOUT_S)
     except FileNotFoundError as e:
         # BACK-1166: match _check_pygit2()'s style of actionable guidance
@@ -208,6 +226,17 @@ def get_file_diff(
         element_filter=element,
     )
 
+
+
+def _diff_target_exists(commit, subpath):
+    revisions = [commit] + list(commit.parents[:1])
+    for revision in revisions:
+        try:
+            revision.tree[subpath]
+            return True
+        except KeyError:
+            continue
+    return False
 
 def _filter_diff_to_element(diff_text: str, element: str) -> str:
     """Return only the hunks from diff_text whose context or body mention element."""
@@ -401,7 +430,7 @@ def _commit_diff_contains(
     if subpath:
         cmd += ['--', subpath]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace', encoding='utf-8',
+        result = subprocess.run(cmd, capture_output=True, text=True, errors='strict', encoding='utf-8',
                                 timeout=_GIT_DIFF_TIMEOUT_S)
         if result.returncode != 0:
             # A diff that did not run is empty output, which reads as "pattern not found"
@@ -420,8 +449,9 @@ def _commit_diff_contains(
         return False
     # What the body can raise: the git subprocess (OSError: git missing; SubprocessError:
     # TimeoutExpired) and the commit's parent lookup (GitError, KeyError on a missing object).
-    except (OSError, subprocess.SubprocessError, pygit2.GitError, KeyError) as e:
-        logger.warning("pattern search failed for commit %s: %s", commit.id, e)
+    except (OSError, subprocess.SubprocessError, UnicodeError, pygit2.GitError, KeyError) as e:
+        # The result owns the visible disclosure; keep debug detail out of JSON/tool stdout.
+        logger.debug("pattern search failed for commit %s: %s", commit.id, e)
         _content_search_error = (
             f"content-pattern search degraded: {failure_of(e).cause} "
             "(results may be missing matches, not confirmed absent)"
@@ -457,27 +487,10 @@ def _filter_ignored_hunks(hunks: List[Dict[str, Any]], ignore_shas: List[str]):
     return kept, list(ignored_by_sha.values())
 
 
-def _file_has_no_named_elements(path: str, subpath: str) -> bool:
-    """Return True if the file has no analyzable functions or classes (procedural file)."""
-    try:
-        from reveal.registry import get_analyzer
-        file_path = os.path.join(path, subpath) if path and path != '.' else subpath
-        if not os.path.isabs(file_path):
-            file_path = os.path.abspath(file_path)
-        analyzer_class = get_analyzer(file_path)
-        if not analyzer_class:
-            return True
-        structure = analyzer_class(file_path).get_structure()
-        return not structure.get('functions') and not structure.get('classes')
-    except Exception as e:  # boundary-ok: broad-except -- the get_analyzer()/get_structure() pair runs per-language parser code on the working-tree file (OSError/ValueError are the known failures, the rest cannot be bounded here); the fallback only decides which stderr hint blame prints, and the failure is logged at warning
-        logger.warning("could not determine named elements for %s: %s", subpath, e)
-        return False
-
-
 def _apply_element_blame_filter(element_name, hunks, path, subpath, get_range_func):
     """Filter blame hunks to the line range of a named element or explicit L<s>-L<e> range.
 
-    Returns (element_info, filtered_hunks). If element not found, returns (None, original_hunks).
+    Returns (element_info, filtered_hunks). A proven absent named element rejects the request.
     """
     # Handle explicit line-range syntax: L128-L162 or L128-162
     lr_match = _LINE_RANGE_RE.match(element_name)
@@ -499,17 +512,9 @@ def _apply_element_blame_filter(element_name, hunks, path, subpath, get_range_fu
     # Named element lookup
     element_range = get_range_func(element_name, path, subpath)
     if not element_range:
-        if _file_has_no_named_elements(path, subpath):
-            print(
-                f"Warning: Element '{element_name}' not found in {subpath} — "
-                f"file has no named elements (procedural). "
-                f"Use ?element=L<start>-L<end> to blame a specific line range.",
-                file=sys.stderr,
-            )
-        else:
-            print(f"Note: Element '{element_name}' not found in {subpath}, showing full file blame",
-                  file=sys.stderr)
-        return None, hunks
+        raise MissingResourceError(
+            f"Element not found: {element_name} in {subpath}. "
+            'Use element=L<start>-L<end> for an explicit line range.')
 
     element_info = {
         'name': element_name,
@@ -531,9 +536,15 @@ def _apply_element_blame_filter(element_name, hunks, path, subpath, get_range_fu
 def _read_blob_lines(repo: 'pygit2.Repository', commit: 'pygit2.Commit', subpath: str) -> List[str]:
     """Read file lines from a blob in the given commit's tree."""
     tree = commit.tree
-    entry = tree[subpath]
+    try:
+        entry = tree[subpath]
+    except KeyError as exc:
+        raise MissingResourceError(f'File not found at {commit.id}: {subpath}') from exc
+    if entry.type_str != 'blob':
+        raise RequestValidationError(f'Path is not a file: {subpath}')
     blob = cast('pygit2.Blob', repo[entry.id])
-    return split_lines(blob.data.decode('utf-8', errors='replace'))
+    content, loss = _decode_blob(blob.data)
+    return BlobLines(content, loss)
 
 
 def _format_blame_hunks(repo: 'pygit2.Repository', blame: Any) -> List[Dict[str, Any]]:
@@ -606,8 +617,8 @@ def get_file_blame(
 
     try:
         commit = resolve_commit(repo, ref)
-        blame = repo.blame(subpath, newest_commit=commit.id)
         lines = _read_blob_lines(repo, commit, subpath)
+        blame = repo.blame(subpath, newest_commit=commit.id)
         hunks = _format_blame_hunks(repo, blame)
 
         element_name = query.get('element')
@@ -657,6 +668,7 @@ def get_file_blame(
             hunks=hunks,
             file_content=lines,
             detail=detail_mode,
+            meta=text_evidence(getattr(lines, 'decoding_loss', False)),
         )
 
         if getattr(repo, 'is_shallow', False):
@@ -696,7 +708,7 @@ def _aggregate_commit_authors(
     for c in walker:
         if not include_merges and len(c.parents) > 1:
             continue
-        if limit and walked >= limit:
+        if limit is not None and walked >= limit:
             complete = False  # a commit past the window proves older history exists
             break
         walked += 1
@@ -756,7 +768,7 @@ def get_ownership(
         try:
             entry = commit.tree[git_subpath]
         except KeyError as e:
-            raise ValueError(
+            raise MissingResourceError(
                 f"Path not found at {ref}: {git_subpath}"
             ) from e
         source_type = 'directory' if isinstance(repo[entry.id], pygit2.Tree) else 'file'
@@ -773,7 +785,7 @@ def get_ownership(
         source=f"{git_subpath or '.'}@{ref}",
         source_type=source_type,
         contract_version=CONTRACT_VERSION,
-        scope={'history_window': window} if limit else None,
+        scope={'history_window': window} if limit is not None else None,
         path=git_subpath or '.',
         ref=ref,
         total_commits=total,
@@ -805,44 +817,40 @@ def get_ownership(
     return result
 
 
-def get_element_line_range(element_name: str, path: str, subpath: str) -> Optional[Dict[str, int]]:
-    """Get line range for a specific element (function/class) in the file."""
+
+def _element_range(structure, element_name):
+    for item in structure.get('functions', []) + structure.get('classes', []):
+        if item.get('name') == element_name:
+            return {'line': item['line'], 'line_end': item.get('line_end', item['line'])}
+    return None
+
+
+def _element_source_at_commit(repo, commit, filepath):
+    """Read the selected Git blob once for semantic analysis; loss is never absence."""
+    import pygit2
     try:
-        # Use reveal's registry to analyze the file
-        from reveal.registry import get_analyzer
-
-        # Build absolute path if needed
-        if path and path != '.':
-            file_path = os.path.join(path, subpath)
-        else:
-            file_path = subpath
-
-        # Make path absolute for analyzer
-        if not os.path.isabs(file_path):
-            file_path = os.path.abspath(file_path)
-
-        analyzer_class = get_analyzer(file_path)
-        if not analyzer_class:
-            return None
-
-        analyzer = analyzer_class(file_path)
-        structure = analyzer.get_structure()
-
-        # Search for the element in functions and classes
-        for func in structure.get('functions', []):
-            if func.get('name') == element_name:
-                return {'line': func['line'], 'line_end': func.get('line_end', func['line'])}
-
-        for cls in structure.get('classes', []):
-            if cls.get('name') == element_name:
-                return {'line': cls['line'], 'line_end': cls.get('line_end', cls['line'])}
-
+        entry = commit.tree[filepath]
+    except KeyError:
         return None
+    try:
+        blob = cast('pygit2.Blob', repo[entry.id])
+    except KeyError as exc:
+        raise pygit2.GitError(f"blob {entry.id} of {filepath} is missing from the repository") from exc
+    content, loss = _decode_blob(blob.data)
+    if loss:
+        raise ValueError(f'Cannot analyze semantic elements in undecodable source: {filepath}')
+    structure, available = _analyze_blob_content(content, filepath)
+    if not available or structure.get('_has_errors') or structure.get('error'):
+        raise ValueError(f'Cannot resolve semantic elements from unavailable or recovered analysis: {filepath}')
+    return normalize_newlines(content), structure
 
-    except Exception as e:  # boundary-ok: broad-except -- the get_analyzer()/get_structure() pair runs per-language parser code on the working-tree file (OSError/ValueError are the known failures, the rest cannot be bounded here); the caller then prints 'Element ... not found, showing full file blame' and this prints the failure to stderr
-        # Log error for debugging but don't fail the whole blame operation
-        print(f"Warning: Failed to get element range: {e}", file=sys.stderr)
-        return None
+
+def get_element_line_range_at_ref(repo, ref, subpath, element_name):
+    """Resolve named blame bounds in the requested revision, including deleted worktree files."""
+    source = _element_source_at_commit(repo, resolve_commit(repo, ref), subpath)
+    if source is None:
+        raise MissingResourceError(f'File not found at {ref}: {subpath}')
+    return _element_range(source[1], element_name)
 
 
 def commit_touches_file(
@@ -904,68 +912,19 @@ def commit_touches_path(
     return commit_touches_file(repo, commit, path)
 
 
+
 def _get_element_content_at_commit(
-    repo: 'pygit2.Repository',
-    commit: 'pygit2.Commit',
-    filepath: str,
-    element_name: str,
+    repo: 'pygit2.Repository', commit: 'pygit2.Commit', filepath: str, element_name: str,
 ) -> Optional[str]:
-    """Extract the text of a named element from a file at a specific commit.
-
-    Returns None if the file or element doesn't exist at that commit. A repository that
-    cannot be read (a tree entry whose blob is missing, pygit2.GitError) raises: None would
-    read as "the element was absent at this commit" in an element history (BACK-1059).
-    """
-    import tempfile
-    from pathlib import Path
-    import pygit2
-
-    try:
-        entry = commit.tree[filepath]
-    except KeyError:
+    """Absent file/element returns None; required source or parser failure propagates."""
+    source = _element_source_at_commit(repo, commit, filepath)
+    if source is None:
         return None
-    try:
-        blob = cast('pygit2.Blob', repo[entry.id])
-    except KeyError as exc:  # repo[oid] raises KeyError for an object the repository lacks
-        raise pygit2.GitError(f"blob {entry.id} of {filepath} is missing from the repository") from exc
-    # The analyzer's line numbers count a lone \r as a break; the slice must too (BACK-1736).
-    content = normalize_newlines(blob.data.decode('utf-8', errors='replace'))
-    file_lines = split_lines(content)
-
-    try:
-        suffix = Path(filepath).suffix or '.txt'
-        with tempfile.NamedTemporaryFile(mode='w', newline='', suffix=suffix, delete=False,
-                                         encoding='utf-8') as f:
-            f.write(content)
-            tmp_path = f.name
-
-        try:
-            from reveal.registry import get_analyzer
-            analyzer_class = get_analyzer(tmp_path)
-            if not analyzer_class:
-                return None
-            structure = analyzer_class(tmp_path).get_structure()
-
-            element_range = None
-            for item in structure.get('functions', []) + structure.get('classes', []):
-                if item.get('name') == element_name:
-                    element_range = (item['line'], item.get('line_end', item['line']))
-                    break
-
-            if element_range is None:
-                return None
-
-            start, end = element_range
-            return '\n'.join(file_lines[start - 1:end])
-        finally:
-            os.unlink(tmp_path)
-
-    except Exception as e:  # boundary-ok: broad-except -- get_structure() is per-language parser code run on an old revision of the file, which this module cannot bound (OSError/ValueError are the known ones); logged below, and the element counts as absent at that commit
-        logger.warning(
-            f"Failed to extract {element_name!r} from {filepath!r} at "
-            f"{commit.short_id}: {e}"
-        )
+    content, structure = source
+    bounds = _element_range(structure, element_name)
+    if bounds is None:
         return None
+    return '\n'.join(split_lines(content)[bounds['line'] - 1:bounds['line_end']])
 
 
 def commit_touches_element(

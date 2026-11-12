@@ -41,6 +41,15 @@ first bare `?flatten&data-only` / `?gron&data-only` spelling retains its bare
 array document, with identical stdout and JSON artifact content; producer facts
 still determine its exit. The Python API retains its result dictionary.
 
+Git's declared views use the repository namespace rather than filesystem existence
+as their resource boundary. Selected view identity survives failures. Historical
+semantic blame reads the selected blob; parser loss in element history cannot prove
+absence. `meta.blob_text`, `meta.blob_analysis` and repository `meta.ref_sources`
+retain source decisions. Known loss is incomplete (3), a proven invalid named target
+is usage (2), and unsupported structural analysis is distinct from a valid empty file.
+Canonical aggregate display caps apply after counting; `scan-limit` bounds input.
+Legacy aggregate `type=` limits retain their input-window meaning during migration.
+
 ---
 
 ## Purpose
