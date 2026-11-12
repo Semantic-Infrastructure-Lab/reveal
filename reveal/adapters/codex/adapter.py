@@ -337,13 +337,17 @@ class CodexAdapter(ResourceAdapter):
         self._lookup_error_message = base['error']
         return base
 
+    def _goal_selected(self) -> bool:
+        return (selected_type(self.resource, self.query_params) == 'codex_goal'
+                and bool(self.query_params.get('goal')))
+
     def _handle_session(self, session_id: str) -> Dict[str, Any]:
         """Handle codex://<UUID>[/sub] requests."""
         session_row, candidates = self._find_session_row(session_id)
         if session_row is None:
             return self._lookup_failure_result(session_id, candidates)
 
-        if selected_type(self.resource, self.query_params) == 'codex_goal':
+        if self._goal_selected():
             return self._result_goal(session_row)
 
         self._rollout_analysis = None

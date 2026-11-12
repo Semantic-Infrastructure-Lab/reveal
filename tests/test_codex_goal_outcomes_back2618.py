@@ -169,3 +169,12 @@ def test_goal_metadata_cannot_hide_transcript_source_loss(codex, monkeypatch):
     result = _run_reveal_in(codex.parent, 'codex://' + DOC_SESSION_ID + '/messages', '--format', 'json')
     assert result.returncode == 3
     assert json.loads(result.stdout)['meta']['rollout_analysis']['failed_records'] == 1
+
+
+def test_goal_selector_has_no_false_unused_warning_and_preserves_legacy_priority(codex):
+    selected = _run_reveal_in(codex.parent, 'codex://' + DOC_SESSION_ID + '?goal', '--format', 'json')
+    assert selected.returncode == 0
+    assert 'has no effect' not in selected.stderr
+    overridden = _run_reveal_in(codex.parent, 'codex://' + DOC_SESSION_ID + '?last&goal', '--format', 'json')
+    assert overridden.returncode == 0
+    assert json.loads(overridden.stdout)['type'] == 'codex_messages'
