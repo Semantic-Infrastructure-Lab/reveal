@@ -601,10 +601,7 @@ TUTORIAL_PREFIXES = ('mything://', 'help://mything')
 # the named fixture skips them. A source not in RUN_SOURCES runs only the identities listed here.
 DOC_SOURCE_COHORT = {
     ('../../README.md', 'reveal overview .'),
-    ('../../README.md', 'reveal overview . --against HEAD'),
-    ('../../README.md', 'reveal imports . --external'),
-    ('../../README.md', "reveal 'markdown://docs/?aggregate=type'"),
-    ('../../README.md', "reveal 'markdown://docs/?body-contains=retry&type=procedure'"),
+    ('../../README.md', 'reveal markdown docs/ --match retry'),
     ('adapters/OVERVIEW_ADAPTER_GUIDE.md', 'reveal overview . --top 0'),
     ('adapters/IMPORTS_ADAPTER_GUIDE.md', 'reveal imports://src'),
 }
@@ -614,9 +611,7 @@ DOC_SOURCE_COHORT = {
 DOC_NAMED_SOURCE_COHORT = {
     ('adapters/CALLS_ADAPTER_GUIDE.md',
      'reveal calls src/ --callees validate_item --depth 2 --detail'),
-    ('../../README.md', "reveal 'calls://src/?callers=validate_token'"),
-    ('../../README.md', "reveal 'calls://src/?callers=fn&depth=3'"),
-    ('../../README.md', "reveal 'calls://src/?rank=callers&top=20'"),
+    ('../../README.md', 'reveal calls src/ --callers main'),
     ('../../README.md', 'reveal calls src/ --callees main --depth 2 --detail'),
 }
 
@@ -664,6 +659,25 @@ def _documented_commands(docs=None):
     # Keep every existing shell occurrence first: an unqualified embedded copy must
     # never shadow a later shell example when named fixtures deduplicate commands.
     yield from embedded
+
+
+def _documented_command_identities(docs=None):
+    """Presence inventory also includes inline table examples, qualified separately.
+
+    The executable shell/embedded collector keeps its provenance and does not
+    interpret placeholder prose such as FILE FUNCTION as runnable commands.
+    """
+    import reveal
+    from pathlib import Path
+    identities = {(name, shlex.join(tokens)) for name, _, tokens, _ in _documented_commands(docs)}
+    docs = docs or Path(reveal.__file__).parent / 'docs'
+    for name, source in _documented_sources(docs):
+        text = re.sub(r'^(`{3,}|~{3,})[^\n]*\n.*?^\1[ \t]*$', '',
+                      source.read_text(encoding='utf-8'), flags=re.M | re.S)
+        for command in re.findall(r'(?<!`)`(reveal [^`\n]+)`(?!`)', text):
+            for _line, tokens in _shell_reveal_commands(command):
+                identities.add((name, shlex.join(tokens)))
+    return identities
 
 
 def _is_discovery(tokens):

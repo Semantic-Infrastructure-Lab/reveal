@@ -304,7 +304,7 @@ Start broad, drill down as needed. Don't force users to load everything.
 reveal help://examples/quality  # A task's recipes (~350 tokens)
 reveal help://quick             # Intent router (~1,600 tokens) — cheapest orientation
 reveal --agent-help             # Agent orientation (~1,200 tokens)
-reveal help://schemas/ast       # One adapter's query syntax (~1,800 tokens)
+reveal help://schemas/ast       # One adapter's query syntax (~1,030 tokens)
 ```
 
 **Bad:**

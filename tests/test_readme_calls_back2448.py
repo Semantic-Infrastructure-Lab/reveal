@@ -12,16 +12,17 @@ from test_output_contract_compliance import _Harness
 pytestmark = pytest.mark.contract
 
 SOURCE = '../../README.md'
-CALLERS = "reveal 'calls://src/?callers=validate_token'"
+CALLERS = 'reveal calls src/ --callers main'
+LEGACY_CALLERS = "reveal 'calls://src/?callers=validate_token'"
 IMPACT = "reveal 'calls://src/?callers=fn&depth=3'"
 RANK = "reveal 'calls://src/?rank=callers&top=20'"
 CALLEES = 'reveal calls src/ --callees main --depth 2 --detail'
-COMMANDS = (CALLERS, IMPACT, RANK, CALLEES)
+COMMANDS = (CALLERS, CALLEES)
+LEGACY_COMMANDS = (LEGACY_CALLERS, IMPACT, RANK)
 
 
 def _assert_inventory(docs=None):
-    identities = {(source, shlex.join(tokens))
-                  for source, _, tokens, _ in recipes._documented_commands(docs)}
+    identities = recipes._documented_command_identities(docs)
     assert {(SOURCE, query) for query in COMMANDS} <= identities, (
         'README Calls examples disappeared or changed; requalify their answers')
 
@@ -38,20 +39,23 @@ def test_previous_navigation_cohort_remains_eligible():
 
 def test_unrelated_readme_examples_run_too():
     """The README runs whole now (BACK-1365); the Calls identities above keep their answer checks."""
-    command = 'reveal pack src/ --focus auth --budget 6000'
+    command = 'reveal pack src/ --since main --budget 8000'
     identities = {(source, shlex.join(tokens))
                   for source, _, tokens, _ in recipes._documented_commands()}
     assert (SOURCE, command) in identities
     assert recipes._source_cohort_reason(SOURCE, shlex.split(command)) is None
 
 
-def test_changed_advertised_example_fails_presence_guard(tmp_path):
+@pytest.mark.parametrize('markup', ['bash', 'table'])
+def test_changed_advertised_example_fails_presence_guard(tmp_path, markup):
     docs = tmp_path / 'reveal' / 'docs'
     docs.mkdir(parents=True)
     readme = tmp_path / 'README.md'
-    readme.write_text('```bash\n' + '\n'.join(COMMANDS) + '\n```\n', encoding='utf-8')
+    text = ('```bash\n' + '\n'.join(COMMANDS) + '\n```\n' if markup == 'bash' else
+            '| Command |\n|---|\n' + '\n'.join(f'| `{q}` |' for q in COMMANDS))
+    readme.write_text(text, encoding='utf-8')
     _assert_inventory(docs)
-    readme.write_text(readme.read_text(encoding='utf-8').replace('depth=3', 'depth=2'), encoding='utf-8')
+    readme.write_text(readme.read_text(encoding='utf-8').replace('--depth 2', '--depth 1'), encoding='utf-8')
     with pytest.raises(AssertionError, match='disappeared or changed'):
         _assert_inventory(docs)
 
@@ -69,6 +73,9 @@ def _answer(harness, query):
 def _assert_callers(query, answer):
     assert answer['type'] == 'calls_query'
     if query == CALLERS:
+        assert answer['target'] == 'main' and answer['depth'] == 1
+        expected = {1: {('src/cli.py', 'cli', 'main')}}
+    elif query == LEGACY_CALLERS:
         assert answer['target'] == 'validate_token' and answer['depth'] == 1
         expected = {1: {('src/auth.py', 'fn', 'validate_token'),
                         ('src/service.py', 'authenticate', 'validate_token')}}
@@ -118,7 +125,7 @@ def _assert_callees(answer):
 
 
 def _assert_answer(query, answer):
-    if query in (CALLERS, IMPACT):
+    if query in (CALLERS, LEGACY_CALLERS, IMPACT):
         _assert_callers(query, answer)
     elif query == RANK:
         _assert_rank(answer)
@@ -132,6 +139,8 @@ def test_exact_readme_calls_command_answers(calls_harness, query):
     _assert_inventory()
     text = recipes._assert_text_as_written(calls_harness, query, literal=True)
     _assert_answer(query, _answer(calls_harness, query))
+    if query == CALLERS:
+        assert 'src/cli.py' in text and 'cli' in text
     if query == CALLEES:
         assert 'params: value' in text and 'effects: file:copy' in text
         assert 'not measured' in text
@@ -161,3 +170,8 @@ def test_successful_but_wrong_answers_fail_semantic_guards(calls_harness, query,
         wrong['walk_rule']['measured']['detail'] = True
     with pytest.raises(AssertionError):
         _assert_answer(query, wrong)
+
+
+@pytest.mark.parametrize('query', LEGACY_COMMANDS)
+def test_legacy_uri_answers_remain_qualified_without_claiming_readme_advertises_them(calls_harness, query):
+    _assert_answer(query, _answer(calls_harness, query))

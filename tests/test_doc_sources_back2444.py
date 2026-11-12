@@ -11,7 +11,7 @@ import pytest
 from doc_command_fixture import build_navigation_cohort_tree
 from test_example_recipes_run import (
     DOC_SOURCE_COHORT, DOC_NAMED_SOURCE_COHORT, RUN_SOURCES,
-    _documented_commands, _documented_sources, _source_cohort_reason,
+    _documented_commands, _documented_command_identities, _documented_sources, _source_cohort_reason,
     _assert_text_as_written,
 )
 from test_output_contract_compliance import _Harness
@@ -89,6 +89,10 @@ def _assert_navigation_answer(query, answer):
         assert answer['matched_files'] == answer['total_files'] == 3
         assert answer['files_missing_field'] == 1
         assert {row['value']: row['count'] for row in answer['aggregate']} == {'guide': 1, 'procedure': 1}
+    elif query == 'reveal markdown docs/ --match retry':
+        assert answer['type'] == 'markdown_query'
+        assert answer['matched_files'] == 2
+        assert {row['path'] for row in answer['results']} == {'docs/retry.md', 'docs/guide.md'}
     else:
         assert answer['type'] == 'markdown_query'
         assert answer['matched_files'] == 1
@@ -97,7 +101,7 @@ def _assert_navigation_answer(query, answer):
 
 @pytest.mark.parametrize('source,query', sorted(DOC_SOURCE_COHORT))
 def test_qualified_source_command_answers(navigation_harness, source, query):
-    inventory = {(name, shlex.join(tokens)) for name, _, tokens, _ in _documented_commands()}
+    inventory = _documented_command_identities()
     assert (source, query) in inventory, 'qualified command disappeared or changed; requalify its answer'
     assert _source_cohort_reason(source, shlex.split(query)) is None
     _assert_text_as_written(navigation_harness, query, literal=True)
@@ -109,12 +113,13 @@ def test_qualified_source_command_answers(navigation_harness, source, query):
 
 def test_new_source_exclusions_are_explicit_and_legacy_sources_still_run():
     rows = list(_documented_commands())
-    identities = {(source, shlex.join(tokens)) for source, _, tokens, _ in rows}
-    assert DOC_NAMED_SOURCE_COHORT <= identities
+    assert DOC_NAMED_SOURCE_COHORT <= _documented_command_identities()
     reasons = [_source_cohort_reason(source, tokens) for source, _, tokens, _ in rows]
     # Every inventoried source now runs whole, its embedded Markdown included (BACK-1365).
     assert [(source, reason) for (source, _, _, _), reason in zip(rows, reasons) if reason] == []
-    assert any(source == '../../README.md#embedded-md' for source, _, _, _ in rows)
+    # The current README uses ordinary tables; embedded Markdown remains covered
+    # by the collector's synthetic fixture rather than an obsolete README copy.
+    assert ('../../README.md', 'reveal calls src/ --callees main --depth 2 --detail') in _documented_command_identities()
     sources ={name for name, _ in _documented_sources(Path(__file__).parents[1] / 'reveal' / 'docs')}
     assert {'../../README.md', 'QUICK_START.md', 'WHY_REVEAL.md', 'INDEX.md',
             'adapters/IMPORTS_ADAPTER_GUIDE.md', 'adapters/OVERVIEW_ADAPTER_GUIDE.md',
@@ -122,11 +127,10 @@ def test_new_source_exclusions_are_explicit_and_legacy_sources_still_run():
 
 
 def test_first_contact_sources_run_their_own_commands():
-    """QUICK_START, WHY_REVEAL and the README (its embedded table too) are executed, not only
-    inventoried (BACK-1365): a collector or cohort change that skips them again fails here."""
+    """Shell examples execute; current README table answers have dedicated controls.
+    A collector or cohort change that skips shell sources fails here (BACK-1365)."""
     from test_example_recipes_run import _named_fixture_commands
-    floors = {'QUICK_START.md': 10, 'WHY_REVEAL.md': 10, '../../README.md': 4,
-              '../../README.md#embedded-md': 5}
+    floors = {'QUICK_START.md': 10, 'WHY_REVEAL.md': 10, '../../README.md': 4}
     for source, floor in floors.items():
         params = [p for p in _named_fixture_commands() if p.id.startswith(source + ':')]
         run = [p for p in params if not any(m.name == 'skip' for m in p.marks)]
@@ -219,3 +223,14 @@ def test_harness_reads_the_guides_ast_type_spellings():
     assert _findings_exits(['imports://src?circular', '--fail-on', 'findings']) == {0, 1}
     assert _DOCUMENTED_FAILURE.search('reveal env://MY_VAR=value  # Error')
     assert not _DOCUMENTED_FAILURE.search('reveal env://MY_VAR')
+
+
+def test_current_markdown_match_rejects_a_successful_but_incomplete_answer(navigation_harness):
+    query = 'reveal markdown docs/ --match retry'
+    code, out, _, _ = navigation_harness.run_subcommand('markdown', 'docs/', '--match', 'retry', '--format', 'json')
+    assert code == 0
+    answer = json.loads(out)
+    _assert_navigation_answer(query, answer)
+    answer['results'] = [row for row in answer['results'] if row['path'] != 'docs/guide.md']
+    with pytest.raises(AssertionError):
+        _assert_navigation_answer(query, answer)

@@ -1032,7 +1032,7 @@ class TestHelpQuickRegistryDriven(unittest.TestCase):
         # get_help()-derived command must appear, proving derivation happened.
         result = self._get_quick()
         cmds = [c['cmd'] for c in result['commands']]
-        self.assertTrue(any('ast://' in c for c in cmds))
+        self.assertTrue(any(c.startswith('reveal ast ') for c in cmds))
 
     def test_commands_reflect_live_get_help_description(self):
         # The description in the quick block must match the adapter's own
@@ -1040,7 +1040,7 @@ class TestHelpQuickRegistryDriven(unittest.TestCase):
         from reveal.adapters.help import HelpAdapter
         from reveal.adapters.registry import _ADAPTER_REGISTRY
         result = self._get_quick()
-        ast_cmd = next(c for c in result['commands'] if 'ast://' in c['cmd'])
+        ast_cmd = next(c for c in result['commands'] if c['cmd'].startswith('reveal ast '))
         live_description = _ADAPTER_REGISTRY['ast'].get_help()['description']
         self.assertEqual(ast_cmd['description'], live_description)
 
