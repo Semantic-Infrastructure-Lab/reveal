@@ -1,6 +1,5 @@
 """Session list and search handlers for codex:// adapter (SQLite-backed)."""
 
-import json
 import sqlite3
 from datetime import date as _date, datetime
 from pathlib import Path
@@ -9,10 +8,10 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder, note_truncation
 from ..analysis.normalize import normalize_record
-from reveal.utils.lines import split_lines
 
 from ..lookup import USER_FILTER as _USER_FILTER, connect_readonly
 from ..catalog import CatalogRead
+from ..content import scan_rollout, attach_content_evidence
 
 
 def _resolve_date_bound(value: str) -> str:
@@ -114,14 +113,7 @@ def filter_sessions(db_path: Path, filter_term: str, since: str = '', until: str
     return base_result
 
 
-def _message_snippet(line: str, term: str) -> Optional[Dict[str, Any]]:
-    """The user/agent message on one rollout line, if it contains *term*."""
-    try:
-        rec = json.loads(line)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(rec, dict):
-        return None
+def _record_snippet(rec, term):
     rec = normalize_record(rec)  # current rollouts' item_completed turns (BACK-1566)
     payload = rec.get('payload')
     if not isinstance(payload, dict):
@@ -136,19 +128,6 @@ def _message_snippet(line: str, term: str) -> Optional[Dict[str, Any]]:
         'timestamp': rec.get('timestamp'),
         'snippet': text[:200],
     }
-
-
-def _collect_snippets(content: str, term: str, cap: int) -> tuple:
-    """(kept snippets, every match found) in one rollout; cap <= 0 keeps them all."""
-    snippets: List[Dict[str, Any]] = []
-    found = 0
-    for line in split_lines(content):
-        snippet = _message_snippet(line, term)
-        if snippet:
-            found += 1
-            if cap <= 0 or len(snippets) < cap:
-                snippets.append(snippet)
-    return snippets, found
 
 
 def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
@@ -175,59 +154,32 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
         data={'query': query, 'since': since or None, 'until': until or None},
     )
 
-    if not db_path.exists():
-        return {**base, 'sessions': [], 'total': 0,
-                'error': f'Codex DB not found: {db_path}'}
-
-    try:
-        conn = _connect(db_path)
-        try:
-            rows = conn.execute(
-                f"SELECT id, rollout_path, title, first_user_message, model, updated_at "
-                f"FROM threads WHERE {_USER_FILTER} ORDER BY updated_at DESC"
-            ).fetchall()
-        finally:
-            conn.close()
-    except sqlite3.Error as exc:
-        return {**base, 'sessions': [], 'total': 0, 'error': str(exc)}
-
-    if since or until:
-        rows = [
-            row for row in rows
-            if _apply_date_range([{'updated_at': _format_ts(row['updated_at'])}], since, until)
-        ]
+    acquisition = CatalogRead(db_path, _connect, 'id, rollout_path, title, first_user_message, model, updated_at')
+    acquisition.read()
+    rows = []
+    for raw in acquisition.rows:
+        row = dict(raw)
+        row['updated_at'] = _format_ts(raw.get('updated_at'), lambda exc: acquisition.failure('updated_at', exc))
+        rows.append(row)
+    rows = _apply_date_range(rows, since, until)
 
     term = query.lower()
     matched: List[Dict[str, Any]] = []
     found_total = 0
 
-    for row in rows:
-        d = _row_to_dict(row)
-        rollout_raw = d.get('rollout_path')
-        if not rollout_raw:
-            continue
-        rollout = Path(rollout_raw)
-        if not rollout.exists():
-            continue
-        try:
-            content = rollout.read_text(encoding='utf-8', errors='replace')
-        except OSError:
-            continue
-
-        snippets, found = _collect_snippets(content, term, max_matches_per_session)
-
+    sources = []
+    for d in rows:
+        snippets, found, proof = scan_rollout(d, term, max_matches_per_session, _record_snippet)
+        sources.append(proof)
         if snippets:
             found_total += found
             matched.append({
-                'id': d['id'],
-                'title': d.get('title', ''),
-                'updated_at': _format_ts(d.get('updated_at')),
-                'model': d.get('model'),
-                'matches': snippets,
-                'match_count': len(snippets),
+                'id': d['id'], 'title': d.get('title', ''), 'updated_at': d['updated_at'],
+                'model': d.get('model'), 'matches': snippets, 'match_count': len(snippets),
             })
 
-    result = {**base, 'sessions': matched, 'total': len(matched)}
+    result = acquisition.attach({**base, 'sessions': matched, 'total': len(matched)})
+    attach_content_evidence(result, sources)
     note_truncation(result, 'matches', sum(len(m['matches']) for m in matched), found_total,
                     'matches_per_session', hint='raise ?matches=N (0 keeps every match)')
     return result

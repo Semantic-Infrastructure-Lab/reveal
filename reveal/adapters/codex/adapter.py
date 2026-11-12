@@ -18,7 +18,8 @@ from ...utils.query_parser import ResourceSpec, param_schema, peek_query_items
 from .params import PARAM_SPECS, _MATCHES, _FULL, bind_query
 from .lookup import SessionLookup, attach_lookup_evidence
 from .catalog import CATALOG_PATHS
-from .qualification import (RESULT_VARIANTS, VIEW_TYPES, ROLLOUT_RULE, selected_type, index_request_error, unavailable_rollout)
+from .qualification import RESULT_VARIANTS, VIEW_TYPES, selected_type, index_request_error
+from .rollout import ROLLOUT_RULE, unavailable_rollout
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
     filter_sessions as _h_filter_sessions,
@@ -105,7 +106,7 @@ class CodexAdapter(ResourceAdapter):
         path = resource.partition('?')[0]
         identifier, _, sub = path.partition('/')
         if path in CATALOG_PATHS:
-            return cls.execution_facts if cls.uri_result_type(resource) == 'codex_session_list' else None
+            return cls.execution_facts
         if not _UUID_RE.match(identifier):
             return None
         kind = cls.uri_result_type(resource)

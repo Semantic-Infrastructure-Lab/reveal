@@ -44,7 +44,7 @@ semantics remain unchanged (`?last=false` still selects the last agent message).
 `full=False` or `full=None` restores bounded exchange text while JSON retains the
 complete strings. The Codex subcommand and vocabulary migration remain open. Direct transcript
 URI execution, optional goals and SQLite catalog reads are qualified below;
-content search and install policies remain separate.
+install and remaining resource policies remain separate.
 
 
 ```bash
@@ -394,8 +394,29 @@ formatting failure before date filtering. Healthy lists and filtered emptiness
 exit **0**, a confirmed missing index exits **2**, and required source or output
 loss exits **3**. Partial results carry warnings; completely failed acquisition
 is an MCP error. Source receipts, selection claims and population counts remain
-checked through display cuts and presentation. Content search retains its
-separate rollout-scanning policy pending qualification.
+checked through display cuts and presentation. Content search also measures its required rollouts as described below.
+
+---
+
+## Content Search Outcomes
+
+`codex://sessions?search=TEXT` uses the same measured SQLite catalog and shared
+JSONL object reader as direct transcript views. Date bounds select the rollout
+corpus before records are read. `meta.content_analysis` records every selected
+session source, nonblank/object/failed record counts, decoding repairs, consumed
+prefixes and read failures. Empty or unavailable rollout paths are failed input,
+not skipped sessions. Matching still normalizes Codex messages and uses literal,
+case-insensitive substring comparison over user and agent message text; it does
+not case-fold or normalize Unicode. Per-session `matches=0` keeps all snippets.
+Every selected rollout is consumed before snippet caps, so display cuts do not
+hide source failures.
+
+Healthy empty search results exit **0**, a confirmed missing index exits **2**,
+and required catalog/rollout/decoding/output loss exits **3**. Matches survive an
+interrupted read. MCP returns usable partial results with source disclosures;
+fully failed required analysis is an error. Owned source decisions, applied
+query, session identities, snippet counts and population counts remain checked
+through presentation, and fresh reads refresh all source evidence.
 
 ---
 
@@ -427,7 +448,7 @@ same execution facts: usable partial data is returned with its disclosures;
 failed required analysis is an error using the existing private-failure wording.
 
 This policy covers overview, messages/last, tools, errors, shell, tokens, workflow,
-timeline, digest, exchanges, indexed records and goals. Content search, install,
+timeline, digest, exchanges, indexed records, goals and session content search. Install,
 unknown legacy suffixes, element, batch, stdin and check transports remain
 separately scoped; this is no complete Codex migration claim.
 

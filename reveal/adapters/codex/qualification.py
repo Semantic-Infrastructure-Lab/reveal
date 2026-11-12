@@ -8,6 +8,8 @@ from ...utils.query_parser import peek_query_items
 from ...utils.results import (AnalysisCompleteness, FailureCause, failure_execution_facts,
                               result_execution_facts)
 from .params import bind_query
+from .content import execution_facts as content_facts, answer_requirement_error as content_error
+from .rollout import ROLLOUT_RULE, rollout_lost as _rollout_lost
 from .catalog import (CATALOG_PATHS, execution_facts as catalog_facts,
                       answer_requirement_error as catalog_error)
 
@@ -26,7 +28,6 @@ COUNTS = {'codex_session_overview': ('user_turns', 'agent_turns', 'tool_calls', 
           'codex_timeline': ('total',), 'codex_digest': ('prompt_count', 'narrative_turn_count', 'user_turns', 'agent_turns'),
           'codex_exchanges': ('exchange_count',), 'codex_message': ('record_index',)}
 RESULT_VARIANTS = {kind: ('codex_error', 'codex_not_installed') for kind in (*CONTAINERS, 'codex_goal')}
-ROLLOUT_RULE = 'Consumed nonblank JSONL lines before Codex normalization, rollback marking and view selection; object decoding does not validate every payload'
 
 
 def selected_type(resource, params):
@@ -61,18 +62,6 @@ def index_request_error(resource):
     return None
 
 
-def unavailable_rollout(raw):
-    return {'candidate_records': 0, 'analyzed_records': 0, 'failed_records': 0, 'first_failed_line': None,
-            'source': raw if isinstance(raw, str) else '', 'opened': False, 'decision': 'unavailable',
-            'recovered_records': 0, 'failures': [{'phase': 'selection', 'cause': 'UnavailableRolloutPath',
-                                                'message': 'Selected session has no usable rollout path'}],
-            'count_rule': ROLLOUT_RULE}
-
-
-def _rollout_lost(proof):
-    return bool(proof.get('failed_records') or proof.get('recovered_records') or proof.get('failures'))
-
-
 def _invalid_envelope(result):
     return any(entry.get('code') == 'invalid_adapter_answer' for entry in result.get('meta', {}).get('errors', [])
                if isinstance(entry, dict))
@@ -97,6 +86,8 @@ def _goal_state(lookup, goal):
 def execution_facts(result):
     if _invalid_envelope(result):
         return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+    if result.get('type') == 'codex_content_search':
+        return content_facts(result)
     if result.get('type') == 'codex_session_list':
         return catalog_facts(result)
     if result.get('scope', {}).get('request_rejected'):
@@ -206,6 +197,8 @@ def _rejected_index_error(adapter, result, expected_type):
 
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
+    if expected_type == 'codex_content_search':
+        return content_error(adapter, result, prior_facts)
     if expected_type == 'codex_session_list':
         return catalog_error(adapter, result, prior_facts)
     goal = expected_type == 'codex_goal' and result.get('type') == 'codex_goal'
