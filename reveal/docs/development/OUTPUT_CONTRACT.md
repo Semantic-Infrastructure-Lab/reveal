@@ -587,7 +587,11 @@ decoding and required read/analysis failures give 3. Missing tracking paths give
 2; legacy empty search terms require no reads and remain empty success. The
 legacy `sessions_scanned` field is a candidate count; receipts supply actual scan
 decisions. MCP retains usable partial data and rejects fully failed scans.
-Indexed `/message/N`, `/message` ranges, chains,
+Indexed `/message/N` and `/message` ranges share transcript source qualification.
+Raw indices are 0-based decoded-object positions (metadata included); negative
+indices count backward. Ranges are 1-based user/assistant turns and retain raw
+indices. A healthy out-of-range request gives 2; lost records cannot establish
+absence and give 3. Range cuts require receipts. Chains,
 install resources, positional elements, Check, stdin and mixed batches retain their
 separate policies. Qualified postprocessing recognizes explicit request validation;
 unqualified transports preserve their prior classification.

@@ -696,10 +696,7 @@ class ClaudeAdapter(ResourceAdapter):
         if '/tokens' in self.resource:
             return get_token_breakdown(messages, self.session_name, contract_base)
         if '/message/' in self.resource:
-            msg_id = int(self.resource.split('/message/')[1])
-            if msg_id < 0:
-                msg_id = len(messages) + msg_id
-            return get_message(messages, msg_id, self.session_name, contract_base)
+            return self._get_indexed_message(messages, contract_base)
         if self.resource.endswith('/message'):
             result = get_message_range(messages, self.session_name, contract_base)
             result['full'] = 'full' in self.query_params
@@ -717,6 +714,20 @@ class ClaudeAdapter(ResourceAdapter):
             search = self.query_params.get('search') or self.query_params.get('contains')
             return get_messages(messages, self.session_name, contract_base, search=search)
         return get_overview(messages, self.session_name, conversation_path_str, contract_base)
+
+    def _get_indexed_message(self, messages: List[Dict], contract_base: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            requested = int(self.resource.split('/message/', 1)[1])
+        except ValueError as exc:
+            raise RequestValidationError('Message index must be an integer') from exc
+        index = len(messages) + requested if requested < 0 else requested
+        if not 0 <= index < len(messages):
+            lookup = getattr(self, '_conversation_lookup', None)
+            loss = ((self._transcript_analysis or {}).get('failed_records')
+                    or (lookup is not None and lookup.failures))
+            if not loss:
+                raise RequestValidationError(f'Message index {requested} out of range (0-{len(messages)-1})')
+        return get_message(messages, index, self.session_name, contract_base)
 
     def _route_query_handler(self, messages: List[Dict], conversation_path_str: str,
                              contract_base: Dict[str, Any]) -> Dict[str, Any]:

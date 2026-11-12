@@ -133,9 +133,9 @@ def test_overview_range_rejection_is_a_usage_error(transcript):
     assert json.loads(result.stdout)['meta']['errors'][0]['code'] == 'invalid_request'
 
 
-def test_indexed_message_reads_keep_their_separate_policy(transcript):
+def test_indexed_message_reads_use_qualified_request_policy(transcript):
     result = _run_reveal_in(transcript.parent, 'claude://session/my-session/message/99999', '--format', 'json')
-    assert result.returncode == 1
+    assert result.returncode == 2
 
 
 @pytest.mark.parametrize('timestamp,expected', [(b'2027-01-01T00:00:00Z', 0), (b'2027-01-\xffT00:00:00Z', 3)])

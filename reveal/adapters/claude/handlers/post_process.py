@@ -170,6 +170,7 @@ def _post_process_message_range(result: Dict[str, Any], args: Any) -> None:
     total_before = len(msgs)
     msgs = _slice_list(msgs, args)
     result['messages'] = msgs
+    note_truncation(result, 'messages', len(msgs), total_before, 'display-selection')
     result['displayed'] = len(msgs)
     if len(msgs) < total_before:
         result['filtered_from'] = total_before

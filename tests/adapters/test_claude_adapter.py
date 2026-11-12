@@ -427,10 +427,9 @@ class TestSpecificMessageRetrieval:
         mock_find.return_value = TEST_CONVERSATION
         adapter = ClaudeAdapter('session/test/message/999')
 
-        result = adapter.get_structure()
-
-        assert 'error' in result
-        assert 'out of range' in result['error']
+        from reveal.errors import RequestValidationError
+        with pytest.raises(RequestValidationError, match='out of range'):
+            adapter.get_structure()
 
     def test_get_message_snapshot_includes_hint(self, tmp_path):
         """Test that file-history-snapshot messages include a helpful hint."""

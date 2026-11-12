@@ -10,7 +10,7 @@ from .analysis.records import valid_record_proof as _valid_record_proof
 
 SESSION_VIEWS = frozenset(('', 'messages', 'prompts', 'thinking', 'tools', 'files', 'workflow',
                            'agents', 'context', 'timeline', 'errors', 'summary', 'tokens',
-                           'digest', 'exchanges'))
+                           'digest', 'exchanges', 'message'))
 QUERY_VIEWS = (('summary', 'claude_analytics'), ('digest', 'claude_digest'),
                ('timeline', 'claude_timeline'), ('errors', 'claude_errors'),
                ('tokens', 'claude_token_breakdown'), ('tools', 'claude_tool_calls'),
@@ -44,7 +44,7 @@ def direct_session(resource, parse_identifier, prefixes):
     if any(path == prefix or path.startswith(prefix + '/') for prefix in prefixes):
         return False
     name, subpath = parse_identifier(path)
-    return bool(name) and '/' not in name and subpath in SESSION_VIEWS
+    return bool(name) and '/' not in name and (subpath in SESSION_VIEWS or subpath.startswith('message/'))
 
 
 def _active(params):
@@ -63,6 +63,10 @@ def selected_type(resource, params):
             if 'raw' in active and segment in ('prompts', 'messages'):
                 return 'claude_user_messages' if segment == 'prompts' else 'claude_assistant_messages'
             return kind
+    if '/message/' in resource:
+        return 'claude_message'
+    if resource.endswith('/message'):
+        return 'claude_message_range'
     return 'claude_session_overview'
 
 
@@ -101,6 +105,8 @@ _CONTAINERS: Dict[str, Dict[str, Any]] = {
     'claude_exchanges': {'exchanges': list},
     'claude_search_results': {'matches': list},
     'claude_filtered_results': {'results': list},
+    'claude_message': {'message': dict, 'text': str},
+    'claude_message_range': {'messages': list},
 }
 _COUNTS = {
     'claude_session_overview': 'message_count', 'claude_analytics': 'message_count',
@@ -113,6 +119,7 @@ _COUNTS = {
     'claude_errors': 'error_count', 'claude_digest': 'message_count',
     'claude_exchanges': 'exchange_count', 'claude_search_results': 'match_count',
     'claude_filtered_results': 'result_count',
+    'claude_message_range': 'total_messages',
 }
 
 
@@ -150,7 +157,16 @@ def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
     if expected_type in ('claude_session_overview', 'claude_analytics', 'claude_digest'):
         if result['message_count'] != proof['analyzed_records']:
             return 'Claude record count disagrees with its source proof'
-    return _presentation_error(adapter, result, fields, prior_facts)
+    error = _indexed_observation_error(result, proof, expected_type)
+    return error or _presentation_error(adapter, result, fields, prior_facts)
+
+
+def _indexed_observation_error(result, proof, expected_type):
+    if expected_type == 'claude_message':
+        index = result.get('message_index')
+        if not _count(index) or index >= proof['analyzed_records']:
+            return 'Claude indexed answer missing an observed source index'
+    return None
 
 
 _CATALOG_FIELDS = {'claude_session_list': 'recent_sessions',

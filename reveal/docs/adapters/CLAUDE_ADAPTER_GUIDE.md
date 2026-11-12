@@ -737,7 +737,7 @@ reveal claude://session/infernal-earth-0118/message/-1
 **Output**: Full message content. For `tool_use` blocks: shows name + key params (`file_path`, `command`, `content` size). For `tool_result` blocks: shows content preview (first 500 chars).
 
 **Notes**:
-- Index is 0-indexed over raw JSONL records (see [`/message` (range)](#11-message-range) below for the *other* indexing scheme this resource family uses)
+- Index is 0-indexed over decoded JSONL object records, including metadata; blank, malformed and non-object lines are excluded (see [`/message` (range)](#11-message-range) for conversation-turn indexing).
 - For `user`/`assistant` messages, the response includes a `turn` field — the 1-indexed conversation-turn number that `/message --range` uses, so you can go from a raw index straight to the range number without a second call
 
 **Use when**: Read a long assistant response in full, inspect what a Write/Edit tool call actually wrote, read agent tool_result output, or find the `turn` number to jump into `/message --range`
@@ -764,7 +764,7 @@ reveal claude://session/infernal-earth-0118/message --range 5-15
 
 **Notes**:
 - Range is 1-indexed over conversation messages (user + assistant only; metadata records excluded)
-- Raw `message_index` shown per turn for cross-reference with `/message/N` (which is 0-indexed over all raw records)
+- Raw `message_index` shown per turn for cross-reference with `/message/N` (0-indexed over decoded object records, including metadata).
 - Open-ended `--range 300-` supported: returns all messages from turn 300 to end
 - `?full` and `--verbose` are equivalent — both disable the 600-char truncation
 
@@ -1904,8 +1904,12 @@ read/decode exceptions still raise.
 
 This scope covers overview/summary, messages/prompts (including raw), thinking,
 tools, files, workflow, session agents, context, timeline, errors, tokens, digest,
-exchanges and session search/composite filters. Indexed `/message/N`, `/message`
-ranges, chains and install resources retain their separate
+exchanges, session search/composite filters, indexed `/message/N` and `/message`
+ranges. Invalid or out-of-range indices after a healthy read give exit 2; lost
+records cannot prove an index absent and retain exit 3. Negative indices count
+backward from the decoded object records. Ranges remain 1-indexed over user and
+assistant turns and preserve their raw record indices through display cuts.
+Chains and install resources retain their separate
 policies. Stdin and mixed batches retain legacy completeness behavior; a warning
 there is not yet guaranteed to change the exit code.
 
