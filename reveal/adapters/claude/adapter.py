@@ -20,6 +20,7 @@ from ...utils.query_parser import ResourceSpec
 from ...errors import RequestValidationError
 from ...utils.results import ResultBuilder, note_warning
 from .params import PARAM_SPECS, bind_query, bind_request
+from .workflow_selection import select_workflow_result, remember_workflow_selection, MATCH_RULE
 from .discovery import ConversationDiscovery, TranscriptNotFoundError, first_timestamp as _first_timestamp
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
@@ -530,6 +531,7 @@ class ClaudeAdapter(ResourceAdapter):
     def _refresh_conversation(self):
         self.messages = None
         self._transcript_analysis = None
+        self._workflow_selection = None
         self.conversation_path = None
         self._conversation_lookup = None
         self._other_transcripts = []
@@ -676,7 +678,8 @@ class ClaudeAdapter(ResourceAdapter):
             include_patches = str(self.query_params.get('patches', False)).lower() == 'true'
             return get_files_touched(messages, self.session_name, contract_base, include_patches=include_patches)
         if '/workflow' in self.resource:
-            return get_workflow(messages, self.session_name, contract_base)
+            result = select_workflow_result(get_workflow(messages, self.session_name, contract_base), self.query_params)
+            return remember_workflow_selection(self, result)
         if '/agents' in self.resource:
             return get_session_agents(messages, self.session_name, contract_base)
         if '/context' in self.resource:
@@ -997,6 +1000,8 @@ class ClaudeAdapter(ResourceAdapter):
             'uri_syntax': 'claude://session/{name}[/resource][?query]',
             'query_params': {spec.name: spec.schema() for spec in PARAM_SPECS},
             'pagination': page_schema(),
+            'workflow_selection': {'tool_predicate': 'tool==NAME (case-insensitive exact equality)',
+                                   'match_rule': MATCH_RULE, 'order': 'selection before sorting, offset and limit'},
             'modifier_scopes': {name: list(kinds) for name, kinds in MODIFIER_SCOPES.items()},
             'selector_rules': {
                 'session_only': sorted(SESSION_SELECTORS),

@@ -119,7 +119,10 @@ def execution_facts(result):
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
     from .controls import control_requirement_error
     from .pagination import page_requirement_error
-    control_error = control_requirement_error(adapter, result) or page_requirement_error(adapter, result, prior_facts)
+    from .workflow_selection import workflow_requirement_error
+    control_error = (control_requirement_error(adapter, result)
+                     or workflow_requirement_error(adapter, result, prior_facts)
+                     or page_requirement_error(adapter, result, prior_facts))
     if control_error:
         return control_error
     if expected_type in ('claude_plan', 'claude_agent'):

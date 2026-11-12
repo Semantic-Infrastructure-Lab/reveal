@@ -71,12 +71,19 @@ def detail_requirement_error(adapter, result):
 
 
 def validate_where_scope(params, resource):
-    if params.get('where') is None:
+    terms = params.get('where')
+    if terms is None:
         return
-    if resource.rstrip('/') not in ('', '.', 'sessions') or params.get('search'):
-        raise RequestValidationError('where session predicates are supported only on catalog listings, without content search')
+    if resource.endswith('/workflow'):
+        valid = all(term.partition('==')[0].strip() == 'tool' and '==' in term for term in terms)
+    else:
+        valid = (resource.rstrip('/') in ('', '.', 'sessions') and not params.get('search')
+                 and all(term.partition('~=')[0].strip() == 'session' and '~=' in term for term in terms))
+    if not valid:
+        raise RequestValidationError('where supports session~=TEXT on catalog listings or tool==NAME on workflows')
 
 
+WORKFLOW_WHERE_RULE = 'AND of case-insensitive exact tool-name equalities in existing collapsed workflow rows'
 SESSION_WHERE_RULE = 'AND of case-insensitive literal substrings of the session name; not README titles or message content'
 
 
@@ -96,8 +103,9 @@ def filter_session_names(result: Dict[str, Any], params) -> Dict[str, Any]:
 def where_requirement_error(adapter, result):
     terms = adapter.query_params.get('where')
     scope = result.get('scope', {})
-    if terms is not None and (scope.get('where') != terms or scope.get('where_rule') != SESSION_WHERE_RULE):
-        return 'Claude presentation cannot change requested session-name predicate scope'
+    rule = WORKFLOW_WHERE_RULE if adapter.resource.endswith('/workflow') else SESSION_WHERE_RULE
+    if terms is not None and (scope.get('where') != terms or scope.get('where_rule') != rule):
+        return 'Claude presentation cannot change requested predicate scope'
     return None
 
 
@@ -169,6 +177,8 @@ def _session_match_target(params, resource, noun, suffix):
         raise RequestValidationError('match is not supported on raw session records')
     if 'tools' in params or 'errors' in params:
         return 'contains'
+    if resource.endswith('/workflow'):
+        return 'match'
     if resource.endswith('/messages'):
         return 'contains'
     if resource.endswith('/errors'):

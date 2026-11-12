@@ -25,6 +25,18 @@ def _slice_list(items: list, args: Any) -> list:
     return items
 
 
+def select_workflow_rows(workflow: list[Dict[str, Any]], tool=None, term=None) -> list[Dict[str, Any]]:
+    """Existing literal workflow population, shared by native and CLI controls."""
+    if tool is not None:
+        workflow = [step for step in workflow if (step.get('tool') or '').lower() == tool.lower()]
+    if term:
+        needle = term.lower()
+        workflow = [step for step in workflow
+                    if needle in (step.get('detail') or '').lower()
+                    or needle in (step.get('tool') or '').lower()]
+    return workflow
+
+
 def _post_process_workflow(result: Dict[str, Any], args: Any) -> None:
     """Apply --type, --search, and --head/--tail/--range to claude_workflow results."""
     workflow = result.get('workflow')
@@ -32,18 +44,8 @@ def _post_process_workflow(result: Dict[str, Any], args: Any) -> None:
         return
     total_before = len(workflow)
 
-    type_filter = getattr(args, 'type', None)
-    if type_filter:
-        workflow = [s for s in workflow if (s.get('tool') or '').lower() == type_filter.lower()]
-
-    search_term = getattr(args, 'name', None)
-    if search_term:
-        lower = search_term.lower()
-        workflow = [
-            s for s in workflow
-            if lower in (s.get('detail') or '').lower()
-            or lower in (s.get('tool') or '').lower()
-        ]
+    workflow = select_workflow_rows(workflow, getattr(args, 'type', None) or None,
+                                    getattr(args, 'name', None))
 
     workflow = _slice_list(workflow, args)
     result['workflow'] = workflow

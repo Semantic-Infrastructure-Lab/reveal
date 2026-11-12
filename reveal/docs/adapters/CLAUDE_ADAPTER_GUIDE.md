@@ -13,7 +13,7 @@ category: guide
 Legacy query names `summary`, `search`, `contains`, `filter`, `tail`, `last`,
 `full` and `raw` are deprecated compatibility spellings. They still use their
 original readers and codecs and emit one retirement notice. Prefer `detail`,
-`match`, session-name `where`, and explicit message `view`/`sort`/`limit`.
+`match`, reader-specific `where`, and explicit message `view`/`sort`/`limit`.
 Canonical `match` and `where` URI values percent-decode once; API values remain
 literal. Latest-turn examples below use `sort=-message_index`, so they display
 latest-first. Legacy `tail`/`last` preserve chronological order: `tail=0` is empty,
@@ -1983,7 +1983,9 @@ session request. Element and batch transports keep their existing routing policy
 The canonical `match` query/API control uses each resource's existing text
 population. At a session root it searches message content; on `/messages` it
 filters narrative turns; with `tools`/`errors` or on `/errors` it filters tool
-results through the existing composite reader. On session catalogs it searches
+results through the existing composite reader. On `/workflow`, it matches literal
+substrings of tool name or operation detail, using the existing CLI selection
+helper rather than tool-result text. On session catalogs it searches
 cross-session content; plan/agent/memory listings and history match their own
 text. For example, `claude://session/my-session/messages?match=Fixed` is a
 narrative filter, while `claude://session/my-session?match=Fixed` searches all
@@ -2025,8 +2027,17 @@ Matching is a case-insensitive literal substring of the catalog's session label
 title, arbitrary transcript filename or message-content search. For example,
 `claude://sessions?where=session~=refactor&where=session~=auth` requires both
 substrings. The selected expressions and their rule remain in `scope.where`
-and `scope.where_rule`. Empty predicate lists apply no constraints. Other fields,
-operators, resources and content-search modes reject with exit 2. URI expression
+and `scope.where_rule`. On `/workflow`, repeated `tool==NAME` expressions AND
+case-insensitive exact tool-name equality, reusing the legacy workflow type
+filter. They combine with workflow `match` before sorting and pagination. For
+example, `reveal claude session/NAME --view workflow --where 'tool==Bash'
+--match pytest --limit 1` filters the existing collapsed operation rows first.
+`meta.workflow_selection` records requested predicates/text and measured
+before/selected counts; full `total_steps` and `collapsed_steps` remain source
+population counts. Presentation cannot erase or alter this receipt. Empty
+predicate lists apply no constraints. Other fields/operators or misplaced
+expressions reject with exit 2; catalog predicates cannot combine with
+cross-session content-search mode. URI expression
 values percent-decode once; typed API values stay literal. Acquisition loss
 remains exit 3 even when predicates hide every acquired row; MCP retains source
 proof and reads follow-up source state afresh.

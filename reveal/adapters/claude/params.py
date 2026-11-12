@@ -30,9 +30,15 @@ def name_predicates(value):
     if not isinstance(terms, (list, tuple)) or any(not isinstance(term, str) for term in terms):
         raise ValueError('where requires session~=TEXT expressions')
     for term in terms:
-        field, separator, _ = term.partition('~=')
-        if term and (field.strip() != 'session' or not separator):
-            raise ValueError('where supports only session~=TEXT (case-insensitive literal substring)')
+        if not term:
+            continue
+        session = term.partition('~=')
+        tool = term.partition('==')
+        if session[0].strip() == 'session' and session[1]:
+            continue
+        if tool[0].strip() == 'tool' and tool[1] and tool[2]:
+            continue
+        raise ValueError('where supports session~=TEXT on catalogs or tool==NAME on workflows')
     return [term for term in terms if term]
 
 
@@ -60,13 +66,13 @@ PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS
     ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', None,
               lambda value: nonnegative_display_limit(value, name='offset'), minimum=0, cli=CliBinding(('--offset',))),
     ParamSpec('sort', 'string', 'Answer row field; prefix - for descending; supported fields depend on the selected reader', None, nonempty_scalar, cli=CliBinding(('--sort',))),
-    ParamSpec('where', 'array', 'Session catalog names only: repeat session~=TEXT for case-insensitive literal substring constraints, ANDed',
+    ParamSpec('where', 'array', 'Reader-specific predicates, ANDed: catalog session~=TEXT substrings or workflow tool==NAME exact equality; case-insensitive',
               None, name_predicates, uri_codec='percent', role='name-predicate',
               cli=CliBinding(('--where',), action='append')),
     ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence, cli=CliBinding(('--timeline',), action='store_true')),
     ParamSpec('detail', 'string', 'summary, normal, full or raw; levels are qualified by the existing reader', None, text, choices=('summary', 'normal', 'full', 'raw'), cli=CliBinding(('--detail',))),
     ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES, cli=CliBinding(('--view',))),
-    ParamSpec('match', 'string', 'Match text in this resource: session content, narrative messages, tool results, cross-session content, workspace lists or history; unsupported views reject',
+    ParamSpec('match', 'string', 'Match text in this resource: session content, narrative messages, tool results, workflow tool/detail text, cross-session content, workspace lists or history; unsupported views reject',
               None, text, uri_codec='percent', cli=CliBinding(('--match',))),
 )
 
