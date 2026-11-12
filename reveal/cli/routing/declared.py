@@ -22,7 +22,13 @@ def declared_adapter_class(name: str):
     spec = COMMANDS.get(name)
     if spec is None or not spec.declared_adapter:
         return None
-    return get_adapter_class(spec.declared_adapter)
+    adapter = get_adapter_class(spec.declared_adapter)
+    # The registry also admits legacy plugins/replacements. Scheme membership
+    # alone cannot opt them into resource binding and generated query controls.
+    if (getattr(adapter, 'RESOURCE_SPEC', None) is None
+            or getattr(adapter, 'PARAM_SPECS', None) is None):
+        return None
+    return adapter
 
 
 def create_declared_parser(name: str) -> argparse.ArgumentParser:
