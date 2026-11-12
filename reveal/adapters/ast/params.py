@@ -2,8 +2,8 @@
 from typing import Any
 
 from ...utils.query_binding import boolean_value
-from ...utils.query_parser import CliBinding, ParamSpec, QueryParams, peek_query_items
-from ...utils.query_control import ResultControl
+from ...utils.query_parser import CliBinding, ParamSpec, QueryParams
+from ...utils.query_control import declared_result_control as result_control
 from .queries import ALL_OP, parse_query, validate_filter_values, _condition
 
 
@@ -52,14 +52,3 @@ def ast_query(params: QueryParams):
         _and_kind(query, _condition('=', kind))
     validate_filter_values(query)
     return query
-
-
-def result_control(params: QueryParams) -> ResultControl:
-    # Validated bindings are inspected here; ResultControl records reads only when applied.
-    values = dict(peek_query_items(params))
-    sort = values.get('sort')
-    control = ResultControl(sort_field=sort.lstrip('-') if sort else None,
-                            sort_descending=bool(sort and sort.startswith('-')),
-                            limit=values.get('limit'), offset=values.get('offset', 0))
-    control.__dict__['_reads'] = params._reads
-    return control

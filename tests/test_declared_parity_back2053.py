@@ -25,6 +25,7 @@ CASES = {
     'deps': ([], ''),
     'hotspots': ([], ''),
     'imports': ([], ''),
+    'markdown': ([], ''),
     'metrics': ([], ''),
     'overview': ([], ''),
     'pack': ([], ''),

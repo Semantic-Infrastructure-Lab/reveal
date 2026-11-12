@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple
 
-from .query_parser import query_key_recorder
+from .query_parser import QueryParams, peek_query_items, query_key_recorder
 
 @dataclass(frozen=True)
 class BudgetAccounting:
@@ -89,6 +89,19 @@ class ResultControl:
             if reads is not None:
                 reads.add(key)
         return object.__getattribute__(self, name)
+
+
+def declared_result_control(params: QueryParams) -> ResultControl:
+    """Build from validated bindings; track application instead of normalization."""
+    values = dict(peek_query_items(params))
+    sort = values.get('sort')
+    descending = bool(sort and sort.startswith('-'))
+    field = sort[1:] if isinstance(sort, str) and sort.startswith('-') else sort
+    control = ResultControl(sort_field=field,
+                            sort_descending=descending,
+                            limit=values.get('limit'), offset=values.get('offset', 0))
+    vars(control)['_reads'] = params._reads
+    return control
 
 
 def _apply_sort_param(control: ResultControl, sort_field: str) -> None:

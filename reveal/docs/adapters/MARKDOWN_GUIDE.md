@@ -7,6 +7,52 @@ help_category: feature_guides
 ---
 # Markdown Support - Complete Guide
 
+## Directory queries
+
+`reveal markdown PATH` and `markdown://PATH` share declared controls and the same
+existing document operations:
+
+```bash
+reveal markdown docs/ --where 'status=draft' --match retry --columns author,date
+reveal 'markdown://docs/?where=status%3Ddraft&match=retry&columns=author,date'
+reveal markdown docs/ --view links
+reveal markdown docs/ --view aggregate --field status
+reveal markdown docs/ --backlinks guide.md
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `where` | Frontmatter expressions, ANDed; repeat for multiple bounds |
+| `match` | Body terms, ANDed; repeated values preserve every term |
+| `view` | `list`, `links`, `aggregate`, or legacy `lint` |
+| `field` | Field counted by `view=aggregate` |
+| `backlinks` | Existing reverse-link target lookup |
+| `columns` | Additional frontmatter columns; `fields=` remains a URI alias |
+| `explain` | Per-term evidence for body relevance scores |
+| `sort` | Frontmatter field; prefix `-` for descending |
+| `limit` | Answer rows; zero returns an empty page with the full matching count |
+| `offset` | Answer rows skipped after sorting |
+| `aggregate` | Legacy field selector; use `view=aggregate&field=FIELD` |
+| `link-graph` | Legacy selector; use `view=links` |
+| `lint` | Legacy frontmatter maintenance queue |
+| `lint-fields` | Required frontmatter fields for legacy lint |
+
+`--fields` keeps its shared JSON projection meaning; `--columns` adds frontmatter
+columns. A bare `body-contains` is rejected because it supplies no search term;
+`body-contains=` retains the empty-term listing behavior. Nonempty `body-contains=`
+values remain aliases for `match=`. Canonical `match=` and `where=` values decode
+percent escapes once and keep `+` literal; legacy inline filters retain their codec.
+Typed API overrides now apply, including empty lists, zero and false, after the URI
+controls validate. The directory is validated before controls; a missing API resource
+still raises `FileNotFoundError`. Typed paths preserve literal `?` and percent signs;
+URI paths use existing-path-first decoding.
+
+Every direct directory query view records `analysis` source decisions before
+selection or pagination. Required source loss exits 3 while partial results remain
+visible. Registered MCP retains partial evidence and marks a fully failed scan as
+an error. Existing lint findings remain data in this legacy view; migration to Check
+is separate from these declaration and source-completeness changes.
+
 ## Overview
 
 Reveal treats Markdown files as structured documents with queryable entities: headings, links, and code blocks. Using tree-sitter for accurate parsing, reveal can extract document structure, validate links, analyze code examples, and support documentation workflows.
@@ -1052,11 +1098,12 @@ or non-mapping frontmatter retain their existing missing-field meaning. List
 values count each item, including duplicates; frequency totals can therefore
 exceed matched file totals. Partial frequencies remain available with diagnostics.
 
-Backlinks, link-graph and lint operations take precedence and keep their existing
-policy, along with bare/empty body terms in ordinary listings, element/check
-operations, stdin and batches.
+Backlinks, link-graph, lint and ordinary listings now carry the same source-decision
+counts and direct-invocation execution policy. Legacy selectors retain their precedence;
+new `view=` selectors reject contradictory mode controls. Element/check operations,
+stdin and mixed batches retain their separately qualified transport policy.
 
-### Extra Frontmatter Columns (`?fields=`)
+### Extra Frontmatter Columns (`columns=`, legacy `fields=`)
 
 Add arbitrary frontmatter fields as inline columns in listing output:
 

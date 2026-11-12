@@ -313,6 +313,17 @@ def _with_retirement_notes(output: str) -> str:
     return output.rstrip('\n') + ''.join(f'\n[note: {entry.text}]' for entry in notes.values()) + '\n'
 
 
+def _note_incomplete_tool_answer(result: dict) -> None:
+    """Keep an owner's existing incomplete disclosure instead of adding a second one."""
+    warnings = result.setdefault('meta', {}).setdefault('warnings', [])
+    existing = next((entry for entry in warnings if entry.get('type') == 'analysis_incomplete'), None)
+    if existing is None:
+        warnings.append({'type': 'analysis_incomplete',
+                         'message': 'Required analysis is incomplete; usable evidence follows.'})
+    elif 'incomplete' not in existing.get('message', '').lower():
+        existing['message'] = 'Required analysis is incomplete; ' + existing.get('message', '')
+
+
 def _run_declared_tool(fn, *args, quiet_usage: bool = False, render=None, **kwargs) -> str:
     """Capture one qualified consumer while retaining canonical outcome evidence.
 
@@ -327,8 +338,7 @@ def _run_declared_tool(fn, *args, quiet_usage: bool = False, render=None, **kwar
         if _declared_failure(answer) is not None:
             return
         if answer.execution_facts.completeness is AnalysisCompleteness.INCOMPLETE:
-            answer.result.setdefault('meta', {}).setdefault('warnings', []).append(
-                {'type': 'analysis_incomplete', 'message': 'Required analysis is incomplete; usable evidence follows.'})
+            _note_incomplete_tool_answer(answer.result)
         if render is not None:
             rendered.append(render(answer.result))
         elif quiet_usage and _trace_absence_compatibility(answer):

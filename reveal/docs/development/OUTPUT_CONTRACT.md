@@ -602,10 +602,20 @@ List values expand per item, including duplicates, so aggregate frequencies can
 sum to more than the number of matched files. Frontmatter and optional body
 selection share one decoded read per candidate after any prefilter.
 
-Backlinks, link-graph and lint modes take precedence and retain their existing
-execution policy, as do ordinary listings without a nonempty body term,
-element/check operations, stdin and batches. Their missing-directory CLI
-diagnostic now uses the common `Path not found` wording. No findings gate is added.
+BACK-2614 extends these source-decision counts and direct-invocation execution
+facts to ordinary listings, link graphs, backlinks and lint. Their current result
+types remain intact. Readable malformed frontmatter stays a lint finding; read/decode
+loss is incomplete analysis, with surviving observations retained. Lint findings
+remain data in this legacy view, with no new findings gate. Element/check operations,
+stdin and mixed batches keep their separate transport policy.
+
+`reveal markdown PATH` and its URI form share declared `where`, `match`, `view`,
+`field`, `backlinks`, `columns`, `explain`, `sort`, `limit` and `offset` bindings.
+`fields=` remains an alias for listing columns; shared `--fields` still projects
+JSON. Typed overrides now apply (including empty lists, zero and false) after the
+original URI validates. Negative page controls reject before analysis; `limit=0`
+is an empty page, not an unbounded scan. Canonical repeated controls retain every
+value. Legacy inline expressions keep their codec and selection semantics.
 
 Direct Markdown link-graph and backlink answers disclose root-stat or directory
 enumeration failures in `meta.warnings` as `analysis_incomplete` (BACK-2416).
@@ -613,9 +623,11 @@ Its count is reached failed discovery events; the missing file population is
 unknown. File/edge/backlink counts describe only observed sources. Discovery loss
 bypasses graph cache reads and writes, including when the observed file set is
 unchanged. Text and grep show the warning; incomplete empty backlink lists do
-not claim a rename is safe. This disclosure repair preserves their legacy CLI
-exit and MCP error policy, including total discovery loss; it does not adopt
-the body-search/aggregate execution policy or qualify `--related` consumers.
+not claim a rename is safe. BACK-2614 now maps partial discovery to exit 3 and
+fully lost source to a failed registered MCP answer; partial MCP evidence remains
+usable. Stored graph entries require the source-decision payload before reuse;
+cache keys and environmental/content failure retention rules are unchanged.
+`--related` consumers retain their separate qualification.
 
 Surface is an inventory and declares only `--fail-on none`, also its default; it
 rejects `findings`. `none` never suppresses incomplete analysis or output failure.

@@ -44,7 +44,7 @@
   "reveal/cli/handlers/introspection.py": 1,
   "reveal/cli/invocation.py": 2,
   "reveal/cli/parser.py": 1,
-  "reveal/cli/routing/declared.py": 14,
+  "reveal/cli/routing/declared.py": 13,
   "reveal/cli/routing/file.py": 1,
   "reveal/cli/routing/flag_specs.py": 1,
   "reveal/cli/routing/formats.py": 2,

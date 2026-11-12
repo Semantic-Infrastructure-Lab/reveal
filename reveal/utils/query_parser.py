@@ -303,11 +303,15 @@ class ResourceSpec:
     uri_default: Optional[str] = '.'
     required: bool = False
     uri_codec: str = 'raw'
+    kind: Optional[str] = None
 
     def schema(self) -> Dict[str, Any]:
-        return {'name': self.name, 'required': self.required,
-                'cli_default': self.cli_default, 'uri_default': self.uri_default,
-                'uri_codec': self.uri_codec}
+        result = {'name': self.name, 'required': self.required,
+                  'cli_default': self.cli_default, 'uri_default': self.uri_default,
+                  'uri_codec': self.uri_codec}
+        if self.kind is not None:
+            result['kind'] = self.kind
+        return result
 
 
 @dataclass(frozen=True)

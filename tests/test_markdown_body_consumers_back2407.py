@@ -11,6 +11,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from reveal import api
+from reveal.errors import RequestValidationError
 from reveal.adapters.markdown import MarkdownQueryAdapter
 from test_mcp_expected_errors_back1992 import _run, _text
 
@@ -273,14 +274,19 @@ def test_postprocessing_cannot_rewrite_source_loss_as_success_or_decline(
     ('?backlinks=good.md&body-contains=needle', 'markdown_backlinks'),
     ('?body-contains=', 'markdown_query'), ('?body-contains', 'markdown_query'),
 ])
-def test_unqualified_siblings_retain_legacy_results(tmp_path, suffix, expected_type):
+def test_sibling_views_retain_partial_results_with_incomplete_status(tmp_path, suffix, expected_type):
     (tmp_path / 'good.md').write_bytes(b'---\ntitle: good\n---\nneedle\n')
     (tmp_path / 'bad.md').write_bytes(b'needle caf\xe9\n')
     request = 'markdown://' + tmp_path.as_posix() + suffix
     response = run(request, '--format', 'json')
-    assert response.returncode == 0
+    if suffix == '?body-contains':
+        assert response.returncode == 2
+        with pytest.raises(RequestValidationError):
+            api.query(request)
+        return
+    assert response.returncode == 3
     answer = json.loads(response.stdout)
-    assert answer['type'] == expected_type and 'analysis' not in answer
+    assert answer['type'] == expected_type and answer['analysis']['failed_files'] == 1
     assert answer == api.query(request)
 
 
@@ -328,13 +334,15 @@ def test_registered_sdk_partial_total_empty_cuts_and_source_edits(tmp_path, prov
         cut = await request(_uri(tmp_path, '&limit=0'))
         assert not cut.is_error and '0 of 1' in _text(cut)
         invalid = await request(_uri(tmp_path, '&limit=-1'))
-        assert invalid.is_error and 'non-negative' in _text(invalid)
+        assert invalid.is_error and 'limit must be >= 0' in _text(invalid)
         bad.write_bytes(b'needle caf\xe9\n')
         sibling = await request('markdown://' + tmp_path.as_posix() + '?link-graph')
         assert not sibling.is_error and 'bad.md' in _text(sibling)
         if provenance:
             answer, _ = json.JSONDecoder().raw_decode(_text(sibling))
-            assert answer['type'] == 'markdown_link_graph' and 'analysis' not in answer
+            assert answer['type'] == 'markdown_link_graph'
+            assert tuple(answer['analysis'][key] for key in (
+                'candidate_files', 'analyzed_files', 'failed_files', 'discovery_failures')) == (2, 1, 1, 0)
 
     _run(tmp_path, scenario)
 

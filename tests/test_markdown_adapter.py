@@ -91,7 +91,7 @@ class TestMarkdownAdapter:
         """Test adapter initialization."""
         adapter = MarkdownQueryAdapter('.', query='topics=reveal')
         assert adapter.base_path.is_absolute()
-        assert adapter.query == 'topics=reveal'
+        assert adapter.query == 'where=topics=reveal'
 
     def test_find_markdown_files(self, sample_docs):
         """Test finding all markdown files."""

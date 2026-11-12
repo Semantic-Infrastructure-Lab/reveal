@@ -36,13 +36,9 @@ def _query_candidate(path: Path, filters: list, query_filters: list,
                      body_contains: Optional[list], extra_fields: Optional[list],
                      explain: bool) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """One source decision; body selection and ranking share the same UTF-8 read."""
-    body = ''
-    if body_contains:
-        content = path.read_text(encoding='utf-8')
-        frontmatter = files.extract_frontmatter_diagnostic(path, content=content)['frontmatter']
-        body, _ = files.read_body_outcome(path, content=content)
-    else:
-        frontmatter = files.extract_frontmatter(path)
+    content = path.read_text(encoding='utf-8')
+    frontmatter = files.extract_frontmatter_diagnostic(path, content=content)['frontmatter']
+    body, _ = files.read_body_outcome(path, content=content) if body_contains else ('', None)
     if not filtering.matches_all_filters(frontmatter, filters, query_filters):
         return frontmatter, None
     if body_contains and not filtering.body_has_terms(body, body_contains):
@@ -73,8 +69,6 @@ def _collect_query_sources(all_files: List[Path], filters: list, query_filters: 
             frontmatter, item = _query_candidate(
                 path, filters, query_filters, body_contains, extra_fields, explain)
         except (OSError, UnicodeDecodeError) as exc:
-            if not body_contains:
-                raise
             collected.failed.add(path)
             collected.unreadable.append((to_posix(path), failure_of(exc).cause))
             continue
@@ -116,10 +110,7 @@ def get_structure(
         sort field (BACK-869).
     """
     discovery: List[PathFailure] = []
-    if body_contains:
-        all_files = files.find_markdown_files(base_path, on_error=lambda exc: discovery.append(failure_of(exc)))
-    else:
-        all_files = files.find_markdown_files(base_path)
+    all_files = files.find_markdown_files(base_path, on_error=lambda exc: discovery.append(failure_of(exc)))
     collected = _collect_query_sources(all_files, filters, query_filters, body_contains, extra_fields, explain)
     matched_results = collected.items
 
@@ -152,12 +143,8 @@ def get_structure(
         total_matches,
         controlled_results
     )
-    if body_contains:
-        analysis: results.BodySearchAnalysis = {
-            'candidate_files': len(all_files), 'analyzed_files': collected.analyzed,
-            'failed_files': len(collected.failed), 'discovery_failures': len(discovery),
-        }
-        response['analysis'] = analysis
+    response['analysis'] = results.source_analysis(len(all_files), len(collected.failed), len(discovery))
+    response['body_search'] = bool(body_contains)
 
     # Add truncation warning if needed
     displayed = len(controlled_results)
@@ -317,7 +304,8 @@ def _cached_link_graph(fingerprint: Optional[str]) -> Optional[Dict[str, Any]]:
     if fingerprint is None:
         return None
     cached = disk_cache.get(_LINK_GRAPH_CACHE_NAMESPACE, fingerprint)
-    if cached is not None and _storable(cached.get('unreadable_files', [])):
+    if (cached is not None and _storable(cached.get('unreadable_files', []))
+            and results.valid_source_analysis(cached.get('analysis'))):
         return cached
     return None
 
@@ -365,13 +353,15 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
     for md_path in all_files:
         try:
             rel = str(md_path.resolve().relative_to(base_resolved)).replace('\\', '/')
-        except ValueError:
+        except ValueError as exc:
+            unreadable.append([to_posix(md_path), str(exc)])
             continue
         forward[rel], failure = files.extract_internal_links_outcome(md_path, base_path)
         if failure:
             unreadable.append([rel, failure])
 
     graph = _link_graph_result(forward, len(all_files))
+    graph['analysis'] = results.source_analysis(len(all_files), len(unreadable), len(discovery))
     if unreadable:
         graph['unreadable_files'] = unreadable  # BACK-1854: a stored content failure still says it on a hit
     warning = traversal_failed_warning(discovery, base_path)
@@ -443,6 +433,7 @@ def get_backlinks(base_path: Path, target: str) -> Dict[str, Any]:
     """
     graph = build_link_graph(base_path)
     result = _lookup_backlinks(graph, target)
+    result['analysis'] = graph['analysis']
     if graph.get('unreadable_files'):
         result['unreadable_files'] = graph['unreadable_files']  # BACK-1854
     for warning in graph.get('meta', {}).get('warnings', []):
@@ -522,7 +513,9 @@ def lint_frontmatter(base_path: Path, required_fields: Optional[list] = None) ->
                             'missing_fields' and detail carries the parse
                             error string or the list of missing field names
     """
-    all_files = files.find_markdown_files(base_path)
+    discovery: List[PathFailure] = []
+    all_files = files.find_markdown_files(base_path, on_error=lambda exc: discovery.append(failure_of(exc)))
+    unreadable: List[List[str]] = []
     base_resolved = base_path.resolve()
     issues = []
 
@@ -532,7 +525,12 @@ def lint_frontmatter(base_path: Path, required_fields: Optional[list] = None) ->
         except ValueError:
             rel = str(path)
 
-        diagnosis = files.extract_frontmatter_diagnostic(path)
+        try:
+            content = path.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError) as exc:
+            unreadable.append([rel, failure_of(exc).cause])
+            continue
+        diagnosis = files.extract_frontmatter_diagnostic(path, content=content)
         status = diagnosis['status']
 
         if status == 'missing':
@@ -545,11 +543,14 @@ def lint_frontmatter(base_path: Path, required_fields: Optional[list] = None) ->
             if missing:
                 issues.append({'file': rel, 'issue': 'missing_fields', 'detail': missing})
 
-    return {
-        'total_files': len(all_files),
-        'issues_found': len(issues),
-        'issues': issues,
+    result = {
+        'total_files': len(all_files), 'issues_found': len(issues), 'issues': issues,
+        'analysis': results.source_analysis(len(all_files), len(unreadable), len(discovery)),
+        'unreadable_files': unreadable,
     }
+    warning = traversal_failed_warning(discovery, base_path)
+    note_warning(result, dict(warning) if warning else None)
+    return result
 
 
 def get_element(base_path: Path, element_name: str) -> Optional[Dict[str, Any]]:

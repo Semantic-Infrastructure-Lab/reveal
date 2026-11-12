@@ -1,6 +1,7 @@
 """Declared CLI/URI binding; legacy raw queries and exclusion/filter codecs stay separate."""
 
 import argparse
+import stat
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import quote, unquote
@@ -70,6 +71,18 @@ def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str,
     return result
 
 
+def _prepare_repeated_params(declarations: tuple[ParamSpec, ...], source: str, params: QueryParams) -> None:
+    """Keep every occurrence for explicitly repeated controls; other controls stay last-wins."""
+    parts = [part.strip().partition('=') for part in source.split('&')]
+    for spec in declarations:
+        if spec.cli is None or spec.cli.action != 'append' or spec.role == 'filter-expression':
+            continue
+        for name in (spec.name, *spec.aliases):
+            values = [value if separator else True for key, separator, value in parts if key == name]
+            if values:
+                params[name] = [_decode_value(spec, value) if name == spec.name else value for value in values]
+
+
 def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> QueryParams:
     """A declared expression-list owns the remaining raw DSL, including repeated bounds.
 
@@ -77,6 +90,7 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     The domain's existing expression parser still owns their syntax and evaluation.
     """
     params = parse_query_params(source)
+    _prepare_repeated_params(declarations, source, params)
     expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
     if expression is not None:
         known = {name for spec in declarations for name in (spec.name, *spec.aliases)}
@@ -126,7 +140,10 @@ def _validate_binding(spec: ParamSpec, raw: Any, transport: str) -> Any:
             raise ValueError(f'{spec.name} must be a list of nonempty strings')
         if any(not isinstance(item, str) or not item for item in decoded):
             raise ValueError(f'{spec.name} lists require nonempty string elements')
-    return spec.validate(decoded)
+    try:
+        return spec.validate(decoded)
+    except ValueError as exc:
+        raise RequestValidationError(str(exc)) from exc
 
 
 def bind_declared_params(specs: Iterable[ParamSpec], source: Union[str, Mapping[str, Any]],
@@ -225,13 +242,26 @@ def bind_resource_path(spec: ResourceSpec, path: str, *, transport: str) -> str:
     if '\x00' in value:
         raise RequestValidationError('Resource path must not contain NUL')
     if transport == 'typed' or spec.uri_codec == 'raw':
-        return value
+        return _validate_resource_kind(spec, value)
     if spec.uri_codec != 'existing-path-first':
         raise ValueError(f'Unknown resource URI codec {spec.uri_codec!r}')
     if _resource_exists(value):
-        return value
+        return _validate_resource_kind(spec, value)
     try:
         decoded = unquote(value, encoding='utf-8', errors='strict')
     except UnicodeDecodeError as exc:
         raise RequestValidationError('Resource path contains invalid UTF-8 percent encoding') from exc
-    return decoded if _resource_exists(decoded) else value
+    chosen = decoded if _resource_exists(decoded) else value
+    return _validate_resource_kind(spec, chosen)
+
+
+def _validate_resource_kind(spec: ResourceSpec, value: str) -> str:
+    if spec.kind is None:
+        return value
+    mode = Path(value).expanduser().stat().st_mode
+    matches = {'directory': stat.S_ISDIR, 'file': stat.S_ISREG}
+    if spec.kind not in matches:
+        raise ValueError(f'Unknown resource kind {spec.kind!r}')
+    if not matches[spec.kind](mode):
+        raise RequestValidationError(f'{spec.name} must be a {spec.kind}: {value}')
+    return value

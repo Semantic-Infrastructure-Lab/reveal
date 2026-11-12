@@ -2,11 +2,11 @@
 
 from pathlib import Path
 import stat
+import os
 from typing import Dict, Any, Optional, TypeGuard
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from ...utils.query import parse_query_filters, parse_result_control, ResultControl
 from ...utils.results import ResultBuilder
 from ...utils.validation import require_directory
 from ...utils.path_utils import as_spelled
@@ -17,192 +17,22 @@ from . import query as query_module
 from . import operations
 from . import files
 from . import filtering
-from .results import BodySearchAnalysis
-from ...utils.query_parser import note_query_parsed
+from .results import BodySearchAnalysis, valid_source_analysis
+from ...utils.query_parser import QueryParams, ResourceSpec, param_schema, parse_query_params
+from ...utils.query_binding import bind_declared_params
+from .params import (PARAM_SPECS, MATCH, BACKLINKS, AGGREGATE, FIELD, LINT_FIELDS, FIELDS, EXPLAIN,
+                     selected_view, result_type, result_control, filter_state, describe_request, validate_request)
 from ...errors import RequestValidationError
 from ...utils.results import AnalysisCompleteness, result_execution_facts
 
 
-def _extract_backlinks(filter_query: str) -> tuple:
-    """Extract backlinks=<path> param from filter query.
-
-    Returns:
-        (target_path_or_None, remaining_query_string)
-    """
-    target = None
-    remaining_parts = []
-    for part in filter_query.split('&'):
-        stripped = part.strip()
-        if stripped.startswith('backlinks='):
-            note_query_parsed(stripped)
-            value = stripped[len('backlinks='):]
-            if value:
-                target = value
-        else:
-            remaining_parts.append(part)
-    return target, '&'.join(remaining_parts)
-
-
-def _extract_aggregate(filter_query: str) -> tuple:
-    """Extract aggregate=<field> param from filter query.
-
-    Returns:
-        (aggregate_field_or_None, remaining_query_string)
-    """
-    aggregate_field = None
-    remaining_parts = []
-    for part in filter_query.split('&'):
-        stripped = part.strip()
-        if stripped.startswith('aggregate='):
-            note_query_parsed(stripped)
-            field = stripped[len('aggregate='):]
-            if field:
-                aggregate_field = field
-        else:
-            remaining_parts.append(part)
-    return aggregate_field, '&'.join(remaining_parts)
-
-
-def _extract_explain(filter_query: str) -> tuple:
-    """Extract bare ``explain`` flag from filter query.
-
-    Returns:
-        (explain_requested: bool, remaining_query_string)
-    """
-    explain = False
-    remaining_parts = []
-    for part in filter_query.split('&'):
-        stripped = part.strip()
-        if stripped == 'explain':
-            note_query_parsed(stripped)
-            explain = True
-        else:
-            remaining_parts.append(part)
-    return explain, '&'.join(remaining_parts)
-
-
-def _extract_link_graph(filter_query: str) -> tuple:
-    """Extract bare ``link-graph`` flag from filter query.
-
-    Returns:
-        (link_graph_requested: bool, remaining_query_string)
-    """
-    link_graph = False
-    remaining_parts = []
-    for part in filter_query.split('&'):
-        stripped = part.strip()
-        if stripped in ('link-graph', 'link_graph'):
-            note_query_parsed(stripped)
-            link_graph = True
-        else:
-            remaining_parts.append(part)
-    return link_graph, '&'.join(remaining_parts)
-
-
-def _extract_lint(filter_query: str) -> tuple:
-    """Extract bare ``lint`` flag from filter query.
-
-    Returns:
-        (lint_requested: bool, remaining_query_string)
-    """
-    lint = False
-    remaining_parts = []
-    for part in filter_query.split('&'):
-        stripped = part.strip()
-        if stripped == 'lint':
-            note_query_parsed(stripped)
-            lint = True
-        else:
-            remaining_parts.append(part)
-    return lint, '&'.join(remaining_parts)
-
-
-def _extract_lint_fields(filter_query: str) -> tuple:
-    """Extract lint-fields=<f1,f2,...> param from filter query.
-
-    Returns:
-        (required_fields_list_or_None, remaining_query_string)
-    """
-    lint_fields = None
-    remaining_parts = []
-    for part in filter_query.split('&'):
-        stripped = part.strip()
-        if stripped.startswith('lint-fields='):
-            note_query_parsed(stripped)
-            value = stripped[len('lint-fields='):]
-            if value:
-                lint_fields = [f.strip() for f in value.split(',') if f.strip()]
-        else:
-            remaining_parts.append(part)
-    return lint_fields, '&'.join(remaining_parts)
-
-
-def _extract_fields(filter_query: str) -> tuple:
-    """Extract fields=<f1,f2,...> param from filter query.
-
-    Returns:
-        (fields_list_or_None, remaining_query_string)
-    """
-    fields = None
-    remaining_parts = []
-    for part in filter_query.split('&'):
-        stripped = part.strip()
-        if stripped.startswith('fields='):
-            note_query_parsed(stripped)
-            value = stripped[len('fields='):]
-            if value:
-                fields = [f.strip() for f in value.split(',') if f.strip()]
-        else:
-            remaining_parts.append(part)
-    return fields, '&'.join(remaining_parts)
-
-
-def _extract_body_contains(filter_query: str) -> tuple:
-    """Extract body-contains= params from filter query.
-
-    Returns:
-        (body_contains_terms, remaining_query_string)
-    """
-    body_contains = []
-    remaining_parts = []
-    for part in filter_query.split('&'):
-        stripped = part.strip()
-        if stripped.startswith('body-contains='):
-            note_query_parsed(stripped)
-            term = stripped[len('body-contains='):]
-            if term:
-                body_contains.append(term)
-        else:
-            remaining_parts.append(part)
-    return body_contains, '&'.join(remaining_parts)
-
-
-def _execution_query_type(query: str) -> Optional[str]:
-    """Resolve qualified operations without consuming source files."""
-    if not isinstance(query, str):
-        raise TypeError('Markdown query must be a string')
-    link_graph, query = _extract_link_graph(query)
-    lint, query = _extract_lint(query)
-    backlinks, query = _extract_backlinks(query)
-    aggregate, query = _extract_aggregate(query)
-    terms, _ = _extract_body_contains(query)
-    if link_graph or lint or backlinks:
-        return None
-    if aggregate:
-        return 'markdown_aggregate'
-    return 'markdown_query' if terms else None
-
-
 def _valid_body_analysis(proof: Any) -> TypeGuard[BodySearchAnalysis]:
-    keys = ('candidate_files', 'analyzed_files', 'failed_files', 'discovery_failures')
-    return (isinstance(proof, dict)
-            and all(type(proof.get(key)) is int and proof[key] >= 0 for key in keys)
-            and proof['candidate_files'] == proof['analyzed_files'] + proof['failed_files'])
+    return valid_source_analysis(proof)
 
 
-def _valid_body_observations(result, proof: BodySearchAnalysis) -> bool:
+def _valid_body_observations(result, proof: BodySearchAnalysis, require_score: bool = True) -> bool:
     observations, matched = result.get('results'), result.get('matched_files')
-    return (isinstance(observations, list) and all(_valid_body_row(row) for row in observations)
+    return (isinstance(observations, list) and all(_valid_listing_row(row, require_score) for row in observations)
             and type(matched) is int and len(observations) <= matched <= proof['analyzed_files'])
 
 
@@ -222,6 +52,46 @@ def _valid_aggregate_row(row) -> bool:
             and type(row.get('count')) is int and row['count'] > 0)
 
 
+def _valid_listing_row(row, require_score: bool) -> bool:
+    if require_score:
+        return _valid_body_row(row)
+    return (isinstance(row, dict)
+            and all(isinstance(row.get(key), str) and row[key] for key in ('path', 'relative_path'))
+            and type(row.get('has_frontmatter')) is bool)
+
+
+def _valid_lint_observations(result) -> bool:
+    rows = result.get('issues')
+    return (isinstance(rows, list) and type(result.get('issues_found')) is int
+            and result['issues_found'] == len(rows)
+            and all(isinstance(row, dict) and isinstance(row.get('file'), str)
+                    and isinstance(row.get('issue'), str) for row in rows))
+
+
+def _valid_graph_observations(result, proof) -> bool:
+    nodes = result.get('nodes')
+    if not (isinstance(nodes, list) and proof['analyzed_files'] <= len(nodes) <= proof['candidate_files']
+            and all(isinstance(row, dict) and isinstance(row.get('file'), str)
+                    and _strings(row.get('links_to')) and _strings(row.get('linked_by')) for row in nodes)):
+        return False
+    return (type(result.get('total_edges')) is int
+            and result['total_edges'] == sum(len(row['links_to']) for row in nodes)
+            and len({row['file'] for row in nodes}) == len(nodes))
+
+
+def _valid_auxiliary_observations(result, proof, kind: str) -> bool:
+    if kind == 'markdown_frontmatter_lint':
+        return _valid_lint_observations(result)
+    if kind == 'markdown_backlinks':
+        return (type(result.get('found')) is bool and isinstance(result.get('target'), str)
+                and _strings(result.get('linked_by')) and _strings(result.get('links_to')))
+    return kind == 'markdown_link_graph' and _valid_graph_observations(result, proof)
+
+
+def _strings(value) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
 def _valid_body_row(row) -> bool:
     return (isinstance(row, dict)
             and all(isinstance(row.get(key), str) and row[key] for key in ('path', 'relative_path'))
@@ -239,7 +109,7 @@ def _directory_resource(resource: str, qualified: bool) -> tuple[Path, str]:
     clean_path = resource or '.'
     if '://' in clean_path:
         clean_path = clean_path.split('://', 1)[1]
-    clean_path = clean_path.split('?', 1)[0].rstrip('/')
+    clean_path = os.path.expanduser(clean_path)
     try:
         resolved = Path(clean_path).resolve()
     except ValueError as exc:
@@ -258,24 +128,6 @@ def _directory_resource(resource: str, qualified: bool) -> tuple[Path, str]:
     return directory, clean_path or '.'
 
 
-def _request_result_control(query: str, qualified: bool):
-    try:
-        return parse_result_control(query)
-    except ValueError as exc:
-        if qualified:
-            raise RequestValidationError(str(exc)) from exc
-        raise
-
-
-def _request_query_filters(query: str, qualified: bool):
-    try:
-        return parse_query_filters(query)
-    except ValueError as exc:
-        if qualified:
-            raise RequestValidationError(str(exc)) from exc
-        raise
-
-
 @register_adapter('markdown')
 @register_renderer(MarkdownRenderer)
 class MarkdownQueryAdapter(ResourceAdapter):
@@ -291,16 +143,27 @@ class MarkdownQueryAdapter(ResourceAdapter):
     RESOURCE_IS_PATH = True
     RESULT_TYPE = 'markdown_query'
     DEFAULT_FAIL_ON = 'none'
+    FINDINGS_POLICIES = ('none',)
+    BOUND_QUERY_CALL = True
+    PARAM_SPECS = PARAM_SPECS
+    RESOURCE_SPEC = ResourceSpec(kind='directory', uri_codec='existing-path-first')
+    validate_request = staticmethod(validate_request)
+    result_type_for = staticmethod(result_type)
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
+
+    @staticmethod
+    def resource_path(resource):
+        return os.path.expanduser(resource)
 
     @classmethod
     def uri_execution_facts(cls, resource):
-        """Ordinary body searches and aggregates qualify required source decisions."""
-        return cls.execution_facts if _execution_query_type(resource.partition('?')[2]) else None
+        """Every directory-query view now records its required source decisions."""
+        return cls.execution_facts
 
     @staticmethod
     def uri_result_type(resource):
-        return _execution_query_type(resource.partition('?')[2]) or 'markdown_query'
+        params = parse_query_params(resource.partition('?')[2])
+        return result_type(params)
 
     @staticmethod
     def execution_facts(result):
@@ -317,8 +180,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                          else AnalysisCompleteness.FAILED)
         return result_execution_facts(result, completeness=state)
 
-    @staticmethod
-    def answer_requirement_error(result, expected_type, prior_facts=None):
+    def answer_requirement_error(self, result, expected_type, prior_facts=None):
         """Transformations must retain required source proof and observation counts."""
         if prior_facts is not None and any(
                 error.get('code') == 'invalid_request' for error in result.get('meta', {}).get('errors', [])):
@@ -331,11 +193,17 @@ class MarkdownQueryAdapter(ResourceAdapter):
             return 'Markdown answer missing consistent nonnegative source analysis counts'
         if _erased_source_loss(result, proof, prior_facts):
             return 'Markdown postprocessing cannot erase established required source loss'
-        valid_observations = (_valid_aggregate_observations(result, proof)
-                              if expected_type == 'markdown_aggregate' else _valid_body_observations(result, proof))
+        valid_observations = self._valid_observations(result, proof, expected_type)
         if not valid_observations:
             return 'Markdown answer missing consistent observations and match count'
         return None
+
+    def _valid_observations(self, result, proof, expected_type):
+        if expected_type == 'markdown_aggregate':
+            return _valid_aggregate_observations(result, proof)
+        if expected_type == 'markdown_query':
+            return _valid_body_observations(result, proof, bool(self.body_contains))
+        return _valid_auxiliary_observations(result, proof, expected_type)
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -343,85 +211,39 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
         Returns JSON schema for AI agent integration.
         """
-        return get_schema()
+        schema = get_schema()
+        return {**schema, 'query_params': param_schema(PARAM_SPECS),
+                'resource': MarkdownQueryAdapter.RESOURCE_SPEC.schema()}
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for markdown:// adapter."""
         return get_help()
 
-    def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
-        """Initialize the markdown query adapter.
-
-        Args:
-            resource: Directory to search for markdown files ('' = current directory)
-            query: Query string (e.g., 'topics=reveal', '!status', 'lines>100')
-        """
-        qualified = _execution_query_type(query or '') is not None
-        self.base_path, self.spelling = _directory_resource(resource, qualified)
-        self.query = query
-
-        # Parse result control (sort, limit, offset) and get cleaned query
-        if query:
-            filter_query, self.result_control = _request_result_control(query, qualified)
-        else:
-            filter_query = ''
-            self.result_control = ResultControl()
-
-        # Extract link-graph flag before passing to filter parsers
-        self.link_graph = False
-        if filter_query:
-            self.link_graph, filter_query = _extract_link_graph(filter_query)
-
-        # Extract lint flag + optional required-fields list before filter parsers
-        self.lint = False
-        if filter_query:
-            self.lint, filter_query = _extract_lint(filter_query)
-
-        self.lint_fields = None
-        if filter_query:
-            self.lint_fields, filter_query = _extract_lint_fields(filter_query)
-
-        # Extract backlinks= param before passing to filter parsers
-        self.backlinks_target = None
-        if filter_query:
-            self.backlinks_target, filter_query = _extract_backlinks(filter_query)
-
-        # Extract aggregate= param before passing to filter parsers
-        self.aggregate_field = None
-        if filter_query:
-            self.aggregate_field, filter_query = _extract_aggregate(filter_query)
-
-        # Extract body-contains= params before passing to filter parsers
-        self.body_contains = []
-        if filter_query:
-            self.body_contains, filter_query = _extract_body_contains(filter_query)
-
-        # Extract bare explain flag (score breakdown for body-contains ranking)
-        self.explain = False
-        if filter_query:
-            self.explain, filter_query = _extract_explain(filter_query)
-
-        # Extract fields= param (extra frontmatter columns to show in listing)
-        self.extra_fields = None
-        if filter_query:
-            self.extra_fields, filter_query = _extract_fields(filter_query)
-
-        # Parse query filters conditionally (only if new operators present)
-        # This prevents legacy parameters from being misinterpreted
-        self.query_filters = []
-        has_new_operators = filter_query and any(op in filter_query for op in ['>', '<', '!=', '~=', '!~', '..', '=='])
-
-        if has_new_operators:
-            # No fallback to "no filters": that would answer an unfiltered query as if it
-            # were the filtered one (BACK-1059). A ValueError here fails the query.
-            self.query_filters = _request_query_filters(filter_query, qualified)
-
-        # Keep legacy filter parsing for backward compatibility
-        # Only use legacy parsing if there are no new operators
-        self.filters = []
-        if filter_query and not has_new_operators:
-            self.filters = query_module.parse_query(filter_query)
+    def __init__(self, resource: str = '', query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None, **kwargs: Any):
+        if params is None:
+            params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
+        elif not isinstance(params, QueryParams):
+            params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        try:
+            validate_request(params)
+        except ValueError as exc:
+            raise RequestValidationError(str(exc)) from exc
+        self.query_params = params
+        self.base_path, self.spelling = _directory_resource(resource, True)
+        self.query = describe_request(params)
+        self.result_control = result_control(params)
+        _, self.filters, self.query_filters = filter_state(params)
+        view = selected_view(params, apply=True)
+        self.link_graph = view == 'links'
+        self.lint = view == 'lint'
+        self.backlinks_target = BACKLINKS.read(params) if view == 'backlinks' else None
+        self.aggregate_field = (FIELD.read(params) or AGGREGATE.read(params)) if view == 'aggregate' else None
+        self.body_contains = MATCH.read(params)
+        self.lint_fields = LINT_FIELDS.read(params)
+        self.extra_fields = FIELDS.read(params)
+        self.explain = EXPLAIN.read(params)
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Query markdown files and return matching results.
@@ -451,6 +273,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 source=source,
                 source_type='directory',
                 contract_version=CONTRACT_VERSION,
+                warnings=self._source_warnings(result, "required document evidence is missing from lint"),
                 data=result,
             )
 

@@ -341,7 +341,7 @@ def get_schema() -> Dict[str, Any]:
         'notes': [
             'Searches recursively in the specified directory (or current dir if omitted)',
             'body-contains= searches body text after frontmatter; multiple values are AND\'d',
-            'Direct ordinary nonempty body searches and active aggregate queries exit 0 when complete, 2 for invalid requests, and 3 for required source/output loss; partial matches survive. Other modes keep their execution policy.',
+            'Direct directory queries in every view exit 0 when complete, 2 for invalid requests, and 3 for required source/output loss; partial results and source-decision counts survive.',
             '!field finds files missing a specific frontmatter field — useful for doc quality audits',
             'List fields match if any item in the list matches (e.g., tags=python matches [python, web])',
             'All filter conditions are AND\'d; OR logic across different fields is not supported',
@@ -400,7 +400,7 @@ def get_help() -> Dict[str, Any]:
             'body-contains= is case-insensitive; multiple values are AND\'d',
             'body-contains= matches files without frontmatter too',
             'body-contains= results are ranked by relevance_score (term frequency + heading boost) unless sort= overrides it; add ?explain for the term_counts/heading_hits breakdown',
-            'Direct ordinary nonempty body searches and active aggregate queries exit 0 when complete, 2 for invalid requests, and 3 for required source/output loss. Healthy empty searches succeed; partial matches and source-count diagnostics survive.',
+            'All direct directory-query views report required source decisions before selection or paging. Complete empty answers succeed; required source/output loss exits 3, with partial evidence retained.',
             'Aggregate matched/missing-field counts exclude unreadable files; readable missing or malformed frontmatter keeps its existing missing-field meaning.',
             '?lint distinguishes malformed YAML from "no frontmatter at all" — extract_frontmatter() collapses both to None, lint tells you which',
             'Only frontmatter fields require valid YAML frontmatter to filter',

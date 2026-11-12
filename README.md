@@ -41,7 +41,7 @@ use the same execution path. Quote URI arguments containing shell operators.
 | `calls` | Callers/callees: `reveal calls src/ --callees main --depth 2 --detail` |
 | `imports` | Import relationships: `reveal imports src/ --importers app.py` |
 | `git://` | History: `reveal 'git://.?type=history&message~=fix'` |
-| `markdown://` | Documents: `reveal 'markdown://docs/?body-contains=retry'` |
+| `markdown` | Documents: `reveal markdown docs/ --match retry` |
 | `metrics` | File size, complexity and churn: `reveal metrics src/` |
 | `check` | Rule findings: `reveal check src/`; a change: `reveal check --changed main..HEAD` |
 | `surface` | Recognized external boundaries: `reveal surface src/` |

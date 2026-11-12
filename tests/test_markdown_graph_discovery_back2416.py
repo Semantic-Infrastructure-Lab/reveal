@@ -83,7 +83,7 @@ def test_api_loss_and_recovery_keep_observed_population(docs, denied, total, mod
 def test_cli_discloses_loss_in_each_format(docs, denied, mode, output):
     denied.add(docs / 'hidden')
     response = run(_uri(docs, mode), '--format', output)
-    assert response.returncode == 0  # bounded disclosure repair; legacy exits remain
+    assert response.returncode == 3  # source loss is now qualified across Markdown views
     if output == 'json':
         _loss(json.loads(response.stdout), 'hidden')
         assert json.loads(response.stdout) == api.query(_uri(docs, mode))
@@ -146,7 +146,7 @@ def test_existing_content_loss_and_discovery_loss_both_survive(docs, denied):
         assert answer['total_files'] == 2
         assert {w['type'] for w in _warnings(answer)} == {'unreadable_files', 'analysis_incomplete'}
         response = run(_uri(docs, mode))
-        assert response.returncode == 0
+        assert response.returncode == 3
         assert 'safe to rename' not in response.stdout
         assert 'could not be read' in response.stdout
         assert 'missing file population is unknown' in response.stdout
@@ -194,7 +194,10 @@ mcp_server.main()
             for value, directory in ((b'partial', 'hidden'), (b'all', '.')):
                 marker.write_bytes(value)
                 lost = await request()
-                assert not lost.is_error  # legacy transport policy is unchanged
+                if value == b'all':
+                    assert lost.is_error and _text(lost).strip()
+                    continue
+                assert not lost.is_error  # surviving partial evidence remains usable
                 text = _text(lost)
                 if provenance:
                     _loss(json.loads(text), directory)

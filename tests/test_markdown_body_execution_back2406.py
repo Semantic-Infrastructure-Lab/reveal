@@ -199,13 +199,18 @@ def test_resource_validation_precedes_controls_and_preserves_api_missing_excepti
     'body-contains=needle&link-graph',
     'body-contains=needle&link_graph', 'body-contains=needle&lint',
     'body-contains=needle&backlinks=good.md'])
-def test_sibling_modes_remain_outside_execution_admission(tmp_path, query):
+def test_sibling_views_now_record_source_completeness(tmp_path, query):
     document(tmp_path, 'good.md', b'---\ntitle: guide\n---\nneedle\n')
-    assert _uri_execution_facts(MarkdownQueryAdapter, uri(tmp_path, query).split('://', 1)[1],
-                                None, _default_args()) is None
+    if query == 'body-contains':
+        assert run(uri(tmp_path, query), '--format', 'json').returncode == 2
+        with pytest.raises(RequestValidationError):
+            api.query(uri(tmp_path, query))
+        return
+    assert callable(_uri_execution_facts(MarkdownQueryAdapter, uri(tmp_path, query).split('://', 1)[1],
+                                        None, _default_args()))
     answer = resolved(tmp_path, query)
-    assert answer.execution_facts is None
-    assert 'analysis' not in answer.result
+    assert answer.execution_facts.completeness is AnalysisCompleteness.COMPLETE
+    assert answer.result['analysis']['failed_files'] == 0
 
 
 def test_malformed_frontmatter_is_completed_content_and_lint_keeps_its_verdict(tmp_path):
@@ -214,7 +219,7 @@ def test_malformed_frontmatter_is_completed_content_and_lint_keeps_its_verdict(t
     assert_analysis(answer, AnalysisCompleteness.COMPLETE, 1, 1, 0)
     assert answer.result['matched_files'] == 1
     lint = resolved(tmp_path, 'lint')
-    assert lint.execution_facts is None
+    assert lint.execution_facts.completeness is AnalysisCompleteness.COMPLETE
     assert lint.result['issues_found'] == 1
     assert lint.result['issues'][0]['issue'] == 'malformed_yaml'
 

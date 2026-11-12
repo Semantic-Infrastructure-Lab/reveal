@@ -10,6 +10,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from reveal import api
+from reveal.errors import RequestValidationError
 from reveal.adapters.markdown import MarkdownQueryAdapter
 from test_mcp_expected_errors_back1992 import _run, _text
 
@@ -40,6 +41,11 @@ def test_markdown_api_preserves_requested_relative_source_spelling(tmp_path, mon
     (root / 'good.md').write_text('---\nkind: guide\n---\nneedle\n', encoding='utf-8')
     monkeypatch.chdir(tmp_path)
     request = 'markdown://./docs?' + query
+    if query == 'body-contains':
+        with pytest.raises(RequestValidationError):
+            api.query(request)
+        assert run(request, '--format', 'json').returncode == 2
+        return
     answer = api.query(request)
     assert answer['source'] == './docs'
     response = run(request, '--format', 'json')
@@ -262,7 +268,7 @@ def test_registered_sdk_partial_failed_empty_and_fresh_repair(tmp_path, provenan
         bad.unlink()
         assert not (await request()).is_error
         rejected = await request('&limit=-1')
-        assert rejected.is_error and 'non-negative' in _text(rejected)
+        assert rejected.is_error and 'limit must be >= 0' in _text(rejected)
 
     _run(tmp_path, scenario)
 

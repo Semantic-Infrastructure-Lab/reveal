@@ -583,6 +583,7 @@ def _walk_tree(root):
         'from unittest.mock import patch\n\n\n@patch("skipme.extra.extra_fn")\n'
         '@patch("skipme.extra.os")\ndef test_main(a, b):\n    pass\n', encoding='utf-8')
     (proj / 'README.md').write_text('# Proj\n\nSee [app](app.py).\n', encoding='utf-8')
+    (proj / 'skipme' / 'notes.md').write_text('# Excluded notes\n', encoding='utf-8')
     # More of everything than any default --top shows, so --verbose (lift the cap) is visible.
     (proj / 'many').mkdir()
     for i in range(30):
@@ -607,6 +608,7 @@ WALKERS = {
     'deps': ['proj'],
     'hotspots': ['proj'],
     'imports': ['proj'],
+    'markdown': ['proj'],
     'metrics': ['proj'],
     'overview': ['proj'],
     'pack': ['proj'],

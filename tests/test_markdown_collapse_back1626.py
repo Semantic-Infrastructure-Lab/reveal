@@ -76,10 +76,10 @@ class TestCollapse:
     def test_json_carries_body_outline_and_warning(self, with_intro):
         data = json.loads(_run(with_intro, "Big Doc", "--format", "json"))
         assert data['collapsed'] is True
-        assert data['source'].endswith("Second intro line.")
+        assert data['content'].endswith("Second intro line.")
         assert [h['name'] for h in data['headings']] == [f"Sub {i}" for i in range(6)]
         warning, = data['meta']['warnings']
-        assert (warning['field'], warning['shown'], warning['total']) == ('source', 4, 203)
+        assert (warning['field'], warning['shown'], warning['total']) == ('content', 4, 203)
 
     def test_explicit_head_wins_over_collapse(self, with_intro):
         out = _run(with_intro, "Big Doc", "--head", "10")

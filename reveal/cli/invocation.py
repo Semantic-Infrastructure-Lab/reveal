@@ -112,6 +112,8 @@ COMMANDS: Dict[str, CommandSpec] = {
     'imports':      _declared('imports',
                      'reveal imports [path]',
                      'Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations'),
+    'markdown':     _declared('markdown', 'reveal markdown [path] [--where EXPR] [--match TEXT]',
+                     'Find documents by frontmatter/body; inspect links and aggregate fields'),
     'metrics':      _declared('metrics',
                      'reveal metrics [path]',
                      'Per-file lines, complexity and quality; --hotspots ranks files; --view provenance tags every file'),
@@ -152,7 +154,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
-EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'metrics', 'contracts', 'surface',
+EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'markdown', 'metrics', 'contracts', 'surface',
                 'patches', 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline', 'architecture')
 

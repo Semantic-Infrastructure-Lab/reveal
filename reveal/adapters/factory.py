@@ -152,10 +152,10 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
     if overrides is not None:
         from ..utils.query_binding import bind_declared_params, bind_resource_path
         from ..utils.query_parser import ResourceSpec
-        bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
-                                     overrides=overrides)
         spec = getattr(adapter_class, 'RESOURCE_SPEC', ResourceSpec(uri_default=empty_default))
         path = bind_resource_path(spec, path, transport='uri')
+        bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
+                                     overrides=overrides)
         return adapter_class(path, params=bound)
     spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
     if spec is not None:

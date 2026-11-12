@@ -12,6 +12,7 @@ from typing import Any
 
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from ...utils.severity import CHECK_GATES
+from ...utils.path_utils import to_posix
 
 
 def declared_adapter_class(name: str):
@@ -190,8 +191,9 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             expected_type = select_type(source) if select_type else adapter.RESULT_TYPE
             try:
                 path = bind_resource_path(adapter.RESOURCE_SPEC, os.path.expanduser(path), transport=transport)
-            except ValueError as exc:
-                consume(_invalid_answer(adapter, name, path, str(exc), args, result_type=expected_type))
+            except (ValueError, FileNotFoundError, NotADirectoryError) as exc:
+                consume(_invalid_answer(adapter, name, path, _resource_error_message(exc, path), args,
+                                        result_type=expected_type))
                 return
             except OSError as exc:
                 from ...utils.results import FailureCause
@@ -213,6 +215,12 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     finally:
         if ledger is not None and ledger.complete:
             ledger.report(name)
+
+
+def _resource_error_message(error, path: str) -> str:
+    if isinstance(error, (FileNotFoundError, NotADirectoryError)):
+        return f'Path not found: {to_posix(path)}'
+    return str(error)
 
 
 def _invalid_prepared_answer(adapter, name, path, resource, message, args):
@@ -264,7 +272,7 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
 
     def resolve():
         adapter = _call_adapter(lambda: _canonical_init(adapter_class, path, params=params),
-                                name, scope, adapter_class)
+                                name, scope, adapter_class, classify_validation=True)
         return _structure_answer(adapter, _renderer_class_of(name), args, name, scope,
                                  source_path=scope, facts_of=adapter_class.execution_facts, expected_type=expected_type)
 

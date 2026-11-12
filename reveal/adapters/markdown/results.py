@@ -19,6 +19,19 @@ class BodySearchAnalysis(TypedDict):
     discovery_failures: int
 
 
+def source_analysis(candidate_files: int, failed_files: int, discovery_failures: int) -> BodySearchAnalysis:
+    """One source decision per candidate, before filtering or presentation."""
+    return {'candidate_files': candidate_files, 'analyzed_files': candidate_files - failed_files,
+            'failed_files': failed_files, 'discovery_failures': discovery_failures}
+
+
+def valid_source_analysis(proof: Any) -> bool:
+    keys = ('candidate_files', 'analyzed_files', 'failed_files', 'discovery_failures')
+    return (isinstance(proof, dict)
+            and all(type(proof.get(key)) is int and proof[key] >= 0 for key in keys)
+            and proof['candidate_files'] == proof['analyzed_files'] + proof['failed_files'])
+
+
 def build_result_item(
     path: Path,
     frontmatter: Optional[Dict[str, Any]],

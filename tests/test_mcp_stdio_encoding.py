@@ -112,7 +112,7 @@ def test_config_edits_are_visible_between_live_requests(child, tmp_path):
         config.write_text(f'root: true\nrules:\n  E501:\n    max_length: {value}\n', encoding='utf-8')
 
     def check(server):
-        _, answer = server.call('reveal_check', {'path': str(path), 'select': 'E501'})
+        _, answer = server.call('reveal_check', {'path': str(path), 'select': 'E501', 'severity': 'low'})
         assert not answer['result']['isError'], answer
         return answer['result']['content'][0]['text']
 
