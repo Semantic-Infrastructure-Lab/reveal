@@ -73,7 +73,7 @@ def test_failed_file_sample_is_disclosed(tmp_path, monkeypatch):
     monkeypatch.setattr(adapter, 'get_metadata', lambda: dict(
         real(), files_failed=[f'f{i}.py' for i in range(50)], files_failed_count=73))
     [cut] = truncations_of(adapter._build_response('imports'))
-    assert (cut['field'], cut['shown'], cut['total']) == ('metadata.files_failed', 50, 73)
+    assert (cut['field'], cut['shown'], cut['total']) == ('meta.files_failed', 50, 73)
 
 
 def test_no_failed_files_no_note(tmp_path):

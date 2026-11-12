@@ -368,7 +368,8 @@ class TestComposedMetaConsuming(unittest.TestCase):
         self.assertTrue(first['meta'].get('errors'))
 
         second = adapter.get_structure()
-        self.assertIsNone(second.get('meta'), "healthy re-scan must not re-report the prior call's errors")
+        self.assertEqual(second['meta']['errors'], [], "healthy re-scan must not re-report the prior call's errors")
+        self.assertEqual(second['meta']['warnings'], [])
 
 
 if __name__ == '__main__':

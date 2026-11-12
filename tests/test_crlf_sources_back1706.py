@@ -119,7 +119,7 @@ class TestCrlfPython:
         out = _both(tmp_path, 'a.py', PY_SRC, 'K', '--format', 'json')
         data = json.loads(out['crlf'])
         assert (data['line_start'], data['line_end']) == (10, 12)
-        assert data['source'] == 'class K:\n    def m(self):\n        return 2'
+        assert data['content'] == 'class K:\n    def m(self):\n        return 2'
         assert json.loads(out['lf']) == data
 
     def test_check_finds_same_issue_on_same_line(self, tmp_path):

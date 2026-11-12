@@ -47,7 +47,7 @@ def test_repeated_bom_structure_is_failed_source_not_recovered(tmp_path, eol):
 @pytest.mark.parametrize('fmt', ['json', 'text'])
 def test_file_structure_discloses_source_invalidity(tmp_path, fmt):
     result = _run_reveal_direct(_write(tmp_path), '--format', fmt)
-    assert result.returncode == 1
+    assert result.returncode == 3
     if fmt == 'json':
         payload = json.loads(result.stdout)
         assert payload['error'] == REASON
@@ -133,17 +133,23 @@ def test_valid_source_preserves_unicode_extraction_and_parse_work(tmp_path, coun
                 if e.event == 'artifact' and e.scope == 'target']) == 1
     extracted = _run_reveal_direct(path, 'café', '--format', 'json')
     assert extracted.returncode == 0
-    assert json.loads(extracted.stdout) == {
+    answer = json.loads(extracted.stdout)
+    assert answer['source'] == path.as_posix()
+    assert answer['meta']['warnings'] == answer['meta']['errors'] == []
+    assert {key: answer[key] for key in ('name', 'line_start', 'line_end', 'content')} == {
         'name': 'café', 'line_start': 2, 'line_end': 3,
-        'source': 'def café():\n    return "\ufeffπ"'}
+        'content': 'def café():\n    return "\ufeffπ"'}
 
 
 def test_repeated_bom_extraction_remains_best_effort(tmp_path):
-    result = _run_reveal_direct(_write(tmp_path), 'café', '--format', 'json')
+    path = _write(tmp_path)
+    result = _run_reveal_direct(path, 'café', '--format', 'json')
     assert result.returncode == 0
-    assert json.loads(result.stdout) == {
+    answer = json.loads(result.stdout)
+    assert answer['source'] == path.as_posix()
+    assert {key: answer[key] for key in ('name', 'line_start', 'line_end', 'content')} == {
         'name': 'café', 'line_start': 2, 'line_end': 3,
-        'source': 'def café():\n    return "\ufeffπ"'}
+        'content': 'def café():\n    return "\ufeffπ"'}
 
 
 @pytest.mark.parametrize('count', [0, 1])

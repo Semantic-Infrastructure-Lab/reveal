@@ -96,7 +96,8 @@ def test_no_cut_no_note(six_funcs):
     run = _run_reveal_direct(six_funcs, '--head', '10')
     assert 'Truncated' not in run.stdout
     out = json.loads(_run_reveal_direct(six_funcs, '--head', '10', '--format', 'json').stdout)
-    assert 'warnings' not in out['meta'] and 'meta' not in out['structure']
+    assert out['meta']['warnings'] == [] and out['meta']['errors'] == []
+    assert 'meta' not in out['structure']
 
 
 def test_api_analyze_cuts_like_the_cli(six_funcs):
