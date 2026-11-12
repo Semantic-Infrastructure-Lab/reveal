@@ -225,7 +225,7 @@ class TestRouteByResourceFilesPatches:
         msgs[1]['toolUseResult'] = {'structuredPatch': [{'oldStart': 1, 'newStart': 1}]}
         jsonl = _write_session(tmp_path, 'sess', msgs)
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
-            adapter = ClaudeAdapter('session/sess', query=f'patches={patches_value}')
+            adapter = ClaudeAdapter('session/sess/files', query=f'patches={patches_value}')
         adapter.conversation_path = jsonl
         adapter.messages = msgs
         adapter.resource = 'session/sess/files'

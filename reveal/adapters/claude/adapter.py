@@ -990,12 +990,14 @@ class ClaudeAdapter(ResourceAdapter):
         Returns JSON schema for AI agent integration.
         """
         from .pagination import page_schema
+        from .controls import MODIFIER_SCOPES
         return {
             'adapter': 'claude',
             'description': 'Claude Code conversation analysis with tool usage, workflow tracking, and error detection',
             'uri_syntax': 'claude://session/{name}[/resource][?query]',
             'query_params': {spec.name: spec.schema() for spec in PARAM_SPECS},
             'pagination': page_schema(),
+            'modifier_scopes': {name: list(kinds) for name, kinds in MODIFIER_SCOPES.items()},
             'elements': _SCHEMA_ELEMENTS,
             'cli_flags': _SCHEMA_CLI_FLAGS,
             'supports_batch': False,

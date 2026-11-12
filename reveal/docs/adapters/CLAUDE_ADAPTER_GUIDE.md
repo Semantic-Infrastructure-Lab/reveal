@@ -35,6 +35,15 @@ category: guide
 
 ---
 
+Declared modifiers reject on resources whose readers do not use them, rather
+than silently changing no selection: `key` belongs to settings/config, `project`
+to history, `patches` to the session files view, and `word`/`snippet` to
+cross-session content search. `filter` is catalog-name filtering only. `since`
+applies to catalog listing/search, file tracking and history; `until` applies
+to catalog listing/search. The schema publishes these `modifier_scopes`.
+`None` API overrides omit a control; invalid original URI scope still rejects
+before an override can hide it.
+
 ## Overview
 
 The **claude://** adapter provides two families of resources: **session analysis** for inspecting individual Claude Code conversations, and **install introspection** for exploring your Claude Code installation (history, settings, plans, config, memory, agents, hooks).

@@ -178,3 +178,24 @@ def _session_match_target(params, resource, noun, suffix):
         if noun not in ('info', 'settings', 'config', 'hooks', 'plans', 'agents'):
             return 'search'
     raise RequestValidationError('match is not supported on this Claude resource')
+
+
+# These modifiers have a reader only on the listed answer populations.
+MODIFIER_SCOPES = {
+    'key': ('claude_settings', 'claude_config'),
+    'project': ('claude_history',),
+    'patches': ('claude_files',),
+    'word': ('claude_cross_session_search',),
+    'snippet': ('claude_cross_session_search',),
+    'filter': ('claude_session_list',),
+    'since': ('claude_session_list', 'claude_cross_session_search', 'claude_file_sessions', 'claude_history'),
+    'until': ('claude_session_list', 'claude_cross_session_search'),
+}
+
+
+def validate_modifier_scope(params, resource):
+    from .resources import operation_type
+    kind = operation_type(resource, params)
+    for name, supported in MODIFIER_SCOPES.items():
+        if name in params and kind not in supported:
+            raise RequestValidationError(f'{name} is supported only by: ' + ', '.join(supported))

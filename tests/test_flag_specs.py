@@ -66,7 +66,8 @@ def test_declared_fragment_is_accepted_by_its_adapter_without_warning(scheme, de
         query = 'from=main&' + query  # required constructor origin, independent of this flag
     err = io.StringIO()
     with redirect_stderr(err), caplog.at_level(logging.WARNING):
-        cls(str(REPO), query)
+        # Session catalog dates are scoped to a semantic resource, not a filesystem path.
+        cls('sessions' if scheme == 'claude' else str(REPO), query)
     seen = err.getvalue() + caplog.text
     assert 'nknown query param' not in seen, f'{scheme}:// warns on its own {fragment!r}: {seen}'
 
