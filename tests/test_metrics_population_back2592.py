@@ -1,5 +1,6 @@
 """A page changes rows, never aggregates over the filtered statistics population."""
 import json
+import re
 
 import pytest
 
@@ -67,3 +68,23 @@ def test_summary_only_does_not_claim_to_display_a_file_page(project):
     assert answer['population']['displayed_files'] == 0 and 'files' not in answer
     assert 'displayed_results' not in answer
     assert not [w for w in answer.get('meta', {}).get('warnings', []) if w.get('field') == 'files']
+
+
+@pytest.mark.parametrize('flags', [[], ['--limit', '2', '--offset', '1', '--sort=-lines'],
+                                  ['--min-lines', '999'], ['--summary-only']])
+def test_text_display_claim_matches_rendered_file_rows(project, flags):
+    """BACK-2628: a JSON page is not proof that its rows reached the text sink."""
+    argv = ('metrics', str(project), *flags)
+    text = _run_reveal_direct(*argv)
+    machine = _run_reveal_direct(*argv, '--format', 'json')
+    assert text.returncode == machine.returncode == 0, (text.stderr, machine.stderr)
+    answer = json.loads(machine.stdout)
+    claimed = re.search(r'(\d+) file rows displayed', text.stdout)
+    assert claimed, text.stdout
+    rendered = re.findall(r'^  (f\d\.py) \| lines=(\d+) \| complexity=([\d.]+)',
+                          text.stdout, re.MULTILINE)
+    assert int(claimed.group(1)) == len(rendered), text.stdout
+    expected = [(row['file'], str(row['lines']['total']), f"{row['complexity']['average']:.2f}")
+                for row in answer.get('files', [])]
+    assert rendered == expected, text.stdout
+    assert len(rendered) == answer['population']['displayed_files']

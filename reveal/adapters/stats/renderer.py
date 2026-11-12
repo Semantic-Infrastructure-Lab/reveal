@@ -44,6 +44,18 @@ def _print_test_scope(result: dict) -> None:
         print(f"Policy source: {declaration['layer']} {declaration['path']}")
 
 
+def _print_file_rows(result: dict) -> None:
+    """Render the already selected file page without applying another cap."""
+    if not result.get('files'):
+        return
+    print("\nPer-file metrics (complexity: average/max):")
+    for row in result['files']:
+        lines = row.get('lines', {})
+        complexity = row.get('complexity', {})
+        print(f"  {row['file']} | lines={lines.get('total', 0)} "
+              f"| complexity={complexity.get('average', 0):.2f}/{complexity.get('max', 0)}")
+
+
 def render_provenance(result: Dict[str, Any]) -> None:
     """Text rendering of a provenance report."""
     rows = result.get('files', [])
@@ -129,7 +141,8 @@ class StatsRenderer:
             if result.get('population'):
                 p = result['population']
                 print(f"Summary:    {p['filtered_files']} filtered files of {p['analyzed_files']} analyzed; "
-                      f"{p['displayed_files']} file rows displayed")
+                      f"{len(result.get('files', []))} file rows displayed")
+            _print_file_rows(result)
             _print_hotspots(result)
             _print_test_scope(result)
             _print_issue_count_line(result)
