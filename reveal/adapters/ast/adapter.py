@@ -401,7 +401,10 @@ class AstAdapter(ResourceAdapter):
         Returns JSON schema for AI agent integration.
         """
         schema = _get_schema()
-        return {**schema, 'filter_fields': schema['query_params'],
+        fields = {key: value for key, value in schema['query_params'].items()
+                  if key not in ('show', 'reveal_type')}
+        fields['kind'] = fields['type']
+        return {**schema, 'filter_fields': fields,
                 'query_params': param_schema(PARAM_SPECS),
                 'resource': AstAdapter.RESOURCE_SPEC.schema()}
 

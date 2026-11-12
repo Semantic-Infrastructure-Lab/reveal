@@ -286,9 +286,22 @@ reveal 'ast://./src?lines>20&lines<50'            # same as lines=20..50 but exc
 
 ## Query Parameters
 
-Complete reference of all supported query parameters:
+Declared controls (CLI flags use the same names):
 
-| Parameter | Type | Description | Examples |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `where` | repeated expression | AND constraints using the fields below |
+| `kind` | string | Element kind, including `function`, `method`, `class` and `struct` |
+| `view` | string | `dict-heatmap`, `dict-schemas`, or the legacy `calls` view |
+| `builtins` | boolean | Include builtin calls in the legacy calls view |
+| `reveal-type` | string | Python type evidence for a named variable |
+| `sort` | string | Field, prefixed with `-` for descending |
+| `limit` | integer | Page size; zero is empty; omitted retains the automatic cap |
+| `offset` | integer | Rows to skip after sorting |
+
+Expression fields for `where` (legacy inline expressions remain accepted):
+
+| Field | Type | Description | Examples |
 |-----------|------|-------------|----------|
 | `lines` | integer | Number of lines in function/class | `lines>50`, `lines=10..100` |
 | `complexity` | integer | McCabe cyclomatic complexity (>10 needs refactoring, >20 high risk) | `complexity>10`, `complexity<5` |
@@ -301,8 +314,6 @@ Complete reference of all supported query parameters:
 | `param_type` | string | Find functions where any parameter has a given type annotation (parses the signature string; glob supported; bare type name matches generics too) | `param_type=dict`, `param_type=Dict*`, `param_type=Optional*` |
 | `return_type` | string | Find functions with a given return type annotation (parses the `-> TYPE` suffix; glob supported) | `return_type=bool`, `return_type=List*` |
 | `has_annotations` | boolean | Filter by presence of type annotations — `has_annotations=false` finds fully unannotated functions | `has_annotations=false`, `has_annotations=true` |
-| `reveal_type` | string | Show all type evidence for a named variable: parameter annotations, inferred assignment shapes, for-loop bindings — works on unannotated code, no mypy `reveal_type()` needed | `reveal_type=trade`, `reveal_type=config` |
-| `show` | string | Display mode — `show=calls` (retired, prints a replaced-by note: use `calls://<path>?callers=NAME` or `?callees=NAME`) renders a compact call graph view; `show=dict-heatmap` ranks untyped-dict names (annotated/unannotated params, loop variables, locals) by distinct string keys read via `x['k']`, `x.get('k')`, `'k' in x`; `show=dict-schemas` clusters those across functions into shared implicit record shapes and names any TypedDict (defined under the scanned path) that already covers one, plus the keys readers use that it doesn't declare. Python only | `show=dict-heatmap`, `show=dict-schemas` |
 
 **Parameter capabilities:**
 
