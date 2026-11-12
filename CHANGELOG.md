@@ -18,7 +18,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
-- Calls reverse walks now retain definition sites and check explicitly imported module-level function targets at later levels. Importing an unrelated same-named function no longer creates a false ancestor; ambiguous and name-only candidates remain disclosed (BACK-2607).
+- Calls reverse walks now retain definition sites and label explicit import targets at later levels, including calls to a different same-named definition. The disclosed name-candidate population stays unchanged; target identity is evidence alongside those candidates (BACK-2607).
 
 - Calls `--detail` and Trace now use parameter names extracted from syntax, so commas or parentheses inside defaults cannot invent parameters. Unqualified language or binding forms report parameters as unavailable (`null` in JSON) (BACK-2591).
 

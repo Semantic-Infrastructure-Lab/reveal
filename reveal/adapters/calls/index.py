@@ -22,6 +22,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
+from itertools import groupby
 from typing import Any, Callable, Dict, FrozenSet, Iterator, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from ..ast.analysis import (
@@ -253,24 +254,23 @@ def _candidate_evidence(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {'target_resolution': 'name_only'}
 
 
-def _resolved_reverse_evidence(resolved: Any, target: _ReverseTarget) -> Optional[Dict[str, Any]]:
-    """Only imported module-level functions qualify a rejected later hop; members retain candidates."""
-    identity = (target.file, target.line)
+def _resolved_reverse_evidence(resolved: Any, frontiers: Tuple[_ReverseTarget, ...]) -> Dict[str, Any]:
+    """Imported function evidence labels a later hop; the name-candidate population stays unchanged."""
+    identities = {(target.file, target.line) for target in frontiers}
     if isinstance(resolved, dict):
         if resolved.get('member'):
             return _candidate_evidence([resolved])
-        if (resolved['file'], resolved['line']) != identity:
-            return None
-        return {'target_resolution': 'resolved', 'target_file': target.file, 'target_line': target.line}
+        return {'target_resolution': 'resolved' if (resolved['file'], resolved['line']) in identities else 'different_definition',
+                'target_file': resolved['file'], 'target_line': resolved['line'],
+                'frontier_candidates': [{'file': t.file, 'line': t.line, 'name': t.name} for t in frontiers]}
     if isinstance(resolved, list):
-        if not any(d.get('member') for d in resolved) and identity not in {(d['file'], d['line']) for d in resolved}:
-            return None
         return _candidate_evidence(resolved)
     return _candidate_evidence([])
 
 
-def _reverse_evidence(record: Dict[str, Any], target: _ReverseTarget, resolver: Any) -> Optional[Dict[str, Any]]:
+def _reverse_evidence(record: Dict[str, Any], frontiers: Tuple[_ReverseTarget, ...], resolver: Any) -> Dict[str, Any]:
     """Names remain candidates unless explicit import evidence qualifies a module-level target."""
+    target = frontiers[0]
     if not target.file or resolver is None:
         return {}
     candidates = resolver.name_candidates(_bare_callee_name(target.name), record['file'])
@@ -279,7 +279,7 @@ def _reverse_evidence(record: Dict[str, Any], target: _ReverseTarget, resolver: 
     if not resolver.has_import_target(call, record['file'], shadows) or all(d.get('member') for d in candidates):
         return _candidate_evidence(candidates)
     _name, resolved = resolver.resolve(call, record['file'], shadows)
-    return _resolved_reverse_evidence(resolved, target)
+    return _resolved_reverse_evidence(resolved, frontiers)
 
 
 def _bfs_level(
@@ -291,16 +291,16 @@ def _bfs_level(
     """One reverse level: names find candidates; definition evidence qualifies later hops."""
     level_records: List[Dict[str, Any]] = []
     next_targets: Set[_ReverseTarget] = set()
-    for target in sorted(current_targets):
+    for _name, group in groupby(sorted(current_targets), key=lambda t: t.name):
+        frontiers = tuple(group)
+        target = frontiers[0]
         bare = _bare_callee_name(target.name)
         records = index.get(target.name, []) + (index.get(bare, []) if bare != target.name else [])
         for record in records:
             key = (record['file'], record['caller'])
             if key in visited_callers:
                 continue
-            evidence = _reverse_evidence(record, target, resolver)
-            if evidence is None:
-                continue
+            evidence = _reverse_evidence(record, frontiers, resolver)
             visited_callers.add(key)
             level_records.append({**record, 'callee': target.name, **evidence})
             next_targets.add(_ReverseTarget(record['caller'], record['file'], record['line']))

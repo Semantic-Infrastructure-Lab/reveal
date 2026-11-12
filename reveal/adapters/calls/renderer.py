@@ -166,9 +166,15 @@ def _render_text(data: Dict[str, Any]) -> None:
             call_expr = rec.get('call_expr', rec.get('callee', target))
             verb = {'jsx_reference': 'JSX reference to',
                     'call_and_jsx_reference': 'calls and JSX reference to'}.get(rec.get('relationship'), 'calls')
-            print(f"  {file_path}:{line}  {caller}  ({verb} {call_expr}){_site_locations(rec)}")
+            print(f"  {file_path}:{line}  {caller}  ({verb} {call_expr}){_site_locations(rec)}{_target_evidence_label(rec)}")
         if depth > 1:
             print()
+
+
+def _target_evidence_label(record: Dict[str, Any]) -> str:
+    if record.get('target_resolution') == 'different_definition':
+        return f" [name candidate; imported target is {record['target_file']}:{record['target_line']}, a different definition]"
+    return ''
 
 
 def _line_list(label: str, lines: List[int]) -> str:
@@ -498,6 +504,7 @@ def _render_dot(data: Dict[str, Any]) -> None:
             edge = (caller, callee)
             if edge not in edges:
                 edges.add(edge)
-                print(f'  "{caller}" -> "{callee}";')
+                evidence = ' [style=dashed,label="different definition; name candidate"]' if rec.get('target_resolution') == 'different_definition' else ''
+                print(f'  "{caller}" -> "{callee}"{evidence};')
 
     print("}")
