@@ -388,7 +388,15 @@ class TestGenericAdapterHandler(unittest.TestCase):
 
 
 class TestHandleUri(unittest.TestCase):
-    """Tests for handle_uri function."""
+    """Legacy-plugin dispatch still injects flags before calling handle_adapter.
+
+    Builtin generated routing is exercised through real CLI fixtures below.
+    """
+
+    def setUp(self):
+        route = patch('reveal.cli.routing.declared.declared_adapter_class', return_value=None)
+        route.start()
+        self.addCleanup(route.stop)
 
     def test_invalid_uri_format(self):
         """Verify error handling for URI without :// separator."""
@@ -1851,3 +1859,17 @@ def test_expiring_within_param_runs_the_check_end_to_end(tmp_path):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+@pytest.mark.parametrize('flags', [('--limit=2',), ('--limit', '2')])
+def test_declared_ast_limit_spellings_answer_a_valid_resource(tmp_path, flags):
+    """A valid resource answers both limit spellings; missing src was exit 2, not a flag bug."""
+    import json
+    from conftest import _run_reveal_direct
+    (tmp_path / 'app.py').write_text('def a(): pass\ndef b(): pass\ndef c(): pass\n')
+    result = _run_reveal_direct(f'ast://{tmp_path}', *flags, '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    answer = json.loads(result.stdout)
+    assert len(answer['results']) == 2
+    assert {row['name'] for row in answer['results']} <= {'a', 'b', 'c'}
+    assert any(w['type'] == 'truncated' for w in answer['meta']['warnings'])

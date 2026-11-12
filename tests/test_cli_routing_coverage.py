@@ -212,6 +212,13 @@ class TestHandleUriSinceUntil:
     every URI-scheme target -- git:// is the only scheme that consumes them
     (as ?since=/?until= ergonomic aliases for date>=/date<=)."""
 
+    @pytest.fixture(autouse=True)
+    def legacy_dispatch(self):
+        # Retain the legacy-plugin injection contract with the live flag declarations.
+        # Generated Git/AST routes have their own end-to-end transport tests.
+        with patch('reveal.cli.routing.declared.declared_adapter_class', return_value=None):
+            yield
+
     def test_since_injected_for_git_scheme(self):
         with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
             from reveal.cli.routing import handle_uri
