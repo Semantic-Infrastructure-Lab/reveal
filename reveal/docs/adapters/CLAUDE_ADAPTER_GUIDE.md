@@ -1924,6 +1924,14 @@ their own readers before session-chain selection. Plan/agent lookups and hook
 event details qualify their own acquisition, as described below. Stdin and mixed batches retain legacy completeness behavior; a warning
 there is not yet guaranteed to change the exit code.
 
+Unsupported session subpaths and suffixes on root-only `info`, `history`,
+`settings`, `config` and `sessions` resources give exit 2, before reading the
+requested answer source. A trailing slash remains a root spelling. Use
+`settings?key=...`/`config?key=...` for key lookup and `session/NAME` for a session.
+The removed `/user` and `/assistant` suffixes retain their legacy overview
+fallback; they do not restore role filtering. Empty `session/` remains a missing
+session request. Element and batch transports keep their existing routing policy.
+
 Store listings (`claude://` and `claude://sessions`) also qualify their required
 directory and metadata acquisition. `meta.session_catalog` counts non-agent
 JSONL-named candidates, acquired entries and failed metadata operations before

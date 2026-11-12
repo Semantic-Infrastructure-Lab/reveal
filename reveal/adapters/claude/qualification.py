@@ -37,28 +37,28 @@ def catalog_type(resource):
     return None
 
 
-def direct_session(resource, parse_identifier, prefixes):
-    path = resource.partition('?')[0]
-    if not path or path in ('.', 'sessions', 'sessions/') or path.startswith(('sessions/', 'search/')) or path == 'search':
-        return False
-    if any(path == prefix or path.startswith(prefix + '/') for prefix in prefixes):
-        return False
-    name, subpath = parse_identifier(path)
-    return bool(name) and '/' not in name and (subpath in SESSION_VIEWS or subpath.startswith('message/'))
-
-
-def chain_resource(resource, parse_identifier):
-    name, subpath = parse_identifier(resource.partition('?')[0])
-    return bool(name) and '/' not in name and subpath == 'chain'
-
-
 def history_resource(resource):
-    return resource.partition('?')[0] == 'history'
+    return resource.partition('?')[0].rstrip('/') == 'history'
 
 
 def installation_type(resource):
     return {'settings': 'claude_settings', 'config': 'claude_config',
-            'info': 'claude_info'}.get(resource.partition('?')[0])
+            'info': 'claude_info'}.get(resource.partition('?')[0].rstrip('/'))
+
+
+def validate_resource(resource, parse_identifier, prefixes):
+    """Reject ignored suffixes before answer dispatch; namespace names own their paths."""
+    from ...errors import RequestValidationError
+    noun, _, suffix = resource.partition('/')
+    roots = ('history', 'info', 'settings', 'config', 'sessions')
+    if noun in roots and suffix:
+        raise RequestValidationError(f'claude://{noun} does not support a resource suffix: {suffix}')
+    if resource in ('', '.', 'session/') or noun in (*prefixes, 'sessions', 'search'):
+        return
+    name, view = parse_identifier(resource)
+    if name and '/' not in name and (view in SESSION_VIEWS or view in ('chain', 'user', 'assistant') or view.startswith('message/')):
+        return
+    raise RequestValidationError(f'Unsupported Claude session resource: {resource}')
 
 
 def _active(params):

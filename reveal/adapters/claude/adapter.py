@@ -392,15 +392,9 @@ class ClaudeAdapter(ResourceAdapter):
 
     @classmethod
     def uri_execution_facts(cls, resource):
-        from .qualification import direct_session, catalog_type, chain_resource, history_resource, installation_type
-        from .workspace_scan import workspace_listing_type
-        prefixes = tuple(prefix for prefix, _ in cls._RESOURCE_DISPATCH)
-        return (cls.execution_facts if catalog_type(resource)
-                or workspace_listing_type(resource)
-                or installation_type(resource)
-                or history_resource(resource)
-                or chain_resource(resource, _parse_session_identifier)
-                or direct_session(resource, _parse_session_identifier, prefixes) else None)
+        # Every structure resource is now qualified, including authored scope rejection.
+        # Element, batch, stdin and check transports retain the shared router's exclusions.
+        return cls.execution_facts
 
     @staticmethod
     def uri_result_type(resource):
@@ -800,6 +794,8 @@ class ClaudeAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Return session structure based on resource path and query params."""
+        from .qualification import validate_resource
+        validate_resource(self.resource, _parse_session_identifier, tuple(p for p, _ in self._RESOURCE_DISPATCH))
         # Bare claude://, sessions/, '.', '' → session list or cross-session search.
         if self._is_session_list_resource():
             return self._search_sessions() if self.query_params.get('search') else self._list_sessions()
