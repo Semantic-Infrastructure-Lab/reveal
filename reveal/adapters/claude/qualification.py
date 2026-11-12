@@ -240,6 +240,10 @@ def _installation_answer_error(adapter, result, expected_type, prior_facts):
 
 def _workspace_answer_error(adapter, result, expected_type, prior_facts):
     from .workspace_scan import LIST_FIELDS, workspace_requirement_error
+    if expected_type == 'claude_hooks' and adapter.resource.partition('/')[2].strip():
+        from .hook_events import hook_event_requirement_error, hook_event_fields
+        error = hook_event_requirement_error(adapter, result, prior_facts)
+        return error or _presentation_error(adapter, result, hook_event_fields(result), prior_facts)
     error = workspace_requirement_error(adapter, result, expected_type, prior_facts)
     return error or _presentation_error(adapter, result, {LIST_FIELDS[expected_type]: list}, prior_facts)
 

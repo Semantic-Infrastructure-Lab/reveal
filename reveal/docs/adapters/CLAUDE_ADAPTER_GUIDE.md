@@ -1920,8 +1920,8 @@ Settings/config JSON also qualify acquisition and preserve scalar values; see
 [Path Diagnostics](#claudeinfo--path-diagnostics) qualifies path inventory.
 Ordinary workspace catalogs also qualify named-entry acquisition, as described
 below. Reserved namespace paths, including names beginning with `chain`, reach
-their own readers before session-chain selection. Singular lookups and hook-event detail retain their separate
-policies. Stdin and mixed batches retain legacy completeness behavior; a warning
+their own readers before session-chain selection. Plan/agent lookups and hook
+event details qualify their own acquisition, as described below. Stdin and mixed batches retain legacy completeness behavior; a warning
 there is not yet guaranteed to change the exit code.
 
 Store listings (`claude://` and `claude://sessions`) also qualify their required
@@ -1954,6 +1954,15 @@ partial discovery retains its known matches without claiming completeness.
 Successful empty bodies exit 0. The envelope identifies a selected file as a
 file. MCP retains usable partial bodies or candidate names, rejects failed
 acquisition and reads source state again on follow-up requests.
+
+Hook-event detail also qualifies the selected script file or event directory.
+Its envelope names that file/directory; `meta.workspace_analysis.hook_event`
+records the selected kind and source. Confirmed missing events or roots exit 2.
+Failed selection, enumeration, script metadata, body reads or replacement
+decoding exit 3; known scripts and bodies remain available. Empty event
+directories exit 0. Directory entries are inspected for metadata without
+reading script bodies. MCP preserves usable partial results, rejects fully
+failed acquisition and re-reads event sources on follow-up requests.
 
 `meta.transcript_selection` records lookup and first-timestamp selection decisions.
 Unknown timestamps sort last. A recovered decode in an unselected candidate does

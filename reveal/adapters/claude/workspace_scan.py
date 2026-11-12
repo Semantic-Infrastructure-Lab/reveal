@@ -105,8 +105,8 @@ LIST_FIELDS = {'claude_plans': 'plans', 'claude_agents': 'agents',
 def workspace_listing_type(resource):
     path = resource.partition('?')[0]
     noun, _, name = path.partition('/')
-    if noun == 'memory':
-        return 'claude_memory'
+    if noun in ('memory', 'hooks'):
+        return 'claude_memory' if noun == 'memory' else 'claude_hooks'
     if name.strip() and noun in ('plans', 'agents'):
         return 'claude_plan' if noun == 'plans' else 'claude_agent'
     if not name.strip():

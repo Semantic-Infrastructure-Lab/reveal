@@ -296,50 +296,8 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
     parts = resource.split('/', 1)
     event_name = parts[1].strip() if len(parts) > 1 else ''
     if event_name:
-        if not hooks_dir.exists():
-            return {**base, 'hooks': [], 'total': 0,
-                    'error': f'Hooks directory not found: {hooks_dir}'}
-        event_path = hooks_dir / event_name
-        if not event_path.exists():
-            return {**base, 'error': f'Hook event not found: {event_name}', 'event': event_name}
-        if event_path.is_file():
-            # Single script file directly under hooks/
-            try:
-                content = event_path.read_text(encoding='utf-8', errors='replace')
-            except OSError as e:
-                return {**base, 'type': 'claude_hooks', 'error': str(e), 'event': event_name}
-            stat = event_path.stat()
-            is_exec = bool(stat.st_mode & 0o111)
-            return {
-                **base,
-                'event': event_name,
-                'kind': 'file',
-                'path': str(event_path),
-                'size_bytes': stat.st_size,
-                'executable': is_exec,
-                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                'content': content,
-            }
-        # Directory: list scripts within it
-        scripts = []
-        skipped: List[Tuple[Path, BaseException]] = []
-        for script in sorted(event_path.iterdir()):
-            try:
-                stat = script.stat()
-                is_exec = bool(stat.st_mode & 0o111)
-                scripts.append({
-                    'name': script.name,
-                    'path': str(script),
-                    'size_bytes': stat.st_size,
-                    'executable': is_exec,
-                    'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                })
-            except _ENTRY_ERRORS as e:
-                logger.warning("skipping unreadable hook script %s: %s", script, e)
-                skipped.append((script, e))
-        result = {**base, 'event': event_name, 'kind': 'directory', 'scripts': scripts}
-        note_warning(result, skipped_entries_warning('hook scripts', skipped))
-        return result
+        from ..hook_events import read_hook_event
+        return read_hook_event(hooks_dir, event_name, base, skipped_entries_warning, datetime.fromtimestamp)
 
     return _list_hook_events(hooks_dir, base)
 
