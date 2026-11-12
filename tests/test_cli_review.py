@@ -802,6 +802,6 @@ class TestReviewAgainstRealRepo(unittest.TestCase):
         self._commit('clean.py', "def fine():\n    return 2\n")
         self.assertEqual(outcomes(), [True, True, True], 'clean change')
         self._commit('branchy.py', _MEDIUM_ONLY)
-        self.assertEqual(outcomes(), [False, False, True], 'medium-only change')
+        self.assertEqual(outcomes(), [True, False, True], 'medium-only change')
         self._commit('swallow.py', _HIGH)
         self.assertEqual(outcomes(), [False, False, False], 'high-severity change')

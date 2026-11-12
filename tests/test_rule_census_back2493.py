@@ -148,7 +148,7 @@ def test_pointer_patterns_match_what_the_rules_emit(tmp_path):
     body = '    x = 1\n    y = 2\n    z = x + y\n    w = z * 2\n    return w + x + y\n'
     (tmp_path / 'm.py').write_text(
         f'import os\nimport os\n\ndef first(a):\n{body}\ndef second(a):\n{body}', encoding='utf-8')
-    run = _run_reveal_direct('check', tmp_path, '--select', 'I005,D001', '--format', 'json')
+    run = _run_reveal_direct('check', tmp_path, '--select', 'I005,D001', '--severity', 'low', '--format', 'json')
     data = json.loads(run.stdout)
     found = {d['rule_code']: d for r in data['files'] for d in r.get('detections') or []}
     assert set(found) == {'I005', 'D001'}, found

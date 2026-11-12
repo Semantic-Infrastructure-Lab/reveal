@@ -88,7 +88,7 @@ def test_override_applies_through_file_config(tmp_path, pattern, suppressed):
 def test_check_reports_e501_in_the_nested_file(tmp_path):
     root = _project(tmp_path, 'tests/*.py')
     # No --select: a CLI --select re-enables a rule the config disables.
-    result = _run_reveal_in(root, 'check', '.', '--format', 'json')
+    result = _run_reveal_in(root, 'check', '.', '--severity', 'low', '--format', 'json')
     data = json.loads(result.stdout)
     flagged = sorted({Path(f['file']).as_posix() for f in data['files']
                       if any(d['rule_code'] == 'E501' for d in f.get('detections', []))})

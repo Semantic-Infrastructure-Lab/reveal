@@ -107,7 +107,7 @@ class TestCheckMaxItems:
         because --max-items limited what's rendered."""
         _write_py(tmp_path, "bad.py", _B006_CODE)
         result = _run_reveal_direct(
-            "check", str(tmp_path), "--format", "json", "--max-items", "0"
+            "check", str(tmp_path), "--format", "json", "--max-items", "0", "--fail-on", "medium"
         )
         assert result.returncode == 1
 

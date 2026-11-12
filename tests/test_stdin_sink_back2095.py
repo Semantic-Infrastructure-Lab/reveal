@@ -16,7 +16,7 @@ from reveal.main import main
 @pytest.fixture
 def project(tmp_path):
     (tmp_path / 'a.py').write_text('def f():\n    return 1\n', encoding='utf-8')
-    (tmp_path / 'b.py').write_text('import os\n', encoding='utf-8')
+    (tmp_path / 'b.py').write_text('try:\n    pass\nexcept:\n    pass\n', encoding='utf-8')
     return tmp_path
 
 

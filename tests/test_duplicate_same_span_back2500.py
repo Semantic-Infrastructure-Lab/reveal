@@ -13,7 +13,7 @@ from conftest import _run_reveal_direct
 def findings(tmp_path, name, text, rules='D001,D002'):
     f = tmp_path / name
     f.write_bytes(text.encode('utf-8'))
-    result = _run_reveal_direct('check', f, '--select', rules)
+    result = _run_reveal_direct('check', f, '--select', rules, '--severity', 'low')
     return [line for line in result.stdout.splitlines() if ' D00' in line]
 
 

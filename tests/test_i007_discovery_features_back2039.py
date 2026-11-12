@@ -93,7 +93,7 @@ def test_existing_public_cuts_and_grep_boundaries_keep_incomplete_exit(tmp_path,
         flags += ['--max-items', '0']
     if view == 'exit-zero':
         flags += ['--exit-zero']
-    result = run('check', str(manifest), '--select', 'I007', *flags)
+    result = run('check', str(manifest), '--select', 'I007', '--severity', 'low', *flags)
     assert fault['events'] == [str(hidden.parent)]
     assert result.returncode == (0 if view == 'exit-zero' else 3)
     if view == 'grep':

@@ -43,7 +43,7 @@ def findings(answer):
 
 
 def checked(path, *flags):
-    result = run('check', str(path), '--select', 'M102', '--format', 'json', *flags)
+    result = run('check', str(path), '--select', 'M102', '--fail-on', 'medium', '--format', 'json', *flags)
     return result, json.loads(result.stdout)
 
 

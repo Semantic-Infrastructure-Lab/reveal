@@ -176,7 +176,7 @@ class TestCLIWithFilesIntegration(unittest.TestCase):
         """reveal check <file> must exit 1 when violations are found."""
         import tempfile as _tmp, os as _os
         with _tmp.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
-            f.write('import os\nimport os\n\ndef add(a, b):\n    return a + b\n')
+            f.write('def add(a, b):\n    try:\n        return a + b\n    except:\n        return None\n')
             target = f.name
         try:
             result = _run_reveal_direct("check", target)
@@ -213,7 +213,7 @@ class TestCLIWithFilesIntegration(unittest.TestCase):
         from reveal.main import main
 
         with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
-            f.write('import os\nimport os\n\ndef add(a, b):\n    return a + b\n')
+            f.write('def add(a, b):\n    try:\n        return a + b\n    except:\n        return None\n')
             dirty_file = f.name
         original_stdin = sys.stdin
         try:

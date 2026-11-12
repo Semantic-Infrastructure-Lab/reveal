@@ -79,7 +79,7 @@ def _grep(root):
 
 
 def _check(root):
-    payload = _json(root, 'check', '.', '--select', 'E501')
+    payload = _json(root, 'check', '.', '--select', 'E501', '--severity', 'low')
     return _dirs((f['file'] for f in payload['files']), '.py')
 
 

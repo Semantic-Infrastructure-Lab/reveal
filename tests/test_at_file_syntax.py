@@ -191,7 +191,7 @@ class TestAtFileWithFlags(unittest.TestCase):
     def test_at_file_check_exits_1_with_violations(self):
         """@file --check must exit 1 when any listed file has violations."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write('import os\nimport os\n\ndef add(a, b):\n    return a + b\n')
+            f.write('def add(a, b):\n    try:\n        return a + b\n    except:\n        return None\n')
             dirty_file = f.name
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
