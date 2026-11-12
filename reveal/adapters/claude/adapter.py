@@ -871,7 +871,8 @@ class ClaudeAdapter(ResourceAdapter):
         return base
 
     def _list_sessions(self) -> Dict[str, Any]:
-        return _h_list_sessions(self.CONVERSATION_BASE, self.query_params)
+        from .controls import filter_session_names
+        return filter_session_names(_h_list_sessions(self.CONVERSATION_BASE, self.query_params), self.query_params)
 
     def _search_sessions(self) -> Dict[str, Any]:
         return _h_search_sessions(self.CONVERSATION_BASE, self.query_params)

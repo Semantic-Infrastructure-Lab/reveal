@@ -2,7 +2,7 @@
 from typing import Any, Callable
 
 from ...utils.query_binding import bind_declared_params, legacy_presence_value as presence, string_value as text
-from ...utils.query_parser import ParamSpec, QueryParams, peek_query_items
+from ...utils.query_parser import CliBinding, ParamSpec, QueryParams, peek_query_items
 from .schema import _SCHEMA_QUERY_PARAMS
 from .resources import SESSION_VIEW_NAMES
 
@@ -25,6 +25,17 @@ def snippet(value):
         return 120
 
 
+def name_predicates(value):
+    terms = [value] if isinstance(value, str) else value
+    if not isinstance(terms, (list, tuple)) or any(not isinstance(term, str) for term in terms):
+        raise ValueError('where requires session~=TEXT expressions')
+    for term in terms:
+        field, separator, _ = term.partition('~=')
+        if term and (field.strip() != 'session' or not separator):
+            raise ValueError('where supports only session~=TEXT (case-insensitive literal substring)')
+    return [term for term in terms if term]
+
+
 def _spec(name, schema):
     convert: Callable[[Any], Any] = text
     if name in PRESENCE_FLAGS:
@@ -41,6 +52,9 @@ def _spec(name, schema):
 
 
 PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS.items()) + (
+    ParamSpec('where', 'array', 'Session catalog names only: repeat session~=TEXT for case-insensitive literal substring constraints, ANDed',
+              None, name_predicates, uri_codec='percent', role='name-predicate',
+              cli=CliBinding(('--where',), action='append')),
     ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence),
     ParamSpec('detail', 'string', 'summary, normal, full or raw; levels are qualified by the existing reader', None, text, choices=('summary', 'normal', 'full', 'raw')),
     ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES),
@@ -54,10 +68,11 @@ def bind_request(query, params, resource=''):
     # Presence readers must not mistake an explicit False/None override for a flag.
     runtime = QueryParams({key: value for key, value in peek_query_items(bound)
                            if value is not None and not (key in PRESENCE_FLAGS and value is False)})
-    from .controls import apply_view, apply_detail, apply_match
+    from .controls import apply_view, apply_detail, apply_match, validate_where_scope
     resource = apply_view(runtime, resource)
     apply_detail(runtime, resource)
     apply_match(runtime, resource)
+    validate_where_scope(runtime, resource)
     for spec in PARAM_SPECS:
         if spec.name in dict.keys(runtime):
             runtime.set_normalized(spec, dict.__getitem__(runtime, spec.name))

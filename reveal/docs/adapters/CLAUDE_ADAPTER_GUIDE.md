@@ -1970,6 +1970,19 @@ the selected raw tool-result bodies instead of only the legacy compact counts.
 Legacy flags retain their
 readers; display controls are not reported as source filters.
 
+Canonical `where` scopes session catalog listings with repeatable
+`session~=TEXT` expressions, ANDed with each other and any legacy `filter`.
+Matching is a case-insensitive literal substring of the catalog's session label
+(derived from its project/session directory or UUID filename), not a README
+title, arbitrary transcript filename or message-content search. For example,
+`claude://sessions?where=session~=refactor&where=session~=auth` requires both
+substrings. The selected expressions and their rule remain in `scope.where`
+and `scope.where_rule`. Empty predicate lists apply no constraints. Other fields,
+operators, resources and content-search modes reject with exit 2. URI expression
+values percent-decode once; typed API values stay literal. Acquisition loss
+remains exit 3 even when predicates hide every acquired row; MCP retains source
+proof and reads follow-up source state afresh.
+
 Store listings (`claude://` and `claude://sessions`) also qualify their required
 directory and metadata acquisition. `meta.session_catalog` counts non-agent
 JSONL-named candidates, acquired entries and failed metadata operations before

@@ -1,4 +1,5 @@
 """Canonical controls translate to the existing, resource-specific readers."""
+from typing import Any, Dict
 from ...errors import RequestValidationError
 from .resources import _parse_session_identifier, selected_type, NON_SESSION_NAMESPACES
 
@@ -66,6 +67,41 @@ def detail_requirement_error(adapter, result):
     if adapter.query_params.get('detail') in ('full', 'raw') and result.get('full') is not True:
         return 'Claude answer missing requested full/raw detail intent'
     return None
+
+
+def validate_where_scope(params, resource):
+    if params.get('where') is None:
+        return
+    if resource.rstrip('/') not in ('', '.', 'sessions') or params.get('search'):
+        raise RequestValidationError('where session predicates are supported only on catalog listings, without content search')
+
+
+SESSION_WHERE_RULE = 'AND of case-insensitive literal substrings of the session name; not README titles or message content'
+
+
+def filter_session_names(result: Dict[str, Any], params) -> Dict[str, Any]:
+    terms = params.get('where')
+    if terms is None:
+        return result
+    needles = [term.partition('~=')[2].lower() for term in terms]
+    rows = [row for row in result['recent_sessions']
+            if all(needle in str(row['session']).lower() for needle in needles)]
+    result.update(recent_sessions=rows, session_count=len(rows))
+    result.setdefault('scope', {}).update(
+        where=list(terms), where_rule=SESSION_WHERE_RULE)
+    return result
+
+
+def where_requirement_error(adapter, result):
+    terms = adapter.query_params.get('where')
+    scope = result.get('scope', {})
+    if terms is not None and (scope.get('where') != terms or scope.get('where_rule') != SESSION_WHERE_RULE):
+        return 'Claude presentation cannot change requested session-name predicate scope'
+    return None
+
+
+def control_requirement_error(adapter, result):
+    return detail_requirement_error(adapter, result) or where_requirement_error(adapter, result)
 
 
 def apply_match(params, resource):

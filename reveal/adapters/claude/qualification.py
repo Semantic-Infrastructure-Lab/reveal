@@ -146,10 +146,10 @@ def execution_facts(result):
 
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
-    from .controls import detail_requirement_error
-    detail_error = detail_requirement_error(adapter, result)
-    if detail_error:
-        return detail_error
+    from .controls import control_requirement_error
+    control_error = control_requirement_error(adapter, result)
+    if control_error:
+        return control_error
     if expected_type in ('claude_plan', 'claude_agent'):
         from .markdown_lookup import lookup_requirement_error
         error = lookup_requirement_error(adapter, result, expected_type, prior_facts)
