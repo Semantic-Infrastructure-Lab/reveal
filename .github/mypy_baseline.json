@@ -26,7 +26,7 @@
  "reveal/adapters/codex/adapter.py::override": 1,
  "reveal/adapters/codex/handlers/goals.py::assignment": 1,
  "reveal/adapters/codex/handlers/sessions.py::assignment": 2,
- "reveal/adapters/codex/handlers/system.py::assignment": 6,
+ "reveal/adapters/codex/handlers/system.py::assignment": 5,
  "reveal/adapters/codex/handlers/workspace.py::assignment": 2,
  "reveal/adapters/contracts.py::arg-type": 1,
  "reveal/adapters/contracts.py::assignment": 1,

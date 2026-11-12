@@ -22,6 +22,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Codex history now discloses parsing/decoding/read loss and retains acquired prefixes through I/O failure. Existing JSON scalars, nulls and raw malformed-line fallbacks are preserved through explicit shared-reader policies; transcript defaults remain object-only. Qualified history gives complete 0, missing input 2 and source/output loss 3, with usable partial MCP results and failed-analysis errors (BACK-2618).
+
 - Codex TOML configuration reads now measure selection, loading and masking, distinguishing missing files/keys (2) from source/output loss (3). Masked data survives a close failure after parsing; falsy, nested, NaN and datetime observations retain their types through presentation. Native missing-key null dictionaries remain available, with public diagnostics on qualified CLI/MCP requests. Claude and Codex share one document-acquisition mechanism (BACK-2618).
 
 - Codex content search now measures every selected rollout before snippet caps, retaining matches from interrupted reads and disclosing malformed records, decoding repairs and unavailable paths. Healthy empty results exit 0, missing indexes 2 and source/output loss 3; MCP preserves usable partial results and marks failed analysis as an error. Existing literal matching, date scope and snippet limits are retained (BACK-2618).

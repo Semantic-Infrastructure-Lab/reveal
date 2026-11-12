@@ -384,6 +384,25 @@ outcome policy; goal reads also qualify their optional database as described bel
 
 ---
 
+## History Outcomes
+
+`codex://history` measures every consumed nonblank line before display cuts in
+`meta.history_analysis`. Its existing policy accepts any JSON value, including
+`null`, `false`, zero and arrays; malformed JSON remains a `raw` entry. It uses
+the shared JSONL reader with explicit value/recovery options. Transcript readers
+retain their default object-only policy. Decoding repairs, failed parses and
+read failures are disclosed, and acquired prefixes survive I/O failure with the
+native error marker retained.
+
+Healthy history, including empty files, exits **0**; missing input exits **2**;
+required parsing, decoding, I/O or output loss exits **3**. Native raw fallbacks
+remain available in API/CLI JSON, but do not establish successful JSON parsing.
+MCP retains a decoded usable prefix with disclosures; fully failed required
+interpretation is an error. Source receipts and population counts survive display
+cuts and presentation. Every request refreshes source evidence.
+
+---
+
 ## Configuration Outcomes
 
 `codex://config` records `meta.installation_analysis` around source selection,

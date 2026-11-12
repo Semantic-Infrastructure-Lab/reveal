@@ -8,6 +8,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
 from ....utils.document_read import DocumentRead
+from ..history import read_history
 from ....utils.secrets import redact_secrets
 from ....utils.path_utils import failure_of
 
@@ -69,33 +70,7 @@ def get_info(codex_home: Path, db_path: Path) -> Dict[str, Any]:
 
 def get_history(codex_home: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """Read ~/.codex/history.jsonl and return entries."""
-    history_path = codex_home / 'history.jsonl'
-    base: Dict[str, Any] = ResultBuilder.create(
-        result_type='codex_history',
-        source=str(history_path),
-        source_type='file',
-        contract_version=CONTRACT_VERSION,
-    )
-
-    if not history_path.exists():
-        return {**base, 'entries': [], 'total_entries': 0,
-                'error': f'History file not found: {history_path}'}
-
-    entries: List[Any] = []
-    try:
-        with open(history_path, 'r', encoding='utf-8', errors='replace') as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entries.append(json.loads(line))
-                except json.JSONDecodeError:
-                    entries.append({'raw': line})
-    except OSError as exc:
-        return {**base, 'entries': [], 'total_entries': 0, 'error': str(exc)}
-
-    return {**base, 'entries': entries, 'total_entries': len(entries)}
+    return read_history(codex_home, opener=open)
 
 
 def get_config(codex_home: Path, query_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

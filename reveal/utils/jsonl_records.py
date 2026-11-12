@@ -1,7 +1,10 @@
-"""One JSONL object reader with decisions bounded to the consumed record prefix."""
+"""One measured JSONL reader with explicit value and recovery policies."""
 import json
 from pathlib import Path
 from typing import Callable, TextIO
+
+
+_SKIP = object()
 
 
 def valid_record_proof(proof):
@@ -18,9 +21,11 @@ def valid_record_proof(proof):
 
 class TranscriptRecords:
     def __init__(self, path: Path, *, replace_decode: bool = False,
-                 opener: Callable[..., TextIO] | None = None):
+                 opener: Callable[..., TextIO] | None = None,
+                 objects_only: bool = True, keep_invalid: bool = False):
         self.path, self.replace_decode = path, replace_decode
         self.opener = opener
+        self.objects_only, self.keep_invalid = objects_only, keep_invalid
         self.opened = False
         self.candidates = self.analyzed = self.failed = self.recovered = 0
         self.first_failed: int | None = None
@@ -34,14 +39,15 @@ class TranscriptRecords:
             self.recovered += 1
         try:
             record = json.loads(repaired)
+            valid = not self.objects_only or isinstance(record, dict)
         except json.JSONDecodeError:
-            record = None
-        if isinstance(record, dict):
+            record, valid = None, False
+        if valid:
             self.analyzed += 1
             return record
         self.failed += 1
         self.first_failed = self.first_failed or number
-        return None
+        return {'raw': repaired.strip()} if self.keep_invalid else _SKIP
 
     def records(self):
         errors = 'surrogateescape' if self.replace_decode else 'strict'
@@ -53,7 +59,7 @@ class TranscriptRecords:
                 for number, line in enumerate(handle, 1):
                     if line.strip():
                         record = self._record(line, number)
-                        if record is not None:
+                        if record is not _SKIP:
                             yield record
             self.decision = 'exhausted'
         except (OSError, UnicodeDecodeError) as exc:

@@ -1,5 +1,5 @@
 """Direct Codex transcript identity, required-source evidence and observations."""
-from typing import Any, Dict
+from typing import Any, Callable, Dict, Tuple
 
 from ...errors import RequestValidationError
 from ...utils.jsonl_records import valid_record_proof
@@ -8,11 +8,19 @@ from ...utils.query_parser import peek_query_items
 from ...utils.results import (AnalysisCompleteness, FailureCause, failure_execution_facts,
                               result_execution_facts)
 from .params import bind_query
+from .history import execution_facts as history_facts, answer_requirement_error as history_error
 from .configuration import execution_facts as config_facts, answer_requirement_error as config_error
 from .content import execution_facts as content_facts, answer_requirement_error as content_error
 from .rollout import ROLLOUT_RULE, rollout_lost as _rollout_lost
 from .catalog import (CATALOG_PATHS, execution_facts as catalog_facts,
                       answer_requirement_error as catalog_error)
+
+RESOURCE_OWNERS: Dict[str, Tuple[Callable[..., Any], Callable[..., Any]]] = {
+    'codex_history': (history_facts, history_error),
+    'codex_config': (config_facts, config_error),
+    'codex_content_search': (content_facts, content_error),
+    'codex_session_list': (catalog_facts, catalog_error),
+}
 
 VIEW_TYPES = {'': 'codex_session_overview', 'messages': 'codex_messages', 'tools': 'codex_tools',
               'errors': 'codex_errors', 'shell': 'codex_shell', 'workflow': 'codex_workflow',
@@ -32,8 +40,8 @@ RESULT_VARIANTS = {kind: ('codex_error', 'codex_not_installed') for kind in (*CO
 
 
 def selected_type(resource, params):
-    if resource == 'config':
-        return 'codex_config'
+    if resource in ('config', 'history'):
+        return 'codex_' + resource
     values = dict(peek_query_items(params))
     if resource in CATALOG_PATHS:
         return 'codex_content_search' if values.get('search') else 'codex_session_list'
@@ -89,12 +97,9 @@ def _goal_state(lookup, goal):
 def execution_facts(result):
     if _invalid_envelope(result):
         return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
-    if result.get('type') == 'codex_config':
-        return config_facts(result)
-    if result.get('type') == 'codex_content_search':
-        return content_facts(result)
-    if result.get('type') == 'codex_session_list':
-        return catalog_facts(result)
+    owner = RESOURCE_OWNERS.get(result.get('type'))
+    if owner is not None:
+        return owner[0](result)
     if result.get('scope', {}).get('request_rejected'):
         return failure_execution_facts(FailureCause.INVALID_REQUEST)
     meta = result.get('meta', {})
@@ -202,12 +207,9 @@ def _rejected_index_error(adapter, result, expected_type):
 
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
-    if expected_type == 'codex_config':
-        return config_error(adapter, result, prior_facts)
-    if expected_type == 'codex_content_search':
-        return content_error(adapter, result, prior_facts)
-    if expected_type == 'codex_session_list':
-        return catalog_error(adapter, result, prior_facts)
+    owner = RESOURCE_OWNERS.get(expected_type)
+    if owner is not None:
+        return owner[1](adapter, result, prior_facts)
     goal = expected_type == 'codex_goal' and result.get('type') == 'codex_goal'
     source = adapter.CODEX_HOME / 'goals_1.sqlite' if goal else adapter.CODEX_DB
     if result.get('source') != str(source) or result.get('source_type') != 'database':
