@@ -32,6 +32,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- JSON gains a generated CLI and typed API controls using the existing loader and predicate engine. `where` filters arrays; `view` selects inspection; raw flatten text keeps canonical JSON enveloped while the legacy data-only spelling retains its array. All direct views carry execution evidence and use usage/source-failure exits 2/3. File-only commands reject walking flags (BACK-2615).
+
 - Markdown gains a generated CLI and typed API controls over its existing operations. `where` filters frontmatter, repeated `match` terms search body text, and `view` selects links or aggregation. Listing columns use `columns` (`fields=` remains an alias); `--fields` keeps JSON projection. Every direct query view now records source decisions and exits 3 for required source loss, retaining partial evidence. Registered MCP rejects fully failed source and retains partial answers (BACK-2614).
 
 - AST gains a generated `reveal ast PATH` command and constructor-bound typed API controls over the existing filter parser. Repeated `--where`/`where=` constraints are ANDed; `kind` and `view` select element kinds and existing views. API overrides, including zero/false, now apply after URI validation; negative page controls reject before analysis (BACK-2613).

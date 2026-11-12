@@ -34,6 +34,13 @@ stage. Imports keeps analysis counts and trust diagnostics together in `meta`;
 in new consumers. These shape changes do not establish analysis completeness:
 the producer's execution facts still determine failures and exit codes.
 
+JSON's declared file reads and inspection views carry the current envelope and
+qualified execution evidence. Missing/invalid requests exit 2; required source
+loss exits 3. Canonical raw flatten detail keeps the envelope. The existing
+first bare `?flatten&data-only` / `?gron&data-only` spelling retains its bare
+array document, with identical stdout and JSON artifact content; producer facts
+still determine its exit. The Python API retains its result dictionary.
+
 ---
 
 ## Purpose

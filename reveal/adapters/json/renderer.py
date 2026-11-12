@@ -1,11 +1,14 @@
 """Renderer for JSON navigation adapter results."""
 
 from ...utils.results import outcome_of
+from ...rendering.adapters.json_adapter import json_document
 from ...utils.warning_render import render_meta_warnings
 
 
 class JsonRenderer:
     """Renderer for JSON navigation results."""
+
+    json_document = staticmethod(json_document)
 
     @staticmethod
     def render_structure(result: dict, format: str = 'text') -> None:

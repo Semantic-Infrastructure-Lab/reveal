@@ -72,9 +72,9 @@ def test_selector_validation_precedes_content_and_preflight_only_resolves_file(s
     response = run(uri(source, '/items[-:]'), '--format', 'json')
     assert response.returncode == 2 and 'slice' in json.loads(response.stdout)['error'].lower()
     assert 'not valid JSON' not in response.stderr
-    # Legacy introspection also avoids the old preflight traceback, retaining exit 1.
+    # Inspection uses the same selector validation and usage exit.
     legacy = run(uri(source, '/items[-:]?keys'), '--format', 'json')
-    assert legacy.returncode == 1 and 'Traceback' not in legacy.stderr
+    assert legacy.returncode == 2 and 'Traceback' not in legacy.stderr
     assert 'slice' in json.loads(legacy.stdout)['error'].lower()
 
 
@@ -161,7 +161,7 @@ def test_missing_required_value_is_not_an_empty_success(source, monkeypatch):
                for e in json.loads(response.stdout)['meta']['errors'])
 
 
-def test_excluded_introspection_and_ordinary_warnings_keep_meaning(source):
+def test_qualified_introspection_and_ordinary_warnings_keep_meaning(source):
     for suffix, result_type in [('?keys&limit=-1', 'json_keys'), ('?schema', 'json_schema'),
                                 ('?flatten', 'json_flatten'), ('?type', 'json_type'),
                                 ('?length', 'json_length'), ('?gron&data-only', None)]:
@@ -169,7 +169,7 @@ def test_excluded_introspection_and_ordinary_warnings_keep_meaning(source):
         assert response.returncode == 0
         answer = json.loads(response.stdout)
         assert isinstance(answer, list) if result_type is None else answer['type'] == result_type
-        assert resolve_uri(uri(source, suffix), _default_args()).execution_facts is None
+        assert resolve_uri(uri(source, suffix), _default_args()).execution_facts is not None
     response = run(uri(source, '/items?missing=1'), '--format', 'json')
     answer = json.loads(response.stdout)
     assert response.returncode == 0 and answer['value'] == []

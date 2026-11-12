@@ -38,7 +38,7 @@ def _render_json_schema(data: Dict[str, Any], file_path: str, json_path: str) ->
 
 
 def _render_json_flatten(data: Dict[str, Any], file_path: str, json_path: str) -> None:
-    if not data.get('data_only'):
+    if not data.get('data_only') and data.get('detail') != 'raw':
         print(f"# File: {file_path}")
         print(f"# Path: {json_path}")
         print()
@@ -89,17 +89,8 @@ def render_json_result(data: Dict[str, Any], output_format: str) -> None:
     """
     result_type = data.get('type', 'unknown')
 
-    # data-only flatten: output lines only (skips header in text; gives bare array in json)
-    if result_type in ('json_flatten', 'json-flatten') and data.get('data_only'):
-        if output_format == 'json':
-            print(json.dumps(data.get('lines', []), indent=2))
-        else:
-            for line in data.get('lines', []):
-                print(line)
-        return
-
     if output_format == 'json':
-        print_json_result(data)
+        print_json_result(json_document(data))
         return
 
     # Keyed on the outcome, not the type: this branch tested 'json-error' while the
@@ -116,3 +107,11 @@ def render_json_result(data: Dict[str, Any], output_format: str) -> None:
         renderer(data, file_path, json_path)
     else:
         print_json_result(data)
+
+
+def json_document(data):
+    """Retain the legacy raw-lines JSON document until its spelling is retired."""
+    if (data.get('type') in ('json_flatten', 'json-flatten')
+            and data.get('data_only') and outcome_of(data) != 'failed'):
+        return data.get('lines', [])
+    return data

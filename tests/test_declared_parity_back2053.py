@@ -25,6 +25,7 @@ CASES = {
     'deps': ([], ''),
     'hotspots': ([], ''),
     'imports': ([], ''),
+    'json': ([], ''),
     'markdown': ([], ''),
     'metrics': ([], ''),
     'overview': ([], ''),
@@ -137,6 +138,7 @@ def project(tmp_path, monkeypatch):
     root = tmp_path / 'proj'
     (root / 'tests').mkdir(parents=True)
     (root / 'app.py').write_text(APP, encoding='utf-8')
+    (root / 'data.json').write_text('{"items": [1, 2]}', encoding='utf-8')
     (root / 'tests' / 'test_app.py').write_text(
         'from app import serve\n\n\ndef test_serve():\n    assert serve("") is None\n', encoding='utf-8')
     return root
@@ -144,13 +146,16 @@ def project(tmp_path, monkeypatch):
 
 def argv_for(noun, spelling, resource='proj'):
     cli, query = CASES[noun]
+    if noun == 'json':
+        resource += '/data.json'
     if spelling == 'cli':
         return [noun, resource, *cli]
     return [f'{noun}://{resource}{query}']
 
 
 def run(noun, spelling, *extra, resource='proj'):
-    return _run_reveal_direct(*argv_for(noun, spelling, resource), '--no-gitignore', *extra)
+    walk_flags = ['--no-gitignore'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
+    return _run_reveal_direct(*argv_for(noun, spelling, resource), *walk_flags, *extra)
 
 
 def architecture_retirement(spelling):
@@ -272,12 +277,14 @@ def test_missing_resource_is_rejected_alike(project, noun, fmt):
 def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
     """The project carries an unused import and a branchy function, so a declared gate has something to match."""
     cli, query = FINDINGS_VIEWS.get(noun, CASES[noun])
+    target = 'proj/data.json' if noun == 'json' else 'proj'
+    walk_flags = ['--no-gitignore'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
     spellings = {
-        'after': [noun, 'proj', *cli, '--fail-on', gate],
-        'before': ['--fail-on', gate, noun, 'proj', *cli],
-        'uri': [f'{noun}://proj{query}', '--fail-on', gate],
+        'after': [noun, target, *cli, '--fail-on', gate],
+        'before': ['--fail-on', gate, noun, target, *cli],
+        'uri': [f'{noun}://{target}{query}', '--fail-on', gate],
     }
-    runs = {k: _run_reveal_direct(*v, '--format', 'json', '--no-gitignore') for k, v in spellings.items()}
+    runs = {k: _run_reveal_direct(*v, '--format', 'json', *walk_flags) for k, v in spellings.items()}
     if gate == 'none':
         expected = 0
     elif 'findings' in declared_adapter_class(noun).FINDINGS_POLICIES:

@@ -34,6 +34,31 @@ category: guide
 
 ## Quick Start
 
+The CLI and URI forms share declared controls over the same JSON loader:
+
+```bash
+reveal json data.json/items --where 'type=book' --where 'price>10' --sort=-price --limit 5
+reveal json data.json --view schema
+reveal json data.json --view flatten --detail raw
+reveal 'json://data.json/items?where=price%3E10&limit=5'
+```
+
+`view` selects `value` (default), `schema`, `flatten`, `type`, `keys`, or `length`.
+`where` accepts the existing array predicate language and repeats to AND constraints.
+Sorting and pagination apply to arrays; zero limit returns an empty page. A filter
+such as `?type=book` still refers to a data field; the first bare `?type` selects
+inspection. Existing first bare inspection selectors remain accepted, including
+`?gron&data-only`, whose JSON document remains a bare array of lines. Canonical
+`--view flatten --detail raw` removes text headers while retaining the JSON envelope.
+The Python API accepts the same typed controls through `query(uri, view=..., limit=...)`.
+
+Every direct view records execution evidence: invalid requests exit 2 and required
+source failures exit 3. A malformed selector is rejected before reading content;
+for a valid selector, the source is loaded before validating query controls.
+The adapter reads a single file, so directory exclusion and gitignore flags are
+rejected. See [the output contract](../development/OUTPUT_CONTRACT.md).
+
+
 The JSON adapter provides powerful JSON file navigation without requiring jq or other external tools.
 
 **Common examples:**
@@ -394,20 +419,17 @@ reveal 'json://data.json/orders?customer.tier=premium'
 
 ## Query Parameters
 
-Complete reference of all query modes:
-
-### Introspection Modes
+Declared controls are the same in CLI, URI and typed API requests:
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `schema` | flag | Show type structure of data | `?schema` |
-| `flatten` | flag | Flatten to grep-able lines (gron-style) | `?flatten` |
-| `gron` | flag | Alias for `flatten` | `?gron` |
-| `type` | flag | Show type at current path | `?type` |
-| `keys` | flag | List keys (objects) or length (arrays) | `?keys` |
-| `length` | flag | Get array/string length or object key count | `?length` |
+| `view` | string | Select value, schema, flatten, type, keys, or length | `?view=keys` |
+| `where` | expression | Filter array elements; repeat to AND | `?where=price%3E10` |
+| `detail` | string | Flatten text headers: full or raw | `?view=flatten&detail=raw` |
 
-**Note**: These are **mutually exclusive** - use one at a time.
+The deprecated first bare selectors `?schema`, `?flatten`, `?gron`, `?type`,
+`?keys` and `?length` remain aliases for one view at a time. A field predicate
+such as `?type=book` is an array filter, rather than an inspection selector.
 
 ### Filtering Parameters
 

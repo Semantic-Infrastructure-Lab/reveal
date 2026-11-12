@@ -306,7 +306,9 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
     except RetiredSpellingError as exc:
         print(f'error: {exc.entry.text}', file=sys.stderr)  # boundary-ok: print -- the retirement error line
         sys.exit(2)
-    if declared_adapter_class(scheme) is not None and not peek(args, 'stdin', False):
+    declared = declared_adapter_class(scheme)
+    legacy_check = getattr(declared, 'LEGACY_CHECK_TRANSPORT', False) and peek(args, 'check', False)
+    if declared is not None and not peek(args, 'stdin', False) and not legacy_check:
         run_declared_uri(uri, element, args, consumed, answer_consumer=answer_consumer)
         return
     try:
@@ -547,7 +549,8 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace', *,
         from .declared import _scope_path
         spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
         if spec is not None:
-            scope_path = bind_resource_path(spec, scope_path, transport='uri')
+            scope_path = bind_resource_path(spec, scope_path, transport='uri',
+                                            resolve=getattr(adapter_class, 'resource_path', None), validate_kind=False)
         scope_path = _scope_path(adapter_class, scope_path)
     walk_root, combined_values = dispatch_scope(os.path.expanduser(scope_path), exclude_values)
 
@@ -576,7 +579,8 @@ def _reject_missing_path(adapter_class: type, scheme: str, resource: str, *, cla
     spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
     if spec is not None:
         from ...utils.query_binding import bind_resource_path
-        path = _call_adapter(lambda: bind_resource_path(spec, path, transport='uri'),
+        path = _call_adapter(lambda: bind_resource_path(spec, path, transport='uri',
+                                                      resolve=getattr(adapter_class, 'resource_path', None), validate_kind=False),
                              scheme, resource, adapter_class, classify_validation=classify_validation)
     resolve = getattr(adapter_class, 'resource_path', None)  # BACK-1499: calls:// path:name
     if resolve is not None:
@@ -1407,6 +1411,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                                          exit_code=getattr(renderer_class, 'exit_code', None),
                                          execution_facts=facts, execution_answer=answer, announce_error=announce_error,
                                          default_fail_on=default_fail_on,
+                                         json_document=getattr(renderer_class, 'json_document', None),
                                          **_render_structure_top_kwargs(renderer_class, args, adapter)),
                     execution_facts=facts, private_diagnostic=private_diagnostic, public_diagnostic=public_diagnostic)
     return answer
@@ -1422,7 +1427,7 @@ def _echo_source(result: Any, adapter_class: type, resource: Optional[str]) -> N
 def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
                  exit_code: Optional[Callable[[Any, str], int]] = None,
                  execution_facts=None, execution_answer=None, announce_error=True,
-                 default_fail_on=None, **render_kwargs) -> None:
+                 default_fail_on=None, json_document=None, **render_kwargs) -> None:
     """Render a URI result and turn its outcome into the exit code (BACK-1059).
 
     Every printed URI result, for the CLI and MCP alike, ends here (the emit of a
@@ -1444,12 +1449,12 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
         from .declared import emit_declared_result
         emit_declared_result(result, args, scheme, render, execution_facts,
                              execution_answer=execution_answer, announce_error=announce_error,
-                             default_fail_on=default_fail_on, **render_kwargs)
+                             default_fail_on=default_fail_on, json_document=json_document, **render_kwargs)
         return
     output_format = args.format
     result = attach_provenance(result)
     outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
-    failure = write_requested_artifact(lambda: write_also_json(result, args, render, **render_kwargs), result)
+    failure = write_requested_artifact(lambda: write_also_json(result, args, render, json_document=json_document, **render_kwargs), result)
     emit_rendered(render, result, output_format, **render_kwargs)
     if failure is not None:
         # Preserve result-control disclosures, then let the requested write failure outrank source failure.

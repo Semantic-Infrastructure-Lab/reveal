@@ -117,6 +117,8 @@ class QueryParams(Dict[str, Any]):
         super().__init__(*args, **kwargs)
         self._reads = query_key_recorder()
         self._aliases: Dict[str, Tuple[str, ...]] = {}
+        self._selectors: Dict[str, str] = {}
+        self._transport = "typed"
         self._normalized: Dict[str, Tuple[Any, Any, Any]] = {}
 
     def set_normalized(self, spec: 'ParamSpec', value: Any) -> None:
@@ -304,11 +306,14 @@ class ResourceSpec:
     required: bool = False
     uri_codec: str = 'raw'
     kind: Optional[str] = None
+    walks: bool = True
 
     def schema(self) -> Dict[str, Any]:
         result = {'name': self.name, 'required': self.required,
                   'cli_default': self.cli_default, 'uri_default': self.uri_default,
                   'uri_codec': self.uri_codec}
+        if not self.walks:
+            result['walks'] = False
         if self.kind is not None:
             result['kind'] = self.kind
         return result
@@ -339,6 +344,7 @@ class ParamSpec:
     # names a target exits 2 when it matches nothing (surface plan rule 9), never a clean zero.
     names: Optional[str] = None
     aliases: Tuple[str, ...] = ()
+    legacy_selectors: Tuple[str, ...] = ()
 
     def read(self, params: Dict[str, Any]) -> Any:
         raw = params.get(self.name)
@@ -375,6 +381,8 @@ class ParamSpec:
                   'examples': list(self.examples), 'default': self.default}
         if self.aliases:
             result['aliases'] = list(self.aliases)
+        if self.legacy_selectors:
+            result['legacy_first_selectors'] = list(self.legacy_selectors)
         if self.minimum is not None:
             result['minimum'] = self.minimum
         if self.zero_policy is not None:

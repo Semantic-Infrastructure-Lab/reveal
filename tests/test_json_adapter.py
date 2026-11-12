@@ -524,7 +524,7 @@ class TestJsonAdapterFiltering(unittest.TestCase):
 
         self.assertEqual(result['value'], [])
         self.assertNotIn('warnings', result)
-        self.assertNotIn('meta', result)
+        self.assertEqual(result['meta'], {'warnings': [], 'errors': []})
 
     def test_unknown_filter_field_nested_path(self):
         """Nested dot-path fields should be checked for literal presence too."""
@@ -545,7 +545,7 @@ class TestJsonAdapterFiltering(unittest.TestCase):
 
         self.assertEqual(result['value'], [])  # every user has 'status'
         self.assertNotIn('warnings', result)
-        self.assertNotIn('meta', result)
+        self.assertEqual(result['meta'], {'warnings': [], 'errors': []})
 
     def test_sort_missing_field(self):
         """Should handle sorting by missing field."""

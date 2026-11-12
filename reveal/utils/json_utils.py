@@ -109,7 +109,7 @@ def _render_sink(result, fmt, render, render_kwargs) -> str:
     return buffer.getvalue()
 
 
-def write_also_json(result, args, render=None, **render_kwargs) -> None:
+def write_also_json(result, args, render=None, *, json_document=None, **render_kwargs) -> None:
     """Write *result* to every file sink the invocation asked for (BACK-1184, BACK-2089): one result, one
     write per sink, each sink rendered on its own.
 
@@ -125,7 +125,7 @@ def write_also_json(result, args, render=None, **render_kwargs) -> None:
         try:
             if fmt == 'json':
                 with open(path, 'w', encoding='utf-8') as f:
-                    print_json_result(result, file=f)
+                    print_json_result(json_document(result) if json_document else result, file=f)
             elif render is None:
                 raise ValueError(f'{path}: this output cannot be rendered as {fmt}')
             else:

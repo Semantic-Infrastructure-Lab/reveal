@@ -198,7 +198,12 @@ def get_help() -> Dict[str, Any]:
     return {
         'name': 'json',
         'description': 'Navigate and query JSON files - path access, schema discovery, gron-style output',
-        'syntax': 'json://<file>[/path/to/key][?query]',
+        'syntax': 'reveal json FILE[/KEY] [--where EXPR] [--view VIEW]',
+        'epilog': ('Array predicates: --where EXPR (repeat to AND); --sort FIELD; --limit N; --offset N.\n'
+                   'Views: value, schema, flatten, type, keys, length. Flatten text: --detail raw.\n'
+                   'URI: json://FILE[/KEY]?where=EXPR&view=VIEW (percent-encode canonical expressions).\n'
+                   'Legacy first bare selectors, including ?gron&data-only, still work.\n'
+                   'Reads one JSON file; directory-walking exclusions do not apply.'),
         'path_syntax': get_path_syntax(),
         'queries': get_queries_help(),
         'examples': get_examples(),

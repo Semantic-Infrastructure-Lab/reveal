@@ -114,12 +114,12 @@ def test_api_exceptions_and_canonical_returned_errors(files):
     ('?keys', 0, 'json_keys'), ('/absent', 2, 'json_value'),
     ('/items[0:1]', 0, 'json_value'), ('?', 0, 'json_value'),
 ])
-def test_ordinary_queries_qualify_while_introspection_stays_legacy(files, suffix, code, result_type):
+def test_ordinary_and_inspection_queries_qualify(files, suffix, code, result_type):
     result = run(uri(files / 'object.json') + suffix, '--format', 'json')
     assert result.returncode == code
     assert json.loads(result.stdout)['type'] == result_type
     facts = resolve_uri(uri(files / 'object.json') + suffix, _default_args(format='json')).execution_facts
-    assert (facts is None) == (suffix == '?keys')
+    assert facts is not None
 
 
 def test_queries_keep_source_before_control_validation(files):
@@ -132,7 +132,7 @@ def test_queries_keep_source_before_control_validation(files):
 def test_missing_legacy_resource_has_only_the_accepted_diagnostic_delta(files):
     result = run(uri(files / 'missing.json') + '?keys', '--format', 'json')
     answer = json.loads(result.stdout)
-    assert result.returncode == 2 and answer['type'] == 'json'  # BACK-2533: an absent path is exit 2
+    assert result.returncode == 2 and answer['type'] == 'json_keys'  # selected view identity survives a missing path
     assert answer['error'] == 'Path not found: ' + (files / 'missing.json').as_posix()
     assert answer['meta']['errors'][0]['code'] == 'invalid_request'
 
@@ -147,7 +147,7 @@ def test_admission_uses_resource_syntax_before_any_content_load(files, monkeypat
     args = _default_args()
     assert callable(_uri_execution_facts(JsonAdapter, (files / 'missing.json').as_posix(), None, args))
     for resource in ('missing.json?keys', 'missing.json?schema', 'missing.json?gron&data-only'):
-        assert _uri_execution_facts(JsonAdapter, resource, None, args) is None
+        assert callable(_uri_execution_facts(JsonAdapter, resource, None, args))
     for resource in ('missing.json?limit=-1', 'missing.json/a', 'missing.json/[0:1]', 'missing.json?'):
         assert callable(_uri_execution_facts(JsonAdapter, resource, None, args))
     for flag in ('stdin', 'batch', 'check'):
@@ -197,7 +197,7 @@ def test_navigation_constructor_error_reports_the_underlying_file(files):
     result = run(request, '--format', 'json')
     answer = json.loads(result.stdout)
     assert result.returncode == 2 and answer['type'] == 'json_value'
-    assert answer['source'] == request.removeprefix('json://')
+    assert answer['source'] == (files / 'object.json').as_posix()
     assert answer['source_type'] == 'file'
     assert answer['error'] == "limit must be a non-negative integer: '-1'"
     assert answer['meta']['errors'][0]['code'] == 'invalid_request'

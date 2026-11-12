@@ -44,8 +44,9 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
         parser.add_argument('--all', action='store_true',
                             help='Show every entry in capped sections (same expansion as --verbose)')
     _add_universal_filter_flags(parser)
-    add_exclude_argument(parser)
-    add_gitignore_arguments(parser)
+    if adapter.RESOURCE_SPEC.walks:
+        add_exclude_argument(parser)
+        add_gitignore_arguments(parser)
     return parser
 
 
@@ -154,6 +155,16 @@ def _delegate_typed_parameters(adapter, args, source, transport: str) -> None:
             delegate(args, dest, spec.name)
 
 
+def _validate_walk_policy(adapter, args, query_policy) -> None:
+    """File-only declarations cannot promise filesystem-walking controls."""
+    if adapter.RESOURCE_SPEC.walks:
+        return
+    if peek(args, 'exclude'):
+        raise ValueError('--exclude requires a directory-walking operation')
+    if query_policy is not None or peek(args, 'respect_gitignore', True) is False:
+        raise ValueError('--no-gitignore / respect-gitignore requires a directory-walking operation')
+
+
 def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=(), *,
                   answer_consumer=None) -> None:
     from ...utils.exclusions import dispatch_scope, exclusion_scope
@@ -178,11 +189,13 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     query_resource, respect = split_respect_gitignore(query_resource)
     if transport == 'uri':
         source = query_resource.partition('?')[2]
+    query_walk_policy = respect
     respect = respect if respect is not None else peek(args, 'respect_gitignore', True)
     dispatch = ledger.dispatching(query_resource, name) if ledger is not None else nullcontext()
     try:
         with dispatch:
             try:
+                _validate_walk_policy(adapter, args, query_walk_policy)
                 source = prepare_declared_params(adapter.PARAM_SPECS, source, transport)
             except ValueError as exc:
                 consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
@@ -190,7 +203,8 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             select_type = getattr(adapter, 'result_type_for', None)
             expected_type = select_type(source) if select_type else adapter.RESULT_TYPE
             try:
-                path = bind_resource_path(adapter.RESOURCE_SPEC, os.path.expanduser(path), transport=transport)
+                path = bind_resource_path(adapter.RESOURCE_SPEC, os.path.expanduser(path), transport=transport,
+                                          resolve=getattr(adapter, 'resource_path', None))
             except (ValueError, FileNotFoundError, NotADirectoryError) as exc:
                 consume(_invalid_answer(adapter, name, path, _resource_error_message(exc, path), args,
                                         result_type=expected_type))
@@ -257,10 +271,12 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
     from .uri import _answer, _call_adapter, _renderer_class_of, _structure_answer
     scope = path if scope_path is None else scope_path
     try:
-        params = bind_prepared_params(adapter_class.PARAM_SPECS, source, transport=transport)
-        validate = getattr(adapter_class, 'validate_request', None)
-        if validate is not None:
-            validate(params, args)
+        params = source
+        if not getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
+            params = bind_prepared_params(adapter_class.PARAM_SPECS, source, transport=transport)
+            validate = getattr(adapter_class, 'validate_request', None)
+            if validate is not None:
+                validate(params, args)
         # stat distinguishes absence from inaccessible required work.
         Path(scope).stat()
     except (FileNotFoundError, NotADirectoryError):
@@ -314,7 +330,7 @@ def detach_stdout() -> None:
 
 
 def emit_declared_result(result, args, scheme, render, facts, *, execution_answer=None, announce_error=True,
-                         default_fail_on=None, renderer_owns_json=False, **render_kwargs) -> None:
+                         default_fail_on=None, renderer_owns_json=False, json_document=None, **render_kwargs) -> None:
     """Finalize selected D6 facts; legacy emitters keep their existing policy.
 
     File structures own their current JSON representation through the renderer;
@@ -334,7 +350,7 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
     result = attach_provenance(result)
     if announce_error:
         announce_outcome(result, f'{scheme}://')
-    failure = write_requested_artifact(lambda: write_also_json(result, args, render, **render_kwargs), result)
+    failure = write_requested_artifact(lambda: write_also_json(result, args, render, json_document=json_document, **render_kwargs), result)
     if failure is not None:
         facts = merge_execution_facts(facts, failure_execution_facts(FailureCause.OUTPUT))
         if execution_answer is not None:
@@ -342,7 +358,7 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
     code = execution_exit_code(facts, fail_on=policy)
     try:
         if output_format == 'json' and not renderer_owns_json:
-            print_json_result(result)
+            print_json_result(json_document(result) if json_document else result)
         else:
             emit_rendered(render, result, output_format, **render_kwargs)
         print_result_control_notes(result, output_format)

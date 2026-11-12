@@ -166,6 +166,9 @@ KNOWN_VIOLATIONS: dict = {}
 # How to run each `reveal <name>` against the fixture (invariant 6). Every COMMANDS entry
 # needs a row here or a NOT_A_QUERY reason.
 SUBCOMMAND_ARGV = {
+    'ast': ['proj'],
+    'json': ['proj/data.json'],
+    'markdown': ['proj'],
     'architecture': ['proj'],
     'calls': ['proj', '--target', 'main'],
     'check': ['proj'],
@@ -193,7 +196,7 @@ NOT_A_QUERY = {
 # Flags that make the small fixture cut a list, so the text-disclosure half of invariant 6
 # is not vacuously green.
 SUBCOMMAND_CUT_ARGV = {
-    'check': ['--max-items', '1'],
+    'check': ['--severity', 'low', '--max-items', '1'],
     'hotspots': ['--top', '1', '--min-complexity', '1'],
 }
 
@@ -1057,7 +1060,7 @@ def test_a_disclosed_total_is_the_real_total(harness, scheme):
 def test_the_own_cap_invariant_bites(harness):
     """Positive control: on wide/ a knob at 1 really cuts these adapters' lists, so
     test_an_adapters_own_cap_is_disclosed is not vacuously green."""
-    expected = ['architecture', 'ast', 'calls', 'depends', 'git', 'hotspots', 'imports', 'json', 'metrics', 'overview',
+    expected = ['architecture', 'ast', 'calls', 'depends', 'git', 'hotspots', 'imports', 'json', 'markdown', 'metrics', 'overview',
                 'patches', 'stats', 'xlsx']
     cuts = {scheme: _knob_cuts(harness, scheme)
             for scheme in sorted(s for s in FIXTURE_URIS if _cap_knobs(s))}

@@ -50,9 +50,23 @@ mcp_server.main()
         assert not empty.is_error
         warning = await request('/items?absent=1')
         assert not warning.is_error and 'never appear' in _text(warning)
-        # Excluded legacy modes keep their existing delivery and unused-input notes.
+        # Legacy selectors keep delivery and unused-input notes under qualified inspection.
         keys = await request('?keys&limit=-1')
         assert not keys.is_error and 'items' in _text(keys)
+        for view in ('schema', 'flatten', 'type', 'keys', 'length'):
+            inspected = await request('?view=' + view)
+            assert not inspected.is_error, (view, _text(inspected))
+            if provenance:
+                payload = json.loads(_text(inspected))
+                assert payload['type'] == 'json_' + view
+                assert payload['source'] == path.as_posix()
+                assert payload['meta']['errors'] == []
+        raw = await request('?view=flatten&detail=raw')
+        assert not raw.is_error
+        if provenance:
+            assert json.loads(_text(raw))['type'] == 'json_flatten'
+        else:
+            assert '# File:' not in _text(raw)
         path.write_text('{PRIVATE_QUERY_PARSE', encoding='utf-8')
         failure = await request('?limit=-1')
         assert failure.is_error

@@ -21,7 +21,7 @@ def test_missing_path_exits_2(tmp_path):
     assert 'no_such_file.py not found' in result.stderr
 
 
-@pytest.mark.parametrize('scheme', ['git', 'markdown', 'json', 'codex'])
+@pytest.mark.parametrize('scheme', ['git', 'codex'])
 def test_uri_only_noun_names_working_spelling(tmp_path, scheme):
     result = _run_reveal_in(tmp_path, scheme, 'src with spaces')
     assert result.returncode == 2

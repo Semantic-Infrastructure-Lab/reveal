@@ -139,6 +139,11 @@ class ResourceAdapter(ABC):
     # get_structure call. Subclasses must opt in themselves; plugin from_uri stays legacy.
     BOUND_QUERY_CALL: bool = False
 
+    # Some source readers must load once before interpreting query controls.
+    SOURCE_BEFORE_CONTROLS: bool = False
+    # Retain a pre-existing Check transport while direct command views adopt declarations.
+    LEGACY_CHECK_TRANSPORT: bool = False
+
     # What an empty resource string means for this adapter's canonical
     # __init__ (LEGACY_INIT = False only — ignored otherwise). Default '.'
     # matches path-based adapters, where bare scheme:// means "current

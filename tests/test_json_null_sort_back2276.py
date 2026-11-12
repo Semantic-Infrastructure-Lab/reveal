@@ -38,7 +38,7 @@ def _sorted(path, query):
 def test_descending_sort_puts_nulls_last(people):
     names, result = _sorted(people, 'sort=-age')
     assert names == ['c', 'a', 'b', 'nul1', 'miss', 'nul2']
-    assert 'warnings' not in result and 'meta' not in result
+    assert 'warnings' not in result and result['meta'] == {'warnings': [], 'errors': []}
 
 
 def test_descending_sort_pages_past_the_nulls(people):
@@ -51,7 +51,7 @@ def test_descending_sort_pages_past_the_nulls(people):
 def test_ascending_sort_still_puts_nulls_last(people):
     names, result = _sorted(people, 'sort=age')
     assert names == ['b', 'a', 'c', 'nul1', 'miss', 'nul2']
-    assert 'warnings' not in result and 'meta' not in result
+    assert 'warnings' not in result and result['meta'] == {'warnings': [], 'errors': []}
 
 
 def test_values_that_do_not_compare_still_disclose(tmp_path):

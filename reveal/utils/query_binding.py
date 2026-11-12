@@ -3,7 +3,7 @@
 import argparse
 import stat
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Optional, Union
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import quote, unquote
 
 from ..errors import RequestValidationError
@@ -83,6 +83,37 @@ def _prepare_repeated_params(declarations: tuple[ParamSpec, ...], source: str, p
                 params[name] = [_decode_value(spec, value) if name == spec.name else value for value in values]
 
 
+def _prepare_legacy_selectors(declarations: tuple[ParamSpec, ...], source: str, params: QueryParams) -> Dict[str, str]:
+    """Opted-in first bare words select views; field=value remains dataset syntax."""
+    first = source.partition('&')[0].lower()
+    selected = {}
+    for spec in declarations:
+        if first not in spec.legacy_selectors:
+            continue
+        if spec.name in params:
+            raise RequestValidationError(f'{first} conflicts with {spec.name}')
+        dict.pop(params, first, None)
+        params[spec.name] = first
+        selected[spec.name] = first
+    return selected
+
+
+def _prepare_expression_params(declarations, source, params, selectors, expression) -> None:
+    known = {name for spec in declarations for name in (spec.name, *spec.aliases)}
+    terms = []
+    for index, part in enumerate(source.split('&')):
+        if index == 0 and selectors:
+            continue
+        key, separator, value = part.strip().partition('=')
+        if key == expression.name and separator:
+            terms.append(unquote(value, encoding='utf-8', errors='strict'))
+        elif key and key not in known:
+            terms.append(part.strip())
+            dict.pop(params, key, None)
+    if terms:
+        params[expression.name] = terms
+
+
 def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> QueryParams:
     """A declared expression-list owns the remaining raw DSL, including repeated bounds.
 
@@ -91,21 +122,15 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     """
     params = parse_query_params(source)
     _prepare_repeated_params(declarations, source, params)
+    selectors = _prepare_legacy_selectors(declarations, source, params)
     expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
     if expression is not None:
-        known = {name for spec in declarations for name in (spec.name, *spec.aliases)}
-        terms = []
-        for part in source.split('&'):
-            key, separator, value = part.strip().partition('=')
-            if key == expression.name and separator:
-                terms.append(unquote(value, encoding='utf-8', errors='strict'))
-            elif key and key not in known:
-                terms.append(part.strip())
-                dict.pop(params, key, None)
-        if terms:
-            params[expression.name] = terms
+        _prepare_expression_params(declarations, source, params, selectors, expression)
     prepared = QueryParams(_normalize_aliases(declarations, params))
     prepared._aliases = {spec.name: spec.aliases for spec in declarations}
+    prepared._selectors = selectors
+    for name, selector in selectors.items():
+        prepared._aliases[name] += (selector,)
     return prepared
 
 
@@ -115,7 +140,9 @@ def prepare_declared_params(declarations: Iterable[ParamSpec],
     if transport == 'uri':
         if not isinstance(source, str):
             raise TypeError('URI parameters must be a raw query string')
-        return _prepare_uri_params(tuple(declarations), source)
+        params = _prepare_uri_params(tuple(declarations), source)
+        params._transport = transport
+        return params
     if transport != 'typed':
         raise ValueError(f'Unknown parameter transport {transport!r}')
     if isinstance(source, str):
@@ -159,6 +186,13 @@ def bind_declared_params(specs: Iterable[ParamSpec], source: Union[str, Mapping[
     declarations = tuple(specs)
     params = prepare_declared_params(declarations, source, transport)
     params = bind_prepared_params(declarations, params, transport=transport)
+    return apply_declared_overrides(declarations, params, overrides)
+
+
+def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryParams,
+                             overrides: Optional[Mapping[str, Any]]) -> QueryParams:
+    """Apply typed overrides after original-source validation, without URI serialization."""
+    declarations = tuple(declarations)
     if overrides is not None:
         if not isinstance(overrides, Mapping):
             raise TypeError('Declared parameter overrides must be a mapping')
@@ -223,7 +257,12 @@ def _resource_exists(path: str) -> bool:
     return True
 
 
-def bind_resource_path(spec: ResourceSpec, path: str, *, transport: str) -> str:
+def _resource_exists_at(value: str, resolve: Optional[Callable[[str], str]]) -> bool:
+    return _resource_exists(resolve(value) if resolve else value)
+
+
+def bind_resource_path(spec: ResourceSpec, path: str, *, transport: str,
+                       resolve: Optional[Callable[[str], str]] = None, validate_kind: bool = True) -> str:
     """Bind an already separated resource path; never split typed '?' filenames.
 
     Only declared URI resources opt in. An existing raw literal percent path
@@ -242,23 +281,25 @@ def bind_resource_path(spec: ResourceSpec, path: str, *, transport: str) -> str:
     if '\x00' in value:
         raise RequestValidationError('Resource path must not contain NUL')
     if transport == 'typed' or spec.uri_codec == 'raw':
-        return _validate_resource_kind(spec, value)
+        return _validate_resource_kind(spec, value, resolve, validate_kind)
     if spec.uri_codec != 'existing-path-first':
         raise ValueError(f'Unknown resource URI codec {spec.uri_codec!r}')
-    if _resource_exists(value):
-        return _validate_resource_kind(spec, value)
+    if _resource_exists_at(value, resolve):
+        return _validate_resource_kind(spec, value, resolve, validate_kind)
     try:
         decoded = unquote(value, encoding='utf-8', errors='strict')
     except UnicodeDecodeError as exc:
         raise RequestValidationError('Resource path contains invalid UTF-8 percent encoding') from exc
-    chosen = decoded if _resource_exists(decoded) else value
-    return _validate_resource_kind(spec, chosen)
+    chosen = decoded if _resource_exists_at(decoded, resolve) else value
+    return _validate_resource_kind(spec, chosen, resolve, validate_kind)
 
 
-def _validate_resource_kind(spec: ResourceSpec, value: str) -> str:
-    if spec.kind is None:
+def _validate_resource_kind(spec: ResourceSpec, value: str,
+                            resolve: Optional[Callable[[str], str]], validate: bool = True) -> str:
+    if spec.kind is None or not validate:
         return value
-    mode = Path(value).expanduser().stat().st_mode
+    target = resolve(value) if resolve else value
+    mode = Path(target).expanduser().stat().st_mode
     matches = {'directory': stat.S_ISDIR, 'file': stat.S_ISREG}
     if spec.kind not in matches:
         raise ValueError(f'Unknown resource kind {spec.kind!r}')
