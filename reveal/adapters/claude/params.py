@@ -76,10 +76,11 @@ def bind_request(query, params, resource=''):
     # Presence readers must not mistake an explicit False/None override for a flag.
     runtime = QueryParams({key: value for key, value in peek_query_items(bound)
                            if value is not None and not (key in PRESENCE_FLAGS and value is False)})
-    from .controls import apply_view, apply_detail, apply_match, validate_where_scope, validate_modifier_scope
+    from .controls import apply_view, apply_detail, apply_match, validate_where_scope, validate_modifier_scope, validate_selectors
     resource = apply_view(runtime, resource)
     apply_detail(runtime, resource)
     apply_match(runtime, resource)
+    validate_selectors(runtime, resource)
     validate_where_scope(runtime, resource)
     validate_modifier_scope(runtime, resource)
     from .pagination import validate_page_scope

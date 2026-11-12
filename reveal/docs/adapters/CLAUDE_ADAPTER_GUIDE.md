@@ -18,7 +18,12 @@ Canonical `match` and `where` URI values percent-decode once; API values remain
 literal. Latest-turn examples below use `sort=-message_index`, so they display
 latest-first. Legacy `tail`/`last` preserve chronological order: `tail=0` is empty,
 while bare `last` or `last=0` selects one. Canonical `limit=0` is uncapped.
-Canonical raw detail also expands text display. Legacy names in compatibility
+Canonical raw detail also expands text display. Select one session view per
+request: competing selectors reject instead of selecting by branch order. The
+existing `tools` + `errors` composite remains supported (with optional `match`),
+and legacy `tail`/`last` coalesce only when their resolved counts agree. Session
+selectors reject on catalog and installation resources; text search rejects on
+resources without a text-search reader. The schema publishes `selector_rules`. Legacy names in compatibility
 headings describe the retained behavior, not additional recommended controls.
 
 ## Table of Contents

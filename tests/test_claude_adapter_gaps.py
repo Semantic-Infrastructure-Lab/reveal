@@ -2165,7 +2165,7 @@ class TestBack353ValueFormQueryParams:
     def test_summary_bare_flag_still_works(self, tmp_path):
         adapter = self._make_session(tmp_path, [_user_msg('hi'), _assistant_msg('hello')])
         from reveal.adapters.claude.params import bind_query
-        adapter.query_params = bind_query('summary', None)
+        adapter.query_params = bind_query('summary', None, adapter.resource)
         result = adapter._route_by_query(adapter.messages, '', adapter._get_contract_base())
         assert result is not None
         assert result.get('type') == 'claude_analytics'

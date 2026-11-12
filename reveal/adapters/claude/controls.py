@@ -199,3 +199,27 @@ def validate_modifier_scope(params, resource):
     for name, supported in MODIFIER_SCOPES.items():
         if name in params and kind not in supported:
             raise RequestValidationError(f'{name} is supported only by: ' + ', '.join(supported))
+
+
+SESSION_SELECTORS = frozenset(('summary', 'digest', 'timeline', 'errors', 'tokens', 'tools', 'tail', 'last'))
+SEARCH_POPULATIONS = frozenset(('claude_cross_session_search', 'claude_search_results', 'claude_history',
+                                'claude_plans', 'claude_agents', 'claude_memory'))
+
+
+def validate_selectors(params, resource):
+    from .resources import operation_type
+    selected = set(params).intersection(SESSION_SELECTORS | {'search'})
+    namespace = resource.partition('/')[0]
+    if resource.rstrip('/') in ('', '.') or namespace in NON_SESSION_NAMESPACES:
+        misplaced = selected.intersection(SESSION_SELECTORS)
+        if misplaced:
+            raise RequestValidationError('Session selectors require a session resource: ' + ', '.join(sorted(misplaced)))
+    if 'search' in selected and operation_type(resource, params) not in SEARCH_POPULATIONS:
+        raise RequestValidationError('search selector is unsupported on this resource')
+    if {'tail', 'last'} <= selected:
+        last_count = params['last'] or 1
+        if params['tail'] != last_count:
+            raise RequestValidationError('Conflicting tail/last selectors select different counts')
+        selected.remove('last')
+    if len(selected) > 1 and not selected <= {'tools', 'errors'}:
+        raise RequestValidationError('Conflicting Claude selectors: ' + ', '.join(sorted(selected)))
