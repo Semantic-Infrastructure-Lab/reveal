@@ -8,12 +8,7 @@ from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
 from pathlib import Path
 from typing import Dict, List, Any, Optional, cast
 
-from .queries import (
-    condition_pairs, parse_query, format_query, validate_filter_values,
-    extract_show_param as _extract_show_param,
-    extract_builtins_param as _extract_builtins_param,
-    extract_reveal_type_param as _extract_reveal_type_param,
-)
+from .queries import condition_pairs, format_query
 from .analysis import (
     analysis_skipped_warning, collect_structures, parse_recovered_warning,
     traversal_failed_warning,
@@ -28,7 +23,6 @@ from ...conventions import conventions_for, family_for_path
 from ...core import suppress_treesitter_warnings
 from ...registry import get_code_extensions
 from ...utils.query import (
-    parse_result_control,
     apply_result_control,
     unknown_sort_field_warning,
     ResultControl
@@ -36,7 +30,9 @@ from ...utils.query import (
 from ...utils.results import ResultBuilder, note_truncation
 from ...errors import RequestValidationError
 from ...utils.path_utils import failure_of
-from ...utils.query_parser import ResourceSpec
+from ...utils.query_parser import ResourceSpec, QueryParams, param_schema, parse_query_params
+from ...utils.query_binding import bind_declared_params
+from .params import PARAM_SPECS, VIEW, BUILTINS, REVEAL_TYPE, ast_query, result_control
 
 # Filter aliases that name a differently-named element field (see filtering.py).
 _SORT_FIELD_ALIASES = {'lines': 'line_count'}
@@ -334,17 +330,24 @@ class AstAdapter(ResourceAdapter):
     RESULT_TYPE = 'ast_query'
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    PARAM_SPECS = PARAM_SPECS
+    BOUND_QUERY_CALL = True
+    FINDINGS_POLICIES = ('none',)
+
+    @staticmethod
+    def resource_path(path):
+        """The decoded home-relative resource names the expanded filesystem path."""
+        return os.path.expanduser(path)
 
     @staticmethod
     def uri_result_type(resource):
         """Resolve mode identity before construction using the existing mode codec."""
-        query = '&'.join(part.strip() for part in resource.partition('?')[2].split('&'))
-        query, show = _extract_show_param(query)
-        query, _ = _extract_builtins_param(query)
-        _, variable = _extract_reveal_type_param(query)
+        values = parse_query_params(resource.partition('?')[2])
+        show = values.get('view', values.get('show'))
+        variable = values.get('reveal-type', values.get('reveal_type'))
         if show in ('dict-heatmap', 'dict-schemas'):
             return 'ast_' + show.replace('-', '_')
-        return 'ast_reveal_type' if variable else 'ast_query'
+        return 'ast_reveal_type' if isinstance(variable, str) and variable else 'ast_query'
 
     @classmethod
     def uri_execution_facts(cls, resource):
@@ -397,9 +400,13 @@ class AstAdapter(ResourceAdapter):
 
         Returns JSON schema for AI agent integration.
         """
-        return {**_get_schema(), 'resource': AstAdapter.RESOURCE_SPEC.schema()}
+        schema = _get_schema()
+        return {**schema, 'filter_fields': schema['query_params'],
+                'query_params': param_schema(PARAM_SPECS),
+                'resource': AstAdapter.RESOURCE_SPEC.schema()}
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
         """Initialize AST adapter.
 
         Args:
@@ -430,30 +437,36 @@ class AstAdapter(ResourceAdapter):
                 )
 
         try:
-            self._prepare_query(query_string)
+            self._prepare_query(query_string, params)
         except ValueError as exc:
             raise RequestValidationError(str(exc)) from exc
 
         self.results: List[Any] = []
 
-    def _prepare_query(self, query_string):
-        """Parse request controls before any source analysis begins."""
-        # Extract result control parameters (sort, limit, offset)
-        if query_string:
-            cleaned_query, self.result_control = parse_result_control(query_string)
-            # Extract show=, builtins=, reveal_type= before parsing filters (display modes, not filters)
-            cleaned_query, self.show_mode = _extract_show_param(cleaned_query)
-            cleaned_query, self.include_builtins = _extract_builtins_param(cleaned_query)
-            cleaned_query, self.reveal_type_var = _extract_reveal_type_param(cleaned_query)
-            query = parse_query(cleaned_query)
-            validate_filter_values(query)  # BACK-2531: exit 2 before any scan
-            self.query = query
-        else:
-            self.query = {}
-            self.result_control = ResultControl()
-            self.show_mode = None
-            self.include_builtins = False
-            self.reveal_type_var = None
+    def _prepare_query(self, query_string, params=None):
+        """Bind controls once; preserve raw legacy expressions at the shared binder."""
+        if params is None:
+            params = bind_declared_params(PARAM_SPECS, query_string or '', transport='uri')
+        elif not isinstance(params, QueryParams):
+            params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        self.query_params = params
+        self.query = ast_query(params)
+        self.result_control = result_control(params)
+        self.show_mode = VIEW.read(params)
+        self.include_builtins = BUILTINS.read(params)
+        self.reveal_type_var = REVEAL_TYPE.read(params)
+
+    @staticmethod
+    def validate_request(params, args=None):
+        """Reject contradictory or invalid expressions before source analysis."""
+        ast_query(params)
+
+    @staticmethod
+    def result_type_for(params):
+        view = dict(params.peek_items()).get('view')
+        if view in ('dict-heatmap', 'dict-schemas'):
+            return 'ast_' + view.replace('-', '_')
+        return 'ast_reveal_type' if dict(params.peek_items()).get('reveal-type') else 'ast_query'
 
     def _matches_decorator(self, decorators: List[str], condition: Dict[str, Any]) -> bool:
         """Check if any decorator matches the condition.

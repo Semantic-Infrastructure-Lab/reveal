@@ -77,6 +77,8 @@ _SUBCOMMANDS_GUIDE = 'guides/SUBCOMMANDS_GUIDE.md'
 # from an unknown name (BACK-1028). health and review have no same-named adapter, and their
 # runners render only these formats (measured: grep/typed output matched text byte for byte).
 COMMANDS: Dict[str, CommandSpec] = {
+    'ast':         _declared('ast', 'reveal ast [path] [--where EXPR] [--kind KIND]',
+                     'Find code elements by properties; repeated --where expressions are ANDed'),
     'architecture': _declared('architecture',
                      'reveal architecture [path] [--against REF]',
                      'Retired: use reveal overview [path] [--against REF]'),
@@ -150,7 +152,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
-EPILOG_ORDER = ('overview', 'imports', 'deps', 'hotspots', 'metrics', 'contracts', 'surface',
+EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'metrics', 'contracts', 'surface',
                 'patches', 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline', 'architecture')
 

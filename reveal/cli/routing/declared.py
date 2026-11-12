@@ -181,7 +181,11 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     dispatch = ledger.dispatching(query_resource, name) if ledger is not None else nullcontext()
     try:
         with dispatch:
-            source = prepare_declared_params(adapter.PARAM_SPECS, source, transport)
+            try:
+                source = prepare_declared_params(adapter.PARAM_SPECS, source, transport)
+            except ValueError as exc:
+                consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
+                return
             select_type = getattr(adapter, 'result_type_for', None)
             expected_type = select_type(source) if select_type else adapter.RESULT_TYPE
             try:
@@ -197,7 +201,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             expected_type = _result_type_at(adapter, expected_type, source, scope_path)
             try:
                 root, excludes = dispatch_scope(scope_path, peek(args, 'exclude'))
-            except OSError as exc:
+            except (OSError, ValueError) as exc:
                 from ...utils.results import FailureCause
                 consume(_invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS,
                                         result_type=expected_type))
@@ -209,6 +213,13 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     finally:
         if ledger is not None and ledger.complete:
             ledger.report(name)
+
+
+def _invalid_prepared_answer(adapter, name, path, resource, message, args):
+    """Keep an unbound request's mode identity when decoding/alias validation fails."""
+    selector = getattr(adapter, 'uri_result_type', None)
+    expected_type = selector(resource) if selector is not None else adapter.RESULT_TYPE
+    return _invalid_answer(adapter, name, path, message, args, result_type=expected_type)
 
 
 def _result_type_at(adapter_class, expected_type: str, params: Any, scope_path: str) -> str:

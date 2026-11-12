@@ -32,6 +32,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- AST gains a generated `reveal ast PATH` command and constructor-bound typed API controls over the existing filter parser. Repeated `--where`/`where=` constraints are ANDed; `kind` and `view` select element kinds and existing views. API overrides, including zero/false, now apply after URI validation; negative page controls reject before analysis (BACK-2613).
+
 - Check now displays medium and above and gates on high by default. Low findings have one count; `--severity low` shows their rows. `--fail-on none|low|medium|high` controls the full-population gate independently of display filters and pagination; `findings` retains the displayed-findings gate. Incomplete analysis and required output failure still exit 3 (BACK-2602).
 
 - File outlines and element views now carry the shared JSON envelope. Extracted code is `content`; `source` identifies the file, in CLI JSON and Python `element()`. Update code-reading consumers from `result["source"]` to `result["content"]`. Check file/directory JSON shares `files` and `summary`; Imports analysis metadata is in `meta`, with `metadata` retained as an additive-stage alias (BACK-2601).

@@ -104,12 +104,13 @@ def test_projection_failure_and_mode_identity_survive_encoding(tmp_path):
     assert json.loads(failed.stdout)['type'] == 'ast_dict_heatmap'
 
 
-def test_api_kwargs_and_raw_query_codec_are_unchanged(tmp_path):
+def test_declared_api_overrides_preserve_raw_query_codec(tmp_path):
     path = source(tmp_path / 'space name.py')
     literal = 'ast://' + path.as_posix()
     expected = query(literal + '?limit=1')
     assert expected['total_results'] == 1
-    assert query(literal + '?limit=1', limit=0) == expected
+    overridden = query(literal + '?limit=1', limit=0)
+    assert overridden['results'] == [] and overridden['total_results'] == 1
     with pytest.raises(ValueError, match='limit'):
         query(literal + '?limit=bad', limit=0)
     assert query(literal + '?name=alpha%26beta')['results'] == []

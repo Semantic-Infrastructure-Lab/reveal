@@ -5,7 +5,25 @@ category: guide
 # AST Adapter Guide
 
 **Status**: 🟢 Stable - Production Ready
-**Adapter**: `ast://`
+**Adapter**: `reveal ast PATH` and `ast://PATH` share declared controls.
+
+```bash
+reveal ast src/ --kind function --where 'complexity>10' --sort=-complexity --limit 10
+reveal 'ast://src/?kind=function&where=complexity%3E10&sort=-complexity&limit=10'
+```
+
+Repeat `--where` or `where=` to AND expressions, including two bounds on the same
+field. Legacy inline expressions retain their existing parsing. `kind` names the
+element type; `view` selects `dict-heatmap`, `dict-schemas` or the legacy `calls` view.
+`type`, `show` and `reveal_type` remain input aliases for `kind`, `view` and
+`reveal-type`; mixing two spellings of one control is rejected. The Calls noun
+remains the home for call-graph questions.
+
+`limit=0` returns an empty page while retaining the full matching count; negative
+limit/offset values reject before analysis. Typed API keyword controls now apply
+after validated URI controls, including zero and false; unsupported keywords reject.
+Typed filenames keep literal `?` and percent signs, while URI resources retain
+existing-path-first decoding.
 
 ---
 

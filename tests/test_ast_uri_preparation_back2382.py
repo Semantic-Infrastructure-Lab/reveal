@@ -57,10 +57,10 @@ def test_unqualified_preparation_returns_legacy_failed_answer(project, monkeypat
             assert answer.execution_facts is None
             assert answer.kind == 'router'
             answer.emit()
-    assert stopped.value.code == 1
+    assert stopped.value.code == (2 if mode == 'element' else 1)
     answer = json.loads(out.getvalue())
     assert answer['error']
-    assert answer['type'] == 'ast'
+    assert answer['type'] == ('ast_query' if mode == 'element' else 'ast')
     assert 'Traceback' not in err.getvalue()
 
 
@@ -73,7 +73,7 @@ def test_real_cli_unqualified_preparation_is_structured_failure(project, mode, f
         [sys.executable, '-m', 'reveal', *options, '--format', 'json'],
         input=resource + '\n' if mode == 'stdin' else None,
         capture_output=True, text=True, encoding='utf-8', timeout=30)
-    assert result.returncode == 1
+    assert result.returncode == (2 if mode == 'element' else 1)
     assert 'Traceback' not in result.stderr
     assert json.loads(result.stdout)['error']
 

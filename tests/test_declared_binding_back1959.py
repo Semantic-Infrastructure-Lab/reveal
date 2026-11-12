@@ -201,3 +201,14 @@ def test_list_encoder_rejects_scalar_string(binding):
     declaration = query.ParamSpec('paths', 'array', 'Paths', (), tuple, uri_codec='comma-percent')
     with pytest.raises(ValueError, match='list|tuple'):
         binding.encode_param_value(declaration, 'a,b')
+
+
+def test_alias_read_accounting_and_conflicts(binding):
+    declaration = spec('canonical', aliases=('old',))
+    with query.collect_query_keys() as log:
+        params = binding.bind_declared_params((declaration,), 'old=hello', transport='uri')
+        assert 'old' in log.seen and 'old' not in log.used
+        assert declaration.read(params) == 'hello'
+        assert 'old' in log.used
+    with pytest.raises(ValueError, match='conflicting spellings'):
+        binding.bind_declared_params((declaration,), 'old=x&canonical=y', transport='uri')

@@ -180,6 +180,8 @@ def query(
             adapters; otherwise forwarded to ``get_structure()`` or ``get_element()``.
             Surface accepts type, source_only, by, depth and top; Contracts accepts
             abstract_only, implementations and impls; Trace accepts from and depth.
+            AST accepts where (a string or list of ANDed expressions), kind, view,
+            builtins, reveal-type, sort, limit and offset, using the existing AST parser.
             Calls accepts its declared mode and analysis/presentation controls; mode
             validation uses the effective URI plus typed overrides.
             Trace requires a valid URI from selector first; use dictionary expansion

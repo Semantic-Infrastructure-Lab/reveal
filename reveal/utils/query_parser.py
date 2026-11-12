@@ -116,6 +116,7 @@ class QueryParams(Dict[str, Any]):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._reads = query_key_recorder()
+        self._aliases: Dict[str, Tuple[str, ...]] = {}
         self._normalized: Dict[str, Tuple[Any, Any, Any]] = {}
 
     def set_normalized(self, spec: 'ParamSpec', value: Any) -> None:
@@ -157,6 +158,7 @@ class QueryParams(Dict[str, Any]):
         """Count ``keys`` as used: applied, or already named in a warning."""
         if self._reads is not None:
             self._reads.update(query_key(key) for key in keys)
+            self._reads.update(alias for key in keys for alias in self._aliases.get(key, ()))
 
     def _mark_all(self) -> None:
         if self._reads is not None:
@@ -332,6 +334,7 @@ class ParamSpec:
     # What a value names: 'file' (a path under the scan) or 'symbol' (a definition name). A parameter that
     # names a target exits 2 when it matches nothing (surface plan rule 9), never a clean zero.
     names: Optional[str] = None
+    aliases: Tuple[str, ...] = ()
 
     def read(self, params: Dict[str, Any]) -> Any:
         raw = params.get(self.name)
@@ -366,6 +369,8 @@ class ParamSpec:
     def schema(self) -> Dict[str, Any]:
         result = {'type': self.type, 'description': self.description,
                   'examples': list(self.examples), 'default': self.default}
+        if self.aliases:
+            result['aliases'] = list(self.aliases)
         if self.minimum is not None:
             result['minimum'] = self.minimum
         if self.zero_policy is not None:

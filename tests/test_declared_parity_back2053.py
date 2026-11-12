@@ -18,6 +18,7 @@ from reveal.cli.routing.declared import declared_adapter_class
 
 # noun -> (CLI argv after the noun, URI suffix after `noun://proj`)
 CASES = {
+    'ast': ([], ''),
     'architecture': ([], ''),
     'calls': (['--callers', 'serve'], '?callers=serve'),
     'contracts': ([], ''),

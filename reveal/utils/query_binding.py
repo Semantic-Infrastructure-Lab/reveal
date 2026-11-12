@@ -58,22 +58,62 @@ def _decode_value(spec: ParamSpec, value: Any) -> Any:
     raise ValueError(f'Unknown URI codec {spec.uri_codec!r}')
 
 
+def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str, Any]) -> Dict[str, Any]:
+    """Aliases have one value owner; mixed spellings cannot hide precedence."""
+    result = dict(peek_query_items(supplied))
+    for spec in declarations:
+        present = [name for name in (spec.name, *spec.aliases) if name in result]
+        if len(present) > 1:
+            raise ValueError(f'{spec.name}: conflicting spellings: ' + ', '.join(present))
+        if present and present[0] != spec.name:
+            result[spec.name] = result.pop(present[0])
+    return result
+
+
+def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> QueryParams:
+    """A declared expression-list owns the remaining raw DSL, including repeated bounds.
+
+    Explicit where= values decode once; legacy expressions retain their existing codec.
+    The domain's existing expression parser still owns their syntax and evaluation.
+    """
+    params = parse_query_params(source)
+    expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
+    if expression is not None:
+        known = {name for spec in declarations for name in (spec.name, *spec.aliases)}
+        terms = []
+        for part in source.split('&'):
+            key, separator, value = part.strip().partition('=')
+            if key == expression.name and separator:
+                terms.append(unquote(value, encoding='utf-8', errors='strict'))
+            elif key and key not in known:
+                terms.append(part.strip())
+                dict.pop(params, key, None)
+        if terms:
+            params[expression.name] = terms
+    prepared = QueryParams(_normalize_aliases(declarations, params))
+    prepared._aliases = {spec.name: spec.aliases for spec in declarations}
+    return prepared
+
+
 def prepare_declared_params(declarations: Iterable[ParamSpec],
                    source: Union[str, Mapping[str, Any]], transport: str) -> QueryParams:
+    declarations = tuple(declarations)
     if transport == 'uri':
         if not isinstance(source, str):
             raise TypeError('URI parameters must be a raw query string')
-        return parse_query_params(source)
+        return _prepare_uri_params(tuple(declarations), source)
     if transport != 'typed':
         raise ValueError(f'Unknown parameter transport {transport!r}')
     if isinstance(source, str):
         raise TypeError('Typed parameters must be a mapping')
-    supplied = dict(peek_query_items(source))
+    supplied = _normalize_aliases(declarations, source)
     params = QueryParams()
     for spec in declarations:
         destination = spec.cli.dest if spec.cli and spec.cli.dest else spec.name
         if destination in supplied:
             params[spec.name] = supplied[destination]
+        elif spec.name in supplied:
+            params[spec.name] = supplied[spec.name]
     from .query_parser import query_key_recorder
     query_key_recorder(*dict.keys(params))
     return params
@@ -105,7 +145,7 @@ def bind_declared_params(specs: Iterable[ParamSpec], source: Union[str, Mapping[
     if overrides is not None:
         if not isinstance(overrides, Mapping):
             raise TypeError('Declared parameter overrides must be a mapping')
-        supplied = dict(peek_query_items(overrides))
+        supplied = _normalize_aliases(declarations, overrides)
         names = {spec.name for spec in declarations}
         unknown = [key for key in supplied if key not in names]
         if unknown:
