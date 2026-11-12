@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Claude installation `info` now distinguishes confirmed absence from denied metadata, retains partial directory counts and known paths, and exits 3 for required inspection loss. Qualified partial MCP answers omit duplicate legacy stderr error announcements, keeping requested JSON parseable (BACK-2617).
+
 - Claude settings/config reads now distinguish missing files and settings keys (exit 2) from unreadable, malformed or repaired source (exit 3), with public request diagnostics and acquisition receipts. Config retains missing-key `null` and replacement-decoding behavior; valid `null`, `false` and zero observations survive presentation and fresh MCP requests (BACK-2617).
 
 - Claude prompt history now discloses malformed records, decoding repairs and required read or timestamp failures before filters and display cuts. Failed reads retain preceding entries; missing history gives exit 2 with a public MCP diagnostic, while loss after opening remains an analysis failure (BACK-2617).

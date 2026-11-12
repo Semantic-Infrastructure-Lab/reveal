@@ -65,8 +65,12 @@ class ClaudeRenderer(TypeDispatchRenderer):
     def render_structure(cls, result: dict, format: str = 'text') -> str | None:
         from ...utils.results import AnalysisCompleteness
         from .history import history_execution_facts
-        if (format == 'text' and result.get('type') == 'claude_history'
-                and history_execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE):
+        from .info import info_execution_facts
+        if (format == 'text' and (
+                (result.get('type') == 'claude_history'
+                 and history_execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE)
+                or (result.get('type') == 'claude_info'
+                    and info_execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE))):
             return cls._render_text(result)
         return super().render_structure(result, format)
 

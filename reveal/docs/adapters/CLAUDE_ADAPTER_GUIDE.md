@@ -1916,7 +1916,9 @@ under [chain](#13-chain). Prompt history also qualifies its consumed records and
 payloads, as described under [Prompt History](#claudehistory--prompt-history).
 Settings/config JSON also qualify acquisition and preserve scalar values; see
 [User Settings](#claudesettings--user-settings) and
-[Install Config](#claudeconfig--install-config). Other install resources retain their separate
+[Install Config](#claudeconfig--install-config).
+[Path Diagnostics](#claudeinfo--path-diagnostics) qualifies path inventory.
+Other install resources retain their separate
 policies. Stdin and mixed batches retain legacy completeness behavior; a warning
 there is not yet guaranteed to change the exit code.
 
@@ -2397,6 +2399,17 @@ Environment overrides:
 ```
 
 **Returns**: Paths with existence, kind (`file`/`dir`), size/count. No query parameters.
+
+`meta.info_analysis` measures the eight named path slots, counting aliases
+independently. Confirmed absence (including a nondirectory parent) is successful
+inventory data. Failed metadata inspection uses `exists: null` and an error,
+preserving the other paths; failed directory counting retains known existence,
+`count: null` and `entries_seen`. Required inspection loss gives exit 3; a complete
+inventory gives 0. Receipts and measured path/environment observations survive
+presentation. MCP retains usable partial inventory, rejects fully failed path
+measurement and re-inspects on follow-up requests. Legacy metadata-error markers
+remain while qualified partial text still displays known inventory. Requested
+MCP JSON omits the duplicate stderr error announcement.
 
 ---
 

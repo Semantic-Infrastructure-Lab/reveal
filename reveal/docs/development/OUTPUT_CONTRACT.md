@@ -615,6 +615,16 @@ usable partial values with source loss; settings remain strict. Scalar observati
 preserve presence, type and value (`null`, `false` and zero included). Stage receipts
 describe the existing reader, not universal document payload validation. Python
 retains its error dictionaries; corrupted presentation fully fails an MCP answer.
+Installation `info` qualifies its eight named path slots through
+`meta.info_analysis` (aliases count independently). Confirmed optional absence is
+complete; denied metadata uses `exists: null` and reports the failure. Directory
+count loss retains known existence and the entries seen. Required inspection loss
+gives 3 and retains other metadata. With no usable path metadata, MCP reports a
+tool error.
+Returned observations and source receipts survive presentation. Legacy metadata
+error markers remain for unqualified transports; qualified partial text retains
+the inventory. Partial MCP emission omits the duplicate legacy stderr error
+announcement so requested JSON remains parseable.
 Other install resources, positional elements, Check, stdin and mixed batches retain their
 separate policies. Qualified postprocessing recognizes explicit request validation;
 unqualified transports preserve their prior classification.

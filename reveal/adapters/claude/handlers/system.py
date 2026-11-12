@@ -1,6 +1,7 @@
 """System-level resource handlers for the claude:// adapter — history, settings, info, config."""
 import json
 import os
+import stat as stat_module
 from pathlib import Path
 from typing import Any, Dict, Optional
 from reveal.reveal_types import CONTRACT_VERSION
@@ -11,17 +12,24 @@ from ..installation import JsonDocumentRead
 
 
 def _path_info(p: Path) -> Dict[str, Any]:
-    if not p.exists():
+    try:
+        metadata = p.stat()
+    except (FileNotFoundError, NotADirectoryError):
         return {'path': str(p), 'exists': False}
-    if p.is_dir():
+    except OSError as exc:
+        return {'path': str(p), 'exists': None, 'error_phase': 'metadata', 'cause': type(exc).__name__,
+                'error': f'metadata unreadable: {failure_of(exc).cause}'}
+    if stat_module.S_ISDIR(metadata.st_mode):
+        count = 0
         try:
-            count = sum(1 for _ in p.iterdir())
+            for _ in p.iterdir():
+                count += 1
         except OSError as exc:
             return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': None,
+                    'entries_seen': count, 'error_phase': 'directory-count', 'cause': type(exc).__name__,
                     'error': f'directory unreadable: {failure_of(exc).cause}'}
         return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': count}
-    stat = p.stat()
-    return {'path': str(p), 'exists': True, 'kind': 'file', 'size_bytes': stat.st_size}
+    return {'path': str(p), 'exists': True, 'kind': 'file', 'size_bytes': metadata.st_size}
 
 
 def get_history(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -73,7 +81,8 @@ def get_info(
     sessions_dir: Optional[Path],
 ) -> Dict[str, Any]:
     """Diagnostic dump of all resolved Claude Code data paths and env overrides."""
-    return ResultBuilder.create(
+    from ..info import attach_info_evidence
+    return attach_info_evidence(dict(ResultBuilder.create(
         result_type='claude_info',
         source=str(claude_home),
         source_type='directory',
@@ -97,7 +106,7 @@ def get_info(
             },
             'sessions_dir': str(sessions_dir) if sessions_dir else None,
         }
-    )
+    )))
 
 
 def get_config(claude_json: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:

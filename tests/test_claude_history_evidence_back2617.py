@@ -140,6 +140,10 @@ def test_sdk_history_partial_failed_repaired_and_absent(transcript, history, mon
         partial = await session.call_tool('reveal_query', request)
         assert not partial.is_error, _text(partial)
         assert json.loads(_text(partial))['meta']['history_analysis']['failed_records'] == 1
+        history.write_bytes(original + b'{"display":"bad timestamp","timestamp":1e300}\n')
+        operational_partial = await session.call_tool('reveal_query', request)
+        assert not operational_partial.is_error, _text(operational_partial)
+        assert json.loads(_text(operational_partial))['meta']['history_analysis']['failed_entries'] == 1
         history.write_text('broken\n', encoding='utf-8')
         failed = await session.call_tool('reveal_query', request)
         assert failed.is_error

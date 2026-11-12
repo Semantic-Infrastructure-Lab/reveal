@@ -57,7 +57,8 @@ def history_resource(resource):
 
 
 def installation_type(resource):
-    return {'settings': 'claude_settings', 'config': 'claude_config'}.get(resource.partition('?')[0])
+    return {'settings': 'claude_settings', 'config': 'claude_config',
+            'info': 'claude_info'}.get(resource.partition('?')[0])
 
 
 def _active(params):
@@ -144,6 +145,9 @@ _COUNTS = {
 
 
 def execution_facts(result):
+    if result.get('type') == 'claude_info':
+        from .info import info_execution_facts
+        return info_execution_facts(result)
     if result.get('type') in ('claude_settings', 'claude_config'):
         from .installation import installation_execution_facts
         return installation_execution_facts(result)
@@ -169,6 +173,9 @@ def execution_facts(result):
 
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
+    if expected_type == 'claude_info':
+        from .info import info_requirement_error
+        return info_requirement_error(adapter, result, prior_facts)
     if expected_type in ('claude_settings', 'claude_config'):
         return _installation_answer_error(adapter, result, expected_type, prior_facts)
     if expected_type == 'claude_history':
@@ -177,6 +184,10 @@ def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
         return None
     if expected_type in _RESOURCE_FIELDS:
         return _resource_answer_error(adapter, result, expected_type, prior_facts)
+    return _transcript_answer_error(adapter, result, expected_type, prior_facts)
+
+
+def _transcript_answer_error(adapter, result, expected_type, prior_facts):
     error = _source_decision_error(adapter, result)
     if error:
         return error

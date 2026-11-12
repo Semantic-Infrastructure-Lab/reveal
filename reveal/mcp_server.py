@@ -337,11 +337,12 @@ def _run_declared_tool(fn, *args, quiet_usage: bool = False, render=None, **kwar
         answers.append(answer)
         if _declared_failure(answer) is not None:
             return
-        if answer.execution_facts.completeness is AnalysisCompleteness.INCOMPLETE:
+        partial = answer.execution_facts.completeness is AnalysisCompleteness.INCOMPLETE
+        if partial:
             _note_incomplete_tool_answer(answer.result)
         if render is not None:
             rendered.append(render(answer.result))
-        elif quiet_usage and _trace_absence_compatibility(answer):
+        elif partial or (quiet_usage and _trace_absence_compatibility(answer)):
             answer.emit(announce_error=False)
         else:
             answer.emit()

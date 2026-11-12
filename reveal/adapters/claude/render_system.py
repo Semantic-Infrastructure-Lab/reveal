@@ -24,7 +24,9 @@ def _render_claude_info(result: dict) -> None:
         info = paths.get(key, {})
         path = info.get('path', '?')
         exists = info.get('exists', False)
-        if not exists:
+        if info.get('error'):
+            status = f'[{info["error"]}]'
+        elif not exists:
             status = '[not found]'
         elif info.get('kind') == 'dir':
             count = info.get('count', 0)
