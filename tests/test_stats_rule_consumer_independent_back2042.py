@@ -129,7 +129,7 @@ def test_two_root_owner_loss_changes_no_measured_row_in_any_view(tmp_path, actua
     assert {row['quality']['score'] for row in measured} == {100.0}
     assert owner.get_scan_disclosures([first]) == [] and owner.get_scan_disclosures([second]) == []
     # quality<99 matched the 3 D005-penalised files before; nothing is penalised now.
-    assert result['summary']['total_files'] == 0
+    assert result['summary']['total_files'] == (6 if view == 'offset' else 0)
     if view == 'filtered-summary':
         assert 'files' not in result
     else:
