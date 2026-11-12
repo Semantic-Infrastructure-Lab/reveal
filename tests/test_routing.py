@@ -1866,7 +1866,7 @@ def test_declared_ast_limit_spellings_answer_a_valid_resource(tmp_path, flags):
     """A valid resource answers both limit spellings; missing src was exit 2, not a flag bug."""
     import json
     from conftest import _run_reveal_direct
-    (tmp_path / 'app.py').write_text('def a(): pass\ndef b(): pass\ndef c(): pass\n')
+    (tmp_path / 'app.py').write_text('def a(): pass\ndef b(): pass\ndef c(): pass\n', encoding='utf-8')
     result = _run_reveal_direct(f'ast://{tmp_path}', *flags, '--format', 'json')
     assert result.returncode == 0, result.stderr
     answer = json.loads(result.stdout)
