@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from reveal.adapters.claude.adapter import ClaudeAdapter
+from reveal.errors import RequestValidationError
 from reveal.adapters.claude.renderer import ClaudeRenderer
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
@@ -68,15 +69,14 @@ class TestFileSessionsRouting:
     def test_bare_files_routes_to_track_file_sessions(self, tmp_path):
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
             adapter = ClaudeAdapter('files')
-            result = adapter.get_structure()
-        assert result['type'] == 'claude_file_sessions'
+            with pytest.raises(RequestValidationError, match='No file path provided'):
+                adapter.get_structure()
 
     def test_bare_files_with_no_path_returns_error(self, tmp_path):
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
             adapter = ClaudeAdapter('files')
-            result = adapter.get_structure()
-        assert 'error' in result
-        assert result['match_count'] == 0
+            with pytest.raises(RequestValidationError, match='No file path provided'):
+                adapter.get_structure()
 
     def test_files_does_not_interfere_with_search_route(self, tmp_path):
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):

@@ -147,6 +147,7 @@ class TestNegativeMessageIndex:
         adapter.query_params = {}
         adapter.session_name = 'test-session'
         adapter.conversation_path = None
+        adapter._transcript_analysis = None
 
         msgs = self._make_msgs(5)
         contract = CONTRACT.copy()
@@ -183,9 +184,11 @@ class TestNegativeMessageIndex:
         adapter.query_params = {}
         adapter.session_name = 'test-session'
         adapter.conversation_path = None
+        adapter._transcript_analysis = None
 
         msgs = self._make_msgs(3)
         contract = {'contract_version': '1.0', 'source': '/fake', 'source_type': 'file'}
-        result = adapter._route_by_resource(msgs, '/fake', contract)
-        # -99 + 3 = -96, still negative → out of range
-        assert 'error' in result
+        from reveal.errors import RequestValidationError
+        # D6: a bad requested index is invalid input, not an empty successful answer.
+        with pytest.raises(RequestValidationError, match='Message index -99 out of range'):
+            adapter._route_by_resource(msgs, '/fake', contract)

@@ -158,9 +158,9 @@ def test_claude_decoded_file_tracking_does_not_depend_on_byte_pool(tmp_path, mon
     visited = []
     extract = handlers._extract_session_ops
 
-    def observed(session, path):
+    def observed(session, path, reads=None):
         visited.append(session['path'])
-        return extract(session, path)
+        return extract(session, path, reads)
 
     monkeypatch.setattr(handlers, '_extract_session_ops', observed)
     result = handlers.track_file_sessions(base, 'files/src/needle.py', {})
