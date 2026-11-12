@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Claude cross-session search and file tracking now disclose malformed records, repaired decoding and required read failures, retain usable results and exit 3 for incomplete input. Search measures only the prefix through its first content match; display cuts preserve match counts and source receipts. Missing file-tracking paths are usage errors (exit 2) (BACK-2617).
+
 - Claude store listings retain known entries when directory discovery or transcript metadata fails, and exit 3 even when filtering hides all acquired rows. Catalog receipts distinguish partial acquisition from a genuinely empty store and survive display cuts; content search and file tracking also retain catalog acquisition evidence (BACK-2617).
 
 - Direct Claude transcript URI views now classify complete/empty/display-cut answers as 0, missing requests or rejected controls as 2, and required source/selection/output loss as 3. Source receipts preserve partial observations, distinguish timestamp recovery from required loss and guard presentation cuts; MCP retains usable partial data and rejects fully failed source. Store reconfiguration resets records and proof together. Other session resources and legacy transports retain separate policies (BACK-2617).

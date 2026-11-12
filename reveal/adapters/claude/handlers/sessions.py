@@ -14,6 +14,9 @@ from ....utils.results import ResultBuilder, note_warning
 from .workspace import skipped_entries_warning
 from ..catalog import SessionEntries, collect_session_entries, attach_catalog_evidence
 from ..discovery import directory_entries
+from ..content import ContentScans
+from ..analysis.records import TranscriptRecords
+from ....errors import RequestValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -307,8 +310,9 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
     except (ValueError, TypeError):
         snippet_window = 120
     skipped: List[Tuple[Path, BaseException]] = []
+    scans = ContentScans(len(all_sessions) if term else 0)
     matches = search_sessions_for_term(all_sessions, term, whole_word=whole_word,
-                                       window_chars=snippet_window, errors_out=skipped)
+                                       window_chars=snippet_window, errors_out=skipped, reads_out=scans.reads)
 
     result = ResultBuilder.create(
         result_type='claude_cross_session_search',
@@ -327,17 +331,15 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
     )
     note_warning(result, skipped_entries_warning(
         'sessions', skipped, "they were not searched, so matches may be missing"))
-    return attach_catalog_evidence(result, catalog)
+    return scans.attach(attach_catalog_evidence(result, catalog))
 
 
-def _extract_session_ops(session: Dict[str, Any], file_path: str) -> Optional[Dict[str, Any]]:
-    messages: List[Dict] = []
-    with open(session['path'], 'r', encoding='utf-8') as fh:
-        for line in fh:
-            try:
-                messages.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+def _extract_session_ops(session: Dict[str, Any], file_path: str,
+                         reads_out: Optional[List[TranscriptRecords]] = None) -> Optional[Dict[str, Any]]:
+    reader = TranscriptRecords(Path(session['path']))
+    if reads_out is not None:
+        reads_out.append(reader)
+    messages = list(reader.records())
     contract_base = {'contract_version': CONTRACT_VERSION, 'source': session['path'], 'source_type': 'file'}
     files_result = get_files_touched(messages, session['session'], contract_base)
 
@@ -361,8 +363,7 @@ def _extract_session_ops(session: Dict[str, Any], file_path: str) -> Optional[Di
 def track_file_sessions(conversation_base: Path, resource: str, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """Cross-session file tracking using ``claude://files/<path>``.
 
-    Finds all sessions that touched a given file path using parallel
-    byte-level pre-filtering, then extracts per-session operations.
+    Reads session records and extracts per-session operations for the given path.
 
     Supports ``?since=DATE`` to scope the corpus before scanning.
 
@@ -375,22 +376,8 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
     if since == 'today':
         since = _date.today().isoformat()
 
-    _error_base: Dict[str, Any] = ResultBuilder.create(
-        result_type='claude_file_sessions',
-        source=str(conversation_base),
-        source_type='directory',
-        contract_version=CONTRACT_VERSION,
-        data={
-            'file_path': file_path,
-            'since': since or None,
-            'sessions_scanned': 0,
-            'match_count': 0,
-            'sessions': [],
-        }
-    )
-
     if not file_path:
-        return {**_error_base, 'error': 'No file path provided. Usage: claude://files/path/to/file.py'}
+        raise RequestValidationError('No file path provided. Usage: claude://files/path/to/file.py')
 
     catalog = collect_session_entries(conversation_base, _collect_sessions_from_dir)
     all_sessions = list(catalog)
@@ -399,9 +386,10 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
 
     results = []
     skipped: List[Tuple[Path, BaseException]] = []
+    scans = ContentScans(len(all_sessions))
     for session in all_sessions:
         try:
-            entry = _extract_session_ops(session, file_path)
+            entry = _extract_session_ops(session, file_path, scans.reads)
             if entry:
                 results.append(entry)
         # One session file written by another program (any shape; get_files_touched does
@@ -410,6 +398,8 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
         except Exception as e:  # boundary-ok: broad-except -- per-session isolation, skip is disclosed in meta.warnings
             logger.warning("skipping unparseable session %s: %s", session.get('path'), e)
             skipped.append((Path(session['path']), e))
+            if scans.reads and not scans.reads[-1].failures:
+                scans.reads[-1].failures.append({'phase': 'analysis', 'cause': type(e).__name__, 'message': str(e)})
 
     results.sort(key=lambda x: x['modified'], reverse=True)
 
@@ -428,7 +418,7 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
     )
     note_warning(result, skipped_entries_warning(
         'sessions', skipped, "they were not checked, so matches may be missing"))
-    return attach_catalog_evidence(result, catalog)
+    return scans.attach(attach_catalog_evidence(result, catalog))
 
 
 def get_chain(

@@ -1905,7 +1905,7 @@ read/decode exceptions still raise.
 This scope covers overview/summary, messages/prompts (including raw), thinking,
 tools, files, workflow, session agents, context, timeline, errors, tokens, digest,
 exchanges and session search/composite filters. Indexed `/message/N`, `/message`
-ranges, chains, store content search and install resources retain their separate
+ranges, chains and install resources retain their separate
 policies. Stdin and mixed batches retain legacy completeness behavior; a warning
 there is not yet guaranteed to change the exit code.
 
@@ -1915,8 +1915,18 @@ JSONL-named candidates, acquired entries and failed metadata operations before
 name/date filters, plus directory discovery failures. Known entries survive
 partial acquisition; filtering all of them away still exits 3 when acquisition
 was incomplete. A genuinely empty catalog and disclosed display cuts exit 0.
-Content search and file tracking carry this catalog evidence too, but their
-content-read outcomes remain under their separate policies.
+Cross-session content search (including `search/TERM`) and file tracking
+(`files/PATH`) also qualify their required reads. `meta.session_content` counts
+sessions after date scoping and records consumed for each decision. Search stops
+at its first content match; its receipt says `matched-prefix`, without claiming
+to have checked later records. File tracking consumes the full source. Malformed
+or non-object records, repaired decoding and required read/analysis failures
+give exit 3, retaining usable results from other sessions. Missing file-tracking
+paths give exit 2. The legacy empty search term remains an empty result requiring
+no content reads. `sessions_scanned` retains its legacy candidate-count meaning;
+the receipt supplies measured scan counts. Display cuts retain match counts and
+source receipts. MCP keeps usable partial answers, rejects fully failed scans,
+and re-reads source decisions on follow-up requests.
 
 `meta.transcript_selection` records lookup and first-timestamp selection decisions.
 Unknown timestamps sort last. A recovered decode in an unselected candidate does

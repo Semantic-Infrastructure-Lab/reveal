@@ -6,6 +6,7 @@ from ...utils.query_binding import prepare_declared_params
 from ...utils.query_parser import peek_query_items
 from ...utils.results import AnalysisCompleteness, result_execution_facts
 from .params import PARAM_SPECS
+from .analysis.records import valid_record_proof as _valid_record_proof
 
 SESSION_VIEWS = frozenset(('', 'messages', 'prompts', 'thinking', 'tools', 'files', 'workflow',
                            'agents', 'context', 'timeline', 'errors', 'summary', 'tokens',
@@ -23,12 +24,17 @@ RESOURCE_VIEWS = (('thinking', 'claude_thinking'), ('tools', 'claude_tool_summar
                   ('tokens', 'claude_token_breakdown'), ('messages', 'claude_messages'))
 
 
-def catalog_listing(resource):
+def catalog_type(resource):
     path, _, query = resource.partition('?')
-    if path not in ('', '.', 'sessions', 'sessions/'):
-        return False
-    params = prepare_declared_params(PARAM_SPECS, query, 'uri')
-    return not dict(peek_query_items(params)).get('search')
+    if path in ('', '.', 'sessions') or path.startswith('sessions/'):
+        params = prepare_declared_params(PARAM_SPECS, query, 'uri')
+        return ('claude_cross_session_search' if dict(peek_query_items(params)).get('search')
+                else 'claude_session_list')
+    if path == 'search' or path.startswith('search/'):
+        return 'claude_cross_session_search'
+    if path == 'files' or path.startswith('files/'):
+        return 'claude_file_sessions'
+    return None
 
 
 def direct_session(resource, parse_identifier, prefixes):
@@ -61,8 +67,9 @@ def selected_type(resource, params):
 
 
 def uri_result_type(resource):
-    if catalog_listing(resource):
-        return 'claude_session_list'
+    kind = catalog_type(resource)
+    if kind:
+        return kind
     path, _, query = resource.partition('?')
     params = prepare_declared_params(PARAM_SPECS, query, 'uri')
     return selected_type(path, params)
@@ -109,18 +116,10 @@ _COUNTS = {
 }
 
 
-def _valid_record_proof(proof):
-    if not isinstance(proof, dict):
-        return False
-    if not all(_count(proof.get(key)) for key in ('candidate_records', 'analyzed_records', 'failed_records')):
-        return False
-    if proof['candidate_records'] != proof['analyzed_records'] + proof['failed_records']:
-        return False
-    line = proof.get('first_failed_line')
-    return (type(line) is int and line > 0) if proof['failed_records'] else line is None
-
-
 def execution_facts(result):
+    if result.get('type') in ('claude_cross_session_search', 'claude_file_sessions'):
+        from .content import content_execution_facts
+        return content_execution_facts(result)
     if result.get('type') == 'claude_session_list':
         from .catalog import catalog_execution_facts
         return catalog_execution_facts(result)
@@ -136,10 +135,8 @@ def execution_facts(result):
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
     if result.get('error') or result.get('applicable') is False:
         return None
-    if expected_type == 'claude_session_list':
-        from .catalog import catalog_requirement_error
-        error = catalog_requirement_error(adapter, result, prior_facts)
-        return error or _presentation_error(adapter, result, {'recent_sessions': list}, prior_facts)
+    if expected_type in _CATALOG_FIELDS:
+        return _catalog_answer_error(adapter, result, expected_type, prior_facts)
     error = _source_decision_error(adapter, result)
     if error:
         return error
@@ -154,6 +151,18 @@ def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
         if result['message_count'] != proof['analyzed_records']:
             return 'Claude record count disagrees with its source proof'
     return _presentation_error(adapter, result, fields, prior_facts)
+
+
+_CATALOG_FIELDS = {'claude_session_list': 'recent_sessions',
+                   'claude_cross_session_search': 'matches', 'claude_file_sessions': 'sessions'}
+
+
+def _catalog_answer_error(adapter, result, expected_type, prior_facts):
+    from .catalog import catalog_requirement_error
+    from .content import content_requirement_error
+    qualify = catalog_requirement_error if expected_type == 'claude_session_list' else content_requirement_error
+    error = qualify(adapter, result, prior_facts)
+    return error or _presentation_error(adapter, result, {_CATALOG_FIELDS[expected_type]: list}, prior_facts)
 
 
 def _source_decision_error(adapter, result):

@@ -58,10 +58,12 @@ def _post_process_search_results(result: Dict[str, Any], args: Any) -> None:
     matches = result.get('matches')
     if matches is None:
         return
+    total_before = len(matches)
     if not getattr(args, 'all', False):
         head = getattr(args, 'head', None)
         matches = matches[:head if head else 20]
     result['matches'] = matches
+    note_truncation(result, 'matches', len(matches), total_before, 'display-selection')
     result['displayed_count'] = len(matches)
 
 

@@ -391,9 +391,9 @@ class ClaudeAdapter(ResourceAdapter):
 
     @classmethod
     def uri_execution_facts(cls, resource):
-        from .qualification import direct_session, catalog_listing
+        from .qualification import direct_session, catalog_type
         prefixes = tuple(prefix for prefix, _ in cls._RESOURCE_DISPATCH)
-        return (cls.execution_facts if catalog_listing(resource)
+        return (cls.execution_facts if catalog_type(resource)
                 or direct_session(resource, _parse_session_identifier, prefixes) else None)
 
     @staticmethod
@@ -605,27 +605,10 @@ class ClaudeAdapter(ResourceAdapter):
             missing = TranscriptNotFoundError if self.conversation_path is None else FileNotFoundError
             raise missing(f"Conversation not found for session: {self.session_name}")
 
-        messages = []
-        candidates = failed = 0
-        first_failed = None
-        with open(self.conversation_path, 'r', encoding='utf-8') as f:
-            for line_number, line in enumerate(f, 1):
-                if not line.strip():
-                    continue
-                candidates += 1
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    record = None
-                if isinstance(record, dict):
-                    messages.append(record)
-                else:
-                    failed += 1
-                    first_failed = first_failed or line_number
-        self._transcript_analysis = {
-            'candidate_records': candidates, 'analyzed_records': len(messages),
-            'failed_records': failed, 'first_failed_line': first_failed,
-        }
+        from .analysis.records import TranscriptRecords
+        reader = TranscriptRecords(self.conversation_path)
+        messages = list(reader.records())
+        self._transcript_analysis = reader.record_proof()
         self.messages = messages
         return messages
 

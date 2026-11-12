@@ -579,9 +579,15 @@ count fields. Store listings qualify directory and metadata acquisition before
 name/date filters using `meta.session_catalog`: candidate entries equal acquired
 plus failed metadata entries; directory discovery failures are counted separately.
 Partial acquisition exits 3 even when filtering leaves no rows; a genuinely empty
-catalog and receipted display cuts exit 0. Search and file tracking carry the same
-catalog receipt without yet qualifying their content-read outcomes.
-Indexed `/message/N`, `/message` ranges, chains, store content search,
+catalog and receipted display cuts exit 0. Cross-session content search and file
+tracking also qualify content acquisition through `meta.session_content`, after
+date scope and before display cuts. Search measures the consumed prefix through
+its first match; tracking measures full transcripts. Failed records, repaired
+decoding and required read/analysis failures give 3. Missing tracking paths give
+2; legacy empty search terms require no reads and remain empty success. The
+legacy `sessions_scanned` field is a candidate count; receipts supply actual scan
+decisions. MCP retains usable partial data and rejects fully failed scans.
+Indexed `/message/N`, `/message` ranges, chains,
 install resources, positional elements, Check, stdin and mixed batches retain their
 separate policies. Qualified postprocessing recognizes explicit request validation;
 unqualified transports preserve their prior classification.

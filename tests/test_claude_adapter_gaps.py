@@ -536,11 +536,11 @@ class TestSearchSessions:
 class TestTrackFileSessions:
 
     def test_no_file_path_returns_error(self, tmp_path):
+        from reveal.errors import RequestValidationError
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
             adapter = ClaudeAdapter('files')
-            result = adapter._track_file_sessions()
-        assert 'error' in result
-        assert result['type'] == 'claude_file_sessions'
+            with pytest.raises(RequestValidationError, match='No file path'):
+                adapter._track_file_sessions()
 
     def test_basic_tracking_returns_result_type(self, tmp_path):
         _write_session(tmp_path, 'sess', [

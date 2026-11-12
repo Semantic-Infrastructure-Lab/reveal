@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from .messages import _content_to_blocks, _collect_block_matches, _find_excerpt, _matches_term
+from .records import TranscriptRecords
 
 
 def _snippet_timestamp(record: Dict[str, Any]) -> str:
@@ -16,7 +17,8 @@ def _snippet_timestamp(record: Dict[str, Any]) -> str:
 
 def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = False,
                            window_chars: int = 120,
-                           errors_out: List[Tuple[Path, BaseException]] | None = None) -> Dict[str, Any]:
+                           errors_out: List[Tuple[Path, BaseException]] | None = None,
+                           reads_out: List[TranscriptRecords] | None = None) -> Dict[str, Any]:
     """Scan a JSONL file line-by-line and return the first matching excerpt.
 
     Parses every valid JSON line to maintain an accurate ``message_index`` that
@@ -38,36 +40,30 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
     lower = term.lower()
     message_index = 0
     fallback: Dict[str, Any] | None = None
+    reader = TranscriptRecords(jsonl_path, replace_decode=True)
+    if reads_out is not None:
+        reads_out.append(reader)
     try:
-        with open(jsonl_path, encoding='utf-8', errors='replace') as fh:
-            for raw_line in fh:
-                line = raw_line.strip()
-                if not line:
-                    continue
-                try:
-                    msg = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(msg, dict):
-                    continue
-                role = msg.get('type', '')
-                message = msg.get('message')
-                if fallback is None:
-                    fallback = _sidecar_hit(msg, role, term, message_index, whole_word, window_chars)
-                if role in ('user', 'assistant') and isinstance(message, dict):
-                    content = message.get('content', [])
-                    blocks = _content_to_blocks(content)
-                    ts = _snippet_timestamp(msg)
-                    matches = _collect_block_matches(blocks, lower, term, message_index, role, ts,
-                                                    whole_word=whole_word, window_chars=window_chars)
-                    if matches:
-                        return {
-                            'excerpt': matches[0].get('excerpt', ''),
-                            'role': role,
-                            'timestamp': ts,
-                            'message_index': message_index,
-                        }
-                message_index += 1
+        for msg in reader.records():
+            role = msg.get('type', '')
+            message = msg.get('message')
+            if fallback is None:
+                fallback = _sidecar_hit(msg, role, term, message_index, whole_word, window_chars)
+            if role in ('user', 'assistant') and isinstance(message, dict):
+                content = message.get('content', [])
+                blocks = _content_to_blocks(content)
+                ts = _snippet_timestamp(msg)
+                matches = _collect_block_matches(blocks, lower, term, message_index, role, ts,
+                                                whole_word=whole_word, window_chars=window_chars)
+                if matches:
+                    reader.decision = 'matched-prefix'
+                    return {
+                        'excerpt': matches[0].get('excerpt', ''),
+                        'role': role,
+                        'timestamp': ts,
+                        'message_index': message_index,
+                    }
+            message_index += 1
     except OSError as exc:
         if errors_out is not None:
             errors_out.append((jsonl_path, exc))
@@ -106,6 +102,7 @@ def search_sessions_for_term(
     window_chars: int = 120,
     lost_out: List[Path] | None = None,
     errors_out: List[Tuple[Path, BaseException]] | None = None,
+    reads_out: List[TranscriptRecords] | None = None,
 ) -> List[Dict[str, Any]]:
     """Search across multiple sessions for a term and return one snippet per match.
 
@@ -142,7 +139,7 @@ def search_sessions_for_term(
     for path in all_paths:
         session = path_to_session[path]
         snippet = _extract_first_snippet(path, term, whole_word=whole_word,
-                                         window_chars=window_chars, errors_out=errors_out)
+                                         window_chars=window_chars, errors_out=errors_out, reads_out=reads_out)
         if snippet['message_index'] is None:
             continue
         results.append({

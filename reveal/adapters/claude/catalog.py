@@ -81,9 +81,8 @@ def _valid_catalog_proof(proof):
     return isinstance(proof.get('failures'), list) and len(proof['failures']) == proof['failed_entries'] + proof['discovery_failures']
 
 
-def catalog_requirement_error(adapter, result, prior_facts):
+def catalog_proof_error(adapter, result, prior_facts):
     from copy import deepcopy
-    from ...utils.observations import has_truncation_receipt
     proof = result.get('meta', {}).get('session_catalog')
     if not _valid_catalog_proof(proof):
         return 'Claude listing missing consistent session-entry acquisition decisions'
@@ -91,6 +90,14 @@ def catalog_requirement_error(adapter, result, prior_facts):
         adapter._catalog_proof = deepcopy(proof)
     if proof != adapter._catalog_proof:
         return 'Claude presentation cannot change session-entry acquisition decisions'
+    return None
+
+
+def catalog_requirement_error(adapter, result, prior_facts):
+    from ...utils.observations import has_truncation_receipt
+    error = catalog_proof_error(adapter, result, prior_facts)
+    if error:
+        return error
     rows, count = result.get('recent_sessions'), result.get('session_count')
     if not isinstance(rows, list) or type(count) is not int or count < 0:
         return 'Claude listing missing session observations and count'
