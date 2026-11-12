@@ -146,10 +146,20 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
     _run_declared(name, args, path, query, 'uri', consumed, answer_consumer=answer_consumer)
 
 
+def _bind_legacy_cli_values(adapter, args, source):
+    """Apply opted-in global flag values through the same declaration as URI forwarding."""
+    for spec in adapter.PARAM_SPECS:
+        for flag, value in spec.cli_flags:
+            if peek(args, flag, False) is True and spec.name not in source:
+                source[spec.name] = value
+                delegate(args, flag, spec.name)
+
+
 def _delegate_typed_parameters(adapter, args, source, transport: str) -> None:
     """Forward declaration accounting only after the receiving ledger exists."""
     if transport != 'typed':
         return
+    _bind_legacy_cli_values(adapter, args, source)
     for spec in adapter.PARAM_SPECS:
         dest = (spec.cli.dest if spec.cli else None) or spec.name
         if dest in source:

@@ -104,3 +104,12 @@ def test_conflicting_cli_aliases_reject_instead_of_last_wins(tree):
     assert 'conflicting spellings' in result.stderr
     same = _run_reveal_in(tree, 'ast', str(tree), '--kind', 'function', '--type', 'function', '--format', 'json')
     assert same.returncode == 0
+
+
+def test_global_all_reaches_the_same_declared_limit_as_the_uri(tree):
+    path = tree / 'many.py'
+    path.write_text(''.join(f'def item_{i}():\n    return {i}\n\n' for i in range(250)), encoding='utf-8')
+    cli = answer(tree, 'ast', str(path), '--all')
+    uri = answer(tree, f'ast://{path}', '--all')
+    assert len(cli['results']) == len(uri['results']) == 250
+    assert cli == uri

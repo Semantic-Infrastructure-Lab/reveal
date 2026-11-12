@@ -1,21 +1,12 @@
 """Bind existing Claude query controls before session reading; no new analysis engine."""
 from typing import Any, Callable
 
-from ...utils.query_binding import bind_declared_params
+from ...utils.query_binding import bind_declared_params, legacy_presence_value as presence, string_value as text
 from ...utils.query_parser import ParamSpec, QueryParams, peek_query_items
 from .schema import _SCHEMA_QUERY_PARAMS
 
 
 PRESENCE_FLAGS = frozenset(('summary', 'errors', 'word', 'tokens', 'digest', 'full', 'raw', 'timeline'))
-
-
-def presence(value):
-    """Legacy URI flags mean presence; typed False explicitly restores omission."""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return True
-    raise ValueError('expected a flag or boolean')
 
 
 def patches(value):
@@ -31,12 +22,6 @@ def snippet(value):
         return max(60, min(500, int(value)))
     except (ValueError, TypeError):
         return 120
-
-
-def text(value):
-    if not isinstance(value, str) or '\x00' in value:
-        raise ValueError('expected a string without NUL')
-    return value
 
 
 def _spec(name, schema):
@@ -62,5 +47,9 @@ PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS
 def bind_query(query, params):
     bound = bind_declared_params(PARAM_SPECS, query or '', transport='uri') if params is None else params
     # Presence readers must not mistake an explicit False/None override for a flag.
-    return QueryParams({key: value for key, value in peek_query_items(bound)
-                        if value is not None and not (key in PRESENCE_FLAGS and value is False)})
+    runtime = QueryParams({key: value for key, value in peek_query_items(bound)
+                           if value is not None and not (key in PRESENCE_FLAGS and value is False)})
+    for spec in PARAM_SPECS:
+        if spec.name in dict.keys(runtime):
+            runtime.set_normalized(spec, dict.__getitem__(runtime, spec.name))
+    return runtime

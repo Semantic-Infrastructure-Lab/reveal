@@ -38,6 +38,35 @@ subcommands:
       review: honored
       via:
       - declared-read
+  ast:
+    all:
+      reason: Declared legacy limit value shared with URI forwarding; test_global_all_reaches_the_same_declared_limit_as_the_uri
+        proves full row counts above the default cap.
+      review: honored
+      via:
+      - declared-read
+    respect_gitignore:
+      reason: Shared gitignore scope controls the existing walker; PROBES compares
+        tracked-only versus ignored inputs.
+      review: honored
+      via:
+      - declared-global
+    since:
+      reason: --since is not declared on `reveal ast`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    until:
+      reason: --until is not declared on `reveal ast`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: No verbosity control in this reader; the shared flag ledger reports
+        that --verbose has no effect.
+      review: not-applicable
+      via:
+      - declared-unused
   calls:
     all:
       reason: --all is not declared on `reveal calls`'s own parser -- argparse rejects
@@ -176,6 +205,37 @@ subcommands:
         it loudly (unrecognized arguments), not a silent gap
       review: not-applicable
       via: []
+  git:
+    all:
+      reason: Declared legacy limit value shared with URI forwarding; test_global_all_reaches_the_same_declared_limit_as_the_uri
+        proves full row counts above the default cap.
+      review: honored
+      via:
+      - declared-read
+    respect_gitignore:
+      reason: --respect_gitignore is not declared on `reveal git`'s own parser --
+        argparse rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    since:
+      reason: Declared repeated date bounds reach the existing commit filter; test_declared_date_flags_reach_the_existing_history_owner
+        proves filtered row counts and CLI/URI/API parity.
+      review: honored
+      via:
+      - declared-read
+    until:
+      reason: Declared repeated date bounds reach the existing commit filter; test_declared_date_flags_reach_the_existing_history_owner
+        proves filtered row counts and CLI/URI/API parity.
+      review: honored
+      via:
+      - declared-read
+    verbose:
+      reason: The global boolean binds the declared verbose control, selecting existing
+        full blame detail; test_declared_verbose_reaches_full_blame proves the result
+        control.
+      review: honored
+      via:
+      - declared-read
   health:
     all:
       reason: --all is not declared on `reveal health`'s own parser -- argparse rejects
@@ -262,6 +322,61 @@ subcommands:
         views, read where they apply it; on any other view the flag ledger names it as
         a no-op; PROBES entry proves an output diff'
       review: honored
+      via:
+      - declared-read
+  json:
+    all:
+      reason: --all is not declared on `reveal json`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    respect_gitignore:
+      reason: --respect_gitignore is not declared on `reveal json`'s own parser --
+        argparse rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    since:
+      reason: --since is not declared on `reveal json`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    until:
+      reason: --until is not declared on `reveal json`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: No verbosity control in this reader; the shared flag ledger reports
+        that --verbose has no effect.
+      review: not-applicable
+      via:
+      - declared-unused
+  markdown:
+    all:
+      reason: --all is not declared on `reveal markdown`'s own parser -- argparse
+        rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    respect_gitignore:
+      reason: Shared gitignore scope controls the existing walker; PROBES compares
+        tracked-only versus ignored inputs.
+      review: honored
+      via:
+      - declared-global
+    since:
+      reason: --since is not declared on `reveal markdown`'s own parser -- argparse
+        rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    until:
+      reason: --until is not declared on `reveal markdown`'s own parser -- argparse
+        rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: No verbosity control in this reader; the shared flag ledger reports
+        that --verbose has no effect.
+      review: not-applicable
       via:
       - declared-unused
   metrics:

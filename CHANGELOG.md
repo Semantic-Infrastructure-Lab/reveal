@@ -18,6 +18,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- AST and Git generated commands now accept legacy `--all` through the same declared limit value used by URI forwarding, retaining full-row parity above their default caps (BACK-2613, BACK-2616).
+
+- Codex Python API query controls now bind before SQLite and JSONL reading, preserving literal search overrides, snippet zero, date bounds and explicit false/default controls (BACK-2618).
+
 - Claude Python API query controls now bind before session reading, so typed tool/search overrides, false flags, explicit zero and `None` reach the existing readers instead of being ignored (BACK-2617).
 
 - Calls and Imports rankings and Overview now accept `--limit` as an alias for their existing `--top` cap; help states which views apply it. Typing a URI-only noun as a subcommand now names its URI spelling instead of reporting a missing file (BACK-2603, BACK-2605).

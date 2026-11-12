@@ -11,9 +11,9 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import CodexRenderer
-from ...utils.query import parse_query_params, warn_unknown_query_params
-from ...utils.query_binding import boolean_value
-from ...utils.query_parser import ParamSpec, param_schema, peek_query_items, whole_number
+from ...utils.query import warn_unknown_query_params
+from ...utils.query_parser import ResourceSpec, param_schema, peek_query_items
+from .params import PARAM_SPECS, _MATCHES, _FULL, bind_query
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
     filter_sessions as _h_filter_sessions,
@@ -47,14 +47,6 @@ _UUID_RE = re.compile(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     r'|^[0-9a-f]{7,}$'
 )
-
-# Snippets kept per session by ?search=; the cut is disclosed with this knob's name (BACK-1384).
-_MATCHES = ParamSpec('matches', 'integer', 'Snippets kept per session by ?search= (0 = all)',
-                     3, whole_number, ('matches=10', 'matches=0'), minimum=0, zero_policy='all')
-
-_FULL = ParamSpec('full', 'boolean',
-                  'For /exchanges: show complete prompts and answers in text output; JSON already contains full text',
-                  False, boolean_value, ('full', 'full=true', 'full=false'))
 
 _USER_FILTER = "(thread_source IS NULL OR thread_source = 'user') AND archived = 0"
 
@@ -95,6 +87,9 @@ class CodexAdapter(ResourceAdapter):
     """
     HELP_CLUSTER = 'Sessions & Docs'
     LEGACY_INIT = False
+    BOUND_QUERY_CALL = True
+    PARAM_SPECS = PARAM_SPECS
+    RESOURCE_SPEC = ResourceSpec(walks=False, filesystem=False)
     # BACK-1379: get_structure already reads since/until from query_params and
     # threads them into _h_search_sessions/_h_filter_sessions (below), but nothing
     # declared the flag, so --since/--until were silently dropped on the CLI path
@@ -120,12 +115,12 @@ class CodexAdapter(ResourceAdapter):
         else CODEX_HOME / 'state_5.sqlite'
     )
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None, *, params=None):
         if resource is None or not isinstance(resource, str):
             raise TypeError(f'resource must be a string, got {type(resource).__name__}')
         self.resource = resource
-        self.query = query
-        self.query_params = parse_query_params(query or '')
+        self.query = query if query is not None else getattr(params, '_source_query', None)
+        self.query_params = bind_query(query, params)
         known = set(self.get_schema()['query_params'])
         query_keys = {key for key, _ in peek_query_items(self.query_params)}
         if (self._session_id_from_resource() is None or self._session_sub_path() != 'exchanges'
@@ -557,17 +552,7 @@ class CodexAdapter(ResourceAdapter):
                 {'type': 'codex_plugins', 'description': '~/.codex/plugins/cache/**/.codex-plugin/plugin.json — list of installed plugins'},
                 {'type': 'codex_plugin', 'description': 'Single plugin manifest'},
             ],
-            'query_params': {
-                'filter': 'Metadata filter across sessions by title/first-message substring (SQLite index, no JSONL scan) — codex://sessions/?filter=<term>. Renamed from ?search= (BACK-947) to match claude://\'s filter/search split.',
-                'search': 'Full-text search across all session JSONL files — codex://sessions/?search=<term>. Renamed from ?content= (BACK-947) to match claude://\'s ?search= meaning content search.',
-                **param_schema([_MATCHES, _FULL]),
-                'since': 'Lower-bound date filter (ISO 8601 or "today") on session updated_at — codex://sessions/?filter=<term>&since=<date> or ?search=<term>&since=<date>',
-                'until': 'Upper-bound date filter (ISO 8601) on session updated_at, pairs with ?since= — codex://sessions/?filter=<term>&since=<date>&until=<date>',
-                'last': 'Last agent message only, for fast session recovery — codex://<UUID>?last',
-                'tokens': 'Per-request token breakdown (input/output/cached/reasoning), one row per API call — codex://<UUID>?tokens',
-                'goal': 'Thread goal objective + token budget from goals_1.sqlite — codex://<UUID>?goal',
-                'key': 'Dot-path key lookup for codex://config — applied after secret masking — codex://config?key=<dotpath>',
-            },
+            'query_params': param_schema(PARAM_SPECS),
             'example_queries': [
                 {'uri': 'codex://', 'description': 'List all sessions (newest first)', 'output_type': 'codex_session_list'},
                 {'uri': 'codex://sessions/?filter=auth-refactor', 'description': 'Find sessions by title/first-message substring (SQLite metadata, fast)', 'output_type': 'codex_session_list'},

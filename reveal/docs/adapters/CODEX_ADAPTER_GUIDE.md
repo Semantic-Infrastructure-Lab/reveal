@@ -30,6 +30,22 @@ The **codex://** adapter navigates and analyzes [OpenAI Codex CLI](https://githu
 
 ## Quick Start
 
+Python callers can override declared controls at the existing query owner:
+
+```python
+from reveal.api import query
+answer = query("codex://sessions?search=authentication", matches=0)
+```
+
+Overrides apply after original-input validation; strings remain literal, `None`
+restores omission, and typed `False` disables a legacy presence flag. URI presence
+semantics remain unchanged (`?last=false` still selects the last agent message).
+`matches=0` keeps every snippet per matching session; it does not cap session input.
+`full=False` or `full=None` restores bounded exchange text while JSON retains the
+complete strings. These declarations do not yet add a Codex subcommand, new
+vocabulary or a new source-completeness policy.
+
+
 ```bash
 # List recent sessions
 reveal 'codex://'

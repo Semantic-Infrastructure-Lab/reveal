@@ -29,7 +29,7 @@ REVEAL_TYPE = ParamSpec('reveal-type', 'string', 'Type evidence for a variable (
 SORT = ParamSpec('sort', 'string', 'Sort field; prefix - for descending', None, str,
                  cli=CliBinding(('--sort',)))
 LIMIT = ParamSpec('limit', 'integer', 'Answer rows (0 returns an empty page)', None, int,
-                  minimum=0, zero_policy='empty page', cli=CliBinding(('--limit',)))
+                  minimum=0, zero_policy='empty page', cli_flags=(('all', '1000000'),), cli=CliBinding(('--limit',)))
 OFFSET = ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', 0, int,
                    minimum=0, cli=CliBinding(('--offset',)))
 PARAM_SPECS = (WHERE, KIND, VIEW, BUILTINS, REVEAL_TYPE, SORT, LIMIT, OFFSET)

@@ -19,6 +19,22 @@ def boolean_value(value: Any) -> bool:
     raise ValueError('expected true or false')
 
 
+def legacy_presence_value(value: Any) -> bool:
+    """Legacy URI flags mean presence; typed False explicitly restores omission."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return True
+    raise ValueError('expected a flag or boolean')
+
+
+def string_value(value: Any) -> str:
+    """A literal string, including empty text; never decode, trim or coerce it."""
+    if not isinstance(value, str) or '\x00' in value:
+        raise ValueError('expected a string without NUL')
+    return value
+
+
 def _list_parts(value: str) -> list[str]:
     # The empty query means no items; an empty member has no distinct comma encoding.
     if not value:
@@ -255,12 +271,21 @@ class _ScalarAliasAction(argparse.Action):
         setattr(namespace, self.dest, values)
 
 
+def _add_legacy_cli_arguments(parser, spec):
+    for flag, value in spec.cli_flags:
+        option = '--' + flag
+        if option not in parser._option_string_actions:
+            parser.add_argument(option, action='store_true', default=argparse.SUPPRESS,
+                                help=f'Legacy {option}: sets --{spec.name}={value}')
+
+
 def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[ParamSpec],
                            resource: ResourceSpec) -> None:
     """Generate local arguments; global presentation/exclusion owners remain unchanged."""
     parser.add_argument(resource.name, nargs=None if resource.required else '?',
                         default=resource.cli_default)
     for spec in specs:
+        _add_legacy_cli_arguments(parser, spec)
         cli = spec.cli
         if cli is None:
             continue

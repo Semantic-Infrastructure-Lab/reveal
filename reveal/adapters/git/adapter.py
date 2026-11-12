@@ -19,7 +19,7 @@ from ...utils.query import (
 )
 from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_binding import bind_declared_params
-from ...utils.query_parser import ResourceSpec, param_schema, QueryParams, filter_expression, mark_query_keys, peek_query_items, query_key
+from ...utils.query_parser import ResourceSpec, param_cli_flags, param_schema, QueryParams, filter_expression, mark_query_keys, peek_query_items, query_key
 from ...utils.results import note_warning
 
 # Import modular components
@@ -242,7 +242,7 @@ class GitAdapter(ResourceAdapter):
 
     CLI_QUERY_FLAGS = {
         'since': 'since={value}', 'until': 'until={value}',  # BACK-1192
-        'all': 'limit=1000000',  # lifts the 50-commit log default (BACK-1379)
+        **param_cli_flags(PARAM_SPECS),  # legacy --all lifts the history cap (BACK-1379)
         # BACK-1379: 'detail' is view-scoped to type=blame (_VIEW_SCOPED_PARAMS
         # below) -- --verbose is a no-op on any other type=, same as detail= itself.
         'verbose': 'detail=full',

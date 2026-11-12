@@ -30,7 +30,7 @@ from ...utils.query import (
 from ...utils.results import ResultBuilder, note_truncation
 from ...errors import RequestValidationError
 from ...utils.path_utils import failure_of
-from ...utils.query_parser import ResourceSpec, QueryParams, param_schema, parse_query_params
+from ...utils.query_parser import ResourceSpec, param_cli_flags, QueryParams, param_schema, parse_query_params
 from ...utils.query_binding import bind_declared_params
 from .params import PARAM_SPECS, VIEW, BUILTINS, REVEAL_TYPE, ast_query, result_control
 
@@ -326,7 +326,7 @@ class AstAdapter(ResourceAdapter):
     BUDGET_LIST_FIELD = 'results'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    CLI_QUERY_FLAGS = {'all': 'limit=1000000', 'respect_gitignore': 'respect_gitignore=false'}  # lifts the 200-result auto-cap (BACK-1379)
+    CLI_QUERY_FLAGS = {**param_cli_flags(PARAM_SPECS), 'respect_gitignore': 'respect_gitignore=false'}  # lifts the 200-result auto-cap (BACK-1379)
     RESULT_TYPE = 'ast_query'
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')

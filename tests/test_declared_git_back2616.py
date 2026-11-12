@@ -357,3 +357,40 @@ def test_declared_presentation_cut_keeps_source_counts(repo_path, monkeypatch):
     payload = json.loads(result.stdout)
     assert payload['authors'] == []
     assert payload['contributor_count'] > 0
+
+
+def test_global_all_reaches_the_same_declared_limit_as_the_uri(repo_path):
+    import pygit2
+    repo = pygit2.Repository(str(repo_path))
+    tree = repo.index.write_tree()
+    for i in range(25):
+        sig = pygit2.Signature('Scott', 'scott@example.com', 1700000100 + i, 0)
+        repo.create_commit('HEAD', sig, sig, f'more {i}', tree, [repo.head.target])
+    cli = _run_reveal_in(repo_path, 'git', str(repo_path), '--view', 'history', '--all', '--format', 'json')
+    uri = _run_reveal_in(repo_path, f'git://{repo_path}?view=history', '--all', '--format', 'json')
+    assert cli.returncode == uri.returncode == 0
+    a, b = json.loads(cli.stdout), json.loads(uri.stdout)
+    assert len(a['history']) == len(b['history']) == 28
+    assert a == b
+
+
+@pytest.mark.parametrize('name,value', [('since', '2100-01-01'), ('until', '1900-01-01')])
+def test_declared_date_flags_reach_the_existing_history_owner(repo_path, name, value):
+    from reveal.api import query
+    resource = f'git://{repo_path}?view=history'
+    assert len(query(resource)['history']) == 3
+    cli = _run_reveal_in(repo_path, 'git', str(repo_path), '--view', 'history', '--' + name, value, '--format', 'json')
+    uri = _run_reveal_in(repo_path, resource + '&' + name + '=' + value, '--format', 'json')
+    assert cli.returncode == uri.returncode == 0
+    a, b = json.loads(cli.stdout), json.loads(uri.stdout)
+    assert a == b and a['history'] == []
+    assert query(resource, **{name: value})['history'] == []
+
+
+def test_declared_verbose_reaches_full_blame(repo_path):
+    target = str(repo_path / 'code.py')
+    cli = _run_reveal_in(repo_path, 'git', target, '--view', 'blame', '--verbose', '--format', 'json')
+    uri = _run_reveal_in(repo_path, f'git://{target}?view=blame', '--verbose', '--format', 'json')
+    assert cli.returncode == uri.returncode == 0
+    a, b = json.loads(cli.stdout), json.loads(uri.stdout)
+    assert a == b and a['detail'] is True

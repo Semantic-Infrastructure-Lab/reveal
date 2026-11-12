@@ -77,6 +77,8 @@ PROBES = {
     ('check', 'respect_gitignore'): (['{tree}'], False),
     # BACK-1386: every walking subcommand, via apply_global_flags (probe_tree's *ignored*).
     ('architecture', 'respect_gitignore'): (['{tree}'], False),
+    ('ast', 'respect_gitignore'): (['{tree}'], False),
+    ('markdown', 'respect_gitignore'): (['{tree}'], False),
     ('contracts', 'respect_gitignore'): (['{tree}'], False),
     ('deps', 'respect_gitignore'): (['{tree}'], False),
     ('hotspots', 'respect_gitignore'): (['{tree}'], False),
@@ -127,6 +129,14 @@ def _module_reads_flag(rel_path: str, flag: str) -> bool:
     return False
 
 
+def _declared_spec_carries_flag(spec, flag):
+    if any(name == flag for name, _ in spec.cli_flags):
+        return True
+    if spec.cli is None:
+        return spec.type == 'boolean' and spec.name == flag
+    return (spec.cli.dest or spec.name) == flag
+
+
 def _reads_via_shared_seam(name, flag):
     """A subcommand can also route a flag through flag_specs.inject_query_flags -- the
     same generic seam URI adapters use (BACK-1377 shared overview.py with handle_uri).
@@ -151,7 +161,7 @@ def _reads_via_shared_seam(name, flag):
         if flag in ('all', 'verbose') and getattr(get_renderer_class(name), 'ACCEPTS_TOP', False) is True:
             return True
         # A declared parameter bound to the flag's dest is read where the adapter applies it.
-        if any((spec.cli.dest or spec.name) == flag for spec in adapter_cls.PARAM_SPECS if spec.cli):
+        if any(_declared_spec_carries_flag(spec, flag) for spec in adapter_cls.PARAM_SPECS):
             return True
         # The declared runner uses the URI owner's named-argument forwarding.
         return flag in inspect.signature(adapter_cls.get_structure).parameters

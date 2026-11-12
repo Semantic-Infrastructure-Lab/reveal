@@ -72,7 +72,7 @@ RAW = ParamSpec('raw', 'boolean', 'Legacy raw historical file content', None, bo
 SORT = string('sort', 'Commit field; prefix - for descending')
 LIMIT = ParamSpec('limit', 'integer', 'Returned rows; zero is empty (legacy type= aggregate requests retain input-window limits)', None,
                   lambda v: nonnegative_display_limit(v, name='limit'), minimum=0,
-                  zero_policy='empty page', cli=CliBinding(('--limit',)))
+                  zero_policy='empty page', cli_flags=(('all', '1000000'),), cli=CliBinding(('--limit',)))
 SCAN_LIMIT = ParamSpec('scan-limit', 'integer', 'Commit-input budget for ownership or timeline; required loss exits 3',
                        None, lambda v: nonnegative_display_limit(v, name='scan-limit'), minimum=0,
                        aliases=('scan_limit',), zero_policy='count no commits',
