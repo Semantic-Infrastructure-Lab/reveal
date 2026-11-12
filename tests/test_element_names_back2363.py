@@ -32,7 +32,7 @@ def without_note(answer, old):
     warnings = answer['meta'].get('warnings', [])
     assert len(warnings) == 1 and warnings[0]['field'] == 'flag:--' + old
     assert warnings[0]['code'] == 'retired_spelling'
-    del answer['meta']['warnings']
+    answer['meta']['warnings'] = []
     return answer
 
 

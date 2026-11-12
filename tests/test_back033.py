@@ -1,7 +1,7 @@
 """Tests for BACK-033: markdown:// ?aggregate=<field> frontmatter frequency table.
 
 Tests cover:
-- _extract_aggregate helper
+- declared aggregate selection
 - aggregate_field_values in operations.py
 - MarkdownQueryAdapter with ?aggregate= query
 - Renderer (text and grep output)
@@ -13,7 +13,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from reveal.adapters.markdown.adapter import _extract_aggregate, MarkdownQueryAdapter
+from reveal.adapters.markdown.adapter import MarkdownQueryAdapter
 from reveal.adapters.markdown.operations import aggregate_field_values
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
@@ -31,34 +31,38 @@ def _capture(fn, *args, **kwargs):
     return buf.getvalue()
 
 
-# ─── _extract_aggregate ───────────────────────────────────────────────────────
+# ─── Declared aggregate selection ────────────────────────────────────────────
 
-class TestExtractAggregate:
-    def test_extracts_aggregate_field(self):
-        field, remaining = _extract_aggregate('aggregate=type')
-        assert field == 'type'
-        assert remaining == ''
+class TestDeclaredAggregate:
+    def test_extracts_aggregate_field(self, tmp_path):
+        adapter = MarkdownQueryAdapter(str(tmp_path), 'aggregate=type')
+        assert adapter.aggregate_field == 'type'
+        assert adapter.filters == []
 
-    def test_aggregate_with_other_params(self):
-        field, remaining = _extract_aggregate('status=active&aggregate=type&limit=10')
-        assert field == 'type'
-        assert 'status=active' in remaining
-        assert 'limit=10' in remaining
-        assert 'aggregate' not in remaining
+    def test_aggregate_with_other_params(self, tmp_path):
+        _write_md(tmp_path / 'a.md', '---\nstatus: active\ntype: guide\n---\n')
+        _write_md(tmp_path / 'b.md', '---\nstatus: draft\ntype: reference\n---\n')
+        adapter = MarkdownQueryAdapter(str(tmp_path), 'status=active&aggregate=type&limit=10')
+        result = adapter.get_structure()
+        assert adapter.aggregate_field == 'type'
+        assert adapter.result_control.limit == 10
+        assert result['matched_files'] == 1
+        assert result['aggregate'] == [{'value': 'guide', 'count': 1}]
 
-    def test_no_aggregate_returns_none(self):
-        field, remaining = _extract_aggregate('status=active&limit=10')
-        assert field is None
-        assert remaining == 'status=active&limit=10'
+    def test_no_aggregate_returns_none(self, tmp_path):
+        adapter = MarkdownQueryAdapter(str(tmp_path), 'status=active&limit=10')
+        assert adapter.aggregate_field is None
+        assert adapter.filters
+        assert adapter.result_control.limit == 10
 
-    def test_empty_aggregate_value_ignored(self):
-        field, remaining = _extract_aggregate('aggregate=')
-        assert field is None
+    def test_empty_aggregate_value_ignored(self, tmp_path):
+        adapter = MarkdownQueryAdapter(str(tmp_path), 'aggregate=')
+        assert adapter.aggregate_field is None
 
-    def test_empty_query_returns_none(self):
-        field, remaining = _extract_aggregate('')
-        assert field is None
-        assert remaining == ''
+    def test_empty_query_returns_none(self, tmp_path):
+        adapter = MarkdownQueryAdapter(str(tmp_path), '')
+        assert adapter.aggregate_field is None
+        assert adapter.filters == []
 
 
 # ─── aggregate_field_values ───────────────────────────────────────────────────

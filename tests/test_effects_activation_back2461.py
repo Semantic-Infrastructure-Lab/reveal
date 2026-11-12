@@ -20,8 +20,6 @@ def _without_legacy_correction(answer, old):
     notes = [w for w in meta.get('warnings', []) if w.get('type') == 'retired_spelling']
     assert len(notes) == 1 and notes[0]['field'] == 'flag:' + old
     meta['warnings'] = [w for w in meta['warnings'] if w not in notes]
-    if not meta['warnings']:
-        meta.pop('warnings')
     return answer
 
 
