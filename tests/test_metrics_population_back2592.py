@@ -60,3 +60,10 @@ def test_uri_generated_cli_and_mcp_have_same_aggregates(project):
 def test_legacy_api_mixed_control_is_not_an_extra_file_filter(project):
     expected = ask(project, 'min_lines=3&limit=0')['summary']
     assert ask(project, 'churn=false&lines>2&limit=1')['summary'] == expected
+
+
+def test_summary_only_does_not_claim_to_display_a_file_page(project):
+    answer = ask(project, 'limit=1&offset=1&summary_only=true')
+    assert answer['population']['displayed_files'] == 0 and 'files' not in answer
+    assert 'displayed_results' not in answer
+    assert not [w for w in answer.get('meta', {}).get('warnings', []) if w.get('field') == 'files']

@@ -694,9 +694,9 @@ class MetricsAdapter(ResourceAdapter):
                             + '; totals describe only the analyzed population'),
             })
 
-    def _add_truncation_metadata(self, result: dict, displayed: int, total: int) -> None:
+    def _add_truncation_metadata(self, result: dict, displayed: int, total: int, *, rows_omitted: bool = False) -> None:
         """Record a ?limit/?offset cut of the files list (note_truncation, BACK-1059)."""
-        if displayed < total:
+        if not rows_omitted and displayed < total:
             note_truncation(result, 'files', displayed, total, 'limit')
             result['displayed_results'] = displayed
             result['total_matches'] = total
@@ -908,7 +908,7 @@ class MetricsAdapter(ResourceAdapter):
             'filtered_files': total_filtered,
             'displayed_files': 0 if summary_only else len(controlled_stats),
         }
-        self._add_truncation_metadata(result, len(controlled_stats), total_filtered)
+        self._add_truncation_metadata(result, len(controlled_stats), total_filtered, rows_omitted=summary_only)
         note_warning(result, unknown_sort_field_warning(
             self.result_control.sort_field, dir_file_stats, field_value, SORT_FIELDS))
         note_warning(result, self._sort_failure)
