@@ -11,6 +11,7 @@ from reveal.adapters.calls import index as calls_index
 class _Index(dict):
     """The slice of CallersIndex ``rank_by_callers`` reads: items(), skipped, defined."""
 
+    directory = None  # A graph-only fixture, without source definitions to bind.
     skipped = ()
     defined = frozenset({'target'})  # rank lists defined names only (BACK-2433)
 

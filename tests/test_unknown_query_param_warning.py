@@ -109,7 +109,8 @@ def test_declared_params_never_warn(adapter_name):
         # Skip filter-syntax template keys (defensive; wired adapters are fixed-set).
         if any(c in pname for c in '<>~!=*.'):
             continue
-        stderr = _stderr_of(lambda: factory(f'{pname}=x'))
+        value = 'author==x' if pname == 'where' else 'x'
+        stderr = _stderr_of(lambda: factory(f'{pname}={value}'))
         assert 'Unknown query param' not in stderr, (
             f'{adapter_name}: declared param {pname!r} produced an unknown-param '
             f'warning -> schema/code drift. stderr:\n{stderr}'
