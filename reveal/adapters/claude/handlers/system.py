@@ -7,6 +7,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
 from ....utils.path_utils import failure_of
+from ..installation import JsonDocumentRead
 
 
 def _path_info(p: Path) -> Dict[str, Any]:
@@ -32,19 +33,22 @@ def get_history(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, An
 def get_settings(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """Read and return ~/.claude/settings.json, with optional ?key= extraction."""
     settings_path = claude_home / 'settings.json'
-    base: Dict[str, Any] = ResultBuilder.create(
+    base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_settings',
         source=str(settings_path),
         source_type='file',
         contract_version=CONTRACT_VERSION,
-    )
-    if not settings_path.exists():
-        return {**base, 'error': f'Not found: {settings_path}', 'settings': {}}
+    ))
+    source = JsonDocumentRead(settings_path)
     try:
-        with open(settings_path, 'r', encoding='utf-8') as fh:
-            data = json.load(fh)
+        source.select()
+        with source.operation('read-json'):
+            with open(settings_path, 'r', encoding='utf-8') as fh:
+                data = json.load(fh)
+        source.parsed = source.usable = True
     except (OSError, ValueError) as e:  # unreadable, not UTF-8 or not JSON (JSONDecodeError is a ValueError)
-        return {**base, 'error': str(e), 'settings': {}}
+        error = f'Not found: {settings_path}' if isinstance(e, FileNotFoundError) and not source.selected else str(e)
+        return source.attach({**base, 'error': error, 'settings': {}})
 
     key = query_params.get('key', '')
     if key:
@@ -53,11 +57,12 @@ def get_settings(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, A
         try:
             for part in parts:
                 val = val[part]
-            return {**base, 'key': key, 'value': val}
-        except (KeyError, TypeError):
-            return {**base, 'key': key, 'error': f'Key not found: {key}', 'value': None}
+            return source.attach({**base, 'key': key, 'value': val})
+        except (KeyError, TypeError) as exc:
+            source.error('key', exc, rejected=True)
+            return source.attach({**base, 'key': key, 'error': f'Key not found: {key}', 'value': None})
 
-    return {**base, 'settings': data}
+    return source.attach({**base, 'settings': data})
 
 
 def get_info(
@@ -97,23 +102,29 @@ def get_info(
 
 def get_config(claude_json: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """Read ~/.claude.json — per-install config (projects, MCP servers, feature flags)."""
-    base: Dict[str, Any] = ResultBuilder.create(
+    base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_config',
         source=str(claude_json),
         source_type='file',
         contract_version=CONTRACT_VERSION,
-    )
-
-    if not claude_json.exists():
-        return {**base, 'error': f'Config not found: {claude_json}', 'projects': [], 'flags': {}}
-
+    ))
+    source = JsonDocumentRead(claude_json)
     try:
-        data = json.loads(claude_json.read_text(encoding='utf-8', errors='replace'))
+        source.select()
+        with source.operation('read'):
+            text = claude_json.read_text(encoding='utf-8', errors='surrogateescape')
+        text = source.repair(text)
+        with source.operation('parse-json'):
+            data = json.loads(text)
+        source.parsed = True
     except (OSError, ValueError) as e:  # unreadable or not JSON
-        return {**base, 'error': str(e), 'projects': [], 'flags': {}}
+        error = f'Config not found: {claude_json}' if isinstance(e, FileNotFoundError) and not source.selected else str(e)
+        return source.attach({**base, 'error': error, 'projects': [], 'flags': {}})
     if not isinstance(data, dict):  # valid JSON of another shape: .get below would raise (BACK-1857)
-        return {**base, 'error': f'{claude_json} is not a JSON object (top-level {type(data).__name__})',
-                'projects': [], 'flags': {}}
+        error = f'{claude_json} is not a JSON object (top-level {type(data).__name__})'
+        source.error('validate-root', ValueError(error))
+        return source.attach({**base, 'error': error, 'projects': [], 'flags': {}})
+    source.usable = True
 
     # ?key=dotpath — drill into a specific value
     key = query_params.get('key', '').strip()
@@ -121,7 +132,7 @@ def get_config(claude_json: Path, query_params: Dict[str, Any]) -> Dict[str, Any
         val: Any = data
         for part in key.split('.'):
             val = val.get(part) if isinstance(val, dict) else None
-        return {**base, 'key': key, 'value': val}
+        return source.attach({**base, 'key': key, 'value': val})
 
     # Build per-project MCP server summary
     projects_raw = data.get('projects', {})
@@ -143,9 +154,9 @@ def get_config(claude_json: Path, query_params: Dict[str, Any]) -> Dict[str, Any
     ]
     flags = {k: data[k] for k in flag_keys if k in data}
 
-    return {
+    return source.attach({
         **base,
         'projects_count': len(projects_raw),
         'projects': project_list,
         'flags': flags,
-    }
+    })

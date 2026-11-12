@@ -23,7 +23,6 @@
  "reveal/adapters/claude/analysis/tools.py::arg-type": 6,
  "reveal/adapters/claude/handlers/sessions.py::assignment": 1,
  "reveal/adapters/claude/handlers/sessions.py::no-any-return": 1,
- "reveal/adapters/claude/handlers/system.py::assignment": 2,
  "reveal/adapters/claude/handlers/system.py::return-value": 1,
  "reveal/adapters/claude/handlers/workspace.py::assignment": 4,
  "reveal/adapters/codex/adapter.py::override": 1,

@@ -607,6 +607,14 @@ Failure after opening remains source loss. The legacy `total_entries` counts
 decoded objects consumed; receipts distinguish successfully interpreted payloads.
 Operational failures retain their legacy error marker; measured owner facts keep
 usable prefixes incomplete for qualified URI/MCP answers, including text output.
+Settings/config JSON qualify source selection, parsing and decoding through
+`meta.installation_analysis`. Missing files/settings keys give 2 with public
+diagnostics; a missing config key keeps its existing successful `value: null`.
+Required acquisition/parse loss gives 3. Config replacement decoding retains
+usable partial values with source loss; settings remain strict. Scalar observations
+preserve presence, type and value (`null`, `false` and zero included). Stage receipts
+describe the existing reader, not universal document payload validation. Python
+retains its error dictionaries; corrupted presentation fully fails an MCP answer.
 Other install resources, positional elements, Check, stdin and mixed batches retain their
 separate policies. Qualified postprocessing recognizes explicit request validation;
 unqualified transports preserve their prior classification.

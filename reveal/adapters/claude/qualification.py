@@ -56,6 +56,10 @@ def history_resource(resource):
     return resource.partition('?')[0] == 'history'
 
 
+def installation_type(resource):
+    return {'settings': 'claude_settings', 'config': 'claude_config'}.get(resource.partition('?')[0])
+
+
 def _active(params):
     return {key for key, value in peek_query_items(params) if value is not None and value is not False}
 
@@ -80,6 +84,9 @@ def selected_type(resource, params):
 
 
 def uri_result_type(resource):
+    installed = installation_type(resource)
+    if installed:
+        return installed
     if history_resource(resource):
         return 'claude_history'
     kind = catalog_type(resource)
@@ -137,6 +144,9 @@ _COUNTS = {
 
 
 def execution_facts(result):
+    if result.get('type') in ('claude_settings', 'claude_config'):
+        from .installation import installation_execution_facts
+        return installation_execution_facts(result)
     if result.get('type') == 'claude_history':
         from .history import history_execution_facts
         return history_execution_facts(result)
@@ -159,6 +169,8 @@ def execution_facts(result):
 
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
+    if expected_type in ('claude_settings', 'claude_config'):
+        return _installation_answer_error(adapter, result, expected_type, prior_facts)
     if expected_type == 'claude_history':
         return _resource_answer_error(adapter, result, expected_type, prior_facts)
     if result.get('error') or result.get('applicable') is False:
@@ -188,6 +200,17 @@ def _indexed_observation_error(result, proof, expected_type):
         if not _count(index) or index >= proof['analyzed_records']:
             return 'Claude indexed answer missing an observed source index'
     return None
+
+
+def _installation_answer_error(adapter, result, expected_type, prior_facts):
+    from .installation import installation_requirement_error, installation_fields, installation_scalar_error
+    error = installation_requirement_error(adapter, result, expected_type, prior_facts)
+    if error:
+        return error
+    fields = installation_fields(adapter, expected_type)
+    error = installation_scalar_error(adapter, result, fields, prior_facts)
+    containers = {key: kind for key, kind in fields.items() if isinstance(result.get(key), (list, str, dict))}
+    return error or _presentation_error(adapter, result, containers, prior_facts)
 
 
 _RESOURCE_FIELDS = {'claude_session_list': 'recent_sessions',

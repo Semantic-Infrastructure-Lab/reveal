@@ -1914,7 +1914,9 @@ assistant turns and preserve their raw record indices through display cuts.
 Continuation chains qualify their optional README source separately, as described
 under [chain](#13-chain). Prompt history also qualifies its consumed records and
 payloads, as described under [Prompt History](#claudehistory--prompt-history).
-Other install resources retain their separate
+Settings/config JSON also qualify acquisition and preserve scalar values; see
+[User Settings](#claudesettings--user-settings) and
+[Install Config](#claudeconfig--install-config). Other install resources retain their separate
 policies. Stdin and mixed batches retain legacy completeness behavior; a warning
 there is not yet guaranteed to change the exit code.
 
@@ -2482,6 +2484,15 @@ reveal 'claude://settings?key=cleanupPeriodDays'
 
 **Returns**: Full settings JSON, or a single extracted value when `?key=` is used.
 
+`meta.installation_analysis` records source selection, parsing, usable input and
+acquisition/validation stages. A missing file or missing settings key gives exit
+2 with a public diagnostic; unreadable/malformed input and loss after a successful
+selection give 3. Valid empty documents and present `null`, `false` or zero values
+give 0. Python keeps its existing error dictionaries. Receipts and observations
+survive presentation, including the difference between `false` and zero. Settings
+retain strict UTF-8 decoding; stage receipts do not promise universal payload
+validation beyond the existing reader.
+
 **Common keys**: `cleanupPeriodDays`, `includeCoAuthoredBy`, `permissions.additionalDirectories`, `statusLine`, `alwaysThinkingEnabled`, `autoCompactEnabled`.
 
 ---
@@ -2546,6 +2557,14 @@ reveal 'claude://config?key=autoUpdates'
 - Secrets (API keys, tokens) are masked
 
 **Returns (`?key=`)**: Scalar or object at the specified path.
+
+Config uses the same `meta.installation_analysis` acquisition receipt as settings.
+It retains its existing replacement decoding: repaired UTF-8 values survive, but
+their source loss gives exit 3 and a usable partial MCP answer. Fully failed reads
+or invalid JSON/root shape fail the tool. A missing file gives 2; a missing config
+key retains the existing successful `value: null` behavior. Ordinary `null`,
+`false` and zero values remain present observations. Follow-up requests re-read
+source decisions. MCP rejects corrupted presentation.
 
 **Common keys**: `numStartups`, `autoUpdates`, `verbose`, `installMethod`, `autoCompactEnabled`.
 

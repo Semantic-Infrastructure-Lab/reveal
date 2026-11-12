@@ -391,9 +391,10 @@ class ClaudeAdapter(ResourceAdapter):
 
     @classmethod
     def uri_execution_facts(cls, resource):
-        from .qualification import direct_session, catalog_type, chain_resource, history_resource
+        from .qualification import direct_session, catalog_type, chain_resource, history_resource, installation_type
         prefixes = tuple(prefix for prefix, _ in cls._RESOURCE_DISPATCH)
         return (cls.execution_facts if catalog_type(resource)
+                or installation_type(resource)
                 or history_resource(resource)
                 or chain_resource(resource, _parse_session_identifier)
                 or direct_session(resource, _parse_session_identifier, prefixes) else None)
@@ -414,9 +415,18 @@ class ClaudeAdapter(ResourceAdapter):
 
     @staticmethod
     def public_diagnostic(result: Dict[str, Any]) -> Optional[str]:
-        proof = result.get('meta', {}).get('history_analysis', {})
+        kind = result.get('type')
+        if not isinstance(kind, str):
+            return None
+        fields = {'claude_history': ('history_analysis', 'request_absent'),
+                  'claude_settings': ('installation_analysis', 'request_rejected'),
+                  'claude_config': ('installation_analysis', 'request_rejected')}.get(kind)
+        if fields is None:
+            return None
+        name, flag = fields
+        proof = result.get('meta', {}).get(name, {})
         error = result.get('error')
-        if result.get('type') == 'claude_history' and proof.get('request_absent') and isinstance(error, str):
+        if proof.get(flag) and isinstance(error, str):
             return error
         return None
 
