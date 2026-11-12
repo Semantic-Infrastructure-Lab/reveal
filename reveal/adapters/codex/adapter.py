@@ -106,8 +106,8 @@ class CodexAdapter(ResourceAdapter):
         if not _UUID_RE.match(identifier):
             return None
         kind = cls.uri_result_type(resource)
-        supported = sub in VIEW_TYPES or sub.startswith('message/') or kind in ('codex_messages', 'codex_tokens')
-        return cls.execution_facts if supported and kind != 'codex_goal' else None
+        supported = sub in VIEW_TYPES or sub.startswith('message/') or kind in ('codex_messages', 'codex_tokens', 'codex_goal')
+        return cls.execution_facts if supported else None
 
     @staticmethod
     def uri_result_type(resource):
@@ -338,6 +338,9 @@ class CodexAdapter(ResourceAdapter):
         if session_row is None:
             return self._lookup_failure_result(session_id, candidates)
 
+        if selected_type(self.resource, self.query_params) == 'codex_goal':
+            return self._result_goal(session_row)
+
         self._rollout_analysis = None
         jsonl_path = self._find_jsonl_for_session(session_row)
         records: List[Dict[str, Any]] = []
@@ -351,8 +354,6 @@ class CodexAdapter(ResourceAdapter):
             return self._result_last(records, session_row)
         if 'tokens' in self.query_params or self.query_params.get('tokens') is not None:
             return self._result_tokens(records, session_row)
-        if 'goal' in self.query_params or self.query_params.get('goal') is not None:
-            return self._result_goal(session_row)
 
         if sub == 'messages':
             return self._result_messages(records, session_row)
@@ -519,6 +520,7 @@ class CodexAdapter(ResourceAdapter):
         result = _h_get_goal(self.CODEX_HOME, thread_id)
         # Merge session_id into result for contract consistency
         result['session_id'] = thread_id
+        self._goal_answer = deepcopy(result)
         return result
 
     # ------------------------------------------------------------------

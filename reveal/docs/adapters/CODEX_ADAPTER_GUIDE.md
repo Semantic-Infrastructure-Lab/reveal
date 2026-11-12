@@ -43,8 +43,8 @@ semantics remain unchanged (`?last=false` still selects the last agent message).
 `matches=0` keeps every snippet per matching session; it does not cap session input.
 `full=False` or `full=None` restores bounded exchange text while JSON retains the
 complete strings. The Codex subcommand and vocabulary migration remain open. Direct transcript
-URI execution is qualified below; catalog, install and goal policies remain
-separate.
+URI execution and optional goals are qualified below; catalog and install policies
+remain separate.
 
 
 ```bash
@@ -301,6 +301,15 @@ Status values: `active`, `paused`, `blocked`, `usage_limited`, `budget_limited`,
 
 Without a budget the line reads `Tokens: N (no budget)`. When no goal is set: `Codex Goal: (none set for 019e5cc5)`.
 
+Goal requests resolve the required session index, then open the optional goals
+source read-only; they do not read rollout records. `meta.goal_lookup` records
+metadata, opening, exact-row acquisition and close failures. A missing goals
+database or healthy missing row returns `goal: null` and exit **0**. Denied,
+corrupt or interrupted goal acquisition exits **3**. An acquired goal survives a
+close failure with a warning. Missing or ambiguous sessions retain exit **2**;
+required index failure gives **3**. Source decisions and the nullable goal remain
+checked through presentation, and failed analysis is an MCP error.
+
 ---
 
 ## Memory Pipeline
@@ -370,7 +379,7 @@ UUIDs are distinguished from denied metadata, corrupt SQLite and interrupted
 queries. Source failures report their actual phase instead of claiming no
 session exists. This evidence covers UUID lookup, including the index used to
 select a thread goal. Direct transcript views consume these decisions for
-outcome policy; catalog/search and goal-input qualification remain separate.
+outcome policy; goal reads also qualify their optional database as described below.
 
 ---
 
@@ -402,7 +411,7 @@ same execution facts: usable partial data is returned with its disclosures;
 failed required analysis is an error using the existing private-failure wording.
 
 This policy covers overview, messages/last, tools, errors, shell, tokens, workflow,
-timeline, digest, exchanges and indexed records. Goal, catalog/search, install,
+timeline, digest, exchanges, indexed records and goals. Catalog/search, install,
 unknown legacy suffixes, element, batch, stdin and check transports remain
 separately scoped; this is no complete Codex migration claim.
 

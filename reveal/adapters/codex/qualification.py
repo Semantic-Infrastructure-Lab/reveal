@@ -23,7 +23,7 @@ COUNTS = {'codex_session_overview': ('user_turns', 'agent_turns', 'tool_calls', 
           'codex_shell': ('total',), 'codex_tokens': ('total_turns',), 'codex_workflow': ('total',),
           'codex_timeline': ('total',), 'codex_digest': ('prompt_count', 'narrative_turn_count', 'user_turns', 'agent_turns'),
           'codex_exchanges': ('exchange_count',), 'codex_message': ('record_index',)}
-RESULT_VARIANTS = {kind: ('codex_error', 'codex_not_installed') for kind in CONTAINERS}
+RESULT_VARIANTS = {kind: ('codex_error', 'codex_not_installed') for kind in (*CONTAINERS, 'codex_goal')}
 ROLLOUT_RULE = 'Consumed nonblank JSONL lines before Codex normalization, rollback marking and view selection; object decoding does not validate every payload'
 
 
@@ -83,6 +83,13 @@ def _source_state(lookup, rollout):
     return AnalysisCompleteness.COMPLETE
 
 
+def _goal_state(lookup, goal):
+    if not goal.get('failed_operations') and not lookup.get('failed_operations'):
+        return AnalysisCompleteness.COMPLETE
+    usable = goal.get('query_complete') or goal.get('decision') == 'source_absent'
+    return AnalysisCompleteness.INCOMPLETE if usable else AnalysisCompleteness.FAILED
+
+
 def execution_facts(result):
     if _invalid_envelope(result):
         return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
@@ -94,7 +101,7 @@ def execution_facts(result):
     if absence:
         return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE,
                                       failure_cause=FailureCause.INVALID_REQUEST)
-    state = _source_state(lookup, rollout)
+    state = _goal_state(lookup, meta.get('goal_lookup', {})) if result.get('type') == 'codex_goal' else _source_state(lookup, rollout)
     cause = FailureCause.INVALID_REQUEST if state is AnalysisCompleteness.COMPLETE else FailureCause.ANALYSIS
     return result_execution_facts(result, completeness=state, failure_cause=cause)
 
@@ -174,18 +181,36 @@ def _view_error(adapter, result, expected_type, prior_facts):
     return validate_observation_counts(result, adapter._session_observations, current, label='Codex')
 
 
+def _goal_error(adapter, result):
+    expected = adapter._goal_answer
+    if result.get('meta', {}).get('goal_lookup') != expected['meta']['goal_lookup']:
+        return 'Codex goal answer changed its source acquisition decisions'
+    for key in ('goal', 'thread_id', 'error'):
+        if (key in result) != (key in expected) or result.get(key) != expected.get(key):
+            return 'Codex goal answer changed its acquired goal or absence diagnostic'
+    return None
+
+
+def _rejected_index_error(adapter, result, expected_type):
+    reason = adapter._request_index_error
+    if (result.get('type') != expected_type or reason != index_request_error(adapter.resource) or result.get('error') != reason
+            or result.get('scope', {}).get('request_rejected') != reason):
+        return 'Codex answer changed its authored index rejection'
+    return None
+
+
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
-    if result.get('source') != str(adapter.CODEX_DB) or result.get('source_type') != 'database':
-        return 'Codex answer changed its required index source identity'
+    goal = expected_type == 'codex_goal' and result.get('type') == 'codex_goal'
+    source = adapter.CODEX_HOME / 'goals_1.sqlite' if goal else adapter.CODEX_DB
+    if result.get('source') != str(source) or result.get('source_type') != 'database':
+        return 'Codex answer changed its required database source identity'
     if adapter._request_index_error is not None:
-        reason = adapter._request_index_error
-        if (result.get('type') != expected_type or reason != index_request_error(adapter.resource) or result.get('error') != reason
-                or result.get('scope', {}).get('request_rejected') != reason):
-            return 'Codex answer changed its authored index rejection'
-        return None
+        return _rejected_index_error(adapter, result, expected_type)
     error = _lookup_error(adapter, result)
     if error or adapter._session_lookup.selected is None:
         return error
+    if goal:
+        return _goal_error(adapter, result)
     error = _rollout_error(adapter, result)
     if error:
         return error
