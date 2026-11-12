@@ -98,7 +98,7 @@ _RANK = ParamSpec('rank', 'string', 'Rank every function by in-degree, most-call
                   cli=CliBinding(('--rank',), metavar='callers'))
 _TOP = ParamSpec('top', 'integer', 'Max entries for rank (default 10) or uncalled (default all); 0 = all; '
                  'other modes ignore it with a warning', None, _calls_top, examples=('top=20',), minimum=0,
-                 zero_policy='all', role='analysis', cli=CliBinding(('--top',), metavar='N'))
+                 zero_policy='all', role='analysis', cli=CliBinding(('--top', '--limit'), metavar='N'))
 _UNCALLED = _flag_spec('uncalled', 'List every function/method with no callers (retired, D8: ?callers=NAME for one '
                        'function, the language\'s own dead-code tool for the rest; prints no confidence)',
                        role='operation')

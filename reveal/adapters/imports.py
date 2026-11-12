@@ -245,7 +245,7 @@ PARAM_SPECS: Tuple[ParamSpec, ...] = (
               cli=CliBinding(('--rank',), metavar='fan-in')),
     ParamSpec('top', 'integer', 'Limit ?rank rows (default: all)', None, _top_value,
               ('imports://src?rank=fan-in&top=20',), minimum=0, role='analysis',  # the adapter cuts the rows
-              cli=CliBinding(('--top',), metavar='N')),
+              cli=CliBinding(('--top', '--limit'), metavar='N')),
     _flag('entrypoints', 'Files with fan-in 0 (entry points, scripts or dead code)'),
     _flag('components', 'Score each directory as a component'),
     _flag('external', 'Package table: unresolved (third-party or unresolved-local) and stdlib packages by use'),

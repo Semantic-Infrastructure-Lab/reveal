@@ -51,9 +51,14 @@ def _parse_file_line_syntax(path_str: str) -> tuple[Path, Optional[str]]:
     return path, element_from_path
 
 
-def _validate_path_exists(path: Path, path_str: str) -> None:
+def _validate_path_exists(path: Path, path_str: str, element: Optional[str] = None) -> None:
     """Validate that path exists, providing helpful error messages."""
     if not path.exists():
+        from ...adapters.registry import list_supported_schemes
+        if path_str in list_supported_schemes():
+            target = shlex.quote(f'{path_str}://{element or "."}')
+            print(f'Error: {path_str} is a URI noun: reveal {target}', file=sys.stderr)
+            sys.exit(2)
         cwd = os.getcwd()
         if ':' in path_str and re.search(r':\d+', path_str):
             base_path = path_str.rsplit(':', 1)[0]
@@ -642,7 +647,7 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     _guard_related_flags(args, path_str)
 
     path, element_from_path = _parse_file_line_syntax(path_str)
-    _validate_path_exists(path, path_str)
+    _validate_path_exists(path, path_str, getattr(args, 'element', None))
 
     _validate_effects_file_view(args, is_directory=path.is_dir())
 

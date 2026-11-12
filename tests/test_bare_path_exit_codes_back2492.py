@@ -6,6 +6,7 @@ the code `reveal check <missing>` already returns.
 """
 
 from conftest import _run_reveal_in
+import pytest
 
 
 def _write(tmp_path, name, text):
@@ -18,6 +19,22 @@ def test_missing_path_exits_2(tmp_path):
     result = _run_reveal_in(tmp_path, 'no_such_file.py')
     assert result.returncode == 2
     assert 'no_such_file.py not found' in result.stderr
+
+
+@pytest.mark.parametrize('scheme', ['ast', 'git', 'markdown', 'json', 'codex'])
+def test_uri_only_noun_names_working_spelling(tmp_path, scheme):
+    result = _run_reveal_in(tmp_path, scheme, 'src with spaces')
+    assert result.returncode == 2
+    assert f'{scheme}://src with spaces' in result.stderr
+    assert 'URI noun' in result.stderr
+    assert 'Running from' not in result.stderr
+
+
+def test_existing_directory_named_for_a_scheme_stays_a_path(tmp_path):
+    (tmp_path / 'ast').mkdir()
+    result = _run_reveal_in(tmp_path, 'ast')
+    assert result.returncode == 0
+    assert 'URI noun' not in result.stderr
 
 
 def test_missing_path_exits_2_like_check(tmp_path):

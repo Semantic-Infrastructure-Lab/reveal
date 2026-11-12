@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Calls and Imports rankings and Overview now accept `--limit` as an alias for their existing `--top` cap; help states which views apply it. Typing a URI-only noun as a subcommand now names its URI spelling instead of reporting a missing file (BACK-2603, BACK-2605).
+
 - Calls reverse walks now retain definition sites and label explicit import targets at later levels, including calls to a different same-named definition. The disclosed name-candidate population stays unchanged; target identity is evidence alongside those candidates (BACK-2607).
 
 - Calls `--detail` and Trace now use parameter names extracted from syntax, so commas or parentheses inside defaults cannot invent parameters. Unqualified language or binding forms report parameters as unavailable (`null` in JSON) (BACK-2591).

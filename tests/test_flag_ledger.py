@@ -302,6 +302,26 @@ def test_a_used_flag_gets_no_note(db):
         assert 'has no effect' not in proc.stderr, (argv, proc.stderr)
 
 
+@pytest.mark.parametrize('noun,mode', [
+    ('calls', ('--rank', 'callers')),
+    ('imports', ('--rank', 'fan-in')),
+    ('overview', ()),
+])
+def test_declared_native_cap_accepts_limit(db, noun, mode):
+    for index in range(5):
+        (db / f'm{index}.py').write_text(
+            f'import m{(index + 1) % 5}\n\ndef f{index}():\n'
+            f'    return m{(index + 1) % 5}.f{(index + 1) % 5}()\n', encoding='utf-8')
+    results = [_cli(noun, '.', *mode, flag, '2', '--format', 'json', cwd=db)
+               for flag in ('--top', '--limit')]
+    assert [result.returncode for result in results] == [0, 0], [r.stderr for r in results]
+    assert json.loads(results[0].stdout) == json.loads(results[1].stdout)
+    assert 'has no effect' not in results[1].stderr
+    full = _cli(noun, '.', *mode, '--top', '4', '--format', 'json', cwd=db)
+    assert full.returncode == 0, full.stderr
+    assert json.loads(full.stdout) != json.loads(results[1].stdout)
+
+
 # ---------------------------------------------------------------------------
 # 3. The ratchet: adapter x flag, honored or named
 # ---------------------------------------------------------------------------

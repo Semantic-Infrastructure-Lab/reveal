@@ -437,7 +437,7 @@ class OverviewAdapter(ResourceAdapter):
         ParamSpec('top', 'integer', 'Rows per map section; comparison centroid population is max(top,1)*4',
                   5, _overview_top, minimum=0, role='analysis', examples=('top=10',),
                   zero_policy='Ordinary: no graph rows, retain totals and diagnostics; comparison: population 4',
-                  cli=CliBinding(('--top',), metavar='N')),
+                  cli=CliBinding(('--top', '--limit'), metavar='N')),
         ParamSpec('no_git', 'boolean', 'Removed: use Git queries for history',
                   False, _obsolete_git, role='analysis', cli=CliBinding(('--no-git',), action='store_true')),
         ParamSpec('no_imports', 'boolean', 'Request only the recognized-code census; omit import analysis explicitly',
