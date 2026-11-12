@@ -2,6 +2,10 @@
 from typing import Optional
 
 
+def _full_output(result):
+    return bool(result.get('full') or result.get('_display', {}).get('verbose'))
+
+
 def _tool_summary(name: str, inp: dict) -> str:
     """One-line summary of a tool call: ToolName → key param."""
     if name in ('Write', 'Edit', 'Read', 'NotebookEdit'):
@@ -130,7 +134,7 @@ def _render_claude_tool_calls(result: dict) -> None:
     session = result.get('session', 'unknown')
 
     display = result.get('_display', {})
-    verbose = display.get('verbose', False)
+    verbose = _full_output(result)
     explicit_max = display.get('max_snippet_chars', None)
     if verbose:
         cmd_limit = None
@@ -246,6 +250,27 @@ def _render_claude_thinking(result: dict) -> None:
         print()
 
 
+def _user_content_summary(blocks):
+    text_parts = []
+    tool_result_count = 0
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        btype = block.get('type', '')
+        if btype == 'text':
+            text_parts.append(block.get('text', ''))
+        elif btype == 'tool_result':
+            tool_result_count += 1
+    return '\n'.join(text_parts).strip(), tool_result_count
+
+
+def _render_full_user_content(blocks):
+    for block in blocks:
+        if isinstance(block, dict):
+            _render_raw_block(block, max_chars=None)
+    print()
+
+
 def _render_claude_user_messages(result: dict) -> None:
     """Render user messages: first message as full text (the prompt), rest compact."""
     session = result.get('session', 'unknown')
@@ -261,20 +286,12 @@ def _render_claude_user_messages(result: dict) -> None:
         ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
         blocks = msg.get('content', [])
 
-        text_parts = []
-        tool_result_count = 0
-        for block in blocks:
-            if not isinstance(block, dict):
-                continue
-            btype = block.get('type', '')
-            if btype == 'text':
-                text_parts.append(block.get('text', ''))
-            elif btype == 'tool_result':
-                tool_result_count += 1
-
-        text = '\n'.join(text_parts).strip()
+        text, tool_result_count = _user_content_summary(blocks)
 
         print(f"[msg {msg_idx}] {ts}")
+        if result.get('full') is True:
+            _render_full_user_content(blocks)
+            continue
 
         if text:
             limit = 1200 if i == 0 else 300
@@ -381,7 +398,7 @@ def _render_claude_message(result: dict) -> None:
     print()
 
     display = result.get('_display', {})
-    verbose = display.get('verbose', False)
+    verbose = _full_output(result)
     explicit_max = display.get('max_snippet_chars', None)
     if verbose:
         block_max = None  # no truncation

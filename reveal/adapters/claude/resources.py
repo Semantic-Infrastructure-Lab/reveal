@@ -1,6 +1,8 @@
 """Shared Claude session identifier parsing and canonical view names."""
 import re
 
+from ...utils.query_parser import peek_query_items
+
 # Matches the adjective-noun-MMDD pattern used for named TIA/Claude sessions.
 _SESSION_NAME_RE = re.compile(r'^([a-z]+-[a-z]+-\d{4})(?:/|$)')
 # Matches UUID session names (Windows / standard Claude Code layout).
@@ -40,3 +42,46 @@ def _parse_session_identifier(resource: str):
 SESSION_VIEW_NAMES = ('overview', 'messages', 'prompts', 'thinking', 'tools', 'files',
                       'workflow', 'agents', 'context', 'timeline', 'errors', 'tokens',
                       'digest', 'exchanges', 'message', 'search', 'chain')
+
+
+SESSION_VIEWS = frozenset(('', 'messages', 'prompts', 'thinking', 'tools', 'files', 'workflow',
+                           'agents', 'context', 'timeline', 'errors', 'summary', 'tokens',
+                           'digest', 'exchanges', 'message'))
+QUERY_VIEWS = (('summary', 'claude_analytics'), ('digest', 'claude_digest'),
+               ('timeline', 'claude_timeline'), ('errors', 'claude_errors'),
+               ('tokens', 'claude_token_breakdown'), ('tools', 'claude_tool_calls'),
+               ('search', 'claude_search_results'), ('tail', 'claude_messages'), ('last', 'claude_messages'))
+RESOURCE_VIEWS = (('thinking', 'claude_thinking'), ('tools', 'claude_tool_summary'),
+                  ('files', 'claude_files'), ('workflow', 'claude_workflow'),
+                  ('agents', 'claude_session_agents'), ('context', 'claude_context'),
+                  ('prompts', 'claude_user_prompts'), ('exchanges', 'claude_exchanges'),
+                  ('errors', 'claude_errors'), ('summary', 'claude_analytics'),
+                  ('digest', 'claude_digest'), ('timeline', 'claude_timeline'),
+                  ('tokens', 'claude_token_breakdown'), ('messages', 'claude_messages'))
+
+
+def _active(params):
+    return {key for key, value in peek_query_items(params) if value is not None and value is not False}
+
+
+def selected_type(resource, params):
+    active = _active(params)
+    if len(active.intersection(('tools', 'errors', 'contains'))) > 1:
+        return 'claude_filtered_results'
+    for key, kind in QUERY_VIEWS:
+        if key in active:
+            return kind
+    for segment, kind in RESOURCE_VIEWS:
+        if '/' + segment in resource:
+            if 'raw' in active and segment in ('prompts', 'messages'):
+                return 'claude_user_messages' if segment == 'prompts' else 'claude_assistant_messages'
+            return kind
+    if '/message/' in resource:
+        return 'claude_message'
+    if resource.endswith('/message'):
+        return 'claude_message_range'
+    return 'claude_session_overview'
+
+
+NON_SESSION_NAMESPACES = ('files', 'history', 'info', 'settings', 'plans', 'config', 'memory',
+                          'agents', 'hooks', 'sessions', 'search')

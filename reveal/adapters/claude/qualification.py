@@ -8,20 +8,7 @@ from ...utils.results import AnalysisCompleteness, result_execution_facts
 from .params import PARAM_SPECS
 from .analysis.records import valid_record_proof as _valid_record_proof
 
-SESSION_VIEWS = frozenset(('', 'messages', 'prompts', 'thinking', 'tools', 'files', 'workflow',
-                           'agents', 'context', 'timeline', 'errors', 'summary', 'tokens',
-                           'digest', 'exchanges', 'message'))
-QUERY_VIEWS = (('summary', 'claude_analytics'), ('digest', 'claude_digest'),
-               ('timeline', 'claude_timeline'), ('errors', 'claude_errors'),
-               ('tokens', 'claude_token_breakdown'), ('tools', 'claude_tool_calls'),
-               ('search', 'claude_search_results'), ('tail', 'claude_messages'), ('last', 'claude_messages'))
-RESOURCE_VIEWS = (('thinking', 'claude_thinking'), ('tools', 'claude_tool_summary'),
-                  ('files', 'claude_files'), ('workflow', 'claude_workflow'),
-                  ('agents', 'claude_session_agents'), ('context', 'claude_context'),
-                  ('prompts', 'claude_user_prompts'), ('exchanges', 'claude_exchanges'),
-                  ('errors', 'claude_errors'), ('summary', 'claude_analytics'),
-                  ('digest', 'claude_digest'), ('timeline', 'claude_timeline'),
-                  ('tokens', 'claude_token_breakdown'), ('messages', 'claude_messages'))
+from .resources import SESSION_VIEWS, selected_type
 
 
 def catalog_type(resource, params=None):
@@ -60,29 +47,6 @@ def validate_resource(resource, parse_identifier, prefixes):
     if name and '/' not in name and (view in SESSION_VIEWS or view in ('chain', 'user', 'assistant') or view.startswith('message/')):
         return
     raise RequestValidationError(f'Unsupported Claude session resource: {resource}')
-
-
-def _active(params):
-    return {key for key, value in peek_query_items(params) if value is not None and value is not False}
-
-
-def selected_type(resource, params):
-    active = _active(params)
-    if len(active.intersection(('tools', 'errors', 'contains'))) > 1:
-        return 'claude_filtered_results'
-    for key, kind in QUERY_VIEWS:
-        if key in active:
-            return kind
-    for segment, kind in RESOURCE_VIEWS:
-        if '/' + segment in resource:
-            if 'raw' in active and segment in ('prompts', 'messages'):
-                return 'claude_user_messages' if segment == 'prompts' else 'claude_assistant_messages'
-            return kind
-    if '/message/' in resource:
-        return 'claude_message'
-    if resource.endswith('/message'):
-        return 'claude_message_range'
-    return 'claude_session_overview'
 
 
 def uri_result_type(resource):
@@ -182,6 +146,10 @@ def execution_facts(result):
 
 
 def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
+    from .controls import detail_requirement_error
+    detail_error = detail_requirement_error(adapter, result)
+    if detail_error:
+        return detail_error
     if expected_type in ('claude_plan', 'claude_agent'):
         from .markdown_lookup import lookup_requirement_error
         error = lookup_requirement_error(adapter, result, expected_type, prior_facts)

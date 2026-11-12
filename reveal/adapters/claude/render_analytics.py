@@ -1,4 +1,5 @@
 """Analytics and workflow renderers for the Claude adapter."""
+from .render_messages import _full_output
 
 
 def _render_claude_analytics(result: dict) -> None:
@@ -101,7 +102,7 @@ def _render_claude_workflow(result: dict) -> None:
     filtered_from = result.get('filtered_from', None)
 
     display = result.get('_display', {})
-    verbose = display.get('verbose', False)
+    verbose = _full_output(result)
     max_chars = display.get('max_snippet_chars', None)
     if verbose:
         truncate_at = None

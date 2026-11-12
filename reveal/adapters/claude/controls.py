@@ -1,6 +1,6 @@
 """Canonical controls translate to the existing, resource-specific readers."""
 from ...errors import RequestValidationError
-from .resources import _parse_session_identifier
+from .resources import _parse_session_identifier, selected_type, NON_SESSION_NAMESPACES
 
 
 def apply_view(params, resource):
@@ -8,9 +8,7 @@ def apply_view(params, resource):
     if view is None:
         return resource
     noun = resource.partition('/')[0]
-    namespaces = ('files', 'history', 'info', 'settings', 'plans', 'config', 'memory',
-                  'agents', 'hooks', 'sessions', 'search')
-    if resource in ('', '.') or noun in namespaces:
+    if resource in ('', '.') or noun in NON_SESSION_NAMESPACES:
         raise RequestValidationError('view is supported only on session resources')
     name, previous = _parse_session_identifier(resource)
     if not name or '/' in name:
@@ -32,6 +30,42 @@ def _validate_view_selectors(params, view):
     for selector, views in compatible.items():
         if selector in params and view not in views:
             raise RequestValidationError(f'view={view} conflicts with {selector}')
+
+
+_FULL_TYPES = frozenset(('claude_messages', 'claude_message', 'claude_message_range',
+                         'claude_exchanges', 'claude_workflow', 'claude_tool_calls',
+                         'claude_assistant_messages'))
+_RAW_TYPES = frozenset(('claude_messages', 'claude_user_prompts', 'claude_user_messages',
+                        'claude_assistant_messages'))
+
+
+def apply_detail(params, resource):
+    level = params.get('detail')
+    if level is None:
+        return
+    if level == 'normal':
+        if any(key in params for key in ('summary', 'full', 'raw')):
+            raise RequestValidationError('detail=normal conflicts with a legacy detail control')
+        return
+    if resource in ('', '.') or resource.partition('/')[0] in NON_SESSION_NAMESPACES:
+        raise RequestValidationError(f'detail={level} is not supported on this resource')
+    kind = selected_type(resource, params)
+    if level == 'summary' and kind in ('claude_session_overview', 'claude_analytics'):
+        if 'raw' in params or 'full' in params:
+            raise RequestValidationError('detail=summary conflicts with raw/full')
+        params['summary'] = True
+    elif level == 'full' and kind in _FULL_TYPES:
+        params['full'] = True
+    elif level == 'raw' and kind in _RAW_TYPES:
+        params.update(raw=True, full=True)
+    else:
+        raise RequestValidationError(f'detail={level} is not supported by this session view')
+
+
+def detail_requirement_error(adapter, result):
+    if adapter.query_params.get('detail') in ('full', 'raw') and result.get('full') is not True:
+        return 'Claude answer missing requested full/raw detail intent'
+    return None
 
 
 def apply_match(params, resource):

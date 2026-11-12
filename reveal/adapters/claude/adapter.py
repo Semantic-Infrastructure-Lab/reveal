@@ -528,6 +528,8 @@ class ClaudeAdapter(ResourceAdapter):
         result: Dict[str, Any] = dict(ResultBuilder.create(
             '', str(self.conversation_path) if self.conversation_path else '',
             source_type='file', contract_version=CONTRACT_VERSION))
+        if self.query_params.get('detail') in ('full', 'raw'):
+            result['full'] = True
         proof = getattr(self, '_transcript_analysis', None)
         if proof is not None:
             self._attach_transcript_evidence(result, proof)
@@ -820,9 +822,10 @@ class ClaudeAdapter(ResourceAdapter):
             return False
 
         # Composite if we have multiple filter-type params
-        filter_params = {'tools', 'errors', 'contains'}
-        active_filters = filter_params & set(self.query_params.keys())
-        return len(active_filters) > 1
+        return len(self._composite_filter_names()) > 1
+
+    def _composite_filter_names(self):
+        return [key for key in self.query_params.keys() if key in ('tools', 'errors', 'contains')]
 
     def _handle_composite_query(self, messages: List[Dict]) -> Dict[str, Any]:
         """Handle composite queries with multiple filters.
@@ -860,7 +863,7 @@ class ClaudeAdapter(ResourceAdapter):
         base.update({
             'session': self.session_name,
             'query': self.query,
-            'filters_applied': list(self.query_params.keys()),
+            'filters_applied': self._composite_filter_names(),
             'result_count': len(results),
             'results': results
         })

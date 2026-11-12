@@ -1958,6 +1958,18 @@ Non-session namespaces reject `view`. API `view=None` clears a valid URI view,
 and invalid original views cannot be hidden by API overrides. Existing path
 spellings retain their readers, scopes and source receipts.
 
+Canonical `detail` uses `summary`, `normal`, `full` or `raw`. `normal` preserves
+the selected reader's default. `summary` selects existing overview analytics;
+`raw` on messages/prompts selects the existing role-record population. `full`
+expands existing message/range/exchange/workflow/tool-call text displays, with
+`full: true` retained in JSON (also present for raw detail). Other readers or
+unsupported levels reject with exit 2. Conflicting legacy detail flags reject;
+original URI level/scope errors validate before API overrides. The requested
+full/raw marker cannot be removed by presentation. Raw prompt detail also prints
+the selected raw tool-result bodies instead of only the legacy compact counts.
+Legacy flags retain their
+readers; display controls are not reported as source filters.
+
 Store listings (`claude://` and `claude://sessions`) also qualify their required
 directory and metadata acquisition. `meta.session_catalog` counts non-agent
 JSONL-named candidates, acquired entries and failed metadata operations before

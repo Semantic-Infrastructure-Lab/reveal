@@ -42,6 +42,7 @@ def _spec(name, schema):
 
 PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS.items()) + (
     ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence),
+    ParamSpec('detail', 'string', 'summary, normal, full or raw; levels are qualified by the existing reader', None, text, choices=('summary', 'normal', 'full', 'raw')),
     ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES),
     ParamSpec('match', 'string', 'Match text in this resource: session content, narrative messages, tool results, cross-session content, workspace lists or history; unsupported views reject',
               None, text, uri_codec='percent'),
@@ -53,8 +54,9 @@ def bind_request(query, params, resource=''):
     # Presence readers must not mistake an explicit False/None override for a flag.
     runtime = QueryParams({key: value for key, value in peek_query_items(bound)
                            if value is not None and not (key in PRESENCE_FLAGS and value is False)})
-    from .controls import apply_view, apply_match
+    from .controls import apply_view, apply_detail, apply_match
     resource = apply_view(runtime, resource)
+    apply_detail(runtime, resource)
     apply_match(runtime, resource)
     for spec in PARAM_SPECS:
         if spec.name in dict.keys(runtime):
