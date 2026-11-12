@@ -1,6 +1,5 @@
 """Inventory embedded Markdown commands; they run when their source does (BACK-1365)."""
 import shlex
-from pathlib import Path
 
 import pytest
 
@@ -33,10 +32,12 @@ def _write(docs, source, text):
 
 
 @pytest.mark.parametrize('command', README_COMMANDS)
-def test_readme_embedded_examples_keep_text_tokens_and_distinct_provenance(command):
-    readme = Path(recipes.__file__).parents[1] / 'README.md'
-    assert f'`{command}`' in readme.read_text(encoding='utf-8')
-    rows = [row for row in recipes._documented_commands() if row[0] == README]
+def test_readme_embedded_examples_keep_text_tokens_and_distinct_provenance(command, tmp_path):
+    # Parser coverage must survive intentional changes to the product README's
+    # examples and layout; this fixture explicitly supplies an embedded block.
+    docs = tmp_path / 'reveal' / 'docs'
+    _write(docs, '../../README.md', f'```md\n1. `{command}`\n```\n')
+    rows = [row for row in recipes._documented_commands(docs) if row[0] == README]
     assert (README, command, shlex.split(command), False) in rows
     assert recipes._source_cohort_reason(README, shlex.split(command)) is None  # README runs
 
@@ -137,14 +138,22 @@ def test_embedded_commands_do_not_shadow_later_legacy_shell_examples(tmp_path):
 
 
 def test_existing_shell_inventory_and_execution_eligibility_remain_identical(monkeypatch):
-    rows = list(recipes._documented_commands())
-    shell_rows = [row for row in rows if not row[0].endswith(EMBEDDED)]
-    assert len(rows) > len(shell_rows)
+    shell_rows = [row for row in recipes._documented_commands() if not row[0].endswith(EMBEDDED)]
+    # Exercise both added cohorts even when the current docs contain no embedded
+    # Markdown instructions. Literal identities and every shell mark stay fixed.
+    queries = ('reveal app.py process_batch --head 987',
+               'reveal help://schemas/ast --provenance --format json')
+    shell_tokens = {tuple(row[2]) for row in shell_rows}
+    assert all(tuple(shlex.split(query)) not in shell_tokens for query in queries)
+    embedded = [(README, query, shlex.split(query), False) for query in queries]
+    monkeypatch.setattr(recipes, '_documented_commands', lambda docs=None: iter([*shell_rows, *embedded]))
     named = recipes._named_fixture_commands()
     discovery = recipes._documentation_commands()
     monkeypatch.setattr(recipes, '_documented_commands', lambda docs=None: iter(shell_rows))
     prior_named = recipes._named_fixture_commands()
     prior_discovery = recipes._documentation_commands()
+    assert len(named) > len(prior_named)
+    assert len(discovery) > len(prior_discovery)
     by_query = {p.values: p for p in named}
     assert all(by_query[p.values] == p for p in prior_named)
     assert discovery[:len(prior_discovery)] == prior_discovery

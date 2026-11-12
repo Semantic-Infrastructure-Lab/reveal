@@ -2,7 +2,8 @@
 
 ``reveal.utils.results.outcome_of`` says what a result reports: ``failed`` (a top-level
 ``error``), ``not_applicable`` (BACK-1210) or ``ok``. ``cli/routing/uri._emit_result``
-exits 1 after rendering a failed result, for every URI adapter, in text and JSON alike.
+retains exit 1 for legacy failed results. Qualified operation owners supply the
+D6 invalid-request (2) or required-analysis/output-failure (3) policy in either format.
 
 Before it, each adapter or renderer decided its own exit code, and an error result from
 calls://, codex://, claude:// or json:// rendered and exited 0 (BACK-1520, BACK-1525,
@@ -91,7 +92,11 @@ def test_claude_without_a_projects_dir_exits_nonzero(proj, fmt, monkeypatch):
     monkeypatch.setattr(get_adapter_class('claude'), 'CONVERSATION_BASE',
                         proj / 'no-claude' / 'projects')
     r = _run_reveal_direct('claude://sessions', '--format', fmt)
-    assert r.returncode == 1
+    assert r.returncode == 3  # BACK-2617: required catalog discovery failed.
+    if fmt == 'json':
+        payload = _json(r)
+        assert payload['meta']['session_catalog']['discovery_failures'] == 1
+        assert payload['meta']['errors'] == []
 
 
 @pytest.mark.parametrize('fmt', FORMATS)

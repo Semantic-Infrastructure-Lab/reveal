@@ -67,7 +67,7 @@ def test_real_session_resources_construct_once_without_legacy_warning(session_ad
     assert calls == [((expected_resource, query), {})]
     assert result.resource == expected_resource and result.query == query
     assert result.query_params == ({'search': 'auth'} if kind == 'query-only'
-                                   else {'last': '2'} if kind == 'session-query' else {})
+                                   else {'last': 2 if scheme == 'claude' else True} if kind == 'session-query' else {})
     assert not [notice for notice in caught if issubclass(notice.category, DeprecationWarning)]
     if scheme == 'claude':
         assert result.CONVERSATION_BASE.is_dir()
@@ -120,18 +120,18 @@ def test_real_constructor_failure_propagates_once(session_adapter, monkeypatch, 
     error = error_type('session initialization failed')
     calls = []
 
-    def failed(query):
+    def failed(query, *args, **kwargs):
         calls.append(query)
         raise error
 
-    # Both real constructors parse queries before route-specific validation.
-    # Inject at that live seam so the no-retry contract does not depend on which
-    # warning helper an adapter uses for its supported query parameters.
-    monkeypatch.setattr(f'{adapter.__module__}.parse_query_params', failed)
+    # Inject at the current binding seam, before source acquisition. Both
+    # canonical constructors must propagate this exact exception without retry.
+    binding = 'bind_request' if scheme == 'claude' else 'bind_query'
+    monkeypatch.setattr(f'{adapter.__module__}.{binding}', failed)
     with pytest.raises(error_type) as caught:
         adapter.from_uri(scheme, resource, None)
     assert caught.value is error
-    assert calls == ['search=auth' if '?' in resource else '']
+    assert calls == ['search=auth' if '?' in resource else None]
 
 
 def test_legacy_keyword_plugin_retains_compatibility_and_one_warning(monkeypatch):
