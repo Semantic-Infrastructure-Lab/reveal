@@ -410,6 +410,11 @@ class ClaudeAdapter(ResourceAdapter):
         from .qualification import answer_requirement_error
         return answer_requirement_error(self, result, expected_type, prior_facts)
 
+    @classmethod
+    def validate_original_request(cls, params, resource):
+        # Resource-sensitive canonical controls validate before API overrides.
+        bind_query(None, params, resource)
+
     @staticmethod
     def public_diagnostic(result: Dict[str, Any]) -> Optional[str]:
         kind = result.get('type')
@@ -492,7 +497,7 @@ class ClaudeAdapter(ResourceAdapter):
             raise TypeError(f"resource must be a string, got {type(resource).__name__}")
         self.resource = resource
         self.query = query if query is not None else getattr(params, '_source_query', None)
-        self.query_params = bind_query(query, params)
+        self.query_params = bind_query(query, params, resource)
         self._warn_unknown_query_params(self.query_params)  # BACK-507
         self.session_name = self._parse_session_name(resource) or "unknown"
         self.conversation_path: Optional[Path] = None

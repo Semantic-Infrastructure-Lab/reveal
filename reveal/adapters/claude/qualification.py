@@ -24,10 +24,11 @@ RESOURCE_VIEWS = (('thinking', 'claude_thinking'), ('tools', 'claude_tool_summar
                   ('tokens', 'claude_token_breakdown'), ('messages', 'claude_messages'))
 
 
-def catalog_type(resource):
+def catalog_type(resource, params=None):
     path, _, query = resource.partition('?')
     if path in ('', '.', 'sessions') or path.startswith('sessions/'):
-        params = prepare_declared_params(PARAM_SPECS, query, 'uri')
+        if params is None:
+            params = prepare_declared_params(PARAM_SPECS, query, 'uri')
         return ('claude_cross_session_search' if dict(peek_query_items(params)).get('search')
                 else 'claude_session_list')
     if path == 'search' or path.startswith('search/'):
@@ -85,6 +86,9 @@ def selected_type(resource, params):
 
 
 def uri_result_type(resource):
+    from .params import bind_query
+    path, _, query = resource.partition('?')
+    params = bind_query(query, None, path)
     from .workspace_scan import workspace_listing_type
     workspace = workspace_listing_type(resource)
     if workspace:
@@ -94,13 +98,11 @@ def uri_result_type(resource):
         return installed
     if history_resource(resource):
         return 'claude_history'
-    kind = catalog_type(resource)
+    kind = catalog_type(resource, params)
     if kind:
         return kind
-    path, _, query = resource.partition('?')
     if path.endswith('/chain'):
         return 'claude_chain'
-    params = prepare_declared_params(PARAM_SPECS, query, 'uri')
     return selected_type(path, params)
 
 

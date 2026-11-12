@@ -1932,6 +1932,20 @@ The removed `/user` and `/assistant` suffixes retain their legacy overview
 fallback; they do not restore role filtering. Empty `session/` remains a missing
 session request. Element and batch transports keep their existing routing policy.
 
+The canonical `match` query/API control uses each resource's existing text
+population. At a session root it searches message content; on `/messages` it
+filters narrative turns; with `tools`/`errors` or on `/errors` it filters tool
+results through the existing composite reader. On session catalogs it searches
+cross-session content; plan/agent/memory listings and history match their own
+text. For example, `claude://session/my-session/messages?match=Fixed` is a
+narrative filter, while `claude://session/my-session?match=Fixed` searches all
+message content. Raw records and views without an existing text matcher reject
+`match` with exit 2. Conflicting legacy `search`/`contains` controls also reject;
+equal controls for the same population coalesce. URI `match` values percent-decode
+once, preserving literal plus signs; API values remain literal,
+and original URI conflicts validate before API overrides. Legacy names retain
+their existing populations. Generated command and retirement work is ongoing.
+
 Store listings (`claude://` and `claude://sessions`) also qualify their required
 directory and metadata acquisition. `meta.session_catalog` counts non-agent
 JSONL-named candidates, acquired entries and failed metadata operations before
