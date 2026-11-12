@@ -1,6 +1,5 @@
 """OpenAI Codex CLI session adapter implementation."""
 
-import json
 import logging
 import os
 import re
@@ -12,6 +11,8 @@ from reveal.reveal_types import CONTRACT_VERSION
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import CodexRenderer
 from ...utils.query import warn_unknown_query_params
+from ...utils.jsonl_records import TranscriptRecords
+from ...utils.results import note_warning
 from ...utils.query_parser import ResourceSpec, param_schema, peek_query_items
 from .params import PARAM_SPECS, _MATCHES, _FULL, bind_query
 from .handlers.sessions import (
@@ -119,6 +120,7 @@ class CodexAdapter(ResourceAdapter):
         if resource is None or not isinstance(resource, str):
             raise TypeError(f'resource must be a string, got {type(resource).__name__}')
         self.resource = resource
+        self._rollout_analysis: Optional[Dict[str, Any]] = None
         self.query = query if query is not None else getattr(params, '_source_query', None)
         self.query_params = bind_query(query, params)
         known = set(self.get_schema()['query_params'])
@@ -198,36 +200,26 @@ class CodexAdapter(ResourceAdapter):
     # ------------------------------------------------------------------
 
     def _load_records(self, jsonl_path: Path) -> List[Dict[str, Any]]:
-        """Read a JSONL file, parse envelope, skip malformed lines.
-
-        Each returned dict: {timestamp, type, payload}
-        Legacy bare-JSON lines (no envelope) are treated as unknown.
-        """
+        """Decode objects with measured source decisions, then retain existing normalization."""
         records: List[Dict[str, Any]] = []
+        reader = TranscriptRecords(jsonl_path, replace_decode=True, opener=open)
         try:
-            with open(jsonl_path, 'r', encoding='utf-8', errors='replace') as fh:
-                for line in fh:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        obj = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if not isinstance(obj, dict):
-                        continue
-                    # Envelope format: must have 'type' at top level
-                    if 'type' in obj:
-                        records.append(normalize_record({
-                            'timestamp': obj.get('timestamp'),
-                            'type': obj.get('type'),
-                            'payload': obj.get('payload', {}),
-                        }))
-                    else:
-                        # Legacy bare-JSON — keep as unknown
-                        records.append({'timestamp': None, 'type': 'unknown', 'payload': obj})
-        except OSError:
+            for obj in reader.records():
+                if 'type' in obj:
+                    records.append(normalize_record({
+                        'timestamp': obj.get('timestamp'),
+                        'type': obj.get('type'),
+                        'payload': obj.get('payload', {}),
+                    }))
+                else:
+                    records.append({'timestamp': None, 'type': 'unknown', 'payload': obj})
+        except (OSError, UnicodeDecodeError):
+            # The reader retains the operation failure; preserve every acquired record.
             pass
+        self._rollout_analysis = {
+            **reader.receipt(), 'opened': reader.opened,
+            'count_rule': 'Consumed nonblank JSONL lines before Codex normalization, rollback marking and view selection; object decoding does not validate every payload',
+        }
         return mark_rolled_back(records)
 
     def _find_jsonl_for_session(self, session_row: Dict[str, Any]) -> Optional[Path]:
@@ -317,6 +309,7 @@ class CodexAdapter(ResourceAdapter):
             base['error'] = _session_lookup_error(session_id, candidates)
             return base
 
+        self._rollout_analysis = None
         jsonl_path = self._find_jsonl_for_session(session_row)
         records: List[Dict[str, Any]] = []
         if jsonl_path:
@@ -362,6 +355,16 @@ class CodexAdapter(ResourceAdapter):
         b = self._get_contract_base()
         b['type'] = result_type
         b['session_id'] = session_row.get('id', '')
+        if self._rollout_analysis is not None:
+            proof = dict(self._rollout_analysis)
+            b.setdefault('meta', {'warnings': [], 'errors': []})['rollout_analysis'] = proof
+            if proof['failed_records'] or proof['recovered_records'] or proof['failures']:
+                note_warning(b, {
+                    'type': 'analysis_incomplete', 'code': 'analysis_incomplete',
+                    'message': (f"Codex rollout: {proof['failed_records']} non-object/invalid record(s), "
+                                f"{proof['recovered_records']} decode repair(s), {len(proof['failures'])} read failure(s); "
+                                'known records retained. Source decisions: JSON meta.rollout_analysis.'),
+                })
         return b
 
     def _result_overview(self, records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> Dict[str, Any]:

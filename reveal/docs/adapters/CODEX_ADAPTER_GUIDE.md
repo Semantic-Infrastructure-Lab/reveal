@@ -353,6 +353,25 @@ reveal 'codex://sessions/?search=authentication&since=2026-07-01'
 
 ---
 
+## Rollout Source Evidence
+
+Session views that consume a resolved rollout retain `meta.rollout_analysis`:
+nonblank candidate lines, decoded object records, failed records and the first
+failed line, UTF-8 replacement repairs, opening/read failures, and the consumed
+source path. Counts precede the existing Codex normalization and rollback
+marking. Valid bare objects still become unknown events; non-object JSON and
+malformed lines are skipped with measured failures. Known records survive an
+interrupted read. Object decoding does not validate every event payload.
+
+The measured reader is shared with Claude; each adapter retains its own event
+interpretation. Required record/decode/read loss is disclosed as an
+`analysis_incomplete` warning. This evidence does **not** adopt D6 execution
+policy: the legacy Codex URI exit remains unchanged. SQLite lookup/discovery,
+unresolved rollout paths, non-rollout resources and per-view required-input
+qualification remain separate work.
+
+---
+
 ## Storage Layout
 
 ```
