@@ -7,10 +7,14 @@ from typing import Dict, Any, Optional, Iterator, cast
 from .git import resolve_git_ref, resolve_git_adapter, read_git_text
 from ..base import get_adapter_class
 from ...diff.structure_diff import element_categories, element_label
-from ...errors import NotApplicableError
+from ...errors import MissingResourceError, NotApplicableError
 from ...registry import get_analyzer
 from ...utils.path_utils import _walk_code_files
 from reveal.utils.lines import split_lines
+
+
+class DiffTargetNotFoundError(MissingResourceError, FileNotFoundError):
+    """An absent comparison target; preserve FileNotFoundError for library callers."""
 
 
 _CODE_KEYS = ('functions', 'classes', 'imports')
@@ -105,8 +109,13 @@ def _resolve_structure(uri: str, **kwargs) -> Dict[str, Any]:
         analyzer_class = get_analyzer(resource, allow_fallback=True)
         if not analyzer_class:
             raise ValueError(f"No analyzer found for file: {resource}")
-        analyzer = analyzer_class(resource)
-        return cast(Dict[str, Any], analyzer.get_structure(**kwargs))
+        try:
+            analyzer = analyzer_class(resource)
+            return cast(Dict[str, Any], analyzer.get_structure(**kwargs))
+        except FileNotFoundError as exc:
+            if exc.filename is None or Path(exc.filename).resolve() != file_path:
+                raise
+            raise DiffTargetNotFoundError(f"File not found: {resource}") from exc
 
     # Get registered adapter
     adapter_class = get_adapter_class(scheme)

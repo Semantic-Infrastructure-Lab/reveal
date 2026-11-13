@@ -1,5 +1,6 @@
 """Core diff adapter for comparing two reveal resources."""
 
+from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -9,7 +10,8 @@ from .resolution import (resolve_uri, extract_metadata, find_element, element_na
 from .help import get_schema as _get_schema, get_help as _get_help
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import DiffRenderer
-from ...utils.results import ResultBuilder
+from ...utils.results import (AnalysisCompleteness, FailureCause, ResultBuilder,
+                              result_execution_facts)
 
 
 @register_adapter('diff')
@@ -45,6 +47,31 @@ class DiffAdapter(ResourceAdapter):
     HONORS_RESULT_CONTROL = False  # no sort=/limit=/offset= handling (BACK-1385)
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # directory diffs walk (BACK-1386)
     CANONICAL_EMPTY_RESOURCE = ''
+
+    RESULT_TYPE = 'diff_comparison'
+    DEFAULT_FAIL_ON = 'none'
+
+    @classmethod
+    def uri_execution_facts(cls, resource: str):
+        """Qualify direct local single-file pairs; composed and directory views stay legacy."""
+        try:
+            left, right = parse_diff_uris(resource)
+            right, element = split_trailing_element(right)
+        except ValueError:
+            return None
+        paths = [uri.removeprefix('file://') for uri in (left, right)]
+        if element or any('://' in path or Path(path).is_dir() for path in paths):
+            return None
+        return cls.execution_facts
+
+    @staticmethod
+    def execution_facts(result):
+        """Missing targets are invalid requests; failed required reads are analysis loss."""
+        errors = result.get('meta', {}).get('errors', []) if isinstance(result, dict) else []
+        cause = (FailureCause.INVALID_REQUEST if any(e.get('code') == 'invalid_request' for e in errors)
+                 else FailureCause.ANALYSIS)
+        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE,
+                                      failure_cause=cause)
 
     def __init__(self, resource: Optional[str] = None, right_uri: Optional[str] = None):
         """Initialize with either a combined resource string or two URIs.

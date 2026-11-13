@@ -1158,7 +1158,7 @@ def test_batch_answers_like_the_uri(harness, scheme):
             legacy = copy.deepcopy(payload)
             legacy['type'] = scheme
             legacy['source'] = uri.partition('://')[2]  # legacy router retains original resource spelling
-            if not getattr(owner, 'RESOURCE_IS_PATH', False) and scheme != 'git':
+            if not getattr(owner, 'RESOURCE_IS_PATH', False) and scheme not in ('git', 'diff'):
                 # The adapter raises its own 'not found' before the router's path check (metrics,
                 # patches, sqlite): a mixed batch still records that raise as adapter_error.
                 legacy['meta']['errors'][0]['code'] = 'adapter_error'
