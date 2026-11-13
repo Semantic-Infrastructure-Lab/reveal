@@ -1,5 +1,6 @@
 """Measured exact/prefix Markdown lookup, including existing ambiguity responses."""
 import stat
+from glob import has_magic
 from datetime import datetime
 from fnmatch import fnmatchcase
 from pathlib import Path
@@ -16,6 +17,8 @@ class MarkdownLookup(WorkspaceScan):
         self.matches: list[str] = []
 
     def resolve(self, directory, name):
+        if has_magic(name):
+            return self._prefix(directory, name)
         path = directory / name
         if not path.suffix:
             path = directory / (name + '.md')
