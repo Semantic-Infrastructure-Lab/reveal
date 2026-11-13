@@ -284,6 +284,8 @@ def run_push_dispatch(repo, tmp_path, args, suite_body='', extra_env=None, befor
     env['REVEAL_CI_LOG_DIR'] = str(tmp_path / 'logs')
     if not (env.get('REVEAL_PRIVATE_TERMS') or env.get('REVEAL_PRIVATE_TERMS_FILE')):
         env['REVEAL_PRIVATE_TERMS'] = 'zz-gate-test-term'  # --push refuses to start without terms (BACK-2489)
+    if not (extra_env or {}).get('REVEAL_CI_VENV_ROOT'):
+        env['REVEAL_CI_VENV_ROOT'] = str(_fake_venv(tmp_path))
     env.update(extra_env or {})
     if before_run is not None:
         before_run(repo, env)
@@ -400,3 +402,17 @@ def test_matching_green_suite_still_requires_successful_wheel_smoke(repo, tmp_pa
     assert marker.with_name(marker.name + '.wheel').read_text(encoding='utf-8') == 'ran'
     assert result.returncode == 1
     assert 'installed-wheel README smoke' in result.stderr
+
+
+@shell_only
+def test_push_driver_needs_no_venv_in_the_callers_home(repo, tmp_path, monkeypatch):
+    home = tmp_path / 'empty-home'
+    home.mkdir()
+    monkeypatch.setenv('HOME', str(home))
+    monkeypatch.setenv('USERPROFILE', str(home))
+    monkeypatch.setenv('PATH', str(Path(sys.executable).parent) + os.pathsep + os.environ['PATH'])
+    commit_file(repo, 'reveal/utils/results.py')
+    result, marker, _ = run_push_dispatch(repo, tmp_path, ['--push'])
+    assert result.returncode == 0, result.stderr
+    assert marker.exists()
+    assert marker.with_name(marker.name + '.wheel').read_text(encoding='utf-8') == 'ran'
