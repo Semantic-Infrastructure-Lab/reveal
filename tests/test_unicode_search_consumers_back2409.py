@@ -1,5 +1,6 @@
 """The registered tools must return decoded Unicode matches across all owners."""
 import json
+from contextlib import closing
 import sqlite3
 
 import pytest
@@ -24,7 +25,7 @@ def test_registered_searches_and_source_edits(tmp_path, provenance):
     rollout.write_text(json.dumps({'type': 'event_msg', 'payload': {
         'type': 'user_message', 'message': 'CAFÉ'}}) + '\n', encoding='utf-8')
     database = tmp_path / 'state.sqlite'
-    with sqlite3.connect(database) as conn:
+    with closing(sqlite3.connect(database)) as conn, conn:
         conn.execute('CREATE TABLE threads(id TEXT,rollout_path TEXT,title TEXT,first_user_message TEXT,model TEXT,updated_at INTEGER,thread_source TEXT,archived INTEGER)')
         conn.execute('INSERT INTO threads VALUES(?,?,?,?,?,?,?,?)',
                      ('synthetic', str(rollout), 'synthetic', '', 'synthetic', 1, 'user', 0))

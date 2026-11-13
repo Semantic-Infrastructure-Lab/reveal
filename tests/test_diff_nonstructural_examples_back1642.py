@@ -12,6 +12,7 @@ are exercised here; nothing below claims MySQL output.
 """
 
 import re
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 
@@ -38,9 +39,9 @@ def _summary_counts(structure_diff):
 
 def test_sqlite_databases_with_different_schemas_are_declined(tmp_path):
     left, right = tmp_path / 'a.db', tmp_path / 'b.db'
-    with sqlite3.connect(left) as conn:
+    with closing(sqlite3.connect(left)) as conn, conn:
         conn.execute('create table t(id integer)')
-    with sqlite3.connect(right) as conn:
+    with closing(sqlite3.connect(right)) as conn, conn:
         conn.execute('create table t(id integer, extra text)')
         conn.execute('create table u(x integer)')
     uri = f'sqlite://{left.as_posix()}:sqlite://{right.as_posix()}'

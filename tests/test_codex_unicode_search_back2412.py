@@ -1,5 +1,6 @@
 """JSON serialization cannot erase a decoded Codex content match."""
 import json
+from contextlib import closing
 import sqlite3
 from unittest.mock import patch
 
@@ -16,7 +17,7 @@ from reveal.adapters.codex.adapter import CodexAdapter
 ])
 def test_serialization_equivalence_and_caps(tmp_path, text, term, expected):
     db = tmp_path / 'state.sqlite'
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         conn.execute('CREATE TABLE threads(id TEXT,rollout_path TEXT,title TEXT,first_user_message TEXT,model TEXT,updated_at INTEGER,thread_source TEXT,archived INTEGER)')
         for escaped in (False, True):
             name = str(escaped)

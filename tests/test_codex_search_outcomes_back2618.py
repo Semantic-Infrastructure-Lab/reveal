@@ -1,5 +1,6 @@
 """Content search cannot turn rollout loss into a clean negative result."""
 import json
+from contextlib import closing
 import sqlite3
 
 import pytest
@@ -77,7 +78,7 @@ def test_search_source_and_match_receipts_survive_presentation(codex, monkeypatc
 
 
 def test_absent_rollout_path_is_failed_selection_not_a_skipped_session(codex):
-    with sqlite3.connect(codex / 'state_5.sqlite') as conn:
+    with closing(sqlite3.connect(codex / 'state_5.sqlite')) as conn, conn:
         conn.execute('UPDATE threads SET rollout_path = ? WHERE id = ?', ('', DOC_SESSION_ID))
     answer = query('codex://sessions?search=authentication')
     proof = answer['meta']['content_analysis']
@@ -130,7 +131,7 @@ def test_search_keeps_matches_from_interrupted_record_prefix(codex, monkeypatch)
 
 def test_search_display_cut_and_output_failure_keep_execution_policy(codex, tmp_path):
     path = next((codex / 'sessions').rglob('*.jsonl'))
-    with sqlite3.connect(codex / 'state_5.sqlite') as conn:
+    with closing(sqlite3.connect(codex / 'state_5.sqlite')) as conn, conn:
         conn.execute('INSERT INTO threads (id, rollout_path, created_at, updated_at) VALUES (?, ?, 1, 2)',
                      ('ffffffff-ffff-7fff-8fff-ffffffffffff', str(path)))
     uri = 'codex://sessions?search=authentication'

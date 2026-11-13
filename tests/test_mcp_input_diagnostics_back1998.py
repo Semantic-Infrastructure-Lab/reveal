@@ -1,5 +1,6 @@
 """Ignored-input evidence belongs in the JSON answer, before MCP transports it."""
 import json
+from contextlib import closing
 import sqlite3
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
@@ -21,7 +22,7 @@ def resources(tmp_path):
     (tmp_path / 'app.py').write_text('def main():\n    return 1\n', encoding='utf-8')
     (tmp_path / 'object.json').write_text('{"value": 1}', encoding='utf-8')
     database = tmp_path / 'data.db'
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute('CREATE TABLE items (id INTEGER)')
     return tmp_path
 

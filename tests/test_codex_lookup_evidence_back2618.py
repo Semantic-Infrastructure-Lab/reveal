@@ -1,4 +1,5 @@
 """SQLite lookup must distinguish absence, ambiguity and failed acquisition."""
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 
@@ -74,7 +75,7 @@ def test_open_race_cannot_create_an_empty_database(codex, monkeypatch):
 def test_ambiguity_reports_bounded_observed_candidates(codex):
     database = codex / 'state_5.sqlite'
     path = next((codex / 'sessions').rglob('*.jsonl'))
-    with sqlite3.connect(database) as conn:
+    with closing(sqlite3.connect(database)) as conn, conn:
         for index in range(2, 11):
             identifier = DOC_SESSION_ID[:-3] + f'{index:03d}'
             conn.execute('INSERT INTO threads (id, rollout_path, created_at, updated_at) VALUES (?, ?, 1, 2)',

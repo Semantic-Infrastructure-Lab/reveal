@@ -1,5 +1,6 @@
 """Goal absence is optional; failed goal acquisition is not empty success."""
 import json
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from test_codex_declared_api_back2618 import codex
 
 def goals(codex):
     path = codex / 'goals_1.sqlite'
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         conn.execute('CREATE TABLE thread_goals (thread_id TEXT PRIMARY KEY, objective TEXT)')
         conn.execute('INSERT INTO thread_goals VALUES (?, ?)', (DOC_SESSION_ID, 'Keep the acquired goal'))
     return path
@@ -24,7 +25,7 @@ def test_goal_source_decisions(codex, state, exit_code):
     if state != 'absent':
         path = goals(codex)
         if state == 'empty':
-            with sqlite3.connect(path) as conn:
+            with closing(sqlite3.connect(path)) as conn, conn:
                 conn.execute('DELETE FROM thread_goals')
         elif state == 'corrupt':
             path.write_bytes(b'broken')
@@ -178,3 +179,30 @@ def test_goal_selector_has_no_false_unused_warning_and_preserves_legacy_priority
     overridden = _run_reveal_in(codex.parent, 'codex://' + DOC_SESSION_ID + '?last&goal', '--format', 'json')
     assert overridden.returncode == 0
     assert json.loads(overridden.stdout)['type'] == 'codex_messages'
+
+
+def test_goal_fixture_releases_windows_sharing_lock(codex, monkeypatch):
+    """Model Windows refusing unlink while the fixture creator still owns the file."""
+    original_connect = sqlite3.connect
+    original_unlink = Path.unlink
+    opened = []
+    class Connection(sqlite3.Connection):
+        closed = False
+        def close(self):
+            super().close()
+            self.closed = True
+    def connect(*args, **kwargs):
+        conn = original_connect(*args, factory=Connection, **kwargs)
+        opened.append(conn)
+        return conn
+    def unlink(path, *args, **kwargs):
+        if path.name == 'goals_1.sqlite' and any(not conn.closed for conn in opened):
+            raise PermissionError(13, 'simulated Windows sharing violation')
+        return original_unlink(path, *args, **kwargs)
+    monkeypatch.setattr(sqlite3, 'connect', connect)
+    monkeypatch.setattr(Path, 'unlink', unlink)
+    try:
+        test_goal_open_race_cannot_create_database(codex, monkeypatch)
+    finally:
+        for conn in opened:
+            conn.close()

@@ -1,5 +1,6 @@
 """SQLite catalog source decisions precede metadata filtering and display."""
 import json
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 
@@ -107,7 +108,7 @@ def test_sdk_catalog_failure_and_repair(codex, monkeypatch):
 
 
 def test_catalog_invalid_timestamp_is_disclosed_before_date_filter(codex):
-    with sqlite3.connect(codex / 'state_5.sqlite') as conn:
+    with closing(sqlite3.connect(codex / 'state_5.sqlite')) as conn, conn:
         conn.execute('UPDATE threads SET updated_at = ? WHERE id = ?', ('not-a-timestamp', DOC_SESSION_ID))
     result = _run_reveal_in(codex.parent, 'codex://sessions?filter=auth-refactor&until=2100-01-01', '--format', 'json')
     assert result.returncode == 3
@@ -154,7 +155,7 @@ def test_metadata_selection_receipt_cannot_change_after_read(codex, monkeypatch)
 
 def test_catalog_display_cut_and_output_failure_keep_execution_policy(codex, tmp_path):
     path = next((codex / 'sessions').rglob('*.jsonl'))
-    with sqlite3.connect(codex / 'state_5.sqlite') as conn:
+    with closing(sqlite3.connect(codex / 'state_5.sqlite')) as conn, conn:
         conn.execute('INSERT INTO threads (id, rollout_path, created_at, updated_at) VALUES (?, ?, 1, 2)',
                      ('ffffffff-ffff-7fff-8fff-ffffffffffff', str(path)))
     result = _run_reveal_in(codex.parent, 'codex://sessions', '--max-items', '1', '--format', 'json')
