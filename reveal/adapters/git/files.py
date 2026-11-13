@@ -184,8 +184,7 @@ def get_file_diff(
                empty_tree, str(commit.id), '--', subpath]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, errors='strict', encoding='utf-8',
-                                timeout=_GIT_DIFF_TIMEOUT_S)
+        result = subprocess.run(cmd, capture_output=True, timeout=_GIT_DIFF_TIMEOUT_S)
     except FileNotFoundError as e:
         # BACK-1166: match _check_pygit2()'s style of actionable guidance
         # instead of letting a raw errno bubble up through main.py's
@@ -198,7 +197,7 @@ def get_file_diff(
         raise ValueError(
             f"git:// diff timed out after {_GIT_DIFF_TIMEOUT_S}s running 'git diff' on {subpath}"
         ) from e
-    diff_text = result.stdout
+    diff_text, decoding_loss = _decode_blob(result.stdout)
 
     if not diff_text:
         diff_text = f"(no changes to {subpath} in this commit)"
@@ -223,6 +222,7 @@ def get_file_diff(
         commit=short_hash,
         commit_info=commit_info,
         diff_text=diff_text,
+        meta=text_evidence(decoding_loss),
         element_filter=element,
     )
 
@@ -430,17 +430,22 @@ def _commit_diff_contains(
     if subpath:
         cmd += ['--', subpath]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, errors='strict', encoding='utf-8',
-                                timeout=_GIT_DIFF_TIMEOUT_S)
+        result = subprocess.run(cmd, capture_output=True, timeout=_GIT_DIFF_TIMEOUT_S)
         if result.returncode != 0:
             # A diff that did not run is empty output, which reads as "pattern not found"
             # (BACK-1854): say it was not searched.
-            detail = split_lines((result.stderr or '').strip())
+            stderr, _ = _decode_blob(result.stderr or b'')
+            detail = split_lines(stderr.strip())
             raise subprocess.SubprocessError(
                 f"git diff exited {result.returncode}" + (f": {detail[-1]}" if detail else ''))
         # The diff is file content: split at \n as git does, or a U+2028/NEL/form feed on a
         # changed line hides the rest of it from the search (BACK-1731).
-        for line in split_lines(result.stdout):
+        diff_text, decoding_loss = _decode_blob(result.stdout)
+        if decoding_loss:
+            _content_search_error = (
+                'content-pattern search decoded invalid UTF-8 with replacements '
+                '(known matches retained; results may be incomplete)')
+        for line in split_lines(diff_text):
             if (line and line[0] in ('+', '-')
                     and not line.startswith('+++')
                     and not line.startswith('---')
