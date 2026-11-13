@@ -694,20 +694,18 @@ class TestFindConversationAgentFilter:
 
 @pytest.fixture
 def reload_claude_adapter(monkeypatch):
-    """Reload the claude adapter module under the test's env vars; reload it again under
-    the real env afterwards, even if the test fails.
+    """Reload under test environment overrides, then restore all original identities.
 
-    CONVERSATION_BASE is resolved at import, so these tests reload the module. They used
-    to 'restore' with a second reload at the end of the test body, while monkeypatch still
-    had the env vars set, so the registry kept a ClaudeAdapter pointing at a deleted temp
-    dir. Any later claude:// run in the same xdist worker read from it (the contract
-    harness failed on py3.10 only, by test distribution).
+    A second reload creates another class and leaves package exports and test aliases
+    stale. Restore the module namespace and registry slot captured before the test.
     """
-    import importlib
-    import reveal.adapters.claude.adapter as mod
-    yield lambda: importlib.reload(mod)
-    monkeypatch.undo()
-    importlib.reload(mod)
+    from claude_session_fixture import isolated_claude_reload
+    with isolated_claude_reload() as reload:
+        try:
+            yield reload
+        finally:
+            monkeypatch.undo()
+
 
 
 class TestConversationBaseEnvVar:

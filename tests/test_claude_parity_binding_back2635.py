@@ -1,5 +1,4 @@
 """A reloaded registry class must use the parity fixture, never the real HOME."""
-import importlib
 import json
 from pathlib import Path
 
@@ -10,17 +9,19 @@ from test_declared_parity_back2053 import project, run  # noqa: F401
 
 @pytest.fixture(autouse=True)
 def reloaded_claude_with_empty_home(tmp_path, monkeypatch):
-    import reveal.adapters.claude.adapter as module
+    from claude_session_fixture import isolated_claude_reload
     home = tmp_path / 'empty-home'
     home.mkdir()
     monkeypatch.setenv('HOME', str(home))
     monkeypatch.setenv('USERPROFILE', str(home))
     monkeypatch.delenv('REVEAL_CLAUDE_HOME', raising=False)
     monkeypatch.delenv('REVEAL_CLAUDE_BASE_PATH', raising=False)
-    importlib.reload(module)
-    yield
-    monkeypatch.undo()
-    importlib.reload(module)
+    with isolated_claude_reload() as reload:
+        reload()
+        try:
+            yield
+        finally:
+            monkeypatch.undo()
 
 
 @pytest.mark.parametrize('spelling', ['cli', 'uri'])

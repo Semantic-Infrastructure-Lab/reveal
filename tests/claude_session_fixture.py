@@ -7,6 +7,7 @@ documented claim can be checked against a positive match instead of being skippe
 """
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 
 SESSION_NAMES = ('infernal-earth-0118', 'my-session', '2627362f-6f72-45e1-b7bb-d5a61519a388')
@@ -98,3 +99,19 @@ def build_claude_home(home: Path, extra_sessions: tuple = ()) -> Path:
         'projects': {'/path/to/proj': {'mcpServers': {'reveal': {'command': 'reveal-mcp'}}}},
     }), encoding='utf-8')
     return claude
+
+
+@contextmanager
+def isolated_claude_reload():
+    """Restore module and registry identities after environment-sensitive reload tests."""
+    import importlib
+    import reveal.adapters.claude.adapter as module
+    from reveal.adapters.registry import _ADAPTER_REGISTRY
+    namespace = dict(module.__dict__)
+    registered = _ADAPTER_REGISTRY['claude']
+    try:
+        yield lambda: importlib.reload(module)
+    finally:
+        module.__dict__.clear()
+        module.__dict__.update(namespace)
+        _ADAPTER_REGISTRY['claude'] = registered
