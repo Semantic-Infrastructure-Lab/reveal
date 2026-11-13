@@ -803,10 +803,10 @@ class CallsAdapter(ResourceAdapter):
         clean = not any(w.get('type') in (*_LOSS_WARNINGS, 'scope_hidden') for w in meta['warnings'])
         # A queried name the function-value rule left out is declared, just not listed: absence is not claimable (BACK-2229).
         clean = clean and not (dropped and data.get('target') in dropped['names'])
-        if absent is not None and clean and absent():
-            data['error'] = _calls_absence_message(data)
         if 'path' in data:
             data['path'] = to_posix(data['path'])
+        if absent is not None and clean and absent():
+            data['error'] = _calls_absence_message(data)
         return ResultBuilder.create(
             result_type=result_type,
             source=to_posix(self.path),
