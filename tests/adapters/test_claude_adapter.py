@@ -121,7 +121,7 @@ class TestContractCompliance:
         # Required fields
         assert overview['contract_version'] == '1.1'
         assert overview['type'] == 'claude_session_overview'
-        assert overview['source'] == str(TEST_CONVERSATION)
+        assert overview['source'] == TEST_CONVERSATION.as_posix()
         assert overview['source_type'] == 'file'
 
     @patch.object(ClaudeAdapter, '_find_conversation')
