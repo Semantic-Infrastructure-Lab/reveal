@@ -28,7 +28,7 @@ def test_search_does_not_claim_to_scan_after_decisive_match(transcript):
     result = _run_reveal_in(transcript.parent, 'claude://sessions?search=auth', '--format', 'json')
     assert result.returncode == 0
     proof = json.loads(result.stdout)['meta']['session_content']
-    source = next(s for s in proof['sources'] if s['source'] == str(transcript))
+    source = next(s for s in proof['sources'] if s['source'] == transcript.as_posix())
     assert source['decision'] == 'matched-prefix'
     assert source['candidate_records'] < 9 and source['failed_records'] == 0
 
@@ -107,7 +107,7 @@ def test_content_read_failure_is_measured_without_hiding_healthy_sessions(transc
     answer = json.loads(result.stdout)
     assert answer['match_count'] > 0
     proof = answer['meta']['session_content']
-    source = next(s for s in proof['sources'] if s['source'] == str(transcript))
+    source = next(s for s in proof['sources'] if s['source'] == transcript.as_posix())
     assert source['decision'] == 'interrupted' and source['candidate_records'] == 0
     assert source['failures'] == [{'phase': 'read', 'cause': 'PermissionError',
                                    'message': 'injected content read failure'}]

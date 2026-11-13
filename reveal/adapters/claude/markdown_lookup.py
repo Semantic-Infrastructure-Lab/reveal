@@ -1,4 +1,5 @@
 """Measured exact/prefix Markdown lookup, including existing ambiguity responses."""
+from reveal.utils.path_utils import to_posix
 import stat
 from glob import has_magic
 from datetime import datetime
@@ -33,8 +34,8 @@ class MarkdownLookup(WorkspaceScan):
 
     def select(self, path, resolution):
         self.resolution = resolution
-        self.selected_source = str(path)
-        self.candidates.add(str(path))
+        self.selected_source = to_posix(path)
+        self.candidates.add(to_posix(path))
         return path
 
     def _prefix(self, directory, name):
@@ -49,7 +50,7 @@ class MarkdownLookup(WorkspaceScan):
         if matches:
             self.resolution = 'ambiguous'
             self.matches = [p.stem for p in matches]
-            self.candidates.update(str(p) for p in matches)
+            self.candidates.update(to_posix(p) for p in matches)
             self.completed.update(self.candidates)  # names, not bodies, are required for ambiguity
             return self.matches
         self.resolution = 'missing' if not self.discovery_errors else 'unresolved'

@@ -1,4 +1,5 @@
 """Installation path slots and independent read-only SQLite count observations."""
+from reveal.utils.path_utils import to_posix
 import sqlite3
 from typing import Any, Dict
 
@@ -110,7 +111,7 @@ def _stats_error(stats, paths, proof):
 
 
 def answer_requirement_error(adapter, result, prior_facts):
-    if result.get('source') != str(adapter.CODEX_DB) or result.get('source_type') != 'database':
+    if result.get('source') != to_posix(adapter.CODEX_DB) or result.get('source_type') != 'database':
         return 'Codex info changed its database source identity'
     paths = result.get('paths')
     if not isinstance(paths, dict) or set(paths) != set(PATH_KEYS) or not all(valid_path_info(row) for row in paths.values()):

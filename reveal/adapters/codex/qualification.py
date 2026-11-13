@@ -1,4 +1,5 @@
 """Direct Codex transcript identity, required-source evidence and observations."""
+from reveal.utils.path_utils import to_posix
 from typing import Any, Callable, Dict, Tuple
 
 from ...errors import RequestValidationError
@@ -214,7 +215,7 @@ def answer_requirement_error(adapter, result, expected_type, prior_facts=None):
         return owner[1](adapter, result, prior_facts)
     goal = expected_type == 'codex_goal' and result.get('type') == 'codex_goal'
     source = adapter.CODEX_HOME / 'goals_1.sqlite' if goal else adapter.CODEX_DB
-    if result.get('source') != str(source) or result.get('source_type') != 'database':
+    if result.get('source') != to_posix(source) or result.get('source_type') != 'database':
         return 'Codex answer changed its required database source identity'
     if adapter._request_index_error is not None:
         return _rejected_index_error(adapter, result, expected_type)

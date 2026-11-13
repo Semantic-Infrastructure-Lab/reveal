@@ -26,7 +26,7 @@ def test_configuration_source_outcomes(codex, state, exit_code):
     result = _run_reveal_in(codex.parent, 'codex://config', '--format', 'json')
     assert result.returncode == exit_code
     proof = json.loads(result.stdout)['meta']['installation_analysis']
-    assert proof['source'] == str(path)
+    assert proof['source'] == path.as_posix()
     assert proof['request_rejected'] == (state == 'missing')
     assert bool(proof['failed_operations']) == (state in ('malformed', 'decode', 'directory'))
 

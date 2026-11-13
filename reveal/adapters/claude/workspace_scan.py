@@ -1,4 +1,5 @@
 """Acquisition of named workspace-list entries, before content filtering."""
+from reveal.utils.path_utils import to_posix
 import stat
 from pathlib import Path
 from typing import Any, Dict
@@ -25,7 +26,7 @@ class WorkspaceScan:
         try:
             directory = stat.S_ISDIR(path.stat().st_mode)
             if required and not directory:
-                raise NotADirectoryError(str(path))
+                raise NotADirectoryError(to_posix(path))
             return directory
         except (FileNotFoundError, NotADirectoryError) as exc:
             if required:
@@ -52,26 +53,26 @@ class WorkspaceScan:
 
     def markdown(self, path):
         entries = [p for p in self.entries(path) if p.match('*.md')]
-        self.candidates.update(str(p) for p in entries)
+        self.candidates.update(to_posix(p) for p in entries)
         return entries
 
     def read_text(self, path):
         text = path.read_text(encoding='utf-8', errors='surrogateescape')
         repaired = text.encode('utf-8', errors='surrogateescape').decode('utf-8', errors='replace')
         if repaired != text:
-            self.recovered.add(str(path))
+            self.recovered.add(to_posix(path))
         return repaired
 
     def complete(self, path, *, filtered=False):
-        self.completed.add(str(path))
+        self.completed.add(to_posix(path))
         if filtered:
-            self.filtered.add(str(path))
+            self.filtered.add(to_posix(path))
 
     def count_directory(self, path):
         return sum(1 for _ in path.iterdir())
 
     def attach(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        required_order = [(p, e) for p, e in self.ordering_errors if str(p) not in self.filtered]
+        required_order = [(p, e) for p, e in self.ordering_errors if to_posix(p) not in self.filtered]
         failures = [('discovery', p, e) for p, e in self.discovery_errors]
         failures += [('entry', p, e) for p, e in self.entry_errors]
         failures += [('ordering', p, e) for p, e in required_order]
@@ -82,7 +83,7 @@ class WorkspaceScan:
             'recovered_entries': len(self.recovered),
             'advisory_ordering_failures': len(self.ordering_errors) - len(required_order),
             'request_rejected': self.request_rejected,
-            'failures': [{'phase': phase, 'source': str(p), 'cause': type(e).__name__, 'message': str(e)}
+            'failures': [{'phase': phase, 'source': to_posix(p), 'cause': type(e).__name__, 'message': str(e)}
                          for phase, p, e in failures],
             'count_rule': 'Named entries after project scope and before content/display filters; analyzed plus failed equals candidates; required ordering/discovery failures count separately; aliases remain separate entries',
         }

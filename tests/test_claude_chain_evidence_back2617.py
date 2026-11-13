@@ -33,7 +33,7 @@ def test_failed_chain_metadata_is_not_a_healthy_terminal(transcript, chain_store
     assert result.returncode == 3
     answer = json.loads(result.stdout)
     assert answer['chain_length'] == 1
-    assert answer['source'] == str(chain_store)
+    assert answer['source'] == chain_store.as_posix()
     assert answer['meta']['chain_analysis']['failed_operations'] == 1
 
 
@@ -85,7 +85,7 @@ def test_latest_readme_loss_cannot_fall_back_to_an_older_healthy_link(transcript
     result = _run_reveal_in(transcript.parent, 'claude://session/my-session/chain', '--format', 'json')
     assert result.returncode == 3
     answer = json.loads(result.stdout)
-    assert answer['chain'][0]['readme'] == str(newest)
+    assert answer['chain'][0]['readme'] == newest.as_posix()
     assert answer['chain'][0]['badge'] is None
     assert answer['meta']['chain_analysis']['failures'][0]['cause'] == 'UnicodeDecodeError'
 

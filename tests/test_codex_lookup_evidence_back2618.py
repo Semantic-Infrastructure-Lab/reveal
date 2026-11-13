@@ -13,7 +13,7 @@ from test_codex_declared_api_back2618 import codex
 def test_healthy_lookup_records_the_observed_query_scope(codex, identifier, phases):
     answer = query('codex://' + identifier + '/messages')
     proof = answer['meta']['session_lookup']
-    assert proof['source'] == str(codex / 'state_5.sqlite')
+    assert proof['source'] == (codex / 'state_5.sqlite').as_posix()
     assert proof['source_present'] is True and proof['opened'] is True
     assert proof['decision'] == 'selected' and proof['selected_id'] == DOC_SESSION_ID
     assert [step['phase'] for step in proof['queries']] == phases
@@ -135,7 +135,7 @@ def test_readonly_uri_keeps_literal_database_filenames(codex, monkeypatch):
     monkeypatch.setattr(CodexAdapter, 'CODEX_DB', unusual)
     answer = query('codex://' + DOC_SESSION_ID + '/messages')
     assert answer['messages']
-    assert answer['meta']['session_lookup']['source'] == str(unusual)
+    assert answer['meta']['session_lookup']['source'] == unusual.as_posix()
     assert answer['meta']['session_lookup']['decision'] == 'selected'
 
 

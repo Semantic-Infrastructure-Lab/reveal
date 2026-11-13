@@ -1,4 +1,5 @@
 """Measured acquisition of the existing SQLite session catalog."""
+from reveal.utils.path_utils import to_posix
 from copy import deepcopy
 import sqlite3
 from pathlib import Path
@@ -19,7 +20,7 @@ class CatalogRead:
         self.path, self.connector, self.columns = path, connector, columns
         self.rows: List[Dict[str, Any]] = []
         self.proof: Dict[str, Any] = {
-            'source': str(path), 'source_present': None, 'opened': False,
+            'source': to_posix(path), 'source_present': None, 'opened': False,
             'query_complete': False, 'observed_rows': 0, 'failed_operations': 0,
             'failures': [], 'count_rule': CATALOG_RULE,
         }
@@ -90,7 +91,7 @@ def execution_facts(result):
 
 def answer_requirement_error(adapter, result, prior_facts):
     expected = adapter._catalog_answer
-    if result.get('source') != str(adapter.CODEX_DB) or result.get('source_type') != 'database':
+    if result.get('source') != to_posix(adapter.CODEX_DB) or result.get('source_type') != 'database':
         return 'Codex catalog answer changed its database source identity'
     if result.get('meta', {}).get('session_catalog') != expected['meta']['session_catalog']:
         return 'Codex catalog answer changed its acquisition decisions'

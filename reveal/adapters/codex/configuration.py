@@ -1,4 +1,5 @@
 """Execution facts and immutable masked observations for Codex TOML config."""
+from reveal.utils.path_utils import to_posix
 import math
 
 from ...utils.document_read import document_proof_error
@@ -31,7 +32,7 @@ def _same_value(left, right):
 
 
 def answer_requirement_error(adapter, result, prior_facts):
-    if result.get('source') != str(adapter.CODEX_HOME / 'config.toml') or result.get('source_type') != 'file':
+    if result.get('source') != to_posix(adapter.CODEX_HOME / 'config.toml') or result.get('source_type') != 'file':
         return 'Codex config changed its TOML source identity'
     proof = result.get('meta', {}).get('installation_analysis')
     error = document_proof_error(proof, label='Codex configuration')

@@ -1,4 +1,5 @@
 """One measured JSONL reader with explicit value and recovery policies."""
+from reveal.utils.path_utils import to_posix
 import json
 from pathlib import Path
 from typing import Callable, TextIO
@@ -71,5 +72,5 @@ class TranscriptRecords:
                 'failed_records': self.failed, 'first_failed_line': self.first_failed}
 
     def receipt(self):
-        return {**self.record_proof(), 'source': str(self.path), 'decision': self.decision,
+        return {**self.record_proof(), 'source': to_posix(self.path), 'decision': self.decision,
                 'recovered_records': self.recovered, 'failures': list(self.failures)}

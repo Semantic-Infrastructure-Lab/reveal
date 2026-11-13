@@ -1,4 +1,5 @@
 """Prompt-history decisions from the shared JSONL reader, before display scope."""
+from reveal.utils.path_utils import to_posix
 from datetime import date, datetime
 from typing import Any, Dict
 
@@ -21,7 +22,7 @@ def read_history(home, params, *, opener) -> Dict[str, Any]:
              'source_opened': reader.opened,
              'count_rule': 'All nonblank history records before date/project/text/display filters; decoded objects are interpreted until EOF or the first required operation failure'}
     result: Dict[str, Any] = dict(ResultBuilder.create(
-        'claude_history', str(path), source_type='file', contract_version=CONTRACT_VERSION,
+        'claude_history', to_posix(path), source_type='file', contract_version=CONTRACT_VERSION,
         data={'search': search or None, 'project': project or None, 'since': since or None,
               'total_entries': reader.analyzed, 'match_count': len(entries), 'entries': entries},
         meta={'history_analysis': proof, 'warnings': [], 'errors': []}))

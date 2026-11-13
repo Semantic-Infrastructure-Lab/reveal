@@ -22,7 +22,7 @@ def test_hook_body_decode_repair_retains_body_with_loss(transcript, workspace_ho
     assert result.returncode == 3
     answer = json.loads(result.stdout)
     assert answer['content'] == 'echo \ufffd\n'
-    assert answer['source'] == str(path) and answer['source_type'] == 'file'
+    assert answer['source'] == path.as_posix() and answer['source_type'] == 'file'
 
 
 @pytest.mark.parametrize('phase', ['select', 'read', 'metadata'])
@@ -74,7 +74,7 @@ def test_hook_directory_retains_known_scripts(transcript, workspace_home, monkey
     assert result.returncode == 3
     answer = json.loads(result.stdout)
     assert [row['name'] for row in answer['scripts']] == ['good.sh']
-    assert answer['source'] == str(event) and answer['source_type'] == 'directory'
+    assert answer['source'] == event.as_posix() and answer['source_type'] == 'directory'
 
 
 @pytest.mark.parametrize('kind', ['file', 'directory'])

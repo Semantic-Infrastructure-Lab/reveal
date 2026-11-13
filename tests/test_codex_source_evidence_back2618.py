@@ -27,7 +27,7 @@ def test_session_views_retain_object_record_decisions(codex, suffix):
     assert proof['candidate_records'] == count + 1
     assert proof['analyzed_records'] == count and proof['failed_records'] == 1
     assert proof['first_failed_line'] == count + 1 and proof['decision'] == 'exhausted'
-    assert proof['source'] == str(path) and proof['opened'] is True
+    assert proof['source'] == path.as_posix() and proof['opened'] is True
     assert any(w['code'] == 'analysis_incomplete' for w in answer['meta']['warnings'])
 
 

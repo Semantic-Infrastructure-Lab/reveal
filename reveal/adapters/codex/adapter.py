@@ -1,4 +1,5 @@
 """OpenAI Codex CLI session adapter implementation."""
+from reveal.utils.path_utils import to_posix
 
 import logging
 from copy import deepcopy
@@ -186,7 +187,7 @@ class CodexAdapter(ResourceAdapter):
         return {
             'contract_version': CONTRACT_VERSION,
             'type': '',
-            'source': str(self.CODEX_DB),
+            'source': to_posix(self.CODEX_DB),
             'source_type': 'database',
         }
 

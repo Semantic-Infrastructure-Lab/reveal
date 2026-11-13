@@ -1,4 +1,5 @@
 """Qualified execution of the existing optional README continuation traversal."""
+from reveal.utils.path_utils import to_posix
 from pathlib import Path
 from typing import Any, Dict, Optional
 from ...utils.results import AnalysisCompleteness, note_warning, result_execution_facts
@@ -62,7 +63,7 @@ def _terminal_reason(root, path, failed):
 
 
 def _chain_entry(name, path, metadata):
-    return {'session': name, 'readme': str(path) if path else None,
+    return {'session': name, 'readme': to_posix(path) if path else None,
             'date': metadata.get('date') or metadata.get('session_date'),
             **{key: metadata.get(key) for key in ('badge', 'continuing_from', 'tests_start', 'tests_end', 'commits')}}
 

@@ -1,4 +1,5 @@
 """Measured, read-only acquisition of the existing Codex UUID lookup."""
+from reveal.utils.path_utils import to_posix
 import sqlite3
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -92,7 +93,7 @@ class SessionLookup:
         return None, []
 
     def receipt(self) -> Dict[str, Any]:
-        return {'source': str(self.path), 'requested_id': self.identifier,
+        return {'source': to_posix(self.path), 'requested_id': self.identifier,
                 'source_present': self.source_present, 'opened': self.opened,
                 'decision': self.decision, 'selected_id': self.selected['id'] if self.selected is not None else None,
                 'queries': [dict(step) for step in self.queries],

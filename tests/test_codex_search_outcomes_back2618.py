@@ -124,7 +124,7 @@ def test_search_keeps_matches_from_interrupted_record_prefix(codex, monkeypatch)
     answer = json.loads(result.stdout)
     assert answer['sessions'][0]['matches'][0]['snippet'] == 'authentication prefix'
     source = answer['meta']['content_analysis']['rollouts'][0]
-    assert source['source'] == str(path) and source['analyzed_records'] == 1
+    assert source['source'] == path.as_posix() and source['analyzed_records'] == 1
     assert source['decision'] == 'interrupted' and source['failures'][0]['phase'] == 'read'
 
 

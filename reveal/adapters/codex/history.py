@@ -1,4 +1,5 @@
 """Measured acquisition of Codex history's native JSON values and raw fallbacks."""
+from reveal.utils.path_utils import to_posix
 from typing import Any, Dict
 
 from ...reveal_types import CONTRACT_VERSION
@@ -29,7 +30,7 @@ def read_history(home, *, opener) -> Dict[str, Any]:
              'retained_entries': len(entries), 'value_policy': 'all_json_values',
              'invalid_policy': 'raw_fallback', 'count_rule': HISTORY_RULE}
     result: Dict[str, Any] = dict(ResultBuilder.create(
-        'codex_history', str(path), source_type='file', contract_version=CONTRACT_VERSION,
+        'codex_history', to_posix(path), source_type='file', contract_version=CONTRACT_VERSION,
         data={'entries': entries, 'total_entries': len(entries)},
         meta={'history_analysis': proof, 'warnings': [], 'errors': []}))
     if error is not None:
@@ -67,7 +68,7 @@ def _proof_error(proof):
 
 
 def answer_requirement_error(adapter, result, prior_facts):
-    if result.get('source') != str(adapter.CODEX_HOME / 'history.jsonl') or result.get('source_type') != 'file':
+    if result.get('source') != to_posix(adapter.CODEX_HOME / 'history.jsonl') or result.get('source_type') != 'file':
         return 'Codex history changed its required source identity'
     proof = result.get('meta', {}).get('history_analysis')
     error = _proof_error(proof)

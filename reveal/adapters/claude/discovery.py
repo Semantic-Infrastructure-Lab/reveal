@@ -1,4 +1,5 @@
 """Qualified, request-local execution of the existing transcript lookup strategies."""
+from reveal.utils.path_utils import to_posix
 import os
 import json
 import stat
@@ -114,7 +115,7 @@ class ConversationDiscovery:
 
 
 def _diagnostics(entries: Failures) -> list:
-    return [{'source': str(path), 'cause': type(exc).__name__, 'message': str(exc)} for path, exc in entries]
+    return [{'source': to_posix(path), 'cause': type(exc).__name__, 'message': str(exc)} for path, exc in entries]
 
 
 def _report_once(entries: Optional[Failures], path: Path, exc: BaseException) -> None:

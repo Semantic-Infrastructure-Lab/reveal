@@ -70,7 +70,7 @@ def _nav_json(flag: str, path: str, element: str, from_line: int, to_line: int,
     from .utils.json_utils import print_json_result  # noqa: I006
     from .utils.results import ResultBuilder
     from .reveal_types import CONTRACT_VERSION
-    meta: Dict[str, Any] = {'flag': flag, 'file': str(path), 'element': element,
+    meta: Dict[str, Any] = {'flag': flag, 'file': to_posix(path), 'element': element,
             'from_line': from_line, 'to_line': to_line}
     if extra_meta:
         meta.update(extra_meta)
@@ -79,7 +79,7 @@ def _nav_json(flag: str, path: str, element: str, from_line: int, to_line: int,
                         for warning in warnings or []]
     meta['warnings'] = [*meta.get('warnings', []), *extra_warnings]
     print_json_result(ResultBuilder.create(
-        'element_view', path, source_type='file', contract_version=CONTRACT_VERSION,
+        'element_view', to_posix(path), source_type='file', contract_version=CONTRACT_VERSION,
         meta=meta, data={'findings': findings, 'warnings': warnings or []}))
 
 

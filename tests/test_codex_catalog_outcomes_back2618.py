@@ -23,7 +23,7 @@ def test_catalog_source_outcomes(codex, suffix, state, exit_code):
     assert result.returncode == exit_code
     answer = json.loads(result.stdout)
     proof = answer['meta']['session_catalog']
-    assert proof['source'] == str(path)
+    assert proof['source'] == path.as_posix()
     assert proof['observed_rows'] == int(state == 'healthy')
     assert proof['failed_operations'] == int(state == 'corrupt')
     assert answer['total'] == int(state == 'healthy')

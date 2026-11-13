@@ -1,4 +1,5 @@
 """Claude Code conversation adapter implementation."""
+from reveal.utils.path_utils import to_posix
 
 import logging
 import os
@@ -544,7 +545,7 @@ class ClaudeAdapter(ResourceAdapter):
     def _get_contract_base(self) -> Dict[str, Any]:
         """Build the shared envelope; each view supplies its own type and observations."""
         result: Dict[str, Any] = dict(ResultBuilder.create(
-            '', str(self.conversation_path) if self.conversation_path else '',
+            '', to_posix(self.conversation_path) if self.conversation_path else '',
             source_type='file', contract_version=CONTRACT_VERSION))
         if self.query_params.get('detail') in ('full', 'raw'):
             result['full'] = True
@@ -814,7 +815,7 @@ class ClaudeAdapter(ResourceAdapter):
         # Session message routing — load messages then dispatch by query/resource.
         messages = self._load_messages()
         contract_base = self._get_contract_base()
-        conversation_path_str = str(self.conversation_path) if self.conversation_path else ''
+        conversation_path_str = to_posix(self.conversation_path) if self.conversation_path else ''
         if self._is_composite_query():
             result = self._handle_composite_query(messages)
         else:
@@ -974,12 +975,12 @@ class ClaudeAdapter(ResourceAdapter):
     # Wrapper methods for backward compatibility with tests
     def _get_overview(self, messages: List[Dict]) -> Dict[str, Any]:
         """Wrapper for backward compatibility."""
-        conversation_path_str = str(self.conversation_path) if self.conversation_path else ''
+        conversation_path_str = to_posix(self.conversation_path) if self.conversation_path else ''
         return get_overview(messages, self.session_name, conversation_path_str, self._get_contract_base())
 
     def _get_summary(self, messages: List[Dict]) -> Dict[str, Any]:
         """Wrapper for backward compatibility."""
-        conversation_path_str = str(self.conversation_path) if self.conversation_path else ''
+        conversation_path_str = to_posix(self.conversation_path) if self.conversation_path else ''
         return get_summary(messages, self.session_name, conversation_path_str, self._get_contract_base())
 
     def _calculate_tool_success_rate(self, messages: List[Dict]) -> Dict[str, Dict[str, Any]]:

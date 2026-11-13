@@ -1,4 +1,5 @@
 """Session list and search handlers for codex:// adapter (SQLite-backed)."""
+from reveal.utils.path_utils import to_posix
 
 import sqlite3
 from datetime import date as _date, datetime
@@ -54,7 +55,7 @@ def list_sessions(db_path: Path) -> Dict[str, Any]:
     """
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_session_list',
-        source=str(db_path),
+        source=to_posix(db_path),
         source_type='database',
         contract_version=CONTRACT_VERSION,
     )
@@ -148,7 +149,7 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
 
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_content_search',
-        source=str(db_path),
+        source=to_posix(db_path),
         source_type='database',
         contract_version=CONTRACT_VERSION,
         data={'query': query, 'since': since or None, 'until': until or None},

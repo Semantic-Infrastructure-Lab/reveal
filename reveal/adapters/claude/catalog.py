@@ -1,4 +1,5 @@
 """Measured session-entry acquisition shared by listing, search and file tracking."""
+from reveal.utils.path_utils import to_posix
 import stat
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping
@@ -25,7 +26,7 @@ class SessionEntries(list):
             'candidate_entries': self.candidate_entries, 'analyzed_entries': len(self),
             'failed_entries': len(self.metadata_failures), 'discovery_failures': len(self.discovery_failures),
             'count_rule': 'Non-agent JSONL-named entries before name/date/content filtering; analyzed metadata plus failed entries equals candidates; discovery failures count directory/stat events',
-            'failures': [{'source': str(path), 'cause': type(exc).__name__, 'message': str(exc)}
+            'failures': [{'source': to_posix(path), 'cause': type(exc).__name__, 'message': str(exc)}
                          for path, exc in (*self.metadata_failures, *self.discovery_failures)],
         }
 

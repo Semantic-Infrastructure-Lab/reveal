@@ -1,4 +1,5 @@
 """Workspace resource handlers for the claude:// adapter — plans, memory, agents, hooks."""
+from reveal.utils.path_utils import to_posix
 import logging
 import stat as stat_module
 from pathlib import Path
@@ -76,7 +77,7 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
     """List or read plans from ~/.claude/plans/."""
     base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_plans',
-        source=str(plans_dir),
+        source=to_posix(plans_dir),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
     ))
@@ -101,7 +102,7 @@ def _read_markdown_resource(directory, name, base, noun) -> Dict[str, Any]:
         result['error'] = (str(lookup.discovery_errors[0][1]) if lookup.discovery_errors
                            else f'{noun.title()} not found: {name}')
         return lookup.attach(result)
-    result.update(source=str(resolved), source_type='file', name=resolved.stem)
+    result.update(source=to_posix(resolved), source_type='file', name=resolved.stem)
     lookup.read(resolved, result)
     if noun == 'agent' and 'content' in result:
         fm = _parse_agent_frontmatter(result['content'])
@@ -164,7 +165,7 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
     """Walk ~/.claude/projects/ for memory/ subdirs and list memory files."""
     base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_memory',
-        source=str(conversation_base),
+        source=to_posix(conversation_base),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
     ))
@@ -207,7 +208,7 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
                     'description': fm.get('description', ''),
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
                     'size_bytes': stat.st_size,
-                    'path': str(mem_file),
+                    'path': to_posix(mem_file),
                 })
                 scan.complete(mem_file)
             except _ENTRY_ERRORS as e:
@@ -229,7 +230,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
     """List or read agent definitions from ~/.claude/agents/."""
     base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_agents',
-        source=str(agents_dir),
+        source=to_posix(agents_dir),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
     ))
@@ -287,7 +288,7 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
     """List or read hook scripts from ~/.claude/hooks/."""
     base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_hooks',
-        source=str(hooks_dir),
+        source=to_posix(hooks_dir),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
     ))
@@ -312,7 +313,7 @@ def _list_hook_events(hooks_dir: Path, base: Dict[str, Any]) -> Dict[str, Any]:
     skipped: List[Tuple[Path, BaseException]] = []
     scan.entry_errors = skipped
     entries = sorted(scan.entries(hooks_dir, legacy_error=True), key=lambda p: p.name)
-    scan.candidates.update(str(p) for p in entries)
+    scan.candidates.update(to_posix(p) for p in entries)
     for entry in entries:
         try:
             stat = entry.stat()
@@ -321,7 +322,7 @@ def _list_hook_events(hooks_dir: Path, base: Dict[str, Any]) -> Dict[str, Any]:
                 hooks.append({
                     'event': entry.name,
                     'kind': 'file',
-                    'path': str(entry),
+                    'path': to_posix(entry),
                     'size_bytes': stat.st_size,
                     'executable': is_exec,
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
@@ -331,7 +332,7 @@ def _list_hook_events(hooks_dir: Path, base: Dict[str, Any]) -> Dict[str, Any]:
                 hooks.append({
                     'event': entry.name,
                     'kind': 'directory',
-                    'path': str(entry),
+                    'path': to_posix(entry),
                     'script_count': script_count,
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
                 })

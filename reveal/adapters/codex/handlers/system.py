@@ -1,4 +1,5 @@
 """System resource handlers for codex:// adapter — info, history, config, memories, rules."""
+from reveal.utils.path_utils import to_posix
 
 import json
 import sqlite3
@@ -22,7 +23,7 @@ def get_info(codex_home: Path, db_path: Path) -> Dict[str, Any]:
     """Return path map + DB stats for codex://info."""
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_info',
-        source=str(db_path),
+        source=to_posix(db_path),
         source_type='database',
         contract_version=CONTRACT_VERSION,
     )
@@ -57,7 +58,7 @@ def get_config(codex_home: Path, query_params: Optional[Dict[str, Any]] = None) 
     config_path = codex_home / 'config.toml'
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_config',
-        source=str(config_path),
+        source=to_posix(config_path),
         source_type='file',
         contract_version=CONTRACT_VERSION,
     )
@@ -101,7 +102,7 @@ def get_memories(codex_home: Path) -> Dict[str, Any]:
     memories_dir = codex_home / 'memories'
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_memories',
-        source=str(memories_dir),
+        source=to_posix(memories_dir),
         source_type='file',
         contract_version=CONTRACT_VERSION,
     )
@@ -119,7 +120,7 @@ def get_memories(codex_home: Path) -> Dict[str, Any]:
         except OSError:
             content = ''
         memories.append({
-            'path': str(path),
+            'path': to_posix(path),
             'name': path.name,
             'size_bytes': path.stat().st_size,
             'content': content,
@@ -132,7 +133,7 @@ def get_memories_pipeline(db_path: Path) -> Dict[str, Any]:
     """Return Stage1/Stage2 memory pipeline status from stage1_outputs table."""
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_memories_pipeline',
-        source=str(db_path),
+        source=to_posix(db_path),
         source_type='database',
         contract_version=CONTRACT_VERSION,
     )
@@ -173,7 +174,7 @@ def get_rules(codex_home: Path) -> Dict[str, Any]:
     rules_dir = codex_home / 'rules'
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_rules',
-        source=str(rules_dir),
+        source=to_posix(rules_dir),
         source_type='file',
         contract_version=CONTRACT_VERSION,
     )
@@ -188,7 +189,7 @@ def get_rules(codex_home: Path) -> Dict[str, Any]:
         except OSError:
             content = ''
         rules.append({
-            'path': str(path),
+            'path': to_posix(path),
             'name': path.name,
             'size_bytes': path.stat().st_size,
             'content': content,

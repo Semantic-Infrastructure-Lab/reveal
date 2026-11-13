@@ -1,4 +1,5 @@
 """System-level resource handlers for the claude:// adapter — history, settings, info, config."""
+from reveal.utils.path_utils import to_posix
 import json
 import os
 from pathlib import Path
@@ -23,7 +24,7 @@ def get_settings(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, A
     settings_path = claude_home / 'settings.json'
     base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_settings',
-        source=str(settings_path),
+        source=to_posix(settings_path),
         source_type='file',
         contract_version=CONTRACT_VERSION,
     ))
@@ -64,7 +65,7 @@ def get_info(
     from ..info import attach_info_evidence
     return attach_info_evidence(dict(ResultBuilder.create(
         result_type='claude_info',
-        source=str(claude_home),
+        source=to_posix(claude_home),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
         data={
@@ -84,7 +85,7 @@ def get_info(
                 'REVEAL_CLAUDE_DIR': os.environ.get('REVEAL_CLAUDE_DIR', ''),
                 'REVEAL_SESSIONS_DIR': os.environ.get('REVEAL_SESSIONS_DIR', ''),
             },
-            'sessions_dir': str(sessions_dir) if sessions_dir else None,
+            'sessions_dir': to_posix(sessions_dir) if sessions_dir else None,
         }
     )))
 
@@ -93,7 +94,7 @@ def get_config(claude_json: Path, query_params: Dict[str, Any]) -> Dict[str, Any
     """Read ~/.claude.json — per-install config (projects, MCP servers, feature flags)."""
     base: Dict[str, Any] = dict(ResultBuilder.create(
         result_type='claude_config',
-        source=str(claude_json),
+        source=to_posix(claude_json),
         source_type='file',
         contract_version=CONTRACT_VERSION,
     ))

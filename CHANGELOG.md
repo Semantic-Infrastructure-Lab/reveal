@@ -22,6 +22,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- On Windows, Calls and session-reader JSON now use portable path separators, and recursive Claude plan lookups work without treating wildcard paths as read failures. Git diff and content-history searches preserve recovered UTF-8 text and known matches when decoding is lossy, report incomplete analysis, and return usable partial MCP answers (BACK-2635).
+
 - Codex installation inspection now distinguishes confirmed absence from unknown metadata, retains interrupted directory counts and read-only SQLite observations, and exits 3 for required inspection/output loss. Shared path inspection preserves Claude behavior; Codex shows unknown paths as `?` and keeps usable partial MCP inventory with source receipts (BACK-2618).
 
 - Codex history now discloses parsing/decoding/read loss and retains acquired prefixes through I/O failure. Existing JSON scalars, nulls and raw malformed-line fallbacks are preserved through explicit shared-reader policies; transcript defaults remain object-only. Qualified history gives complete 0, missing input 2 and source/output loss 3, with usable partial MCP results and failed-analysis errors (BACK-2618).

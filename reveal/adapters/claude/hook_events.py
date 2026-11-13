@@ -1,4 +1,5 @@
 """Hook-event source acquisition, separate from the root event catalog."""
+from reveal.utils.path_utils import to_posix
 import stat
 from copy import deepcopy
 from typing import Any, Dict
@@ -28,9 +29,9 @@ def read_hook_event(hooks_dir, event_name, base, skipped_warning, timestamp) -> 
         result['error'] = str(exc)
         return _attach(scan, result)
     kind = 'file' if stat.S_ISREG(selected.st_mode) else 'directory'
-    result.update(source=str(path), source_type=kind, kind=kind)
+    result.update(source=to_posix(path), source_type=kind, kind=kind)
     if kind == 'file':
-        result['path'] = str(path)
+        result['path'] = to_posix(path)
         _read_file(scan, path, result, timestamp)
     else:
         _read_directory(scan, path, result, timestamp)
@@ -39,7 +40,7 @@ def read_hook_event(hooks_dir, event_name, base, skipped_warning, timestamp) -> 
 
 
 def _read_file(scan, path, result, timestamp):
-    scan.candidates.add(str(path))
+    scan.candidates.add(to_posix(path))
     try:
         result['content'] = scan.read_text(path)
         scan.complete(path)
@@ -52,10 +53,10 @@ def _read_file(scan, path, result, timestamp):
 def _read_directory(scan, path, result, timestamp):
     scripts = []
     entries = sorted(scan.entries(path, legacy_error=True))
-    scan.candidates.update(str(p) for p in entries)
+    scan.candidates.update(to_posix(p) for p in entries)
     for script in entries:
         try:
-            scripts.append({'name': script.name, 'path': str(script), **_metadata(script, timestamp)})
+            scripts.append({'name': script.name, 'path': to_posix(script), **_metadata(script, timestamp)})
             scan.complete(script)
         except _ENTRY_ERRORS as exc:
             scan.entry_errors.append((script, exc))

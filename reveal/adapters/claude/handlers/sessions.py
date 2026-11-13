@@ -454,10 +454,10 @@ def get_chain(
     return traversal.attach({
         **contract_base,
         'type': 'claude_chain',
-        'source': str(sessions_dir) if sessions_dir else f'claude://session/{session_name}/chain',
+        'source': to_posix(sessions_dir) if sessions_dir else f'claude://session/{session_name}/chain',
         'source_type': 'directory' if sessions_dir else 'runtime',
         'session': session_name,
         'chain': chain,
         'chain_length': len(chain),
-        'sessions_dir': str(sessions_dir) if sessions_dir else None,
+        'sessions_dir': to_posix(sessions_dir) if sessions_dir else None,
     })

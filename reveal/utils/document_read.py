@@ -1,4 +1,5 @@
 """Measured document acquisition stages shared by structured configuration readers."""
+from reveal.utils.path_utils import to_posix
 from contextlib import contextmanager
 from typing import Any, Dict
 
@@ -40,7 +41,7 @@ class DocumentRead:
 
     def attach(self, result: Dict[str, Any]) -> Dict[str, Any]:
         states = [op['outcome'] for op in self.operations]
-        proof = {'source': str(self.path), 'selected': self.selected, 'parsed': self.parsed,
+        proof = {'source': to_posix(self.path), 'selected': self.selected, 'parsed': self.parsed,
                  'usable': self.usable, 'failed_operations': states.count('failed'),
                  'recovered_operations': states.count('recovered'),
                  'request_rejected': 'rejected' in states, 'operations': list(self.operations),

@@ -1,4 +1,5 @@
 """Measured named-path inspection shared by installation diagnostic readers."""
+from reveal.utils.path_utils import to_posix
 import stat as stat_module
 from pathlib import Path
 from typing import Any, Dict
@@ -10,9 +11,9 @@ def path_info(p: Path) -> Dict[str, Any]:
     try:
         metadata = p.stat()
     except (FileNotFoundError, NotADirectoryError):
-        return {'path': str(p), 'exists': False}
+        return {'path': to_posix(p), 'exists': False}
     except OSError as exc:
-        return {'path': str(p), 'exists': None, 'error_phase': 'metadata', 'cause': type(exc).__name__,
+        return {'path': to_posix(p), 'exists': None, 'error_phase': 'metadata', 'cause': type(exc).__name__,
                 'error': f'metadata unreadable: {failure_of(exc).cause}'}
     if stat_module.S_ISDIR(metadata.st_mode):
         count = 0
@@ -20,11 +21,11 @@ def path_info(p: Path) -> Dict[str, Any]:
             for _ in p.iterdir():
                 count += 1
         except OSError as exc:
-            return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': None,
+            return {'path': to_posix(p), 'exists': True, 'kind': 'dir', 'count': None,
                     'entries_seen': count, 'error_phase': 'directory-count', 'cause': type(exc).__name__,
                     'error': f'directory unreadable: {failure_of(exc).cause}'}
-        return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': count}
-    return {'path': str(p), 'exists': True, 'kind': 'file', 'size_bytes': metadata.st_size}
+        return {'path': to_posix(p), 'exists': True, 'kind': 'dir', 'count': count}
+    return {'path': to_posix(p), 'exists': True, 'kind': 'file', 'size_bytes': metadata.st_size}
 
 
 

@@ -199,9 +199,9 @@ def show_file_list_json(path: str, show_hidden: bool = False,
             'size': stat.st_size,
         })
 
-    result: dict = dict(ResultBuilder.create('file_list', root_path, source_type='directory',
+    result: dict = dict(ResultBuilder.create('file_list', to_posix(root_path), source_type='directory',
                                   contract_version=CONTRACT_VERSION,
-                                  data={'path': str(root_path), 'entries': entries}))
+                                  data={'path': to_posix(root_path), 'entries': entries}))
     if total_count is not None:
         result['total_count'] = total_count
     return result
@@ -545,9 +545,9 @@ def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = Non
                                    context=context, hidden=hidden)
 
     # The Output Contract envelope every other JSON answer carries (BACK-1591).
-    result: dict = dict(ResultBuilder.create('directory_tree', root_path, source_type='directory',
+    result: dict = dict(ResultBuilder.create('directory_tree', to_posix(root_path), source_type='directory',
                                   contract_version=CONTRACT_VERSION,
-                                  data={'path': str(root_path), 'name': root_path.name or str(root_path),
+                                  data={'path': to_posix(root_path), 'name': root_path.name or to_posix(root_path),
                                         'entries': entries}))
     if context['truncated'] > 0:
         result['truncated'] = context['truncated']

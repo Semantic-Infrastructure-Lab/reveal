@@ -1,4 +1,5 @@
 """Measured read-only acquisition of optional Codex thread goals."""
+from reveal.utils.path_utils import to_posix
 
 import sqlite3
 from pathlib import Path
@@ -15,7 +16,7 @@ class GoalLookup:
     def __init__(self, path: Path, thread_id: str):
         self.path, self.thread_id = path, thread_id
         self.proof: Dict[str, Any] = {
-            'source': str(path), 'thread_id': thread_id, 'source_present': None,
+            'source': to_posix(path), 'thread_id': thread_id, 'source_present': None,
             'opened': False, 'query_complete': False, 'rows': 0,
             'decision': 'failed', 'failed_operations': 0, 'failures': [], 'count_rule': GOAL_RULE,
         }
@@ -68,7 +69,7 @@ def get_goal(codex_home: Path, thread_id: str) -> Dict[str, Any]:
     lookup = GoalLookup(codex_home / 'goals_1.sqlite', thread_id)
     lookup.read()
     result: Dict[str, Any] = ResultBuilder.create(
-        result_type='codex_goal', source=str(lookup.path), source_type='database',
+        result_type='codex_goal', source=to_posix(lookup.path), source_type='database',
         contract_version=CONTRACT_VERSION, data={'thread_id': thread_id, 'goal': lookup.goal},
     )
     result.setdefault('meta', {'warnings': [], 'errors': []})['goal_lookup'] = lookup.proof

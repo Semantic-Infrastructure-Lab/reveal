@@ -46,7 +46,7 @@ def test_base_path_override_reconfigures_the_same_store(transcript, command_home
     result = _run_reveal_in(transcript.parent, *args, '--base-path', str(other / 'projects'), '--format', 'json')
     assert result.returncode == 0
     answer = json.loads(result.stdout)
-    assert answer['messages'] == [] and answer['source'].startswith(str(other))
+    assert answer['messages'] == [] and answer['source'].startswith(other.as_posix())
 
 
 def test_command_help_teaches_own_controls(transcript):
