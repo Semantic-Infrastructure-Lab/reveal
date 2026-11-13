@@ -1,7 +1,6 @@
 """Overview emits executable AST navigation for URI-escaped target paths."""
 import json
 import shlex
-import sys
 from urllib.parse import quote
 
 import pytest
@@ -9,10 +8,11 @@ import pytest
 from conftest import _run_reveal_direct as run
 
 
-@pytest.mark.parametrize('name', ['project space', pytest.param('project?space',
-    marks=pytest.mark.skipif(sys.platform == 'win32', reason="Windows forbids '?' in filenames"))])
+@pytest.mark.parametrize('name', ['project space #雪%', 'project?space'])
 def test_overview_ast_hint_uses_encoded_resource_and_preserves_scope(tmp_path, name):
+    from filename_fixture import require_filename
     root = tmp_path / name
+    require_filename(root)
     root.mkdir()
     for function in ('keep', 'omit'):
         (root / (function + '.py')).write_text(f'def {function}():\n    return 1\n', encoding='utf-8')

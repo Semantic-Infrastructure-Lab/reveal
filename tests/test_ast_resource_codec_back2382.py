@@ -52,9 +52,11 @@ def test_real_cli_and_declared_siblings_decode_the_same_resource(tmp_path, schem
     assert not json.loads(result.stdout).get('error')
 
 
-@pytest.mark.skipif(sys.platform == 'win32', reason="Windows cannot represent '?' in filenames")
-def test_encoded_question_mark_is_not_reparsed_as_query(tmp_path):
-    path = source(tmp_path / 'question?name=wrong&percent%+.py')
+@pytest.mark.parametrize('filename', ['name=wrong&percent%+ #雪.py', 'question?name=wrong&percent%+.py'])
+def test_encoded_question_mark_is_not_reparsed_as_query(tmp_path, filename):
+    from filename_fixture import require_filename
+    require_filename(tmp_path / filename)
+    path = source(tmp_path / filename)
     answer = query(uri(path) + '?name=alpha&limit=1')
     assert answer['path'] == path.as_posix()
     assert answer['total_results'] == 1

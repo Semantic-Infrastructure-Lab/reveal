@@ -1,6 +1,5 @@
 """Declared binding preserves typed values, legacy URI spelling and actual reads."""
 import argparse
-import sys
 from urllib.parse import quote
 
 import pytest
@@ -115,10 +114,12 @@ def test_resource_raw_existing_path_wins_then_decodes_once(binding, tmp_path):
     assert binding.bind_resource_path(declaration, str(raw), transport='uri') == str(decoded)
 
 
-@pytest.mark.skipif(sys.platform == 'win32', reason="Windows cannot represent '?' in filenames")
-def test_resource_question_mark_and_comma_filename(binding, tmp_path):
+@pytest.mark.parametrize('filename', ['what #雪%+,part', 'what?,part'])
+def test_resource_question_mark_and_comma_filename(binding, tmp_path, filename):
     declaration = query.ResourceSpec(uri_codec='existing-path-first')
-    question = tmp_path / 'what?,part'
+    from filename_fixture import require_filename
+    question = tmp_path / filename
+    require_filename(question)
     question.mkdir()
     encoded = str(tmp_path / quote(question.name, safe=''))
     assert binding.bind_resource_path(declaration, encoded, transport='uri') == str(question)

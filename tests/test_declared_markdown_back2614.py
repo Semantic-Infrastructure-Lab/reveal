@@ -100,7 +100,13 @@ def test_resource_validation_precedes_bad_controls_and_preserves_literal_paths(d
     run = _run_reveal_in(docs, 'markdown', 'missing', '--limit', 'bad', '--format', 'json')
     assert run.returncode == 2
     assert 'not found' in json.loads(run.stdout)['error'].lower()
-    special = docs / 'question?and%26'
+
+
+@pytest.mark.parametrize('filename', ['space #雪%26', 'question?and%26'])
+def test_literal_directory_paths(docs, filename):
+    from filename_fixture import require_filename
+    special = docs / filename
+    require_filename(special)
     special.mkdir()
     (special / 'one.md').write_text('# One\n', encoding='utf-8')
     typed = _run_reveal_in(docs, 'markdown', str(special), '--format', 'json')

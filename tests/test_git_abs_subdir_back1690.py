@@ -17,6 +17,8 @@ import pytest
 
 pytest.importorskip('pygit2')
 
+from reveal.utils.path_utils import to_posix
+
 from conftest import _run_reveal_direct  # noqa: E402
 
 pytestmark = [
@@ -138,7 +140,7 @@ def test_work_tree_root_keeps_the_repository_view(layout, spelling, view):
     if not view:
         actual_heading, _, actual_text = actual_text.partition('\n')
         expected_heading, _, expected_text = expected_text.partition('\n')
-        assert actual_heading.removeprefix('Repository: ').rstrip('/\\') == str(repo)
+        assert actual_heading.removeprefix('Repository: ').rstrip('/\\') == to_posix(repo)
         assert expected_heading == 'Repository: .'
     assert (actual.returncode, actual_text, actual.stderr) == \
         (expected.returncode, expected_text, expected.stderr)

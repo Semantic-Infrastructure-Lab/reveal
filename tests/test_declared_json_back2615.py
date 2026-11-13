@@ -107,10 +107,13 @@ def test_inspection_postprocessing_cannot_erase_required_observations(data, monk
     assert any(e['code'] == 'invalid_adapter_answer' for e in json.loads(result.stdout)['meta']['errors'])
 
 
-def test_encoded_source_selector_and_literal_typed_question_mark(data):
+@pytest.mark.parametrize('filename', ['percent%20 #雪.json', 'percent%20?source.json'])
+def test_encoded_source_selector_and_literal_typed_question_mark(data, filename):
     from reveal.api import query
     from urllib.parse import quote
-    literal = data / 'percent%20?source.json'
+    from filename_fixture import require_filename
+    literal = data / filename
+    require_filename(literal)
     literal.write_text('{"answer": 42}', encoding='utf-8')
     canonical = answer(data, 'json', str(literal) + '/answer')
     encoded = quote(str(literal), safe='/')

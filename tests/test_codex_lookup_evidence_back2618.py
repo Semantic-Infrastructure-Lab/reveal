@@ -129,9 +129,12 @@ def test_close_failure_keeps_the_acquired_row_and_rollout(codex, monkeypatch):
     assert proof['failures'][0]['phase'] == 'close'
 
 
-def test_readonly_uri_keeps_literal_database_filenames(codex, monkeypatch):
+@pytest.mark.parametrize('filename', ['state #% 雪.sqlite', 'state #?% 雪.sqlite'])
+def test_readonly_uri_keeps_literal_database_filenames(codex, monkeypatch, filename):
     from reveal.adapters.codex.adapter import CodexAdapter
-    unusual = codex / 'state #?% 雪.sqlite'
+    from filename_fixture import require_filename
+    unusual = codex / filename
+    require_filename(unusual)
     (codex / 'state_5.sqlite').rename(unusual)
     monkeypatch.setattr(CodexAdapter, 'CODEX_DB', unusual)
     answer = query('codex://' + DOC_SESSION_ID + '/messages')
