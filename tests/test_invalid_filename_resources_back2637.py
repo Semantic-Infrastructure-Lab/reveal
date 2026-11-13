@@ -12,7 +12,9 @@ from test_codex_declared_api_back2618 import codex
 
 @pytest.mark.parametrize('character', list('<>:"|?*'))
 @pytest.mark.parametrize('noun', ['json', 'markdown'])
-def test_windows_rejected_literal_is_reported_without_prefix_fallback(tmp_path, monkeypatch, noun, character):
+@pytest.mark.parametrize('transport', ['typed', 'uri'])
+@pytest.mark.parametrize('winerror,exit_code', [(123, 2), (5, 3), (None, 3)])
+def test_windows_rejected_literal_is_reported_without_prefix_fallback(tmp_path, monkeypatch, noun, character, transport, winerror, exit_code):
     # Run the Windows metadata failure on Linux too, without changing os.name.
     target = tmp_path / ('invalid' + character + 'name.json')
     (tmp_path / 'invalid').mkdir()
@@ -20,17 +22,21 @@ def test_windows_rejected_literal_is_reported_without_prefix_fallback(tmp_path, 
     original = Path.stat
     def stat(path, *args, **kwargs):
         if path == target:
-            error = OSError(errno.EINVAL, 'Windows invalid filename')
-            error.winerror = 123
+            error = OSError(errno.EACCES if winerror == 5 else errno.EINVAL, 'resource metadata rejected')
+            error.winerror = winerror
             raise error
         return original(path, *args, **kwargs)
     monkeypatch.setattr(Path, 'stat', stat)
-    run = _run_reveal_in(tmp_path, noun, str(target), '--format', 'json')
-    # An OS metadata error remains required acquisition loss; it must not be
-    # swallowed as a clean empty answer or select the path before '?'.
-    assert run.returncode == 3, (run.stdout, run.stderr)
+    from urllib.parse import quote
+    argv = (noun, str(target)) if transport == 'typed' else (noun + '://' + quote(target.as_posix(), safe='/:'),)
+    run = _run_reveal_in(tmp_path, *argv, '--format', 'json')
+    # WinError123 identifies an invalid requested resource, not failed analysis.
+    assert run.returncode == exit_code, (run.stdout, run.stderr)
     answer = json.loads(run.stdout)
-    assert answer['error'] and answer['meta']['errors']
+    assert answer['error']
+    errors = answer['meta']['errors']
+    assert errors
+    assert (errors[0]['code'] == 'invalid_request') == (exit_code == 2)
     assert 'Traceback' not in run.stderr
 
 

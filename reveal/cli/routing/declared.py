@@ -235,16 +235,14 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                                         result_type=expected_type))
                 return
             except OSError as exc:
-                from ...utils.results import FailureCause
-                consume(_invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS, result_type=expected_type))
+                consume(_invalid_answer(adapter, name, path, str(exc), args, _resource_failure_cause(exc), result_type=expected_type))
                 return
             scope_path = _scope_path(adapter, path)
             expected_type = _result_type_at(adapter, expected_type, source, scope_path)
             try:
                 root, excludes = _walk_scope(adapter, scope_path, args)
             except (OSError, ValueError) as exc:
-                from ...utils.results import FailureCause
-                consume(_invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS,
+                consume(_invalid_answer(adapter, name, path, str(exc), args, _resource_failure_cause(exc),
                                         result_type=expected_type))
                 return
             with exclusion_scope(root, excludes), gitignore_scope(respect):
@@ -254,6 +252,13 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     finally:
         if ledger is not None and ledger.complete:
             ledger.report(name)
+
+
+def _resource_failure_cause(error: OSError | ValueError):
+    """Windows invalid-name metadata rejects a resource; other OS loss stays analysis."""
+    from ...utils.results import FailureCause
+    return (FailureCause.INVALID_REQUEST if isinstance(error, OSError) and getattr(error, 'winerror', None) == 123
+            else FailureCause.ANALYSIS)
 
 
 def _resource_error_message(error, path: str) -> str:
@@ -301,7 +306,6 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
     from ...adapters.factory import _canonical_init
     from ...utils.query_binding import bind_prepared_params
     from ...utils.path_utils import to_posix
-    from ...utils.results import FailureCause
     from .uri import _answer, _call_adapter, _renderer_class_of, _structure_answer, _configure_base_path
     scope = path if scope_path is None else scope_path
     try:
@@ -317,7 +321,7 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
     except ValueError as exc:
         return _invalid_answer(adapter_class, name, scope, str(exc), args, result_type=expected_type)
     except OSError as exc:
-        return _invalid_answer(adapter_class, name, scope, str(exc), args, FailureCause.ANALYSIS, result_type=expected_type)
+        return _invalid_answer(adapter_class, name, scope, str(exc), args, _resource_failure_cause(exc), result_type=expected_type)
 
     def resolve():
         adapter = _call_adapter(lambda: _canonical_init(adapter_class, path, params=params),

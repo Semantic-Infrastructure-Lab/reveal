@@ -22,7 +22,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
-- On Windows, Calls and session-reader JSON now use portable path separators, and recursive Claude plan lookups work without treating wildcard paths as read failures. Git diff and content-history searches preserve recovered UTF-8 text and known matches when decoding is lossy, report incomplete analysis, and return usable partial MCP answers. Missing Calls targets keep exit 2 with Windows paths; genuinely incomplete input keeps exit 3 (BACK-2635, BACK-2636).
+- On Windows, Calls and session-reader JSON now use portable path separators, and recursive Claude plan lookups work without treating wildcard paths as read failures. Git diff and content-history searches preserve recovered UTF-8 text and known matches when decoding is lossy, report incomplete analysis, and return usable partial MCP answers. Missing Calls targets keep exit 2 with Windows paths; genuinely incomplete input keeps exit 3. Windows-invalid filenames in declared commands give exit 2; denied or failed metadata reads remain exit 3 (BACK-2635, BACK-2636, BACK-2637).
 
 - Codex installation inspection now distinguishes confirmed absence from unknown metadata, retains interrupted directory counts and read-only SQLite observations, and exits 3 for required inspection/output loss. Shared path inspection preserves Claude behavior; Codex shows unknown paths as `?` and keeps usable partial MCP inventory with source receipts (BACK-2618).
 

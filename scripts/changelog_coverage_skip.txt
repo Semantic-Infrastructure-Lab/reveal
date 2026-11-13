@@ -8,4 +8,3 @@ BACK-2609  Corpus fetcher: enable sparse cone mode before selecting source direc
 BACK-2575  Independent Python package-build recall oracle and gated monorepo row.
 BACK-2634  Installed-wheel README semantic smoke and mandatory local push-gate coverage.
 BACK-2638  Explicitly close SQLite fixture connections while preserving transactions and race assertions.
-BACK-2637  Portable filename fixtures, filesystem-qualified literal cases, invalid-resource controls and Git heading pins.
