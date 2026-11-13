@@ -102,12 +102,12 @@ class TestGitSource:
 class TestElementErrors:
     def test_missing_file_is_a_clean_error_not_a_traceback(self, files):
         proc = run_reveal(files, 'diff://nonexist.py:b.py', 'foo')
-        assert proc.returncode == 1
+        assert proc.returncode == 2  # BACK-2639: absent path target, plan rule 9
         assert 'Traceback' not in proc.stderr
         assert 'Error (diff://)' in proc.stderr
 
     def test_missing_file_json_has_error_envelope(self, files):
         proc = run_reveal(files, 'diff://nonexist.py:b.py', 'foo', '--format', 'json')
-        assert proc.returncode == 1
+        assert proc.returncode == 2  # BACK-2639: absent path target, plan rule 9
         assert 'Traceback' not in proc.stderr
-        assert '"adapter_error"' in proc.stdout
+        assert '"invalid_request"' in proc.stdout
