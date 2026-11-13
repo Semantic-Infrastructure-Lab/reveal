@@ -192,6 +192,7 @@ if [[ $PUSH -eq 1 ]]; then
     python3 "$CALLS_HELPER" "${CALLS_ARGS[@]}" || exit 1
     python3 "$IMPORTS_HELPER" "${IMPORTS_ARGS[@]}" || { echo "push gate FAILED (imports recall gate)" >&2; exit 1; }
     python3 "$IMPORTS_HELPER" "${CALLS_RECALL_ARGS[@]}" || { echo "push gate FAILED (public calls recall gate)" >&2; exit 1; }
+    "$CALLS_PY" "$GATE_REPO/scripts/default_install_smoke.py" || { echo "push gate FAILED (core-only installed-wheel README smoke)" >&2; exit 1; }
     printf '\nPush gate passed. Push, then: scripts/ci-watch.sh (macOS, Windows and the floor run only on GitHub).\n'
     exit 0
 fi

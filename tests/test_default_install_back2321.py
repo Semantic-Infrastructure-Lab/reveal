@@ -19,12 +19,12 @@ pytestmark = pytest.mark.component
 
 def _overview(*, code=0, errors=None, **overrides):
     answer = {
-        'scope': {'complete': True, 'total_code_files': 3},
+        'scope': {'complete': True, 'total_code_files': 4},
         'map_status': 'complete',
         'map': {
-            'metadata': {'scanned_files': 3},
-            'fan_in': {'rows': [{'file': 'src/auth.py', 'fan_in': 1, 'fan_out': 0}]},
-            'entrypoints': {'rows': [{'file': 'src/login.py', 'fan_out': 1}]},
+            'metadata': {'scanned_files': 4},
+            'fan_in': {'rows': [{'file': 'src/app.py', 'fan_in': 1, 'fan_out': 0}, {'file': 'src/auth.py', 'fan_in': 1, 'fan_out': 0}]},
+            'entrypoints': {'rows': [{'file': 'src/login.py', 'fan_out': 2}]},
         },
         'meta': {'errors': errors or []},
     }
@@ -44,7 +44,7 @@ def test_overview_rejects_old_missing_pygit2_failure():
 
 @pytest.mark.parametrize('overrides, reason', [
     ({'scope': {}}, 'code scope'),
-    ({'scope': {'complete': False, 'total_code_files': 3}}, 'code scope'),
+    ({'scope': {'complete': False, 'total_code_files': 4}}, 'code scope'),
     ({'map': None}, 'import map'),
     ({'map_status': 'incomplete'}, 'import map'),
     ({'errors': [{'code': 'E_COMPOSE', 'message': 'failed'}]}, 'analysis errors'),

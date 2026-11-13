@@ -65,10 +65,13 @@ def create_fixture(root: Path, env: dict[str, str]) -> None:
     auth = src / 'auth.py'
     auth.write_text('"""Token validation."""\n\n\ndef validate_token(token: str) -> bool:\n'
                     '    """Validate one token."""\n    return bool(token)\n', encoding='utf-8')
+    (src / 'app.py').write_text(
+        '"""Application entry point."""\n\n\ndef main(token: str) -> bool:\n'
+        '    """Accept a nonempty token."""\n    return bool(token)\n', encoding='utf-8')
     (src / 'login.py').write_text(
-        '"""Login entry point."""\n\nfrom auth import validate_token\n\n\n'
+        '"""Login entry point."""\n\nfrom auth import validate_token\nfrom app import main\n\n\n'
         'def run_login(token: str) -> bool:\n    """Check one login."""\n'
-        '    return validate_token(token)\n', encoding='utf-8')
+        '    return main(token) and validate_token(token)\n', encoding='utf-8')
     (src / 'complexity.py').write_text(
         '"""A bounded complexity-query fixture."""\n\n\n'
         'def classify(value: int) -> int:\n    """Map a small integer."""\n'
@@ -93,16 +96,17 @@ def validate_overview(result: subprocess.CompletedProcess) -> dict:
     answer = json.loads(result.stdout)
     require(not (answer.get('meta') or {}).get('errors'), 'overview: unexpected analysis errors')
     scope = answer.get('scope') or {}
-    require(scope.get('complete') is True and scope.get('total_code_files') == 3,
+    require(scope.get('complete') is True and scope.get('total_code_files') == 4,
             'overview: fixture code scope is missing or incomplete')
     graph = answer.get('map') or {}
-    require(answer.get('map_status') == 'complete' and graph.get('metadata', {}).get('scanned_files') == 3,
+    require(answer.get('map_status') == 'complete' and graph.get('metadata', {}).get('scanned_files') == 4,
             'overview: fixture import map is missing or incomplete')
     require(graph.get('fan_in', {}).get('rows') == [
+        {'file': 'src/app.py', 'fan_in': 1, 'fan_out': 0},
         {'file': 'src/auth.py', 'fan_in': 1, 'fan_out': 0}],
         'overview: expected the real auth import relationship')
     require([(row.get('file'), row.get('fan_out'))
-             for row in graph.get('entrypoints', {}).get('rows', [])] == [('src/login.py', 1)],
+             for row in graph.get('entrypoints', {}).get('rows', [])] == [('src/login.py', 2)],
             'overview: expected the real login entrypoint')
     return answer
 
@@ -137,6 +141,8 @@ def readme_commands(path: Path) -> list[tuple[str, ...]]:
     for line in block.split('\n'):
         argv = shlex.split(line, comments=True)
         if argv:
+            if argv == ['pip', 'install', 'reveal-cli']:
+                continue  # The runtime has already installed the built wheel.
             require(argv[0] == 'reveal', 'README first-screen example needs a smoke fixture')
             commands.append(tuple(argv[1:]))
     return commands
@@ -146,12 +152,12 @@ def smoke_commands(cli: Path, root: Path, env: dict[str, str]) -> None:
     """Run the documented text commands, then verify their structured answers."""
     prefix = [str(cli)]
     examples = {
-        ('src/auth.py', 'validate_token'): 'return token == "accepted"',
-        ('calls://src/?callers=validate_token',): 'run_login',
-        ('overview', '.'): 'Import map: complete',
-        ('ast://src/?complexity>10',): 'classify',
+        ('src/',): 'app.py',
+        ('src/app.py',): 'main',
+        ('src/app.py', 'main'): 'return bool(token)',
+        ('calls', 'src/', '--callers', 'main'): 'run_login',
+        ('src/app.py', 'main', '--boundary'): 'token',
         ('check', 'src/'): 'No issues found',
-        ('pack', 'src/', '--since', 'main', '--budget', '8000'): 'auth.py',
     }
     commands = readme_commands(Path(__file__).resolve().parent.parent / 'README.md')
     require(len(commands) == len(examples) and set(commands) == set(examples),
@@ -159,6 +165,7 @@ def smoke_commands(cli: Path, root: Path, env: dict[str, str]) -> None:
     for args in commands:
         result = run(prefix + list(args), root, env)
         require(examples[args] in result.stdout, f'{args}: expected {examples[args]!r} in text answer')
+    validate_first_screen(cli, root, env)
     overview = run(prefix + ['overview', '.', '--format', 'json'], root, env)
     validate_overview(overview)
     calls = json.loads(run(prefix + ['calls://src/?callers=validate_token', '--format', 'json'],
@@ -173,6 +180,35 @@ def smoke_commands(cli: Path, root: Path, env: dict[str, str]) -> None:
     require(any(row['path'].endswith('auth.py') for row in packed['files']),
             'pack: changed auth.py missing from selected files')
     _check_findings(cli, root, env)
+
+
+def validate_first_screen(cli: Path, root: Path, env: dict[str, str]) -> None:
+    """Qualify each ladder rung against independently constructed fixture facts."""
+    def answer(*args):
+        result = run([str(cli), *args, '--format', 'json'], root, env)
+        data = json.loads(result.stdout)
+        require(not data.get('meta', {}).get('errors'), f'{args}: unexpected analysis errors')
+        return data
+
+    tree = answer('src/')
+    require([row['name'] for row in tree['entries']]
+            == ['app.py', 'auth.py', 'complexity.py', 'login.py'], 'directory: expected four fixture files')
+    structure = answer('src/app.py')
+    require([(row['name'], row['parameters']) for row in structure['structure']['functions']]
+            == [('main', ['token'])], 'structure: expected main(token)')
+    element = answer('src/app.py', 'main')
+    expected = 'def main(token: str) -> bool:\n    """Accept a nonempty token."""\n    return bool(token)'
+    require(element['name'] == 'main' and element['content'] == expected,
+            'content: expected the complete main definition')
+    calls = answer('calls', 'src/', '--callers', 'main')
+    require(calls['total_callers'] == 1 and [(row['file'], row['caller'])
+            for row in calls['levels'][0]['callers']] == [('src/login.py', 'run_login')],
+            'calls: expected the one real main caller')
+    boundary = answer('src/app.py', 'main', '--boundary')
+    require([(row['kind'], row['var']) for row in boundary['findings']]
+            == [('input', 'token'), ('builtin', 'bool')], 'boundary: expected input token and builtin bool')
+    checked = answer('check', 'src/')
+    require(checked['summary']['total_issues'] == 0, 'check: clean fixture contains findings')
 
 
 def validate_queries(calls: dict, ast: dict) -> None:
@@ -196,7 +232,9 @@ def _check_findings(cli: Path, root: Path, env: dict[str, str]) -> None:
                    + ''.join(f'    if value == {i}:\n        return {i}\n' for i in range(25))
                    + '    return -1\n', encoding='utf-8')
     try:
-        findings = json.loads(run(args, root, env, expected=1).stdout)
+        default = json.loads(run(args, root, env).stdout)
+        require(default['summary']['total_issues'] == 1, 'check: default-high scan hid medium finding')
+        findings = json.loads(run(args + ['--fail-on', 'medium'], root, env, expected=1).stdout)
         require(findings['summary']['total_issues'] == 1, 'check: expected exactly one C901 finding')
     finally:
         bad.unlink()
