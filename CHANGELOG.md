@@ -74,6 +74,12 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- AST, Markdown, JSON, Git and Claude gain CLI/API controls shared with URI queries. Qualified inspections distinguish invalid requests (2) from source/output loss (3), preserving usable partial results. File and element JSON share an envelope: `source` identifies the file; extracted code moves to `content`. Check shows medium and above and gates on high by default. Metrics totals cover all filtered files; text renders the selected rows. Calls exposes syntax-derived parameters and import-target evidence. Python imports prefer packages over namespace candidates. Claude/Codex session readers disclose incomplete input. Pass Calls controls to query or its constructor, rather than get_structure.
+
+- Incomplete required analysis now exits 3 even when findings exist; a findings-gate match cannot hide an incomplete answer (BACK-2588, BACK-2602).
+
+- Retired spellings print a "replaced by" note naming their current replacement.
+
 - Git gains a generated CLI over its existing owners, with request/source/output exits 2/3 and source evidence across direct views. Historical semantic blame uses the selected blob; element-parser failures, decoding loss, unreadable refs and failed content searches cannot become clean absence. Canonical aggregate `limit` caps authors/buckets after counting; `scan-limit` bounds commit input, while legacy `type=` aggregate windows keep their meaning. Earlier search failures no longer contaminate healthy followups. Original semantic URI constraints are validated before typed API overrides, including AST predicates (BACK-2616, BACK-2613).
 
 - Git Python queries now bind declared controls before execution: `view`, repeated `where` and time bounds, pagination, ref, detail and merge policy reach the existing owners. Typed booleans and `merges=on/off` give an explicit positive switch; legacy numeric merges remains ownership-only. Original invalid predicates cannot be hidden by typed overrides (BACK-2616).
