@@ -427,7 +427,7 @@ def test_content_pattern_search_discloses_a_git_diff_that_exited_nonzero(tmp_pat
     head = repo[repo.head.target]
     files._reset_content_search_error()
     monkeypatch.setattr(subprocess, 'run', lambda *a, **k: subprocess.CompletedProcess(
-        a, 128, stdout='', stderr='fatal: bad object\n'))
+        a, 128, stdout=b'', stderr=b'fatal: bad object\n'))
     assert files._commit_diff_contains(repo, head, '', 'return') is False
     disclosure = files.get_content_search_disclosure()
     assert 'degraded' in disclosure and 'exited 128' in disclosure and 'bad object' in disclosure
