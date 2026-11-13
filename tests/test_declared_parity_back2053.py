@@ -138,7 +138,8 @@ def project(tmp_path, monkeypatch):
         monkeypatch.delitem(RETIREMENTS, key)
     monkeypatch.chdir(tmp_path)
     from claude_session_fixture import build_claude_home
-    from reveal.adapters.claude import ClaudeAdapter
+    # Environment tests can reload the implementation and replace the registry class.
+    ClaudeAdapter = declared_adapter_class('claude')
     claude = build_claude_home(tmp_path / 'home')
     monkeypatch.setattr(ClaudeAdapter, 'CLAUDE_HOME', claude)
     monkeypatch.setattr(ClaudeAdapter, 'CONVERSATION_BASE', claude / 'projects')
