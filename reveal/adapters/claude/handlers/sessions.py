@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, date as _date
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
+from reveal.utils.path_utils import to_posix
 
 from ..analysis import search_sessions_for_term, get_files_touched
 from ....utils.results import ResultBuilder, note_warning
@@ -194,7 +195,7 @@ def _collect_sessions_from_dir(project_dir: Path) -> SessionEntries:
             continue
         sessions.append({
             'session': session_name,
-            'path': str(jsonl_file),
+            'path': to_posix(jsonl_file),
             'modified': modified,
             'size_kb': stat.st_size // 1024,
             'project': project,
@@ -259,7 +260,7 @@ def list_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Dict
     """
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='claude_session_list',
-        source=str(conversation_base),
+        source=to_posix(conversation_base),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
     )
@@ -327,7 +328,7 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
 
     result = ResultBuilder.create(
         result_type='claude_cross_session_search',
-        source=str(conversation_base),
+        source=to_posix(conversation_base),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
         data={
@@ -416,7 +417,7 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
 
     result = ResultBuilder.create(
         result_type='claude_file_sessions',
-        source=str(conversation_base),
+        source=to_posix(conversation_base),
         source_type='directory',
         contract_version=CONTRACT_VERSION,
         data={

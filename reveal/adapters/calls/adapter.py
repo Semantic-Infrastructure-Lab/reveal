@@ -805,9 +805,11 @@ class CallsAdapter(ResourceAdapter):
         clean = clean and not (dropped and data.get('target') in dropped['names'])
         if absent is not None and clean and absent():
             data['error'] = _calls_absence_message(data)
+        if 'path' in data:
+            data['path'] = to_posix(data['path'])
         return ResultBuilder.create(
             result_type=result_type,
-            source=self.path,
+            source=to_posix(self.path),
             contract_version=CONTRACT_VERSION,
             data=data,
             **meta,
