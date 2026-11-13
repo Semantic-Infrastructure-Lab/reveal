@@ -265,6 +265,11 @@ def run_push_dispatch(repo, tmp_path, args, suite_body='', extra_env=None, befor
     script = scripts / 'ci-local.sh'
     script.write_text(prefix, encoding='utf-8')
     script.chmod(0o755)
+    # Stand in for the separately exercised wheel install, as this driver stubs pytest/recall.
+    (scripts / 'default_install_smoke.py').write_text(
+        "import os, pathlib, sys\n"
+        "pathlib.Path(os.environ['SUITE_MARKER'] + '.wheel').write_text('ran', encoding='utf-8')\n"
+        "sys.exit(int(os.environ.get('STUB_WHEEL_EXIT', '0')))\n", encoding='utf-8')
     for helper in (HELPER, HELPER.with_name('check_imports_gate.py')):  # the imports gate imports the calls one
         if helper.exists():
             shutil.copy2(helper, scripts / helper.name)
@@ -334,10 +339,10 @@ def test_push_option_validation_still_refuses_invalid_combinations(repo, tmp_pat
 # ---------------------------------------------------------------- BACK-2187: no second suite on a green tree
 
 def _fake_venv(tmp_path, lp='1.25.0'):
-    """A py3.12 'interpreter' that answers only the language-pack version query."""
+    """A py3.12 stand-in: pin the pack query, execute other script requests normally."""
     python = tmp_path / 'venvs' / 'py3.12' / 'bin' / 'python'
     python.parent.mkdir(parents=True)
-    python.write_text(f'#!/bin/sh\necho {lp}\n', encoding='utf-8')
+    python.write_text(f'#!/bin/sh\nif [ "$1" = "-c" ]; then echo {lp}; else exec "{sys.executable}" "$@"; fi\n', encoding='utf-8')
     python.chmod(0o755)
     return tmp_path / 'venvs'
 
@@ -384,3 +389,14 @@ def test_push_runs_the_suite_unless_tree_and_environment_match(repo, tmp_path, c
     result, marker, _ = run_push_dispatch(repo, tmp_path, ['--push'], extra_env=env, before_run=before)
     assert marker.exists(), (result.stdout, result.stderr)
     assert marker.read_text(encoding='utf-8') == ''
+
+
+@shell_only
+def test_matching_green_suite_still_requires_successful_wheel_smoke(repo, tmp_path):
+    commit_file(repo, 'reveal/utils/results.py')
+    env = {'REVEAL_CI_VENV_ROOT': str(_fake_venv(tmp_path)), 'STUB_WHEEL_EXIT': '1'}
+    result, marker, _ = run_push_dispatch(repo, tmp_path, ['--push'], extra_env=env, before_run=_stamp())
+    assert marker.read_text(encoding='utf-8') == '--no-tests'
+    assert marker.with_name(marker.name + '.wheel').read_text(encoding='utf-8') == 'ran'
+    assert result.returncode == 1
+    assert 'installed-wheel README smoke' in result.stderr
