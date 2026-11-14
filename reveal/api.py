@@ -161,6 +161,20 @@ def element(
     return None
 
 
+def _bound_query_result(adapter, scheme: str, uri: str, overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep declared alias retirement metadata equal to the CLI's JSON answer."""
+    from .cli.invocation import Invocation, invocation_scope, retirement_note, uri_retirement_keys
+    from .utils.json_utils import attach_retirements
+    aliases = {f'param:{scheme}.{alias}' for spec in adapter.PARAM_SPECS for alias in spec.aliases}
+    keys = uri_retirement_keys(uri) + [f'param:{scheme}.{key}' for key in overrides]
+    with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False):
+        for key in keys:
+            if key in aliases:
+                retirement_note(key)
+        result: Dict[str, Any] = attach_retirements(adapter.get_structure())
+        return result
+
+
 def query(
     uri: str,
     element_name: Optional[str] = None,
@@ -235,8 +249,8 @@ def query(
     with host_request(), gitignore_scope(respect_gitignore):
         from .adapters.factory import _canonical_init, uses_bound_query_call
         if not element_name and uses_bound_query_call(adapter_class):
-            bound_result: Dict[str, Any] = _canonical_init(
-                adapter_class, resource, overrides=kwargs).get_structure()
+            bound_result: Dict[str, Any] = _bound_query_result(
+                _canonical_init(adapter_class, resource, overrides=kwargs), scheme, uri, kwargs)
             return bound_result
         if isinstance(adapter_class, type) and hasattr(adapter_class, "from_uri"):
             adapter = adapter_class.from_uri(scheme, resource, element_name)

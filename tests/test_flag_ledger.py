@@ -315,7 +315,13 @@ def test_declared_native_cap_accepts_limit(db, noun, mode):
     results = [_cli(noun, '.', *mode, flag, '2', '--format', 'json', cwd=db)
                for flag in ('--top', '--limit')]
     assert [result.returncode for result in results] == [0, 0], [r.stderr for r in results]
-    assert json.loads(results[0].stdout) == json.loads(results[1].stdout)
+    legacy, canonical = (json.loads(result.stdout) for result in results)
+    if noun == 'calls':
+        notes = [w for w in legacy['meta']['warnings'] if w.get('field') == 'param:calls.top']
+        assert len(notes) == 1
+        assert notes[0]['replacement'] == '?limit=N (--limit N); 0 is uncapped'
+        legacy['meta']['warnings'].remove(notes[0])
+    assert legacy == canonical
     assert 'has no effect' not in results[1].stderr
     full = _cli(noun, '.', *mode, '--top', '4', '--format', 'json', cwd=db)
     assert full.returncode == 0, full.stderr

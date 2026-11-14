@@ -82,6 +82,9 @@ def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str,
         present = [name for name in (spec.name, *spec.aliases) if name in result]
         if not present:
             continue
+        if spec.alias_normalize is not None:
+            for name in present:
+                result[name] = spec.alias_normalize(name, result[name])
         value = result[present[0]]
         if any(type(result[name]) is not type(value) or result[name] != value for name in present[1:]):
             raise ValueError(f'{spec.name}: conflicting spellings: ' + ', '.join(present))
@@ -261,7 +264,18 @@ def bind_prepared_params(declarations: Iterable[ParamSpec], params: QueryParams,
 class _ScalarAliasAction(argparse.Action):
     """Keep argparse's repeated-key policy without letting aliases hide conflicts."""
 
+    def __init__(self, *args, alias_normalize=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.alias_normalize = alias_normalize
+
     def __call__(self, parser, namespace, values, option_string=None):
+        if self.alias_normalize is not None:
+            try:
+                values = self.alias_normalize(option_string.lstrip('-'), values)
+            except ValueError:
+                # Invalid values are rejected by the binder, preserving JSON
+                # request diagnostics instead of an argparse-only usage dump.
+                pass
         submitted = getattr(namespace, '_declared_alias_values', {})
         previous = submitted.setdefault(self.dest, {})
         if any(flag != option_string and value != values for flag, value in previous.items()):
@@ -296,8 +310,11 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
         else:
             if len(cli.flags) > 1:
                 options['action'] = _ScalarAliasAction
+                options['alias_normalize'] = spec.alias_normalize
             if cli.nargs is not None:
                 options['nargs'] = cli.nargs
+                if cli.nargs == '?':
+                    options['const'] = cli.const
             if cli.metavar is not None:
                 options['metavar'] = cli.metavar
         parser.add_argument(*cli.flags, **options)

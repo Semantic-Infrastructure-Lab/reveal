@@ -84,7 +84,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Retired: use reveal overview [path] [--against REF]'),
     'calls':        _declared('calls',
                      'reveal calls --callers FUNC',
-                     'Call graph: callers, callees (--depth N, --detail), --rank callers'),
+                     'Call graph: callers, callees (--depth N, --detail), --sort=-callers'),
     'check':        _spec('check',
                      'reveal check <path>',
                      'Run quality rules on a file or directory',
@@ -288,6 +288,9 @@ RETIREMENTS: Dict[str, Retirement] = {
                                    '?callees=FUNC&depth=N (--callees FUNC --depth N), the same walk'),
     # Decision (a): an alias that answers identically until the cut.
     'param:calls.target': Retirement('calls ?target= (--target)', '?callers=FUNC (--callers FUNC), the same answer'),
+    'param:calls.rank': Retirement('calls ?rank=callers (--rank callers)', '?sort=-callers (--sort=-callers)'),
+    'param:calls.top': Retirement('calls ?top=N (--top N)', '?limit=N (--limit N); 0 is uncapped'),
+    'param:calls.type': Retirement('calls ?type=KIND (--type KIND)', '?kind=KIND (--kind KIND); legacy method keeps its existing population'),
     # calls?modules folded into imports (BACK-1054 slice S5, Q4/Q8): the module graph is imports' edges, in the
     # old shape without call_count, until the cut.
     'param:calls.modules': Retirement('calls ?modules (--modules)',

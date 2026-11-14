@@ -394,7 +394,7 @@ with a note naming `--callers` and `--callees NAME --depth N` ([retired spelling
 ```
 reveal calls [PATH] --callers NAME [--depth N]
 reveal calls [PATH] --callees NAME|FILE:NAME [--depth N] [--detail] [--builtins]
-reveal calls [PATH] --rank callers [--top N] [--builtins] [--test-framework]
+reveal calls [PATH] --sort=-callers [--limit N] [--builtins] [--test-framework]
 ```
 
 ### CLI Flags
@@ -446,7 +446,7 @@ reveal calls src --callers validate_item           # who calls validate_item?
 reveal calls src --callers process --depth 2       # callers of callers
 reveal calls src --callees validate_item           # what it calls
 reveal calls src --callees main --depth 3 --detail # what that calls, 3 levels, params/effects
-reveal calls src --rank callers --top 20           # most-called functions
+reveal calls src --sort=-callers --limit 20           # most-called functions
 reveal imports src --importers --scope path        # was: reveal calls src --modules (module graph)
 ```
 

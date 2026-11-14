@@ -83,7 +83,7 @@ calls://<path>:<name>
 calls://<path>?callees=<name>|<file>:<name>[&depth=N][&detail][&format=<fmt>]
 
 # Ranking: most-called functions in the project
-calls://<path>?rank=callers[&top=N]
+calls://<path>?sort=-callers[&limit=N]
 ```
 
 | Component | Description |
@@ -92,7 +92,7 @@ calls://<path>?rank=callers[&top=N]
 | `callers` | Function name to find **callers of** (reverse lookup); `target` is its older name |
 | `callees` | Function name, or `FILE:NAME`, to find **callees of** (forward lookup) |
 | `rank` | Set to `callers` to rank the functions and classes the path defines by in-degree (coupling metrics) |
-| `top` | Max results for `?rank=callers` (default: 10; `0` = all) |
+| `top` | Max results for `?sort=-callers` (default: 10; `0` = all) |
 | `depth` | Levels for `?callers` and `?callees` (default: 1, max: 5) |
 | `detail` | `?callees` only: add each reached definition's params and effects |
 | `format` | Output format: `text` (default), `json`, or `dot` (Graphviz) |
@@ -193,25 +193,40 @@ callee → [(file, caller_func, line), ...]
 | `callers` | string | — | Function name to find **callers of** (reverse lookup). A bare name: `callers=FILE:NAME` exits 2, because the callers index has no file filter |
 | `target` | string | — | Retired name of `callers`: the same mode and answer, with a replaced-by note |
 | `callees` | string | — | Function name, or `FILE:NAME` for the definitions in one file, to find **callees of** (forward lookup). Depth 1 lists each definition's calls (`matches`); depth 2-5 walks level by level (see [`callees`](#callees)) |
-| `detail` | flag | — | `?callees` only: adds `params` and `effects` to every definition the walk reaches (`definitions[]`); with any other mode it exits 2. Not measured (W-CALLS-9) |
-| `rank` | string | — | Set to `callers` to rank all functions by in-degree |
+| `detail` | normal/full or legacy boolean | normal | `?callees` only: full adds `params` and `effects` to every definition the walk reaches (`definitions[]`); with any other mode it exits 2. Not measured (W-CALLS-9) |
+| `sort` | string | — | `-callers` selects the existing in-degree ranking operation |
 | `uncalled` | flag | — | Retired (D8): lists functions/methods with no static callers, with no confidence; use `?callers=NAME` for one function (see [Retired spellings](#retired-spellings)) |
-| `top` | integer | 10 for `?rank`, all for `?uncalled` | Max results for `?rank=callers` or `?uncalled`; `0` = all; a negative or non-whole value exits 2. `--limit N` becomes `top=N` |
+| `limit` | integer | 10 for ranking, all for `?uncalled` | Max results for `?sort=-callers` or `?uncalled`; `0` = all; a negative or non-whole value exits 2. Zero is truly uncapped; walk modes retain their existing warning instead of cutting graph rows |
 | `depth` | integer | 1 (the retired `?root`: 2) | Levels for `?callers` and `?callees` (and the retired `?root`): a signed whole integer clamped 1–5 (1 = direct only); `depth=abc` or `1.5` exits 2. A callee walk beyond depth 1 is not measured (W-CALLS-9) |
-| `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` at every depth, the retired `?root` and `?rank=callers`); in `?rank=callers` also ranks names the scan does not define, such as library methods |
+| `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` at every depth, the retired `?root` and `?sort=-callers`); in `?sort=-callers` also ranks names the scan does not define, such as library methods |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot`; another value exits 2 |
 | `root` | string | — | Retired: use `callees=NAME&depth=N`, the same walk (`?root` defaults to depth 2). A replaced-by note is printed. Root function name (or `FILE:NAME`) for a level-by-level callee walk. Every matching definition is a starting point and each definition is expanded once, at the shallowest level it is reached. Every call site of an expanded definition is an edge (`call_expr`), including one to a definition already reached, which has `expanded: false`. A callee name that several definitions share, with none in the caller's file or imports, is listed as `ambiguous` with its candidates and not expanded. Totals count edges: `total_edges` = `total_resolved` (ambiguous included, also counted in `total_ambiguous`) + `total_unresolved` |
 | `modules` | boolean | `false` | Retired: a module-level graph, one edge per import that resolves under the path (`imports://<path>?importers&scope=path`, no call count; see [Retired spellings](#retired-spellings)) |
 | `external` | boolean | `false` | Retired, with `modules`: importers from the whole project root (`scope=root`) |
-| `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?rank=callers`, and as dead-code candidates in `?uncalled` |
+| `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?sort=-callers`, and as dead-code candidates in `?uncalled` |
 
-> Exactly one of `callers`, `callees`, `rank`, `uncalled` or `modules` per request (the retired
+> Exactly one of `callers`, `callees`, `sort`, `uncalled` or `modules` per request (the retired
 > `target` and `root` count as selectors too, so `callers` and `target` together are two). The `path:name` shorthand is the
 > callers mode, so with any other mode it exits 2. Two modes exit 2 and name both;
 > before calls was a declared noun they resolved silently by a hidden precedence. No mode exits 2.
 > Values are typed, never coerced: `callers=123` is the name `123`; a malformed value (`depth=abc`,
 > `top=-1`, `rank=often`, `type=klass`, `builtins=maybe`) exits 2 naming the parameter. Boolean
 > keys take `true/false/yes/no/1/0` or bare presence.
+
+Canonical `sort=-callers`, `limit=N` and `kind=KIND` share their declared
+CLI/URI/API binding. Legacy `rank=callers`, `top=N` and `type=KIND` keep working
+with one replaced-by note until the cut. Equal cap aliases coalesce; conflicting
+values exit 2. `callers` plus `target` remains two modes even for the same name.
+
+`kind=function` retains the module-function selection for `uncalled`.
+`kind=method` retains the current unfiltered function-and-method population;
+it does not promise method-only results. No population changed (BACK-2645).
+`detail=normal|full` also accepts bare `--detail` and legacy true/false.
+`--max-items` remains a separate output budget: zero means an empty page,
+whereas `limit=0` is uncapped. `where`, `match`, `offset`, `since` and `until`
+are unsupported on Calls and reject with per-symbol lookup guidance.
+URI `format=dot` is retained; global `--format` is not widened. Ranking keeps
+its existing URI-format behavior; use global `--format json` for ranked JSON.
 
 ### Python API
 
@@ -229,7 +244,7 @@ keywords.
 
 ### Subcommand and exit codes
 
-`reveal calls <path>` takes the same parameters as flags (`--callers NAME`, `--callees NAME`, `--depth N`, `--detail`, `--rank callers`, `--top N`, `--uncalled`, `--type KIND`, `--modules`,
+`reveal calls <path>` takes the same parameters as flags (`--callers NAME`, `--callees NAME`, `--depth N`, `--detail`, `--sort=-callers`, `--limit N`, `--uncalled`, `--type KIND`, `--modules`,
 `--external`, `--builtins`, `--test-framework`, and the retired `--target`/`--root`, which print the
 same note as `?target=`/`?root=`); both spellings give equal JSON through one execution path. `format=dot` stays URI-only. Details: [SUBCOMMANDS_GUIDE](../guides/SUBCOMMANDS_GUIDE.md#reveal-calls--cross-file-call-graph).
 
@@ -331,7 +346,7 @@ reveal 'calls://src/?callees=handle_request&depth=3'
 reveal 'calls://src/?callees=handle_request&detail' --format=json | jq '.definitions[0].effects'
 ```
 
-> `?builtins` applies to both `?callees` (forward lookup) and `?rank=callers`. The `?callers` (reverse lookup) is unaffected — callers of builtins are always shown.
+> `?builtins` applies to both `?callees` (forward lookup) and `?sort=-callers`. The `?callers` (reverse lookup) is unaffected — callers of builtins are always shown.
 
 ### `rank`
 
@@ -339,10 +354,10 @@ Rank the functions, methods and classes defined under the path by how many uniqu
 
 ```bash
 # Top 10 most-called functions
-reveal 'calls://src/?rank=callers'
+reveal 'calls://src/?sort=-callers'
 
 # Top 20, every called name including builtins and library methods
-reveal 'calls://src/?rank=callers&top=20&builtins=true'
+reveal 'calls://src/?sort=-callers&limit=20&builtins=true'
 ```
 
 Output:
@@ -490,7 +505,7 @@ hidden by `.gitignore`) has nothing to weight: no `confidence`, and W-CALLS-12 s
 be taken (an error outside directory enumeration) withholds it the same way, and W-CALLS-12 then names the
 error (`could not be taken (PermissionError: ...)`), not an empty scope.
 W-CALLS-13 says the import analysis behind call resolution stopped at its file cap (20,000 source files): the
-callers, `--rank callers` and callee walks that read it match calls from the files past the cap by bare name
+callers, `--sort=-callers` and callee walks that read it match calls from the files past the cap by bare name
 only. It is not a loss of evidence and does not withhold the confidence; a project under the cap never sees it.
 `?uncalled` (retired) withholds it in every language, because the figure is call-extraction recall and
 says nothing about dead code; over a JavaScript, TypeScript, TSX, Java or PHP scan W-CALLS-11 also names the
@@ -570,7 +585,7 @@ reveal 'calls://src/?callers=validate_item' --format=json
 ### Dot (Graphviz)
 
 Directed graph format for visualisation. It draws callers, a callees walk (`depth=2-5` or `detail`), the
-retired `?root` and `?modules`; `?callees=NAME` at depth 1, `?rank=callers` and `?uncalled` have no graph,
+retired `?root` and `?modules`; `?callees=NAME` at depth 1, `?sort=-callers` and `?uncalled` have no graph,
 and `format=dot` on them exits 2 naming the views that have one.
 
 ```bash

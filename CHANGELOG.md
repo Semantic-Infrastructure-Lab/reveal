@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Added
 
+- Calls accepts `sort=-callers`, `limit=N`, `kind=KIND` and `detail=normal|full` in CLI, URI and typed API requests; old rank/top/type spellings still work with replacement notes. URI global `--limit 0` uses exact uncapped zero when the native declaration supports it; `--max-items 0` still means an empty output page, URI DOT stays supported, and graph populations do not change (BACK-2619).
+
 - `--agent-help` now routes questions about files importing a file, documents linking to a file, and abstract interfaces to Imports, Markdown backlinks, and Contracts (BACK-2640).
 
 - `reveal claude` is generated from the same declarations as `claude://`: canonical view/detail/match/where and answer-row pagination use existing readers, preserve source-loss outcomes, and retain base-path configuration and optional session statistics. Composite query receipts describe applied bound filters, including API overlays (BACK-2617).

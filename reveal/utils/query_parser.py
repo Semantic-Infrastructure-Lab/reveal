@@ -298,6 +298,7 @@ class CliBinding:
     required: bool = False
     action: Optional[str] = None
     metavar: Optional[str] = None
+    const: Any = None
 
 
 @dataclass(frozen=True)
@@ -351,6 +352,7 @@ class ParamSpec:
     names: Optional[str] = None
     aliases: Tuple[str, ...] = ()
     legacy_selectors: Tuple[str, ...] = ()
+    alias_normalize: Optional[Callable[[str, Any], Any]] = None
 
     def read(self, params: Dict[str, Any]) -> Any:
         raw = params.get(self.name)

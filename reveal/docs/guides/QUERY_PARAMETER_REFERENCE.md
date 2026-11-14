@@ -430,8 +430,8 @@ reveal 'metrics://.?hotspots&code_only'
 
 - **`rank=callers`** - Rank the functions and classes defined under the path by number of unique callers (coupling metrics); `builtins=true` also ranks library methods and builtins
   ```bash
-  reveal 'calls://src?rank=callers'          # top 10 most-called
-  reveal 'calls://src?rank=callers&top=20'   # top 20
+  reveal 'calls://src?sort=-callers'          # top 10 most-called
+  reveal 'calls://src?sort=-callers&limit=20'   # top 20
   ```
 
 - **`depth`** - Levels for `?callers` and `?callees` (default 1; the retired `?root`: 2), clamped 1-5

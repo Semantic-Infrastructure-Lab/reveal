@@ -55,7 +55,7 @@ reveal 'calls://src/?callers=validate_token&depth=3'
 reveal 'calls://src/?callees=process_payment'
 
 # Architectural coupling: what functions are called the most?
-reveal 'calls://src/?rank=callers&top=20'
+reveal 'calls://src/?sort=-callers&limit=20'
 
 # Colon shorthand — same as ?callers=
 reveal 'calls://src/auth.py:validate_token'
@@ -304,7 +304,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 ## Things Nobody Else Does
 
-1. **`?rank=callers`** — coupling metrics from the CLI. Not "who calls this" but "what is most called across the project." Graph analysis, not search.
+1. **`?sort=-callers`** — coupling metrics from the CLI. Not "who calls this" but "what is most called across the project." Graph analysis, not search.
 
 2. **`reveal health` spanning certs + DB + DNS** — a category collapse. One command, one JSON blob, one exit code.
 

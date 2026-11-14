@@ -62,7 +62,7 @@ what Reveal does that normal code utilities do not.
 ### Architectural gravity and impact radius
 
 ```bash
-reveal 'calls://src/?rank=callers&top=20'
+reveal 'calls://src/?sort=-callers&limit=20'
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
 ```
 
@@ -580,8 +580,8 @@ reveal 'calls://src/?callees=process_request&builtins=true'
 reveal 'calls://src/?callers=validate_item&depth=2'
 
 # Most-called functions in the project (coupling hotspots)
-reveal 'calls://src/?rank=callers'
-reveal 'calls://src/?rank=callers&top=20'
+reveal 'calls://src/?sort=-callers'
+reveal 'calls://src/?sort=-callers&limit=20'
 
 # Generate Graphviz call graph (pipe to dot)
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
@@ -1697,7 +1697,7 @@ reveal metrics ./src --hotspots         # Find technical debt
 reveal 'calls://src/?callers=fn'          # Who calls fn? (cross-file reverse)
 reveal 'calls://src/file.py:fn'          # Shorthand for ?callers=fn
 reveal 'calls://src/?callees=fn'         # What does fn call? (cross-file forward)
-reveal 'calls://src/?rank=callers'       # Most-called functions (coupling metrics)
+reveal 'calls://src/?sort=-callers'       # Most-called functions (coupling metrics)
 reveal 'claude://?match=term'           # Search session history for keyword
 reveal 'claude://files/path/to/file.py'  # Sessions that touched this file
 reveal 'markdown://docs/?link-graph'     # Cross-file doc link graph

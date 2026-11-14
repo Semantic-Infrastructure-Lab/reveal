@@ -63,6 +63,34 @@ def _calls_top(value: Any) -> int:
         raise ParamValueError(str(exc)) from None
 
 
+def _calls_limit_alias(name: str, value: Any) -> Any:
+    return None if value is None else _calls_top(value)
+
+
+def _calls_sort_alias(name: str, value: Any) -> Any:
+    if value is None:
+        return None
+    if name != 'rank':
+        return _calls_sort(value)
+    if value != 'callers':
+        raise ParamValueError('rank requires callers; use sort=-callers (--sort=-callers)')
+    return '-callers'
+
+
+def _calls_sort(value: Any) -> str:
+    if value != '-callers':
+        raise ParamValueError('sort supports -callers only; use --sort=-callers (legacy rank=callers)')
+    return '-callers'
+
+
+def _calls_detail(value: Any) -> bool:
+    if value == 'normal':
+        return False
+    if value == 'full':
+        return True
+    return boolean_value(value)
+
+
 def _name_spec(name: str, description: str, example: str) -> ParamSpec:
     return ParamSpec(name, 'string', description, None, _name_value(name), examples=(example,),
                      role='operation', uri_codec='percent', names='symbol',
@@ -94,18 +122,21 @@ _DEPTH = ParamSpec('depth', 'integer', 'Levels to walk, a signed whole integer c
                    '(default 2); other modes ignore it with a warning',
                    None, _calls_depth, examples=('depth=2',), role='analysis',
                    cli=CliBinding(('--depth',), metavar='N'))
-_RANK = ParamSpec('rank', 'string', 'Rank every function by in-degree, most-called first (one value: callers)', None,
-                  nonempty_scalar, examples=('rank=callers',), choices=('callers',), role='operation',
-                  cli=CliBinding(('--rank',), metavar='callers'))
-_TOP = ParamSpec('top', 'integer', 'Max entries for rank (default 10) or uncalled (default all); 0 = all; '
+_RANK = ParamSpec('sort', 'string', 'Select caller ranking, most-called first: -callers (legacy --rank callers)', None,
+                  _calls_sort, examples=('sort=-callers',), choices=('-callers',), role='operation',
+                  aliases=('rank',), alias_normalize=_calls_sort_alias,
+                  cli=CliBinding(('--sort', '--rank'), metavar='-callers'))
+_TOP = ParamSpec('limit', 'integer', 'Max entries for rank (default 10) or uncalled (default all); 0 = all; '
                  'other modes ignore it with a warning', None, _calls_top, examples=('top=20',), minimum=0,
-                 zero_policy='all', role='analysis', cli=CliBinding(('--top', '--limit'), metavar='N'))
+                 zero_policy='all', role='analysis', aliases=('top',), alias_normalize=_calls_limit_alias,
+                 cli=CliBinding(('--limit', '--top'), dest='top', metavar='N'))
 _UNCALLED = _flag_spec('uncalled', 'List every function/method with no callers (retired, D8: ?callers=NAME for one '
                        'function, the language\'s own dead-code tool for the rest; prints no confidence)',
                        role='operation')
-_TYPE = ParamSpec('type', 'string', 'For uncalled: function (module-level functions only) or method', None,
+_TYPE = ParamSpec('kind', 'string', 'For uncalled: function selects module-level functions; '
+                 'legacy method keeps the unfiltered function-and-method population', None,
                   nonempty_scalar, examples=('type=function',), choices=('function', 'method'), role='analysis',
-                  cli=CliBinding(('--type',), metavar='KIND'))
+                  aliases=('type',), cli=CliBinding(('--kind', '--type'), dest='type', metavar='KIND'))
 _MODULES = _flag_spec('modules', 'Module-level dependency graph: one edge per import that resolves under the path '
                       '(retired: imports://<path>?importers&scope=path answers the same edges)', role='operation')
 _EXTERNAL = _flag_spec('external', 'With modules: also count importers from the rest of the project root '
@@ -113,8 +144,10 @@ _EXTERNAL = _flag_spec('external', 'With modules: also count importers from the 
 _BUILTINS = _flag_spec('builtins', 'Include language builtins (len, str, ValueError, ...) in callees (every '
                        'depth), root and rank output; in rank, also names the scan does not define '
                        '(library methods such as dict.get) (default: false)')
-_DETAIL = _flag_spec('detail', 'Callees only: add params and effects to every definition the walk reaches '
-                     '(not measured, W-CALLS-9); with another mode it exits 2')
+_DETAIL = ParamSpec('detail', 'boolean', 'Callees only: normal or full; full adds params/effects '
+                   '(not measured, W-CALLS-9). Bare --detail and true/false remain supported.',
+                   False, _calls_detail, examples=('detail=normal', 'detail=full', 'detail=true'),
+                   role='analysis', cli=CliBinding(('--detail',), nargs='?', const=True, metavar='LEVEL'))
 _TEST_FRAMEWORK = _flag_spec('test-framework', 'Include test-framework entrypoints: as callers in rank, and as '
                              'dead-code candidates in uncalled (default: false)', dest='test_framework')
 _FORMAT = ParamSpec('format', 'string', 'URI output override: text, json or dot (Graphviz; dot has no --format '
@@ -150,7 +183,8 @@ def _selects(name: str, value: Any) -> bool:
 def _selected_modes(params: Any) -> List[str]:
     """The modes a request selects, read without counting any key as applied."""
     supplied = dict(peek_query_items(params))
-    return [name for name in _MODES if name in supplied and _selects(name, supplied[name])]
+    return [name for name in _MODES
+            if _selects(name, supplied.get(_RANK.name if name == 'rank' else name))]
 
 
 # The views format=dot draws a graph for. Callees at depth 1 (a per-definition call list without edge
@@ -177,9 +211,9 @@ _HELP: Dict[str, Any] = {
               '         calls://<path>?callees=<function>|<file>:<function>[&depth=N][&detail]\n'
               '         calls://<path>:<function>           # shorthand — infers ?callers=<function>\n'
               '         reveal calls <path> --callers NAME [--depth N] | --callees NAME [--depth N] [--detail] | '
-              '--rank callers [--top N] | --uncalled | --modules',
+              '--sort=-callers [--limit N] | --uncalled | --modules',
     'parameters': {spec.name: spec.description for spec in _PARAM_SPECS},
-    'epilog': 'One mode per request: --callers, --callees, --rank, --uncalled or --modules '
+    'epilog': 'One mode per request: --callers, --callees, --sort, --uncalled or --modules '
               '(calls://<path>?callers=NAME and the rest are the same request). Two modes exit 2. A callee '
               'walk beyond depth 1 and --detail are not measured (W-CALLS-9). The retired --target and --root '
               '(?target=, ?root=) still answer, with a note naming --callers and --callees NAME --depth N.',
@@ -196,9 +230,9 @@ _HELP: Dict[str, Any] = {
          'description': 'What those call too, level by level, with params and effects (not measured: W-CALLS-9)'},
         {'uri': 'calls://src/?callees=validate_item&builtins=true',
          'description': 'Include builtins (len, str, sorted, exceptions, etc.)'},
-        {'uri': 'calls://src/?rank=callers',
+        {'uri': 'calls://src/?sort=-callers',
          'description': 'Top 10 most-called functions (coupling hotspot ranking)'},
-        {'uri': 'calls://src/?rank=callers&top=20',
+        {'uri': 'calls://src/?sort=-callers&limit=20',
          'description': 'Top 20 most-called functions'},
         {'uri': 'calls://src/?callers=main&format=dot',
          'description': 'Output callers graph as Graphviz dot (pipe to dot -Tsvg)'},
@@ -601,7 +635,7 @@ class CallsAdapter(ResourceAdapter):
     BUDGET_LIST_FIELD = ('levels', 'entries')  # ?target= depth levels; ?rank=callers / ?uncalled entries (BACK-1497)
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'limit': 'top={value}', 'respect_gitignore': 'respect_gitignore=false'}  # top= caps ?rank=callers/?uncalled (default 10; BACK-1379, BACK-1496)
+    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'limit': 'limit={value}', 'respect_gitignore': 'respect_gitignore=false'}  # limit caps ranking/uncalled only; legacy all keeps its existing finite expansion.
 
     RESULT_TYPE = 'calls_query'
     FINDINGS_POLICIES = ('none',)
@@ -654,6 +688,10 @@ class CallsAdapter(ResourceAdapter):
             raise ValueError(f'calls takes one mode per request, got {named}: choose one of '
                              f'{", ".join(_MODES)} (target is the older name of callers)')
         supplied = dict(peek_query_items(params))
+        unsupported = sorted(set(supplied) & {'where', 'match', 'offset', 'since', 'until'})
+        if unsupported:
+            raise ValueError(f'Calls does not support {", ".join(unsupported)}; no equivalent filter is available. '
+                             'Use --callers NAME (callers=NAME) for a supported per-symbol lookup.')
         for key in ('callers', 'target'):
             value = supplied.get(key)
             if isinstance(value, str) and _split_root(value)[0]:
@@ -732,7 +770,7 @@ class CallsAdapter(ResourceAdapter):
         """top= caps only ?rank=callers and ?uncalled; say so instead of ignoring it in
         silence -- `--limit N` arrives as top=N in every mode (BACK-1496). --all's own
         top= is exempt: lifting a cap the mode does not have is not worth a warning."""
-        top = self.query_params.get('top')
+        top = _TOP.read(self.query_params)
         if top is None or str(top) == type(self).CLI_QUERY_FLAGS['all'].partition('=')[2]:
             return
         print("⚠ Query param 'top' (--limit) for calls:// only caps ?rank=callers and "
@@ -762,7 +800,7 @@ class CallsAdapter(ResourceAdapter):
                                f'{_selected_modes(params)[0]}= it names two modes: calls takes one mode per request')
         if modules:
             return self._module_graph()
-        if rank == 'callers':
+        if rank == '-callers':
             return self._ranking()
         if uncalled:
             return self._uncalled()
