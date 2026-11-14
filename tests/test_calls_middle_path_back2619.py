@@ -273,6 +273,15 @@ class TestPreservation:
 
 
 class TestProposedChanges:
+    @pytest.mark.parametrize('control', ['where', 'match', 'offset', 'since', 'until'])
+    def test_api_unsupported_controls_name_supported_lookup(self, project, control):
+        baseline = query(uri(project, 'callers=sink'))
+        assert baseline['total_callers'] == 1
+        with pytest.raises(TypeError) as error:
+            query(uri(project, 'callers=sink'), **{control: 'unsupported'})
+        assert control in str(error.value)
+        assert 'callers=NAME' in str(error.value) and 'no equivalent filter' in str(error.value)
+
     def test_canonical_requests_have_no_retirement_notes(self, project):
         result, answer = cli_json('calls', str(project), '--sort=-callers', '--limit', '1')
         assert result.returncode == 0 and len(answer['entries']) == 1

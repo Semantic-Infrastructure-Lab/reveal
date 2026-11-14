@@ -127,7 +127,7 @@ _RANK = ParamSpec('sort', 'string', 'Select caller ranking, most-called first: -
                   aliases=('rank',), alias_normalize=_calls_sort_alias,
                   cli=CliBinding(('--sort', '--rank'), metavar='-callers'))
 _TOP = ParamSpec('limit', 'integer', 'Max entries for rank (default 10) or uncalled (default all); 0 = all; '
-                 'other modes ignore it with a warning', None, _calls_top, examples=('top=20',), minimum=0,
+                 'other modes ignore it with a warning', None, _calls_top, examples=('limit=20',), minimum=0,
                  zero_policy='all', role='analysis', aliases=('top',), alias_normalize=_calls_limit_alias,
                  cli=CliBinding(('--limit', '--top'), dest='top', metavar='N'))
 _UNCALLED = _flag_spec('uncalled', 'List every function/method with no callers (retired, D8: ?callers=NAME for one '
@@ -135,7 +135,7 @@ _UNCALLED = _flag_spec('uncalled', 'List every function/method with no callers (
                        role='operation')
 _TYPE = ParamSpec('kind', 'string', 'For uncalled: function selects module-level functions; '
                  'legacy method keeps the unfiltered function-and-method population', None,
-                  nonempty_scalar, examples=('type=function',), choices=('function', 'method'), role='analysis',
+                  nonempty_scalar, examples=('kind=function',), choices=('function', 'method'), role='analysis',
                   aliases=('type',), cli=CliBinding(('--kind', '--type'), dest='type', metavar='KIND'))
 _MODULES = _flag_spec('modules', 'Module-level dependency graph: one edge per import that resolves under the path '
                       '(retired: imports://<path>?importers&scope=path answers the same edges)', role='operation')

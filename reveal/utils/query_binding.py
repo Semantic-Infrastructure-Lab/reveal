@@ -223,6 +223,15 @@ def bind_declared_params(specs: Iterable[ParamSpec], source: Union[str, Mapping[
     return apply_declared_overrides(declarations, params, overrides)
 
 
+def _unsupported_override_message(declarations: Iterable[ParamSpec], unknown: list[str]) -> str:
+    message = 'Unsupported declared parameter override(s): ' + ', '.join(repr(key) for key in unknown)
+    symbol = next((spec.name for spec in declarations
+                   if spec.names == 'symbol' and spec.role == 'operation'), None)
+    if symbol is not None:
+        message += f'. Use {symbol}=NAME for a supported per-symbol lookup; no equivalent filter is implied.'
+    return message
+
+
 def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryParams,
                              overrides: Optional[Mapping[str, Any]]) -> QueryParams:
     """Apply typed overrides after original-source validation, without URI serialization."""
@@ -234,8 +243,7 @@ def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryPar
         names = {spec.name for spec in declarations}
         unknown = [key for key in supplied if key not in names]
         if unknown:
-            raise TypeError('Unsupported declared parameter override(s): ' +
-                            ', '.join(repr(key) for key in unknown))
+            raise TypeError(_unsupported_override_message(declarations, unknown))
         from .query_parser import query_key_recorder
         query_key_recorder(*supplied)
         params._overrides.update(supplied)
