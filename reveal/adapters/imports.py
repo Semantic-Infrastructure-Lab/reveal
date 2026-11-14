@@ -2015,7 +2015,7 @@ class ImportsAdapter(ResourceAdapter):
         known = {os.path.relpath(f, root): f for f in self._edges(LAZY_INCLUDE).dependencies}
         near = difflib.get_close_matches(name, [to_posix(k) for k in known], n=3, cutoff=0.5)
         hint = f'; did you mean {", ".join(near)}?' if near else ''
-        return None, f'importers={name} matched no file for requested directory ({to_relative_display(self._base_dir(), Path.cwd())}){hint}'
+        return None, f'importers={name} matched no file under requested directory ({to_relative_display(self._base_dir(), Path.cwd())}){hint}'
 
     def _format_file_importers(self, target: Path) -> Dict[str, Any]:
         graph = self._edges(LAZY_INCLUDE)
