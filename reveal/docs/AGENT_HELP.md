@@ -66,7 +66,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Prior Claude sessions | `reveal 'claude://sessions/?match=auth-refactor'` |
 | Databases, env, SSL, nginx, other resources | `reveal help://adapters` |
 
-- **Limit results:** `calls --rank callers` and `imports --rank fan-in` accept `--limit N` (also `--top N`); `overview --limit N` caps each map section. Caps depend on the selected view: Calls caller/callee walks and the default Imports summary do not use `top`. Other nouns and URI forms list their caps in `help://schemas/<adapter>`; a note names an unused cap. `--head N` slices list output.
+- **Limit results:** `calls --sort=-callers` and `imports --rank fan-in` accept `--limit N` (Calls legacy `--top N` notes its replacement); `overview --limit N` caps each map section. Caps depend on the selected view: Calls caller/callee walks and the default Imports summary do not use `top`. Other nouns and URI forms list their caps in `help://schemas/<adapter>`; a note names an unused cap. `--head N` slices list output.
 - **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
 - **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~15,000 tokens); rules are `reveal --rules`.
 - **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `check --changed RANGE` uses `check`'s codes, with 2 for an unusable range; `imports` defaults to no findings gate, with `--fail-on findings` for exit 1 on a `--circular`, `--unused` or `--violations` row, usage 2 and incomplete/output failure 3; `metrics --hotspots` (and the retired `hotspots`) defaults to no findings gate; `--fail-on findings` exits 1 for an analysed file with quality below 70 or a function with complexity above 20, usage exits 2, and incomplete/output failure exits 3.
@@ -255,7 +255,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
 | `reveal patches [path]` | Mock/patch pressure in tests, grouped by target; --view pressure joins it with production boundary fan-out *(Python and TS/JS test suites)* | `reveal patches --help` |
 | `reveal testability [path]` | Retired: use reveal patches <path> --view pressure (the same answer); test patch pressure joined with production boundary fan-out | `reveal testability --help` |
-| `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --rank callers | `reveal calls --help` |
+| `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --sort=-callers | `reveal calls --help` |
 | `reveal trace --from FUNC` | Retired: use reveal calls --callees FUNC --depth N --detail (the same walk); depth-indented narrative with side effects | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
 | `reveal review <path>` | Retired: use reveal check --changed RANGE and the diff:// adapter (structure: reveal 'diff://git://A/.:git://B/.'); still answers and prints a replaced-by note | `reveal review --help` |
@@ -1300,16 +1300,16 @@ reveal 'calls://src/?callers=validate_item&depth=2'
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
 
 # Coupling metrics: rank all functions by how many unique callers they have
-reveal 'calls://src/?rank=callers'             # Top 10 most-called functions
-reveal 'calls://src/?rank=callers&top=20'      # Top 20
-reveal 'calls://src/?rank=callers&builtins=true'  # Also rank builtins and library methods (dict.get)
+reveal 'calls://src/?sort=-callers'             # Top 10 most-called functions
+reveal 'calls://src/?sort=-callers&limit=20'      # Top 20
+reveal 'calls://src/?sort=-callers&builtins=true'  # Also rank builtins and library methods (dict.get)
 
 # The same queries as a subcommand: one flag per query key, equal JSON
 reveal calls src/ --callers validate_item --depth 2
-reveal calls src/ --rank callers --top 20
+reveal calls src/ --sort=-callers --limit 20
 ```
 
-One mode per request (`callers`, `callees`, `rank`, `modules`, or the retired `uncalled`): two exit 2 and name
+One mode per request (`callers`, `callees`, `sort`, `modules`, or the retired `uncalled`): two exit 2 and name
 both, and a malformed value (`depth=abc`, `top=-1`, `callers=a.py:f`, `detail` without `callees`)
 exits 2 naming the parameter. The retired `?target=` and `?root=` still answer, with a note naming
 `?callers=` and `?callees=NAME&depth=N`. A name that names nothing (callees: no definition;
@@ -1324,7 +1324,7 @@ so), a scanned call-source language with no recall snapshot (Elixir, Objective-C
 |---------|-------|---------|
 | `calls://src/?callers=fn` | Cross-file, whole project | "Who calls fn anywhere?" (reverse) |
 | `calls://src/?callees=fn` | Cross-file, whole project | "What does fn call?" (forward, builtins hidden; add `&builtins=true` to include) |
-| `calls://src/?rank=callers` | Cross-file, whole project | "Which functions are called most?" (coupling metrics) |
+| `calls://src/?sort=-callers` | Cross-file, whole project | "Which functions are called most?" (coupling metrics) |
 | `ast://src/?type=function` | Per file | Each function's `calls`/`called_by` lists (JSON) |
 
 The `ast://` call filters `calls=`, `callee_of=` and `show=calls` are retired: each still answers with
@@ -2874,10 +2874,10 @@ reveal file.py --format text         # an explicit --format always wins
 reveal 'ast://./src?complexity>5' --max-items 20
 
 # Truncate long string values to N chars (useful for calls:// call lists, git messages, etc.)
-reveal 'calls://./src?rank=callers' --max-snippet-chars 80
+reveal 'calls://./src?sort=-callers' --max-snippet-chars 80
 
 # Combine: first 50 items, strings max 80 chars
-reveal 'calls://./src?rank=callers' --max-items 50 --max-snippet-chars 80
+reveal 'calls://./src?sort=-callers' --max-items 50 --max-snippet-chars 80
 ```
 Any cut list is disclosed the same way, whatever cut it (`--max-items`, `--head`, `?limit=`, an adapter's default cap): text output ends with `⚠ Truncated <field>: showing N of M — <how to see more>`, and JSON carries it as a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "cause", "message"}`. When a URI result has one list, `--max-items` also adds `meta.budget` with a cursor for pagination. A result with several lists (`hotspots://`, `reveal://`) and a file's lists are each cut on their own, like `--head`, so they carry only the per-list entries. A truncated result exits 0.
 

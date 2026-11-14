@@ -5,7 +5,7 @@ request that already had ``?offset=M`` the adapter's page starts at item M, so t
 is ``offset=M+returned``; the cursor said ``offset=<returned>`` and a paging loop that
 followed it re-read the same page forever. Every adapter that applies ``?offset=``
 (ast, markdown, metrics/stats, git log) shares the router's cut; one that does not take
-``?offset=`` (calls://) must keep ``offset=<returned>``.
+``?offset=`` (calls://) rejects it; without an offset its cursor remains ``offset=<returned>``.
 """
 
 import json
@@ -95,10 +95,10 @@ def test_no_offset_cursor_is_the_returned_count(py_tree):
 
 
 def test_adapter_without_offset_keeps_the_returned_count(py_tree):
-    """calls:// does not take ?offset= (it warns and ignores it): its list is not shifted,
-    so the cursor must not claim it was."""
-    proc = _run_reveal_direct(f'calls://{py_tree.as_posix()}?uncalled&offset=3',
+    """A supported Calls request still reports the unshifted returned count."""
+    proc = _run_reveal_direct(f'calls://{py_tree.as_posix()}?uncalled',
                               '--max-items=1', '--format=json')
+    assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
     assert payload['meta']['budget']['next_cursor'] == 'offset=1'
 

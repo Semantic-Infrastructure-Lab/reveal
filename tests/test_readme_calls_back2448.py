@@ -66,8 +66,23 @@ def calls_harness(tmp_path):
 
 
 def _answer(harness, query):
-    output = recipes._assert_text_as_written(harness, query + ' --format json', literal=True)
-    return json.loads(output)
+    if query != RANK:
+        output = recipes._assert_text_as_written(harness, query + ' --format json', literal=True)
+        return json.loads(output)
+    # This retained legacy spelling now has two D5 notes; qualify both exactly.
+    from reveal.cli.invocation import RETIREMENTS
+    argv = shlex.split(query)[1:] + ['--format', 'json']
+    code, output, error, _ = harness.run_subcommand(argv[0], *argv[1:])
+    assert code == 0, error
+    assert output.strip(), 'legacy ranking printed nothing'
+    keys = ('param:calls.rank', 'param:calls.top')
+    expected = [RETIREMENTS[key] for key in keys]
+    assert error.splitlines() == [f'note: {row.text}' for row in expected]
+    answer = json.loads(output)
+    notes = [w for w in answer['meta']['warnings'] if w.get('code') == 'retired_spelling']
+    assert [(w['field'], w['replacement']) for w in notes] == [
+        (key, row.replacement) for key, row in zip(keys, expected)]
+    return answer
 
 
 def _assert_callers(query, answer):
