@@ -999,3 +999,21 @@ def test_next_step_hints_in_recipe_output_run(harness):
             failures.append(f'{command} (hinted after {source}): exit {code} {problems[:1]}')
     assert not failures, failures
 
+
+
+@pytest.mark.parametrize('task,target,kind,field', [
+    ('Files importing FILE', 'proj/cycle_b.py', 'module_importers', 'importers'),
+    ('Documents linking to FILE', 'proj/auth.md', 'markdown_backlinks', 'linked_by'),
+    ('Abstract interfaces / contracts', '', 'contracts', 'abcs'),
+])
+def test_agent_help_routing_rows_execute(harness, task, target, kind, field):
+    """Execute the shipped screen's commands with positive DIR/FILE bindings (BACK-2640)."""
+    code, screen, err, _ = harness.run_subcommand('--agent-help')
+    assert code == 0 and not err
+    assert len(screen.splitlines()) <= 150
+    row = next(line for line in screen.splitlines() if line.startswith(f'| {task} |'))
+    template = re.search(r'`([^`]+)`', row).group(1)
+    command = template.replace('DIR', 'proj').replace('FILE', target)
+    _assert_text_as_written(harness, command, literal=True)
+    payload = _assert_runs_as_written(harness, command, kind)
+    assert payload[field], f'{command}: route failed to return a positive answer'

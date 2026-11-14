@@ -53,6 +53,9 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Who calls a function | `reveal 'calls://src/?callers=my_fn'` |
 | What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
 | A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--effects`, `--exits`) |
+| Files importing FILE | `reveal imports DIR --importers FILE` |
+| Documents linking to FILE | `reveal 'markdown://DIR/?backlinks=FILE'` |
+| Abstract interfaces / contracts | `reveal contracts DIR` |
 | Unused or circular imports | `reveal 'imports://src/?unused'` / `?circular` |
 | HTTP routes | `reveal 'surface://src/?type=http'` |
 | Env vars, network/db/fs access, the whole external boundary | `reveal 'surface://src/'` |
