@@ -36,7 +36,8 @@ from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.query_parser import (CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
                                    clamped_whole, nonempty_scalar, nonnegative_display_limit, param_schema,
                                    peek_query_items)
-from ...utils.path_utils import to_posix
+from ...utils.path_utils import to_posix, named_path_candidates, to_relative_display
+from ...errors import RequestValidationError
 from ...utils.results import ResultBuilder, note_truncation
 
 
@@ -891,9 +892,10 @@ class CallsAdapter(ResourceAdapter):
         params = self.query_params
         depth = _DEPTH.read(params)
         source = callee_source(self.path)
-        walk = walk_callees(self.path, root, depth=2 if depth is None else depth,
+        walk = walk_callees(self.path, _qualified_callee_name(root, self._directory()), depth=2 if depth is None else depth,
                             include_builtins=_BUILTINS.read(params), source=source)
         data = callee_levels(walk)
+        data['root'] = root
         data['path'] = self.path
         return self._answer('calls_callees_recursive', data, query_format=_FORMAT.read(params) or '',
                             census=source.language_census(self.path), absent=lambda: not walk.roots)
@@ -921,7 +923,8 @@ class CallsAdapter(ResourceAdapter):
         depth = _DEPTH.read(params) or 1
         include_builtins = _BUILTINS.read(params)
         walked = depth > 1 or detail
-        file_filter, bare = _split_root(name)
+        lookup = _qualified_callee_name(name, self._directory())
+        file_filter, bare = _split_root(lookup)
         source = callee_source(self.path)
         if not walked and not file_filter:
             data = find_callees(self.path, name, include_builtins=include_builtins, source=source)
@@ -930,7 +933,7 @@ class CallsAdapter(ResourceAdapter):
                                 source=source.in_file(file_filter) if file_filter else source)
             data['target'] = name
             if walked:
-                data.update(_walk_view(walk_callees(self.path, name, depth=depth, include_builtins=include_builtins,
+                data.update(_walk_view(walk_callees(self.path, lookup, depth=depth, include_builtins=include_builtins,
                                                     source=source), detail))
         data['path'] = self.path
         return self._answer('calls_callees', data, query_format=query_format, unmeasured_walk=walked,
@@ -954,6 +957,18 @@ class CallsAdapter(ResourceAdapter):
         return any(name_matches(elem.get('name'), want)
                    for file_struct in collect_structures(str(self._directory()))
                    for elem in file_struct.get('elements', []) for want in wanted)
+
+
+def _qualified_callee_name(name: str, directory: Path) -> str:
+    """Resolve FILE:NAME through the same path-spelling boundary as other nouns."""
+    file_filter, bare = _split_root(name)
+    if not file_filter:
+        return name
+    candidates = named_path_candidates(file_filter, directory, directory)
+    if len(candidates) > 1:
+        shown = ' and '.join(to_relative_display(path, Path.cwd()) for path in candidates)
+        raise RequestValidationError(f'callees={name} is ambiguous: it names {shown}; spell an absolute path to choose one')
+    return f'{to_posix(candidates[0])}:{bare}' if candidates else name
 
 
 def _walk_view(walk: CalleeWalk, detail: bool) -> Dict[str, Any]:

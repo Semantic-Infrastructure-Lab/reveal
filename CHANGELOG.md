@@ -24,7 +24,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
-- `imports DIR --importers FILE` and `imports://DIR/?importers=FILE` now accept cwd-relative targets such as `src/storage.py` as well as directory-relative targets. Ambiguous spellings exit 2 and name both files; missing-target errors name the requested directory (BACK-2642).
+- `imports DIR --importers FILE` and `imports://DIR/?importers=FILE` now accept cwd-relative targets such as `src/storage.py` as well as directory-relative targets. Ambiguous spellings exit 2 and name both files; missing-target errors name the requested directory. Markdown backlinks and file-qualified Calls use the same resolution and ambiguity check (BACK-2642).
 
 - `diff://` reports a missing local comparison file as an invalid resource (exit 2), matching direct path reads. Direct local single-file comparisons exit 3 when a required read fails; other comparison modes retain their existing policy (BACK-2639).
 

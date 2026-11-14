@@ -12,7 +12,9 @@ from ...core import disk_cache
 from ...utils.parallel import grep_files, worker_lost_warning
 from ...utils.query import unknown_sort_field_warning
 from ...utils.results import note_warning
-from ...utils.path_utils import failure_of, to_posix, traversal_failed_warning
+from ...utils.path_utils import (failure_of, to_posix, traversal_failed_warning,
+                                 named_path_candidates, to_relative_display)
+from ...errors import RequestValidationError
 from ...reveal_types import PathFailure
 
 _LINK_GRAPH_CACHE_NAMESPACE = "markdown_link_graph"
@@ -432,13 +434,24 @@ def get_backlinks(base_path: Path, target: str) -> Dict[str, Any]:
             total_files — number of markdown files scanned
     """
     graph = build_link_graph(base_path)
-    result = _lookup_backlinks(graph, target)
+    result = _lookup_backlinks(graph, _backlink_target(base_path, target))
     result['analysis'] = graph['analysis']
     if graph.get('unreadable_files'):
         result['unreadable_files'] = graph['unreadable_files']  # BACK-1854
     for warning in graph.get('meta', {}).get('warnings', []):
         note_warning(result, dict(warning))
     return result
+
+
+def _backlink_target(base_path: Path, target: str) -> str:
+    """Resolve explicit path spellings before the graph's existing basename fallback."""
+    candidates = named_path_candidates(target, base_path, base_path)
+    if len(candidates) > 1:
+        shown = ' and '.join(to_relative_display(path, Path.cwd()) for path in candidates)
+        raise RequestValidationError(f'backlinks={target} is ambiguous: it names {shown}; spell an absolute path to choose one')
+    if candidates and candidates[0].is_relative_to(base_path.resolve()):
+        return to_posix(candidates[0].relative_to(base_path.resolve()))
+    return target
 
 
 def _lookup_backlinks(graph: Dict[str, Any], target: str) -> Dict[str, Any]:

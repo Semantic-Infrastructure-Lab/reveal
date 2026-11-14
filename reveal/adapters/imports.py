@@ -47,7 +47,8 @@ from ..analyzers.imports.extraction import (  # noqa: F401 -- tests import these
 )
 from ..analyzers.imports import resolution
 from ..registry import get_code_extensions
-from ..utils.path_utils import TestLayout, hidden_entries_warning, to_posix, to_relative_display
+from ..utils.path_utils import (TestLayout, hidden_entries_warning, to_posix, to_relative_display,
+                                named_path_candidates as _named_candidates)
 from ..utils.query_control import ScanBudget
 from ..utils.results import ResultBuilder, note_truncation
 from ..utils.warning_render import meta_warning_lines
@@ -1349,24 +1350,6 @@ def _typed_params(params: Any) -> QueryParams:
     return typed
 
 
-def _named_candidates(name: str, base_dir: Path, root: Path) -> List[Path]:
-    """The existing paths ``?importers=NAME`` can mean: relative to the requested directory and
-    relative to the scan root or cwd (spellings of one file collapse; two files stay two), or the
-    absolute path itself. One owner for the answer and for the result type chosen before it."""
-    named = Path(name).expanduser()
-    found: List[Path] = []
-    for candidate in ([named] if named.is_absolute() else [base_dir / named, root / named]):
-        resolved = candidate.resolve()
-        if resolved.exists() and resolved not in found:
-            found.append(resolved)
-    # A cwd-relative spelling must name something inside this scan; an unrelated cwd
-    # file must not shadow the root-relative target (BACK-2642).
-    cwd_named = named.resolve()
-    if cwd_named.is_relative_to(root.resolve()) and cwd_named.exists() and cwd_named not in found:
-        found.append(cwd_named)
-    return found
-
-
 def _scan_root_of(params: Any, target_path: Path) -> resolution.ScanRoot:
     """Where a request resolves: the requested path itself under ``&scope=path``, else the project
     root the shared climb finds (``resolution.choose_scan_root``: ``&root=``, markers, the inferred subtree)."""
@@ -2011,7 +1994,7 @@ class ImportsAdapter(ResourceAdapter):
         show = _path_display(self._base_dir())  # BACK-2250: the root is a host path in an error text
         if found:
             return None, (f'importers={name} is ambiguous: it names {" and ".join(str(show(str(f))) for f in found)}; '
-                          f'spell the path from the scan root {show(str(root))}')
+                          'spell an absolute path to choose one')
         known = {os.path.relpath(f, root): f for f in self._edges(LAZY_INCLUDE).dependencies}
         near = difflib.get_close_matches(name, [to_posix(k) for k in known], n=3, cutoff=0.5)
         hint = f'; did you mean {", ".join(near)}?' if near else ''

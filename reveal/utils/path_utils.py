@@ -32,6 +32,24 @@ from .request_cache import register_request_cache
 from ..registry import _is_cpp_header_content, display_name_for_extension, language_for_extension, LANGUAGE_DISPLAY_NAMES
 
 
+def named_path_candidates(name: str, base_dir: Path, root: Path) -> List[Path]:
+    """The existing paths a named target can mean: relative to the requested directory and
+    relative to the scan root or cwd (spellings of one file collapse; two files stay two), or the
+    absolute path itself. Shared by target lookup and pre-execution result typing."""
+    named = Path(name).expanduser()
+    found: List[Path] = []
+    for candidate in ([named] if named.is_absolute() else [base_dir / named, root / named]):
+        resolved = candidate.resolve()
+        if resolved.exists() and resolved not in found:
+            found.append(resolved)
+    # A cwd-relative spelling must name something inside this scan; an unrelated cwd
+    # file must not shadow the root-relative target (BACK-2642).
+    cwd_named = named.resolve()
+    if cwd_named.is_relative_to(root.resolve()) and cwd_named.exists() and cwd_named not in found:
+        found.append(cwd_named)
+    return found
+
+
 def _language_for_path(fpath: Path) -> Optional[str]:
     """Like registry.language_for_extension, but content-sniffs `.h` for C++
     (BACK-421/630) instead of always resolving it to C."""

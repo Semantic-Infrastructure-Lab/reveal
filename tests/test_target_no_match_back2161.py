@@ -149,3 +149,21 @@ def test_markdown_backlinks_accepts_each_spelling(project, named):
     out = _run_reveal_direct(f'markdown://proj/?backlinks={named}', '--format', 'json')
     assert out.returncode == 0, (out.stdout, out.stderr)
     assert json.loads(out.stdout)['linked_by'] == ['pkg/source.md']
+
+
+@pytest.mark.parametrize('noun', ['calls', 'calls-root', 'markdown'])
+def test_file_qualified_controls_reject_two_distinct_path_candidates(project, noun):
+    (project / 'pkg/proj/pkg').mkdir(parents=True)
+    if noun.startswith('calls'):
+        for name in ('pkg/leaf.py', 'pkg/proj/pkg/leaf.py'):
+            (project / name).write_text('def leaf():\n    return print(1)\n', encoding='utf-8')
+        argv = (['calls://proj/pkg?root=proj/pkg/leaf.py:leaf'] if noun == 'calls-root'
+                else ['calls', 'proj/pkg', '--callees', 'proj/pkg/leaf.py:leaf'])
+    else:
+        for name in ('pkg/target.md', 'pkg/proj/pkg/target.md'):
+            (project / name).write_text('# Target\n', encoding='utf-8')
+        argv = ['markdown://proj/pkg?backlinks=proj/pkg/target.md']
+    out = _run_reveal_direct(*argv)
+    assert out.returncode == 2, (out.stdout, out.stderr)
+    assert 'ambiguous' in out.stderr
+    assert 'proj/pkg/' in out.stderr and ' and ' in out.stderr
