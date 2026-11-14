@@ -150,6 +150,14 @@ def strip_result_control_keys(resource: str, adapter_class: Any) -> tuple[str, l
     return (f"{base}?{'&'.join(kept)}" if kept else base), removed
 
 
+def _native_uncapped_value(adapter_class: Any, fragment: str, fallback: int) -> int:
+    """Use the declared native zero policy instead of approximating an uncapped answer."""
+    parameter = fragment.partition('=')[0]
+    declaration = next((p for p in getattr(adapter_class, 'PARAM_SPECS', ())
+                        if parameter in (p.name, *p.aliases)), None)
+    return 0 if declaration is not None and declaration.zero_policy == 'all' else fallback
+
+
 def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
     """Append the query fragment for every CLI flag in effect that this scheme's adapter
     declares; print a note for the flags it does not support (where the spec says to)."""
@@ -169,7 +177,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             continue
         fragment = declared.get(spec.dest)
         if fragment and spec.unbounded is not None and value == 0:
-            value = spec.unbounded
+            value = _native_uncapped_value(adapter_class, fragment, spec.unbounded)
         fragment = fragment or spec.universal
         if fragment:
             fragment = fragment.replace('{value}', str(value))
