@@ -56,14 +56,14 @@ def test_a_file_target_that_matches_nothing_exits_2(project, bogus):
             assert 'matched no file' in result.stderr
 
 
-def test_the_two_spellings_of_one_file_give_the_same_importers(project):
+def test_all_spellings_of_one_file_give_the_same_importers(project):
     """Relative to the requested directory, and relative to the scan root: the same file, one answer."""
     answers = []
-    for named in ('a.py', 'pkg/a.py'):
+    for named in ('a.py', 'pkg/a.py', 'proj/pkg/a.py'):
         out = _run_reveal_direct(f'imports://proj/pkg?importers={named}', '--no-gitignore', '--format', 'json')
         data = json.loads(out.stdout)
         answers.append(sorted(row['file'] for row in data['importers']))
-    assert answers[0] == answers[1] and len(answers[0]) == 2
+    assert all(answer == answers[0] for answer in answers) and len(answers[0]) == 2
 
 
 def test_a_real_file_with_no_importers_is_still_a_zero(project):
@@ -95,3 +95,57 @@ def test_a_defined_root_with_no_calls_is_still_a_zero(project):
     out = _run_reveal_direct('calls://proj?root=leaf', '--no-gitignore', '--format', 'json')
     assert out.returncode == 0, (out.stdout, out.stderr)
     assert json.loads(out.stdout)['total_edges'] == 0
+
+
+@pytest.mark.parametrize('uri', [False, True])
+@pytest.mark.parametrize('named', ['storage.py', 'src/storage.py'])
+def test_cwd_and_requested_spellings_without_a_manifest(tmp_path, monkeypatch, uri, named):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'src').mkdir()
+    (tmp_path / 'src/storage.py').write_text('VALUE = 1\n', encoding='utf-8')
+    (tmp_path / 'src/app.py').write_text('import storage\n', encoding='utf-8')
+    argv = [f'imports://src/?importers={named}'] if uri else ['imports', 'src', '--importers', named]
+    out = _run_reveal_direct(*argv, '--format', 'json')
+    assert out.returncode == 0, (out.stdout, out.stderr)
+    assert [r['file'] for r in json.loads(out.stdout)['importers']] == ['app.py']
+
+
+@pytest.mark.parametrize('uri', [False, True])
+def test_cwd_and_requested_candidates_are_ambiguous(project, uri):
+    (project / 'pkg/proj/pkg').mkdir(parents=True)
+    (project / 'pkg/proj/pkg/a.py').write_text('X = 2\n', encoding='utf-8')
+    argv = ['imports://proj/pkg?importers=proj/pkg/a.py'] if uri else ['imports', 'proj/pkg', '--importers', 'proj/pkg/a.py']
+    out = _run_reveal_direct(*argv)
+    assert out.returncode == 2, (out.stdout, out.stderr)
+    assert 'ambiguous' in out.stderr
+    assert 'proj/pkg/a.py and a.py' in out.stderr
+
+
+def test_cwd_candidate_outside_scan_root_does_not_shadow_target(project, tmp_path):
+    (tmp_path / 'a.py').write_text('X = 2\n', encoding='utf-8')
+    out = _run_reveal_direct('imports', 'proj/pkg', '--importers', 'a.py', '--format', 'json')
+    assert out.returncode == 0, (out.stdout, out.stderr)
+    assert len(json.loads(out.stdout)['importers']) == 2
+
+
+def test_missing_target_error_names_requested_directory(project):
+    out = _run_reveal_direct('imports', 'proj/pkg', '--importers', 'absent.py')
+    assert out.returncode == 2
+    assert 'requested directory (proj/pkg)' in out.stderr
+
+
+@pytest.mark.parametrize('named', ['leaf.py', 'pkg/leaf.py', 'proj/pkg/leaf.py'])
+def test_calls_file_qualified_symbol_accepts_each_spelling(project, named):
+    (project / 'pkg/leaf.py').write_text('def leaf():\n    return print(1)\n', encoding='utf-8')
+    out = _run_reveal_direct('calls', 'proj/pkg', '--callees', f'{named}:leaf', '--format', 'json')
+    assert out.returncode == 0, (out.stdout, out.stderr)
+    assert len(json.loads(out.stdout)['matches']) == 1
+
+
+@pytest.mark.parametrize('named', ['target.md', 'pkg/target.md', 'proj/pkg/target.md'])
+def test_markdown_backlinks_accepts_each_spelling(project, named):
+    (project / 'pkg/target.md').write_text('# Target\n', encoding='utf-8')
+    (project / 'pkg/source.md').write_text('[Target](target.md)\n', encoding='utf-8')
+    out = _run_reveal_direct(f'markdown://proj/?backlinks={named}', '--format', 'json')
+    assert out.returncode == 0, (out.stdout, out.stderr)
+    assert json.loads(out.stdout)['linked_by'] == ['pkg/source.md']

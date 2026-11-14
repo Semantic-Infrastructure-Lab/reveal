@@ -1351,7 +1351,7 @@ def _typed_params(params: Any) -> QueryParams:
 
 def _named_candidates(name: str, base_dir: Path, root: Path) -> List[Path]:
     """The existing paths ``?importers=NAME`` can mean: relative to the requested directory and
-    relative to the scan root (two spellings of one file collapse; two files stay two), or the
+    relative to the scan root or cwd (spellings of one file collapse; two files stay two), or the
     absolute path itself. One owner for the answer and for the result type chosen before it."""
     named = Path(name).expanduser()
     found: List[Path] = []
@@ -1359,6 +1359,11 @@ def _named_candidates(name: str, base_dir: Path, root: Path) -> List[Path]:
         resolved = candidate.resolve()
         if resolved.exists() and resolved not in found:
             found.append(resolved)
+    # A cwd-relative spelling must name something inside this scan; an unrelated cwd
+    # file must not shadow the root-relative target (BACK-2642).
+    cwd_named = named.resolve()
+    if cwd_named.is_relative_to(root.resolve()) and cwd_named.exists() and cwd_named not in found:
+        found.append(cwd_named)
     return found
 
 
@@ -1997,7 +2002,7 @@ class ImportsAdapter(ResourceAdapter):
         """The file or directory ``?importers=NAME`` names, or ``(None, why)``: a name that matches
         nothing is a usage error, never the directory summary (surface plan rule 9, BACK-2161).
 
-        NAME is tried relative to the requested path and relative to the scan root; a name that
+        NAME is tried relative to the requested path and relative to the scan root or cwd; a name that
         exists under both and differs is ambiguous, and absolute paths are taken as given."""
         root = self._scan.root if self._scan else self._base_dir()
         found = _named_candidates(name, self._base_dir(), root)
@@ -2010,7 +2015,7 @@ class ImportsAdapter(ResourceAdapter):
         known = {os.path.relpath(f, root): f for f in self._edges(LAZY_INCLUDE).dependencies}
         near = difflib.get_close_matches(name, [to_posix(k) for k in known], n=3, cutoff=0.5)
         hint = f'; did you mean {", ".join(near)}?' if near else ''
-        return None, f'importers={name} matched no file under the scan root ({show(str(root))}){hint}'
+        return None, f'importers={name} matched no file for requested directory ({to_relative_display(self._base_dir(), Path.cwd())}){hint}'
 
     def _format_file_importers(self, target: Path) -> Dict[str, Any]:
         graph = self._edges(LAZY_INCLUDE)

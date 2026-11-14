@@ -22,6 +22,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- `imports DIR --importers FILE` and `imports://DIR/?importers=FILE` now accept cwd-relative targets such as `src/storage.py` as well as directory-relative targets. Ambiguous spellings exit 2 and name both files; missing-target errors name the requested directory (BACK-2642).
+
 - `diff://` reports a missing local comparison file as an invalid resource (exit 2), matching direct path reads. Direct local single-file comparisons exit 3 when a required read fails; other comparison modes retain their existing policy (BACK-2639).
 
 - On Windows, Calls and session-reader JSON now use portable path separators, and recursive Claude plan lookups work without treating wildcard paths as read failures. Git diff and content-history searches preserve recovered UTF-8 text and known matches when decoding is lossy, report incomplete analysis, and return usable partial MCP answers. Missing Calls targets keep exit 2 with Windows paths; genuinely incomplete input keeps exit 3. Windows-invalid filenames in declared commands give exit 2; denied or failed metadata reads remain exit 3 (BACK-2635, BACK-2636, BACK-2637).
