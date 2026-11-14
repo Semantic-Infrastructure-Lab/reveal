@@ -77,18 +77,20 @@ Two problems shape the current work.
   figure) or *structure-only* (graph and judgment claims decline in the output).
 - **The help moves with the code** and is run in CI.
 
-Command mapping (BACK-2595), the path/element JSON envelope (BACK-2601), and the
-severity defaults for `check` (BACK-2602) are implemented locally. Paid first-call
-evaluation against the preserved baseline remains deferred (BACK-2596); no
-agent-effectiveness acceptance is claimed.
+Command mapping, the path/element JSON envelope, and the severity defaults for
+`check` are implemented. First-call questions remain regression coverage; a standing
+source-keyed realistic-task suite will measure CLI and MCP workflows (BACK-2644).
+No comparative agent-effectiveness claim follows from that diagnostic coverage.
 
 **Next, in priority order**
 
-1. **One structure for every command.** Every noun gets both spellings (`reveal NOUN
+1. **Reliable requests and shared controls.** Every declared noun gets both spellings (`reveal NOUN
    TARGET --option` and `NOUN://TARGET?option=value`) generated from one declaration, and a
    shared idea gets one option name with one meaning on every noun (BACK-2597,
    BACK-2598). Counting rules shrink to one line in text output and stay in full in the
-   JSON (BACK-2599). Old names keep working with a note until 1.0.
+   JSON (BACK-2599). Old names keep working with a note until the cut. Switching working
+   element and distinct operation selectors to a single view option is deferred;
+   decide those names before the 1.0 freeze, using realistic-task evidence.
 2. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
    through `imports`; finish per-language parity before the old names stop working (BACK-2079, BACK-2063);
    the public-path recall gate and the oracle-free graph invariants run in CI and stay green
@@ -105,7 +107,8 @@ agent-effectiveness acceptance is claimed.
    is generated from the same data (BACK-1900).
 6. **Docs that cannot drift.** Every example in the README, the agent guide, the guides and
    `help://examples` now runs in CI; the ones that need a live host still skip until recorded
-   host fixtures exist (BACK-1615). Help discovery folds into `help://` (BACK-1055). Consumers,
+   host fixtures exist (BACK-1615). Generate help from declarations (BACK-1055);
+   folding the existing discovery entry points is deferred pending task evidence. Consumers,
    the MCP tools included, move to the new names before the cut (BACK-2071).
 
 **After 1.0.** 1.0 freezes names, exit codes and the JSON envelope. These follow it:
