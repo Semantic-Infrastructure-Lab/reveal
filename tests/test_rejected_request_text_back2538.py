@@ -41,7 +41,7 @@ def test_text_rejection_prints_the_error_and_no_answer_body(project, argv, body)
     assert 'Total:' not in result.stdout and 'Modules with importers' not in result.stdout, result.stdout
     if argv[0].startswith('calls'):
         # The caveats stay: a tree hidden by .gitignore can be why a name is absent (BACK-2247).
-        assert 'Dynamic dispatch' in result.stdout, result.stdout
+        assert 'Rules: --format json (walk_rule.text, meta.warnings)' in result.stdout, result.stdout
 
 
 @pytest.mark.parametrize('argv,body', REJECTED)

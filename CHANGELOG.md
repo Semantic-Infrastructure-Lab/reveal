@@ -16,6 +16,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
+- Calls text replaces long counting rules and standing caveats with one pointer to their existing JSON fields; callees `--detail` keeps the full text. Request-specific warnings and JSON are unchanged (BACK-2599).
+
 ### Added
 
 - Calls accepts `sort=-callers`, `limit=N`, `kind=KIND` and `detail=normal|full` in CLI, URI and typed API requests; old rank/top/type spellings still work with replacement notes. URI global `--limit 0` uses exact uncapped zero when the native declaration supports it; `--max-items 0` still means an empty output page, URI DOT stays supported, and graph populations do not change (BACK-2619).

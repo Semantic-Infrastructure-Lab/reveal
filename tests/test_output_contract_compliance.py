@@ -1186,3 +1186,114 @@ def test_the_batch_invariant_bites(harness):
     assert {'success', 'error', 'not_applicable'} <= set(statuses), statuses
     *_, ast_entry = harness.run_batch(harness.fixture_uri('ast'))
     assert ast_entry['data']['results'], 'ast://proj found nothing: the fixture answer is empty'
+
+
+# BACK-2599: opt-in rule budget; other nouns can register cases at this same owner.
+_RULE_BUDGET_CASES = {
+    'calls': json.loads((Path(__file__).parent / 'fixtures' / 'calls_rule_text_back2599.json').read_text(encoding='utf-8')),
+}
+_RULE_BUDGET_STANDING = frozenset({'analysis_limit', 'scope_limit', 'derived_signal',
+                                 'implicit_exclusion', 'not_measured'})
+
+
+def _rule_value(payload, path):
+    value = payload
+    for key in path.split('.'):
+        assert isinstance(value, dict) and key in value, f'pointer field missing from JSON: {path}'
+        value = value[key]
+    return value
+
+
+def _assert_rule_pointer(text, payload, expected_fields, detail_supported):
+    lines = [line for line in text.splitlines() if line.startswith('Rules: ')]
+    assert len(lines) == 1, f'expected exactly one Rules: pointer, got {len(lines)}'
+    pointer = lines[0]
+    fields = tuple(pointer.partition('(')[2].partition(')')[0].split(', '))
+    assert fields == expected_fields, f'pointer must name the actual rule fields: {fields}'
+    assert '--format json' in pointer, 'pointer must name the JSON command option'
+    assert ('--detail' in pointer) == detail_supported, 'detail hint must apply to this view'
+    for path in fields:
+        _rule_value(payload, path)
+
+
+@pytest.mark.parametrize('noun,case', [(noun, case) for noun, cases in _RULE_BUDGET_CASES.items() for case in cases])
+def test_rule_budget_pointer_names_existing_json_fields(harness, noun, case):
+    expected = _RULE_BUDGET_CASES[noun][case]
+    uri = expected['uri']
+    code, payload, _ = harness.run(uri)
+    text_code, text, _ = harness.run_raw(uri)
+    assert code == text_code == expected['exit']
+    fields = tuple(expected['fields']) + (('meta.warnings',) if expected['standing'] else ())
+    _assert_rule_pointer(text, payload, fields, 'callees=' in uri)
+
+
+@pytest.mark.parametrize('case', ['callers', 'not-found', 'callees', 'walk', 'rank', 'uncalled', 'modules'])
+def test_rule_budget_default_omits_long_sentences(harness, case):
+    expected = _RULE_BUDGET_CASES['calls'][case]
+    _, text, _ = harness.run_raw(expected['uri'])
+    for sentence in list(expected['fields'].values()) + expected['standing']:
+        assert sentence not in text, f'default text repeats the full standing rule: {sentence}'
+
+
+@pytest.mark.parametrize('case', _RULE_BUDGET_CASES['calls'])
+def test_rule_budget_full_json_facts_are_verbatim(harness, case):
+    expected = _RULE_BUDGET_CASES['calls'][case]
+    _, payload, _ = harness.run(expected['uri'])
+    for path, sentence in expected['fields'].items():
+        assert _rule_value(payload, path) == sentence, f'full JSON rule changed: {path}'
+    actual = [w['message'] for w in payload['meta']['warnings'] if w.get('type') in _RULE_BUDGET_STANDING]
+    assert actual == expected['standing'], 'full standing caveats must remain verbatim in JSON'
+
+
+def test_rule_budget_detail_keeps_full_sentences(harness):
+    expected = _RULE_BUDGET_CASES['calls']['detail']
+    code, text, _ = harness.run_raw(expected['uri'])
+    assert code == 0
+    for sentence in list(expected['fields'].values()) + expected['standing']:
+        assert sentence in text, f'detail lost the full standing rule: {sentence}'
+
+
+@pytest.mark.parametrize('damage', ['drop-pointer', 'drop-json-rule', 'rename-json-rule'])
+def test_rule_budget_guard_bites(harness, damage):
+    expected = _RULE_BUDGET_CASES['calls']['callers']
+    _, text, _ = harness.run_raw(expected['uri'])
+    _, payload, _ = harness.run(expected['uri'])
+    fields = ('walk_rule.text', 'meta.warnings')
+    _assert_rule_pointer(text, payload, fields, False)  # positive control first
+    broken = copy.deepcopy(payload)
+    if damage == 'drop-pointer':
+        text = '\n'.join(line for line in text.splitlines() if not line.startswith('Rules: '))
+        message = 'exactly one Rules:'
+    else:
+        rule = broken.pop('walk_rule')
+        if damage == 'rename-json-rule':
+            broken['renamed_rule'] = rule
+        message = 'pointer field missing from JSON'
+    with pytest.raises(AssertionError, match=message):
+        _assert_rule_pointer(text, broken, fields, False)
+
+
+@pytest.mark.parametrize('detail', [False, True])
+def test_rule_budget_missing_callee_detail_uses_request_not_rows(harness, detail):
+    uri = 'calls://proj?callees=missing&depth=2' + ('&detail' if detail else '')
+    code, payload, _ = harness.run(uri)
+    text_code, text, _ = harness.run_raw(uri)
+    assert code == text_code == 2
+    assert payload['definitions'] == []  # row contents cannot reveal whether --detail was requested
+    sentence = payload['walk_rule']['text']
+    assert (sentence in text) == detail, 'full rule must follow the request even without definition rows'
+
+
+@pytest.mark.parametrize('code', ['W-CALLS-10', 'W-CALLS-11', 'W-CALLS-12'])
+def test_rule_budget_keeps_request_specific_uncertainty(harness, code):
+    from reveal.adapters.calls.renderer import render_calls_structure
+    _, payload, _ = harness.run('calls://proj?callers=helper')
+    payload = copy.deepcopy(payload)
+    warning = {'type': 'not_measured', 'code': code, 'message': f'Request-specific uncertainty: {code}'}
+    payload['meta']['warnings'].append(warning)
+    before = json.dumps(payload, sort_keys=True)
+    out = StringIO()
+    with redirect_stdout(out):
+        render_calls_structure(payload, 'text')
+    assert out.getvalue().count(warning['message']) == 1, 'request-specific uncertainty must stay visible once'
+    assert json.dumps(payload, sort_keys=True) == before, 'text rendering must not mutate JSON facts'

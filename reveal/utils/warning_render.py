@@ -83,3 +83,42 @@ def render_meta_warnings(
     """Print *result*'s meta.warnings as human-readable lines (see meta_warning_lines)."""
     for line in meta_warning_lines(result, heading=heading, skip_types=skip_types):
         print(line)
+
+
+def _rule_field_values(result: Dict[str, Any], fields: tuple[str, ...]) -> Dict[str, str]:
+    rules: Dict[str, str] = {}
+    for path in fields:
+        value: Any = result
+        for key in path.split('.'):
+            value = value.get(key) if isinstance(value, dict) else None
+        if isinstance(value, str) and value:
+            rules[path] = value
+    return rules
+
+
+def rule_text_lines(
+    result: Dict[str, Any], *, fields: tuple[str, ...], standing_types: frozenset,
+    detail: bool = False, detail_supported: bool = False, preserve_codes: frozenset = frozenset(),
+) -> List[str]:
+    """One opt-in pointer to existing JSON facts, with full text on a detailed view.
+
+    Read only: neither the result nor its frozen JSON envelope acquires fields.
+    Request-specific warnings still belong to the normal warning renderer.
+    """
+    rules = _rule_field_values(result, fields)
+    caveats = [w for w in collect_meta_warnings(result)
+               if w.get('type') in standing_types and w.get('code') not in preserve_codes]
+    if not rules and not caveats:
+        return []
+    locations = list(rules)
+    for key in ('meta', '_meta'):
+        if caveats and isinstance(result.get(key), dict) and result[key].get('warnings'):
+            locations.append(f'{key}.warnings')
+    pointer = f"Rules: --format json ({', '.join(locations)})"
+    if detail_supported:
+        pointer += '; --detail for full text'
+    lines = [pointer]
+    if detail:
+        lines.extend(rules.values())
+        lines.extend(f"⚠ {w['message']}" for w in caveats if w.get('message'))
+    return lines

@@ -209,10 +209,10 @@ def test_callees_depth_text_is_a_tree_with_its_rule(project):
     result = run('calls://proj?callees=main&depth=2', '--no-gitignore')
     assert result.returncode == 0, result.stderr
     lines = result.stdout.splitlines()
-    assert any(line.startswith('Rule: callees') for line in lines), result.stdout
+    assert any(line.startswith('Rules: --format json (walk_rule.text, meta.warnings)') for line in lines), result.stdout
     assert any('helper' in line and '(expanded above)' in line for line in lines), result.stdout
     assert any('os.getenv' in line and '[external]' in line for line in lines), result.stdout
-    assert NOT_MEASURED in result.stdout
+    assert NOT_MEASURED in ' '.join(w['message'] for w in jrun('calls://proj?callees=main&depth=2')[1]['meta']['warnings'])
 
 
 # --- detail ---------------------------------------------------------------------------------
@@ -261,7 +261,8 @@ def test_w_calls_9_declines_unmeasured_walks(project, query):
     declines = [w for w in answer['meta']['warnings'] if w.get('code') == 'W-CALLS-9']
     assert len(declines) == 1 and NOT_MEASURED in declines[0]['message']
     text = run(f'calls://proj?{query}', '--no-gitignore')
-    assert text.stdout.count(NOT_MEASURED) == 1
+    assert text.stdout.count(NOT_MEASURED) == (1 if 'detail' in query else 0)
+    assert 'meta.warnings' in text.stdout
 
 
 @pytest.mark.parametrize('query', ['callees=main', 'target=helper', 'target=helper&depth=2'])
@@ -402,13 +403,13 @@ def test_walk_rule_states_the_callers_walk(project, query):
     assert rule['measured'] == {'depth_1': True, 'depth_2': True, 'beyond_depth_2': False}
     assert rule['text'].startswith('Rule: callers whose body calls helper by bare name or import alias')
     text = run(f'calls://proj?{query}', '--no-gitignore')
-    assert [line for line in text.stdout.splitlines() if line.startswith('Rule: ')] == [rule['text']]
+    assert [line for line in text.stdout.splitlines() if line.startswith('Rules: ')] == ['Rules: --format json (walk_rule.text, meta.warnings)']
 
 
 def test_depth_one_callees_text_states_its_rule_and_every_warning(project):
     text = run('calls://proj?callees=main', '--no-gitignore')
-    assert any(line.startswith('Rule: callees') for line in text.stdout.splitlines())
-    assert 'Dynamic dispatch' in text.stdout  # W-CALLS-1, a caveat the per-definition view used to drop
+    assert any(line.startswith('Rules: --format json (walk_rule.text, meta.warnings)') for line in text.stdout.splitlines())
+    assert 'meta.warnings' in text.stdout  # W-CALLS-1 stays in JSON at the named location
 
 
 # --- W-CALLS-10 names only languages that produce call sources ------------------------------

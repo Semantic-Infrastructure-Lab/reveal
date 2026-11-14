@@ -1490,6 +1490,15 @@ def conclude_outcome(result: Any, outcome: Outcome, output_format: str) -> None:
         sys.exit(1)
 
 
+def _render_structure_detail_kwargs(renderer_class: type, adapter: Any) -> dict:
+    """Opted-in renderers receive the bound detail value, even when there are no rows."""
+    if getattr(renderer_class, 'ACCEPTS_DETAIL', False) is True:
+        for spec in getattr(type(adapter), 'PARAM_SPECS', ()):
+            if spec.name == 'detail':
+                return {'detail': spec.read(adapter.query_params)}
+    return {}
+
+
 def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace', adapter: Any = None) -> dict:
     """Forward --all/--verbose, or the adapter's own ``?top=N``, to render_structure() (BACK-1226, BACK-1606).
 
@@ -1507,22 +1516,23 @@ def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace', adapte
     from here, and forwarding blind would either crash them or silently change
     behavior nobody asked this ticket to touch.
     """
+    detail_kwargs = _render_structure_detail_kwargs(renderer_class, adapter)
     if getattr(renderer_class, 'ACCEPTS_TOP', False) is True and (
             peek(args, 'all', False) or peek(args, 'verbose', False)):
         mark(args, 'all', 'verbose')
         from ...defaults import UNLIMITED_TOP
-        return {'top': UNLIMITED_TOP}
+        return {'top': UNLIMITED_TOP, **detail_kwargs}
     declarations = getattr(type(adapter), 'PARAM_SPECS', ())
     if isinstance(declarations, tuple):
         for spec in declarations:
             if spec.name == 'top' and spec.role == 'presentation':
-                return {'top': spec.read(adapter.query_params)}
+                return {'top': spec.read(adapter.query_params), **detail_kwargs}
     if getattr(renderer_class, 'ACCEPTS_TOP', False) is not True:
-        return {}
+        return detail_kwargs
     params = getattr(adapter, 'query_params', None)
     if isinstance(params, dict) and params.get('top') is not None:
-        return {'top': adapter.int_param('top', 0)}
-    return {}
+        return {'top': adapter.int_param('top', 0), **detail_kwargs}
+    return detail_kwargs
 
 def handle_adapter(adapter_class: type, scheme: str, resource: str,
                    element: Optional[str], args: 'Namespace', *, answer_consumer=None) -> None:

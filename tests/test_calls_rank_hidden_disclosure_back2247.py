@@ -63,4 +63,4 @@ def test_an_empty_ranking_prints_the_caveats_an_empty_callers_view_does(tmp_path
     ranking = _text(corpus, 'rank=callers')
     # An absent name is a usage error (exit 2), but the view still prints its caveats.
     callers = run('calls://' + str(corpus) + '?callers=b')
-    assert 'Dynamic dispatch' in callers.stdout + callers.stderr and 'Dynamic dispatch' in ranking
+    assert 'meta.warnings' in callers.stdout + callers.stderr and 'meta.warnings' in ranking

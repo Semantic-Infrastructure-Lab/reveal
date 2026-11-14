@@ -5,7 +5,13 @@ import sys
 from typing import Any, Dict, List, Set, Tuple
 
 from reveal.utils import print_json_result
-from reveal.utils.warning_render import meta_warning_lines
+from reveal.utils.warning_render import meta_warning_lines, rule_text_lines
+
+_STANDING_RULE_TYPES = frozenset({'analysis_limit', 'scope_limit', 'derived_signal',
+                                   'implicit_exclusion', 'not_measured'})
+_RULE_FIELDS = ('walk_rule.text', 'rule', 'edge_rule.text')
+# The languages actually encountered are request-specific uncertainty, not boilerplate.
+_REQUEST_WARNING_CODES = frozenset({'W-CALLS-10', 'W-CALLS-11', 'W-CALLS-12'})
 
 _REQUIRED_LOSS_TYPES = frozenset({'analysis_failed', 'analysis_incomplete'})
 # Printed above every view: what the answer lost, what no measurement covers (W-CALLS-9/10) and what the
@@ -13,7 +19,14 @@ _REQUIRED_LOSS_TYPES = frozenset({'analysis_failed', 'analysis_incomplete'})
 _ALWAYS_SHOWN = _REQUIRED_LOSS_TYPES | {'not_measured', 'function_values_dropped', 'analysis_capped'}
 
 
-def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
+def _print_rule_budget(data: Dict[str, Any], detail: bool) -> None:
+    for line in rule_text_lines(data, fields=_RULE_FIELDS, standing_types=_STANDING_RULE_TYPES,
+                                detail=detail, detail_supported=data.get('query') == 'callees',
+                                preserve_codes=_REQUEST_WARNING_CODES):
+        print(line)
+
+
+def render_calls_structure(data: Dict[str, Any], output_format: str, *, detail: bool = False) -> None:
     """Render calls:// adapter results.
 
     Args:
@@ -24,10 +37,13 @@ def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
         print_json_result(data)
         return
 
+    if output_format == 'text':
+        _print_rule_budget(data, detail)
+
     if data.get('query') == 'callees' and 'levels' in data:
         _render_callee_walk(data, output_format)
         return
-    for line in meta_warning_lines({'meta': {'warnings': _leading_warnings(data)}}):
+    for line in meta_warning_lines({'meta': {'warnings': _leading_warnings(data, compact_rules=output_format == 'text')}}):
         print(line, file=sys.stderr if output_format == 'dot' else sys.stdout)
 
     if data.get('query') == 'callees_recursive':
@@ -74,19 +90,19 @@ def _render_callee_walk(data: Dict[str, Any], output_format: str) -> None:
     _render_callees_recursive_dot(data)
 
 
-def _print_rule(data: Dict[str, Any]) -> None:
-    """The answer's walk_rule as its Rule: line, through the one rule renderer (imports' edge_rule)."""
-    from reveal.analyzers.imports.service import edge_rule_lines
-    for line in edge_rule_lines({'edge_rule': data.get('walk_rule')}):
-        print(line)
+def _text_warnings(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [w for w in data.get('meta', {}).get('warnings', [])
+            if w.get('type') not in _STANDING_RULE_TYPES or w.get('code') in _REQUEST_WARNING_CODES]
 
 
-def _leading_warnings(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _leading_warnings(data: Dict[str, Any], *, compact_rules: bool = False) -> List[Dict[str, Any]]:
     """The warnings printed above a view: every one for the per-definition callees view and the module
     graph, which print no caveat of their own (lane D finding e: scope_hidden was dropped; the module
     graph's are the imports engine's, a partial parse among them); else what the answer lost and what no
     measurement covers."""
     warnings: List[Dict[str, Any]] = data.get('meta', {}).get('warnings', [])
+    if compact_rules:
+        warnings = _text_warnings(data)
     if data.get('query') in ('callees', 'module_graph'):
         return warnings
     return [w for w in warnings if w.get('type') in _ALWAYS_SHOWN]
@@ -96,7 +112,7 @@ def _print_caveats(data: Dict[str, Any]) -> None:
     """The warnings ``_leading_warnings`` did not print above the view: the dispatch caveats and, for a
     scope with nothing to rank, the tree gitignore hid (BACK-2247). One rule for every view that prints
     them, so a new view cannot pick its own."""
-    for w in data.get('meta', {}).get('warnings', []):
+    for w in _text_warnings(data):
         if w.get('type') not in _ALWAYS_SHOWN:
             print(f"⚠ {w['message']}")
 
@@ -140,7 +156,6 @@ def _render_text(data: Dict[str, Any]) -> None:
         print(f"Depth:      {depth}")
     print(f"Total:      {total}")
     _print_definitions(data)
-    _print_rule(data)
     print()
 
     if not levels:
@@ -203,7 +218,6 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
     print(f"Total:      {total} call(s) across {len(matches)} definition(s)")
     if builtins_hidden:
         print(f"            ({builtins_hidden} builtin(s) hidden — use ?builtins=true to include)")
-    _print_rule(data)
     print()
 
     if not matches:
@@ -240,8 +254,7 @@ def _render_callee_walk_text(data: Dict[str, Any]) -> None:
           f"from {len(roots)} definition(s)")
     if data.get('_builtins_hidden'):
         print(f"            ({data['_builtins_hidden']} builtin(s) hidden at level 1 — use ?builtins=true to include)")
-    _print_rule(data)
-    for line in meta_warning_lines({'meta': {'warnings': data.get('meta', {}).get('warnings', [])}}):
+    for line in meta_warning_lines({'meta': {'warnings': _text_warnings(data)}}):
         print(line)
     print()
     if not roots:
@@ -304,7 +317,6 @@ def _render_ranking_text(data: Dict[str, Any]) -> None:
     entries = data.get('entries', [])
 
     print(f"Most-called functions: {path}")
-    print(f"Ranking by:            {data.get('rule', 'unique callers')}")
     # Counted, not the requested top=: --head/--tail/--range may slice entries after
     # ranking (--tail is not a "top"), and top=10 of 3 callees shows 3 (BACK-1497).
     print(f"Showing:               {len(entries)} of {total} called definitions")
@@ -445,7 +457,6 @@ def _render_module_graph_text(data: Dict[str, Any]) -> None:
     print(f"Module dependency graph: {path}")
     print(f"Nodes (modules):         {data.get('total_nodes', 0)}")
     print(f"Edges (dependencies):    {data.get('total_edges', 0)}")
-    _print_edge_rule(data)
     print()
 
     if not edges:
@@ -457,13 +468,6 @@ def _render_module_graph_text(data: Dict[str, Any]) -> None:
     print("Dependencies (importer → imported):")
     for edge in edges:
         print(f"  {edge['from']} → {edge['to']}")
-
-
-def _print_edge_rule(data: Dict[str, Any]) -> None:
-    """The imports rule the edges were counted by (BACK-1054 slice S5), through the one rule renderer."""
-    from reveal.analyzers.imports.service import edge_rule_lines
-    for line in edge_rule_lines(data):
-        print(line)
 
 
 def _render_module_graph_dot(data: Dict[str, Any]) -> None:

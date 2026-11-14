@@ -246,7 +246,7 @@ _HELP: Dict[str, Any] = {
         'depth=N expands callers transitively up to N levels (capped at 5).',
         '?callees=X finds every definition of X and shows what it calls — useful for multi-file functions. '
         'depth=2-5 walks level by level under the same calls_callees type (levels, definitions, edge totals, '
-        'walk_rule and a Rule: line); &detail adds params and effects. Neither is measured in any language '
+        'walk_rule and a Rules: pointer); &detail adds params and effects. Neither is measured in any language '
         '(W-CALLS-9).',
         'A scanned language that yields call sources and has no recall snapshot (Elixir, Objective-C) withholds '
         'meta.confidence and is named (W-CALLS-10); shell, SQL and other files with no call edges do not. '
@@ -613,10 +613,12 @@ class CallsRenderer:
     format in result[``_query_format``] so the renderer can pick it up.
     """
 
-    def render_structure(result: Dict[str, Any], format: str = 'text') -> None:  # noqa: N805
+    ACCEPTS_DETAIL = True
+
+    def render_structure(result: Dict[str, Any], format: str = 'text', *, detail: bool = False) -> None:  # noqa: N805
         # Query-string format= (e.g. format=dot) takes precedence over CLI --format
         effective_format = result.get('_query_format') or format
-        render_calls_structure(result, effective_format)
+        render_calls_structure(result, effective_format, detail=detail)
 
 
 @register_adapter('calls')

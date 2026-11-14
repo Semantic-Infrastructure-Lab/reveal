@@ -324,7 +324,7 @@ name (`#include`, Ruby `require`, C# `using`) binds nothing here. The answer kee
 `candidates`, `expanded`), `definitions[]` (every definition reached: `name`, `file`, `line`,
 `level`, 0 for the roots, and `expanded`), the edge totals (`total_edges` = `total_resolved` +
 `total_unresolved`; `total_ambiguous` counts resolved edges with several candidates) and a
-`walk_rule` stating all of this (text: a `Rule:` line). `&detail` adds `params` and `effects` to each
+`walk_rule` stating all of this (text: a `Rules:` pointer to JSON). `&detail` adds `params` and `effects` to each
 definition, also at depth 1. Text is a depth-indented tree: `[external]`, `[ambiguous: N ...]`,
 and `(expanded above)` / `(expanded below)` for a definition whose calls are listed elsewhere.
 
@@ -401,10 +401,10 @@ reveal 'calls://src/?callers=validate_item&depth=5'   # up to 5 levels deep (cap
 Human-readable summary with file path, line, and caller context:
 
 ```
+Rules: --format json (walk_rule.text, meta.warnings)
 Callers of: validate_item
 Project:    src/
 Total:      3
-Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name carrying its definition site; explicit imports label module-level function targets without filtering candidates, same-named candidates still join; each (file, caller) once; depth 1 (clamped 1-5). Measured: levels 1 and 2.
 
   src/auth/handlers.py:42  authenticate  (calls validate_item)
   src/api/routes.py:78     process_request  (calls validate_item)
@@ -417,19 +417,20 @@ callers are matched by name; a single definition, or a library name with none, a
 
 > File paths are printed under the path you queried (relative if you passed a relative path, absolute if absolute) — never just the basename, so `auth/handlers.py` and `utils/handlers.py` are never confused.
 
-Every callers and callees answer states its rule: `walk_rule` in JSON (`direction`, `depth`,
-`measured`, `unmeasured_languages`, `text`, plus the direction's own fields) and its `text` as a
-`Rule:` line under the header. The per-definition callees view also prints every `meta.warnings`
-entry (the language caveats W-CALLS-1..8 included), like the callee walk.
+Every callers and callees answer points to its full JSON `walk_rule.text` and standing caveats in
+`meta.warnings`. The other `walk_rule` fields (`direction`, `depth`, `measured`,
+`unmeasured_languages`, plus direction-specific fields) are unchanged. Default text prints one
+`Rules:` pointer; callees `--detail` also prints the full rule and standing caveats.
+Request-specific failures, incomplete scans, ambiguity, unmeasured languages and cuts remain visible.
 
 With `depth=2`:
 
 ```
+Rules: --format json (walk_rule.text, meta.warnings)
 Callers of: validate_item
 Project:    src/
 Depth:      2
 Total:      5
-Rule: callers whose body calls validate_item by bare name or import alias, except a call its imports bind to no file defining validate_item (json.loads is no caller of a project loads); level k+1 looks each caller up by name carrying its definition site; explicit imports label module-level function targets without filtering candidates, same-named candidates still join; each (file, caller) once; depth 2 (clamped 1-5). Measured: levels 1 and 2.
 
 Direct callers:
   src/auth/handlers.py:42  authenticate  (calls validate_item)
@@ -443,19 +444,16 @@ Level 2 callers:
 When no callers are found:
 
 ```
+Rules: --format json (walk_rule.text, meta.warnings)
 Callers of: orphan_fn
 Project:    src/
 Total:      0
-Rule: callers whose body calls orphan_fn by bare name or import alias, except a call its imports bind to no file defining orphan_fn (json.loads is no caller of a project loads); ...; depth 1 (clamped 1-5). Measured: levels 1 and 2.
 
   No callers found for 'orphan_fn'.
 
-⚠ Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.
-...
-⚠ Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; ...
 ```
 
-The `⚠` lines are the language caveats (W-CALLS-*) for the languages scanned.
+Standing language caveats stay verbatim in JSON `meta.warnings`; the pointer names that field.
 
 If `.gitignore` (or `--exclude`/REVEAL_IGNORE) hid every file under the path, the zero is
 not the code's: the output adds `⚠ No files left to analyze: N entries hidden by .gitignore
@@ -465,14 +463,11 @@ with `count`, `hidden` (per cause) and `suggestion`.
 **Callees text output** (`?callees=`):
 
 ```
-  ⚠ Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.
-  ⚠ Method resolution order (MRO) is not considered.
-  ...
+Rules: --format json (walk_rule.text, meta.warnings); --detail for full text
 Callees of: validate_item
 Project:    src/
 Total:      4 call(s) across 1 definition(s)
             (6 builtin(s) hidden — use ?builtins=true to include)
-Rule: callees by definition: each definition of the name, then each definition a call reaches, is expanded once, ...; depth 1 (clamped 1-5). Measured: depth-1 call lists only.
 
   src/auth/validators.py:55  validate_item
     → check_required
@@ -481,15 +476,15 @@ Rule: callees by definition: each definition of the name, then each definition a
     → raise_error
 ```
 
-The language caveats print first, before `Callees of:`. With `?builtins=true` the `(N builtin(s) hidden ...)` line under `Total:` disappears and the full raw list (including `len`, `str`, `isinstance`, etc.) is shown. That line only appears when at least one builtin was filtered.
+The pointer prints first, before `Callees of:`; callees `--detail` also prints the full rule and standing caveats. With `?builtins=true` the `(N builtin(s) hidden ...)` line under `Total:` disappears and the full raw list (including `len`, `str`, `isinstance`, etc.) is shown. That line only appears when at least one builtin was filtered.
 
 When the function is not found (exit 2; stderr has `Error (calls://): Function 'unknown_fn' not found in src/`):
 
 ```
+Rules: --format json (walk_rule.text, meta.warnings); --detail for full text
 Callees of: unknown_fn
 Project:    src/
 Total:      0 call(s) across 0 definition(s)
-Rule:       callees by definition: ...; depth 1 (clamped 1-5). Measured: depth-1 call lists only.
 
   No definition of 'unknown_fn' found.
 ```

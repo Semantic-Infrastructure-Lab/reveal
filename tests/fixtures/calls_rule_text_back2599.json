@@ -1,0 +1,122 @@
+{
+  "callers": {
+    "uri": "calls://proj?callers=helper",
+    "exit": 0,
+    "fields": {
+      "walk_rule.text": "Rule: callers whose body calls helper by bare name or import alias, except a call its imports bind to no file defining helper (json.loads is no caller of a project loads); level k+1 looks each caller up by name carrying its definition site; explicit imports label module-level function targets without filtering candidates, same-named candidates still join; each (file, caller) once; depth 1 (clamped 1-5). Measured: levels 1 and 2."
+    },
+    "standing": [
+      "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",
+      "Method resolution order (MRO) is not considered.",
+      "Calls via importlib/dynamic imports are not tracked.",
+      "Calls inside string-evaluated code (eval/exec) are not detected.",
+      "Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; module calls retain file/line provenance. Class-body initializers, extensionless Ruby DSL files and top-level scopes in other languages are outside this relationship scope."
+    ]
+  },
+  "not-found": {
+    "uri": "calls://proj?callers=missing",
+    "exit": 2,
+    "fields": {
+      "walk_rule.text": "Rule: callers whose body calls missing by bare name or import alias, except a call its imports bind to no file defining missing (json.loads is no caller of a project loads); level k+1 looks each caller up by name carrying its definition site; explicit imports label module-level function targets without filtering candidates, same-named candidates still join; each (file, caller) once; depth 1 (clamped 1-5). Measured: levels 1 and 2."
+    },
+    "standing": [
+      "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",
+      "Method resolution order (MRO) is not considered.",
+      "Calls via importlib/dynamic imports are not tracked.",
+      "Calls inside string-evaluated code (eval/exec) are not detected.",
+      "Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; module calls retain file/line provenance. Class-body initializers, extensionless Ruby DSL files and top-level scopes in other languages are outside this relationship scope."
+    ]
+  },
+  "callees": {
+    "uri": "calls://proj?callees=main",
+    "exit": 0,
+    "fields": {
+      "walk_rule.text": "Rule: callees by definition: each definition of the name, then each definition a call reaches, is expanded once, at its shallowest level; every call site of an expanded definition is an edge (call text de-duplicated per definition); a call resolves within the caller's language family to its one definition, except that a call through an import that resolves to no project file is external; else a same-file one or the one its imports name, else it is ambiguous and not expanded; builtins hidden (builtins=true shows them); depth 1 (clamped 1-5). Measured: depth-1 call lists only."
+    },
+    "standing": [
+      "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",
+      "Method resolution order (MRO) is not considered.",
+      "Calls via importlib/dynamic imports are not tracked.",
+      "Calls inside string-evaluated code (eval/exec) are not detected.",
+      "Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; module calls retain file/line provenance. Class-body initializers, extensionless Ruby DSL files and top-level scopes in other languages are outside this relationship scope."
+    ]
+  },
+  "walk": {
+    "uri": "calls://proj?callees=main&depth=2",
+    "exit": 0,
+    "fields": {
+      "walk_rule.text": "Rule: callees by definition: each definition of the name, then each definition a call reaches, is expanded once, at its shallowest level; every call site of an expanded definition is an edge (call text de-duplicated per definition); a call resolves within the caller's language family to its one definition, except that a call through an import that resolves to no project file is external; else a same-file one or the one its imports name, else it is ambiguous and not expanded; builtins hidden (builtins=true shows them); depth 2 (clamped 1-5). Measured: depth-1 call lists only."
+    },
+    "standing": [
+      "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",
+      "Method resolution order (MRO) is not considered.",
+      "Calls via importlib/dynamic imports are not tracked.",
+      "Calls inside string-evaluated code (eval/exec) are not detected.",
+      "Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; module calls retain file/line provenance. Class-body initializers, extensionless Ruby DSL files and top-level scopes in other languages are outside this relationship scope.",
+      "Callee walks beyond depth 1 and --detail params/effects are not measured in any language: the callees snapshot scores depth-1 call lists only."
+    ]
+  },
+  "detail": {
+    "uri": "calls://proj?callees=main&depth=2&detail",
+    "exit": 0,
+    "fields": {
+      "walk_rule.text": "Rule: callees by definition: each definition of the name, then each definition a call reaches, is expanded once, at its shallowest level; every call site of an expanded definition is an edge (call text de-duplicated per definition); a call resolves within the caller's language family to its one definition, except that a call through an import that resolves to no project file is external; else a same-file one or the one its imports name, else it is ambiguous and not expanded; builtins hidden (builtins=true shows them); depth 2 (clamped 1-5). Measured: depth-1 call lists only."
+    },
+    "standing": [
+      "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",
+      "Method resolution order (MRO) is not considered.",
+      "Calls via importlib/dynamic imports are not tracked.",
+      "Calls inside string-evaluated code (eval/exec) are not detected.",
+      "Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; module calls retain file/line provenance. Class-body initializers, extensionless Ruby DSL files and top-level scopes in other languages are outside this relationship scope.",
+      "Callee walks beyond depth 1 and --detail params/effects are not measured in any language: the callees snapshot scores depth-1 call lists only."
+    ]
+  },
+  "rank": {
+    "uri": "calls://proj?sort=-callers",
+    "exit": 0,
+    "fields": {
+      "rule": "unique callers of each function, method or class defined under the path, matched by name as ?callers=NAME counts them (a name shared with a library method also counts its calls); names defined elsewhere are not ranked (builtins=true ranks them)"
+    },
+    "standing": [
+      "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",
+      "Method resolution order (MRO) is not considered.",
+      "Calls via importlib/dynamic imports are not tracked.",
+      "Calls inside string-evaluated code (eval/exec) are not detected.",
+      "Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; module calls retain file/line provenance. Class-body initializers, extensionless Ruby DSL files and top-level scopes in other languages are outside this relationship scope."
+    ]
+  },
+  "uncalled": {
+    "uri": "calls://proj?uncalled",
+    "exit": 0,
+    "fields": {},
+    "standing": [
+      "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",
+      "Method resolution order (MRO) is not considered.",
+      "Calls via importlib/dynamic imports are not tracked.",
+      "Calls inside string-evaluated code (eval/exec) are not detected.",
+      "Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; module calls retain file/line provenance. Class-body initializers, extensionless Ruby DSL files and top-level scopes in other languages are outside this relationship scope.",
+      "'Uncalled' is a derived heuristic, not a separately measured signal, so it carries no confidence: call extraction is measured, dead code is not, and every convention-invoked call static analysis cannot see (runtime constructors, framework lifecycle hooks, dynamic dispatch) is also missing. Zero callers found is not proof of dead code.",
+      "Excludes __dunder__ methods and @property/@classmethod/@staticmethod (implicitly invoked, not statically reachable)."
+    ]
+  },
+  "root": {
+    "uri": "calls://proj?root=main&depth=2",
+    "exit": 0,
+    "fields": {},
+    "standing": [
+      "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",
+      "Method resolution order (MRO) is not considered.",
+      "Calls via importlib/dynamic imports are not tracked.",
+      "Calls inside string-evaluated code (eval/exec) are not detected.",
+      "Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; module calls retain file/line provenance. Class-body initializers, extensionless Ruby DSL files and top-level scopes in other languages are outside this relationship scope."
+    ]
+  },
+  "modules": {
+    "uri": "calls://proj?modules",
+    "exit": 0,
+    "fields": {
+      "edge_rule.text": "Rule: importers are files whose static imports resolve here, among files under the scanned path, tests included; TYPE_CHECKING imports excluded; function-level (lazy) imports included (default); calls ?modules takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only. Test paths: paths relative to the selected project; anchor ..."
+    },
+    "standing": []
+  }
+}
