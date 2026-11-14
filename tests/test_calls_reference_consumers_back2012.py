@@ -1,5 +1,6 @@
 """Reference-only required loss must not survive recovery as a clean dead-code claim."""
 
+import json
 import os
 from pathlib import Path
 
@@ -171,7 +172,12 @@ def test_cli_text_discloses_reference_only_read_loss_once_and_preserves_exit(tmp
     combined = result.stdout + result.stderr
     assert combined.count('1 file(s) could not be analyzed completely (PermissionError)') == 1
     assert 'confidence above' not in combined
-    assert 'Zero callers found is not proof of dead code.' in combined
+    assert 'Rules: --format json (meta.warnings)' in combined
+    json_result = _run_reveal_direct(f'calls://{root.as_posix()}?uncalled', '--format', 'json')
+    assert json_result.returncode == 3
+    messages = ' '.join(w['message'] for w in json.loads(json_result.stdout)['meta']['warnings'])
+    assert 'Zero callers found is not proof of dead code.' in messages
+    assert 'confidence above' not in messages
 
 
 @pytest.mark.usefixtures('hosted')

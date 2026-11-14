@@ -78,7 +78,9 @@ def test_text_output_states_the_rule(tmp_path):
     (tmp_path / 'app.py').write_text(SOURCE, encoding='utf-8')
     response = _run_reveal_direct(f'calls://{tmp_path.as_posix()}/?rank=callers')
     assert response.returncode == 0
-    assert 'defined under the path' in response.stdout
+    assert 'Rules: --format json (rule, meta.warnings)' in response.stdout
+    answer = json.loads(_run_reveal_direct(f'calls://{tmp_path.as_posix()}/?rank=callers', '--format', 'json').stdout)
+    assert 'defined under the path' in answer['rule']
     assert 'Not ranked:' in response.stdout and 'defined elsewhere' in response.stdout
     assert '  get  (' not in response.stdout
 
