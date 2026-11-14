@@ -205,6 +205,9 @@ PRODUCTION_CASES = {
     # Phase 2b (BACK-2066); every spelling of each row is in tests/test_retired_call_spellings_back2066.py.
     'param:calls.root': lambda f: [f'calls://{Path(f).parent}?root=auth_gate'],
     'param:calls.target': lambda f: [f'calls://{Path(f).parent}?target=auth_gate'],
+    'param:calls.rank': lambda f: [f'calls://{Path(f).parent}?rank=callers&limit=1'],
+    'param:calls.top': lambda f: [f'calls://{Path(f).parent}?sort=-callers&top=1'],
+    'param:calls.type': lambda f: [f'calls://{Path(f).parent}?uncalled&type=function'],
     # Phase 2 slice S5 (BACK-1054): ?modules answers from imports ?importers; tests/test_calls_modules_shim_back1054.py
     # pins its edges, shape and exit codes. ?external is spelled with callers here, where it never applied, so the
     # row is its one note (with ?modules it is the second).
@@ -255,7 +258,8 @@ PRODUCTION_CASES = {
     'param:hotspots.files_only': lambda f: ['hotspots', str(Path(f).parent), '--files-only'],
 }
 # The row a case notes beside its own: a parameter of a noun that is itself retired.
-ALSO_NOTED = {'param:hotspots.functions_only': 'scheme:hotspots', 'param:hotspots.files_only': 'subcommand:hotspots'}
+ALSO_NOTED = {'param:hotspots.functions_only': 'scheme:hotspots', 'param:hotspots.files_only': 'subcommand:hotspots',
+              'param:calls.type': 'param:calls.uncalled'}
 
 
 def test_every_production_row_is_well_formed():

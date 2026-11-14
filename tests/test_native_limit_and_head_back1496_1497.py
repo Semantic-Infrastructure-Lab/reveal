@@ -46,11 +46,13 @@ NATIVE_CAP = ['hotspots', 'calls', 'depends', 'testability']
 class TestLimitBecomesNativeTop:
     @pytest.mark.parametrize('scheme', NATIVE_CAP)
     def test_injects_top_not_limit(self, scheme):
-        assert inject_query_flags(f'{scheme}://x', scheme, _args(limit=3)) == f'{scheme}://x?top=3'
+        key = 'limit' if scheme == 'calls' else 'top'
+        assert inject_query_flags(f'{scheme}://x', scheme, _args(limit=3)) == f'{scheme}://x?{key}=3'
 
     @pytest.mark.parametrize('scheme', NATIVE_CAP)
     def test_zero_means_no_cap(self, scheme):
-        assert inject_query_flags(f'{scheme}://x', scheme, _args(limit=0)) == f'{scheme}://x?top=1000000'
+        expected = {'calls': 'limit=0', 'hotspots': 'top=0'}.get(scheme, 'top=1000000')
+        assert inject_query_flags(f'{scheme}://x', scheme, _args(limit=0)) == f'{scheme}://x?{expected}'
 
     def test_typed_top_is_not_overridden(self):
         assert inject_query_flags('hotspots://x?top=7', 'hotspots', _args(limit=3)) == 'hotspots://x?top=7'
