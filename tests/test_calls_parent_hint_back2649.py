@@ -134,6 +134,43 @@ class TestQuietCollection:
         assert len(quiet) == len(loud)
 
 
+class TestHintCache:
+    """Inside one host request the hint reuses a cached parent index instead of parsing the parent again."""
+
+    @pytest.fixture
+    def collections(self, monkeypatch):
+        from reveal.adapters.calls import index as calls_index
+        seen = []
+        real = calls_index.collect_structures
+
+        def counting(path, *args, **kwargs):
+            seen.append((Path(path).name, kwargs.get('warn', True)))
+            return real(path, *args, **kwargs)
+
+        monkeypatch.setattr(calls_index, 'collect_structures', counting)
+        calls_index._INDEX_CACHE.clear()
+        yield seen
+        calls_index._INDEX_CACHE.clear()
+
+    def test_hint_after_a_parent_query_collects_only_the_requested_scope(self, root, collections):
+        from reveal.adapters.calls.index import find_callers
+        from reveal.utils.request_cache import host_request
+        with host_request():
+            assert find_callers(str(root), 'target')['total_callers'] == 1
+            collections.clear()
+            answer = find_callers(str(root / 'pkg'), 'target')
+        assert potential_count(answer.get('hint')) == 1, answer.get('hint')
+        assert collections == [('pkg', True)], f'the hint parsed the cached parent again: {collections}'
+
+    def test_hint_on_a_miss_collects_the_parent_once_quietly(self, root, collections):
+        from reveal.adapters.calls.index import find_callers
+        from reveal.utils.request_cache import host_request
+        with host_request():
+            answer = find_callers(str(root / 'pkg'), 'target')
+        assert potential_count(answer.get('hint')) == 1, answer.get('hint')
+        assert collections == [('pkg', True), ('root', False)], collections
+
+
 class TestHintWording:
     """The count is a lower bound when the quiet parent scan skipped a file it could not analyze."""
 
