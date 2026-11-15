@@ -6,6 +6,10 @@ diagnostics: ``retired_spelling`` notes (as BACK-2619 does) and, where an input 
 deliberately unread, the one unread-input warning, which names the spelling the
 caller typed (``unused_flag`` ['--top'] on the subcommand, ``unused_query_param``
 ['top'] on the URI); each test asserts that warning separately.
+
+``source`` echoes the caller's spelling of the target (BACK-1366): the subcommand gets the native
+``str(project)`` (``C:\\...`` on Windows) and the URI, API and MCP addresses ``project.as_posix()``,
+so comparisons normalize ``source`` with ``to_posix`` and still compare the path itself.
 """
 import copy
 import json
@@ -15,6 +19,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from reveal.api import query
+from reveal.utils.path_utils import to_posix
 
 
 FILES = {
@@ -59,6 +64,8 @@ def cli_json(*args):
 
 def _without(answer, types):
     result = copy.deepcopy(answer)
+    if isinstance(result.get('source'), str):
+        result['source'] = to_posix(result['source'])
     # Imports keeps the additive-stage `metadata` alias of `meta`; JSON makes it a second copy.
     for key in ('meta', 'metadata'):
         if isinstance(result.get(key), dict) and 'warnings' in result[key]:
@@ -159,7 +166,10 @@ class TestPreservation:
                 'scope': 'scan', 'limit': 3, 'total': 4, 'returned': 3, 'exact': False, 'capped': True}
             capped = [w for w in answer['meta']['warnings'] if w['type'] == 'scan_capped']
             assert len(capped) == 1 and capped[0]['limit'] == 3
-            assert len(answer['entries']) == 6
+            # Which 3 files the walk keeps follows the filesystem's listing order, so the row count
+            # (kept files plus their import targets) is platform-dependent; 3 scanned files are not.
+            assert answer['meta']['scanned_files'] == 3
+            assert 3 <= len(answer['entries']) <= len(RANKING)
         assert_equal_answer(typed, spelled)
 
     @pytest.mark.parametrize('value', ['0', '-1'])
@@ -170,9 +180,13 @@ class TestPreservation:
             assert '>= 1' in answer['error']
 
     def test_scan_budget_requests_do_not_share_answers(self, project):
-        counts = [len(query(uri(project, 'rank=fan-in' + q))['entries'])
-                  for q in ('&max_files=3', '', '&max_files=3', '')]
-        assert counts == [6, 7, 6, 7]
+        # A capped walk may keep files whose targets already cover every row (macOS: 7 rows from 3
+        # files), so the row count cannot tell the answers apart; the scan does.
+        answers = [query(uri(project, 'rank=fan-in' + q)) for q in ('&max_files=3', '', '&max_files=3', '')]
+        assert [(a['meta']['scan_budget']['capped'], a['meta']['scanned_files']) for a in answers] == [
+            (True, 3), (False, 7), (True, 3), (False, 7)]
+        assert answers[0]['entries'] == answers[2]['entries']
+        assert ranking(answers[1]) == ranking(answers[3]) == RANKING
 
     @pytest.mark.parametrize('view', ['circular', 'unused', 'external', 'importers', 'violations'])
     def test_verbose_marks_json_and_changes_nothing_else(self, project, view):
@@ -344,6 +358,13 @@ class TestPreservation:
         noted = copy.deepcopy(expected)
         noted['meta']['warnings'].append({'type': 'retired_spelling', 'message': 'x is deprecated; use y.'})
         assert_equal_answer(noted, expected)
+        # The native Windows spelling of the same target is the same answer; another target is not.
+        native, posix = copy.deepcopy(expected), copy.deepcopy(expected)
+        native['source'], posix['source'] = 'C:\\work\\proj', 'C:/work/proj'
+        assert_equal_answer(native, posix)
+        posix['source'] = 'C:/work/other'
+        with pytest.raises(AssertionError, match='canonical answer differs'):
+            assert_equal_answer(native, posix)
         bad, answer = cli_json(uri(project, 'rank=callers'))
         assert_usage(bad, answer, 'fan-in')
         good, successful = cli_json(uri(project, 'rank=fan-in'))
