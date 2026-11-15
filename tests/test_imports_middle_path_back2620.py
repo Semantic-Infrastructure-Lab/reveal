@@ -569,3 +569,42 @@ class TestProposedChanges:
     def test_typed_api_invalid_or_unknown_keyword_rejects(self, project, keywords):
         with pytest.raises((TypeError, ValueError)):
             query(uri(project), **keywords)
+
+    @pytest.mark.parametrize('first,second', [
+        ('importers', 'circular'), ('unused', 'circular'), ('circular', 'violations'),
+        ('rank=fan-in', 'entrypoints'), ('components', 'external'),
+    ])
+    def test_two_view_modes_reject_naming_both(self, project, first, second):
+        """D18 (Scott 2026-11-14): two view modes in one request exit 2 naming both, as Calls does;
+        today the first in precedence answers and the other is only warned unread."""
+        from reveal.mcp_server import _ToolFailure, reveal_query
+        names = [mode.partition('=')[0] for mode in (first, second)]
+
+        def names_both(text):
+            # rank's canonical spelling is sort; either names the ranking mode.
+            return all(n in text or (n == 'rank' and 'sort' in text) for n in names)
+
+        flags = [arg for mode in (first, second) for arg in (
+            ('--rank', 'fan-in') if mode.startswith('rank') else (f'--{mode}',))]
+        keywords = {n: ('fan-in' if n == 'rank' else True) for n in names}
+        for result, answer in (cli_json(uri(project, f'{first}&{second}')),
+                               cli_json('imports', str(project), *flags)):
+            assert result.returncode == 2, f'{first}&{second} must exit 2, got {result.returncode}'
+            assert names_both(answer['error']), f'the error must name both modes: {answer["error"]}'
+        mcp = reveal_query(uri(project, f'{first}&{second}'))
+        assert isinstance(mcp, _ToolFailure) and names_both(str(mcp)), f'MCP must reject: {str(mcp)[:200]}'
+        for request in (lambda: query(uri(project, f'{first}&{second}')), lambda: query(uri(project), **keywords)):
+            with pytest.raises(ValueError) as rejected:
+                request()
+            assert names_both(str(rejected.value)), str(rejected.value)
+
+    @pytest.mark.parametrize('controls', ['circular&unused=false', 'unused=0&circular'])
+    def test_a_false_mode_is_not_a_second_mode(self, project, controls):
+        """Negative control for the two-mode rule: a mode bound False is not selected (B1)."""
+        expected = query(uri(project, 'circular'))
+        result, answer = cli_json(uri(project, controls))
+        assert result.returncode == 0, result.stderr
+        assert answer['type'] == 'circular_dependencies'
+        assert_equal_answer(_without(answer, UNREAD_WARNINGS), _without(expected, UNREAD_WARNINGS))
+        api = query(uri(project, controls))
+        assert_equal_answer(_without(api, UNREAD_WARNINGS), _without(expected, UNREAD_WARNINGS))
