@@ -32,7 +32,7 @@ from ..analyzers.imports.unused import describe_unused
 from ..conventions import family_for_path
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
-from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, peek_query_items
+from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema, peek_query_items
 from ..errors import RequestValidationError
 from ..utils.query_binding import boolean_value
 from ..analyzers.imports.views import ImportView, _unused_not_checked  # noqa: F401 -- checks.py imports _unused_not_checked from here (BACK-2255)
@@ -115,6 +115,11 @@ def autoload_regime_warning(regime: Optional[Dict[str, str]]) -> str:
     )
 
 
+def _request_cli(name: str) -> CliBinding:
+    """The subcommand flag of a request parameter: ``--max-files`` for ``max_files``."""
+    return CliBinding((f'--{name.replace("_", "-")}',), dest=name, metavar=name.upper())
+
+
 def _lazy_value(value: Any) -> str:
     if not isinstance(value, str):  # a bare `&lazy` parses as True
         raise TypeError(value)
@@ -135,7 +140,7 @@ _LAZY = ParamSpec(
     'retains them and only omits them. Scope is lexical, not runtime timing; the printed rule names coverage',
     None, _lazy_value,
     examples=('imports://src?rank=fan-in&lazy=exclude', 'imports://src?circular&lazy=include'),
-    choices=LAZY_MODES,
+    choices=LAZY_MODES, role='analysis', cli=_request_cli('lazy'),
 )
 
 def _choice_value(value: Any) -> str:
@@ -171,6 +176,7 @@ _SCOPE = ParamSpec(
     'as imports:// resolved before (architecture, overview, pack and diff pass it)',
     SCOPE_ROOT, _choice_value,
     examples=('imports://src?rank=fan-in&scope=path',), choices=(SCOPE_ROOT, SCOPE_PATH),
+    role='analysis', cli=_request_cli('scope'),
 )
 _TESTS = ParamSpec(
     'tests', 'string',
@@ -180,6 +186,7 @@ _TESTS = ParamSpec(
     'scan-root fallback retains its own directory name',
     'include', _choice_value,
     examples=('imports://src?rank=fan-in&tests=exclude',), choices=('include', 'exclude'),
+    role='analysis', cli=_request_cli('tests'),
 )
 _ROOT = ParamSpec(
     'root', 'string',
@@ -187,12 +194,14 @@ _ROOT = ParamSpec(
     'must be an existing directory containing the path, not a filesystem/home/system root; a refused '
     'value says why and the climb decides. Ignored with scope=path',
     None, _choice_value, examples=('imports://src/app.py?importers&root=.',),
+    role='analysis', cli=_request_cli('root'),
 )
 _MAX_FILES = ParamSpec(
     'max_files', 'integer',
     'Source files the walk may keep (default 20000); a capped walk is disclosed in metadata.scan_budget '
     'and as a warning, never silently partial',
     import_analysis.DEFAULT_FILE_CAP, _max_files_value, examples=('imports://.?importers&max_files=50000',), minimum=1,
+    role='analysis', cli=_request_cli('max_files'),
 )
 _IMPORTERS = ParamSpec(
     'importers', 'string',
@@ -201,8 +210,8 @@ _IMPORTERS = ParamSpec(
     'line, scope and the cascade stage (via) of each edge',
     None, _importers_value, names='file',
     examples=('imports://src?importers', 'imports://src?importers=utils.py', 'imports://src/utils.py?importers'),
+    role='operation', cli=CliBinding(('--importers',), nargs='?', const=True, metavar='FILE'),
 )
-_REQUEST_SPECS = (_LAZY, _SCOPE, _TESTS, _ROOT, _MAX_FILES, _IMPORTERS)
 
 # Component cohesion (internal / (internal + outgoing) imports) is declined, not computed, for a component whose
 # files are mostly in a language where one package/module sees its own files with no import (BACK-1428).
@@ -247,103 +256,43 @@ _VERBOSE_VIEWS = frozenset({'unused_imports', 'circular_dependencies', 'layer_vi
                            'module_importers', 'importer_summary', 'external_packages'})
 
 
-_UNUSED = _flag('unused', 'Find unused imports')
+_UNUSED = _flag('unused', 'Find unused imports in the codebase')
 _CIRCULAR = _flag('circular', 'Detect circular dependencies (load-time edges unless &lazy says otherwise)')
 _VIOLATIONS = _flag('violations', 'Check layer violations (requires .reveal.yaml layers)')
-_ENTRYPOINTS = _flag('entrypoints', 'Files with fan-in 0 (entry points, scripts or dead code)')
-_COMPONENTS = _flag('components', 'Score each directory as a component')
-_EXTERNAL = _flag('external', 'Package table: unresolved (third-party or unresolved-local) and stdlib packages by use')
-_VERBOSE = ParamSpec('verbose', 'boolean', 'Show everything instead of a summary (same as --verbose)', False,
+_ENTRYPOINTS = _flag('entrypoints', 'Files with fan-in 0, which nothing imports (entry points, scripts or dead '
+                     'code), sorted by fan-out descending')
+_COMPONENTS = _flag('components', 'Score each directory as a component: cohesion (internal/outgoing imports; null/n/a '
+                    'for a component mostly in Go, Java, Kotlin, C#, Scala or Swift, with cohesion_rule saying why), '
+                    'coupling (incoming), top bridge file')
+_EXTERNAL = ParamSpec(
+    'external', 'boolean',
+    'Package table (the deps:// dashboard\'s, as JSON): every import of the files under the path classified on '
+    'resolution truth first -- resolved in the tree (internal), stdlib (a language rule or marker, never Python\'s '
+    'list for another language) or unresolved (third-party or an unresolved local) -- with uses per package, the '
+    'languages importing each unresolved package, and import statements per file. &tests=exclude drops test files',
+    False, boolean_value, ('imports://src?external', 'imports://src?external&scope=path'),
+    role='operation', cli=CliBinding(('--external',), action='store_true'))
+_VERBOSE = ParamSpec('verbose', 'boolean', 'Show everything instead of a summary: every file in a cycle group plus '
+                     'its cycle edges, all unused imports, all violations, every package (same as --verbose)', False,
                      boolean_value, ('imports://src?circular&verbose',), role='presentation')
+# The one owner of rank's value domain: binding, validation and the schema read these choices.
+_RANK = ParamSpec('rank', 'string', 'Rank files by fan-in: the count of files that import each file (higher = more '
+                  'central; 0 = entry point or dead code). One value: fan-in', None, _choice_value,
+                  ('imports://src?rank=fan-in', 'imports://src?rank=fan-in&top=20'), choices=('fan-in',),
+                  role='operation', cli=CliBinding(('--rank',), metavar='fan-in'))
+_TOP = ParamSpec('top', 'integer', 'Limit ?rank rows (default: all)', None, _top_value,
+                 ('imports://src?rank=fan-in&top=20',), minimum=0, role='analysis',  # the adapter cuts the rows
+                 cli=CliBinding(('--top', '--limit'), metavar='N'))
 
 # The declaration the `reveal imports` subcommand and the declared URI route bind (BACK-1054, D6):
 # every parameter imports:// reads. A view flag selects its view when its value is on (_selects):
 # a bare ``?unused`` or ``--unused`` does, ``?unused=false`` does not.
 PARAM_SPECS: Tuple[ParamSpec, ...] = (
-    _UNUSED,
-    _CIRCULAR,
-    _VIOLATIONS,
-    ParamSpec('rank', 'string', 'Rank files by fan-in (one value: fan-in)', None, _choice_value,
-              ('imports://src?rank=fan-in',), choices=('fan-in',), role='operation',
-              cli=CliBinding(('--rank',), metavar='fan-in')),
-    ParamSpec('top', 'integer', 'Limit ?rank rows (default: all)', None, _top_value,
-              ('imports://src?rank=fan-in&top=20',), minimum=0, role='analysis',  # the adapter cuts the rows
-              cli=CliBinding(('--top', '--limit'), metavar='N')),
-    _ENTRYPOINTS,
-    _COMPONENTS,
-    _EXTERNAL,
-    _VERBOSE,
-    *(ParamSpec(spec.name, spec.type, spec.description, spec.default, spec.convert, spec.examples,
-                minimum=spec.minimum, choices=spec.choices, role='analysis',
-                cli=CliBinding((f'--{spec.name.replace("_", "-")}',), dest=spec.name,
-                               metavar=spec.name.upper()))
-      for spec in _REQUEST_SPECS if spec is not _IMPORTERS),
-    ParamSpec(_IMPORTERS.name, _IMPORTERS.type, _IMPORTERS.description, None, _IMPORTERS.convert,
-              _IMPORTERS.examples, role='operation', names=_IMPORTERS.names,
-              cli=CliBinding(('--importers',), nargs='?', const=True, metavar='FILE')),
-    _FORMAT,
+    _UNUSED, _CIRCULAR, _VIOLATIONS, _RANK, _TOP, _ENTRYPOINTS, _COMPONENTS, _EXTERNAL, _VERBOSE,
+    _LAZY, _SCOPE, _TESTS, _ROOT, _MAX_FILES, _IMPORTERS, _FORMAT,
 )
 _FLAG_NAMES = frozenset(spec.name for spec in PARAM_SPECS if spec.type == 'boolean')
 
-_SCHEMA_QUERY_PARAMS = {
-    'unused': {
-        'type': 'flag',
-        'description': 'Find unused imports in codebase',
-        'examples': ['imports://src?unused']
-    },
-    'circular': {
-        'type': 'flag',
-        'description': 'Detect circular dependencies',
-        'examples': ['imports://src?circular']
-    },
-    'violations': {
-        'type': 'flag',
-        'description': 'Check for layer violations (requires config)',
-        'examples': ['imports://src?violations']
-    },
-    'rank': {
-        'type': 'enum',
-        'values': ['fan-in'],
-        'description': 'Rank files by structural metric. fan-in: count of files that import each file (higher = more central; 0 = entry point or dead code)',
-        'examples': ['imports://src?rank=fan-in', 'imports://src?rank=fan-in&top=20']
-    },
-    'top': {
-        'type': 'integer',
-        'description': 'Limit results for ?rank (default: all files)',
-        'examples': ['imports://src?rank=fan-in&top=20']
-    },
-    'entrypoints': {
-        'type': 'flag',
-        'description': 'List files with fan-in=0 — nothing imports them (entry points, scripts, or dead code); sorted by fan-out descending',
-        'examples': ['imports://src?entrypoints']
-    },
-    'components': {
-        'type': 'flag',
-        'description': 'Score each directory as a component: cohesion (internal/outgoing imports; null/n/a for a component mostly in Go, Java, Kotlin, C#, Scala or Swift, with cohesion_rule saying why), coupling (incoming), top bridge file',
-        'examples': ['imports://src?components']
-    },
-    'external': {
-        'type': 'flag',
-        'description': ('Package table (the deps:// dashboard\'s, as JSON): every import of the files under the path '
-                        'classified on resolution truth first -- resolved in the tree (internal), stdlib (a '
-                        'language rule or marker, never Python\'s list for another language) or unresolved '
-                        '(third-party or an unresolved local) -- with uses per package, the languages importing '
-                        'each unresolved package, and import statements per file. &tests=exclude drops test files'),
-        'examples': ['imports://src?external', 'imports://src?external&scope=path'],
-    },
-    'verbose': {
-        'type': 'flag',
-        'description': 'Show everything instead of a summary: every file in a cycle group plus its cycle edges, all unused imports, all violations, every package. Same as the CLI --verbose',
-        'examples': ['imports://src?circular&verbose']
-    },
-    'lazy': _LAZY.schema(),
-    'importers': _IMPORTERS.schema(),
-    'scope': _SCOPE.schema(),
-    'tests': _TESTS.schema(),
-    'root': _ROOT.schema(),
-    'max_files': _MAX_FILES.schema(),
-    'format': _FORMAT.schema(),
-}
 
 # BACK-2077: the counting rule every edge-derived answer carries (service.edge_rule).
 _EDGE_RULE_SCHEMA = {
@@ -1396,14 +1345,9 @@ def _validate_params(params: QueryParams) -> None:
     """Validate every supplied value; validation is not application (a preceding query mode may
     take priority, and the view that applies a value reads it)."""
     for key, value in params.peek_items():
-        if key == 'rank' and value not in _SCHEMA_QUERY_PARAMS['rank']['values']:
-            choices = ', '.join(_SCHEMA_QUERY_PARAMS['rank']['values'])
-            raise ValueError(f'rank must be one of: {choices}; got {value!r}')
-        if key == _LAZY.name:
-            _LAZY.validate(value)
-        if key == _FORMAT.name:
-            _FORMAT.validate(value)
-        for spec in _REQUEST_SPECS[1:] + PARAM_SPECS[3:5]:
+        if key == _RANK.name and value not in _RANK.choices:
+            raise ValueError(f'rank must be one of: {", ".join(_RANK.choices)}; got {value!r}')
+        for spec in (_LAZY, _FORMAT, _SCOPE, _TESTS, _ROOT, _MAX_FILES, _IMPORTERS, _RANK, _TOP):
             if key == spec.name:
                 spec.validate(value)
 
@@ -1689,7 +1633,7 @@ class ImportsAdapter(ResourceAdapter):
             'adapter': 'imports',
             'description': 'Import graph analysis for detecting unused imports, circular dependencies, and layer violations',
             'uri_syntax': 'imports://<path>[?query]',
-            'query_params': _SCHEMA_QUERY_PARAMS,
+            'query_params': param_schema(PARAM_SPECS),
             'elements': {},
             'cli_flags': ['--verbose'],
             'execution_policy': {'default_fail_on': ImportsAdapter.DEFAULT_FAIL_ON,

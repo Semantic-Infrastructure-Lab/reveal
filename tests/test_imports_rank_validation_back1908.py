@@ -41,9 +41,13 @@ def test_validating_rank_does_not_claim_it_was_applied(project):
     assert 'rank' not in keys.used
 
 
-def test_schema_is_the_rank_value_owner(tmp_path, monkeypatch):
-    # A declaration change must not leave a second accepted-values table behind.
+def test_declaration_is_the_rank_value_owner(tmp_path, monkeypatch):
+    # The rank declaration owns its accepted values (BACK-2620): validation reads them and the schema
+    # is generated from them, so a declaration change leaves no second accepted-values table behind.
+    from dataclasses import replace
     from reveal.adapters import imports
-    monkeypatch.setitem(imports._SCHEMA_QUERY_PARAMS['rank'], 'values', ['other'])
+    schema = ImportsAdapter.get_schema()['query_params']['rank']
+    assert schema == imports._RANK.schema() and schema['choices'] == list(imports._RANK.choices)
+    monkeypatch.setattr(imports, '_RANK', replace(imports._RANK, choices=('other',)))
     with pytest.raises(ValueError, match='rank.*other'):
         ImportsAdapter(str(tmp_path), 'rank=fan-in').get_structure()
