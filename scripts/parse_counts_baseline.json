@@ -1603,7 +1603,7 @@
           },
           "next_steps": [
             {
-              "command": "reveal 'imports://<corpus>?rank=fan-in&scope=path'",
+              "command": "reveal 'imports://<corpus>?sort=-fan-in&scope=path'",
               "question": "Full observed fan-in ranking (subject to scan coverage)"
             },
             {
