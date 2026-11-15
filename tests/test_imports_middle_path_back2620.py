@@ -629,6 +629,22 @@ class TestProposedChanges:
         assert 'verbose' not in ImportsAdapter(str(project), 'circular&verbose=false').get_structure()
         assert ImportsAdapter(str(project), 'circular&verbose').get_structure()['verbose'] is True
 
+    def test_direct_construction_and_get_view_bind_the_canonical_controls(self, project):
+        """The raw-query constructor (deps, calls ?modules, library callers) and get_view bind through
+        the same declarations as the URI: canonical names answer, legacy names still do, and a value
+        the URI rejects is rejected at construction."""
+        from reveal.adapters.imports import ImportsAdapter
+        expected = ranking(query(uri(project, 'rank=fan-in&top=2')))
+        for controls in ('sort=-fan-in&limit=2', 'rank=fan-in&top=2', 'sort=-fan-in&top=2&scan-limit=100'):
+            got = ImportsAdapter(str(project), controls).get_structure()
+            assert (ranking(got), got['total']) == (expected, 7), controls
+        adapter = ImportsAdapter(str(project))
+        adapter.get_structure()
+        assert ranking(adapter.get_view('sort=-fan-in&limit=2')) == expected
+        assert adapter.get_view('circular&detail=full')['verbose'] is True
+        with pytest.raises(ValueError, match='unused'):
+            ImportsAdapter(str(project), 'unused=banana')
+
     @pytest.mark.parametrize('controls', ['circular&unused=false', 'unused=0&circular'])
     def test_a_false_mode_is_not_a_second_mode(self, project, controls):
         """Negative control for the two-mode rule: a mode bound False is not selected (B1)."""
