@@ -562,6 +562,17 @@ class TestProposedChanges:
         assert expected != query(uri(project, base, sub=sub)), 'fixture must make the control observable'
         assert_equal_answer(query(uri(project, base, sub=sub), **keywords), expected)
 
+    def test_typed_api_none_importers_is_the_default_view(self, project):
+        """None selects the declared default for importers as for every typed keyword (no view); a bare
+        --importers on the subcommand still asks for the importer summary of the directory."""
+        default = query(uri(project))
+        assert_equal_answer(query(uri(project), importers=None), default)
+        assert_equal_answer(query(uri(project, 'importers'), importers=None), default)
+        result, answer = cli_json('imports', str(project), '--importers')
+        assert result.returncode == 0, result.stderr
+        assert answer['type'] == 'importer_summary'
+        assert_equal_answer(answer, query(uri(project, 'importers')))
+
     @pytest.mark.parametrize('keywords', [
         {'rank': 'callers'}, {'rank': 'fan-in', 'top': -1}, {'rank': 'fan-in', 'max_files': 0},
         {'circular': True, 'lazy': 'bogus'}, {'tests': 'only'}, {'bogus': 1},
