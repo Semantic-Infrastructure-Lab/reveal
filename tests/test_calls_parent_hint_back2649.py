@@ -89,3 +89,21 @@ class TestPreservation:
         (root / OUTSIDE).unlink()
         answer = json.loads(mcp_text(root / 'pkg'))
         assert potential_count(answer.get('hint')) == 1, answer.get('hint')
+
+
+class TestOutOfScopeWarningLeak:
+    @pytest.mark.parametrize('fmt', ['text', 'json'])
+    def test_cli_prints_no_warning_for_a_file_outside_the_requested_scope(self, root, fmt):
+        result = run('calls', root / 'pkg', '--callers', 'target', '--format', fmt)
+        assert result.returncode == 0, result.stderr
+        assert potential_count(result.stdout) == 1, 'the hint must still fire, or this proves nothing'
+        leaked = warning_lines(result.stderr, OUTSIDE)
+        assert leaked == [], f'the parent-hint scan warned about a file outside {root / "pkg"}: {leaked}'
+
+    def test_mcp_reveal_query_json_is_one_document(self, root):
+        text = mcp_text(root / 'pkg')
+        try:
+            answer = json.loads(text)
+        except json.JSONDecodeError as error:
+            pytest.fail(f'reveal_query text is not one JSON document ({error}); after the JSON: {text[error.pos:]!r}')
+        assert potential_count(answer.get('hint')) == 1, answer.get('hint')
