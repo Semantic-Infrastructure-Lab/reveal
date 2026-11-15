@@ -108,19 +108,28 @@ def _note_retired_flags(name: str, adapter) -> None:
     """The subcommand route's retirement hook: a declared parameter typed as its flag
     (``reveal calls --target``) is the spelling ``calls://?target=`` is, so it is looked up under
     the same ``param:<name>.<param>`` key, in the order typed (a URI's are in query order). The URI
-    route's hook is ``_note_retired_spellings``."""
+    route's hook is ``_note_retired_spellings``. A hyphenated flag names its underscore alias
+    (``--max-files`` is ``max_files``)."""
     from ..invocation import current_invocation, retirement_note
     invocation = current_invocation()
     if invocation is None:
         return
-    params = {flag: flag[2:] if flag[2:] in spec.aliases else spec.name
-              for spec in adapter.PARAM_SPECS if spec.cli is not None for flag in spec.cli.flags}
+    params = {flag: _flag_param(spec, flag) for spec in adapter.PARAM_SPECS if spec.cli is not None
+              for flag in spec.cli.flags}
     for token in invocation.command_argv:
         if token == '--':
             break
         param = params.get(token.partition('=')[0])
         if param is not None:
             retirement_note(f'param:{name}.{param}')
+
+
+def _flag_param(spec, flag: str) -> str:
+    """The declared parameter a subcommand flag spells: the alias it names, else the canonical name."""
+    spelled = flag[2:]
+    if spelled == spec.name:
+        return spec.name
+    return next((alias for alias in spec.aliases if alias in (spelled, spelled.replace('-', '_'))), spec.name)
 
 
 def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
@@ -155,20 +164,25 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
     _run_declared(name, args, path, query, 'uri', consumed, answer_consumer=answer_consumer)
 
 
-def _bind_legacy_cli_values(adapter, args, source):
-    """Apply opted-in global flag values through the same declaration as URI forwarding."""
+def _bind_legacy_cli_values(name, adapter, args, source):
+    """Apply opted-in global flag values through the same declaration as URI forwarding. A global
+    flag that is one of the parameter's aliases (``--verbose`` for ``detail``) is that retired
+    spelling, noted under the same ``param:<name>.<alias>`` row as the URI key."""
+    from ..invocation import retirement_note
     for spec in adapter.PARAM_SPECS:
         for flag, value in spec.cli_flags:
             if peek(args, flag, False) is True and spec.name not in source:
                 source[spec.name] = value
                 delegate(args, flag, spec.name)
+                if flag in spec.aliases:
+                    retirement_note(f'param:{name}.{flag}')
 
 
-def _delegate_typed_parameters(adapter, args, source, transport: str) -> None:
+def _delegate_typed_parameters(name, adapter, args, source, transport: str) -> None:
     """Forward declaration accounting only after the receiving ledger exists."""
     if transport != 'typed':
         return
-    _bind_legacy_cli_values(adapter, args, source)
+    _bind_legacy_cli_values(name, adapter, args, source)
     for spec in adapter.PARAM_SPECS:
         dest = (spec.cli.dest if spec.cli else None) or spec.name
         if dest in source:
@@ -205,7 +219,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
         ledger = FlagLedger(args)
         args = ledger.track(args)
     mark(args, *consumed)
-    _delegate_typed_parameters(adapter, args, source, transport)
+    _delegate_typed_parameters(name, adapter, args, source, transport)
     query_resource = '?' + source if transport == 'uri' else ''
     if transport == 'uri':
         from .flag_specs import inject_query_flags
