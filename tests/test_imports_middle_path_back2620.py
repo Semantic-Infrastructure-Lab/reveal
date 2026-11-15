@@ -354,3 +354,218 @@ class TestPreservation:
         (project / 'pkg' / 'd.py').write_text('from pkg import b\n\n\ndef fd():\n    return 2\n', encoding='utf-8')
         after = dict(ranking(query(uri(project, 'rank=fan-in'))))
         assert before['pkg/b.py'] == 1 and after['pkg/b.py'] == 2
+
+
+MODES = ('unused', 'circular', 'violations', 'entrypoints', 'components', 'external')
+
+
+class TestProposedChanges:
+    @pytest.mark.parametrize('mode', MODES)
+    @pytest.mark.parametrize('value', ['false', '0'])
+    def test_false_mode_is_not_selected_on_every_transport(self, project, mode, value):
+        """B1: ?MODE=false means the mode is not selected: the default view, exit 0, on every transport."""
+        from reveal.mcp_server import _ToolFailure, reveal_query
+        expected = query(uri(project))
+        assert expected['type'] == 'imports'
+        result, cli = cli_json(uri(project, f'{mode}={value}'))
+        mcp = reveal_query(uri(project, f'{mode}={value}'), provenance=True)
+        answers = {
+            'cli-uri': cli,
+            'api-uri': query(uri(project, f'{mode}={value}')),
+            'api-keyword': query(uri(project), **{mode: False}),
+            'mcp': None if isinstance(mcp, _ToolFailure) else {k: v for k, v in json.loads(mcp).items()
+                                                              if k != 'execution'},
+        }
+        problems = [] if result.returncode == 0 else [f'cli-uri exit {result.returncode}: {result.stderr.strip()}']
+        if isinstance(mcp, _ToolFailure):
+            problems.append(f'mcp failed: {mcp}')
+        problems += [f'{name} answered {answer.get("type")}' for name, answer in answers.items()
+                     if answer is not None and without_retirement(answer) != without_retirement(expected)]
+        assert not problems, f'{mode}={value} must answer the default view everywhere: {problems}'
+
+    @pytest.mark.parametrize('transport', ['uri', 'uri-global', 'api', 'mcp'])
+    def test_canonical_limit_cuts_rank_rows_and_zero_is_uncapped(self, project, transport):
+        for cap in (1, 0):
+            expected = query(uri(project, f'rank=fan-in&top={cap}'))
+            assert len(expected['entries']) == (7 if cap == 0 else 1)
+            if transport == 'api':
+                actual = query(uri(project, 'rank=fan-in'), limit=cap)
+            elif transport == 'mcp':
+                actual = mcp_json(uri(project, f'rank=fan-in&limit={cap}'))
+            else:
+                result, actual = (cli_json(uri(project, f'rank=fan-in&limit={cap}')) if transport == 'uri'
+                                  else cli_json(uri(project, 'rank=fan-in'), '--limit', str(cap)))
+                assert result.returncode == 0, result.stderr
+            assert not [w for w in actual['meta']['warnings'] if w['type'] == 'unknown_query_param'], \
+                f'limit={cap} must be a declared Imports control'
+            assert_equal_answer(actual, expected)
+
+    def test_uri_global_zero_limit_binds_exactly_not_a_sentinel(self, project):
+        from reveal.adapters.imports import ImportsAdapter
+        from reveal.cli.defaults import _default_args
+        from reveal.cli.routing.flag_specs import inject_query_flags
+        from reveal.utils.query_binding import bind_declared_params
+        for submitted in (1, 0):
+            fragment = inject_query_flags('', 'imports', _default_args(limit=submitted))
+            bound = bind_declared_params(ImportsAdapter.PARAM_SPECS, fragment.lstrip('?'), transport='uri')
+            cap = next((s.read(bound) for s in ImportsAdapter.PARAM_SPECS
+                        if s.name == 'limit' and s.name in bound), None)
+            assert cap == submitted, f'global --limit {submitted} must bind limit exactly, got {cap} from {fragment!r}'
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri', 'uri-global', 'api', 'mcp'])
+    def test_canonical_sort_selects_the_fan_in_ranking(self, project, transport):
+        expected = query(uri(project, 'rank=fan-in&top=2'))
+        assert expected['type'] == 'fan_in_ranking' and len(expected['entries']) == 2
+        if transport == 'api':
+            actual = query(uri(project, 'top=2'), sort='-fan-in')
+        elif transport == 'mcp':
+            actual = mcp_json(uri(project, 'sort=-fan-in&top=2'))
+        else:
+            result, actual = {
+                'cli': lambda: cli_json('imports', str(project), '--sort=-fan-in', '--top', '2'),
+                'uri': lambda: cli_json(uri(project, 'sort=-fan-in&top=2')),
+                'uri-global': lambda: cli_json(uri(project, 'top=2'), '--sort=-fan-in'),
+            }[transport]()
+            assert result.returncode == 0, result.stderr
+        assert_equal_answer(actual, expected)
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri', 'api', 'mcp'])
+    def test_canonical_detail_levels_equal_verbose_and_plain(self, project, transport):
+        for level, legacy in (('full', 'circular&verbose'), ('normal', 'circular')):
+            expected = query(uri(project, legacy))
+            assert ('verbose' in expected) == (level == 'full')
+            if transport == 'api':
+                actual = query(uri(project, 'circular'), detail=level)
+            elif transport == 'mcp':
+                actual = mcp_json(uri(project, f'circular&detail={level}'))
+            else:
+                result, actual = (cli_json('imports', str(project), '--circular', '--detail', level)
+                                  if transport == 'cli' else cli_json(uri(project, f'circular&detail={level}')))
+                assert result.returncode == 0, result.stderr
+            assert_equal_answer(actual, expected)
+
+    def test_canonical_detail_full_expands_text_like_verbose(self, project):
+        expected = run(uri(project, 'circular&verbose'))
+        actual = run(uri(project, 'circular&detail=full'))
+        assert actual.returncode == expected.returncode == 0
+        assert actual.stdout == expected.stdout
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri', 'uri-alias', 'api', 'mcp'])
+    def test_canonical_scan_limit_is_the_incomplete_input_budget(self, project, transport):
+        if transport == 'api':
+            expected = query(uri(project, 'rank=fan-in&max_files=3'))
+            actual = query(uri(project, 'rank=fan-in'), **{'scan-limit': 3})
+        else:
+            legacy_result, expected = cli_json(uri(project, 'rank=fan-in&max_files=3'))
+            assert legacy_result.returncode == 3
+            if transport == 'mcp':
+                actual = _without(mcp_json(uri(project, 'rank=fan-in&scan-limit=3')), ('analysis_incomplete',))
+            else:
+                result, actual = {
+                    'cli': lambda: cli_json('imports', str(project), '--rank', 'fan-in', '--scan-limit', '3'),
+                    'uri': lambda: cli_json(uri(project, 'rank=fan-in&scan-limit=3')),
+                    'uri-alias': lambda: cli_json(uri(project, 'rank=fan-in&scan_limit=3')),
+                }[transport]()
+                assert result.returncode == 3, f'a cut input budget is incomplete (exit 3), got {result.returncode}'
+        assert actual['meta']['scan_budget']['capped'] is True, 'scan-limit=3 must cut the walk'
+        assert_equal_answer(actual, expected)
+
+    @pytest.mark.parametrize('value', ['0', '-1'])
+    def test_canonical_scan_limit_zero_and_negative_reject(self, project, value):
+        for result, answer in (cli_json('imports', str(project), '--rank', 'fan-in', '--scan-limit', value),
+                               cli_json(uri(project, f'rank=fan-in&scan-limit={value}'))):
+            assert result.returncode == 2, f'scan-limit={value} must reject, got {result.returncode}'
+            assert answer is not None, f'scan-limit must be declared, not an unknown flag: {result.stderr[-120:]}'
+            assert '>= 1' in answer['error']
+
+    def test_canonical_requests_have_no_retirement_notes(self, project):
+        result, answer = cli_json('imports', str(project), '--sort=-fan-in', '--limit', '1', '--scan-limit', '100')
+        assert result.returncode == 0, result.stderr
+        assert len(answer['entries']) == 1
+        assert not [w for w in answer['meta']['warnings'] if w.get('type') == 'retired_spelling']
+        assert 'deprecated' not in result.stderr
+        result, answer = cli_json('imports', str(project), '--circular', '--detail', 'full')
+        assert result.returncode == 0 and answer.get('verbose') is True
+        assert not [w for w in answer['meta']['warnings'] if w.get('type') == 'retired_spelling']
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri', 'api-uri', 'api-keyword'])
+    @pytest.mark.parametrize('old,new,controls,flags,keywords', [
+        ('rank', 'sort', 'rank=fan-in', ('--rank', 'fan-in'), {'rank': 'fan-in'}),
+        ('top', 'limit', 'rank=fan-in&top=2', ('--rank', 'fan-in', '--top', '2'), {'rank': 'fan-in', 'top': 2}),
+        ('verbose', 'detail', 'circular&verbose', ('--circular', '--verbose'), {'circular': True, 'verbose': True}),
+        ('max_files', 'scan-limit', 'rank=fan-in&max_files=100', ('--rank', 'fan-in', '--max-files', '100'),
+         {'rank': 'fan-in', 'max_files': 100}),
+    ])
+    def test_legacy_vocabulary_keeps_answer_and_names_replacement(self, project, transport, old, new,
+                                                                  controls, flags, keywords):
+        expected = query(uri(project, controls))
+        if transport == 'cli':
+            result, answer = cli_json('imports', str(project), *flags)
+        elif transport == 'uri':
+            result, answer = cli_json(uri(project, controls))
+        else:
+            result, answer = None, (query(uri(project, controls)) if transport == 'api-uri'
+                                    else query(uri(project), **keywords))
+        if result is not None:
+            assert result.returncode == 0, result.stderr
+        assert_equal_answer(answer, expected)
+        notes = [w for w in answer['meta']['warnings'] if w.get('type') == 'retired_spelling']
+        assert any(old in w.get('message', '') and new in w.get('message', '') for w in notes), \
+            f'legacy {old} must keep working with a retirement note naming {new}: {notes}'
+
+    @pytest.mark.parametrize('controls,replacement', [
+        ('rank=fan-in&top=1&limit=2', 'limit'),
+        ('rank=fan-in&max_files=3&scan-limit=4', 'scan-limit'),
+        ('circular&verbose&detail=normal', 'detail'),
+        ('sort=fan-in', '-fan-in'),
+        ('rank=fan-in&sort=-fan-out', '-fan-in'),
+        ('circular&detail=summary', 'full'),
+    ])
+    def test_conflicts_and_unsupported_values_reject_with_guidance(self, project, controls, replacement):
+        result, answer = cli_json(uri(project, controls))
+        assert_usage(result, answer, replacement)
+
+    def test_equal_old_and_new_spellings_are_accepted_once(self, project):
+        expected = query(uri(project, 'rank=fan-in&top=2'))
+        result, answer = cli_json(uri(project, 'rank=fan-in&sort=-fan-in&top=2&limit=2'))
+        assert result.returncode == 0, result.stderr
+        assert not [w for w in answer['meta']['warnings'] if w['type'] in ('unknown_query_param',) + UNREAD_WARNINGS]
+        assert_equal_answer(answer, expected)
+        assert 'ignored' not in result.stderr
+
+    @pytest.mark.parametrize('control', ['offset', 'where', 'match', 'kind', 'depth'])
+    def test_unsupported_shared_controls_reject(self, project, control):
+        result, answer = cli_json(uri(project, f'rank=fan-in&{control}=1'))
+        assert result.returncode == 2, f'{control} is not an Imports control and must exit 2, got {result.returncode}'
+        assert control in answer['error']
+        with pytest.raises((TypeError, ValueError), match=control):
+            query(uri(project, 'rank=fan-in'), **{control: '1'})
+
+    @pytest.mark.parametrize('base,keywords,controls,sub', [
+        ('', {'rank': 'fan-in'}, 'rank=fan-in', ''),
+        ('rank=fan-in', {'top': 2}, 'rank=fan-in&top=2', ''),
+        ('rank=fan-in', {'max_files': 3}, 'rank=fan-in&max_files=3', ''),
+        ('', {'importers': True}, 'importers', ''),
+        ('', {'importers': 'pkg/b.py'}, 'importers=pkg/b.py', ''),
+        ('circular', {'lazy': 'include'}, 'circular&lazy=include', ''),
+        ('rank=fan-in', {'tests': 'exclude'}, 'rank=fan-in&tests=exclude', ''),
+        ('rank=fan-in', {'scope': 'path'}, 'rank=fan-in&scope=path', 'pkg'),
+        ('rank=fan-in', {'root': '/'}, 'rank=fan-in&root=/', ''),
+        ('importers', {'format': 'dot'}, 'importers&format=dot', ''),
+        ('', {'entrypoints': True}, 'entrypoints', ''),
+        ('', {'components': True}, 'components', ''),
+        ('', {'external': True}, 'external', ''),
+    ])
+    def test_typed_api_keyword_answers_like_its_uri_spelling(self, project, base, keywords, controls, sub):
+        """B2: every declared typed keyword reaches the answer, as its URI spelling does."""
+        expected = query(uri(project, controls, sub=sub))
+        assert expected != query(uri(project, base, sub=sub)), 'fixture must make the control observable'
+        assert_equal_answer(query(uri(project, base, sub=sub), **keywords), expected)
+
+    @pytest.mark.parametrize('keywords', [
+        {'rank': 'callers'}, {'rank': 'fan-in', 'top': -1}, {'rank': 'fan-in', 'max_files': 0},
+        {'circular': True, 'lazy': 'bogus'}, {'tests': 'only'}, {'bogus': 1},
+    ])
+    def test_typed_api_invalid_or_unknown_keyword_rejects(self, project, keywords):
+        with pytest.raises((TypeError, ValueError)):
+            query(uri(project), **keywords)
