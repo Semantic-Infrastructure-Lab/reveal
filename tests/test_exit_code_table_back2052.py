@@ -29,7 +29,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
 
     BACK-2377 adds architecture aliases; BACK-2364 adds contextual navigation corrections;
     BACK-2461 adds the three effects replacement notes. BACK-2225 adds python://, removed outright.
-    BACK-2149 adds the hotspots noun and its two only-flags.
+    BACK-2149 adds the hotspots noun and its two only-flags. BACK-2620 adds the four Imports aliases.
     """
     assert sorted(RETIREMENTS) == ['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
                                    'flag:--fanout', 'flag:--flowto', 'flag:--ifmap', 'flag:--loopmap', 'flag:--mutations',
@@ -37,7 +37,8 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'flag:--writes', 'param:ast.callee_of', 'param:ast.calls',
                                    'param:calls.external', 'param:calls.modules', 'param:calls.rank', 'param:calls.root', 'param:calls.target', 'param:calls.top', 'param:calls.type', 'param:calls.uncalled',
                                    'param:claude.contains', 'param:claude.filter', 'param:claude.full', 'param:claude.last', 'param:claude.raw', 'param:claude.search', 'param:claude.summary', 'param:claude.tail',
-                                   'param:hotspots.files_only', 'param:hotspots.functions_only', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:hotspots', 'scheme:python', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:hotspots', 'subcommand:review', 'subcommand:scaffold', 'subcommand:testability',
+                                   'param:hotspots.files_only', 'param:hotspots.functions_only',
+                                   'param:imports.max_files', 'param:imports.rank', 'param:imports.top', 'param:imports.verbose', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:hotspots', 'scheme:python', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:hotspots', 'subcommand:review', 'subcommand:scaffold', 'subcommand:testability',
                                    'subcommand:trace', 'target:health.code', 'target:nav.outline', 'value:ast.show=calls']
 
 
