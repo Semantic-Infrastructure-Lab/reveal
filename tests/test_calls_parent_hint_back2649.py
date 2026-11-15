@@ -107,3 +107,11 @@ class TestOutOfScopeWarningLeak:
         except json.JSONDecodeError as error:
             pytest.fail(f'reveal_query text is not one JSON document ({error}); after the JSON: {text[error.pos:]!r}')
         assert potential_count(answer.get('hint')) == 1, answer.get('hint')
+
+    def test_in_scope_unparseable_file_warns_exactly_once(self, root):
+        # The hint's scan of R walks P again; it must not repeat the in-scope warning the answer already printed.
+        (root / 'pkg' / INSIDE).write_text(MALFORMED, encoding='utf-8')
+        result = run('calls', root / 'pkg', '--callers', 'target')
+        assert potential_count(result.stdout) == 1, 'the hint must still fire, or this proves nothing'
+        lines = warning_lines(result.stderr, INSIDE)
+        assert len(lines) == 1, f'expected the in-scope warning once, got {len(lines)}: {lines}'
