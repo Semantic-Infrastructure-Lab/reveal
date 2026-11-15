@@ -32,9 +32,9 @@ def _run_batch(monkeypatch, capsys, lines):
     builds = []
     collect = calls_index._structures_or_collect
 
-    def counting(structures, directory):
+    def counting(structures, directory, **kwargs):
         builds.append(str(directory))
-        return collect(structures, directory)
+        return collect(structures, directory, **kwargs)
 
     monkeypatch.setattr(calls_index, '_structures_or_collect', counting)
     monkeypatch.setattr(sys, 'stdin', io.StringIO(''.join(f'{line}\n' for line in lines)))

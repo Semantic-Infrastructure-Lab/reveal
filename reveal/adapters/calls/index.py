@@ -516,9 +516,10 @@ def _disclose_skipped(result: Dict[str, Any], skipped: Sequence[Tuple[str, str]]
     return result
 
 
-def _structures_or_collect(structures: Optional[StructureList], directory: Path) -> StructureList:
+def _structures_or_collect(structures: Optional[StructureList], directory: Path, *,
+                           warn: bool = True) -> StructureList:
     """The caller's already-collected structures, else collect them (BACK-1868)."""
-    return collect_structures(str(directory)) if structures is None else structures
+    return collect_structures(str(directory), warn=warn) if structures is None else structures
 
 
 def _environmental_loss(skipped: Sequence[Tuple[str, str]],
@@ -575,7 +576,8 @@ def _scope_record_fields(elem: Dict[str, Any], callee: str) -> Dict[str, Any]:
     return fields
 
 
-def build_callers_index(path: str, structures: Optional[StructureList] = None) -> CallersIndex:
+def build_callers_index(path: str, structures: Optional[StructureList] = None, *,
+                        warn: bool = True) -> CallersIndex:
     """Return project-level callers index for *path* (file or directory).
 
     The index maps each callee name to a list of caller records::
@@ -600,6 +602,8 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
             holds, used instead of collecting again on a cache miss (BACK-1868:
             ``find_uncalled`` built every file's structure twice). Must come from
             the same directory and scope as *path*.
+        warn: On a miss, print the per-file stderr line for a file that fails
+            (``collect_structures``). The index is the same either way.
 
     Returns:
         Inverted call graph dict (callee → list of caller dicts).
@@ -620,7 +624,7 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
         return cached
 
     # Build index
-    structures = _structures_or_collect(structures, directory)
+    structures = _structures_or_collect(structures, directory, warn=warn)
     index = CallersIndex()
     index.skipped = list(structures.skipped)
     index.dropped = dropped_values_summary(structures)
@@ -1330,7 +1334,7 @@ def _parent_callers_hint(result: Dict[str, Any], path: str, target: str) -> None
     """
     parent = str(Path(path).parent)
     if parent != path and os.path.isdir(parent) and _parent_hint_scan_is_cheap(parent):
-        parent_index = build_callers_index(parent, collect_structures(parent, warn=False))
+        parent_index = build_callers_index(parent, warn=False)
         potential = len(parent_index.get(target, []))
         if potential:
             bound = 'at least ' if parent_index.skipped or parent_index.traversal_failures else ''
