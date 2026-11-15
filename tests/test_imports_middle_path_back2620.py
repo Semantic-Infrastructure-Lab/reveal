@@ -598,6 +598,26 @@ class TestProposedChanges:
                 request()
             assert names_both(str(rejected.value)), str(rejected.value)
 
+    @pytest.mark.parametrize('controls', ['circular=false', 'entrypoints&unused=0', 'violations=no&components'])
+    def test_a_false_findings_mode_does_not_satisfy_the_gate(self, project, controls):
+        """B1 at the gate: --fail-on findings needs a selected findings view; a false one is not selected."""
+        result, answer = cli_json(uri(project, controls), '--fail-on', 'findings')
+        assert result.returncode == 2, f'{controls} has no findings verdict: exit 2, got {result.returncode}'
+        assert 'imports gates --circular, --unused and --violations' in answer['error']
+        control, gated = cli_json(uri(project, f'{controls}&circular'), '--fail-on', 'findings')
+        assert control.returncode == 1 and gated['type'] == 'circular_dependencies', control.stderr
+
+    @pytest.mark.parametrize('mode', MODES)
+    def test_direct_construction_reads_a_false_mode_as_not_selected(self, project, mode):
+        """B1 at the owner: the raw-query constructor (deps, calls ?modules, library callers) reads the
+        bound value, not key presence; verbose=false does not expand either."""
+        from reveal.adapters.imports import ImportsAdapter
+        expected = ImportsAdapter(str(project)).get_structure()
+        for value in ('false', '0', 'no'):
+            assert ImportsAdapter(str(project), f'{mode}={value}').get_structure() == expected
+        assert 'verbose' not in ImportsAdapter(str(project), 'circular&verbose=false').get_structure()
+        assert ImportsAdapter(str(project), 'circular&verbose').get_structure()['verbose'] is True
+
     @pytest.mark.parametrize('controls', ['circular&unused=false', 'unused=0&circular'])
     def test_a_false_mode_is_not_a_second_mode(self, project, controls):
         """Negative control for the two-mode rule: a mode bound False is not selected (B1)."""
