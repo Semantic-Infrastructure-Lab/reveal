@@ -438,3 +438,382 @@ class TestPreservation:
         good, successful = cli_json(uri(project))
         with pytest.raises(AssertionError, match='expected usage exit 2'):
             assert_usage(good, successful, 'provenance')
+
+
+def _first_note_with(answer, *needles):
+    return [m for m in notes(answer) if all(n in m for n in needles)]
+
+
+class TestProposedChanges:
+    """Discriminating REDs, one group per Scott decision (BACK-2621 note #3) and folded bug B1-B8.
+
+    The hotspot view keeps the legacy row field name ``hotspots`` for its ranked rows.
+    """
+
+    # -- Decision 1: --view hotspots; --limit caps it (default 10), top is its retired alias --------------
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri', 'api-uri', 'api-keyword', 'mcp'])
+    def test_hotspot_view_rows_are_the_ranking(self, project, transport):
+        legacy = query(uri(project, 'hotspots=true&top=0'))
+        if transport == 'cli':
+            result, answer = cli_json('metrics', str(project), '--view', 'hotspots')
+            assert result.returncode == 0, result.stderr[-300:]
+        elif transport == 'uri':
+            result, answer = cli_json(uri(project, 'view=hotspots'))
+            assert result.returncode == 0, result.stderr[-300:]
+        elif transport == 'mcp':
+            answer, failure = mcp_answer(uri(project, 'view=hotspots'))
+            assert failure is None, failure
+        else:
+            answer = (query(uri(project, 'view=hotspots')) if transport == 'api-uri'
+                      else query(uri(project), view='hotspots'))
+        assert hotspot_rows(answer) == HOTSPOTS, answer.get('error') or answer.get('type')
+        assert answer['summary'] == {**legacy['summary']}, 'the view keeps the summary block'
+        assert not notes(answer), notes(answer)
+
+    def test_hotspot_view_has_no_per_file_rows(self, project):
+        result, answer = cli_json(uri(project, 'view=hotspots'))
+        assert result.returncode == 0, result.stderr[-300:]
+        assert 'files' not in answer, 'the ranked hotspot files are the rows of this view'
+
+    def test_hotspot_view_default_cap_is_ten_and_disclosed(self, many):
+        result, answer = cli_json('metrics', str(many), '--view', 'hotspots')
+        assert result.returncode == 0, result.stderr[-300:]
+        full = hotspot_rows(query(uri(many, 'hotspots=true&top=0')))
+        assert len(full) == 12
+        assert hotspot_rows(answer) == full[:10]
+        cuts = [(w['field'], w['shown'], w['total']) for w in warnings_of(answer, 'truncated')]
+        assert cuts == [('hotspots', 10, 12)], cuts
+
+    @pytest.mark.parametrize('controls,slice_', [('limit=0', slice(None)), ('limit=3', slice(0, 3)),
+                                                 ('limit=3&offset=2', slice(2, 5))])
+    def test_limit_and_offset_page_the_hotspot_view(self, many, controls, slice_):
+        full = hotspot_rows(query(uri(many, 'hotspots=true&top=0')))
+        flags = [arg for part in controls.split('&') for arg in ('--' + part.split('=')[0], part.split('=')[1])]
+        expected = query(uri(many, f'view=hotspots&{controls}'))
+        assert hotspot_rows(expected) == full[slice_]
+        assert expected['summary']['total_files'] == 12, 'totals stay those of the filtered population'
+        result, answer = cli_json('metrics', str(many), '--view', 'hotspots', *flags)
+        assert result.returncode == 0, result.stderr[-300:]
+        assert_equal_answer(answer, expected)
+        keywords = {k: int(v) for k, v in (part.split('=') for part in controls.split('&'))}
+        assert_equal_answer(query(uri(many), view='hotspots', **keywords), expected)
+        mcp, failure = mcp_answer(uri(many, f'view=hotspots&{controls}'))
+        assert failure is None, failure
+        assert_equal_answer(mcp, expected)
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri', 'api-keyword'])
+    def test_top_is_the_retired_alias_of_limit_in_the_hotspot_view(self, many, transport):
+        expected = query(uri(many, 'view=hotspots&limit=2'))
+        assert len(hotspot_rows(expected)) == 2
+        if transport == 'cli':
+            result, answer = cli_json('metrics', str(many), '--view', 'hotspots', '--top', '2')
+            assert result.returncode == 0, result.stderr[-300:]
+            assert 'deprecated' in result.stderr
+        elif transport == 'uri':
+            result, answer = cli_json(uri(many, 'view=hotspots&top=2'))
+            assert result.returncode == 0, result.stderr[-300:]
+        else:
+            answer = query(uri(many), view='hotspots', top=2)
+        assert_equal_answer(answer, expected)
+        assert _first_note_with(answer, 'top', 'limit'), notes(answer)
+
+    def test_top_and_limit_conflict_or_agree(self, many):
+        result, answer = cli_json(uri(many, 'view=hotspots&top=2&limit=3'))
+        assert_usage(result, answer, 'limit')
+        result, answer = cli_json(uri(many, 'view=hotspots&top=2&limit=2'))
+        assert result.returncode == 0, result.stderr[-300:]
+        assert_equal_answer(answer, query(uri(many, 'view=hotspots&limit=2')))
+
+    def test_hotspot_view_carries_the_findings_gate(self, project):
+        for args in (('metrics', str(project), '--view', 'hotspots'), (uri(project, 'view=hotspots'),)):
+            result, answer = cli_json(*args, '--fail-on', 'findings')
+            assert result.returncode == 1, f'{args}: {result.returncode} {result.stderr[-200:]}'
+            assert answer['summary']['has_findings'] is True
+
+    def test_hotspot_view_test_scope(self, project):
+        answer = query(uri(project, 'view=hotspots&tests=exclude'))
+        assert hotspot_rows(answer) == [f for f in HOTSPOTS if not f.startswith('tests/')]
+        assert answer['test_scope']['files_excluded'] == 2
+
+    # -- Decision 2 and B6: legacy --hotspots notes; conflicts exit 2 --------------------------------------
+
+    @pytest.mark.parametrize('args', [('--hotspots',), ()])
+    def test_legacy_hotspots_names_the_view(self, project, args):
+        expected = query(uri(project, 'hotspots=true'))
+        address = ('metrics', str(project), *args) if args else (uri(project, 'hotspots=true'),)
+        result, answer = cli_json(*address)
+        assert result.returncode == 0, result.stderr[-300:]
+        assert_equal_answer(answer, expected)
+        assert _first_note_with(answer, 'hotspots', 'view'), notes(answer)
+        assert 'deprecated' in result.stderr
+
+    def test_equal_view_and_legacy_flag_are_accepted_once(self, project):
+        expected = query(uri(project, 'view=hotspots'))
+        result, answer = cli_json('metrics', str(project), '--view', 'hotspots', '--hotspots')
+        assert result.returncode == 0, result.stderr[-300:]
+        assert_equal_answer(answer, expected)
+        assert not unread(answer), unread(answer)
+
+    @pytest.mark.parametrize('args', [
+        ('URI', 'hotspots=false', '--hotspots'),
+        ('CLI', '--view', 'provenance', '--hotspots'),
+        ('URI', 'view=provenance&hotspots=true'),
+    ])
+    def test_conflicting_hotspot_requests_reject(self, project, args):
+        """B6: today the URI false wins silently and provenance drops the ranking."""
+        if args[0] == 'URI':
+            result, answer = cli_json(uri(project, args[1]), *args[2:])
+        else:
+            result, answer = cli_json('metrics', str(project), *args[1:])
+        assert_usage(result, answer, 'hotspots')
+        if args == ('URI', 'view=provenance&hotspots=true'):
+            mcp, failure = mcp_answer(uri(project, args[1]))
+            assert mcp is None and 'hotspots' in failure, f'MCP must reject: {mcp and mcp.get("type")}'
+            with pytest.raises(ValueError, match='hotspots'):
+                query(uri(project, args[1]))
+
+    # -- Decision 3 and B1: declared repeatable where -----------------------------------------------------
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri-where', 'api-uri-where', 'api-keyword', 'api-list', 'mcp'])
+    def test_where_is_declared_on_every_transport(self, project, transport):
+        expected = query(uri(project, 'lines>=15&sort=file'))
+        assert file_rows(expected) == ['pkg/c.py', 'pkg/e.py', 'pkg/f.py', 'pkg/g.py', 'tests/test_big.py']
+        if transport == 'cli':
+            result, answer = cli_json('metrics', str(project), '--where', 'lines>=15', '--sort', 'file')
+            assert result.returncode == 0, result.stderr[-300:]
+        elif transport == 'uri-where':
+            result, answer = cli_json(uri(project, 'where=lines>=15&sort=file'))
+            assert result.returncode == 0, result.stderr[-300:]
+        elif transport == 'api-uri-where':
+            answer = query(uri(project, 'where=lines>=15&sort=file'))
+        elif transport == 'mcp':
+            answer, failure = mcp_answer(uri(project, 'where=lines>=15&sort=file'))
+            assert failure is None, failure
+        else:
+            answer = query(uri(project, 'sort=file'), where='lines>=15' if transport == 'api-keyword' else ['lines>=15'])
+        assert file_rows(answer) == file_rows(expected), 'B1: where must filter, not match nothing'
+        assert_equal_answer(answer, expected)
+        assert not warnings_of(answer, 'unknown_query_param', 'unknown_filter_field')
+
+    def test_repeated_where_is_anded(self, project):
+        expected = query(uri(project, 'lines>=15&complexity<20&sort=file'))
+        assert file_rows(expected) == ['pkg/e.py', 'pkg/f.py', 'pkg/g.py', 'tests/test_big.py']
+        result, answer = cli_json('metrics', str(project), '--where', 'lines>=15', '--where', 'complexity<20',
+                                  '--sort', 'file')
+        assert result.returncode == 0, result.stderr[-300:]
+        assert_equal_answer(answer, expected)
+        assert_equal_answer(query(uri(project, 'where=lines>=15&where=complexity<20&sort=file')), expected)
+
+    def test_avg_complexity_is_the_file_average(self, project):
+        expected = query(uri(project, 'complexity>15&sort=file'))
+        assert file_rows(expected) == ['pkg/c.py', 'pkg/e.py', 'pkg/f.py']
+        answer = query(uri(project, 'avg_complexity>15&sort=file'))
+        assert not warnings_of(answer, 'unknown_filter_field'), warnings_of(answer, 'unknown_filter_field')
+        assert_equal_answer(answer, expected)
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri', 'api-keyword'])
+    @pytest.mark.parametrize('legacy,value,canonical', [
+        ('min_lines', 15, 'lines>='), ('max_lines', 10, 'lines<='), ('min_functions', 2, 'functions>='),
+        ('min_complexity', 15, 'avg_complexity>='), ('max_complexity', 15, 'avg_complexity<='),
+    ])
+    def test_legacy_thresholds_are_where_codecs(self, project, transport, legacy, value, canonical):
+        expected = query(uri(project, f'where={canonical}{value}&sort=file'))
+        assert_equal_answer(expected, query(uri(project, f'{legacy}={value}&sort=file')))
+        if transport == 'cli':
+            result, answer = cli_json('metrics', str(project), '--' + legacy.replace('_', '-'), str(value),
+                                      '--sort', 'file')
+            assert result.returncode == 0, result.stderr[-300:]
+        elif transport == 'uri':
+            result, answer = cli_json(uri(project, f'{legacy}={value}&sort=file'))
+            assert result.returncode == 0, result.stderr[-300:]
+        else:
+            answer = query(uri(project, 'sort=file'), **{legacy: value})
+        assert_equal_answer(answer, expected)
+        assert _first_note_with(answer, legacy, canonical), notes(answer)
+        assert not _first_note_with(answer, 'max_complexity<'), 'never translate to the highest-function field'
+
+    # -- Decision 4: --churn off and merges on/off ---------------------------------------------------------
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri-off', 'api-off', 'api-false'])
+    def test_churn_off_is_the_switch(self, git_project, transport):
+        expected = query(uri(git_project, 'hotspots=true&churn=false'))
+        assert all('commit_count' not in h['details'] for h in expected['hotspots'])
+        if transport == 'cli':
+            result, answer = cli_json('metrics', str(git_project), '--hotspots', '--churn', 'off')
+            assert result.returncode == 0, result.stderr[-300:]
+        elif transport.startswith('uri'):
+            result, answer = cli_json(uri(git_project, f'hotspots=true&churn={transport[4:]}'))
+            assert result.returncode == 0, result.stderr[-300:]
+        else:
+            answer = query(uri(git_project, 'hotspots=true'), churn='off' if transport == 'api-off' else False)
+        assert_equal_answer(answer, expected)
+        assert not _first_note_with(answer, 'churn'), notes(answer)
+
+    def test_no_churn_names_churn_off(self, git_project):
+        result, answer = cli_json('metrics', str(git_project), '--hotspots', '--no-churn')
+        assert result.returncode == 0
+        assert _first_note_with(answer, 'no-churn', 'churn off'), notes(answer)
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri', 'api'])
+    def test_merges_off_excludes_merge_commits(self, git_project, transport):
+        expected = query(uri(git_project, 'hotspots=true&no_merges=true'))
+        assert {h['file']: h['details']['commit_count'] for h in expected['hotspots']}['pkg/e.py'] == 2
+        if transport == 'cli':
+            result, answer = cli_json('metrics', str(git_project), '--hotspots', '--merges', 'off')
+            assert result.returncode == 0, result.stderr[-300:]
+        elif transport == 'uri':
+            result, answer = cli_json(uri(git_project, 'hotspots=true&merges=off'))
+            assert result.returncode == 0, result.stderr[-300:]
+        else:
+            answer = query(uri(git_project, 'hotspots=true'), merges='off')
+        assert_equal_answer(answer, expected)
+        assert not warnings_of(answer, 'unknown_query_param')
+        on = query(uri(git_project, 'hotspots=true&merges=on'))
+        assert {h['file']: h['details']['commit_count'] for h in on['hotspots']}['pkg/e.py'] == 3
+
+    def test_no_merges_names_merges_and_conflicts_reject(self, git_project):
+        answer = query(uri(git_project, 'hotspots=true&no_merges=true'))
+        assert _first_note_with(answer, 'no_merges', 'merges'), notes(answer)
+        result, answer = cli_json(uri(git_project, 'hotspots=true&merges=on&no_merges=true'))
+        assert_usage(result, answer, 'merges')
+
+    # -- Decision 5: --detail normal|summary ---------------------------------------------------------------
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri', 'api'])
+    def test_detail_summary_replaces_summary_only(self, project, transport):
+        expected = query(uri(project, 'summary_only=true'))
+        assert 'files' not in expected
+        if transport == 'cli':
+            result, answer = cli_json('metrics', str(project), '--detail', 'summary')
+            assert result.returncode == 0, result.stderr[-300:]
+        elif transport == 'uri':
+            result, answer = cli_json(uri(project, 'detail=summary'))
+            assert result.returncode == 0, result.stderr[-300:]
+        else:
+            answer = query(uri(project), detail='summary')
+        assert_equal_answer(answer, expected)
+        assert not notes(answer), notes(answer)
+
+    def test_detail_normal_is_the_default_and_summary_only_names_detail(self, project):
+        result, answer = cli_json(uri(project, 'detail=normal'))
+        assert result.returncode == 0, result.stderr[-300:]
+        assert_equal_answer(answer, query(uri(project)))
+        result, answer = cli_json('metrics', str(project), '--summary-only')
+        assert result.returncode == 0
+        assert _first_note_with(answer, 'summary', 'detail'), notes(answer)
+
+    @pytest.mark.parametrize('args', [('--detail', 'full'), ('URI', 'detail=full')])
+    def test_detail_full_rejects_naming_the_levels(self, project, args):
+        if args[0] == 'URI':
+            result, answer = cli_json(uri(project, args[1]))
+        else:
+            result, answer = cli_json('metrics', str(project), *args)
+        assert_usage(result, answer, 'summary')
+        assert 'normal' in answer['error']
+
+    # -- Decision 6 and B5: since validated; churn disclosure in meta and text -----------------------------
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri', 'api'])
+    def test_invalid_since_rejects(self, git_project, transport):
+        if transport == 'api':
+            with pytest.raises(ValueError, match='since'):
+                query(uri(git_project, 'hotspots=true&since=notadate'))
+            return
+        args = (('metrics', str(git_project), '--hotspots', '--since', 'notadate') if transport == 'cli'
+                else (uri(git_project, 'hotspots=true&since=notadate'),))
+        result, answer = cli_json(*args)
+        assert_usage(result, answer, 'since')
+
+    def test_churn_unavailable_is_disclosed_in_meta_and_text(self, git_project, monkeypatch):
+        import sys
+        monkeypatch.setitem(sys.modules, 'pygit2', None)  # import fails: the churn signal is unavailable
+        result, answer = cli_json('metrics', str(git_project), '--hotspots')
+        assert result.returncode == 0
+        disclosed = warnings_of(answer, 'churn_unavailable')
+        assert len(disclosed) == 1, f"meta.warnings {[w['type'] for w in answer['meta']['warnings']]}"
+        assert 'warnings' not in answer, 'the disclosure lives in the envelope only'
+        text = run('metrics', str(git_project), '--hotspots')
+        assert 'churn scoring unavailable' in text.stdout + text.stderr
+
+    # -- Decision 7, B2-B4: typed API, direct construction, disclosure, unsupported controls ---------------
+
+    @pytest.mark.parametrize('base,keywords,controls', [
+        ('sort=file', {'limit': 2}, 'sort=file&limit=2'),
+        ('sort=file&limit=1', {'limit': 2}, 'sort=file&limit=2'),
+        ('sort=file', {'offset': 3}, 'sort=file&offset=3'),
+        ('sort=file&limit=2', {'sort': '-lines'}, 'sort=-lines&limit=2'),
+        ('', {'view': 'provenance'}, 'view=provenance'),
+        ('hotspots=true', {'tests': 'exclude'}, 'hotspots=true&tests=exclude'),
+        ('hotspots=true', {'top': 2}, 'hotspots=true&top=2'),
+        ('min_lines=1&sort=file', {'min_lines': 15}, 'min_lines=15&sort=file'),
+    ])
+    def test_typed_api_keyword_answers_like_its_uri_spelling(self, project, base, keywords, controls):
+        """B2: every declared keyword reaches the answer, and an explicit keyword beats the URI value."""
+        expected = query(uri(project, controls))
+        assert without_retirement(expected) != without_retirement(query(uri(project, base))), \
+            'fixture must make the control observable'
+        assert_equal_answer(query(uri(project, base), **keywords), expected)
+
+    @pytest.mark.parametrize('keywords,name', [
+        ({'limit': -1}, 'limit'), ({'offset': -1}, 'offset'), ({'min_lines': 'abc'}, 'min_lines'),
+        ({'view': 'other'}, 'view'), ({'tests': 'only'}, 'tests'), ({'detail': 'full'}, 'detail'),
+        ({'bogus': 1}, 'bogus'),
+    ])
+    def test_typed_api_invalid_or_unknown_keyword_rejects(self, project, keywords, name):
+        with pytest.raises((TypeError, ValueError), match=name):
+            query(uri(project), **keywords)
+
+    @pytest.mark.parametrize('controls,name', [
+        ('hotspots=true&top=-1', 'top'), ('hotspots=true&top=2.5', 'top'), ('hotspots=true&top=abc', 'top'),
+        ('hotspots=maybe', 'hotspots'), ('summary_only=maybe', 'summary_only'), ('tests=bad', 'tests'),
+        ('min_lines=abc', 'min_lines'),
+    ])
+    def test_api_uri_string_validates_like_the_cli(self, project, controls, name):
+        """B3: the CLI exits 2 on each of these; the API URI string must reject, not answer."""
+        result, _ = cli_json(uri(project, controls))
+        assert result.returncode == 2
+        with pytest.raises(ValueError, match=name):
+            query(uri(project, controls))
+
+    def test_direct_construction_binds_declared_controls(self, project):
+        """The hotspots and review compositions construct the adapter directly: it binds the same declarations."""
+        from reveal.adapters.stats import MetricsAdapter
+        with pytest.raises(ValueError, match='top'):
+            MetricsAdapter(str(project), 'hotspots=true&top=-1')
+        assert hotspot_rows(MetricsAdapter(str(project), 'view=hotspots&limit=2').get_structure()) == HOTSPOTS[:2]
+        with pytest.raises(TypeError):
+            MetricsAdapter(str(project)).get_structure(hotspots=True)
+
+    @pytest.mark.parametrize('flags,field', [(('--code-only',), '--code-only'), (('--min-lines', '5'), 'min-lines'),
+                                             (('--detail', 'summary'), '--detail')])
+    def test_subcommand_discloses_controls_the_provenance_view_does_not_read(self, project, flags, field):
+        """B4: the URI form warns; the subcommand must too."""
+        result, answer = cli_json('metrics', str(project), '--view', 'provenance', *flags)
+        assert result.returncode == 0, result.stderr[-300:]
+        fields = [f for warning in unread(answer) for f in warning.get('fields', [])]
+        assert any(field in f for f in fields), f'{flags} unread but undisclosed: {unread(answer)}'
+
+    @pytest.mark.parametrize('control', ['match', 'kind', 'depth', 'until'])
+    def test_unsupported_shared_controls_reject(self, project, control):
+        result, answer = cli_json(uri(project, f'{control}=1'))
+        assert result.returncode == 2, f'{control} is not a Metrics control and must exit 2, got {result.returncode}'
+        assert control in answer['error'] and 'where' in answer['error'], answer['error']
+        result, answer = cli_json('metrics', str(project), f'--{control}', '1')
+        assert_usage(result, answer, control)
+        with pytest.raises((TypeError, ValueError), match=control):
+            query(uri(project), **{control: '1'})
+
+    # -- Decision 8, B7 and B8 ------------------------------------------------------------------------------
+
+    @pytest.mark.parametrize('args', [('--limit', '-1'), ('--offset', '-1'), ('--hotspots', '--top', '-1')])
+    def test_negative_values_say_at_least_zero(self, project, args):
+        result, answer = cli_json('metrics', str(project), *args)
+        assert result.returncode == 2
+        assert '>= 0' in answer['error'], answer['error']
+
+    @pytest.mark.parametrize('target', ['.', 'pkg/a.py'])
+    def test_path_read_with_hotspots_teaches_the_view(self, project, target):
+        result = run(str(project / target), '--hotspots')
+        assert result.returncode == 2, f'usage error must exit 2, got {result.returncode}'
+        assert 'reveal metrics' in result.stderr and '--view hotspots' in result.stderr, result.stderr
