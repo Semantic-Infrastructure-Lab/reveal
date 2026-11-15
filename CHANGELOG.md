@@ -32,6 +32,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- `reveal.api.query('imports://...', **keywords)` dropped every typed keyword except `unused`, `circular`, `violations` and `verbose` without saying so; each declared keyword now answers like its URI spelling, an unknown one raises `TypeError`, and `importers=None` gives the default view instead of the importer summary (BACK-2620).
+
 - An empty `calls PATH --callers NAME` answer (also `calls://PATH?callers=NAME`) still suggests widening to the parent directory, but no longer prints `Warning: Failed to analyze` for files outside PATH, or twice for files inside it; over MCP those lines followed the JSON as `[stderr: ...]`, so `reveal_query` did not return one JSON document. When the parent scan skips a file it cannot analyze, the hint now reads "at least N potential caller(s)" (BACK-2649).
 
 - `imports DIR --importers FILE` and `imports://DIR/?importers=FILE` now accept cwd-relative targets such as `src/storage.py` as well as directory-relative targets. Ambiguous spellings exit 2 and name both files; missing-target errors name the requested directory. Markdown backlinks and file-qualified Calls use the same resolution and ambiguity check (BACK-2642).
