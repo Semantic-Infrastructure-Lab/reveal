@@ -540,6 +540,17 @@ class TestProposedChanges:
         result, answer = cli_json(uri(project, controls))
         assert_usage(result, answer, replacement)
 
+    def test_subcommand_global_verbose_conflicting_with_detail_rejects(self, project):
+        """--verbose (legacy detail=full) beside --detail normal is a conflicting old/new pair: exit 2
+        naming detail, not an unused --verbose; beside --detail full it is accepted once."""
+        result, answer = cli_json('imports', str(project), '--circular', '--verbose', '--detail', 'normal')
+        assert_usage(result, answer, 'detail')
+        expected = query(uri(project, 'circular&detail=full'))
+        result, answer = cli_json('imports', str(project), '--circular', '--verbose', '--detail', 'full')
+        assert result.returncode == 0, result.stderr
+        assert not unread(answer), unread(answer)
+        assert_equal_answer(answer, expected)
+
     def test_equal_old_and_new_spellings_are_accepted_once(self, project):
         expected = query(uri(project, 'rank=fan-in&top=2'))
         result, answer = cli_json(uri(project, 'rank=fan-in&sort=-fan-in&top=2&limit=2'))
