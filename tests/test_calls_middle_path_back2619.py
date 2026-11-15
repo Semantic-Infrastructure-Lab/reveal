@@ -20,14 +20,18 @@ from reveal.utils.request_cache import host_request
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
+    # A subdirectory, so an empty ?callers answer's parent hint scans only this
+    # test's tmp_path, not pytest's shared basetemp with sibling tests' files.
+    root = tmp_path / 'proj'
+    root.mkdir()
+    monkeypatch.chdir(root)
     monkeypatch.setenv('REVEAL_MAX_WORKERS', '1')
     source = ''.join(f'def n{i}(): return {i}\n' for i in range(12))
     source += 'def sink(): return 1\ndef middle(): return sink()\ndef top(): return middle()\n'
     source += 'def entry(): return (' + ','.join(f'n{i}()' for i in range(12)) + ',len([]))\n'
     source += 'def orphan(): return 0\nclass Box:\n    def unused(self): return 0\n'
-    (tmp_path / 'app.py').write_text(source, encoding='utf-8')
-    return tmp_path
+    (root / 'app.py').write_text(source, encoding='utf-8')
+    return root
 
 
 def uri(project, controls):
