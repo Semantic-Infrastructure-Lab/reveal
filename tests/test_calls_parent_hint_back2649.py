@@ -117,6 +117,23 @@ class TestOutOfScopeWarningLeak:
         assert len(lines) == 1, f'expected the in-scope warning once, got {len(lines)}: {lines}'
 
 
+class TestQuietCollection:
+    """collect_structures(warn=False) drops only the stderr line; the loss stays in ``skipped``."""
+
+    @pytest.mark.parametrize('target', ['dir', 'file'])
+    def test_warn_false_records_the_skip_without_printing(self, root, capsys, target):
+        from reveal.adapters.ast.analysis import collect_structures
+        path = root if target == 'dir' else root / OUTSIDE
+        loud = collect_structures(str(path))
+        loud_err = capsys.readouterr().err
+        quiet = collect_structures(str(path), warn=False)
+        quiet_err = capsys.readouterr().err
+        assert warning_lines(loud_err, OUTSIDE), f'default must still warn: {loud_err!r}'
+        assert warning_lines(quiet_err, OUTSIDE) == [], quiet_err
+        assert [Path(f).name for f, _ in quiet.skipped] == [Path(f).name for f, _ in loud.skipped] == [OUTSIDE]
+        assert len(quiet) == len(loud)
+
+
 class TestHintWording:
     """The count is a lower bound when the quiet parent scan skipped a file it could not analyze."""
 

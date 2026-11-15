@@ -107,16 +107,19 @@ def function_values_dropped_warning(summary: Optional[Dict[str, Any]]) -> Option
 
 
 def try_add_file_structure(file_path: str, structures: StructureList, outline: bool = False,
-                           needle: Optional[str] = None) -> None:
+                           needle: Optional[str] = None, *, warn: bool = True) -> None:
     """Keep usable structure and attribute required loss in ``structures.skipped``.
 
     Args:
         file_path: Path to file to analyze
         structures: List to append structure to
+        warn: Print the per-file stderr line for a failure. False for a scan the user
+            did not ask for (the calls widening hint, BACK-2649); ``skipped`` still records it.
     """
     structure, failure = analyze_file_outcome(file_path, outline, needle)
     if failure:
-        _warn_failed(file_path, failure)
+        if warn:
+            _warn_failed(file_path, failure)
         structures.skipped.append((file_path, failure))
     if structure:
         structures.append(structure)
@@ -135,11 +138,13 @@ def environmental_failure(cause: str) -> bool:
     return isinstance(error_type, type) and issubclass(error_type, OSError)
 
 
-def collect_structures(path: str, outline: bool = False, needle: Optional[str] = None) -> StructureList:
+def collect_structures(path: str, outline: bool = False, needle: Optional[str] = None, *,
+                       warn: bool = True) -> StructureList:
     """Collect structure data from file(s).
 
     Args:
         path: File or directory path
+        warn: Print a stderr line per file that fails (``try_add_file_structure``)
 
     Returns:
         StructureList of structure dicts with file metadata; ``.skipped`` names the
@@ -149,7 +154,7 @@ def collect_structures(path: str, outline: bool = False, needle: Optional[str] =
     path_obj = Path(path)
 
     if path_obj.is_file():
-        try_add_file_structure(str(path_obj), structures, outline, needle)
+        try_add_file_structure(str(path_obj), structures, outline, needle, warn=warn)
     elif path_obj.is_dir():
         # The shared walk (BACK-1223): well-known non-project dirs, what git ignores
         # (BACK-1386; --no-gitignore turns that off), REVEAL_IGNORE and --exclude. Its own
@@ -159,7 +164,7 @@ def collect_structures(path: str, outline: bool = False, needle: Optional[str] =
 
         for fp in _walk_code_files(path_obj, on_error=on_error):
             if is_code_file(fp):
-                try_add_file_structure(str(fp), structures, outline, needle)
+                try_add_file_structure(str(fp), structures, outline, needle, warn=warn)
 
     return structures
 
