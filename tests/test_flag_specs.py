@@ -133,7 +133,7 @@ def test_all_and_verbose_stay_silent_on_adapters_without_a_declaration():
 
 def test_all_and_verbose_inject_where_declared():
     assert _inject('.', 'hotspots', all=True)[0] == '.?top=1000000'
-    assert _inject('.', 'imports', verbose=True)[0] == '.?verbose'
+    assert _inject('.', 'imports', verbose=True)[0] == '.?detail=full'  # BACK-2620: --verbose is detail=full
 
 
 def test_namespace_missing_the_flags_is_tolerated():
