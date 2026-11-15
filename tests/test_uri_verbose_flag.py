@@ -28,23 +28,24 @@ def test_default_declares_no_verbose_query():
 
 
 def test_imports_declares_verbose():
+    # BACK-2620: --verbose is imports' detail=full (the declared cli_flags of detail).
     from reveal import adapters  # noqa: F401
-    assert adapters_base.get_adapter_class('imports').CLI_QUERY_FLAGS['verbose'] == 'verbose'
+    assert adapters_base.get_adapter_class('imports').CLI_QUERY_FLAGS['verbose'] == 'detail=full'
 
 
 def test_verbose_injects_fragment():
-    assert inject_query_flags('src?circular', 'imports', _args(verbose=True)) == 'src?circular&verbose'
-    assert inject_query_flags('src', 'imports', _args(verbose=True)) == 'src?verbose'
+    assert inject_query_flags('src?circular', 'imports', _args(verbose=True)) == 'src?circular&detail=full'
+    assert inject_query_flags('src', 'imports', _args(verbose=True)) == 'src?detail=full'
 
 
 def test_explicit_uri_value_wins():
-    assert inject_query_flags('src?circular&verbose', 'imports', _args(verbose=True)) \
-        == 'src?circular&verbose'
+    assert inject_query_flags('src?circular&detail=full', 'imports', _args(verbose=True)) \
+        == 'src?circular&detail=full'
 
 
 def test_key_match_is_exact_not_substring():
-    assert inject_query_flags('src?verbosex=1', 'imports', _args(verbose=True)) \
-        == 'src?verbosex=1&verbose'
+    assert inject_query_flags('src?detailx=1', 'imports', _args(verbose=True)) \
+        == 'src?detailx=1&detail=full'
 
 
 def test_without_verbose_flag_nothing_changes():

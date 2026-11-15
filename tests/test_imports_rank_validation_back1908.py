@@ -42,12 +42,14 @@ def test_validating_rank_does_not_claim_it_was_applied(project):
 
 
 def test_declaration_is_the_rank_value_owner(tmp_path, monkeypatch):
-    # The rank declaration owns its accepted values (BACK-2620): validation reads them and the schema
-    # is generated from them, so a declaration change leaves no second accepted-values table behind.
-    from dataclasses import replace
+    # _SORT_FIELDS owns the ranking's accepted values (BACK-2620): sort binds them, rank's legacy values
+    # are them without the direction, and the schema's choices are generated from them, so a change
+    # leaves no second accepted-values table behind.
     from reveal.adapters import imports
-    schema = ImportsAdapter.get_schema()['query_params']['rank']
-    assert schema == imports._RANK.schema() and schema['choices'] == list(imports._RANK.choices)
-    monkeypatch.setattr(imports, '_RANK', replace(imports._RANK, choices=('other',)))
+    schema = ImportsAdapter.get_schema()['query_params']['sort']
+    assert schema['choices'] == list(imports._SORT_FIELDS) and schema['aliases'] == ['rank']
+    monkeypatch.setattr(imports, '_SORT_FIELDS', ('-other',))
     with pytest.raises(ValueError, match='rank.*other'):
         ImportsAdapter(str(tmp_path), 'rank=fan-in').get_structure()
+    with pytest.raises(ValueError, match='sort.*-other'):
+        ImportsAdapter(str(tmp_path), 'sort=-fan-in').get_structure()

@@ -123,15 +123,17 @@ class TestLimitLive:
 
     @pytest.mark.parametrize('output_format', ['text', 'json'])
     def test_imports_still_warns(self, tree, output_format):
+        # BACK-2620: limit is a declared Imports control (it caps ?sort=-fan-in); the default view
+        # leaves it unread and says so once, instead of calling it an unknown parameter.
         proc = run_reveal(f'imports://{tree}', '--limit', '2', '--format', output_format)
         assert proc.returncode == 0, proc.stderr
+        assert "Unknown query param 'limit'" not in proc.stderr
         if output_format == 'json':
             warnings = [w for w in json.loads(proc.stdout)['meta']['warnings']
-                        if w['type'] == 'unknown_query_param']
-            assert [(w['code'], w['fields']) for w in warnings] == [('unknown_query_param', ['limit'])]
-            assert "Unknown query param 'limit'" not in proc.stderr
+                        if w['type'] in ('unknown_query_param', 'unused_flag')]
+            assert [(w['type'], w['fields']) for w in warnings] == [('unused_flag', ['--limit'])]
         else:
-            assert proc.stderr.count("Unknown query param 'limit'") == 1
+            assert proc.stderr.count('--limit has no effect on this imports:// query') == 1
 
     def test_calls_target_mode_says_top_is_ignored(self, imported):
         proc = run_reveal(f'calls://{imported}?target=helper', '--limit', '1', '--format', 'json')

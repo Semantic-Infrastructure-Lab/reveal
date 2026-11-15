@@ -208,6 +208,11 @@ PRODUCTION_CASES = {
     'param:calls.rank': lambda f: [f'calls://{Path(f).parent}?rank=callers&limit=1'],
     'param:calls.top': lambda f: [f'calls://{Path(f).parent}?sort=-callers&top=1'],
     'param:calls.type': lambda f: [f'calls://{Path(f).parent}?uncalled&type=function'],
+    # Imports vocabulary (BACK-2620): each legacy spelling beside its canonical companions.
+    'param:imports.rank': lambda f: [f'imports://{Path(f).parent}?rank=fan-in&limit=1'],
+    'param:imports.top': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in&top=1'],
+    'param:imports.verbose': lambda f: [f'imports://{Path(f).parent}?circular&verbose'],
+    'param:imports.max_files': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in&max_files=100'],
     # Phase 2 slice S5 (BACK-1054): ?modules answers from imports ?importers; tests/test_calls_modules_shim_back1054.py
     # pins its edges, shape and exit codes. ?external is spelled with callers here, where it never applied, so the
     # row is its one note (with ?modules it is the second).

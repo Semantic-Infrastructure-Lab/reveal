@@ -316,8 +316,8 @@ def test_declared_native_cap_accepts_limit(db, noun, mode):
                for flag in ('--top', '--limit')]
     assert [result.returncode for result in results] == [0, 0], [r.stderr for r in results]
     legacy, canonical = (json.loads(result.stdout) for result in results)
-    if noun == 'calls':
-        notes = [w for w in legacy['meta']['warnings'] if w.get('field') == 'param:calls.top']
+    if noun in ('calls', 'imports'):
+        notes = [w for w in legacy['meta']['warnings'] if w.get('field') == f'param:{noun}.top']
         assert len(notes) == 1
         assert notes[0]['replacement'] == '?limit=N (--limit N); 0 is uncapped'
         legacy['meta']['warnings'].remove(notes[0])

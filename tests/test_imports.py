@@ -1848,10 +1848,10 @@ class TestFanInRanking:
         assert 'utils.py' in output
 
     def test_fan_in_schema_has_rank_param(self):
-        """Schema exposes rank and top query parameters."""
+        """Schema exposes the ranking controls under their canonical names, legacy ones as aliases (BACK-2620)."""
         schema = ImportsAdapter.get_schema()
-        assert 'rank' in schema['query_params']
-        assert 'top' in schema['query_params']
+        assert schema['query_params']['sort']['aliases'] == ['rank']
+        assert schema['query_params']['limit']['aliases'] == ['top']
         assert 'fan_in_ranking' in [t['type'] for t in schema['output_types']]
 
 

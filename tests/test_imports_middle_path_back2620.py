@@ -208,7 +208,10 @@ class TestPreservation:
         assert dict(ranking(rooted))['a.py'] == 4 and dict(ranking(scoped))['a.py'] == 0
         result, refused = cli_json(uri(project, 'rank=fan-in&root=/'))
         assert result.returncode == 0
-        assert [w['type'] for w in refused['meta']['warnings']] == ['root_rejected']
+        # Decision 7 (D5): the legacy rank spelling keeps its answer and adds its one retirement note.
+        assert [w['type'] for w in without_retirement(refused)['meta']['warnings']] == ['root_rejected']
+        assert [w['field'] for w in refused['meta']['warnings'] if w['type'] in SPELLING_WARNINGS] in (
+            [], ['param:imports.rank'])
         assert ranking(refused) == RANKING
 
     @pytest.mark.parametrize('controls,needle', [

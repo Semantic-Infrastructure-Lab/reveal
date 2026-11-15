@@ -291,6 +291,13 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:calls.rank': Retirement('calls ?rank=callers (--rank callers)', '?sort=-callers (--sort=-callers)'),
     'param:calls.top': Retirement('calls ?top=N (--top N)', '?limit=N (--limit N); 0 is uncapped'),
     'param:calls.type': Retirement('calls ?type=KIND (--type KIND)', '?kind=KIND (--kind KIND); legacy method keeps its existing population'),
+    # Imports vocabulary (BACK-2620): aliases that answer identically until the cut.
+    'param:imports.rank': Retirement('imports ?rank=fan-in (--rank fan-in)', '?sort=-fan-in (--sort=-fan-in)'),
+    'param:imports.top': Retirement('imports ?top=N (--top N)', '?limit=N (--limit N); 0 is uncapped'),
+    'param:imports.verbose': Retirement('imports ?verbose (--verbose)',
+                                        '?detail=full (--detail full); JSON keeps "verbose": true'),
+    'param:imports.max_files': Retirement('imports ?max_files=N (--max-files N)',
+                                          '?scan-limit=N (--scan-limit N), the same input budget'),
     # calls?modules folded into imports (BACK-1054 slice S5, Q4/Q8): the module graph is imports' edges, in the
     # old shape without call_count, until the cut.
     'param:calls.modules': Retirement('calls ?modules (--modules)',

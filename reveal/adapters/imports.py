@@ -31,10 +31,10 @@ from ..analyzers.imports.classify import classify_import, local_package_names, p
 from ..analyzers.imports.unused import describe_unused
 from ..conventions import family_for_path
 from ..analyzers.imports.layers import load_layer_config
-from ..utils.query import parse_query_params
-from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema, peek_query_items
+from ..utils.query_parser import (CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec, param_cli_flags,
+                                  param_schema, peek_query_items, whole_number)
 from ..errors import RequestValidationError
-from ..utils.query_binding import boolean_value
+from ..utils.query_binding import bind_declared_params, boolean_value
 from ..analyzers.imports.views import ImportView, _unused_not_checked  # noqa: F401 -- checks.py imports _unused_not_checked from here (BACK-2255)
 from ..analyzers.imports import diagnostics as import_diagnostics
 from ..analyzers.imports.diagnostics import file_loss_warnings
@@ -116,7 +116,7 @@ def autoload_regime_warning(regime: Optional[Dict[str, str]]) -> str:
 
 
 def _request_cli(name: str) -> CliBinding:
-    """The subcommand flag of a request parameter: ``--max-files`` for ``max_files``."""
+    """The subcommand flag of a request parameter: ``--lazy`` for ``lazy``."""
     return CliBinding((f'--{name.replace("_", "-")}',), dest=name, metavar=name.upper())
 
 
@@ -139,7 +139,7 @@ _LAZY = ParamSpec(
     'other expressions/receivers/arguments and convention edges remain unclassified: exclude '
     'retains them and only omits them. Scope is lexical, not runtime timing; the printed rule names coverage',
     None, _lazy_value,
-    examples=('imports://src?rank=fan-in&lazy=exclude', 'imports://src?circular&lazy=include'),
+    examples=('imports://src?sort=-fan-in&lazy=exclude', 'imports://src?circular&lazy=include'),
     choices=LAZY_MODES, role='analysis', cli=_request_cli('lazy'),
 )
 
@@ -175,7 +175,7 @@ _SCOPE = ParamSpec(
     'counting importers from anywhere under the root. path: the requested path is the scan root, '
     'as imports:// resolved before (architecture, overview, pack and diff pass it)',
     SCOPE_ROOT, _choice_value,
-    examples=('imports://src?rank=fan-in&scope=path',), choices=(SCOPE_ROOT, SCOPE_PATH),
+    examples=('imports://src?sort=-fan-in&scope=path',), choices=(SCOPE_ROOT, SCOPE_PATH),
     role='analysis', cli=_request_cli('scope'),
 )
 _TESTS = ParamSpec(
@@ -185,7 +185,7 @@ _TESTS = ParamSpec(
     'Checkout ancestors and the selected project name are ignored; a disclosed markerless '
     'scan-root fallback retains its own directory name',
     'include', _choice_value,
-    examples=('imports://src?rank=fan-in&tests=exclude',), choices=('include', 'exclude'),
+    examples=('imports://src?sort=-fan-in&tests=exclude',), choices=('include', 'exclude'),
     role='analysis', cli=_request_cli('tests'),
 )
 _ROOT = ParamSpec(
@@ -196,12 +196,15 @@ _ROOT = ParamSpec(
     None, _choice_value, examples=('imports://src/app.py?importers&root=.',),
     role='analysis', cli=_request_cli('root'),
 )
-_MAX_FILES = ParamSpec(
-    'max_files', 'integer',
-    'Source files the walk may keep (default 20000); a capped walk is disclosed in metadata.scan_budget '
-    'and as a warning, never silently partial',
-    import_analysis.DEFAULT_FILE_CAP, _max_files_value, examples=('imports://.?importers&max_files=50000',), minimum=1,
-    role='analysis', cli=_request_cli('max_files'),
+# An input budget, not a row cap (limit cuts rows): a walk it cuts is incomplete analysis, exit 3.
+_SCAN_LIMIT = ParamSpec(
+    'scan-limit', 'integer',
+    'Source files the walk may keep (default 20000, minimum 1): an input budget, not a row cap; a capped walk '
+    'is incomplete (exit 3), disclosed in metadata.scan_budget and as a warning, never silently partial. '
+    'Legacy max_files (--max-files) is the same budget',
+    import_analysis.DEFAULT_FILE_CAP, _max_files_value, examples=('imports://.?importers&scan-limit=50000',), minimum=1,
+    role='analysis', aliases=('scan_limit', 'max_files'),
+    cli=CliBinding(('--scan-limit', '--max-files'), dest='scan_limit', metavar='N'),
 )
 _IMPORTERS = ParamSpec(
     'importers', 'string',
@@ -245,13 +248,64 @@ def _selects(value: Any) -> bool:
         return True
 
 
-def _top_value(value: Any) -> int:
+def _limit_value(value: Any) -> int:
     if isinstance(value, bool):
         raise TypeError(value)
-    return int(value)
+    return whole_number(value)
 
 
-# The answer types --verbose expands (the renderers that take it).
+# The one owner of the ranking's value domain: sort binds these fields, rank's legacy values are
+# them without the direction (fan-in), and the schema's choices are generated from them.
+_SORT_FIELDS: Tuple[str, ...] = ('-fan-in',)
+
+
+def _sort_value(value: Any) -> str:
+    if not isinstance(value, str) or value not in _SORT_FIELDS:
+        raise ParamValueError(f'sort must be one of {_SORT_FIELDS!r}, got {value!r}: the ranking orders files by '
+                              f'fan-in, most imported first (sort={_SORT_FIELDS[0]}; legacy rank=fan-in)')
+    return value
+
+
+def _sort_alias(name: str, value: Any) -> Any:
+    """``rank=fan-in`` is ``sort=-fan-in`` under its retired name (D5); both spellings validate here,
+    before the conflict check, so a wrong value names the supported one."""
+    if value is None:
+        return None
+    if name != 'rank':
+        return _sort_value(value)
+    legacy = {field.lstrip('-'): field for field in _SORT_FIELDS}
+    if not isinstance(value, str):
+        raise ParamValueError(f'rank must be a valid string, got {value!r}: use sort={_SORT_FIELDS[0]} '
+                              f'(--sort={_SORT_FIELDS[0]})')
+    if value not in legacy:
+        raise ParamValueError(f'rank must be one of {tuple(legacy)!r}, got {value!r}: use sort={_SORT_FIELDS[0]} '
+                              f'(--sort={_SORT_FIELDS[0]})')
+    return legacy[value]
+
+
+_DETAIL_LEVELS = ('normal', 'full')
+
+
+def _detail_value(value: Any) -> str:
+    if value not in _DETAIL_LEVELS:
+        raise ParamValueError(f'detail must be normal or full, got {value!r}')
+    return str(value)
+
+
+def _detail_alias(name: str, value: Any) -> Any:
+    """``verbose`` (and the global ``--verbose``) is ``detail=full`` under its retired name (D5)."""
+    if value is None:
+        return None
+    if name != 'verbose':
+        return _detail_value(value)
+    try:
+        return 'full' if boolean_value(value) else 'normal'
+    except ValueError:
+        raise ParamValueError(f'verbose must be a valid boolean, got {value!r}: use detail=full '
+                              '(--detail full)') from None
+
+
+# The answer types detail=full expands (the renderers that take it).
 _VERBOSE_VIEWS = frozenset({'unused_imports', 'circular_dependencies', 'layer_violations',
                            'module_importers', 'importer_summary', 'external_packages'})
 
@@ -272,24 +326,28 @@ _EXTERNAL = ParamSpec(
     'languages importing each unresolved package, and import statements per file. &tests=exclude drops test files',
     False, boolean_value, ('imports://src?external', 'imports://src?external&scope=path'),
     role='operation', cli=CliBinding(('--external',), action='store_true'))
-_VERBOSE = ParamSpec('verbose', 'boolean', 'Show everything instead of a summary: every file in a cycle group plus '
-                     'its cycle edges, all unused imports, all violations, every package (same as --verbose)', False,
-                     boolean_value, ('imports://src?circular&verbose',), role='presentation')
-# The one owner of rank's value domain: binding, validation and the schema read these choices.
-_RANK = ParamSpec('rank', 'string', 'Rank files by fan-in: the count of files that import each file (higher = more '
-                  'central; 0 = entry point or dead code). One value: fan-in', None, _choice_value,
-                  ('imports://src?rank=fan-in', 'imports://src?rank=fan-in&top=20'), choices=('fan-in',),
-                  role='operation', cli=CliBinding(('--rank',), metavar='fan-in'))
-_TOP = ParamSpec('top', 'integer', 'Limit ?rank rows (default: all)', None, _top_value,
-                 ('imports://src?rank=fan-in&top=20',), minimum=0, role='analysis',  # the adapter cuts the rows
-                 cli=CliBinding(('--top', '--limit'), metavar='N'))
+_DETAIL = ParamSpec('detail', 'string', 'How much of the answer: normal (a summary) or full (every file in a cycle '
+                    'group plus its cycle edges, all unused imports, all violations, every package; JSON adds '
+                    '"verbose": true). Legacy verbose and the global --verbose mean full', 'normal', _detail_value,
+                    ('imports://src?circular&detail=full',), choices=_DETAIL_LEVELS, role='presentation',
+                    aliases=('verbose',), alias_normalize=_detail_alias, cli_flags=(('verbose', 'full'),),
+                    cli=CliBinding(('--detail',), metavar='LEVEL'))
+_SORT = ParamSpec('sort', 'string', 'Rank files by fan-in, most imported first: the count of files that import each '
+                  'file (higher = more central; 0 = entry point or dead code). One value: -fan-in (legacy rank=fan-in)',
+                  None, _sort_value, ('imports://src?sort=-fan-in', 'imports://src?sort=-fan-in&limit=20'),
+                  choices=_SORT_FIELDS, role='operation', aliases=('rank',), alias_normalize=_sort_alias,
+                  cli=CliBinding(('--sort', '--rank'), dest='sort', metavar='-fan-in'))
+_LIMIT = ParamSpec('limit', 'integer', 'Ranking rows to show (default: all; 0 = all); the total is kept and other '
+                   'views leave it unread with a warning. Legacy top is the same cap', None, _limit_value,
+                   ('imports://src?sort=-fan-in&limit=20',), minimum=0, zero_policy='all', role='analysis',
+                   aliases=('top',), cli=CliBinding(('--limit', '--top'), dest='top', metavar='N'))
 
 # The declaration the `reveal imports` subcommand and the declared URI route bind (BACK-1054, D6):
 # every parameter imports:// reads. A view flag selects its view when its value is on (_selects):
 # a bare ``?unused`` or ``--unused`` does, ``?unused=false`` does not.
 PARAM_SPECS: Tuple[ParamSpec, ...] = (
-    _UNUSED, _CIRCULAR, _VIOLATIONS, _RANK, _TOP, _ENTRYPOINTS, _COMPONENTS, _EXTERNAL, _VERBOSE,
-    _LAZY, _SCOPE, _TESTS, _ROOT, _MAX_FILES, _IMPORTERS, _FORMAT,
+    _UNUSED, _CIRCULAR, _VIOLATIONS, _SORT, _LIMIT, _ENTRYPOINTS, _COMPONENTS, _EXTERNAL, _DETAIL,
+    _LAZY, _SCOPE, _TESTS, _ROOT, _SCAN_LIMIT, _IMPORTERS, _FORMAT,
 )
 _FLAG_NAMES = frozenset(spec.name for spec in PARAM_SPECS if spec.type == 'boolean')
 
@@ -640,17 +698,17 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'output_type': 'imports'
     },
     {
-        'uri': 'imports://src?rank=fan-in',
+        'uri': 'imports://src?sort=-fan-in',
         'description': 'Rank all files by fan-in — surface core abstractions and entry points',
         'output_type': 'fan_in_ranking'
     },
     {
-        'uri': 'imports://src?rank=fan-in&top=20',
+        'uri': 'imports://src?sort=-fan-in&limit=20',
         'description': 'Top-20 files by fan-in',
         'output_type': 'fan_in_ranking'
     },
     {
-        'uri': 'imports://src?rank=fan-in&lazy=exclude',
+        'uri': 'imports://src?sort=-fan-in&lazy=exclude',
         'description': 'Fan-in over load-time (module-level) imports only: the architecture view',
         'output_type': 'fan_in_ranking'
     },
@@ -755,7 +813,7 @@ class ImportsRenderer:
                     print(f"  {imp['file']}:{imp['line']} - {describe_unused(imp)}")
                 if count > 10:
                     print(f"\n  ... and {count - 10} more unused imports")
-                    print(f"  Run with --verbose to see all {count} unused imports\n")
+                    print(f"  Run with --detail full to see all {count} unused imports\n")
 
     @staticmethod
     def _render_no_unused(result: dict, scope: str) -> None:
@@ -815,9 +873,9 @@ class ImportsRenderer:
                 print(f"     cycle: {' → '.join(path_labels)}")
         if not verbose and count > 5:
             print(f"\n  ... and {count - 5} more groups")
-            print(f"  Run with --verbose to see all {count} groups\n")
+            print(f"  Run with --detail full to see all {count} groups\n")
         if not verbose and cycle_paths:
-            print(f"\n  Tip: add &verbose to see cycle edge sequences (A→B→C→A)")
+            print(f"\n  Tip: add &detail=full to see cycle edge sequences (A→B→C→A)")
 
     @staticmethod
     def _render_layer_violations(result: dict, verbose: bool) -> None:
@@ -849,7 +907,7 @@ class ImportsRenderer:
                 print(f"  {v['from_file']} -> {v['to_file']}  [{v['layer']}] {v['reason']}")
             if not verbose and count > 10:
                 print(f"\n  ... and {count - 10} more violations")
-                print(f"  Run with --verbose to see all {count} violations\n")
+                print(f"  Run with --detail full to see all {count} violations\n")
 
     @staticmethod
     def _render_cycle_summary(result: dict, display_path: str) -> None:
@@ -923,12 +981,12 @@ class ImportsRenderer:
         print(f"  reveal 'imports://{scope}?unused'       - Find unused imports")
         print(f"  reveal 'imports://{scope}?circular'     - Detect circular deps")
         print(f"  reveal 'imports://{scope}?violations'   - Check layer violations")
-        print(f"  reveal 'imports://{scope}?rank=fan-in'  - Rank files by fan-in (core abstractions)")
+        print(f"  reveal 'imports://{scope}?sort=-fan-in'  - Rank files by fan-in (core abstractions)")
         print()
 
     @staticmethod
     def _render_fan_in(result: dict, resource: str) -> None:
-        """Render rank=fan-in output — files ranked by number of importers."""
+        """Render sort=-fan-in output — files ranked by number of importers."""
         entries = result.get('entries', [])
         total = result.get('total', 0)
         source = result.get('source', resource)
@@ -996,7 +1054,7 @@ class ImportsRenderer:
             if not verbose and len(entry['importers']) > 5:
                 print(f"      ... and {len(entry['importers']) - 5} more")
         if len(entries) > len(shown):
-            print(f"\n  ... and {len(entries) - len(shown)} more modules (--verbose or --format json lists all)")
+            print(f"\n  ... and {len(entries) - len(shown)} more modules (--detail full or --format json lists all)")
         if not entries:
             print('  No module under this path has an importer.')
         print()
@@ -1021,7 +1079,7 @@ class ImportsRenderer:
 
     @staticmethod
     def _render_external(result: dict, resource: str, verbose: bool) -> None:
-        """Render ?external: the package table, most used first (20 per list unless --verbose)."""
+        """Render ?external: the package table, most used first (20 per list unless --detail full)."""
         external, stdlib = result.get('external_packages', []), result.get('stdlib_packages', [])
         scope = result.get('meta', {}).get('test_scope', {})
         scope_note = f"\n  Test paths: {scope['basis']}; anchor {scope['anchor']}." if scope else ''
@@ -1041,7 +1099,7 @@ class ImportsRenderer:
                 langs = f"  [{', '.join(entry.get('languages') or []) or '?'}]" if multi_stack and 'languages' in entry else ''
                 print(f"  {entry['package']:<30} {entry['uses']:>4} use(s){langs}")
             if len(entries) > len(shown):
-                print(f"  ... and {len(entries) - len(shown)} more (--verbose or --format json lists all)")
+                print(f"  ... and {len(entries) - len(shown)} more (--detail full or --format json lists all)")
         if not external and not stdlib:
             print('\n  No unresolved or stdlib imports found.')
         print()
@@ -1136,7 +1194,7 @@ class ImportsRenderer:
         for line in meta_warning_lines(result):
             print(line)
 
-        # verbose from query (?verbose) takes precedence over caller arg
+        # verbose from the query (detail=full) takes precedence over caller arg
         verbose = result.get('verbose', verbose)
 
         # Text format with progressive disclosure
@@ -1338,18 +1396,7 @@ def _usage_rejection(result: Dict[str, Any]) -> bool:
 _FINDINGS_VIEWS = frozenset({'circular_dependencies', 'unused_imports', 'layer_violations'})
 
 # The parameters the build reads (where it resolves, under which file cap): one build, one value.
-_BUILD_KEYS = (_SCOPE.name, _ROOT.name, _MAX_FILES.name)
-
-
-def _validate_params(params: QueryParams) -> None:
-    """Validate every supplied value; validation is not application (a preceding query mode may
-    take priority, and the view that applies a value reads it)."""
-    for key, value in params.peek_items():
-        if key == _RANK.name and value not in _RANK.choices:
-            raise ValueError(f'rank must be one of: {", ".join(_RANK.choices)}; got {value!r}')
-        for spec in (_LAZY, _FORMAT, _SCOPE, _TESTS, _ROOT, _MAX_FILES, _IMPORTERS, _RANK, _TOP):
-            if key == spec.name:
-                spec.validate(value)
+_BUILD_KEYS = (_SCOPE.name, _ROOT.name, _SCAN_LIMIT.name)
 
 
 def _incomplete(result: Dict[str, Any]) -> bool:
@@ -1377,7 +1424,9 @@ class ImportsAdapter(ResourceAdapter):
     # bound on a corpus with hundreds of thousands of edges (swift), not a per-edge cap (BACK-2192).
     BUDGET_LIST_FIELD = 'entries'
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    CLI_QUERY_FLAGS = {'verbose': 'verbose', 'respect_gitignore': 'respect_gitignore=false'}  # `--verbose` == `&verbose` (BACK-1361)
+    # --verbose is detail=full (its declared cli_flags); --limit binds limit, 0 exactly (zero_policy='all').
+    CLI_QUERY_FLAGS = {**param_cli_flags(PARAM_SPECS), 'limit': 'limit={value}',
+                       'respect_gitignore': 'respect_gitignore=false'}
 
     # D6 (BACK-1054): imports is a declared command, so a usage error exits 2 and an incomplete
     # analysis (a file parsed with errors or lost, a capped walk, a lost directory) exits 3.
@@ -1428,17 +1477,21 @@ class ImportsAdapter(ResourceAdapter):
         # - netloc component from URI parsing (imports://relative/path → 'relative/path')
         # - absolute path (imports:///absolute/path → '/absolute/path')
         self._target_path: Optional[Path] = Path(path).resolve() if path else None
-        self._query_params = _typed_params(params) if params is not None else parse_query_params(query or '')
+        # Every transport binds through PARAM_SPECS: aliases normalize, values validate once (BACK-2620).
+        if params is None:
+            params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
+        elif not isinstance(params, QueryParams):
+            params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        self._query_params = params
         self.query_params = self._query_params  # the name the declared route reads (D6)
         self._warn_unknown_query_params(self._query_params)  # BACK-507
-        _validate_params(self._query_params)
         self._local_names_cache: Optional[frozenset] = None  # BACK-1190, lazy
         # A walk that hid every candidate says so (BACK-2065); set by _build_graph.
         self._scope_hidden: Optional[WarningEntry] = None
         # Where _build_graph resolved and under which file cap (BACK-1054).
         self._scan: Optional[resolution.ScanRoot] = None
         self._test_layout: Optional[TestLayout] = None
-        self._scan_budget = ScanBudget(_MAX_FILES.default)
+        self._scan_budget = ScanBudget(_SCAN_LIMIT.default)
         self._parse_extensions = parse_extensions
 
     @staticmethod
@@ -1446,13 +1499,13 @@ class ImportsAdapter(ResourceAdapter):
         """The answer type the query selects, in get_structure's precedence (the path decides
         between the two ?importers types: ``result_type_at``)."""
         supplied = dict(_typed_params(params).peek_items()) if not isinstance(params, str) else {}
-        if 'importers' in supplied:
+        if supplied.get(_IMPORTERS.name) is not None:
             return 'importer_summary'
         for spec, kind in ((_UNUSED, 'unused_imports'), (_CIRCULAR, 'circular_dependencies'),
                            (_VIOLATIONS, 'layer_violations')):
             if _selects(supplied.get(spec.name)):
                 return kind
-        if supplied.get('rank') == 'fan-in':
+        if supplied.get(_SORT.name) is not None:
             return 'fan_in_ranking'
         for spec, kind in ((_ENTRYPOINTS, 'entrypoints'), (_COMPONENTS, 'components'),
                            (_EXTERNAL, 'external_packages')):
@@ -1531,10 +1584,9 @@ class ImportsAdapter(ResourceAdapter):
         composer that shows several views side by side reads them from one build (deps:// shows
         the default view, ?circular and ?unused, BACK-1054). ``query`` chooses the view and how it
         counts (``&lazy``, ``&tests``, ``&top``...); a parameter that would change the build
-        (``&scope``, ``&root``, ``&max_files``) must equal the built one, else ValueError."""
-        params = parse_query_params(query or '')
+        (``&scope``, ``&root``, ``&scan-limit``) must equal the built one, else ValueError."""
+        params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
         self._warn_unknown_query_params(params)
-        _validate_params(params)
         changed = [key for key in _BUILD_KEYS
                    if dict(params.peek_items()).get(key) != dict(self._query_params.peek_items()).get(key)]
         if changed:
@@ -1556,7 +1608,7 @@ class ImportsAdapter(ResourceAdapter):
         if result.get('type') == 'importer_summary' and _FORMAT.read(query_params) == 'dot':
             result['_format'] = 'dot'
         # Read where the view expands: on any other view the flag is unread, and says so.
-        if result.get('type') in _VERBOSE_VIEWS and _selects(query_params.get(_VERBOSE.name)):
+        if result.get('type') in _VERBOSE_VIEWS and _DETAIL.read(query_params) == 'full':
             result['verbose'] = True
         return result
 
@@ -1571,7 +1623,7 @@ class ImportsAdapter(ResourceAdapter):
             result = self._format_circular()
         elif _selects(query_params.get(_VIOLATIONS.name)):
             result = self._format_violations()
-        elif query_params.get('rank') == 'fan-in':
+        elif query_params.get(_SORT.name) is not None:
             result = self._format_fan_in()
         elif _selects(query_params.get(_ENTRYPOINTS.name)):
             result = self._format_entrypoints()
@@ -1667,7 +1719,7 @@ class ImportsAdapter(ResourceAdapter):
                                                 root_override=scan.override_used)
         from ..config import RevealConfig
         self._test_layout = RevealConfig.get(self._test_layout.anchor).apply_test_layout(self._test_layout)
-        self._scan_budget = ScanBudget(_MAX_FILES.read(self._query_params))
+        self._scan_budget = ScanBudget(_SCAN_LIMIT.read(self._query_params))
         supported = self._parse_extensions if self._parse_extensions is not None else frozenset(get_all_extensions())
         code = frozenset() if self._parse_extensions is not None else get_code_extensions()
         reader = None
@@ -1697,7 +1749,7 @@ class ImportsAdapter(ResourceAdapter):
         target = self._target_path
         scan = self._scan
         lazy = self._query_params.get(_LAZY.name)
-        top = self._query_params.get('top') if include_top else None
+        top = _LIMIT.read(self._query_params) if include_top else None
         return ImportView(self.analysis, target, scan, self._scan_budget.limit,
                           lazy=None if lazy is None else _LAZY.validate(lazy),
                           tests=_TESTS.read(self._query_params), scope=_SCOPE.read(self._query_params),
@@ -1799,7 +1851,7 @@ class ImportsAdapter(ResourceAdapter):
     def _format_fan_in(self) -> Dict[str, Any]:
         data = self._analysis_view(include_top=True).fan_in()
         response = self._build_response('fan_in_ranking', **data)
-        note_truncation(response, 'entries', len(data['entries']), data['total'], 'limit', hint='raise ?top=N')
+        note_truncation(response, 'entries', len(data['entries']), data['total'], 'limit', hint='raise ?limit=N (--limit N; 0 = all)')
         return response
 
     def _format_entrypoints(self) -> Dict[str, Any]:
@@ -1909,9 +1961,9 @@ class ImportsAdapter(ResourceAdapter):
         if record is not None and record.capped:
             warnings.append(cast(WarningEntry, {
                 'type': 'scan_capped', 'field': 'max_files', 'limit': self._scan_budget.limit,
-                'message': (f"the walk kept {self._scan_budget.limit:,} source files (max_files) and stopped: "
+                'message': (f"the walk kept {self._scan_budget.limit:,} source files (scan-limit) and stopped: "
                             "files past the cap are neither importers nor rows, so counts can under-report; "
-                            "raise &max_files=N or narrow &root=")}))
+                            "raise &scan-limit=N (--scan-limit N) or narrow &root=")}))
         return warnings
 
     def _format_importers(self, importers: Any) -> Dict[str, Any]:
