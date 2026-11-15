@@ -1,0 +1,91 @@
+"""BACK-2649: the empty-?callers widening hint must not leak the parent scan's per-file warnings.
+
+R (``tmp_path / 'root'``) holds ``caller.py``, a caller of ``target``, and ``outside.ipynb``, a
+malformed notebook. P (``R / 'pkg'``) defines ``target`` and calls nothing, so ``?callers=target`` on
+P is empty and the hint scans R. The in-scope ``Failed to analyze`` warning is pinned behaviour;
+the advisory scan of R must not print one for a file the user never asked about (on the CLI it
+is noise; over MCP it is appended after the JSON as ``[stderr: ...]``).
+"""
+import json
+import re
+from pathlib import Path
+
+import pytest
+
+from conftest import _run_reveal_direct as run
+from reveal.utils.path_utils import is_unsafe_scan_root
+
+OUTSIDE = 'outside.ipynb'
+INSIDE = 'inside.ipynb'
+MALFORMED = '{"cells": [\n'  # the notebook that turned CI red (tests/test_back_1083_check_contract_disclosure.py)
+
+
+@pytest.fixture
+def root(tmp_path, monkeypatch):
+    # R lives under tmp_path, so the hint's parent scan never reaches pytest's shared basetemp.
+    root = tmp_path / 'root'
+    pkg = root / 'pkg'
+    pkg.mkdir(parents=True)
+    (pkg / 'lib.py').write_text('def target():\n    return 1\n', encoding='utf-8')
+    (root / 'caller.py').write_text('from pkg.lib import target\n\n\ndef use():\n    return target()\n',
+                                    encoding='utf-8')
+    (root / OUTSIDE).write_text(MALFORMED, encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('REVEAL_MAX_WORKERS', '1')
+    # The hint refuses to scan a system/home/temp root; R must not be one or nothing below fires.
+    assert not is_unsafe_scan_root(root)
+    return root
+
+
+def warning_lines(stderr, name):
+    return [line for line in stderr.split('\n') if 'Failed to analyze' in line and name in line]
+
+
+def potential_count(hint):
+    match = re.search(r'(\d+) potential caller\(s\)', hint or '')
+    return int(match.group(1)) if match else None
+
+
+def mcp_text(path):
+    from reveal.mcp_server import _ToolFailure, reveal_query
+    # provenance=True is the tool's JSON form: it forces --format json (the tool has no format argument).
+    text = reveal_query(f'calls://{path.as_posix()}?callers=target', provenance=True)
+    assert not isinstance(text, _ToolFailure), f'MCP unexpectedly failed: {text}'
+    return text
+
+
+class TestPreservation:
+    def test_hint_still_counts_the_out_of_scope_caller(self, root):
+        result = run('calls', root / 'pkg', '--callers', 'target', '--format', 'json')
+        assert result.returncode == 0, result.stderr
+        answer = json.loads(result.stdout)
+        assert answer['total_callers'] == 0
+        assert potential_count(answer.get('hint')) == 1, answer.get('hint')
+        text = run('calls', root / 'pkg', '--callers', 'target')
+        assert 'Hint:' in text.stdout and potential_count(text.stdout) == 1, text.stdout
+
+    def test_in_scope_unparseable_file_still_warns_on_the_cli(self, root):
+        (root / 'pkg' / INSIDE).write_text(MALFORMED, encoding='utf-8')
+        result = run('calls', root / 'pkg', '--callers', 'target')
+        assert warning_lines(result.stderr, INSIDE), f'in-scope warning lost: {result.stderr!r}'
+
+    def test_sibling_collect_structures_consumer_still_warns(self, root):
+        result = run(f'ast://{root.as_posix()}')
+        assert warning_lines(result.stderr, OUTSIDE), f'ast:// warning lost: {result.stderr!r}'
+
+    def test_non_empty_answer_prints_no_hint_and_never_scans_the_parent(self, root):
+        (root / 'pkg' / 'internal.py').write_text(
+            'from pkg.lib import target\n\n\ndef inner():\n    return target()\n', encoding='utf-8')
+        result = run('calls', root / 'pkg', '--callers', 'target', '--format', 'json')
+        assert result.returncode == 0, result.stderr
+        answer = json.loads(result.stdout)
+        callers = [(Path(c['file']).name, c['caller']) for level in answer['levels'] for c in level['callers']]
+        assert (answer['total_callers'], callers) == (1, [('internal.py', 'inner')])
+        assert 'hint' not in answer
+        assert warning_lines(result.stderr, OUTSIDE) == [], result.stderr
+
+    def test_mcp_json_parses_when_the_parent_holds_no_unparseable_file(self, root):
+        # Control for the MCP red below: the same query is one JSON document once R parses cleanly.
+        (root / OUTSIDE).unlink()
+        answer = json.loads(mcp_text(root / 'pkg'))
+        assert potential_count(answer.get('hint')) == 1, answer.get('hint')
