@@ -66,7 +66,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Prior Claude sessions | `reveal 'claude://sessions/?match=auth-refactor'` |
 | Databases, env, SSL, nginx, other resources | `reveal help://adapters` |
 
-- **Limit results:** `calls --sort=-callers` and `imports --rank fan-in` accept `--limit N` (Calls legacy `--top N` notes its replacement); `overview --limit N` caps each map section. Caps depend on the selected view: Calls caller/callee walks and the default Imports summary do not use `top`. Other nouns and URI forms list their caps in `help://schemas/<adapter>`; a note names an unused cap. `--head N` slices list output.
+- **Limit results:** `calls --sort=-callers` and `imports --sort=-fan-in` accept `--limit N` (legacy `--top N` and `--rank` note their replacements); `overview --limit N` caps each map section. Caps depend on the selected view: Calls caller/callee walks and the default Imports summary do not use `limit`. Other nouns and URI forms list their caps in `help://schemas/<adapter>`; a note names an unused cap. `--head N` slices list output.
 - **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
 - **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~15,000 tokens); rules are `reveal --rules`.
 - **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `check --changed RANGE` uses `check`'s codes, with 2 for an unusable range; `imports` defaults to no findings gate, with `--fail-on findings` for exit 1 on a `--circular`, `--unused` or `--violations` row, usage 2 and incomplete/output failure 3; `metrics --hotspots` (and the retired `hotspots`) defaults to no findings gate; `--fail-on findings` exits 1 for an analysed file with quality below 70 or a function with complexity above 20, usage exits 2, and incomplete/output failure exits 3.
@@ -1261,7 +1261,7 @@ reveal 'imports://src/?importers=validators.py'
 reveal contracts src/
 
 # Rank modules by incoming import edges (fan-in)
-reveal 'imports://src/?rank=fan-in'
+reveal 'imports://src/?sort=-fan-in'
 
 # Named functions in the tree
 reveal 'ast://src/?type=function'
@@ -1404,8 +1404,8 @@ For a whole-project dead-code list use the language's own tool: vulture (Python)
 **Pattern:**
 ```bash
 # Codebase-wide fan-in ranking — which files are most central?
-reveal 'imports://src?rank=fan-in'
-reveal 'imports://src?rank=fan-in&top=10'
+reveal 'imports://src?sort=-fan-in'
+reveal 'imports://src?sort=-fan-in&limit=10'
 
 # Who imports this specific file? (each importer with its import line)
 reveal 'imports://src/utils.py?importers'
@@ -1419,7 +1419,7 @@ reveal 'imports://src?importers&format=dot' | dot -Tsvg > deps.svg
 
 **Key use cases:**
 - **Architectural orientation** — three complementary views from the import graph:
-  - `imports://src?rank=fan-in` — ranks every file by importer count. High fan-in = core abstractions (change carefully); zero = entry points or dead code.
+  - `imports://src?sort=-fan-in` — ranks every file by importer count. High fan-in = core abstractions (change carefully); zero = entry points or dead code.
   - `imports://src?entrypoints` — lists only the fan-in=0 files, sorted by fan-out. High fan-out = real CLI/runner; zero = likely dead code.
   - `imports://src?components` — scores each directory as a component: cohesion (how self-contained), coupling (incoming/outgoing), top bridge file. Low cohesion = not a real component. Cohesion is `null`/`n/a` (with `cohesion_reason` and one `cohesion_rule`) for a directory mostly in Go, Java, Kotlin, C#, Scala or Swift: same-package files need no import, so the number would be a structural 0.
 - **Impact analysis before refactoring** — before changing `utils.py`, run `imports://src/utils.py?importers` to see every direct importer
@@ -1429,7 +1429,7 @@ reveal 'imports://src?importers&format=dot' | dot -Tsvg > deps.svg
 
 | Tool | Question | Granularity |
 |------|----------|-------------|
-| `imports://src?rank=fan-in` | Which files are most central? | Codebase ranking |
+| `imports://src?sort=-fan-in` | Which files are most central? | Codebase ranking |
 | `imports://src?entrypoints` | Where does execution start? | Fan-in=0 subset |
 | `imports://src?components` | Which directories are real components? | Per-directory |
 | `imports://src/module.py?importers` | What exactly imports this file? | Per-file reverse |

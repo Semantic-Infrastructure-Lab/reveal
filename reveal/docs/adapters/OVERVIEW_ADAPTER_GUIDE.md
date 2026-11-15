@@ -88,7 +88,7 @@ field selection and presentation cuts, so `--fields` cannot erase a failure.
 ## Investigate the Next Question
 
 ```bash
-reveal imports . --rank fan-in
+reveal imports . --sort=-fan-in
 reveal imports . --components
 reveal imports . --entrypoints
 reveal imports . --circular

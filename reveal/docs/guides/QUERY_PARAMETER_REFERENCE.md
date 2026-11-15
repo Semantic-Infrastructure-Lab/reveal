@@ -15,7 +15,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 
 | Adapter | Query Params | Example |
 |---------|--------------|---------|
-| **imports://** | `unused`, `circular`, `circular&verbose`, `violations`, `lazy` | `imports://.?unused` |
+| **imports://** | `unused`, `circular`, `violations`, `importers`, `sort`, `limit`, `entrypoints`, `components`, `external`, `detail`, `lazy`, `scope`, `tests`, `root`, `scan-limit`, `format` (retired, with a note: `rank`, `top`, `verbose`, `max_files`) | `imports://.?unused` |
 | **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `date`, `since`, `until`, `ref`, `sort`, `limit`, `offset` | `git://file.py?type=history` |
 | **json://** | `schema`, `flatten`, `gron`, `type`, `keys`, `length`, field filters, `sort`, `limit`, `offset` | `json://data.json?type=object` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
@@ -40,7 +40,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **reveal://** | none | N/A |
 
 `sort`, `limit` and `offset` are applied by `ast://`, `markdown://`, `json://`, `git://` and
-`metrics://` only. `metrics://?hotspots=true` (its hotspot ranking), the retired `hotspots://`, `calls://`, `depends://` and `patches://?view=pressure` cap with `top=N`
+`metrics://`; `imports://` takes `sort=-fan-in` and `limit=N` for its ranking and rejects `offset`. `metrics://?hotspots=true` (its hotspot ranking), the retired `hotspots://`, `calls://`, `depends://` and `patches://?view=pressure` cap with `top=N`
 (the `--limit N` flag maps to it), and other adapters answer `Unknown query param ... ignored`.
 Every adapter that walks a directory also takes `respect_gitignore=false` (the same as `--no-gitignore`).
 
@@ -70,15 +70,22 @@ Every adapter that walks a directory also takes `respect_gitignore=false` (the s
   ```
   Detects imports that violate architectural layer boundaries (if configured).
 
-- **`verbose`** (flag, combine with `circular`) - Show the actual cycle path (A→B→C→A) for each circular dependency group, and every file in it. Same as the CLI `--verbose`: `reveal 'imports://src?circular' --verbose`
+- **`detail`** (`normal` or `full`, combine with `circular`) - `full` shows the actual cycle path (A→B→C→A) for each circular dependency group, and every file in it. The subcommand spells it `--detail full`; the retired `verbose` (and the global `--verbose`) still means `full`, with a note:
   ```bash
-  reveal 'imports://src?circular&verbose'
+  reveal 'imports://src?circular&detail=full'
   ```
-  Without `verbose`, circular output lists the files in each SCC. With `verbose`, shows the full edge sequence tracing one representative cycle per group.
+  With `detail=normal` (the default), circular output lists the files in each SCC. With `full`, it shows the full edge sequence tracing one representative cycle per group.
+
+- **`sort=-fan-in`** and **`limit=N`** - The fan-in ranking, most imported first, and how many of its rows to show (`0` = all; the retired `rank=fan-in` and `top=N` still answer, with a note):
+  ```bash
+  reveal 'imports://src?sort=-fan-in&limit=10'
+  ```
+
+- **`scan-limit=N`** (integer, minimum 1) - Source files the walk may keep (default 20000): an input budget, not a row cap; a cut walk is incomplete (exit 3). It replaces the retired `max_files`.
 
 - **`lazy`** (`include`, `exclude` or `only`) - Which function-level (lazy) import edges an edge-derived answer counts
   ```bash
-  reveal 'imports://src?rank=fan-in&lazy=exclude'   # load-time edges only: the architecture view
+  reveal 'imports://src?sort=-fan-in&lazy=exclude'   # load-time edges only: the architecture view
   reveal 'imports://src?circular&lazy=include'      # count lazy back-edges as cycle edges too
   ```
   Default: `circular` (and `metadata.has_cycles`) exclude them, since a function-level import runs after
@@ -90,11 +97,10 @@ Every adapter that walks a directory also takes `respect_gitignore=false` (the s
   unsupported Ruby contexts and other unclassified edges stay in `include`/`exclude`,
   not `only`, with coverage disclosed. An unknown value is an error.
 
-**Combining Parameters**: `unused`, `circular` and `violations` are separate views --
-run one per call (with several, the first in that order wins and the others draw a
-no-effect note). `verbose` combines with `circular`:
+**Combining Parameters**: `unused`, `circular`, `violations` and the other views are separate --
+run one per call (two views in one request exit 2 naming both). `detail=full` combines with `circular`:
 ```bash
-reveal 'imports://src?circular&verbose'   # Cycle paths
+reveal 'imports://src?circular&detail=full'   # Cycle paths
 ```
 
 ---
@@ -553,7 +559,7 @@ reveal 'imports://src?importers=utils.py'   # one file's importers, each with it
 
 - **`top=N`** (integer) - Limit to the N most-imported modules (directory) or the first N importers (file); `--limit N` maps here. The ranking's replacement:
   ```bash
-  reveal 'imports://src?rank=fan-in&top=10'
+  reveal 'imports://src?sort=-fan-in&limit=10'
   ```
 
 - **`format=dot`** (string) - Output GraphViz DOT format for visualization (directory mode only — single-file
@@ -748,7 +754,7 @@ Multiple query parameters are combined with `&`:
 ```bash
 reveal 'git://.?type=history&author~=john&message~=fix'
 reveal 'markdown://docs/?status=draft&priority=high'
-reveal 'imports://.?circular&verbose'
+reveal 'imports://.?circular&detail=full'
 ```
 
 **Behavior**:

@@ -1927,7 +1927,7 @@ closed a cycle in `?circular`; it now reports no cycle by default and one with `
 
 Measured on reveal's own `reveal/registry.py`, tree at `17429e17`, before and after the change:
 
-| Command | Before | After |
+| Command (as run; `rank=fan-in` is now replaced by `sort=-fan-in`) | Before | After |
 |---|---|---|
 | `depends://reveal/registry.py` | **174** = 94 in `reveal/` + 77 tests + 3 scripts | **174** |
 | `imports://.?rank=fan-in` | **124** | **174**; `&lazy=exclude` 124 |

@@ -122,7 +122,7 @@ The two key tools are `calls://` and `imports://?importers`:
 reveal 'calls://src/?callers=validate_token&depth=3'
 reveal 'calls://src/?sort=-callers&limit=20'
 reveal 'imports://src/auth/tokens.py?importers'
-reveal 'imports://src?rank=fan-in&top=20'
+reveal 'imports://src?sort=-fan-in&limit=20'
 ```
 
 Why it is good for this:

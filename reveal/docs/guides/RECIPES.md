@@ -615,7 +615,7 @@ reveal 'imports://src/utils.py?importers'
 reveal 'imports://src/models?importers'
 
 # Most-imported (high-coupling) modules — change these carefully
-reveal 'imports://src?rank=fan-in&top=10'
+reveal 'imports://src?sort=-fan-in&limit=10'
 
 # Full reverse dependency graph (pipe to Graphviz)
 reveal 'imports://src?importers&format=dot' | dot -Tsvg > deps.svg
@@ -624,7 +624,7 @@ reveal 'imports://src?importers&format=dot' | dot -Tsvg > deps.svg
 **Key use cases:**
 - **Impact analysis before refactoring** — run `imports://src/utils.py?importers` to see every importer before touching a module
 - **Safe deletion** — verify `count: 0` before removing a module
-- **Coupling audit** — `?rank=fan-in&top=N` ranks modules by fan-in; high fan-in = high blast radius if changed
+- **Coupling audit** — `?sort=-fan-in&limit=N` ranks modules by fan-in; high fan-in = high blast radius if changed
 
 | Adapter | Question | Direction |
 |---------|----------|-----------|

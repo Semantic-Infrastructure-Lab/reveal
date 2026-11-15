@@ -51,7 +51,7 @@ reveal 'imports://src?violations'
 reveal imports://src/main.py
 
 # 6. Verbose output: every file of each cycle group, plus the cycle edges
-reveal 'imports://src?circular' --verbose
+reveal 'imports://src?circular&detail=full'
 
 # 7. JSON output for CI/CD
 reveal 'imports://src?unused' --format=json
@@ -135,7 +135,7 @@ Query options:
   reveal 'imports://src?unused'    - Find unused imports
   reveal 'imports://src?circular'  - Detect circular deps
   reveal 'imports://src?violations' - Check layer violations
-  reveal 'imports://src?rank=fan-in' - Rank files by fan-in (core abstractions)
+  reveal 'imports://src?sort=-fan-in' - Rank files by fan-in (core abstractions)
 ```
 
 **What you get**:
@@ -180,13 +180,13 @@ Unused Imports: 12
   tests/test_api.py:15 - pytest (unused: fixture)
 
   ... and 2 more unused imports
-  Run with --verbose to see all 12 unused imports
+  Run with --detail full to see all 12 unused imports
 ```
 
 ### Verbose Output
 
 ```bash
-reveal 'imports://src?unused' --verbose
+reveal 'imports://src?unused&detail=full'
 ```
 
 **Returns**: Full list of all unused imports with file paths and line numbers
@@ -292,7 +292,7 @@ cycling through a shared registry appear as 1 group, not 30 separate paths.
 ### Verbose Output
 
 ```bash
-reveal 'imports://src?circular' --verbose
+reveal 'imports://src?circular&detail=full'
 ```
 
 **Returns**: All groups and all files (no truncation), plus each group's cycle edge sequence (`cycle: a.py → b.py → c.py → a.py`)
@@ -361,8 +361,8 @@ Each inner array is the **members of one SCC** (sorted, no repeated last node).
 Rank files by how many other files import them — the single most useful architectural signal derivable from code alone:
 
 ```bash
-reveal 'imports://src?rank=fan-in'
-reveal 'imports://src?rank=fan-in&top=20'
+reveal 'imports://src?sort=-fan-in'
+reveal 'imports://src?sort=-fan-in&limit=20'
 ```
 
 **Returns** (~200 tokens):
@@ -389,7 +389,7 @@ Files: 10 of 45  (fan-in = number of files that import this file)
   Note: static imports only — files loaded via dynamic dispatch
   (importlib, require(), Class.forName, autoload, etc.) show lower fan-in than actual.
 
-⚠ Truncated entries: showing 10 of 45 — raise ?top=N
+⚠ Truncated entries: showing 10 of 45 — raise ?limit=N (--limit N; 0 = all)
 ```
 
 **Reading the output:**
@@ -400,17 +400,17 @@ Files: 10 of 45  (fan-in = number of files that import this file)
 | Fan-in = 0, fan-out > 0 | Entry points — `main.py`, CLI handlers, route files | Safe starting points for exploration |
 | Fan-in = 0, fan-out = 0 | Dead code candidates or standalone scripts | Investigate before deleting |
 
-**`?top=N` parameter:**
+**`?limit=N` parameter** (`0` = all; it replaces the retired `top=N`):
 
 ```bash
 # Top 10 most-imported files
-reveal 'imports://src?rank=fan-in&top=10'
+reveal 'imports://src?sort=-fan-in&limit=10'
 ```
 
 ### JSON Output
 
 ```bash
-reveal 'imports://src?rank=fan-in' --format=json
+reveal 'imports://src?sort=-fan-in' --format=json
 ```
 
 **Returns**:
@@ -513,18 +513,18 @@ execution claim. Ruby remains outside default recall coverage. The
 measures only its declared importer/target population, not whole-language or runtime loading.
 
 ```bash
-reveal 'imports://src?rank=fan-in&lazy=exclude'   # module-level imports only
+reveal 'imports://src?sort=-fan-in&lazy=exclude'   # module-level imports only
 reveal 'imports://src?circular&lazy=include'      # a lazy back-edge closes a cycle too
 ```
 
-**When to use `rank=fan-in` vs `importers`:**
+**When to use `sort=-fan-in` vs `importers`:**
 
 | Query | Question | Granularity |
 |-------|----------|-------------|
-| `imports://src?rank=fan-in` | Which files are most central? (ranked list) | Codebase-wide |
+| `imports://src?sort=-fan-in` | Which files are most central? (ranked list) | Codebase-wide |
 | `imports://src?importers=utils.py` | What exactly imports this one file? | Per-file |
 
-Use `rank=fan-in` for orientation; use `?importers` for targeted impact analysis.
+Use `sort=-fan-in` for orientation; use `?importers` for targeted impact analysis.
 
 ---
 
@@ -628,10 +628,10 @@ imports:// supports multiple programming languages:
 
 Support comes in tiers — be aware of which query modes actually work per language:
 
-- **✅ Full** — listing, cross-file resolution (`?circular`, `rank=fan-in`), and
+- **✅ Full** — listing, cross-file resolution (`?circular`, `sort=-fan-in`), and
   unused-import detection (`?unused`).
 - **📦 Listing + graph** — imports listed and resolved to files (`?circular`,
-  `rank=fan-in` work); `?unused` is **not** reported (textual `#include` has no
+  `sort=-fan-in` work); `?unused` is **not** reported (textual `#include` has no
   reliable per-symbol usage semantics).
 - **📝 Listing only** — imports listed (counts, per-file view); cross-file
   resolution and `?unused` are not claimed (would need classpath/namespace
@@ -753,27 +753,34 @@ Use `?flag` syntax for operations:
 | `unused` | Find unused imports | `imports://src?unused` |
 | `circular` | Detect circular dependencies | `imports://src?circular` |
 | `violations` | Check layer violations | `imports://src?violations` |
-| `rank=fan-in` | Rank all files by fan-in (importer count) | `imports://src?rank=fan-in` |
-| `top=N` | Limit results for `?rank` (default: all) | `imports://src?rank=fan-in&top=20` |
+| `sort=-fan-in` | Rank all files by fan-in (importer count), most imported first | `imports://src?sort=-fan-in` |
+| `limit=N` | Ranking rows to show (default: all; `0` = all); `total` keeps the full count. Other views leave it unread with a warning | `imports://src?sort=-fan-in&limit=20` |
 | `entrypoints` | Files with fan-in=0 — entry points, scripts, or dead code; sorted by fan-out | `imports://src?entrypoints` |
 | `components` | Per-directory cohesion + coupling scores; top bridge file | `imports://src?components` |
 | `external` | Package table: unresolved (third-party or unresolved-local) and stdlib packages by use, the languages importing each, import statements per file (`external_packages`; the deps dashboard's table, now JSON) | `imports://src?external` |
 | `importers` | Who imports what: on a file (or `=FILE`, relative to the path) each importer with its import line, scope and cascade stage (`via`); on a directory every module under it with its sorted importers | `imports://src/utils.py?importers` |
-| `scope=root\|path` | `root` (default): resolve at the project root, rows under the path; `path`: the path itself is the scan root | `imports://src?rank=fan-in&scope=path` |
+| `scope=root\|path` | `root` (default): resolve at the project root, rows under the path; `path`: the path itself is the scan root | `imports://src?sort=-fan-in&scope=path` |
 | `tests=include\|exclude` | Count importers selected by the scoped conventional/configured test-support policy, or exclude them | `imports://src?importers&tests=exclude` |
 | `root=DIR` | Pin the scan root (must contain the path; not a filesystem/home/system root; a refused value is a warning) | `imports://src/app.py?importers&root=.` |
-| `lazy=include\|exclude\|only` | Function-level (lazy) import edges: include them, exclude them (load-time edges only) or show only them. Default: `?circular` excludes, every other view includes | `imports://src?rank=fan-in&lazy=exclude` |
+| `lazy=include\|exclude\|only` | Function-level (lazy) import edges: include them, exclude them (load-time edges only) or show only them. Default: `?circular` excludes, every other view includes | `imports://src?sort=-fan-in&lazy=exclude` |
 | `format=text\|json\|dot` | Output override for `?importers` on a directory: `dot` draws one importer -> module edge per listed importer as Graphviz | `imports://src?importers&format=dot` |
-| `verbose` | Show everything instead of a summary: every file in a cycle group, all unused imports, all violations, every package (same as the CLI `--verbose`) | `imports://src?circular&verbose` |
-| `max_files=N` | Source files the walk may keep (default 20000); a cut is `meta.scan_budget.capped` and a `scan_capped` warning | `imports://.?importers&max_files=50000` |
+| `detail=normal\|full` | `full` shows everything instead of a summary: every file in a cycle group, all unused imports, all violations, every package; JSON adds `"verbose": true` (`--detail full` on the subcommand; the global `--verbose` means `full`) | `imports://src?circular&detail=full` |
+| `scan-limit=N` | Source files the walk may keep (default 20000, minimum 1): an input budget, not a row cap. A cut is incomplete analysis (exit 3), `meta.scan_budget.capped` and a `scan_capped` warning (`scan_limit` is the same key) | `imports://.?importers&scan-limit=50000` |
 
-**Note**: `unused`, `circular`, and `violations` are flags (no `=value` needed). `rank` and `top` take values.
+**Note**: the view flags (`unused`, `circular`, `violations`, `entrypoints`, `components`, `external`) need
+no `=value`; `=false` selects nothing. A request takes one view: two (`?circular&unused`, or `?importers`
+with `sort=-fan-in`) exit 2 naming both. `sort`, `limit`, `detail` and `scan-limit` take values.
+
+**Replaced spellings** (they still answer, with a one-line note, until the cut): `rank=fan-in` (`--rank
+fan-in`) is replaced by `sort=-fan-in`, `top=N` by `limit=N`, `verbose` by `detail=full` and
+`max_files=N` (`--max-files`) by `scan-limit=N`. Imports takes no `offset`, `where`, `match`, `kind`,
+`depth`, `since` or `until`: they exit 2.
 
 **Where an answer is resolved**: at the project root the shared climb finds (`&root=`,
 `.reveal.yaml` `root: true`, the nearest package marker, the VCS root, else the requested directory),
 through the shared resolution cascade (also behind `?importers`: direct, PHP `define()` constants, namespaces,
 members, Swift modules, Ruby Zeitwerk naming). Rows are the requested path's files; importers come from
-anywhere under the root, so `imports://pkg?rank=fan-in` counts `tests/` and `scripts/` importers of
+anywhere under the root, so `imports://pkg?sort=-fan-in` counts `tests/` and `scripts/` importers of
 `pkg/core.py`. `&scope=path` resolves at the path itself (what `overview://`, `pack` and
 the overview comparison use). `edge_rule` adds `root` (relative to the path), `root_source`, `scope_param`,
 `tests_param`, `via` (counted edges by stage) and `ungated_languages`/`ungated_edges` (languages no recall
@@ -809,13 +816,13 @@ reveal 'imports://src?unused=true'
 | Flag | Description | Example |
 |------|-------------|---------|
 | `--format=<type>` | Output format (text, json) | `reveal imports://src --format=json` |
-| `--verbose` | Full cycle groups and their edges (`?circular`; other views ignore it and say so) | `reveal 'imports://src?circular' --verbose` |
+| `--detail full` | Full cycle groups and their edges (`?circular`; other views ignore it and say so); the URI spells it `&detail=full`, and the global `--verbose` it replaces still means `full` | `reveal imports src --circular --detail full` |
 
 ### Examples
 
 ```bash
 # Verbose unused imports
-reveal 'imports://src?unused' --verbose
+reveal 'imports://src?unused&detail=full'
 
 # JSON output for CI/CD
 reveal 'imports://src?circular' --format=json
@@ -989,7 +996,7 @@ line number. `edge_rule` states which edges were counted (abridged above).
 ```
 
 **Fields**:
-- `total` — total files in the ranked list (before any `?top=N` limit)
+- `total` — total files in the ranked list (before any `?limit=N` cut)
 - `entries[].fan_in` — number of files that import this file (higher = more central)
 - `entries[].fan_out` — number of files this file imports
 
@@ -1068,7 +1075,7 @@ line number. `edge_rule` states which edges were counted (abridged above).
 - `components[].internal` — import edges where both source and target are in this directory
 - `components[].outgoing` — import edges leaving this directory
 - `components[].incoming` — import edges arriving from outside this directory
-- A Go import names a package, so its edge ends at the package directory (`?rank=fan-in` lists it as a row such as `pkg/b`); so does a Python import of a namespace package (a directory without `__init__.py`). That directory node belongs to the component of the same directory, so the edge counts as `internal` or `incoming` there and agrees with fan-in
+- A Go import names a package, so its edge ends at the package directory (`?sort=-fan-in` lists it as a row such as `pkg/b`); so does a Python import of a namespace package (a directory without `__init__.py`). That directory node belongs to the component of the same directory, so the edge counts as `internal` or `incoming` there and agrees with fan-in
 - `components[].cohesion` — `internal / (internal + outgoing)`; 1.0 = fully self-contained; 0.0 = all imports cross boundaries. `null` (text: `n/a`) when more than half the directory's files are in Go, Java, Kotlin, C#, Scala or Swift: files of one package or module use each other without an import, so `internal` would read ~0 whatever the structure. The row then carries `cohesion_reason`, the response carries one `cohesion_rule` sentence, and declined components sort after every measured one (never as 0.00). Other languages keep their number
 - `components[].top_bridge` — file in this directory with the most outgoing cross-boundary edges (null if none)
 
@@ -1119,7 +1126,7 @@ JavaScript the first dotted segment. `languages` says which language each row ca
 reveal 'imports://src?unused'
 
 # 2. Review list (check for false positives)
-reveal 'imports://src?unused' --verbose
+reveal 'imports://src?unused&detail=full'
 
 # 3. Remove unused imports
 # (manually or with automated tools)
@@ -1146,7 +1153,7 @@ git commit -m "refactor: Remove unused imports"
 reveal 'imports://src?circular'
 
 # Example output:
-# 1. 2 files  user.py, auth.py   (add &verbose for the edge sequence: cycle: user.py → auth.py → user.py)
+# 1. 2 files  user.py, auth.py   (add &detail=full for the edge sequence: cycle: user.py → auth.py → user.py)
 
 # 2. Analyze the cycle
 reveal imports://src/models/user.py
@@ -1859,7 +1866,7 @@ reveal 'imports://src?circular'
 reveal 'imports://src?unused'
 
 # Full list
-reveal 'imports://src?unused' --verbose
+reveal 'imports://src?unused&detail=full'
 ```
 
 ### 3. Automate in CI/CD
@@ -1903,7 +1910,7 @@ reveal 'imports://src?circular'
 # - Type hints (TYPE_CHECKING)
 # - Side-effect imports
 
-reveal 'imports://src?unused' --verbose | \
+reveal 'imports://src?unused&detail=full' | \
   grep -v "__all__" | \
   grep -v "TYPE_CHECKING"
 ```
