@@ -18,6 +18,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - Calls text replaces long counting rules and standing caveats with one pointer to their existing JSON fields; callees `--detail` keeps the full text. Request-specific warnings and JSON are unchanged (BACK-2599).
 
+### Behavior changes
+
+- `imports` takes `--sort=-fan-in`, `--limit N`, `--detail normal|full` and `--scan-limit N` (`sort=`, `limit=`, `detail=`, `scan-limit=` in URIs and `reveal.api.query` keywords); `rank=fan-in`, `top`, `verbose` (`--verbose`) and `max_files` still work with a replaced-by note. Two views in one request (`?circular&unused`), `offset`, `where`, `match`, `kind`, `depth`, `since` or `until`, and `--verbose` with `--detail normal` now exit 2; `?unused=false` selects no view instead of exiting 3; the global `--limit` now caps a URI ranking; the `scan_capped` warning's `field` is `scan-limit`, not `max_files` (BACK-2620).
+
 ### Added
 
 - Calls accepts `sort=-callers`, `limit=N`, `kind=KIND` and `detail=normal|full` in CLI, URI and typed API requests; old rank/top/type spellings still work with replacement notes. URI global `--limit 0` uses exact uncapped zero when the native declaration supports it; `--max-items 0` still means an empty output page, URI DOT stays supported, and graph populations do not change (BACK-2619).
