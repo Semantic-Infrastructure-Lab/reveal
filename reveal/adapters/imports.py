@@ -1985,7 +1985,7 @@ class ImportsAdapter(ResourceAdapter):
         record = self.analysis.resolution
         if record is not None and record.capped:
             warnings.append(cast(WarningEntry, {
-                'type': 'scan_capped', 'field': 'max_files', 'limit': self._scan_budget.limit,
+                'type': 'scan_capped', 'field': _SCAN_LIMIT.name, 'limit': self._scan_budget.limit,
                 'message': (f"the walk kept {self._scan_budget.limit:,} source files (scan-limit) and stopped: "
                             "files past the cap are neither importers nor rows, so counts can under-report; "
                             "raise &scan-limit=N (--scan-limit N) or narrow &root=")}))
