@@ -115,3 +115,21 @@ class TestOutOfScopeWarningLeak:
         assert potential_count(result.stdout) == 1, 'the hint must still fire, or this proves nothing'
         lines = warning_lines(result.stderr, INSIDE)
         assert len(lines) == 1, f'expected the in-scope warning once, got {len(lines)}: {lines}'
+
+
+class TestHintWording:
+    """The count is a lower bound when the quiet parent scan skipped a file it could not analyze."""
+
+    def hint(self, root):
+        result = run('calls', root / 'pkg', '--callers', 'target', '--format', 'json')
+        assert result.returncode == 0, result.stderr
+        return json.loads(result.stdout).get('hint', '')
+
+    def test_skipped_parent_file_makes_the_count_a_lower_bound(self, root):
+        hint = self.hint(root)
+        assert 'at least 1 potential caller(s)' in hint, hint
+
+    def test_clean_parent_keeps_the_plain_count(self, root):
+        (root / OUTSIDE).unlink()
+        hint = self.hint(root)
+        assert '1 potential caller(s)' in hint and 'at least' not in hint, hint
