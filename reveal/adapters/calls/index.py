@@ -1322,15 +1322,21 @@ _HINT_SCAN_MAX_FILES = 2000
 
 
 def _parent_callers_hint(result: Dict[str, Any], path: str, target: str) -> None:
-    """A bounded widening suggestion for an empty callers answer."""
+    """A bounded widening suggestion for an empty callers answer.
+
+    The parent scan is advisory and mostly outside the requested scope, so it collects
+    quietly: a file it cannot analyze prints no stderr line (BACK-2649; over MCP that line
+    followed the JSON). Its loss makes the count a lower bound, and the hint says so.
+    """
     parent = str(Path(path).parent)
     if parent != path and os.path.isdir(parent) and _parent_hint_scan_is_cheap(parent):
-        parent_index = build_callers_index(parent)
+        parent_index = build_callers_index(parent, collect_structures(parent, warn=False))
         potential = len(parent_index.get(target, []))
         if potential:
+            bound = 'at least ' if parent_index.skipped or parent_index.traversal_failures else ''
             result['hint'] = (
                 f"0 callers found in '{path}' — "
-                f"{potential} potential caller(s) exist in '{parent}'; "
+                f"{bound}{potential} potential caller(s) exist in '{parent}'; "
                 f"try widening the path"
             )
 
