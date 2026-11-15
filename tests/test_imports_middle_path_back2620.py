@@ -618,7 +618,9 @@ class TestProposedChanges:
         result, answer = cli_json(uri(project, controls), '--fail-on', 'findings')
         assert result.returncode == 2, f'{controls} has no findings verdict: exit 2, got {result.returncode}'
         assert 'imports gates --circular, --unused and --violations' in answer['error']
-        control, gated = cli_json(uri(project, f'{controls}&circular'), '--fail-on', 'findings')
+        # Positive control: the same false modes beside one selected findings view (no second view).
+        false_only = '&'.join(part for part in controls.split('&') if '=' in part)
+        control, gated = cli_json(uri(project, f'{false_only}&circular'), '--fail-on', 'findings')
         assert control.returncode == 1 and gated['type'] == 'circular_dependencies', control.stderr
 
     @pytest.mark.parametrize('mode', MODES)

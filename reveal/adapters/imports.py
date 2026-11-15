@@ -1400,9 +1400,29 @@ _FINDINGS_VIEWS = frozenset({'circular_dependencies', 'unused_imports', 'layer_v
 _UNSUPPORTED_SHARED = ('offset', 'where', 'match', 'kind', 'depth', 'since', 'until')
 
 
+# The view selectors, in the precedence get_structure applies; a request selects at most one (D18,
+# Scott 2026-11-14, as Calls takes one mode). The answer type each selects.
+_VIEW_SPECS = (_IMPORTERS, _UNUSED, _CIRCULAR, _VIOLATIONS, _SORT, _ENTRYPOINTS, _COMPONENTS, _EXTERNAL)
+_VIEW_TYPES = {'importers': 'importer_summary', 'unused': 'unused_imports', 'circular': 'circular_dependencies',
+               'violations': 'layer_violations', 'sort': 'fan_in_ranking', 'entrypoints': 'entrypoints',
+               'components': 'components', 'external': 'external_packages'}
+
+
+def _selected_views(params: Any) -> List[str]:
+    """The views a request selects, bound or prepared, read without counting any key as applied: a flag
+    selects when it is on (``_selects``), importers and sort when supplied."""
+    supplied = dict(peek_query_items(params))
+    return [spec.name for spec in _VIEW_SPECS
+            if (_selects(supplied.get(spec.name)) if spec.type == 'boolean' else supplied.get(spec.name) is not None)]
+
+
 def _validate_request(params: Any) -> None:
-    """Reject what binding cannot: a shared control Imports does not support."""
+    """Reject what binding cannot: a shared control Imports does not support, or two views."""
     unsupported = [key for key, _value in peek_query_items(params) if key in _UNSUPPORTED_SHARED]
+    views = _selected_views(params)
+    if len(views) > 1:
+        raise RequestValidationError(f'imports takes one view per request, got {" and ".join(views)}: choose one of '
+                                     + ', '.join(spec.name for spec in _VIEW_SPECS) + ' (sort is the legacy rank)')
     if unsupported:
         raise RequestValidationError(f'imports does not support {", ".join(unsupported)}: it has no offset, filter, walk depth '
                          'or time window. Use limit=N (--limit N) to cap the ranking or importers=FILE (--importers '
@@ -1513,20 +1533,9 @@ class ImportsAdapter(ResourceAdapter):
     def result_type_for(params: Any) -> str:
         """The answer type the query selects, in get_structure's precedence (the path decides
         between the two ?importers types: ``result_type_at``)."""
-        supplied = dict(_typed_params(params).peek_items()) if not isinstance(params, str) else {}
-        if supplied.get(_IMPORTERS.name) is not None:
-            return 'importer_summary'
-        for spec, kind in ((_UNUSED, 'unused_imports'), (_CIRCULAR, 'circular_dependencies'),
-                           (_VIOLATIONS, 'layer_violations')):
-            if _selects(supplied.get(spec.name)):
-                return kind
-        if supplied.get(_SORT.name) is not None:
-            return 'fan_in_ranking'
-        for spec, kind in ((_ENTRYPOINTS, 'entrypoints'), (_COMPONENTS, 'components'),
-                           (_EXTERNAL, 'external_packages')):
-            if _selects(supplied.get(spec.name)):
-                return kind
-        return 'imports'
+        views = _selected_views(params) if not isinstance(params, str) else []
+        # A rejected two-view request is typed by the first in precedence.
+        return _VIEW_TYPES[views[0]] if views else 'imports'
 
     @classmethod
     def result_type_at(cls, params: Any, path: str) -> str:
