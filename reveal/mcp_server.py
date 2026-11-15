@@ -661,8 +661,9 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     through to this tool — there's no argv for them to come from here.
     '?limit=N', '?sort=field' (or '?sort=-field' for desc) and '?offset=M'
     are applied by ast://, markdown://, json://, git:// and stats:// only;
-    other adapters answer "Unknown query param ... ignored" -- use their own
-    key instead (metrics://?hotspots=true, calls://, depends:// and patches://?view=pressure take '?top=N').
+    imports:// takes '?sort=-fan-in&limit=N' for its ranking and rejects
+    '?offset'; other adapters answer "Unknown query param ... ignored" -- use
+    their own key instead (metrics://?hotspots=true, calls://, depends:// and patches://?view=pressure take '?top=N').
     Every other per-adapter option is that adapter's own '?key=value'
     vocabulary, not a generic CLI-flag passthrough — check
     reveal_query('help://schemas/<adapter>') for what a given scheme accepts.

@@ -223,7 +223,7 @@ _SCHEMA_NOTES = [
     'Inverts the import graph built by imports:// — same language support, same resolution',
     'Dynamic imports (importlib.import_module, __import__) are not tracked',
     'TYPE_CHECKING-only imports are excluded from edges (intentional)',
-    'Function-level imports are importers like any other; edge_rule (and a Rule: line in text) states the rule. depends:// takes no &lazy: imports://<dir>?rank=fan-in&lazy=exclude is the load-time view',
+    'Function-level imports are importers like any other; edge_rule (and a Rule: line in text) states the rule. depends:// takes no &lazy: imports://<dir>?sort=-fan-in&lazy=exclude is the load-time view',
     'Results are conservative: false negatives possible, never false positives',
     'Use ?top=N on a directory to find high-coupling modules (many dependents = high impact if changed)',
     'Use depends://file.py to do impact analysis before refactoring a module',
@@ -676,7 +676,7 @@ class DependsAdapter(ResourceAdapter):
             self._graph, LAZY_INCLUDE, lazy_default=True,
             subject='importers are files whose static imports resolve here, among',
             scope='scan_root',
-            hint="depends:// takes no &lazy; imports://<dir>?rank=fan-in&lazy=exclude counts load-time edges only")
+            hint="depends:// takes no &lazy; imports://<dir>?sort=-fan-in&lazy=exclude counts load-time edges only")
 
     def _scan_cap_warning(self) -> str:
         """BACK-524: one-line disclosure when _build_graph stopped early.

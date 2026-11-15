@@ -205,7 +205,7 @@ def _validate_comparison_controls(params, *, all_requested=False, verbose_reques
 def _next_steps(path: str, exclude_patterns: List[str], respect_gitignore: bool) -> List[dict]:
     target = quote(path, safe='/.:')
     questions = (
-        ('Full observed fan-in ranking (subject to scan coverage)', f'imports://{target}?rank=fan-in&scope=path'),
+        ('Full observed fan-in ranking (subject to scan coverage)', f'imports://{target}?sort=-fan-in&scope=path'),
         ('All observed component relationships', f'imports://{target}?components&scope=path'),
         ('All observed entrypoint candidates; apply the stated active predicate', f'imports://{target}?entrypoints&scope=path'),
         ('Full observed cycle groups and witness paths (subject to scan coverage)', f'imports://{target}?circular&scope=path'),

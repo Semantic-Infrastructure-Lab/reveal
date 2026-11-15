@@ -169,7 +169,7 @@ def _note_graph(graphs: Optional[List[Tuple[str, Any]]], kind: str, graph: Any) 
 def _pack_edge_rule(graphs: List[Tuple[str, Any]]) -> Dict[str, Any]:
     """``{'edge_rule': ...}`` for the import edges the ranking read (BACK-2087), or nothing when it
     read none: every edge, function-level and test importers included, which is the view
-    ``imports://?rank=fan-in`` counts by default."""
+    ``imports://?sort=-fan-in`` counts by default."""
     if not graphs:
         return {}
     kinds = {kind for kind, _graph in graphs}

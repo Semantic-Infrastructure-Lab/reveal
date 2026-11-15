@@ -482,7 +482,7 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     # cap flag shared by URI adapters and --check.
     parser.add_argument('--limit', type=int, metavar='N', default=None,
                         help='Cap the selected view at N where supported (help://schemas/<adapter>). '
-                             'Calls/imports rankings accept --limit as --top; their other views may '
+                             'Calls/imports rankings take --limit (legacy --top notes it); their other views may '
                              'ignore it with a note. With --check, caps text output at the '
                              'first N files with issues and prints a "+N more files" footer (default 50, '
                              '0 disables; ignored with --format json).')

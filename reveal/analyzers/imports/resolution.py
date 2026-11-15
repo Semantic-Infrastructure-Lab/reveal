@@ -449,7 +449,7 @@ class ProjectResolver:
         languages (Java, Kotlin, C#, PHP, Swift) need that index to resolve a
         dotted/qualified import to a file without their own tree walk; without
         it `resolve_import` silently fails for every such import and depends://
-        reports "No dependents found" even though imports://?rank=fan-in sees
+        reports "No dependents found" even though imports://?sort=-fan-in sees
         the same edge (BACK-491 built this index for imports:// only).
 
         Records the file-count cap, the walk's losses and what it hid on ``self.result``.

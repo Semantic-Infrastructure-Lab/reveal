@@ -1894,7 +1894,7 @@ except `TYPE_CHECKING` ones, function-level imports and tests included (the pyth
 recurses into function bodies). Each answer prints its rule, a `Rule:` line in text and
 `edge_rule` in JSON. At the time they differed in scope (`imports://<dir>` saw only importers inside
 `<dir>`; `depends://<file>`, now retired for `imports://<file>?importers`, scanned from the project root). Both now
-resolve importers from the project scan root and `<dir>` only limits which files are listed as rows. `imports://<dir>?rank=fan-in&lazy=exclude`
+resolve importers from the project scan root and `<dir>` only limits which files are listed as rows. `imports://<dir>?sort=-fan-in&lazy=exclude`
 is the architecture view (load-time edges only); `?circular` uses it by default, because a
 function-level import runs after every module has loaded and cannot close an import-time
 cycle. Python, PHP, JavaScript, TypeScript, TSX, Rust, Lua, Zig, GDScript and Scala record where an

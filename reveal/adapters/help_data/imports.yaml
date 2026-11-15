@@ -24,10 +24,10 @@ examples:
     description: 'Check layer violations based on .reveal.yaml architecture rules'
 
   # Architectural analysis
-  - uri: "imports://src?rank=fan-in"
+  - uri: "imports://src?sort=-fan-in"
     description: 'Rank files by fan-in — how many files import each file (high = core abstraction; zero = entry point or dead code)'
 
-  - uri: "imports://src?rank=fan-in&top=10"
+  - uri: "imports://src?sort=-fan-in&limit=10"
     description: 'Top 10 most-imported files — find the load-bearing modules before refactoring'
 
   - uri: "imports://src?entrypoints"
@@ -37,7 +37,7 @@ examples:
     description: 'Score each directory as a component — cohesion (how self-contained; n/a for Go, Java, Kotlin, C#, Scala and Swift directories, where files share a package without importing), coupling (incoming/outgoing), top bridge file'
 
   # Which edges count (function-level imports)
-  - uri: "imports://src?rank=fan-in&lazy=exclude"
+  - uri: "imports://src?sort=-fan-in&lazy=exclude"
     description: 'Load-time (module-level) imports only — the architecture view; the default counts function-level imports too'
 
   - uri: "imports://src?circular&lazy=include"
@@ -50,12 +50,12 @@ examples:
   - uri: "imports://src?importers&tests=exclude"
     description: 'Every module under src with its sorted importers, importers under a test path not counted'
 
-  - uri: "imports://src?rank=fan-in&scope=path"
+  - uri: "imports://src?sort=-fan-in&scope=path"
     description: 'Resolve at src itself instead of the project root (the requested path is the scan root)'
 
-  # Verbose output
-  - uri: "imports://src --verbose"
-    description: 'Show detailed import information including file paths and line numbers'
+  # Full detail
+  - uri: "imports://src?circular&detail=full"
+    description: 'Every file in each cycle group and the edges of one cycle per group (detail=full; the subcommand spells it --detail full)'
 
   # JSON output for tooling
   - uri: "imports://src?unused --format json"
@@ -70,10 +70,13 @@ elements:
   scope: 'root (default): resolve at the project root, rows under the path; path: the path is the scan root'
   tests: 'include (default) or exclude project-relative test importers; checkout ancestors and project name do not count. Markerless scan-root fallback is disclosed; project-local test_layout.additional_paths adds literal helper files/subtrees'
   root: 'Pin the scan root to DIR (must contain the path)'
-  max_files: 'Source files the walk may keep (default 20000), disclosed when it cuts'
+  sort: 'The fan-in ranking, most imported first: -fan-in (it replaces the retired rank=fan-in)'
+  limit: 'Ranking rows to show (default all; 0 = all); it replaces the retired top'
+  detail: 'normal (default) or full: every file in a cycle group, all unused imports, all violations, every package (it replaces the retired verbose)'
+  scan-limit: 'Source files the walk may keep (default 20000, minimum 1), an input budget disclosed when it cuts (exit 3); it replaces the retired max_files'
 
 flags:
-  --verbose: 'Show detailed import information (file paths, line numbers, full chains)'
+  --detail: 'normal or full (the global --verbose it replaces still means full)'
   --format: 'Output format (text, json)'
 
 features:
@@ -91,7 +94,7 @@ workflows:
   - name: 'Architectural Orientation (fan-in ranking)'
     scenario: 'Understand a new codebase — find core abstractions and entry points before reading code'
     steps:
-      - "reveal 'imports://src?rank=fan-in&top=20'"
+      - "reveal 'imports://src?sort=-fan-in&limit=20'"
       - 'High fan-in files (top rows) = core abstractions — changes here ripple everywhere'
       - 'Zero fan-in files (bottom) = entry points or dead code — safe starting points'
       - "reveal src/core_module.py  # drill into the highest fan-in file"
@@ -126,7 +129,7 @@ workflows:
       - 'reveal imports://src'
       - "reveal 'imports://src?unused'"
       - "reveal 'imports://src?circular'"
-      - "reveal 'imports://src?rank=fan-in&top=10'"
+      - "reveal 'imports://src?sort=-fan-in&limit=10'"
       - 'Address issues found in each check'
 
 anti_patterns:
@@ -146,7 +149,7 @@ try_now:
   - 'reveal imports://reveal'
   - "reveal 'imports://reveal?unused'"
   - "reveal 'imports://reveal?circular'"
-  - "reveal 'imports://reveal?rank=fan-in&top=15'"
+  - "reveal 'imports://reveal?sort=-fan-in&limit=15'"
 
 notes:
   - 'Unused import detection requires parsing file content to check references'
@@ -158,7 +161,8 @@ notes:
   - "?components cohesion is declined (null in JSON, n/a in text, a cohesion_reason on the row and one cohesion_rule line) for a component with more than half its files in Go, Java, Kotlin, C#, Scala or Swift: files of one package or module use each other without an import, so internal imports would read ~0. Declined components sort after measured ones; other languages keep their number"
   - 'Static imports only — dynamic dispatch (importlib.import_module, JS require(), Java Class.forName, Ruby autoload, plugin registries, etc.) is not captured by any query mode; affected files show lower fan-in than actual and may appear as false-positive entrypoints'
   - 'Supported languages: Python, JavaScript, TypeScript, Go, Rust, Java, C++, and more'
-  - 'Use --verbose for detailed import chains and file paths'
+  - 'One view per request: two (?circular&unused) exit 2 naming both; a view flag =false selects nothing'
+  - 'Use detail=full (--detail full) for every file in a cycle group and its edges'
 
 see_also:
   - 'reveal help://ast - Query code structure by complexity'
