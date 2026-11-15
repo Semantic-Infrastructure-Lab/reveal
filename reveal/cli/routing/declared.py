@@ -13,6 +13,7 @@ from typing import Any
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from ...utils.severity import CHECK_GATES
 from ...utils.path_utils import to_posix
+from ...utils.query_parser import ParamSpec
 
 
 def declared_adapter_class(name: str):
@@ -124,7 +125,7 @@ def _note_retired_flags(name: str, adapter) -> None:
             retirement_note(f'param:{name}.{param}')
 
 
-def _flag_param(spec, flag: str) -> str:
+def _flag_param(spec: ParamSpec, flag: str) -> str:
     """The declared parameter a subcommand flag spells: the alias it names, else the canonical name."""
     spelled = flag[2:]
     if spelled == spec.name:
