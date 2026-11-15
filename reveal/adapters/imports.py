@@ -224,6 +224,18 @@ def _flag(name: str, description: str) -> ParamSpec:
                      role='operation', cli=CliBinding((f'--{name}',), action='store_true'))
 
 
+def _selects(value: Any) -> bool:
+    """Whether a supplied view flag (or verbose) is on, read bound or raw: absent, False and the false
+    spellings boolean_value accepts (false, no, 0) are off, so ``?unused=false`` selects no view
+    (BACK-2620 B1). A spelling boolean_value rejects counts as on: binding rejects it under that view."""
+    if value is None:
+        return False
+    try:
+        return boolean_value(value)
+    except ValueError:
+        return True
+
+
 def _top_value(value: Any) -> int:
     if isinstance(value, bool):
         raise TypeError(value)
@@ -245,7 +257,8 @@ _VERBOSE = ParamSpec('verbose', 'boolean', 'Show everything instead of a summary
                      boolean_value, ('imports://src?circular&verbose',), role='presentation')
 
 # The declaration the `reveal imports` subcommand and the declared URI route bind (BACK-1054, D6):
-# every parameter imports:// reads. The views read presence for the flags, as the URI always did.
+# every parameter imports:// reads. A view flag selects its view when its value is on (_selects):
+# a bare ``?unused`` or ``--unused`` does, ``?unused=false`` does not.
 PARAM_SPECS: Tuple[ParamSpec, ...] = (
     _UNUSED,
     _CIRCULAR,
@@ -1444,7 +1457,8 @@ class ImportsAdapter(ResourceAdapter):
         if vars(args).get('fail_on') != 'findings':
             return
         keys = dict(peek_query_items(params))  # validating is not reading
-        if _IMPORTERS.name not in keys and any(key in keys for key in ('unused', 'circular', 'violations')):
+        if _IMPORTERS.name not in keys and any(_selects(keys.get(spec.name))
+                                               for spec in (_UNUSED, _CIRCULAR, _VIOLATIONS)):
             return
         raise RequestValidationError(
             '--fail-on findings has no verdict to gate in this view: imports gates --circular, --unused '
@@ -1492,18 +1506,16 @@ class ImportsAdapter(ResourceAdapter):
         supplied = dict(_typed_params(params).peek_items()) if not isinstance(params, str) else {}
         if 'importers' in supplied:
             return 'importer_summary'
-        for key, kind in (('unused', 'unused_imports'), ('circular', 'circular_dependencies'),
-                          ('violations', 'layer_violations')):
-            if key in supplied:
+        for spec, kind in ((_UNUSED, 'unused_imports'), (_CIRCULAR, 'circular_dependencies'),
+                           (_VIOLATIONS, 'layer_violations')):
+            if _selects(supplied.get(spec.name)):
                 return kind
         if supplied.get('rank') == 'fan-in':
             return 'fan_in_ranking'
-        if 'entrypoints' in supplied:
-            return 'entrypoints'
-        if 'components' in supplied:
-            return 'components'
-        if 'external' in supplied:
-            return 'external_packages'
+        for spec, kind in ((_ENTRYPOINTS, 'entrypoints'), (_COMPONENTS, 'components'),
+                           (_EXTERNAL, 'external_packages')):
+            if _selects(supplied.get(spec.name)):
+                return kind
         return 'imports'
 
     @classmethod
@@ -1602,7 +1614,7 @@ class ImportsAdapter(ResourceAdapter):
         if result.get('type') == 'importer_summary' and _FORMAT.read(query_params) == 'dot':
             result['_format'] = 'dot'
         # Read where the view expands: on any other view the flag is unread, and says so.
-        if result.get('type') in _VERBOSE_VIEWS and 'verbose' in query_params:
+        if result.get('type') in _VERBOSE_VIEWS and _selects(query_params.get(_VERBOSE.name)):
             result['verbose'] = True
         return result
 
@@ -1611,19 +1623,19 @@ class ImportsAdapter(ResourceAdapter):
         importers = _IMPORTERS.read(query_params)
         if importers is not None:
             result = self._format_importers(importers)
-        elif 'unused' in query_params:
+        elif _selects(query_params.get(_UNUSED.name)):
             result = self._format_unused()
-        elif 'circular' in query_params:
+        elif _selects(query_params.get(_CIRCULAR.name)):
             result = self._format_circular()
-        elif 'violations' in query_params:
+        elif _selects(query_params.get(_VIOLATIONS.name)):
             result = self._format_violations()
         elif query_params.get('rank') == 'fan-in':
             result = self._format_fan_in()
-        elif 'entrypoints' in query_params:
+        elif _selects(query_params.get(_ENTRYPOINTS.name)):
             result = self._format_entrypoints()
-        elif 'components' in query_params:
+        elif _selects(query_params.get(_COMPONENTS.name)):
             result = self._format_components()
-        elif 'external' in query_params:
+        elif _selects(query_params.get(_EXTERNAL.name)):
             result = self._format_external()
         else:
             result = self._format_all()
