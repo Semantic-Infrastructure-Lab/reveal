@@ -28,10 +28,10 @@ Examples:
 import ast
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
-from .utils import find_reveal_root, has_noqa, load_sources, parse_test_module
+from .utils import has_noqa, load_sources, parse_test_module
 from reveal.utils.lines import split_lines
 from reveal.utils.pyparse import statement_index
 
@@ -117,7 +117,6 @@ def find_windows_path_hazards(lines: List[str]) -> List[Tuple[int, str, str]]:
     return findings
 
 
-
 _PATH_CONSTRUCTORS = frozenset({'Path', 'PurePath', 'PureWindowsPath', 'PurePosixPath'})
 _PATH_METHODS = frozenset({'resolve', 'absolute', 'expanduser', 'joinpath',
                            'with_suffix', 'with_name', 'relative_to'})
@@ -154,10 +153,6 @@ def _envelope_call(expr: ast.AST, facts: Dict[str, str]) -> bool:
     builder = (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
                and func.value.id == 'ResultBuilder' and func.attr in {'create', 'create_error'})
     cli_builder = isinstance(func, ast.Name) and func.id == 'add_cli_contract_fields'
-    name = ('ResultBuilder.' + func.attr if isinstance(func, ast.Attribute)
-            else 'add_cli_contract_fields')
-    if facts.get(name) == 'native-builder':
-        return False
     if not (builder or cli_builder):
         return False
     source = next((kw.value for kw in expr.keywords if kw.arg == 'source'), None)
@@ -265,15 +260,13 @@ def _statement_scopes(tree: ast.Module) -> Tuple[
     return groups, enclosing, parents
 
 
-def find_native_output_hazards(tree: ast.Module, lines: List[str],
-                               native_builders: frozenset[str] = frozenset()) -> List[Tuple[int, str, str]]:
+def find_native_output_hazards(tree: ast.Module, lines: List[str]) -> List[Tuple[int, str, str]]:
     """Strict native-path output checks, sharing the statement index and V039 exclusions."""
     groups, enclosing, parents = _statement_scopes(tree)
     contexts: Dict[ast.AST, Dict[str, str]] = {}
     found = []
     for scope, nodes in groups.items():
-        facts = contexts[enclosing[scope]].copy() if scope in enclosing else {
-            name: 'native-builder' for name in native_builders}
+        facts = contexts[enclosing[scope]].copy() if scope in enclosing else {}
         if isinstance(scope, _FUNCTIONS):
             for arg in (*scope.args.posonlyargs, *scope.args.args, *scope.args.kwonlyargs):
                 facts[arg.arg] = 'path' if arg.arg in {'tmp_path', 'tmpdir'} else 'other'
@@ -285,56 +278,6 @@ def find_native_output_hazards(tree: ast.Module, lines: List[str],
             _bind_statement(node, facts, parents[node] is scope)
         contexts[scope] = facts
     return sorted(set(found))
-
-
-
-def _native_source_dict(node: ast.AST) -> bool:
-    value = node.value if isinstance(node, (ast.Assign, ast.AnnAssign, ast.Return)) else None
-    if not isinstance(value, ast.Dict):
-        return False
-    for key, item in zip(value.keys, value.values):
-        if isinstance(key, ast.Constant) and key.value == 'source':
-            return (isinstance(item, ast.Call) and isinstance(item.func, ast.Name)
-                    and item.func.id == 'str' and len(item.args) == 1
-                    and isinstance(item.args[0], ast.Name) and item.args[0].id == 'source')
-    return False
-
-
-def _builder_name(scope: ast.AST, enclosing: Dict[ast.AST, ast.AST]) -> Optional[str]:
-    if not isinstance(scope, _FUNCTIONS):
-        return None
-    parent = enclosing.get(scope)
-    if isinstance(parent, ast.ClassDef) and parent.name == 'ResultBuilder':
-        return 'ResultBuilder.' + scope.name
-    return scope.name if isinstance(parent, ast.Module) else None
-
-
-def _native_source_builders(rule: BaseRule) -> frozenset[str]:
-    """Honor explicit native builders in the target checkout, not today's contract.
-
-    A small test checkout without a builder implementation uses the current
-    named-builder contract. A real older checkout can explicitly contradict it.
-    No historical commit IDs, dates or version thresholds are involved.
-    """
-    root = find_reveal_root()
-    owner = root / 'utils' / 'results.py' if root else None
-    if owner is None or not owner.is_file():
-        return frozenset()
-    try:
-        source = owner.read_text(encoding='utf-8')
-    except (OSError, UnicodeDecodeError) as error:
-        rule.unavailable(f'{type(error).__name__}: {error}', 'reveal/utils/results.py')
-        return frozenset()
-    tree = parse_test_module(rule, 'reveal/utils/results.py', source)
-    if tree is None:
-        return frozenset()
-    groups, enclosing, _ = _statement_scopes(tree)
-    native: Set[str] = set()
-    for scope, nodes in groups.items():
-        name = _builder_name(scope, enclosing)
-        if name and any(_native_source_dict(node) for node in nodes):
-            native.add(name)
-    return frozenset(native)
 
 
 def _is_scanned(path: Path) -> bool:
@@ -381,14 +324,13 @@ class V039(BaseRule):
             return []
         detections: List[Detection] = []
         modules = load_sources(self, ('tests',), _is_scanned)
-        native_builders = _native_source_builders(self) if modules else frozenset()
         for display, source in modules:
             lines = split_lines(source)
             findings = find_windows_path_hazards(lines)
             if re.search(r'\bstr\s*\(', source):
                 tree = parse_test_module(self, display, source)
                 if tree is not None:
-                    findings.extend(find_native_output_hazards(tree, lines, native_builders))
+                    findings.extend(find_native_output_hazards(tree, lines))
             for lineno, pattern, line in findings:
                 if has_noqa(line, self.code):
                     continue
