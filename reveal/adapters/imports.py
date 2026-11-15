@@ -1395,6 +1395,20 @@ def _usage_rejection(result: Dict[str, Any]) -> bool:
 # slice S4: deps' gate over cycles and unused imports, on the imports views it composed).
 _FINDINGS_VIEWS = frozenset({'circular_dependencies', 'unused_imports', 'layer_violations'})
 
+# Shared controls of the one vocabulary that Imports does not take: rejected (exit 2) naming what it does
+# take, never warned and ignored (D18).
+_UNSUPPORTED_SHARED = ('offset', 'where', 'match', 'kind', 'depth', 'since', 'until')
+
+
+def _validate_request(params: Any) -> None:
+    """Reject what binding cannot: a shared control Imports does not support."""
+    unsupported = [key for key, _value in peek_query_items(params) if key in _UNSUPPORTED_SHARED]
+    if unsupported:
+        raise RequestValidationError(f'imports does not support {", ".join(unsupported)}: it has no offset, filter, walk depth '
+                         'or time window. Use limit=N (--limit N) to cap the ranking or importers=FILE (--importers '
+                         'FILE) for one file; supported controls: ' + ', '.join(spec.name for spec in PARAM_SPECS))
+
+
 # The parameters the build reads (where it resolves, under which file cap): one build, one value.
 _BUILD_KEYS = (_SCOPE.name, _ROOT.name, _SCAN_LIMIT.name)
 
@@ -1482,6 +1496,7 @@ class ImportsAdapter(ResourceAdapter):
             params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
         elif not isinstance(params, QueryParams):
             params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        _validate_request(params)
         self._query_params = params
         self.query_params = self._query_params  # the name the declared route reads (D6)
         self._warn_unknown_query_params(self._query_params)  # BACK-507
@@ -1586,6 +1601,7 @@ class ImportsAdapter(ResourceAdapter):
         counts (``&lazy``, ``&tests``, ``&top``...); a parameter that would change the build
         (``&scope``, ``&root``, ``&scan-limit``) must equal the built one, else ValueError."""
         params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
+        _validate_request(params)
         self._warn_unknown_query_params(params)
         changed = [key for key in _BUILD_KEYS
                    if dict(params.peek_items()).get(key) != dict(self._query_params.peek_items()).get(key)]
