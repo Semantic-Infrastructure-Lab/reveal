@@ -235,23 +235,31 @@ _VERBOSE_VIEWS = frozenset({'unused_imports', 'circular_dependencies', 'layer_vi
                            'module_importers', 'importer_summary', 'external_packages'})
 
 
+_UNUSED = _flag('unused', 'Find unused imports')
+_CIRCULAR = _flag('circular', 'Detect circular dependencies (load-time edges unless &lazy says otherwise)')
+_VIOLATIONS = _flag('violations', 'Check layer violations (requires .reveal.yaml layers)')
+_ENTRYPOINTS = _flag('entrypoints', 'Files with fan-in 0 (entry points, scripts or dead code)')
+_COMPONENTS = _flag('components', 'Score each directory as a component')
+_EXTERNAL = _flag('external', 'Package table: unresolved (third-party or unresolved-local) and stdlib packages by use')
+_VERBOSE = ParamSpec('verbose', 'boolean', 'Show everything instead of a summary (same as --verbose)', False,
+                     boolean_value, ('imports://src?circular&verbose',), role='presentation')
+
 # The declaration the `reveal imports` subcommand and the declared URI route bind (BACK-1054, D6):
 # every parameter imports:// reads. The views read presence for the flags, as the URI always did.
 PARAM_SPECS: Tuple[ParamSpec, ...] = (
-    _flag('unused', 'Find unused imports'),
-    _flag('circular', 'Detect circular dependencies (load-time edges unless &lazy says otherwise)'),
-    _flag('violations', 'Check layer violations (requires .reveal.yaml layers)'),
+    _UNUSED,
+    _CIRCULAR,
+    _VIOLATIONS,
     ParamSpec('rank', 'string', 'Rank files by fan-in (one value: fan-in)', None, _choice_value,
               ('imports://src?rank=fan-in',), choices=('fan-in',), role='operation',
               cli=CliBinding(('--rank',), metavar='fan-in')),
     ParamSpec('top', 'integer', 'Limit ?rank rows (default: all)', None, _top_value,
               ('imports://src?rank=fan-in&top=20',), minimum=0, role='analysis',  # the adapter cuts the rows
               cli=CliBinding(('--top', '--limit'), metavar='N')),
-    _flag('entrypoints', 'Files with fan-in 0 (entry points, scripts or dead code)'),
-    _flag('components', 'Score each directory as a component'),
-    _flag('external', 'Package table: unresolved (third-party or unresolved-local) and stdlib packages by use'),
-    ParamSpec('verbose', 'boolean', 'Show everything instead of a summary (same as --verbose)', False,
-              boolean_value, ('imports://src?circular&verbose',), role='presentation'),
+    _ENTRYPOINTS,
+    _COMPONENTS,
+    _EXTERNAL,
+    _VERBOSE,
     *(ParamSpec(spec.name, spec.type, spec.description, spec.default, spec.convert, spec.examples,
                 minimum=spec.minimum, choices=spec.choices, role='analysis',
                 cli=CliBinding((f'--{spec.name.replace("_", "-")}',), dest=spec.name,
