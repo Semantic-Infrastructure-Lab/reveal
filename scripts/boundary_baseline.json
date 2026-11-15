@@ -11,7 +11,6 @@
   "reveal/adapters/domain/adapter.py": 1,
   "reveal/adapters/git/adapter.py": 1,
   "reveal/adapters/help.py": 1,
-  "reveal/adapters/imports.py": 1,
   "reveal/adapters/json/adapter.py": 1,
   "reveal/adapters/markdown/adapter.py": 1,
   "reveal/adapters/mysql/adapter.py": 1,

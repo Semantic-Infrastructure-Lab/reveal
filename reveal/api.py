@@ -197,7 +197,8 @@ def query(
             AST accepts where (a string or list of ANDed expressions), kind, view,
             builtins, reveal-type, sort, limit and offset, using the existing AST parser.
             Calls accepts its declared mode and analysis/presentation controls; mode
-            validation uses the effective URI plus typed overrides.
+            validation uses the effective URI plus typed overrides. Imports accepts its
+            declared view modes and analysis/presentation controls (False is not selected).
             Trace requires a valid URI from selector first; use dictionary expansion
             for its canonical from keyword. Explicit values override
             validated URI controls; None selects the declared default.

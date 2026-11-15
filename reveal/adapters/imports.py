@@ -1424,6 +1424,9 @@ class ImportsAdapter(ResourceAdapter):
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     PARAM_SPECS = PARAM_SPECS
+    # api.query binds typed keywords through PARAM_SPECS like the URI query (BACK-2620): a declared
+    # keyword answers as its URI spelling does, an undeclared one raises TypeError.
+    BOUND_QUERY_CALL = True
 
     @staticmethod
     def validate_request(params, args):
@@ -1523,11 +1526,8 @@ class ImportsAdapter(ResourceAdapter):
         findings = result.get('type') in _FINDINGS_VIEWS and bool(result.get('count'))
         return result_execution_facts(result, completeness=state, findings=findings)
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
-        """Analyze imports in directory or file.
-
-        Args:
-            **kwargs: Additional parameters (unused, circular, violations flags)
+    def get_structure(self) -> Dict[str, Any]:
+        """Analyze imports in directory or file: the view the constructor-bound parameters select.
 
         Returns:
             Dictionary with import analysis results
@@ -1541,7 +1541,7 @@ class ImportsAdapter(ResourceAdapter):
 
         # Extract imports and build graph
         self._build_graph(target_path)
-        return self._present(query_params, kwargs)
+        return self._present(query_params)
 
     def analyze(self) -> ImportAnalysis:
         """Build the graph this request resolves (its root, file cap and extension family) and return
@@ -1583,31 +1583,31 @@ class ImportsAdapter(ResourceAdapter):
         if self.analysis.graph is None:
             raise ValueError('get_view reads the graph get_structure() builds, and none was built')
         self._query_params = self.query_params = params
-        return self._present(params, {})
+        return self._present(params)
 
-    def _present(self, query_params: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def _present(self, query_params: Any) -> Dict[str, Any]:
         """The answer the query asks for, from the built graph, with paths as the request spelled them."""
         target_path = self._target_path or Path('.').resolve()
-        result = self._format_view(query_params, kwargs)
+        result = self._format_view(query_params)
         _relativize_imports_paths(result, target_path, self._scan.root if self._scan else None)
         # Read where the view draws: on any other view the key is unread, and says so.
         if result.get('type') == 'importer_summary' and _FORMAT.read(query_params) == 'dot':
             result['_format'] = 'dot'
         # Read where the view expands: on any other view the flag is unread, and says so.
-        if result.get('type') in _VERBOSE_VIEWS and ('verbose' in query_params or kwargs.get('verbose', False)):
+        if result.get('type') in _VERBOSE_VIEWS and 'verbose' in query_params:
             result['verbose'] = True
         return result
 
-    def _format_view(self, query_params: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_view(self, query_params: Any) -> Dict[str, Any]:
         """The one view the query asks for, in precedence order (?importers first, BACK-1054)."""
         importers = _IMPORTERS.read(query_params)
         if importers is not None:
             result = self._format_importers(importers)
-        elif 'unused' in query_params or kwargs.get('unused'):
+        elif 'unused' in query_params:
             result = self._format_unused()
-        elif 'circular' in query_params or kwargs.get('circular'):
+        elif 'circular' in query_params:
             result = self._format_circular()
-        elif 'violations' in query_params or kwargs.get('violations'):
+        elif 'violations' in query_params:
             result = self._format_violations()
         elif query_params.get('rank') == 'fan-in':
             result = self._format_fan_in()
