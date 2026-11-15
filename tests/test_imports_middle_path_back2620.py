@@ -473,6 +473,18 @@ class TestProposedChanges:
         assert actual['meta']['scan_budget']['capped'] is True, 'scan-limit=3 must cut the walk'
         assert_equal_answer(actual, expected)
 
+    def test_scan_capped_warning_names_the_canonical_control(self, project):
+        """The scan_capped warning names the control to raise, scan-limit, whichever spelling cut the walk
+        (manager decision 2026-11-14; a Behavior-changes CHANGELOG line)."""
+        for controls in ('scan-limit=3', 'max_files=3'):
+            result, answer = cli_json(uri(project, f'sort=-fan-in&{controls}'))
+            assert result.returncode == 3, result.stderr
+            capped = [w for w in answer['meta']['warnings'] if w['type'] == 'scan_capped']
+            assert [w['field'] for w in capped] == ['scan-limit'], capped
+            assert 'scan-limit' in capped[0]['message']
+        api = query(uri(project, 'sort=-fan-in'), **{'scan-limit': 3})
+        assert [w['field'] for w in api['meta']['warnings'] if w['type'] == 'scan_capped'] == ['scan-limit']
+
     @pytest.mark.parametrize('value', ['0', '-1'])
     def test_canonical_scan_limit_zero_and_negative_reject(self, project, value):
         for result, answer in (cli_json('imports', str(project), '--rank', 'fan-in', '--scan-limit', value),
