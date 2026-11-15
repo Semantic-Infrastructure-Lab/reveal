@@ -17,17 +17,23 @@ This is ``scripts/check_windows_compat.py`` (BACK-1470) moved into the V-series
 Suppress a false positive with ``# noqa: win-path`` (the spelling the repo already
 uses) or ``# noqa: V039`` on the line.
 
+BACK-2590 also checks locally proven native Path expectations in envelope source
+and stderr assertions. These AST checks are strict; explicit string sources,
+negative leakage guards and native stdout expectations remain valid.
+
 Examples:
     reveal reveal:// --check --select V039
 """
 
+import ast
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
-from .utils import has_noqa, load_sources
+from .utils import find_reveal_root, has_noqa, load_sources, parse_test_module
 from reveal.utils.lines import split_lines
+from reveal.utils.pyparse import statement_index
 
 # Test files whose path assertions are intentionally POSIX data content
 # (nginx configs, SSL certs, ZIP archives, URI specs -- never filesystem paths):
@@ -76,6 +82,10 @@ RE_PATH_SPLIT = re.compile(
 )
 
 _LABELS = {
+    'native-source': ("Native Path spelling in an envelope source assertion",
+                      "compare Path sources with .as_posix(); explicitly supplied string sources keep their spelling"),
+    'native-stderr': ("Native Path spelling in a stderr containment assertion",
+                      "compare path parts (directory component and filename); OSError repr doubles Windows backslashes"),
     'posix-literal': ("POSIX path literal in assertion",
                       "use native('/...') from tests/conftest.py"),
     'path-split-on-slash': ("path split on '/' (backslashes on Windows)",
@@ -107,6 +117,226 @@ def find_windows_path_hazards(lines: List[str]) -> List[Tuple[int, str, str]]:
     return findings
 
 
+
+_PATH_CONSTRUCTORS = frozenset({'Path', 'PurePath', 'PureWindowsPath', 'PurePosixPath'})
+_PATH_METHODS = frozenset({'resolve', 'absolute', 'expanduser', 'joinpath',
+                           'with_suffix', 'with_name', 'relative_to'})
+_FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
+_SCOPES = (*_FUNCTIONS, ast.ClassDef)
+
+
+def _path_constructor(expr: ast.AST, facts: Dict[str, str]) -> bool:
+    if isinstance(expr, ast.Name):
+        return facts.get(expr.id) == 'constructor'
+    return (isinstance(expr, ast.Attribute) and expr.attr in _PATH_CONSTRUCTORS
+            and isinstance(expr.value, ast.Name) and facts.get(expr.value.id) == 'pathlib')
+
+
+def _is_path(expr: Optional[ast.AST], facts: Dict[str, str]) -> bool:
+    """Bounded local Path proof, not a variable-name heuristic or fixture inference."""
+    if isinstance(expr, ast.Name):
+        return facts.get(expr.id) == 'path'
+    if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Div):
+        return _is_path(expr.left, facts)
+    if isinstance(expr, ast.Attribute) and expr.attr == 'parent':
+        return _is_path(expr.value, facts)
+    if isinstance(expr, ast.Call):
+        return (_path_constructor(expr.func, facts)
+                or (isinstance(expr.func, ast.Attribute) and expr.func.attr in _PATH_METHODS
+                    and _is_path(expr.func.value, facts)))
+    return False
+
+
+def _envelope_call(expr: ast.AST, facts: Dict[str, str]) -> bool:
+    if not isinstance(expr, ast.Call):
+        return False
+    func = expr.func
+    builder = (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
+               and func.value.id == 'ResultBuilder' and func.attr in {'create', 'create_error'})
+    cli_builder = isinstance(func, ast.Name) and func.id == 'add_cli_contract_fields'
+    name = ('ResultBuilder.' + func.attr if isinstance(func, ast.Attribute)
+            else 'add_cli_contract_fields')
+    if facts.get(name) == 'native-builder':
+        return False
+    if not (builder or cli_builder):
+        return False
+    source = next((kw.value for kw in expr.keywords if kw.arg == 'source'), None)
+    if source is None and builder and len(expr.args) > 1:
+        source = expr.args[1]
+    # A string source is deliberately kept as given, including str(Path).
+    return _is_path(source, facts)
+
+
+def _bind_target(target: ast.AST, value: Optional[ast.AST], facts: Dict[str, str]) -> None:
+    if isinstance(target, ast.Name):
+        kind = 'path' if _is_path(value, facts) else 'other'
+        if value is not None and _envelope_call(value, facts):
+            kind = 'envelope'
+        facts[target.id] = kind
+    elif isinstance(target, (ast.Tuple, ast.List)):
+        values = value.elts if isinstance(value, (ast.Tuple, ast.List)) else []
+        for index, item in enumerate(target.elts):
+            _bind_target(item, values[index] if index < len(values) else None, facts)
+
+
+def _bind_import(node: ast.AST, facts: Dict[str, str], direct: bool) -> None:
+    """Recognize pathlib constructor aliases in this lexical scope."""
+    if isinstance(node, ast.ImportFrom) and node.module == 'pathlib':
+        for alias in node.names:
+            facts[alias.asname or alias.name] = (
+                'constructor' if direct and alias.name in _PATH_CONSTRUCTORS else 'other')
+    elif isinstance(node, ast.Import):
+        for alias in node.names:
+            facts[alias.asname or alias.name] = 'pathlib' if direct and alias.name == 'pathlib' else 'other'
+
+
+def _bind_statement(node: ast.AST, facts: Dict[str, str], direct: bool) -> None:
+    """Forget reassigned values; conditional assignments do not establish a proof."""
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        _bind_import(node, facts, direct)
+    elif isinstance(node, ast.Assign):
+        for target in node.targets:
+            _bind_target(target, node.value if direct else None, facts)
+    elif isinstance(node, ast.AnnAssign):
+        _bind_target(node.target, node.value if direct else None, facts)
+    elif isinstance(node, ast.AugAssign):
+        _bind_target(node.target, None, facts)
+    elif isinstance(node, _SCOPES):
+        facts[node.name] = 'other'
+
+
+def _assertion_pairs(node: ast.AST) -> Iterator[Tuple[ast.cmpop, ast.expr, ast.expr]]:
+    """Only the assertion's expressions: no additional whole-file AST traversal."""
+    if isinstance(node, ast.Assert):
+        value = node.test
+        if isinstance(value, ast.Compare):
+            parts = [value.left, *value.comparators]
+            yield from zip(value.ops, parts, parts[1:])
+        elif isinstance(value, ast.BoolOp):
+            for part in value.values:
+                yield from _assertion_pairs(ast.Assert(test=part))
+    elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+        call = node.value
+        if isinstance(call.func, ast.Attribute) and len(call.args) >= 2:
+            operations = {'assertEqual': ast.Eq, 'assertIn': ast.In}
+            op = operations.get(call.func.attr)
+            if op is not None:
+                yield op(), call.args[0], call.args[1]
+
+
+def _native_path(expr: ast.AST, facts: Dict[str, str]) -> bool:
+    return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+            and expr.func.id == 'str' and 'str' not in facts and len(expr.args) == 1
+            and _is_path(expr.args[0], facts))
+
+
+def _source_field(expr: ast.AST, facts: Dict[str, str]) -> bool:
+    return (isinstance(expr, ast.Subscript) and isinstance(expr.value, ast.Name)
+            and facts.get(expr.value.id) == 'envelope' and isinstance(expr.slice, ast.Constant)
+            and expr.slice.value == 'source')
+
+
+def _native_assertions(node: ast.AST, facts: Dict[str, str]) -> Iterator[Tuple[int, str]]:
+    for op, left, right in _assertion_pairs(node):
+        if isinstance(op, ast.In) and _native_path(left, facts):
+            if isinstance(right, ast.Attribute) and right.attr == 'stderr':
+                yield left.lineno, 'native-stderr'
+        elif isinstance(op, ast.Eq):
+            for native, output in ((left, right), (right, left)):
+                if _native_path(native, facts) and _source_field(output, facts):
+                    yield native.lineno, 'native-source'
+
+
+def _statement_scopes(tree: ast.Module) -> Tuple[
+    Dict[ast.AST, List[ast.AST]], Dict[ast.AST, ast.AST], Dict[ast.AST, ast.AST]
+]:
+    nodes, parents = statement_index(tree)
+    owners: Dict[ast.AST, ast.AST] = {tree: tree}
+    groups: Dict[ast.AST, List[ast.AST]] = {tree: []}
+    enclosing: Dict[ast.AST, ast.AST] = {}
+    for node in nodes:
+        owner = owners[parents[node]]
+        groups[owner].append(node)
+        owners[node] = owner
+        if isinstance(node, _SCOPES):
+            enclosing[node] = owner
+            owners[node] = node
+            groups[node] = []
+    return groups, enclosing, parents
+
+
+def find_native_output_hazards(tree: ast.Module, lines: List[str],
+                               native_builders: frozenset[str] = frozenset()) -> List[Tuple[int, str, str]]:
+    """Strict native-path output checks, sharing the statement index and V039 exclusions."""
+    groups, enclosing, parents = _statement_scopes(tree)
+    contexts: Dict[ast.AST, Dict[str, str]] = {}
+    found = []
+    for scope, nodes in groups.items():
+        facts = contexts[enclosing[scope]].copy() if scope in enclosing else {
+            name: 'native-builder' for name in native_builders}
+        if isinstance(scope, _FUNCTIONS):
+            for arg in (*scope.args.posonlyargs, *scope.args.args, *scope.args.kwonlyargs):
+                facts[arg.arg] = 'path' if arg.arg in {'tmp_path', 'tmpdir'} else 'other'
+        for node in sorted(nodes, key=lambda item: (getattr(item, 'lineno', 0), getattr(item, 'col_offset', 0))):
+            for lineno, pattern in _native_assertions(node, facts):
+                line = lines[lineno - 1]
+                if not (has_noqa(line, 'V039') or has_noqa(line, 'win-path')):
+                    found.append((lineno, pattern, line.rstrip()))
+            _bind_statement(node, facts, parents[node] is scope)
+        contexts[scope] = facts
+    return sorted(set(found))
+
+
+
+def _native_source_dict(node: ast.AST) -> bool:
+    value = node.value if isinstance(node, (ast.Assign, ast.AnnAssign, ast.Return)) else None
+    if not isinstance(value, ast.Dict):
+        return False
+    for key, item in zip(value.keys, value.values):
+        if isinstance(key, ast.Constant) and key.value == 'source':
+            return (isinstance(item, ast.Call) and isinstance(item.func, ast.Name)
+                    and item.func.id == 'str' and len(item.args) == 1
+                    and isinstance(item.args[0], ast.Name) and item.args[0].id == 'source')
+    return False
+
+
+def _builder_name(scope: ast.AST, enclosing: Dict[ast.AST, ast.AST]) -> Optional[str]:
+    if not isinstance(scope, _FUNCTIONS):
+        return None
+    parent = enclosing.get(scope)
+    if isinstance(parent, ast.ClassDef) and parent.name == 'ResultBuilder':
+        return 'ResultBuilder.' + scope.name
+    return scope.name if isinstance(parent, ast.Module) else None
+
+
+def _native_source_builders(rule: BaseRule) -> frozenset[str]:
+    """Honor explicit native builders in the target checkout, not today's contract.
+
+    A small test checkout without a builder implementation uses the current
+    named-builder contract. A real older checkout can explicitly contradict it.
+    No historical commit IDs, dates or version thresholds are involved.
+    """
+    root = find_reveal_root()
+    owner = root / 'utils' / 'results.py' if root else None
+    if owner is None or not owner.is_file():
+        return frozenset()
+    try:
+        source = owner.read_text(encoding='utf-8')
+    except (OSError, UnicodeDecodeError) as error:
+        rule.unavailable(f'{type(error).__name__}: {error}', 'reveal/utils/results.py')
+        return frozenset()
+    tree = parse_test_module(rule, 'reveal/utils/results.py', source)
+    if tree is None:
+        return frozenset()
+    groups, enclosing, _ = _statement_scopes(tree)
+    native: Set[str] = set()
+    for scope, nodes in groups.items():
+        name = _builder_name(scope, enclosing)
+        if name and any(_native_source_dict(node) for node in nodes):
+            native.add(name)
+    return frozenset(native)
+
+
 def _is_scanned(path: Path) -> bool:
     return (path.name.startswith('test_') and path.suffix == '.py'
             and path.name not in SAFE_FILES)
@@ -122,10 +352,15 @@ class V039(BaseRule):
     - ``.path = Path('/fake/...')`` on a mock
     - an ``assert`` line holding a ``/fake``/``/tmp``/``/home``/``/var``/``/src``/``/usr`` path literal
     - ``x['file'].rsplit('/', 1)`` style basename extraction
+    - native Path expectations about known envelope sources or positive stderr containment
 
     Passes:
     - ``native('/...')``, ``str(Path(...))``, ``.as_posix()``, URLs, Path-to-Path comparisons
+    - explicit string-source echoes, negative leakage guards and native stdout
     - ``# noqa: win-path`` (or ``# noqa: V039``) lines and the POSIX-data test files
+
+    The legacy literal check's str(Path(...)) exemption does not exempt a native
+    Path expectation about an envelope source from the new AST check.
     """
 
     code = "V039"
@@ -145,8 +380,16 @@ class V039(BaseRule):
         if not file_path.startswith('reveal://'):
             return []
         detections: List[Detection] = []
-        for display, source in load_sources(self, ('tests',), _is_scanned):
-            for lineno, pattern, line in find_windows_path_hazards(split_lines(source)):
+        modules = load_sources(self, ('tests',), _is_scanned)
+        native_builders = _native_source_builders(self) if modules else frozenset()
+        for display, source in modules:
+            lines = split_lines(source)
+            findings = find_windows_path_hazards(lines)
+            if re.search(r'\bstr\s*\(', source):
+                tree = parse_test_module(self, display, source)
+                if tree is not None:
+                    findings.extend(find_native_output_hazards(tree, lines, native_builders))
+            for lineno, pattern, line in findings:
                 if has_noqa(line, self.code):
                     continue
                 label, advice = _LABELS[pattern]
