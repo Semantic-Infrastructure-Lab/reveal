@@ -280,7 +280,7 @@ PARAM_SPECS: Tuple[ParamSpec, ...] = (
       for spec in _REQUEST_SPECS if spec is not _IMPORTERS),
     ParamSpec(_IMPORTERS.name, _IMPORTERS.type, _IMPORTERS.description, None, _IMPORTERS.convert,
               _IMPORTERS.examples, role='operation', names=_IMPORTERS.names,
-              cli=CliBinding(('--importers',), nargs='?', metavar='FILE')),
+              cli=CliBinding(('--importers',), nargs='?', const=True, metavar='FILE')),
     _FORMAT,
 )
 _FLAG_NAMES = frozenset(spec.name for spec in PARAM_SPECS if spec.type == 'boolean')
@@ -1355,16 +1355,14 @@ def _relativize_imports_paths(result: Dict[str, Any], base_path: Path, scan_root
 
 
 def _typed_params(params: Any) -> QueryParams:
-    """Typed (subcommand) parameters as the URI spells them: an unset flag or option is absent, a
-    set flag is present (the views read presence), a bare ``--importers`` (argparse's ``None`` for
-    ``nargs='?'``) is ``?importers``."""
+    """Typed (subcommand) parameters as the URI spells them: an unset flag or option (False or None,
+    the declared default) is absent and a set flag is True. A bare ``--importers`` binds True
+    (its CliBinding const), as a bare ``?importers`` does."""
     items = list(params.peek_items() if isinstance(params, QueryParams) else dict(params).items())
     if isinstance(params, QueryParams) and not any(v is None or v is False for _k, v in items):
         return params
     typed = QueryParams()
     for key, value in items:
-        if value is None and key == _IMPORTERS.name:
-            value = True
         if value is None or value is False:
             continue
         typed[key] = True if key in _FLAG_NAMES else value
