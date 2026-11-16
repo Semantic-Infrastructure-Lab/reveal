@@ -124,11 +124,21 @@ def test_callers_subcommand_flag_equals_the_uri(project):
     assert cli_json == uri_json
 
 
-@pytest.mark.parametrize('query', ['callers=helper&target=helper', 'callers=helper&callees=main'])
-def test_callers_is_one_mode_selector(project, query):
-    result, answer = jrun(f'calls://proj?{query}')
+def test_callers_is_one_mode_selector(project):
+    result, answer = jrun('calls://proj?callers=helper&callees=main')
     assert result.returncode == 2, result.stderr
     assert 'one answer per request' in answer['error'] and 'callers' in answer['error']  # BACK-2654 rule 17
+
+
+def test_target_is_callers_given_twice(project):
+    """BACK-2654 rule 16: target translates to callers (the same answer), so beside an equal callers it is one value
+    given twice (accepted once, noted) and beside a different one a conflict naming both (it was a second mode)."""
+    once, answer = jrun('calls://proj?callers=helper&target=helper')
+    alone, expected = jrun('calls://proj?callers=helper')
+    assert once.returncode == alone.returncode == 0
+    assert answer['total_callers'] == expected['total_callers'] and answer['target'] == expected['target']
+    clash, rejected = jrun('calls://proj?callers=helper&target=main')
+    assert clash.returncode == 2 and 'callers' in rejected['error'] and 'target' in rejected['error']
 
 
 @pytest.mark.parametrize('query', ['callers=app.py:helper', 'target=app.py:helper'])

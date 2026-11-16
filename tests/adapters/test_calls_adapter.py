@@ -1421,7 +1421,7 @@ class TestCallsAdapterColonSyntax(unittest.TestCase):
     def test_colon_syntax_extracts_target(self):
         """'path:target' sets target= in query_params and strips element from path."""
         adapter = CallsAdapter(f"{self.tmpdir}:helper")
-        self.assertEqual(adapter.query_params.get('target'), 'helper')
+        self.assertEqual(adapter.query_params.get('callers'), 'helper')  # target binds as callers, its legacy word (BACK-2654)
         self.assertEqual(adapter.path, self.tmpdir)
 
     def test_colon_syntax_finds_callers(self):
@@ -1441,7 +1441,7 @@ class TestCallsAdapterColonSyntax(unittest.TestCase):
         """path:name is the callers mode: with an explicit ?target= it is a second mode, a usage
         answer (exit 2), where it used to let ?target= win and drop :helper silently (BACK-2102)."""
         adapter = CallsAdapter(f"{self.tmpdir}:helper", 'target=caller_a')
-        self.assertEqual(adapter.query_params.get('target'), 'caller_a')  # :helper is not applied
+        self.assertEqual(adapter.query_params.get('callers'), 'caller_a')  # :helper is not applied
         result = adapter.get_structure()
         self.assertIn('one mode per request', result['error'])
         self.assertEqual([e['code'] for e in result['meta']['errors']], ['invalid_request'])
@@ -1450,7 +1450,7 @@ class TestCallsAdapterColonSyntax(unittest.TestCase):
         """Paths without ':' are not modified."""
         adapter = CallsAdapter(self.tmpdir, 'target=helper')
         self.assertEqual(adapter.path, self.tmpdir)
-        self.assertEqual(adapter.query_params.get('target'), 'helper')
+        self.assertEqual(adapter.query_params.get('callers'), 'helper')  # target binds as callers, its legacy word (BACK-2654)
 
 
 class TestCallsRendererMissingTarget(unittest.TestCase):

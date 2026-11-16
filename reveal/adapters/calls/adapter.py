@@ -21,6 +21,7 @@ Limitations (static analysis):
 import os
 import sys
 from pathlib import Path
+from dataclasses import replace
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealResult, WarningEntry
 
@@ -98,8 +99,8 @@ def _flag_spec(name: str, description: str, role: str = 'analysis', dest: Option
 _CALLERS = _name_spec('callers', 'Function name to find callers of (reverse lookup): a bare NAME, since the '
                       'callers index has no file filter (FILE:NAME exits 2); calls://<path>:<name> is shorthand '
                       'when no mode is given', 'callers=validate_item')
-_TARGET = _name_spec('target', 'Retired name of callers=: the same mode and answer, with a replaced-by note',
-                     'target=validate_item')
+# target is callers' older word: the same mode and answer (the parity probe proves it), noted (BACK-2654).
+_CALLERS = replace(_CALLERS, legacy=(LegacySpelling('target', flag='--target'),))
 _CALLEES = _name_spec('callees', 'Function name, or FILE:NAME for one file\'s definitions, to find callees of: '
                       'at depth 1 what every definition calls (matches); at depth 2-5 a level-by-level walk '
                       '(levels, definitions), each definition expanded once at its shallowest level, every call '
@@ -148,17 +149,16 @@ _FORMAT = ParamSpec('format', 'string', 'URI output override: text, json or dot 
                     role='presentation')
 
 _RESOURCE = ResourceSpec(uri_codec='existing-path-first')
-_PARAM_SPECS = (_CALLERS, _TARGET, _CALLEES, _ROOT, _DEPTH, _DETAIL, _RANK, _TOP, _UNCALLED, _TYPE, _MODULES,
+_PARAM_SPECS = (_CALLERS, _CALLEES, _ROOT, _DEPTH, _DETAIL, _RANK, _TOP, _UNCALLED, _TYPE, _MODULES,
                 _EXTERNAL, _BUILTINS, _TEST_FRAMEWORK, _FORMAT)
 
-# The mode selectors: exactly one per request. The order is the one messages name them in;
-# target is callers under its older name, and naming both is two selectors too.
-_MODES = ('callers', 'target', 'callees', 'root', 'rank', 'uncalled', 'modules')
+# The mode selectors: exactly one per request. The order is the one messages name them in; target binds as
+# callers (a legacy word), so naming both is one mode given twice.
+_MODES = ('callers', 'callees', 'root', 'rank', 'uncalled', 'modules')
 # The result type each mode answers with. A rejected request with several modes is typed by the
 # first of them in this order, the precedence get_structure applied before modes were exclusive.
 _MODE_TYPES = {'modules': 'calls_module_graph', 'rank': 'calls_ranking', 'uncalled': 'calls_uncalled',
-               'root': 'calls_callees_recursive', 'callees': 'calls_callees', 'target': 'calls_query',
-               'callers': 'calls_query'}
+               'root': 'calls_callees_recursive', 'callees': 'calls_callees', 'callers': 'calls_query'}
 _MISSING_MODE = ('Missing required parameter: callers=<name> (or target=<name>), callees=<name>, root=<name>, '
                  'rank=callers, uncalled or modules')
 _PRESENCE_FLAGS = ('uncalled', 'modules', 'detail')
@@ -663,7 +663,7 @@ class CallsAdapter(ResourceAdapter):
         # path:name is the callers mode: with an explicit mode it is a second one (BACK-2102).
         self._shorthand_conflict = resource if name and _selected_modes(self.query_params) else None
         if name and not self._shorthand_conflict:
-            self.query_params.set_normalized(_TARGET, _TARGET.validate(name))
+            self.query_params.set_normalized(_CALLERS, _CALLERS.validate(name))
         self.path = path
 
     @staticmethod
@@ -683,7 +683,7 @@ class CallsAdapter(ResourceAdapter):
         if unsupported:
             raise ValueError(f'Calls does not support {", ".join(unsupported)}; no equivalent filter is available. '
                              'Use --callers NAME (callers=NAME) for a supported per-symbol lookup.')
-        for key in ('callers', 'target'):
+        for key in ('callers',):
             value = supplied.get(key)
             if isinstance(value, str) and _split_root(value)[0]:
                 raise ValueError(f'{key}={value}: callers takes a bare NAME, not FILE:NAME; the callers index '
@@ -702,7 +702,7 @@ class CallsAdapter(ResourceAdapter):
         from ...utils.results import AnalysisCompleteness, FailureCause
         supplied = dict(peek_query_items(self.query_params))
         kind = result['type']
-        requested = {'calls_query': ('target', ('callers', 'target'), 1), 'calls_callees': ('target', ('callees',), 1),
+        requested = {'calls_query': ('target', ('callers',), 1), 'calls_callees': ('target', ('callees',), 1),
                      'calls_callees_recursive': ('root', ('root',), 2)}.get(kind)
         if requested is not None:
             field, keys, depth = requested
@@ -783,8 +783,8 @@ class CallsAdapter(ResourceAdapter):
         self.validate_request(self.query_params)
         params = self.query_params
         # Every mode key is read here, whichever mode answers: the flag ledger counts each as applied.
-        callers, target, callees_target, root, rank = (spec.read(params) or ''
-                                                       for spec in (_CALLERS, _TARGET, _CALLEES, _ROOT, _RANK))
+        callers, callees_target, root, rank = (spec.read(params) or ''
+                                               for spec in (_CALLERS, _CALLEES, _ROOT, _RANK))
         uncalled, modules, detail = _UNCALLED.read(params), _MODULES.read(params), _DETAIL.read(params)
         if self._shorthand_conflict:
             return self._usage(f'calls://{self._shorthand_conflict} is shorthand for callers=NAME, so with '
@@ -797,13 +797,13 @@ class CallsAdapter(ResourceAdapter):
             return self._uncalled()
         if root:
             return self._callee_walk(root)
-        if not (callers or target) and not callees_target:
+        if not callers and not callees_target:
             return self._usage(_MISSING_MODE)
         query_format = _FORMAT.read(params) or ''
         self._warn_top_ignored()
         if callees_target:
             return self._callees(callees_target, query_format, detail)
-        return self._callers(callers or target, query_format)
+        return self._callers(callers, query_format)
 
     def _answer(self, result_type: str, data: Dict[str, Any], *, query_format: str = '',
                 uncalled: bool = False, unmeasured_walk: bool = False,
