@@ -7,6 +7,7 @@ prints the replaced-by note from the RETIREMENTS table until the cut (D5).
 """
 
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, cast
 from reveal.reveal_types import CONTRACT_VERSION
@@ -21,7 +22,7 @@ from ...utils.query import (
 from ...utils.query_control import sort_failed_warning, sort_nulls_last
 from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_parser import (
-    CliBinding, ParamSpec, QueryParams, ResourceSpec, filter_expression, nonnegative_display_limit,
+    CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, nonnegative_display_limit,
     param_schema, peek_query_items, split_exclude_param, whole_number,
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
@@ -110,6 +111,19 @@ def _text(name: str):
     return convert
 
 
+def _iso_date(name: str):
+    """A churn-window start: an ISO date (or timestamp) in the form the churn walk parses (BACK-2621).
+    A value it cannot parse was a churn_unavailable warning and exit 0; it is an invalid request."""
+    def convert(value: Any) -> str:
+        text = _text(name)(value)
+        try:
+            datetime.fromisoformat(text)
+        except ValueError:
+            raise ParamValueError(f'{name} must be an ISO date (YYYY-MM-DD), got {text!r}') from None
+        return text
+    return convert
+
+
 def _display_count(name: str):
     def convert(value: Any) -> int:
         if isinstance(value, bool):
@@ -154,7 +168,7 @@ _CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into hotspot sc
                    True, boolean_value, ('churn=false',), role='analysis',
                    cli=CliBinding(('--no-churn',), action='store_false'))
 _SINCE = ParamSpec('since', 'string', 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.',
-                   None, _text('since'), ('since=2026-01-01',), role='analysis',
+                   None, _iso_date('since'), ('since=2026-01-01',), role='analysis',
                    cli=CliBinding(('--since',), metavar='DATE'))
 _NO_MERGES = ParamSpec('no_merges', 'boolean', 'Exclude merge commits from the churn tally', False,
                        boolean_value, ('no_merges=1',), role='analysis',
