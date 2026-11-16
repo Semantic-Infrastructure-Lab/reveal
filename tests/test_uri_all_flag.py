@@ -45,9 +45,13 @@ def test_all_injects_fragment():
         == 'src?functions_only=true&top=1000000'
 
 
-def test_explicit_uri_value_wins():
-    assert inject_query_flags('src?top=3', 'hotspots', _args(all=True)) == 'src?top=3'
-    assert inject_query_flags('src?a=1&top=3', 'hotspots', _args(all=True)) == 'src?a=1&top=3'
+def test_an_explicit_uri_value_and_all_conflict():
+    """BACK-2654 rule 1: --all sets top, so beside a different ?top= it is invalid (the URI used to win)."""
+    from reveal.errors import RequestValidationError
+    for uri in ('src?top=3', 'src?a=1&top=3'):
+        with pytest.raises(RequestValidationError, match='--all conflicts with top=3'):
+            inject_query_flags(uri, 'hotspots', _args(all=True))
+    assert inject_query_flags('src?top=1000000', 'hotspots', _args(all=True)) == 'src?top=1000000'
 
 
 def test_key_match_is_exact_not_substring():

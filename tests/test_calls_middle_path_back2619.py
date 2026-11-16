@@ -135,10 +135,12 @@ class TestPreservation:
 
     def test_same_key_repetition_and_same_cli_alias_values(self, project):
         expected = query(uri(project, 'rank=callers&top=2'))
-        assert query(uri(project, 'rank=callers&top=1&top=2')) == expected
-        result, answer = cli_json('calls', str(project), '--rank', 'callers', '--top', '1', '--top', '2')
-        assert result.returncode == 0
-        assert_equal_answer(answer, expected)
+        assert query(uri(project, 'rank=callers&top=2&top=2')) == expected
+        # BACK-2654 rule 1: one setting, two values is an invalid request (it was last-wins).
+        with pytest.raises(ValueError, match='top is given twice with different values'):
+            query(uri(project, 'rank=callers&top=1&top=2'))
+        result, _answer = cli_json('calls', str(project), '--rank', 'callers', '--top', '1', '--top', '2')
+        assert result.returncode == 2 and '--top 1 and --top 2' in result.stderr
         result, answer = cli_json('calls', str(project), '--rank', 'callers', '--top', '2', '--limit', '2')
         assert result.returncode == 0
         assert_equal_answer(answer, expected)

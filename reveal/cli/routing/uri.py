@@ -352,8 +352,14 @@ def _preparation_answer(uri, element, args, exception) -> Optional[Answer]:
     scheme, _, resource = uri.partition('://')
     adapter_class = get_adapter_class(scheme)
     if _uri_execution_facts(adapter_class, resource, element, args) is None:
+        # A request rejected before analysis (a global flag conflicting with the URI, BACK-2654) is answered as
+        # invalid (exit 2) on an adapter with no resource declaration, which used to raise out of the router.
         if getattr(adapter_class, 'RESOURCE_SPEC', None) is None:
-            return None
+            if not isinstance(exception, RequestValidationError):
+                return None
+            return _answer(lambda: _fail(scheme, resource, _exception_message(exception), adapter_class=adapter_class,
+                                         code='invalid_request', failure_cause=FailureCause.INVALID_REQUEST),
+                           scheme, args)
         # These modes keep the existing legacy failed-answer boundary.
         return _answer(lambda: _fail(scheme, resource, _exception_message(exception),
                                     adapter_class=adapter_class, exception=exception), scheme, args)

@@ -74,11 +74,18 @@ def test_cli_omission_and_boolean_polarity(binding):
 
 
 @pytest.mark.parametrize('raw,expected', [('enabled', True), ('enabled=false', False),
-                                         ('enabled=false&enabled=true', True)])
-def test_bare_boolean_false_and_repeated_last_wins(binding, raw, expected):
+                                         ('enabled=true&enabled=true', True)])
+def test_bare_boolean_false_and_an_equal_repeat(binding, raw, expected):
     declaration = query.ParamSpec('enabled', 'boolean', 'Toggle', False, binding.boolean_value)
     params = binding.bind_declared_params((declaration,), raw, transport='uri')
     assert declaration.read(params) is expected
+
+
+def test_a_repeated_setting_with_different_values_is_rejected(binding):
+    """BACK-2654 rule 1: it was last-wins."""
+    declaration = query.ParamSpec('enabled', 'boolean', 'Toggle', False, binding.boolean_value)
+    with pytest.raises(ValueError, match='enabled is given twice with different values'):
+        binding.bind_declared_params((declaration,), 'enabled=false&enabled=true', transport='uri')
 
 
 def test_schema_additions_do_not_reinterpret_legacy_flags(binding):

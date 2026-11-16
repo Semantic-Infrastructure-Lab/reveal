@@ -204,7 +204,7 @@ _SCAN_LIMIT = ParamSpec(
     'Legacy max_files (--max-files) is the same budget',
     import_analysis.DEFAULT_FILE_CAP, _max_files_value, examples=('imports://.?importers&scan-limit=50000',), minimum=1,
     role='analysis', aliases=('scan_limit',), legacy=(LegacySpelling('max_files', flag='--max-files'),),
-    cli=CliBinding(('--scan-limit', '--max-files'), dest='scan_limit', metavar='N'),
+    cli=CliBinding(('--scan-limit',), dest='scan_limit', metavar='N'),
 )
 _IMPORTERS = ParamSpec(
     'importers', 'string',

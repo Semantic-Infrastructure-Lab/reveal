@@ -292,7 +292,7 @@ def _resource_error_message(error, path: str) -> str:
 
 def _flagged_query(adapter, name, path, source, transport: str, args, consume) -> str | None:
     """The URI query with the global flags injected; None after answering a flag that conflicts with the
-    URI's own value as an invalid request (FlagSpec.reject_conflict, BACK-2621)."""
+    URI's own value as an invalid request (BACK-2654)."""
     query_resource: str = '?' + source if transport == 'uri' else ''
     if transport != 'uri':
         return query_resource
@@ -308,7 +308,10 @@ def _flagged_query(adapter, name, path, source, transport: str, args, consume) -
 def _invalid_prepared_answer(adapter, name, path, resource, message, args):
     """Keep an unbound request's mode identity when decoding/alias validation fails."""
     selector = getattr(adapter, 'uri_result_type', None)
-    expected_type = selector(resource) if selector is not None else adapter.RESULT_TYPE
+    try:
+        expected_type = selector(resource) if selector is not None else adapter.RESULT_TYPE
+    except ValueError:  # the selector reads the same rejected query (BACK-2655): no mode beyond the default
+        expected_type = adapter.RESULT_TYPE
     return _invalid_answer(adapter, name, path, message, args, result_type=expected_type)
 
 

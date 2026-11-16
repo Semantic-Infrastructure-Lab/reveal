@@ -105,8 +105,9 @@ class TestHandleUriSortDesc:
         resource_arg = mock_handler.call_args[0][2]  # positional: adapter_cls, scheme, resource, ...
         assert 'sort=-name' in resource_arg
 
-    def test_uri_sort_takes_precedence_over_flag(self):
-        """BACK-161: --sort is not injected when URI already has sort= param."""
+    def test_uri_sort_and_a_different_flag_are_rejected(self):
+        """BACK-161, BACK-2654 rule 1: --sort is not injected beside the URI's sort=; a different value is
+        an invalid request naming both (the URI used to win)."""
         mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
@@ -116,12 +117,12 @@ class TestHandleUriSortDesc:
                 with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
                     from reveal.cli.routing import handle_uri
                     args = _args(sort='complexity', desc=False, base_path=None)
-                    handle_uri('ast://src?sort=name', None, args)
-        assert mock_handler.called
+                    with pytest.raises(SystemExit) as rejected:  # exit 2, the conflict on stderr
+                        handle_uri('ast://src?sort=name', None, args)
+                    assert rejected.value.code == 2
+                    handle_uri('ast://src?sort=name', None, _args(sort='name', desc=False, base_path=None))
         resource_arg = mock_handler.call_args[0][2]
-        # URI sort param must be preserved; CLI --sort must not be appended
-        assert 'sort=name' in resource_arg
-        assert resource_arg.count('sort=') == 1
+        assert resource_arg.count('sort=') == 1  # the equal flag is the URI's value, given once
 
 
 # ─── handle_uri — BACK-1187/BACK-1192: --exclude on URI-scheme targets ───────
@@ -244,14 +245,17 @@ class TestHandleUriSinceUntil:
         assert 'since=2026-01-01' in resource_arg
         assert 'until=2026-06-01' in resource_arg
 
-    def test_uri_since_takes_precedence_over_flag(self):
+    def test_uri_since_and_a_different_flag_are_rejected(self):
+        """BACK-2654 rule 1: a different --since beside the URI's since= is invalid; the URI used to win."""
         with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
             from reveal.cli.routing import handle_uri
             args = _args(sort=None, exclude=None, since='2099-01-01', until=None, base_path=None)
-            handle_uri('git://.?since=2020-01-01', None, args)
-        resource_arg = mock_handler.call_args[0][2]
-        assert resource_arg.count('since=') == 1
-        assert '2099-01-01' not in resource_arg
+            with pytest.raises(SystemExit) as rejected:  # exit 2, the conflict on stderr
+                handle_uri('git://.?since=2020-01-01', None, args)
+            assert rejected.value.code == 2
+            handle_uri('git://.?since=2020-01-01', None,
+                       _args(sort=None, exclude=None, since='2020-01-01', until=None, base_path=None))
+        assert mock_handler.call_args[0][2].count('since=') == 1
 
     def test_since_warns_on_non_supporting_scheme(self, capsys):
         with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:

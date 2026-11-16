@@ -83,11 +83,16 @@ def _comparable(spec: ParamSpec, value: Any) -> Any:
 
 def _spellings_agree(spec: ParamSpec, values: list) -> bool:
     """Two spellings give one value: compared as the control reads it when a legacy spelling translates."""
-    if len(values) < 2:
+    if len(values) < 2 or spec.repeatable:
         return True
     if spec.legacy:
         values = [_comparable(spec, value) for value in values]
     return all(type(other) is type(values[0]) and other == values[0] for other in values[1:])
+
+
+def _accumulated(values: list) -> list:
+    """A repeatable control's spellings combine: every value of each, in order."""
+    return [item for value in values for item in (value if isinstance(value, (list, tuple)) else [value])]
 
 
 def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str, Any]) -> Dict[str, Any]:
@@ -101,20 +106,35 @@ def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str,
         values = [spec.canonical_value(name, result.pop(name)) for name in present]
         if not _spellings_agree(spec, values):
             raise ValueError(f'{spec.name}: conflicting spellings: ' + ', '.join(present))
-        result[spec.name] = values[0]
+        result[spec.name] = _accumulated(values) if spec.repeatable and len(values) > 1 else values[0]
     return result
 
 
 def _prepare_repeated_params(declarations: tuple[ParamSpec, ...], source: str, params: QueryParams) -> None:
-    """Keep every occurrence for explicitly repeated controls; other controls stay last-wins."""
-    parts = [part.strip().partition('=') for part in source.split('&')]
+    """A repeatable control keeps every occurrence of every spelling, in query order (Markdown ``match`` and
+    ``body-contains`` AND); a setting given twice with different values is an invalid request."""
+    parts = [part.strip().partition('=') for part in source.split('&') if part.strip()]
     for spec in declarations:
-        if not spec.repeatable or spec.role == 'filter-expression':
+        if not spec.repeatable:
+            _reject_repeated_setting(spec, parts)
             continue
-        for name in spec.spellings:
-            values = [value if separator else True for key, separator, value in parts if key == name]
-            if values:
-                params[name] = [_decode_value(spec, value) if name == spec.name else value for value in values]
+        if spec.role == 'filter-expression':
+            continue
+        values = [_decode_value(spec, value) if separator else True
+                  for key, separator, value in parts if key in spec.spellings]
+        if values:
+            for name in spec.spellings:
+                dict.pop(params, name, None)
+            params[spec.name] = values
+
+
+def _reject_repeated_setting(spec: ParamSpec, parts: list) -> None:
+    """``?limit=1&limit=2``: one setting, two values (COMMAND_MODEL "Conflicting values"); equal values are one."""
+    for name in spec.spellings:
+        values = list(dict.fromkeys(value if separator else True for key, separator, value in parts if key == name))
+        if len(values) > 1:
+            raise RequestValidationError(f'{name} is given twice with different values ({values[0]} and {values[1]}): '
+                                         'a setting takes one value; give it once')
 
 
 def _prepare_legacy_selectors(declarations: tuple[ParamSpec, ...], source: str, params: QueryParams) -> Dict[str, str]:
@@ -280,8 +300,9 @@ def bind_prepared_params(declarations: Iterable[ParamSpec], params: QueryParams,
     return params
 
 
-class _ScalarAliasAction(argparse.Action):
-    """Keep argparse's repeated-key policy without letting other spellings hide conflicts."""
+class ScalarOnceAction(argparse.Action):
+    """A setting typed twice: equal values are one, different values are an invalid request naming both, whichever
+    spellings carried them (COMMAND_MODEL "Conflicting values"; argparse alone keeps the last)."""
 
     def __init__(self, *args, translate=None, comparable=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -304,8 +325,13 @@ class _ScalarAliasAction(argparse.Action):
                 pass
         submitted = getattr(namespace, '_declared_alias_values', {})
         previous = submitted.setdefault(self.dest, {})
-        if any(flag != option_string and not self._same(value, values) for flag, value in previous.items()):
-            raise argparse.ArgumentError(self, 'conflicting spellings: ' + ', '.join((*previous, option_string)))
+        for flag, value in previous.items():
+            if value == values or (flag != option_string and self._same(value, values)):
+                continue  # one spelling compares as typed (as the URI does); two compare as the control reads them
+            if flag != option_string:
+                raise argparse.ArgumentError(self, f'conflicting spellings: {flag}, {option_string}')
+            raise argparse.ArgumentError(self, f'given twice with different values: {flag} {value} and '
+                                               f'{option_string} {values}; give it once')
         previous[option_string] = values
         setattr(namespace, '_declared_alias_values', submitted)
         setattr(namespace, self.dest, values)
@@ -334,8 +360,8 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
         if spec.cli_action is not None:
             options['action'] = spec.cli_action
         else:
-            if len(spec.flags) > 1:
-                options['action'] = _ScalarAliasAction
+            if cli.nargs != 0:
+                options['action'] = ScalarOnceAction
                 options['translate'] = spec.canonical_value
                 options['comparable'] = spec.validate
             if cli.nargs is not None:

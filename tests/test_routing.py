@@ -429,11 +429,12 @@ class TestHandleUri(unittest.TestCase):
 
         mock_args = Namespace(format='text', sort='complexity', desc=False)
         with patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
-            handle_uri('ast://src?sort=name', None, mock_args)
+            with self.assertRaises(SystemExit) as rejected:  # BACK-2654 rule 1: it used to keep the URI's sort
+                handle_uri('ast://src?sort=name', None, mock_args)
+            self.assertEqual(rejected.exception.code, 2)
+            handle_uri('ast://src?sort=name', None, Namespace(format='text', sort='name', desc=False))
 
-        # URI sort= must not be duplicated — resource should still have exactly one sort=
-        self.assertIn('sort=name', captured['resource'])
-        self.assertNotIn('sort=complexity', captured['resource'])
+        self.assertEqual(captured['resource'].count('sort='), 1)
 
     def test_sort_injection_applied_when_uri_has_no_sort(self):
         """--sort is injected into URI when URI has no sort= param."""
@@ -552,10 +553,13 @@ class TestHandleUri(unittest.TestCase):
         mock_args = Namespace(format='text', sort=None, desc=False, limit=1)
         with patch('sys.argv', ['reveal', 'ast://src?limit=3', '--limit', '1']), \
              patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
-            handle_uri('ast://src?limit=3', None, mock_args)
+            # BACK-2654 rule 1: a different --limit beside ?limit= is invalid (the URI used to win).
+            with self.assertRaises(SystemExit) as rejected:
+                handle_uri('ast://src?limit=3', None, mock_args)
+            self.assertEqual(rejected.exception.code, 2)
+            handle_uri('ast://src?limit=3', None, Namespace(format='text', sort=None, desc=False, limit=3))
 
-        self.assertIn('limit=3', captured['resource'])
-        self.assertNotIn('limit=1', captured['resource'])
+        self.assertEqual(captured['resource'].count('limit='), 1)
 
     def test_limit_equals_form_detected(self):
         """--limit=N (equals form) is also recognized as explicit, not just

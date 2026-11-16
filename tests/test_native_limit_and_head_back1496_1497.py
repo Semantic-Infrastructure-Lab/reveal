@@ -54,8 +54,12 @@ class TestLimitBecomesNativeTop:
         expected = {'calls': 'limit=0', 'hotspots': 'top=0'}.get(scheme, 'top=1000000')
         assert inject_query_flags(f'{scheme}://x', scheme, _args(limit=0)) == f'{scheme}://x?{expected}'
 
-    def test_typed_top_is_not_overridden(self):
-        assert inject_query_flags('hotspots://x?top=7', 'hotspots', _args(limit=3)) == 'hotspots://x?top=7'
+    def test_typed_top_and_a_different_limit_are_rejected(self):
+        """BACK-2654 rule 1: the typed top used to win over --limit."""
+        from reveal.errors import RequestValidationError
+        with pytest.raises(RequestValidationError, match='--limit conflicts with top=7'):
+            inject_query_flags('hotspots://x?top=7', 'hotspots', _args(limit=3))
+        assert inject_query_flags('hotspots://x?top=7', 'hotspots', _args(limit=7)) == 'hotspots://x?top=7'
 
     @pytest.mark.parametrize('scheme', ['imports', 'architecture', 'deps', 'classify'])
     def test_adapters_without_a_cap_keep_the_universal_key(self, scheme):
@@ -67,15 +71,17 @@ class TestLimitBecomesNativeTop:
     def test_sort_is_still_universal(self):
         assert inject_query_flags('hotspots://x', 'hotspots', _args(sort='name')) == 'hotspots://x?sort=name'
 
-    def test_all_and_limit_collide_with_a_note(self, capsys):
-        uri = inject_query_flags('hotspots://x', 'hotspots', _args(all=True, limit=2))
-        assert uri == 'hotspots://x?top=1000000'
-        assert 'Note: --limit ignored on hotspots:// -- --all already sets top=' in capsys.readouterr().err
+    def test_all_and_limit_collide_as_an_invalid_request(self):
+        """BACK-2654 rule 1: two flags setting top differently name both (--limit used to be dropped with a note)."""
+        from reveal.errors import RequestValidationError
+        with pytest.raises(RequestValidationError, match='--limit conflicts with --all'):
+            inject_query_flags('hotspots://x', 'hotspots', _args(all=True, limit=2))
 
-    def test_universal_limit_collision_is_noted_too(self, capsys):
-        # ast:// --all is limit=1000000, so --all --limit always dropped --limit in silence.
-        assert inject_query_flags('ast://x', 'ast', _args(all=True, limit=2)) == 'ast://x?limit=1000000'
-        assert 'Note: --limit ignored on ast:// -- --all already sets limit=' in capsys.readouterr().err
+    def test_universal_limit_collision_is_rejected_too(self):
+        # ast:// --all is limit=1000000: --all --limit 2 sets limit twice (BACK-2654 rule 1).
+        from reveal.errors import RequestValidationError
+        with pytest.raises(RequestValidationError, match='--limit conflicts with --all'):
+            inject_query_flags('ast://x', 'ast', _args(all=True, limit=2))
 
     def test_distinct_keys_do_not_collide(self, capsys):
         uri = inject_query_flags('git://x', 'git', _args(since='2026-01-01', limit=2))

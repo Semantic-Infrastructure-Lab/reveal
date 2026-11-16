@@ -121,6 +121,10 @@ _SWITCH = 'out of scope: the Switches rule renames this noun\'s no_* flag in its
 OUT_OF_SCOPE = {('architecture', '10'): _OVERVIEW_TOP, ('overview', '10'): _OVERVIEW_TOP,
                 ('contracts', '10'): _SWITCH + ' (--no-implementations)',
                 ('patches', '10'): _SWITCH + ' (--no-suppress)'}
+# Cells stopped for a ruling (a case the rules do not settle); each must still fail, and the manager owns the list.
+STOPPED = {('claude', '12'): 'stopped: rule 12 makes match a repeating selection, but Claude match is one search term '
+                             'handed to its legacy search/contains readers; repeating it means Claude ANDs terms, '
+                             'a new evaluator capability (reported in BACK-2654 Step 3)'}
 # Rule 9: the retired stats:// scheme is exempt (deleted at the cut); metrics' cells measure the owner it shares.
 RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted at the cut; metrics:// is measured'}
 
@@ -991,7 +995,7 @@ def probe_repeatability_declared(noun):
             continue
         if spec.cli is not None and spec.cli.action not in (None, 'store_true', 'append'):
             continue
-        appends = spec.cli is not None and spec.cli.action == 'append'
+        appends = getattr(spec, 'cli_action', spec.cli.action if spec.cli else None) == 'append'
         if spec.cli is not None:
             cases.append(Case(f'{spec.name} CLI follows it', appends == declared,
                               f'{spec.name}: repeatable={declared} but the CLI action is {spec.cli.action!r}'))
@@ -1087,7 +1091,7 @@ def test_every_declared_noun_has_a_base_request():
 
 
 def test_the_recorded_cells_name_real_nouns_and_rules():
-    for noun, rule in [*EXEMPT, *NOT_YET, *OUT_OF_SCOPE]:
+    for noun, rule in [*EXEMPT, *NOT_YET, *OUT_OF_SCOPE, *STOPPED]:
         assert noun in NOUNS and rule in RULES, (noun, rule)
         assert noun not in RULED_EXEMPT_NOUNS, (noun, rule)
     assert not [cell for cell in NOT_YET if cell[1] in DEFAULT_NOW], 'rules 1, 2, 5 and 6 have no not-yet cells'
@@ -1149,8 +1153,8 @@ def test_cell(workspace, noun, rule):
         with open(report, 'a', encoding='utf-8') as sink:
             sink.write(json.dumps({'noun': noun, 'rule': rule, 'state': state, 'cases': len(cases),
                                    'failing': failing}) + '\n')
-    if (noun, rule) in OUT_OF_SCOPE:
-        assert state == 'not_yet', f'{noun} x {rule} now conforms: remove it from OUT_OF_SCOPE'
+    if (noun, rule) in OUT_OF_SCOPE or (noun, rule) in STOPPED:
+        assert state == 'not_yet', f'{noun} x {rule} now conforms: remove it from OUT_OF_SCOPE/STOPPED'
     elif (noun, rule) in EXEMPT:
         assert state == 'exempt', f'{noun} x {rule} is recorded exempt ({EXEMPT[noun, rule]}) but has cases: ' + \
             '; '.join(case.label for case in cases)

@@ -6,7 +6,8 @@ One table says how each flag becomes a fragment; an adapter opts in by declaring
 the pattern (and the bug: a flag accepted by argparse and silently dropped).
 
 Rules that apply to every flag here:
-  - a value already in the URI wins over the CLI flag (exact key match, not substring);
+  - a flag and the URI giving one key different values is an invalid request naming both (exit 2); an equal
+    value is one value, carried by the flag (COMMAND_MODEL "Conflicting values", BACK-2654);
   - an adapter that does not declare the flag is left alone -- and, for flags whose
     absence means "ignored" (`warn_unsupported`), the user is told which schemes do.
 
@@ -38,8 +39,6 @@ class FlagSpec:
                                           # (sort=/limit=; applied by a few, warned about by the rest)
     unbounded: int | None = None          # value a declared fragment gets for a 0 ("no cap"): an
                                           # adapter's own `top=0` may mean "nothing" (hotspots)
-    reject_conflict: bool = False         # a URI value that differs from the flag's is an invalid
-                                          # request (exit 2), not "the URI wins" (BACK-2621)
 
 
 # The value functions `peek`: reading a flag here is not using it. inject_query_flags marks a
@@ -81,8 +80,7 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     FlagSpec('verbose', '--verbose', _switch('verbose')),
     # metrics' global switches (BACK-2621): forwarded as declared fragments, not by matching get_structure's
     # parameter names; an adapter that declares neither reports them as unused flags.
-    # ?hotspots=false --hotspots names two answers: an invalid request, not "the URI wins" (decision 2, B6).
-    FlagSpec('hotspots', '--hotspots', _switch('hotspots'), reject_conflict=True),
+    FlagSpec('hotspots', '--hotspots', _switch('hotspots')),
     FlagSpec('code_only', '--code-only', _switch('code_only')),
     # Result-control keys, injected without a per-adapter declaration. Only ast/markdown/json/
     # git/stats apply them; most other adapters warn "Unknown query param" and ignore them, and
@@ -114,19 +112,44 @@ def _query_value(resource: str, key: str) -> str:
                  if pair.partition('=')[0] == key), '')
 
 
-def _note_uri_wins(args: Any, spec: Any, scheme: str, resource: str, key: str, fragment: str) -> None:
-    """The URI already sets *key*: when its value differs from the flag's, say whose value won,
-    not that the adapter lacks the flag (BACK-1685). Equal values need no note."""
+def _same_value(adapter_class: Any, key: str, left: str, right: str) -> bool:
+    """Two raw values of one key, compared as the noun reads them (``limit=05`` is ``--limit 5``)."""
+    if left == right:
+        return True
+    from ...utils.query_binding import boolean_value
+    spec = next((p for p in getattr(adapter_class, 'PARAM_SPECS', ()) if key in p.spellings), None)
+    try:
+        if spec is None:  # a walk-policy switch (respect_gitignore)
+            return boolean_value(left) == boolean_value(right)
+        return bool(spec.validate(spec.canonical_value(key, left)) == spec.validate(spec.canonical_value(key, right)))
+    except ValueError:  # a value the noun rejects is rejected when it binds; as typed, these two differ
+        return False
+
+
+def _join_uri_value(args: Any, spec: Any, adapter_class: Any, resource: str, key: str, fragment: str) -> None:
+    """The URI already sets *key*: the flag's equal value is the same request, carried by the flag; a different
+    value is an invalid request naming both (BACK-2654; the URI used to win with a note, BACK-1685)."""
     uri_value = _query_value(resource, key)
-    if uri_value == fragment.partition('=')[2]:
+    if _same_value(adapter_class, key, uri_value, fragment.partition('=')[2]):
+        delegate(args, spec.dest, key)
         return
     mark(args, spec.dest)
-    if spec.reject_conflict:
-        from ...errors import RequestValidationError
-        raise RequestValidationError(f"{spec.option} conflicts with {key}={uri_value} in the URI: "
-                                     f"{key} is set twice with different values; give it once")
-    print(f"Note: {spec.option} ignored on {scheme}:// -- the URI already sets {key}={uri_value}.",
-          file=sys.stderr)
+    from ...errors import RequestValidationError
+    raise RequestValidationError(f"{spec.option} conflicts with {key}={uri_value} in the URI: "
+                                 f"{key} is set twice with different values; give it once")
+
+
+def _join_flag_value(args: Any, spec: Any, adapter_class: Any, key: str, fragment: str,
+                     earlier: tuple[str, str]) -> None:
+    """Two global flags set one key: equal values are one request; different values are invalid."""
+    option, earlier_fragment = earlier
+    if _same_value(adapter_class, key, earlier_fragment.partition('=')[2], fragment.partition('=')[2]):
+        delegate(args, spec.dest, key)
+        return
+    mark(args, spec.dest)
+    from ...errors import RequestValidationError
+    raise RequestValidationError(f"{spec.option} conflicts with {option}: both set {key} with different values; "
+                                 "give one")
 
 
 def _declared(adapter_class: Any) -> Mapping:
@@ -176,7 +199,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
     adapter_class = get_adapter_class(scheme)
     declared = _declared(adapter_class)
     honors_result_control = getattr(adapter_class, 'HONORS_RESULT_CONTROL', True)
-    injected: dict[str, str] = {}  # query key -> the flag that set it
+    injected: dict[str, tuple[str, str]] = {}  # query key -> (the flag that set it, its fragment)
     for spec in FLAG_SPECS:
         value = spec.value(args)
         if value is None:
@@ -194,20 +217,16 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             fragment = fragment.replace('{value}', str(value))
             key = fragment.partition('=')[0]
             if key in injected:
-                # --all and --limit both map to top= on hotspots/calls/testability.
-                mark(args, spec.dest)
-                print(f"Note: {spec.option} ignored on {scheme}:// -- {injected[key]} already "
-                      f"sets {key}=.", file=sys.stderr)
+                # --all and --limit both map to top= on hotspots/calls/testability: one key, two flags.
+                _join_flag_value(args, spec, adapter_class, key, fragment, injected[key])
             elif any(token in resource for token in spec.already_scoped):
                 mark(args, spec.dest)  # the caller scoped it in the URI (date>...)
             elif not _has_key(resource, key):
                 resource = f"{resource}{'&' if '?' in resource else '?'}{fragment}"
-                injected[key] = spec.option
+                injected[key] = (spec.option, fragment)
                 delegate(args, spec.dest, key)
             else:
-                # A key already in the URI wins; the ledger counts the flag as carried only
-                # when the URI value is the flag's own.
-                _note_uri_wins(args, spec, scheme, resource, key, fragment)
+                _join_uri_value(args, spec, adapter_class, resource, key, fragment)
         elif spec.warn_unsupported:
             mark(args, spec.dest)
             aware = ', '.join(f'{s}://' for s in _supporting_schemes(spec.dest))

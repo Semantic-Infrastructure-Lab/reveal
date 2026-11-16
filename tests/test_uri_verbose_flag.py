@@ -59,7 +59,10 @@ def test_adapters_without_declaration_untouched(scheme):
 
 def test_overview_verbose_uses_its_declared_map_expansion_control():
     assert inject_query_flags('src', 'overview', _args(verbose=True)) == 'src?verbose=true'
-    assert inject_query_flags('src?verbose=false', 'overview', _args(verbose=True)) == 'src?verbose=false'
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match='--verbose conflicts with verbose=false'):  # BACK-2654 rule 1
+        inject_query_flags('src?verbose=false', 'overview', _args(verbose=True))
+    assert inject_query_flags('src?verbose=true', 'overview', _args(verbose=True)) == 'src?verbose=true'
 
 
 def test_ampersand_verbose_does_not_warn_unknown(tmp_path):

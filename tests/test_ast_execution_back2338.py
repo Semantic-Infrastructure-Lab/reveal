@@ -123,8 +123,6 @@ def test_requested_artifact_failure_still_outranks_complete_analysis(root):
 
 @pytest.mark.parametrize('query,qualified', [
     ('show=dict-heatmap', True), ('show=dict-schemas', True), ('reveal_type=x', True),
-    ('show=dict-heatmap&show=functions', True), ('show=functions&show=dict-heatmap', True),
-    ('reveal_type=x&reveal_type=', True), ('reveal_type=&reveal_type=x', True),
     ('show=&reveal_type=', True), ('show&reveal_type', True),
     ('show=dict%2Dheatmap', True), ('reveal_type%3Dx', True),
     (' show=dict-heatmap ', True), ('show=dict-schemas&reveal_type=x', True),
@@ -136,6 +134,15 @@ def test_mode_selector_matches_actual_constructor_semantics(root, query, qualifi
                      else 'ast_reveal_type' if adapter.reveal_type_var else 'ast_query')
     assert AstAdapter.uri_result_type(f'{root}?{query}') == expected_type
     assert (AstAdapter.uri_execution_facts(f'{root}?{query}') is not None) is qualified
+
+
+@pytest.mark.parametrize('query', ['show=dict-heatmap&show=functions', 'show=functions&show=dict-heatmap',
+                                   'reveal_type=x&reveal_type=', 'reveal_type=&reveal_type=x'])
+def test_a_mode_given_twice_with_different_values_is_an_invalid_request(root, query):
+    """BACK-2654 rule 1: a setting given twice with different values is rejected when it binds (it was last-wins);
+    the pre-construction selector only names the failed answer's type."""
+    with pytest.raises(ValueError, match='given twice with different values'):
+        AstAdapter(str(root), query)
 
 
 def test_metadata_error_alone_is_not_required_loss(root, monkeypatch):

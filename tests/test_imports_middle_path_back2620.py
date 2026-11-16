@@ -284,10 +284,12 @@ class TestPreservation:
 
     def test_same_key_repetition_last_value_wins(self, project):
         expected = query(uri(project, 'rank=fan-in&top=3'))
-        assert query(uri(project, 'rank=fan-in&top=2&top=3')) == expected
-        result, answer = cli_json('imports', str(project), '--rank', 'fan-in', '--top', '2', '--top', '3')
-        assert result.returncode == 0
-        assert_equal_answer(answer, expected)
+        assert query(uri(project, 'rank=fan-in&top=3&top=3')) == expected
+        # BACK-2654 rule 1: one setting, two values is an invalid request (it was last-wins).
+        with pytest.raises(ValueError, match='top is given twice with different values'):
+            query(uri(project, 'rank=fan-in&top=2&top=3'))
+        result, _answer = cli_json('imports', str(project), '--rank', 'fan-in', '--top', '2', '--top', '3')
+        assert result.returncode == 2 and '--top 2 and --top 3' in result.stderr
 
     def test_max_items_zero_is_an_empty_output_page_not_a_row_cap(self, project):
         full = query(uri(project, 'rank=fan-in'))
@@ -664,8 +666,10 @@ class TestProposedChanges:
         assert 'imports gates --circular, --unused and --violations' in answer['error']
         # Positive control: the same false modes beside one selected findings view (no second view).
         false_only = '&'.join(part for part in controls.split('&') if '=' in part)
-        control, gated = cli_json(uri(project, f'{false_only}&circular'), '--fail-on', 'findings')
-        assert control.returncode == 1 and gated['type'] == 'circular_dependencies', control.stderr
+        # A view other than the false one: circular=false beside a bare circular is one setting twice (BACK-2654).
+        view, kind = ('unused', 'unused_imports') if 'circular' in false_only else ('circular', 'circular_dependencies')
+        control, gated = cli_json(uri(project, f'{false_only}&{view}'), '--fail-on', 'findings')
+        assert control.returncode == 1 and gated['type'] == kind, control.stderr
 
     @pytest.mark.parametrize('mode', MODES)
     def test_direct_construction_reads_a_false_mode_as_not_selected(self, project, mode):

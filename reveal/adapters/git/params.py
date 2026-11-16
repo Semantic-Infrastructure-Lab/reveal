@@ -87,8 +87,8 @@ PARAM_SPECS = (VIEW, WHERE, DETAIL, VERBOSE, MERGES, NO_MERGES, RAW, SORT, LIMIT
                *(string(name, description) for name, description in (
                    ('ref', 'Starting branch, tag or commit'), ('element', 'Semantic element name'),
                    ('bucket', 'Timeline period: week or month'), ('ignore', 'Blame commit hash prefixes to suppress'))),
-               *(ParamSpec(name, 'array', description, [], expressions, repeatable=True,
-                           cli=CliBinding(('--' + name,)))
+               # since/until are settings (one bound each, COMMAND_MODEL "Conflicting values"), carried as a list
+               *(ParamSpec(name, 'array', description, [], expressions, cli=CliBinding(('--' + name,)))
                  for name, description in (('since', 'Inclusive starting date'), ('until', 'Inclusive ending date'))))
 
 

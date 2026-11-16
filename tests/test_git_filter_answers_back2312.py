@@ -53,16 +53,20 @@ def test_explicit_query_replaces_inline_occurrences_of_same_raw_key(history_repo
 
 def test_overlay_retains_other_inline_filters_and_operational_last_value(history_repo):
     answer = GitAdapter(f'{history_repo}?type=history&author~=Reviewer&limit=2',
-                        'message~=feat&message~=fix&limit=7&limit=1').get_structure()
+                        'message~=feat&message~=fix&limit=1').get_structure()
     assert [row['message'] for row in answer['history']] == ['feat: fix two']
-    assert GitAdapter(str(history_repo), 'type=history&limit=2&limit=1').result_control.limit == 1
+    # BACK-2654 rule 1: limit is a setting; two values in one query are invalid (they were last-wins).
+    with pytest.raises(ValueError, match='limit is given twice with different values'):
+        GitAdapter(str(history_repo), 'type=history&limit=2&limit=1')
 
 
 def test_repeated_since_aliases_and_date_conditions(history_repo):
-    adapter = GitAdapter(str(history_repo), 'type=history&since=2020&since=2021&date<2025')
-    assert [(q.field, q.op, q.value) for q in adapter.query_filters] == [
-        ('date', '>=', 2020), ('date', '>=', 2021), ('date', '<', 2025)]
+    adapter = GitAdapter(str(history_repo), 'type=history&since=2021&date<2025')
+    assert [(q.field, q.op, q.value) for q in adapter.query_filters] == [('date', '>=', 2021), ('date', '<', 2025)]
     assert len(adapter.get_structure()['history']) == 3
+    # BACK-2654 rule 12: since is a setting (one bound); two are an invalid request. Date filters repeat.
+    with pytest.raises(ValueError, match='since is given twice with different values'):
+        GitAdapter(str(history_repo), 'type=history&since=2020&since=2021&date<2025')
 
 
 def test_repeated_unknown_filter_is_reported_once(history_repo):

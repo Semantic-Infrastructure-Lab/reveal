@@ -83,9 +83,12 @@ def test_both_since_and_until_are_injected_in_order():
     assert out == '.?since=2026-01-01&until=2026-06-01'
 
 
-def test_uri_value_wins_over_the_flag():
-    out, _ = _inject('.?since=2020-01-01', 'git', since='2099-01-01')
-    assert out == '.?since=2020-01-01'
+def test_a_flag_that_differs_from_the_uri_value_is_rejected_and_an_equal_one_is_carried():
+    """BACK-2654 rule 1: the URI used to win over a different flag value."""
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match='--since conflicts with since=2020-01-01'):
+        _inject('.?since=2020-01-01', 'git', since='2099-01-01')
+    assert _inject('.?since=2020-01-01', 'git', since='2020-01-01')[0] == '.?since=2020-01-01'
 
 
 def test_key_match_is_exact_not_substring():
@@ -167,8 +170,11 @@ def test_limit_left_at_parser_default_injects_nothing():
     assert inject_query_flags('ast://x', 'ast', args) == 'ast://x'
 
 
-def test_uri_limit_wins_and_key_match_is_exact():
-    assert _inject('ast://x?limit=5', 'ast', limit=9)[0] == 'ast://x?limit=5'
+def test_uri_limit_conflict_and_key_match_is_exact():
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match='--limit conflicts with limit=5'):  # BACK-2654 rule 1
+        _inject('ast://x?limit=5', 'ast', limit=9)
+    assert _inject('ast://x?limit=5', 'ast', limit=5)[0] == 'ast://x?limit=5'
     assert _inject('ast://x?dir_limit=5', 'ast', limit=9)[0] == 'ast://x?dir_limit=5&limit=9'
 
 

@@ -13,6 +13,7 @@ from typing import Optional
 # an unexpected site-packages path instead of silently resolving.
 _PACKAGE_DIR = Path(__file__).resolve().parent.parent
 from .global_flags import add_exclude_argument, add_gitignore_arguments, rule_patterns
+from ..utils.query_binding import ScalarOnceAction
 from ..rules.base import category_legend
 
 
@@ -463,7 +464,7 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                         help="Text search over file content: each matching line, grouped by enclosing structural element (heading, function, class). Accepts Python re syntax (e.g. 'foo|bar' for alternation, not the BRE '\\|'). Use --ignore-case / -i for case-insensitive search. The text view shows the first 100 hits; --all shows every hit, --max-items N sets the cap. On a directory, --ext limits the file types searched.")
     parser.add_argument('--ignore-case', '-i', dest='ignore_case', action='store_true',
                         help='Case-insensitive match for --grep')
-    parser.add_argument('--sort', type=str, metavar='FIELD',
+    parser.add_argument('--sort', type=str, metavar='FIELD', action=ScalarOnceAction,
                         help='Sort results by field (e.g., modified, size, name, complexity). '
                              'Use --desc for descending order, or prefix with - in URI queries. Applied by --files and '
                              'by the adapters that take sort= (help://schemas/<adapter>); elsewhere a note says it has no effect.')
@@ -480,15 +481,15 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                              'self-check entries hidden by default')
     # Navigation, not Quality checks: that group collapses in --help, which hid the one
     # cap flag shared by URI adapters and --check.
-    parser.add_argument('--limit', type=int, metavar='N', default=None,
+    parser.add_argument('--limit', type=int, metavar='N', default=None, action=ScalarOnceAction,
                         help='Cap the selected view at N where supported (help://schemas/<adapter>). '
                              'Calls/imports rankings take --limit (legacy --top notes it); their other views may '
                              'ignore it with a note. With --check, caps text output at the '
                              'first N files with issues and prints a "+N more files" footer (default 50, '
                              '0 disables; ignored with --format json).')
-    parser.add_argument('--since', type=str, metavar='DATE',
+    parser.add_argument('--since', type=str, metavar='DATE', action=ScalarOnceAction,
                         help='Filter results since date (YYYY-MM-DD, e.g., reveal claude:// --since 2026-02-27)')
-    parser.add_argument('--until', type=str, metavar='DATE',
+    parser.add_argument('--until', type=str, metavar='DATE', action=ScalarOnceAction,
                         help='Filter results until date (YYYY-MM-DD, e.g., reveal claude:// --until 2026-06-18)')
     _add_session_stats_option(parser)
     _add_base_path_option(parser)

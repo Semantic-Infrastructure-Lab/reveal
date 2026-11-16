@@ -26,15 +26,16 @@ def _stderr(tree, uri_query, *flags):
     return proc.stderr
 
 
-def test_a_flag_the_uri_overrides_names_the_uri_value(tree):
+def test_a_flag_that_differs_from_the_uri_names_both(tree):
+    """BACK-2654 rule 1: the conflict is an invalid request naming both (the URI used to win with a note)."""
     err = _stderr(tree, '?sort=name', '--sort', 'complexity')
-    assert '--sort ignored on ast:// -- the URI already sets sort=name.' in err
+    assert '--sort conflicts with sort=name in the URI' in err
     assert 'not supported by this adapter' not in err
 
 
-def test_the_same_holds_for_a_different_overridden_flag(tree):
+def test_the_same_holds_for_a_different_flag(tree):
     err = _stderr(tree, '?limit=10', '--limit', '5')
-    assert '--limit ignored on ast:// -- the URI already sets limit=10.' in err
+    assert '--limit conflicts with limit=10 in the URI' in err
     assert 'not supported by this adapter' not in err
 
 

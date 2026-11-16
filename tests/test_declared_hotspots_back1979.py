@@ -184,8 +184,9 @@ def test_verbose_lifts_caps_but_all_preserves_explicit_top(project):
     a, b = json.loads(left.stdout), json.loads(right.stdout)
     equal_answers(a, b)
     assert len(a['file_hotspots']) == len(a['function_hotspots']) == 13
+    # BACK-2654 rule 1: --all sets top too, so beside ?top=1 it is a conflict (the URI's top used to win).
     capped = run('hotspots://proj?top=1', '--all', '--format', 'json')
-    assert len(json.loads(capped.stdout)['function_hotspots']) == 1
+    assert capped.returncode == 2 and '--all conflicts with top=1' in capped.stderr
     assert run('hotspots', 'proj', '--all').returncode == 2
 
 

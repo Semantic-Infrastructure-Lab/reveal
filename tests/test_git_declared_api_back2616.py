@@ -70,8 +70,10 @@ def test_positive_merge_policy_and_legacy_ownership_scope(repo_path):
 
 def test_repeated_time_aliases_and_original_regex_validation(repo_path):
     uri = f'git://{repo_path}?view=history'
-    result = query(uri + '&since=2023&since=2023-11-15')
-    assert result['history'] == []
+    # BACK-2654 rule 12: since is a setting; two bounds are an invalid request (they used to AND).
+    with pytest.raises(ValueError, match='since is given twice with different values'):
+        query(uri + '&since=2023&since=2023-11-15')
+    assert query(uri + '&since=2023-11-15&since=2023-11-15')['history'] == []
     with pytest.raises(ValueError, match='regular expression'):
         query(uri + '&message~=[', where=['message=change 1'])
 
