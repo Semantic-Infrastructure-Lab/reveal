@@ -764,6 +764,13 @@ class TestProposedChanges:
             'fixture must make the control observable'
         assert_equal_answer(query(uri(project, base), **keywords), expected)
 
+    def test_retired_stats_spelling_binds_typed_keywords_too(self, project):
+        """stats:// is metrics' retired spelling and answers the same, typed keywords included."""
+        expected = query(uri(project, 'hotspots=true&top=2&sort=file&limit=3'))
+        answer = query(f'stats://{project.as_posix()}', hotspots=True, top=2, sort='file', limit=3)
+        assert hotspot_rows(answer) == HOTSPOTS[:2] and file_rows(answer) == file_rows(expected)
+        assert_equal_answer(answer, expected)
+
     @pytest.mark.parametrize('keywords,name', [
         ({'limit': -1}, 'limit'), ({'offset': -1}, 'offset'), ({'min_lines': 'abc'}, 'min_lines'),
         ({'view': 'other'}, 'view'), ({'tests': 'only'}, 'tests'), ({'detail': 'full'}, 'detail'),
