@@ -88,10 +88,11 @@ EXEMPT = {
                                             'overview', 'pack', 'patches', 'surface', 'testability', 'trace')},
     **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'contracts', 'git', 'json', 'markdown', 'overview', 'pack',
                                             'patches', 'surface')},
-    **{(noun, '1d'): 'declares no repeatable control with an alias' for noun in NOUNS if noun != 'markdown'},
+    **{(noun, '1d'): 'declares no repeatable control with an alias'
+       for noun in NOUNS if noun not in ('markdown', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
         'architecture', 'ast', 'codex', 'contracts', 'deps', 'git', 'hotspots', 'json', 'markdown', 'overview', 'pack',
-        'patches', 'stats', 'surface', 'testability', 'trace')},
+        'patches', 'surface', 'testability', 'trace')},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
         'architecture', 'claude', 'codex', 'contracts', 'deps', 'hotspots', 'json', 'overview', 'pack', 'patches',
         'surface', 'testability', 'trace')},
@@ -103,52 +104,15 @@ EXEMPT = {
         'surface', 'testability', 'trace')},
 }
 
+# Rules 1, 2, 5 and 6 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must conform
+# on every noun, and none may be recorded below.
+DEFAULT_NOW = ('1a', '1b', '1c', '1d', '2', '5', '6')
+# Rule 9: the retired stats:// scheme is exempt (deleted at the cut); metrics' cells measure the owner it shares.
+RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted at the cut; metrics:// is measured'}
+
 # Cells that do not conform yet: (noun, rule) -> the behaviour observed at fac0718b. May only shrink; every
-# entry reaches zero before the cut. "URI wins" is flag_specs' note "--X ignored on N:// -- the URI already
-# sets K=V", exit 0; "reported unused" is a meta.warnings unused_flag entry for a flag whose value equals the URI's.
-_URI_WINS = 'URI wins with a note, exit 0: '
+# entry reaches zero before the cut.
 NOT_YET = {
-    ('architecture', '1a'): _URI_WINS + '--no-gitignore, --all, --verbose',
-    ('ast', '1a'): _URI_WINS + '--no-gitignore, --all, --sort, --limit; --all equal to ?limit= is reported unused',
-    ('calls', '1a'): _URI_WINS + '--no-gitignore, --all, --limit; --all equal to ?top= is reported unused',
-    ('claude', '1a'): _URI_WINS + '--since, --until, --limit',
-    ('codex', '1a'): _URI_WINS + '--since, --until',
-    ('contracts', '1a'): _URI_WINS + '--no-gitignore',
-    ('deps', '1a'): _URI_WINS + '--no-gitignore',
-    ('git', '1a'): _URI_WINS + '--since, --until, --all, --verbose, --sort, --limit; --all and --verbose equal to '
-                   'the URI value are reported unused',
-    ('hotspots', '1a'): _URI_WINS + '--no-gitignore, --all, --limit; --all and --limit equal to ?top= are reported '
-                        'unused',
-    ('imports', '1a'): _URI_WINS + '--no-gitignore, --verbose, --limit',
-    ('json', '1a'): _URI_WINS + '--sort, --limit',
-    ('markdown', '1a'): _URI_WINS + '--no-gitignore, --sort, --limit',
-    ('metrics', '1a'): _URI_WINS + '--since, --no-gitignore, --all, --code-only, --sort, --limit (only --hotspots '
-                       'rejects: the BACK-2621 opt-in); --all, --hotspots and --code-only equal to the URI value '
-                       'are reported unused',
-    ('overview', '1a'): _URI_WINS + '--no-gitignore, --all, --verbose',
-    ('pack', '1a'): _URI_WINS + '--no-gitignore',
-    ('patches', '1a'): _URI_WINS + '--no-gitignore, --all, --limit; --all equal to ?limit= is reported unused',
-    ('stats', '1a'): 'as metrics, and ?hotspots=false --hotspots exits 1 (adapter_error) where metrics:// exits 2',
-    ('surface', '1a'): _URI_WINS + '--no-gitignore',
-    ('testability', '1a'): _URI_WINS + '--no-gitignore, --all, --limit; --limit equal to ?top= is reported unused',
-    ('trace', '1a'): _URI_WINS + '--no-gitignore',
-    ('git', '1b'): '?view= with ?type=, and ?scan-limit= with ?scan_limit=, raise an uncaught ValueError (a '
-                   "traceback) from git's uri_result_type on the invalid-request path instead of exiting 2",
-    ('stats', '1b'): '?code-only=true&code_only=false exits 1 (adapter_error) where metrics:// exits 2',
-    ('architecture', '2'): 'api.query omits the scheme:architecture note; CLI text, CLI JSON and MCP carry it',
-    ('ast', '2'): 'api.query omits the ?calls=, ?callee_of= and ?show=calls notes (no declared alias carries them); '
-                  'CLI and MCP carry them',
-    ('calls', '2'): 'api.query omits the ?root=, ?target=, ?modules, ?external and ?uncalled notes (parameters of '
-                    'their own, not aliases); CLI and MCP carry them',
-    ('claude', '2'): 'api.query omits all eight legacy-parameter notes (summary, search, contains, filter, tail, '
-                     'last, full, raw); CLI and MCP carry them',
-    ('deps', '2'): 'api.query omits the scheme:deps note (not a bound adapter: get_structure runs outside any '
-                   'invocation)',
-    ('hotspots', '2'): 'api.query omits the scheme:hotspots, ?functions_only and ?files_only notes (not a bound '
-                       'adapter)',
-    ('stats', '2'): 'api.query omits the scheme:stats note',
-    ('testability', '2'): 'api.query omits the scheme:testability note (not a bound adapter)',
-    ('trace', '2'): 'api.query omits the scheme:trace note',
     ('architecture', '3'): 'URI limit, offset, sort, where, match, detail, kind, depth, since, until: exit 0; '
                            'subcommand offset, sort, where, match, detail, kind, depth, since, until: argparse '
                            'error; global --limit, --sort, --since, --until on the URI: exit 0',
@@ -187,8 +151,6 @@ NOT_YET = {
                    'URI: exit 0',
     ('patches', '3'): 'URI offset, sort, where, match, detail, kind, depth, since, until, against: exit 0; '
                       'subcommand the same ten: argparse error; global --sort, --since, --until on the URI: exit 0',
-    ('stats', '3'): 'URI against: exit 0; URI match, kind, depth, until: exit 1 where metrics:// exits 2; global '
-                    '--until on the URI: exit 0',
     ('surface', '3'): 'URI limit, offset, sort, where, match, detail, kind, tests, since, until, against: exit 0; '
                       'subcommand the same eleven: argparse error; global --limit, --sort, --since, --until on the '
                       'URI: exit 0',
@@ -215,77 +177,19 @@ NOT_YET = {
     ('overview', '4'): 'no detail declaration; --verbose is its own verbose control (expanded sections), exit 0',
     ('pack', '4'): 'no detail declaration; --verbose is its own verbose control, exit 0',
     ('patches', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
-    ('stats', '4'): 'as metrics on the URI (no subcommand)',
     ('surface', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
     ('testability', '4'): 'no detail declaration; --verbose accepted silently, exit 0',
     ('trace', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
-    ('architecture', '1c'): 'last-wins, exit 0: URI top, no_imports, all, verbose; subcommand --top; the later '
-                            'value rejected (exit 2, one value named): no_git, tests, against',
-    ('ast', '1c'): 'last-wins, exit 0: URI kind, view, builtins, reveal-type, sort, limit, offset; subcommand '
-                   '--kind, --view, --reveal-type, --sort, --limit, --offset',
-    ('calls', '1c'): 'last-wins, exit 0: URI depth, detail, limit, kind, external, builtins, test-framework, '
-                     'format; subcommand --depth, --detail, --limit, --kind; the later value rejected (exit 2, one '
-                     'value named): callers, target, callees, root, uncalled, modules',
-    ('claude', '1c'): 'last-wins, exit 0: URI contains, search, since, until, filter, full, raw, limit, offset, '
-                      'detail, match; subcommand --since, --until, --limit, --offset, --detail, --match; the later '
-                      'value rejected (exit 2, one value named): summary, errors, tools, word, snippet, project, '
-                      'key, tail, last, tokens, patches, digest, sort, timeline, view',
-    ('codex', '1c'): 'last-wins, exit 0: URI filter, search, since, until, key, last, tokens, goal, matches, full',
-    ('contracts', '1c'): 'last-wins, exit 0: URI abstract_only, implementations, impls; subcommand --impls',
-    ('deps', '1c'): 'last-wins, exit 0: URI top, no_unused, no_circular, summary_only; subcommand --top',
-    ('git', '1c'): 'last-wins, exit 0: URI view, detail, verbose, merges, no_merges, raw, sort, limit, offset, '
-                   'context, element, bucket, ignore; subcommand --view, --detail, --merges, --sort, --limit, '
-                   '--offset, --context, --element, --bucket, --ignore; the later value rejected (exit 2, one value '
-                   'named): scan-limit, ref',
-    ('hotspots', '1c'): 'last-wins, exit 0: URI top, min_complexity, functions_only, files_only; subcommand --top, '
-                        '--min-complexity',
-    ('imports', '1c'): 'last-wins, exit 0: URI unused, circular, violations, limit, entrypoints, components, '
-                       'external, detail, lazy, scope, tests, root, scan-limit, format; subcommand --limit, '
-                       '--detail, --lazy, --scope, --tests, --root, --scan-limit; the later value rejected (exit 2, '
-                       'one value named): importers',
-    ('json', '1c'): 'last-wins, exit 0: URI view, sort, limit, offset; subcommand --view, --sort, --limit, '
-                    '--offset; the later value rejected (exit 2, one value named): detail',
-    ('markdown', '1c'): 'last-wins, exit 0: URI view, backlinks, aggregate, link-graph, lint, explain, sort, limit, '
-                        'offset; subcommand --view, --backlinks, --aggregate, --sort, --limit, --offset; the later '
-                        'value rejected (exit 2, one value named): field',
-    ('metrics', '1c'): 'last-wins, exit 0: all 19 scalar URI keys and 14 subcommand flags (view, hotspots, top, '
-                       'code-only, the min_/max_ thresholds, churn, merges, tests, detail, sort, limit, offset and '
-                       'their legacy keys); the later value rejected (exit 2, one value named): since',
-    ('overview', '1c'): 'last-wins, exit 0: URI top, no_imports, all, verbose; subcommand --top; the later value '
-                        'rejected (exit 2, one value named): no_git, tests, against',
-    ('pack', '1c'): 'last-wins, exit 0: URI budget, focus, since, content, architecture; subcommand --budget, '
-                    '--focus, --since',
-    ('patches', '1c'): 'last-wins, exit 0: URI group, limit, min, target, private, suppress, top, min_patches, '
-                       'min_categories, include_unresolved; subcommand --group, --limit, --min, --target, --top, '
-                       '--min-patches, --min-categories',
-    ('stats', '1c'): 'as metrics on the URI; ?since twice exits 1',
-    ('surface', '1c'): 'last-wins, exit 0: URI type, source_only, depth, top; subcommand --type, --depth, --top',
-    ('testability', '1c'): 'last-wins, exit 0: URI top, min_patches, min_categories, include_unresolved; subcommand '
-                           '--top, --min-patches, --min-categories',
-    ('trace', '1c'): 'last-wins, exit 0: URI depth; subcommand --depth; the later value rejected (exit 2, one value '
-                     'named): from',
-    ('markdown', '1d'): '?match=a&body-contains=b exits 2 (match: conflicting spellings) where --match a '
-                        '--body-contains b ANDs',
     ('codex', '3b'): '?zz-unknown=1: warned and ignored, exit 0 (no subcommand)',
-    ('stats', '3b'): '?zz-unknown=1: warned and ignored, exit 0 (no subcommand)',
     ('ast', '3b'): '?zz-unknown=1 is read as a where field: a zero-row answer, exit 0; subcommand: argparse error',
-    ('calls', '5'): 'root, target and uncalled are parameters of their own, declared on no canonical control',
-    ('claude', '5'): 'all eight legacy keys (summary, search, contains, filter, tail, last, full, raw) are '
-                     'parameters of their own',
-    ('metrics', '5'): 'all ten legacy keys are parameters of their own (ParamSpec.retired), translated by '
-                      'hand-written code',
-    ('ast', '6'): 'type -> kind has no RETIREMENTS row and no note',
-    ('markdown', '6'): 'body-contains -> match and fields -> columns have no RETIREMENTS row and no note',
     ('ast', '8a'): 'bare match, detail, depth, tests, since, until, against are read as where fields, exit 0 (depth '
                    'is nesting depth, with no note)',
     ('git', '8a'): 'bare match, kind, depth, tests, against: exit 0',
     ('json', '8a'): 'bare match, kind, depth, tests, since, until, against: exit 0',
     ('markdown', '8a'): 'bare detail, kind, depth, tests, since, until, against: exit 0',
     ('metrics', '8a'): 'bare against: exit 0 (match, kind, depth, until reject)',
-    ('stats', '8a'): 'bare match, kind, depth, until exit 1 where metrics:// exits 2; against: exit 0',
     ('claude', '8b'): '?session~=session is warned unknown and ignored; ?where=session~=session filters',
     ('metrics', '8b'): '?lines=5 is warned unknown and ignored; ?where=lines=5 filters (?lines>10 already filters)',
-    ('stats', '8b'): 'as metrics',
     ('architecture', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('calls', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('claude', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
@@ -305,8 +209,8 @@ NOT_YET = {
     ('trace', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
 }
 
-NOT_YET_BASELINE = {'1a': 20, '1b': 2, '1c': 20, '1d': 1, '2': 9, '3': 20, '3b': 20, '4': 18, '5': 3, '6': 2,
-                    '8a': 6, '8b': 3}
+NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 19, '3b': 19, '4': 17, '5': 0, '6': 0,
+                    '8a': 5, '8b': 2}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -855,7 +759,7 @@ def _legacy_names(spec):
     return tuple(getattr(entry, 'name', entry) for entry in getattr(spec, 'legacy', ()))
 
 
-def probe_legacy_declarations(noun):
+def probe_legacy_declarations(noun, sample):
     """Each note-stage ``param:`` row names a spelling declared exactly once on the noun: an alias, or a ``legacy``
     entry of the canonical control, and not a parameter of its own (that is ``ParamSpec.retired``'s shape)."""
     cases = []
@@ -870,6 +774,32 @@ def probe_legacy_declarations(noun):
         cases.append(Case(f'{key} declared', len(owners) == 1 and not own,
                           f'{legacy}: declared on {owners or "no control"}'
                           + (f', and still a parameter of its own ({own[0]})' if own else '')))
+        cases += _legacy_conflict_cases(noun, key, legacy, specs, sample)
+    return cases
+
+
+def _legacy_conflict_cases(noun, key, legacy, specs, sample):
+    """Rule 1 for legacy and canonical, generated from the declaration: the retirement case's legacy value
+    translates to canonical values; a different canonical value exits 2 naming both, the same answers once."""
+    entry = next((e for spec in specs for e in getattr(spec, 'legacy', ()) if getattr(e, 'name', None) == legacy), None)
+    uri = _uri_of(PRODUCTION_CASES[key](str(sample)))
+    if entry is None or '://' not in uri:
+        return []
+    base, _, query = uri.partition('?')
+    pairs = [pair for pair in query.split('&') if pair]
+    raw = next((pair.partition('=')[2] for pair in pairs if pair.partition('=')[0] == legacy), '')
+    without = base + '?' + '&'.join(pair for pair in pairs if pair.partition('=')[0] != legacy)
+    cases = []
+    for name, value in dict(entry.translate(raw)).items():
+        spec = _spec_for(noun, name)
+        if spec is None or _repeatable(spec):
+            continue  # a repeatable canonical control accumulates the legacy term (rule 1)
+        other = next((v for v in _candidate_values(spec) if v != str(value)), None)
+        label = f'?{legacy}= vs ?{name}='
+        if other is not None:
+            cases.append(_conflict_case(label, _run(f'{uri}&{name}={other}', '--format', 'json'), (legacy, name)))
+        cases.append(_equal_case(label, noun, _run(f'{uri}&{name}={value}', '--format', 'json'),
+                                 _run(f'{without}&{name}={value}'.replace('?&', '?'), '--format', 'json')))
     return cases
 
 
@@ -973,9 +903,10 @@ def probe_bare_field_filters(noun):
 
 PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repeated_spelling,
           '1d': probe_repeatable_aliases, '3': probe_unsupported_controls, '3b': probe_unknown_keys,
-          '4': probe_verbose_is_detail_full, '5': probe_legacy_declarations, '8a': probe_bare_shared_keys,
+          '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
           '8b': probe_bare_field_filters}
-SAMPLE_PROBES = {'2': probe_retirement_notes, '6': probe_alias_notes}  # these also run the retirement cases' file
+# These also run the retirement cases' sample file.
+SAMPLE_PROBES = {'2': probe_retirement_notes, '5': probe_legacy_declarations, '6': probe_alias_notes}
 
 
 def measure(noun, rule, sample):
@@ -988,6 +919,27 @@ def measure(noun, rule, sample):
 
 # --- the tests ---------------------------------------------------------------------------------------------
 
+@pytest.mark.parametrize('owner,field,present', [
+    ('FlagSpec', 'reject_conflict', False),    # rule 1 is the injection seam's default, not a per-flag opt-in
+    ('ParamSpec', 'retired', False),           # rule 5: a legacy spelling is not a parameter of its own
+    ('ParamSpec', 'legacy_selectors', False),  # rule 5: JSON's first-position selectors are legacy spellings too
+    ('ParamSpec', 'legacy', True),             # rule 5: the one declaration, on the canonical control
+])
+def test_one_legacy_declaration_replaces_the_opt_in_seams(owner, field, present):
+    from dataclasses import fields
+    from reveal.cli.routing.flag_specs import FlagSpec
+    from reveal.utils.query_parser import ParamSpec
+    names = {item.name for item in fields({'FlagSpec': FlagSpec, 'ParamSpec': ParamSpec}[owner])}
+    assert (field in names) is present, f'{owner}.{field} should {"" if present else "not "}exist'
+
+
+def test_every_legacy_entry_names_its_spelling_and_translation():
+    """The declaration's shape (rule 5): a spelling and a translation of its raw value into canonical controls."""
+    for noun in NOUNS:
+        for spec in _adapter(noun).PARAM_SPECS:
+            for entry in getattr(spec, 'legacy', ()):
+                assert isinstance(entry.name, str) and entry.name and callable(entry.translate), (noun, spec.name)
+
 def test_every_declared_noun_has_a_base_request():
     assert sorted(BASE) == NOUNS, 'a new declared noun needs its default request in BASE (and its cells below)'
 
@@ -995,6 +947,8 @@ def test_every_declared_noun_has_a_base_request():
 def test_the_recorded_cells_name_real_nouns_and_rules():
     for noun, rule in [*EXEMPT, *NOT_YET]:
         assert noun in NOUNS and rule in RULES, (noun, rule)
+        assert noun not in RULED_EXEMPT_NOUNS, (noun, rule)
+    assert not [cell for cell in NOT_YET if cell[1] in DEFAULT_NOW], 'rules 1, 2, 5 and 6 have no not-yet cells'
     assert not set(EXEMPT) & set(NOT_YET)
     assert all(reason.strip() for reason in [*EXEMPT.values(), *NOT_YET.values()])
 
@@ -1042,6 +996,8 @@ def test_the_matchers_reject_the_answers_the_rules_replace():
 @pytest.mark.parametrize('rule', RULES)
 @pytest.mark.parametrize('noun', NOUNS)
 def test_cell(workspace, noun, rule):
+    if noun in RULED_EXEMPT_NOUNS:
+        pytest.skip(RULED_EXEMPT_NOUNS[noun])
     if rule in SAMPLE_PROBES:
         pytest.importorskip('mcp')
     state, cases = measure(noun, rule, workspace)
