@@ -961,7 +961,7 @@ class TestHandleFileOrDirectory(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     handle_file_or_directory(temp_path, mock_args)
 
-                mock_exit.assert_called_once_with(1)
+                mock_exit.assert_called_once_with(2)  # a usage error (D6), BACK-2621 decision 8
         finally:
             os.unlink(temp_path)
 

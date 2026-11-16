@@ -177,6 +177,9 @@ def test_check_and_hotspots_non_crash(lang):
     """Bounded-scan guard (BACK-338/418's disease) — smoke-level only, not
     full conformance; see test_conformance_matrix.py's version of this test
     for the 9 matrix languages, which also pins the ceiling env var."""
-    for flag in ("--check", "--hotspots"):
-        result = _run(str(_sample_path(lang).parent), flag)
-        _assert_sane(result, f"{lang} {flag}")
+    # The hotspot ranking is `reveal metrics PATH --view hotspots` (BACK-2621); `PATH --hotspots` was a usage
+    # error that never ranked anything. --churn off: the fixture sits in the checkout, whose history is not its own.
+    directory = str(_sample_path(lang).parent)
+    for argv in ((directory, "--check"), ("metrics", directory, "--view", "hotspots", "--churn", "off")):
+        result = _run(*argv)
+        _assert_sane(result, f"{lang} {' '.join(argv[2:]) or argv[-1]}")

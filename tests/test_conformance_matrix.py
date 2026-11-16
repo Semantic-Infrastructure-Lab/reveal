@@ -735,9 +735,12 @@ def test_check_and_hotspots_complete_quickly(lang, tmp_path):
     (target / ".reveal.yaml").write_text("root: true\n", encoding="utf-8")
     env = os.environ.copy()
     env["PYTHONPATH"] = str(Path(__file__).parents[1])
-    for flag in ("--check", "--hotspots"):
+    # The hotspot ranking is `reveal metrics PATH --view hotspots` (BACK-2621); `PATH --hotspots` is a usage
+    # error that never ranked anything.
+    for argv in ([str(target), "--check"], ["metrics", str(target), "--view", "hotspots"]):
+        flag = argv[-1]
         result = subprocess.run(
-            [sys.executable, "-m", "reveal.main", str(target), flag],
+            [sys.executable, "-m", "reveal.main", *argv],
             capture_output=True, text=True, encoding='utf-8', timeout=30, env=env,
         )
         # rc 3 (scan incomplete, BACK-1824) would mean a cross-file scan escaped the
