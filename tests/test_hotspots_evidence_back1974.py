@@ -229,9 +229,10 @@ def test_actual_optional_churn_warning_survives_stats_composition(tmp_path):
         return None
     with patch.object(MetricsAdapter, '_compute_churn_counts', unavailable):
         child = MetricsAdapter(str(tmp_path), 'hotspots=true').get_structure()
-        assert child['warnings'][0]['type'] == 'churn_unavailable'
-        assert not any(w.get('type') == 'churn_unavailable'
-                       for w in child.get('meta', {}).get('warnings', []))
+        # The disclosure is in metrics' envelope since BACK-2621 (it sat in a top-level list).
+        assert 'warnings' not in child
+        assert [w['type'] for w in child['meta']['warnings'] if w.get('type') == 'churn_unavailable'] == [
+            'churn_unavailable']
         result = HotspotsAdapter(str(tmp_path), 'files_only=true').get_structure()
     warning, = [w for w in result.get('meta', {}).get('warnings', [])
                  if w.get('type') == 'churn_unavailable']

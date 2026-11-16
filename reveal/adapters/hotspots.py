@@ -181,9 +181,6 @@ def _compose_stats(adapter: 'HotspotsAdapter', path: Path, *, cut_as: Optional[T
         return {}
     summary = data.get('summary')
     adapter.stats_summary = summary if isinstance(summary, dict) else {}
-    if data.get('warnings'):
-        # Stats still returns optional churn disclosures outside its meta frame.
-        adapter.fold_meta({'warnings': data['warnings']})
     if params.get('hotspots'):
         files = data.get('files')
         files = files if isinstance(files, list) else []

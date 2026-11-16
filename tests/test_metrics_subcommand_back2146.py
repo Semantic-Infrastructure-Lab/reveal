@@ -46,7 +46,9 @@ CASES = [
     (['--hotspots'], '?hotspots=true'),
     (['--hotspots', '--top', '1'], '?hotspots=true&top=1'),
     (['--hotspots', '--top', '0'], '?hotspots=true&top=0'),
-    (['--hotspots', '--no-churn'], '?hotspots=true&churn=false'),
+    # --no-churn is retired (BACK-2621): its URI twin is the legacy no_churn, and --churn off is churn=off.
+    (['--hotspots', '--no-churn'], '?hotspots=true&no_churn=true'),
+    (['--hotspots', '--churn', 'off'], '?hotspots=true&churn=off'),
     (['--min-lines', '5'], '?min_lines=5'),
     (['--max-lines', '30'], '?max_lines=30'),
     (['--min-complexity', '5.5'], '?min_complexity=5.5'),
@@ -142,7 +144,8 @@ def test_the_findings_gate_belongs_to_the_hotspots_view(project):
     a = run('metrics', 'proj', '--fail-on', 'findings')
     b = run('metrics://proj', '--fail-on', 'findings')
     assert a.returncode == b.returncode == 2, (a.stderr, b.stderr)
-    assert a.stderr == b.stderr and 'metrics gates --hotspots' in a.stderr
+    assert a.stderr == b.stderr and 'metrics gates the hotspot ranking' in a.stderr  # names --view hotspots, BACK-2621
+    assert 'add --view hotspots' in a.stderr
     a = run('metrics', 'proj', '--hotspots', '--fail-on', 'findings', '--format', 'json')
     b = run('metrics://proj?hotspots=true', '--fail-on', 'findings', '--format', 'json')
     assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)

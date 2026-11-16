@@ -91,8 +91,9 @@ HOTSPOT_SPELLINGS = {
 }
 # Each retired spelling, the note it prints, and the new spelling whose answer it must equal.
 RETIRED = {
+    # The hotspot ranking's canonical spelling (BACK-2621): hotspots=true is itself retired.
     'stats://': ('stats://', 'metrics://<path> (the same answer)',
-                 lambda d: [f'stats://{d}?hotspots=true'], lambda d: [f'metrics://{d}?hotspots=true']),
+                 lambda d: [f'stats://{d}?view=hotspots'], lambda d: [f'metrics://{d}?view=hotspots']),
     'classify://': ('classify://', 'metrics://<path>?view=provenance (the same answer)',
                     lambda d: [f'classify://{d}'], lambda d: [f'metrics://{d}?view=provenance']),
 }
@@ -248,7 +249,7 @@ def test_an_unknown_metrics_view_is_rejected(project, argv):
     declared noun (BACK-2146), so a bad value is a rejected request: exit 2, in both spellings."""
     result = run(*argv(project), '--format', 'json')
     assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
-    assert "view must be one of ('provenance',), got 'everything'" in result.stderr
+    assert "view must be one of ('provenance', 'hotspots'), got 'everything'" in result.stderr  # BACK-2621
     assert json.loads(result.stdout)['error']
 
 

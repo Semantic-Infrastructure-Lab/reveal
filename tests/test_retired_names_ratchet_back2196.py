@@ -66,7 +66,7 @@ def test_a_list_item_is_judged_without_its_neighbours():
     "reveal 'calls://src/?callers=fn&depth=3'",
     'reveal calls src --callees main --depth 2 --detail',
     "reveal 'imports://src/?importers'",
-    "reveal 'metrics://src/?hotspots=true'",
+    "reveal 'metrics://src/?view=hotspots'",  # hotspots=true is retired (BACK-2621)
     "reveal 'patches://tests/?view=pressure'",
     "reveal 'ast://src/?type=function&complexity>10'",
     'reveal src/app.py --check-only',

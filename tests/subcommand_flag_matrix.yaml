@@ -425,10 +425,11 @@ subcommands:
       via:
       - declared-read
     until:
-      reason: --until is not declared on `reveal metrics`'s own parser -- argparse
-        rejects it loudly (unrecognized arguments), not a silent gap
+      reason: metrics declares --until only to reject it (exit 2 naming where and its supported
+        controls, BACK-2621); since bounds churn input and there is no time window
       review: not-applicable
-      via: []
+      via:
+      - declared-read
     verbose:
       reason: metrics accepts shared verbosity but nothing it prints changes with it; the
         flag ledger names it as a no-op, as for calls:// (BACK-2146).

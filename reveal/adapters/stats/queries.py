@@ -142,6 +142,7 @@ _FIELD_ALIASES = {
     'code_lines': 'lines.code',
     'comment_lines': 'lines.comments',
     'complexity': 'complexity.average',
+    'avg_complexity': 'complexity.average',  # the taught name of the file average (BACK-2621)
     'max_complexity': 'complexity.max',
     'functions': 'elements.functions',
     'classes': 'elements.classes',
@@ -204,52 +205,18 @@ def compare(value: Any, op: str, target: Any) -> bool:
     )
 
 
-def matches_filters(
-    stats: Dict[str, Any],
-    min_lines: Optional[int],
-    max_lines: Optional[int],
-    min_complexity: Optional[float],
-    max_complexity: Optional[float],
-    min_functions: Optional[int],
-    query_filters: list,
-    field_value_func,
-    compare_func
-) -> bool:
-    """Check if file stats match filter criteria.
-
-    Supports both legacy parameters (min_lines, max_lines, etc.) and
-    new unified query filters (lines>50, complexity=5..15, etc.).
+def matches_filters(stats: Dict[str, Any], query_filters: list, field_value_func, compare_func) -> bool:
+    """Whether file stats match every filter (ANDed): where's terms, the legacy thresholds already
+    translated into them (min_lines=N is lines>=N, BACK-2621).
 
     Args:
         stats: File statistics
-        min_lines: Minimum line count (legacy)
-        max_lines: Maximum line count (legacy)
-        min_complexity: Minimum avg complexity (legacy)
-        max_complexity: Maximum avg complexity (legacy)
-        min_functions: Minimum function count (legacy)
-        query_filters: List of query filter objects
+        query_filters: Parsed filter expressions (lines>50, complexity=5..15, ...)
         field_value_func: Function to extract field values
         compare_func: Function to compare values
-
-    Returns:
-        True if matches all filters
     """
-    # Check legacy parameters (backward compatibility)
-    if min_lines is not None and stats['lines']['total'] < min_lines:
-        return False
-    if max_lines is not None and stats['lines']['total'] > max_lines:
-        return False
-    if min_complexity is not None and stats['complexity']['average'] < min_complexity:
-        return False
-    if max_complexity is not None and stats['complexity']['average'] > max_complexity:
-        return False
-    if min_functions is not None and stats['elements']['functions'] < min_functions:
-        return False
-
-    # Check new query filters (unified syntax)
     for qf in query_filters:
         value = field_value_func(stats, qf.field)
         if not compare_func(value, qf.op, qf.value):
             return False
-
     return True

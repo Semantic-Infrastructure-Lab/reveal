@@ -213,6 +213,17 @@ PRODUCTION_CASES = {
     'param:imports.top': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in&top=1'],
     'param:imports.verbose': lambda f: [f'imports://{Path(f).parent}?circular&verbose'],
     'param:imports.max_files': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in&max_files=100'],
+    # Metrics vocabulary (BACK-2621): each legacy spelling alone, on the one source file.
+    'param:metrics.hotspots': lambda f: [f'metrics://{f}?hotspots=true'],
+    'param:metrics.top': lambda f: [f'metrics://{f}?view=hotspots&top=1'],
+    'param:metrics.min_lines': lambda f: [f'metrics://{f}?min_lines=1'],
+    'param:metrics.max_lines': lambda f: [f'metrics://{f}?max_lines=1000'],
+    'param:metrics.min_functions': lambda f: [f'metrics://{f}?min_functions=0'],
+    'param:metrics.min_complexity': lambda f: [f'metrics://{f}?min_complexity=0'],
+    'param:metrics.max_complexity': lambda f: [f'metrics://{f}?max_complexity=100'],
+    'param:metrics.no_churn': lambda f: ['metrics', f, '--view', 'hotspots', '--no-churn'],
+    'param:metrics.no_merges': lambda f: [f'metrics://{f}?view=hotspots&no_merges=true'],
+    'param:metrics.summary_only': lambda f: [f'metrics://{f}?summary_only=true'],
     # Phase 2 slice S5 (BACK-1054): ?modules answers from imports ?importers; tests/test_calls_modules_shim_back1054.py
     # pins its edges, shape and exit codes. ?external is spelled with callers here, where it never applied, so the
     # row is its one note (with ?modules it is the second).

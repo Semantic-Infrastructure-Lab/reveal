@@ -298,6 +298,22 @@ RETIREMENTS: Dict[str, Retirement] = {
                                         '?detail=full (--detail full); JSON keeps "verbose": true'),
     'param:imports.max_files': Retirement('imports ?max_files=N (--max-files N)',
                                           '?scan-limit=N (--scan-limit N), the same input budget'),
+    # Metrics' vocabulary (BACK-2621, Scott 2026-11-15): the hotspot ranking is a view whose rows limit caps,
+    # filters are where (the complexity pair is the file average, avg_complexity), switches take on|off.
+    'param:metrics.hotspots': Retirement('metrics ?hotspots=true (--hotspots)',
+                                         '?view=hotspots (--view hotspots): the ranked files are the rows'),
+    'param:metrics.top': Retirement('metrics ?top=N (--top N)', '?limit=N (--limit N) in view=hotspots; 0 is uncapped'),
+    'param:metrics.min_lines': Retirement('metrics ?min_lines=N (--min-lines N)', "?where=lines>=N (--where 'lines>=N')"),
+    'param:metrics.max_lines': Retirement('metrics ?max_lines=N (--max-lines N)', "?where=lines<=N (--where 'lines<=N')"),
+    'param:metrics.min_functions': Retirement('metrics ?min_functions=N (--min-functions N)',
+                                              "?where=functions>=N (--where 'functions>=N')"),
+    'param:metrics.min_complexity': Retirement('metrics ?min_complexity=N (--min-complexity N)',
+                                               "?where=avg_complexity>=N (--where 'avg_complexity>=N'), the file average"),
+    'param:metrics.max_complexity': Retirement('metrics ?max_complexity=N (--max-complexity N)',
+                                               "?where=avg_complexity<=N (--where 'avg_complexity<=N'), the file average"),
+    'param:metrics.no_churn': Retirement('metrics --no-churn', '--churn off (?churn=off)'),
+    'param:metrics.no_merges': Retirement('metrics ?no_merges (--no-merges)', '?merges=off (--merges off)'),
+    'param:metrics.summary_only': Retirement('metrics ?summary_only (--summary-only)', '?detail=summary (--detail summary)'),
     # calls?modules folded into imports (BACK-1054 slice S5, Q4/Q8): the module graph is imports' edges, in the
     # old shape without call_count, until the cut.
     'param:calls.modules': Retirement('calls ?modules (--modules)',

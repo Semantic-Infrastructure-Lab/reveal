@@ -6,6 +6,7 @@ and the file hotspot ranking (``?hotspots=true``, which the hotspots noun's file
 prints the replaced-by note from the RETIREMENTS table until the cut (D5).
 """
 
+import argparse
 import os
 from datetime import datetime
 from pathlib import Path
@@ -22,8 +23,8 @@ from ...utils.query import (
 from ...utils.query_control import sort_failed_warning, sort_nulls_last
 from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_parser import (
-    CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression,
-    param_schema, peek_query_items, split_exclude_param, whole_number,
+    CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, mark_query_keys, param_schema,
+    peek_query_items, split_exclude_param, where_param, whole_number,
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.gitignore import respect_gitignore_param
@@ -80,9 +81,19 @@ def _analyze_file_worker(args: tuple):
     )
 
 
-# metrics' views: the default per-file metrics, and the full-population provenance report
-# that classify:// answered (no file analysis, no rule pass).
-VIEWS = ('provenance',)
+# metrics' views: the default per-file metrics; the ranked hotspot files (their rows, capped by limit, with
+# the findings verdict); and the full-population provenance report that classify:// answered (no file
+# analysis, no rule pass).
+VIEWS = ('provenance', 'hotspots')
+DETAIL_LEVELS = ('normal', 'summary')
+# The hotspot view's row cap when no limit is given (the legacy hotspots=true ranking's top default).
+HOTSPOT_VIEW_LIMIT = 10
+# Shared controls of the one vocabulary that metrics does not take (D18): rejected, never folded into where.
+UNSUPPORTED_SHARED = ('match', 'kind', 'depth', 'until')
+# Operators that make a bare URI key a filter expression (``lines>5``, ``lines=1..5``); a bare ``key=value``
+# is a filter only beside one of them, as before where was declared (BACK-2278).
+_FILTER_OPERATORS = ('>', '<', '!=', '~=', '!~', '..')
+
 
 def _count(name: str):
     """A whole-number parameter: 5 and 5.0 are accepted, 5.5, text and booleans are not. A spec's own
@@ -125,69 +136,186 @@ def _iso_date(name: str) -> Callable[[Any], str]:
     return convert
 
 
+def _switch(value: Any) -> bool:
+    """An on/off switch (churn, merges): Git's merges codec, on|off or a boolean (BACK-2621)."""
+    from ..git.params import merge_policy  # deferred: the git package imports its adapter
+    return merge_policy(value).include
+
+
+def _detail(value: Any) -> str:
+    if value not in DETAIL_LEVELS:
+        raise ParamValueError(f'detail must be normal or summary, got {value!r}: metrics has no fuller level '
+                              '(summary omits the per-file rows)')
+    return str(value)
+
+
+def _unsupported(name: str) -> Callable[[Any], Any]:
+    def convert(value: Any) -> Any:
+        raise ParamValueError(
+            f'metrics does not support {name}: filter the files with where (where=lines>50, --where '
+            f"'avg_complexity>=5'); supported controls: {', '.join(spec.name for spec in DECLARED_SPECS)}")
+    return convert
+
+
 TEST_CHOICES = ('include', 'exclude')
 
-# The declaration `reveal metrics` and metrics:// are both generated from (BACK-2146). Operator filters
-# (`lines>50`, `complexity=5..15`) are not parameters: they stay a URI-only expression language and
-# are read from the query keys no parameter claims (MetricsAdapter._expression_filters).
-_VIEW = ParamSpec('view', 'string', 'provenance: the provenance tag (first_party/test/vendor/minified) of every analyzable file, with summary.total, by_provenance, excluded and excluded_by_extension; no file is analyzed and no rule runs (was classify://)',
-                  None, _text('view'), ('view=provenance',), choices=VIEWS, role='analysis',
+# The declaration `reveal metrics` and metrics:// are both generated from (BACK-2146, BACK-2621). Operator
+# filters (`lines>50`, `complexity=5..15`) are where's terms: the binder folds a bare URI key into it.
+_VIEW = ParamSpec('view', 'string', 'hotspots: the ranked hotspot files are the rows (quality, complexity and churn '
+                  'score, each with its provenance tag), capped by limit (default 10, 0 = all), with the --fail-on '
+                  'findings verdict; provenance: the provenance tag (first_party/test/vendor/minified) of every '
+                  'analyzable file, with summary.total, by_provenance, excluded and excluded_by_extension; no file is '
+                  'analyzed and no rule runs (was classify://). Omitted: per-file metrics',
+                  None, _text('view'), ('view=hotspots', 'view=provenance'), choices=VIEWS, role='analysis',
                   cli=CliBinding(('--view',), metavar='VIEW'))
-_HOTSPOTS = ParamSpec('hotspots', 'boolean', 'Include hotspot analysis (files needing attention)', False,
-                      boolean_value, ('hotspots=true',), role='analysis',
-                      cli=CliBinding(('--hotspots',), action='store_true'))
-_TOP = ParamSpec('top', 'integer', 'Max number of hotspot files to return when hotspots=true (default: 10, 0 = all)',
-                 10, _count('top'), ('top=25',), minimum=0, zero_policy='all', role='analysis',
-                 cli=CliBinding(('--top',), metavar='N'))
+_WHERE = where_param('Keep the files whose field matches: FIELD OP VALUE (lines>50, avg_complexity>=5, '
+                     'complexity=5..15, functions!=0, a dotted path such as lines.total); repeat to AND. A bare URI '
+                     'key with an operator (?lines>50) is the same filter', ('where=lines>50', 'where=avg_complexity>=5'))
+_HOTSPOTS = ParamSpec('hotspots', 'boolean', 'Legacy: per-file rows plus the hotspot ranking, top capping it; '
+                      'replaced by view=hotspots', False, boolean_value, ('hotspots=true',), role='analysis',
+                      retired=True, cli=CliBinding(('--hotspots',), action='store_true'))
+_TOP = ParamSpec('top', 'integer', 'Legacy hotspot cap: limit in view=hotspots; with legacy hotspots=true it caps the '
+                 'ranking (default 10, 0 = all)', 10, _count('top'), ('top=25',), minimum=0, zero_policy='all',
+                 role='analysis', retired=True, cli=CliBinding(('--top',), metavar='N'))
 _CODE_ONLY = ParamSpec('code_only', 'boolean', 'Exclude data/config files from analysis', False,
                        boolean_value, ('code_only=true',), role='analysis',
                        cli=CliBinding(('--code-only',), action='store_true'))
-_MIN_LINES = ParamSpec('min_lines', 'integer', 'Filter files with at least this many lines', None,
-                       _count('min_lines'), ('min_lines=50',), role='analysis',
+_MIN_LINES = ParamSpec('min_lines', 'integer', 'Legacy: where lines>=N', None,
+                       _count('min_lines'), ('min_lines=50',), role='analysis', retired=True,
                        cli=CliBinding(('--min-lines',), metavar='N'))
-_MAX_LINES = ParamSpec('max_lines', 'integer', 'Filter files with at most this many lines', None,
-                       _count('max_lines'), ('max_lines=500',), role='analysis',
+_MAX_LINES = ParamSpec('max_lines', 'integer', 'Legacy: where lines<=N', None,
+                       _count('max_lines'), ('max_lines=500',), role='analysis', retired=True,
                        cli=CliBinding(('--max-lines',), metavar='N'))
-_MIN_COMPLEXITY = ParamSpec('min_complexity', 'number', 'Filter files with avg complexity >= this', None,
-                            _number('min_complexity'), ('min_complexity=5.0',), role='analysis',
+_MIN_COMPLEXITY = ParamSpec('min_complexity', 'number', 'Legacy: where avg_complexity>=N (the file average)', None,
+                            _number('min_complexity'), ('min_complexity=5.0',), role='analysis', retired=True,
                             cli=CliBinding(('--min-complexity',), metavar='N'))
-_MAX_COMPLEXITY = ParamSpec('max_complexity', 'number', 'Filter files with avg complexity <= this', None,
-                            _number('max_complexity'), ('max_complexity=15.0',), role='analysis',
+_MAX_COMPLEXITY = ParamSpec('max_complexity', 'number', 'Legacy: where avg_complexity<=N (the file average)', None,
+                            _number('max_complexity'), ('max_complexity=15.0',), role='analysis', retired=True,
                             cli=CliBinding(('--max-complexity',), metavar='N'))
-_MIN_FUNCTIONS = ParamSpec('min_functions', 'integer', 'Filter files with at least this many functions', None,
-                           _count('min_functions'), ('min_functions=10',), role='analysis',
+_MIN_FUNCTIONS = ParamSpec('min_functions', 'integer', 'Legacy: where functions>=N', None,
+                           _count('min_functions'), ('min_functions=10',), role='analysis', retired=True,
                            cli=CliBinding(('--min-functions',), metavar='N'))
-_CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into hotspot scoring (default: on for git repos, silently off otherwise). Set churn=false to opt out and fall back to complexity-only scoring.',
-                   True, boolean_value, ('churn=false',), role='analysis',
-                   cli=CliBinding(('--no-churn',), action='store_false'))
+# Legacy threshold -> the where term it is: field and operator; the value keeps the legacy validation.
+_LEGACY_THRESHOLDS = ((_MIN_LINES, 'lines>='), (_MAX_LINES, 'lines<='), (_MIN_FUNCTIONS, 'functions>='),
+                      (_MIN_COMPLEXITY, 'avg_complexity>='), (_MAX_COMPLEXITY, 'avg_complexity<='))
+_CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into the hotspot score: on (default in a git '
+                   'repository; silently off elsewhere) or off for complexity-only scoring',
+                   True, _switch, ('churn=off',), role='analysis', cli=CliBinding(('--churn',), metavar='on|off'))
+_NO_CHURN = ParamSpec('no_churn', 'boolean', 'Legacy --no-churn: churn off', None, boolean_value, role='analysis',
+                      retired=True, cli=CliBinding(('--no-churn',), action='store_true'))
 _SINCE = ParamSpec('since', 'string', 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.',
                    None, _iso_date('since'), ('since=2026-01-01',), role='analysis',
                    cli=CliBinding(('--since',), metavar='DATE'))
-_NO_MERGES = ParamSpec('no_merges', 'boolean', 'Exclude merge commits from the churn tally', False,
-                       boolean_value, ('no_merges=1',), role='analysis',
+_MERGES = ParamSpec('merges', 'boolean', 'Count merge commits in the churn tally: on (default) or off', None,
+                    _switch, ('merges=off',), role='analysis', cli=CliBinding(('--merges',), metavar='on|off'))
+_NO_MERGES = ParamSpec('no_merges', 'boolean', 'Legacy: merges=off', None,
+                       boolean_value, ('no_merges=1',), role='analysis', retired=True,
                        cli=CliBinding(('--no-merges',), action='store_true'))
 _TESTS = ParamSpec('tests', 'string',
                    'Test/support files in the hotspot ranking, selected by conventional names plus project test_layout.additional_paths: '
-                   'include them (default) or exclude them from hotspots=true. Only the ranking changes; totals and files still count them',
+                   'include them (default) or exclude them from the ranking. Only the ranking changes; totals and files still count them',
                    'include', _text('tests'), ('tests=exclude',), choices=TEST_CHOICES, role='analysis',
                    cli=CliBinding(('--tests',), metavar='{include,exclude}'))
-_SUMMARY_ONLY = ParamSpec('summary_only', 'boolean', 'Omit the per-file "files" array from the result — just the aggregate summary (+ hotspots, if also requested). Use on unscoped whole-repo calls, where the per-file array can reach tens of MB and dwarfs the summary block that is usually the actual signal wanted.',
-                          False, boolean_value, ('summary_only=true',), role='analysis',
+_DETAIL = ParamSpec('detail', 'string', 'normal: the per-file rows; summary: the aggregate summary only (the per-file '
+                    'walk still runs; use it on unscoped whole-repo calls, where the rows can reach tens of MB)',
+                    'normal', _detail, ('detail=summary',), choices=DETAIL_LEVELS, role='presentation',
+                    cli=CliBinding(('--detail',), metavar='LEVEL'))
+_SUMMARY_ONLY = ParamSpec('summary_only', 'boolean', 'Legacy: detail=summary', False, boolean_value,
+                          ('summary_only=true',), role='analysis', retired=True,
                           cli=CliBinding(('--summary-only',), action='store_true'))
 _SORT = ParamSpec('sort', 'string', 'Sort the files by a field, ascending; a leading - sorts descending', None,
                   _text('sort'), ('sort=-lines',), role='analysis', cli=CliBinding(('--sort',), metavar='FIELD'))
-_LIMIT = ParamSpec('limit', 'integer', 'Keep at most this many files (0 = no cap)', None,
-                   _count('limit'), ('limit=10',), minimum=0, zero_policy='no cap', role='analysis',
-                   cli=CliBinding(('--limit',), metavar='N'))
-_OFFSET = ParamSpec('offset', 'integer', 'Skip this many files before the first one kept', None,
+_LIMIT = ParamSpec('limit', 'integer', 'Keep at most this many rows: files, or the ranked files of view=hotspots '
+                   '(default 10 there); 0 = no cap', None, _count('limit'), ('limit=10',), minimum=0,
+                   zero_policy='no cap', role='analysis', cli=CliBinding(('--limit',), metavar='N'))
+_OFFSET = ParamSpec('offset', 'integer', 'Skip this many rows before the first one kept', None,
                     _count('offset'), ('offset=5',), minimum=0, role='analysis',
                     cli=CliBinding(('--offset',), metavar='N'))
+# The walk's scope, from the URI or the global --exclude/--no-gitignore (overview composes them); declared so
+# where does not take them for filters. No subcommand flag: the global flags carry them.
+_EXCLUDE = ParamSpec('exclude', 'string', 'Exclusion patterns, comma-separated (.gitignore syntax); --exclude fills it',
+                     None, _text('exclude'), role='scope')
+_RESPECT_GITIGNORE = ParamSpec('respect_gitignore', 'string', 'false includes files git ignores; --no-gitignore '
+                               'fills it', None, lambda value: value, role='scope')
 
-PARAM_SPECS = (_VIEW, _HOTSPOTS, _TOP, _CODE_ONLY, _MIN_LINES, _MAX_LINES, _MIN_COMPLEXITY, _MAX_COMPLEXITY,
-               _MIN_FUNCTIONS, _CHURN, _SINCE, _NO_MERGES, _TESTS, _SUMMARY_ONLY, _SORT, _LIMIT, _OFFSET)
+# Every control the schema documents; the unsupported shared controls are declared only to reject them.
+DECLARED_SPECS = (_VIEW, _WHERE, _HOTSPOTS, _TOP, _CODE_ONLY, _MIN_LINES, _MAX_LINES, _MIN_COMPLEXITY, _MAX_COMPLEXITY,
+                  _MIN_FUNCTIONS, _CHURN, _NO_CHURN, _SINCE, _MERGES, _NO_MERGES, _TESTS, _DETAIL, _SUMMARY_ONLY,
+                  _SORT, _LIMIT, _OFFSET, _EXCLUDE, _RESPECT_GITIGNORE)
+_UNSUPPORTED_SPECS = tuple(ParamSpec(name, 'string', argparse.SUPPRESS, None, _unsupported(name), role='unsupported',
+                                     cli=CliBinding((f'--{name}',), metavar='VALUE'))
+                           for name in UNSUPPORTED_SHARED)
+PARAM_SPECS = DECLARED_SPECS + _UNSUPPORTED_SPECS
 
-# Query keys a parameter does not claim but the adapter reads: the walk's scope (overview composes them).
-_SCOPE_KEYS = frozenset({'exclude', 'respect_gitignore'})
+def _supplied(params: Any) -> Dict[str, Any]:
+    return dict(peek_query_items(params))  # validating is not reading
+
+
+def _validate_request(params: Any) -> None:
+    """Reject the combinations binding cannot see (D18: conflicting old/new controls exit 2; an equal
+    pair is accepted once)."""
+    supplied = _supplied(params)
+    view = supplied.get('view')
+    if 'hotspots' in supplied:
+        if view == 'provenance' and supplied['hotspots'] is True:
+            raise RequestValidationError('hotspots conflicts with view=provenance: one request has one view; '
+                                         'the hotspot ranking is view=hotspots (--view hotspots)')
+        if view == 'hotspots' and supplied['hotspots'] is False:
+            raise RequestValidationError('hotspots=false conflicts with view=hotspots: drop the legacy hotspots')
+    if view == 'hotspots' and 'top' in supplied and 'limit' in supplied and supplied['top'] != supplied['limit']:
+        raise RequestValidationError(f"top={supplied['top']} conflicts with limit={supplied['limit']}: in view=hotspots "
+                                     'legacy top is limit; give limit=N (--limit N) once')
+    if supplied.get('no_churn') is True and supplied.get('churn') is True:
+        raise RequestValidationError('--no-churn conflicts with churn=on: give churn once (--churn off)')
+    if 'no_merges' in supplied and 'merges' in supplied and supplied['merges'] == supplied['no_merges']:
+        raise RequestValidationError(f"no_merges={str(supplied['no_merges']).lower()} conflicts with "
+                                     f"merges={'on' if supplied['merges'] else 'off'}: give merges=on|off "
+                                     '(--merges on|off) once')
+    if 'summary_only' in supplied and 'detail' in supplied and \
+            (supplied['detail'] == 'summary') != supplied['summary_only']:
+        raise RequestValidationError(f"summary_only={str(supplied['summary_only']).lower()} conflicts with "
+                                     f"detail={supplied['detail']}: give detail=normal|summary (--detail) once")
+
+
+def _explicit_where(params: Any, terms: List[str]) -> List[str]:
+    """The terms given as where (``where=``, ``--where`` or a keyword), as opposed to the bare URI keys
+    the binder folded in: on a URI source they are the ``where=`` parts; on a typed one every term."""
+    source = getattr(params, '_source_query', None)
+    if source is None:
+        return list(terms)
+    from urllib.parse import unquote
+    explicit = []
+    for part in source.split('&'):
+        key, separator, value = part.strip().partition('=')
+        if key == _WHERE.name and separator:
+            explicit.append(unquote(value))
+    return explicit
+
+
+def _filter_terms(params: Any, *, legacy_thresholds: bool = True) -> tuple:
+    """The filter expressions of a bound request, and the bare keys that are no filter.
+
+    where's explicit terms always filter; a bare URI key does when any bare key carries an operator
+    (``lines=1`` beside ``functions>=0``), else it is an unrecognized param (BACK-2278). Each legacy
+    threshold is its where term (min_lines=N is lines>=N; the complexity pair is the file average,
+    avg_complexity, never the highest-function max_complexity field).
+    """
+    terms = list(_WHERE.read(params))
+    explicit = _explicit_where(params, terms)
+    bare = list(terms)
+    for term in explicit:
+        if term in bare:
+            bare.remove(term)
+    ignored = []
+    if bare and not explicit and not any(op in term for term in bare for op in _FILTER_OPERATORS):
+        ignored = [(key, value if separator else True)
+                   for key, separator, value in (term.partition('=') for term in bare)]
+        terms = explicit
+    if not legacy_thresholds:  # view=provenance reads no file filter: they stay unread, and say so
+        return terms, ignored
+    legacy = [f'{field}{spec.read(params)}' for spec, field in _LEGACY_THRESHOLDS if spec.read(params) is not None]
+    return terms + legacy, ignored
+
 
 # The warning types _disclose_failures emits that say the answer lacks files it should have counted.
 REQUIRED_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete', 'parse_degraded', 'check_rules_failed'})
@@ -265,25 +393,26 @@ _SCHEMA_OUTPUT_TYPES = [
 
 _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'metrics://./src', 'description': 'Get codebase statistics for src directory', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src?hotspots=true', 'description': 'Include hotspot analysis (files needing attention)', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src?min_complexity=5.0', 'description': 'Show only files with avg complexity >= 5.0', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src?view=hotspots', 'description': 'The ranked hotspot files (files needing attention), 10 by default', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src?where=avg_complexity>=5', 'description': 'Show only files with avg complexity >= 5', 'output_type': 'stats_summary'},
     {'uri': 'metrics://./src?code_only=true', 'description': 'Exclude data/config files', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src?summary_only=true', 'description': 'Aggregate summary only, no per-file array — for large repos where the full file list is impractical to consume directly', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src?detail=summary', 'description': 'Aggregate summary only, no per-file array — for large repos where the full file list is impractical to consume directly', 'output_type': 'stats_summary'},
     {'uri': 'metrics://src/core.py', 'description': 'File-level statistics', 'output_type': 'stats_file'},
-    {'uri': 'metrics://./src?hotspots=true', 'description': 'Ranked list of files with quality issues', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src?view=hotspots&limit=0', 'description': 'Every ranked hotspot file (limit=0 is uncapped)', 'output_type': 'stats_summary'},
     {'uri': 'metrics://./src?view=provenance', 'description': 'Provenance tag of every analyzable file, with exclusions by extension (was classify://)', 'output_type': 'classify_report'},
 ]
 
 _SCHEMA_NOTES = [
     'quality_score is 0-100: 100 = no issues; weighted by severity (error/warning/info)',
     'Complexity is cyclomatic, from the tree-sitter AST: 1 plus one per decision node (if/elif, loops, except/catch arms, case arms, and/or, ternaries); languages without a tree-sitter complexity fall back to a text heuristic',
-    'hotspots=true adds a ranked list of files most in need of refactoring; each entry carries provenance, the path-only test/vendor/minified tag of its file under the scan root (null = first party)',
-    'hotspots=true adds summary.has_findings: an analysed file with quality below 70 or a function with complexity above 20 (fixed thresholds), over every analysed file before the file filters, tests= and the top/limit/offset cuts; --fail-on findings exits 1 on it (default none). The other views have no findings and exit 0 under --fail-on findings',
-    'tests=exclude leaves conventional and project-declared test/support files out of the hotspots=true ranking only; test_scope records the selected policy and files_excluded. The default includes them. Ordinary overview does not request this ranking',
+    'view=hotspots answers the ranked list of files most in need of refactoring as its rows (limit caps them, default 10; offset pages them); each entry carries provenance, the path-only test/vendor/minified tag of its file under the scan root (null = first party). Legacy hotspots=true adds the same ranking beside the per-file rows, top capping it',
+    'view=hotspots adds summary.has_findings: an analysed file with quality below 70 or a function with complexity above 20 (fixed thresholds), over every analysed file before where, tests= and the limit/offset cuts; --fail-on findings exits 1 on it (default none). The other views have no findings and exit 2 under --fail-on findings',
+    'tests=exclude leaves conventional and project-declared test/support files out of the hotspot ranking only; test_scope records the selected policy and files_excluded. The default includes them. Ordinary overview does not request this ranking',
+    'where filters the files (FIELD OP VALUE, repeatable, ANDed); avg_complexity is the file average (complexity is its alias) and max_complexity the most complex function. Legacy min_lines/max_lines/min_functions and min_complexity/max_complexity are those where terms (the complexity pair on avg_complexity)',
     'quality.local_check_issues counts the findings of file-local check rules only, so a file has one count whatever else is in the tree; meta.issue_count names the rule and the rule set. Cross-file rules (import cycles, duplicate literals, ...) run under reveal check.',
     'Both files and directories are supported; directories show aggregate + per-file breakdown',
     'view=provenance answers what classify:// did: every analyzable file tagged first_party/test/vendor/minified, without analysis or rules; stats:// and classify:// are retired spellings that answer the same',
-    'On large repos, an unscoped call returns one entry per file (can reach tens of MB) — use summary_only=true when only the aggregate summary/hotspots are needed',
+    'On large repos, an unscoped call returns one entry per file (can reach tens of MB) — use detail=summary when only the aggregate summary is needed',
 ]
 
 
@@ -352,10 +481,10 @@ class MetricsAdapter(ResourceAdapter):
             'resource': MetricsAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': MetricsAdapter.DEFAULT_FAIL_ON,
                                  'fail_on': list(MetricsAdapter.FINDINGS_POLICIES)},
-            'query_params': param_schema(PARAM_SPECS),
+            'query_params': param_schema(DECLARED_SPECS),
             'operators': {},
             'elements': {},
-            'cli_flags': ['--hotspots', '--format=json'],
+            'cli_flags': ['--view', '--where', '--format=json'],
             'supports_batch': False,
             'supports_advanced': True,
             'output_types': _SCHEMA_OUTPUT_TYPES,
@@ -365,17 +494,18 @@ class MetricsAdapter(ResourceAdapter):
 
     @staticmethod
     def validate_request(params, args):
-        """--fail-on findings gates the hotspots=true view only: any other view has no findings
-        verdict, so the gate could never fire and a CI run that forgot --hotspots passed (BACK-2528)."""
+        """--fail-on findings gates the hotspot ranking only (view=hotspots, or legacy hotspots=true): any
+        other view has no findings verdict, so the gate could never fire and a CI run that forgot the
+        ranking passed (BACK-2528)."""
         if vars(args).get('fail_on') != 'findings':
             return
         keys = dict(peek_query_items(params))  # validating is not reading
-        if keys.get('view') != 'provenance' and _requests(keys.get('hotspots')):
+        if keys.get('view') == 'hotspots' or (keys.get('view') != 'provenance' and _requests(keys.get('hotspots'))):
             return
         raise RequestValidationError(
-            '--fail-on findings has no verdict to gate in this view: metrics gates --hotspots '
+            '--fail-on findings has no verdict to gate in this view: metrics gates the hotspot ranking '
             '(exit 1 when an analysed file has quality below 70 or a function complexity above 20), '
-            'not the default or provenance view; add --hotspots, or drop --fail-on')
+            'not the default or provenance view; add --view hotspots, or drop --fail-on')
 
     @staticmethod
     def result_type_for(params) -> str:
@@ -412,6 +542,7 @@ class MetricsAdapter(ResourceAdapter):
             params: Parameters already bound against PARAM_SPECS (the declared command and URI route);
                     given, ``query`` is not read.
         """
+        # (Every transport binds the same declarations; conflicting old/new spellings reject here.)
         self.path = Path(os.path.abspath(require_path_exists(Path(resource))))  # the message names the path as spelled
         self._churn_disclosure: Optional[str] = None  # BACK-1166: set by _compute_churn_counts
         self._traversal_failures: List[PathFailure] = []
@@ -422,38 +553,30 @@ class MetricsAdapter(ResourceAdapter):
             params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
         elif not isinstance(params, QueryParams):
             params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        elif not params._normalized and dict(peek_query_items(params)):
+            # A parsed but unbound query (a library caller's parse_query_params): bind its text so bare
+            # operator keys become where's terms as on the URI.
+            params = bind_declared_params(PARAM_SPECS, '&'.join(filter_expression(key, value) for key, value
+                                                                 in peek_query_items(params)), transport='uri')
+        _validate_request(params)
         self.query_params = params
         filter_query, self.result_control = parse_result_control(self._control_query())
+        self.view = _VIEW.read(self.query_params)  # the binder already checked it against VIEWS
 
-        # Declared controls are never file filters, in legacy API queries either.
-        filter_query = self._expression_filters()
-
-        # Parse query filters (new unified syntax: lines>50, complexity=5..15, etc.)
-        # Only parse if the query contains new-style operators (>, <, !=, ~=, ..)
-        # Legacy parameters (min_lines, max_lines, etc.) are handled via query_params
-        self.query_filters = []
-        if filter_query and any(op in filter_query for op in ['>', '<', '!=', '~=', '!~', '..']):
-            # No fallback to "no filters": that would answer an unfiltered query as if it
-            # were the filtered one (BACK-1059). A ValueError here fails the query.
-            self.query_filters = parse_query_filters(filter_query)
+        # where's terms, the legacy thresholds translated into it. No fallback to "no filters": that
+        # would answer an unfiltered query as if it were the filtered one (BACK-1059); a ValueError
+        # here fails the query.
+        terms, ignored = _filter_terms(params, legacy_thresholds=self.view != 'provenance')
+        self.query_filters = parse_query_filters('&'.join(terms)) if terms else []
 
         # Load quality scoring config (with defaults)
         self._quality_config = get_quality_config(self.path)
 
-        # BACK-507: warn on unrecognized params (e.g. ?complexity=true, which
-        # isn't a stats param — the real ones are min_complexity/max_complexity).
-        # Mixed adapter: skip filter expressions (complexity>10) and the
-        # cross-cutting result-control params this adapter honors. A key the
-        # filter parser consumed is applied even when its operator is in the
-        # value (`complexity=5..15`, or `lines=1` beside another filter), so it
-        # is not "ignored" (BACK-2278).
-        self._warn_unknown_query_params(
-            self.query_params,
-            skip_filter_keys=True,
-            extra_known_keys={'sort', 'limit', 'offset', 'exclude', 'respect_gitignore',
-                              *(qf.field for qf in self.query_filters)},
-        )
-        self.view = _VIEW.read(self.query_params)  # the binder already checked it against VIEWS
+        # BACK-507: a bare key that is no filter (no operator in any bare key: ?complexity=true, ?lines=1)
+        # is an unrecognized param, warned and ignored; beside an operator it is a filter (BACK-2278).
+        if ignored:
+            self._warn_unknown_query_params(dict(ignored))
+            mark_query_keys(params, *(key for key, _value in ignored))  # named once, not again as unused
         self._analysis_failures: list = []
         self._population_findings = False
         self._analyzed_count = 0
@@ -463,29 +586,19 @@ class MetricsAdapter(ResourceAdapter):
 
     def _control_query(self) -> str:
         """The bound sort/limit/offset as the query text ``parse_result_control`` reads, so a bound
-        parameter and a legacy query string give one ResultControl."""
+        parameter and a legacy query string give one ResultControl (the per-file rows' controls)."""
         bound = dict(peek_query_items(self.query_params))
         return '&'.join(f'{name}={bound[name]}' for name in ('sort', 'limit', 'offset') if name in bound)
 
-    def _expression_filters(self) -> str:
-        """The operator-filter expressions of a bound request: the query keys no parameter claims.
-
-        ``lines>50`` parses as a bare key and ``complexity>=5`` as key ``complexity>`` with value
-        ``5``; joining them back gives the text the filter parser reads. The scope keys (exclude,
-        respect_gitignore) are not expressions.
-        """
-        claimed = {spec.name for spec in PARAM_SPECS} | _SCOPE_KEYS
-        return '&'.join(filter_expression(key, value)
-                        for key, value in peek_query_items(self.query_params) if key not in claimed)
-
     def _analysis_controls(self) -> tuple:
-        """The bound controls of the per-file views, read where they apply (not on view=provenance)."""
+        """The bound controls of the per-file views, read where they apply (not on view=provenance):
+        whether the ranking runs, the code-only walk, and whether the per-file rows are omitted."""
         params = self.query_params
-        return tuple(spec.read(params) for spec in (_HOTSPOTS, _CODE_ONLY, _MIN_LINES, _MAX_LINES, _MIN_COMPLEXITY,
-                                                     _MAX_COMPLEXITY, _MIN_FUNCTIONS, _SUMMARY_ONLY))
+        hotspots = _HOTSPOTS.read(params) or self.view == 'hotspots'  # legacy beside the view: read, accepted once
+        summary = _DETAIL.read(params) == 'summary' or _SUMMARY_ONLY.read(params)
+        return hotspots, _CODE_ONLY.read(params), summary
 
-    def _collect_filtered_stats(self, code_only, min_lines, max_lines,
-                                min_complexity, max_complexity, min_functions) -> list:
+    def _collect_filtered_stats(self, code_only) -> list:
         """Collect file stats that match the specified filters."""
         from concurrent.futures import ProcessPoolExecutor
         from ...logging_setup import worker_bootstrap
@@ -532,19 +645,14 @@ class MetricsAdapter(ResourceAdapter):
             all_stats = [_analyze_file_worker(a) for a in args]
 
         self._record_analysis_results(all_stats)
-        return self._filter_analyzed([s for s in all_stats if s and not is_failure(s)],
-                                     min_lines, max_lines, min_complexity, max_complexity, min_functions)
+        return self._filter_analyzed([s for s in all_stats if s and not is_failure(s)])
 
-    def _filter_analyzed(self, analyzed: list, min_lines, max_lines, min_complexity,
-                         max_complexity, min_functions) -> list:
+    def _filter_analyzed(self, analyzed: list) -> list:
         """The analyzed files the filters keep, for a directory and a single file alike (a
         single file was returned whatever the filters said, BACK-2308)."""
         matched = [
             s for s in analyzed
-            if matches_filters(
-                s, min_lines, max_lines, min_complexity, max_complexity, min_functions,
-                self.query_filters, field_value, compare
-            )
+            if matches_filters(s, self.query_filters, field_value, compare)
         ]
         self._unknown_filter_fields = []
         if analyzed and not matched:
@@ -576,8 +684,9 @@ class MetricsAdapter(ResourceAdapter):
         note_issue_count_basis(result)
         for message in self._quality_config.get('deprecations', []):
             note_warning(result, {'type': 'deprecated_config_key', 'message': message})
-        used = [name for name in [qf.field for qf in self.query_filters] + [self.result_control.sort_field]
-                if renamed_field(name)]
+        # The per-file rows' sort only where those rows are drawn: view=hotspots leaves it unread, and says so.
+        sort = [] if self.view == 'hotspots' else [self.result_control.sort_field]
+        used = [name for name in [qf.field for qf in self.query_filters] + sort if renamed_field(name)]
         for name in dict.fromkeys(used):
             note_warning(result, {
                 'type': 'deprecated_field',
@@ -628,11 +737,24 @@ class MetricsAdapter(ResourceAdapter):
         return result
 
     def _top_hotspots(self, result: dict, ranked: list) -> list:
-        """Cut the ranked hotspots to ``?top=N`` and record the cut (BACK-1179, BACK-1543).
+        """Cut the ranked hotspots and record the cut (BACK-1179, BACK-1543).
 
-        ``?top=0`` means no cap, as it does for hotspots:// (BACK-1505): ``[:0]`` was an
-        empty list, which reads as a clean codebase.
+        view=hotspots: the ranking is the rows, paged by offset and capped by limit (legacy top is
+        limit there; default 10, 0 = no cap). Legacy hotspots=true: ``?top=N`` caps it beside the
+        per-file rows; ``?top=0`` means no cap, as for hotspots:// (BACK-1505): ``[:0]`` was an empty
+        list, which reads as a clean codebase.
         """
+        if self.view == 'hotspots':
+            limit = _LIMIT.read(self.query_params)
+            if 'top' in _supplied(self.query_params):  # legacy top is limit here (equal to it when both given)
+                top = _TOP.read(self.query_params)
+                limit = top if limit is None else limit
+            limit = HOTSPOT_VIEW_LIMIT if limit is None else limit
+            offset = _OFFSET.read(self.query_params) or 0
+            page = ranked[offset:]
+            shown = page[:limit] if limit > 0 else page
+            note_truncation(result, 'hotspots', len(shown), len(ranked), 'limit', hint='raise ?limit=N')
+            return shown
         top = self.int_param('top', 10)
         shown = ranked[:top] if top > 0 else ranked
         note_truncation(result, 'hotspots', len(shown), len(ranked), 'limit', hint='raise ?top=N')
@@ -741,7 +863,8 @@ class MetricsAdapter(ResourceAdapter):
                 return None
 
             since = self.query_params.get('since')
-            no_merges = self.query_params.get('no_merges') is True
+            # merges=off, or legacy no_merges: the churn cache key keeps its no_merges meaning.
+            no_merges = _NO_MERGES.read(self.query_params) is True or _MERGES.read(self.query_params) is False
 
             # Map each file's display path (relative to self.path, what
             # identify_hotspots/hotspot output key on) to its repo-relative
@@ -782,13 +905,11 @@ class MetricsAdapter(ResourceAdapter):
         """Rank the same analyzed population for file and directory requests."""
         file_stats = self._rank_population(result, file_stats, layout)
         churn_counts = None
-        if self.query_params.get('churn', True) is not False:
+        if _CHURN.read(self.query_params) and not _NO_CHURN.read(self.query_params):
             churn_counts = self._compute_churn_counts(file_stats)
             if self._churn_disclosure:
-                result.setdefault('warnings', []).append({
-                    'type': 'churn_unavailable',
-                    'message': self._churn_disclosure,
-                })
+                # In the envelope, so the text answer prints it too (it sat in a top-level list, BACK-2621).
+                note_warning(result, {'type': 'churn_unavailable', 'message': self._churn_disclosure})
         result['hotspots'] = self._top_hotspots(
             result, identify_hotspots(file_stats, churn_counts=churn_counts))
         # The path-only tag the hotspots noun put on its file entries (test/vendor/minified, None for first
@@ -832,8 +953,9 @@ class MetricsAdapter(ResourceAdapter):
             return provenance_report(self.path, respect_gitignore=respect_gitignore_param(self.query_params))
         self._traversal_failures = []
         self._record_analysis_results([])
-        hotspots, code_only, min_lines, max_lines, min_complexity, max_complexity, min_functions, summary_only = \
-            self._analysis_controls()
+        hotspots, code_only, summary_only = self._analysis_controls()
+        # view=hotspots: the ranked files are the rows; no per-file rows, so sort/limit/offset page the ranking.
+        rows_omitted = summary_only or self.view == 'hotspots'
 
         layout = None
         if hotspots and self.query_params.get('tests') is not None:
@@ -855,8 +977,7 @@ class MetricsAdapter(ResourceAdapter):
                 return dict(ResultBuilder.create_error(
                     result_type='stats_file', source=self.path,
                     error=f"analysis failed: {file_stats['analysis_failed']}"))  # type: ignore[index]
-            kept = self._filter_analyzed([file_stats] if file_stats else [], min_lines, max_lines,
-                                         min_complexity, max_complexity, min_functions)
+            kept = self._filter_analyzed([file_stats] if file_stats else [])
             result = aggregate_stats(kept, self.path)
             self._record_analysis_results([file_stats])
             note_warning(result, unknown_sort_field_warning(
@@ -871,19 +992,18 @@ class MetricsAdapter(ResourceAdapter):
             )
             if hotspots:
                 self._add_hotspots(result, kept, layout)
-            if summary_only:
+            if rows_omitted:
                 result.pop('files', None)
             return result
 
         # Collect filtered directory statistics
-        dir_file_stats = self._collect_filtered_stats(
-            code_only, min_lines, max_lines, min_complexity, max_complexity, min_functions
-        )
+        dir_file_stats = self._collect_filtered_stats(code_only)
         total_filtered = len(dir_file_stats)
 
-        # Apply sorting and pagination
-        controlled_stats = self._apply_sorting(dir_file_stats)
-        controlled_stats = self._apply_pagination(controlled_stats)
+        # Apply sorting and pagination to the per-file rows (view=hotspots pages its ranking instead)
+        controlled_stats: list = []
+        if self.view != 'hotspots':
+            controlled_stats = self._apply_pagination(self._apply_sorting(dir_file_stats))
 
         # Aggregate and build result
         result = aggregate_stats(dir_file_stats, self.path)
@@ -891,12 +1011,13 @@ class MetricsAdapter(ResourceAdapter):
         result['population'] = {
             'summary': 'filtered_analyzed_files', 'analyzed_files': self._analyzed_count,
             'filtered_files': total_filtered,
-            'displayed_files': 0 if summary_only else len(controlled_stats),
+            'displayed_files': 0 if rows_omitted else len(controlled_stats),
         }
-        self._add_truncation_metadata(result, len(controlled_stats), total_filtered, rows_omitted=summary_only)
-        note_warning(result, unknown_sort_field_warning(
-            self.result_control.sort_field, dir_file_stats, field_value, SORT_FIELDS))
-        note_warning(result, self._sort_failure)
+        self._add_truncation_metadata(result, len(controlled_stats), total_filtered, rows_omitted=rows_omitted)
+        if self.view != 'hotspots':
+            note_warning(result, unknown_sort_field_warning(
+                self.result_control.sort_field, dir_file_stats, field_value, SORT_FIELDS))
+            note_warning(result, self._sort_failure)
         note_warning(result, self._unknown_filter_field_warning())
         self._disclose_failures(result)
         self._disclose_exclusions(result)
@@ -906,7 +1027,7 @@ class MetricsAdapter(ResourceAdapter):
             # change which files are the hotspots (BACK-2146).
             self._add_hotspots(result, dir_file_stats, layout)
 
-        if summary_only:
+        if rows_omitted:
             result.pop('files', None)
 
         result.update(

@@ -81,7 +81,8 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     FlagSpec('verbose', '--verbose', _switch('verbose')),
     # metrics' global switches (BACK-2621): forwarded as declared fragments, not by matching get_structure's
     # parameter names; an adapter that declares neither reports them as unused flags.
-    FlagSpec('hotspots', '--hotspots', _switch('hotspots')),
+    # ?hotspots=false --hotspots names two answers: an invalid request, not "the URI wins" (decision 2, B6).
+    FlagSpec('hotspots', '--hotspots', _switch('hotspots'), reject_conflict=True),
     FlagSpec('code_only', '--code-only', _switch('code_only')),
     # Result-control keys, injected without a per-adapter declaration. Only ast/markdown/json/
     # git/stats apply them; most other adapters warn "Unknown query param" and ignore them, and

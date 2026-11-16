@@ -640,8 +640,10 @@ class TestStatsAdapterChurnIntegration:
         adapter = StatsAdapter(str(churn_dir), 'hotspots=true&summary_only=true')
         result = adapter.get_structure()
 
-        warnings = result.get('warnings', [])
+        # In the envelope since BACK-2621 (a top-level list the text answer never printed).
+        warnings = result.get('meta', {}).get('warnings', [])
         assert any(w.get('type') == 'churn_unavailable' for w in warnings)
+        assert 'warnings' not in result
 
 
 class TestQualityMetrics:

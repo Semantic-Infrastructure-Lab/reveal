@@ -176,8 +176,9 @@ def test_views_without_the_ranking_have_nothing_to_gate(make, argv):
     make('clean.py', 'complex.py', 'poor.py')
     result = run(*argv, '--fail-on', 'findings', '--format', 'json', '--no-gitignore')
     assert result.returncode == 2, result.stderr
-    assert 'metrics gates --hotspots' in result.stderr
-    assert 'metrics gates --hotspots' in json.loads(result.stdout)['error']
+    # The gating view is named by its canonical spelling since BACK-2621.
+    assert 'metrics gates the hotspot ranking' in result.stderr and 'add --view hotspots' in result.stderr
+    assert 'metrics gates the hotspot ranking' in json.loads(result.stdout)['error']
     answered = run(*argv, '--format', 'json', '--no-gitignore')
     assert answered.returncode == 0, answered.stderr
     assert 'has_findings' not in json.loads(answered.stdout).get('summary', {})
