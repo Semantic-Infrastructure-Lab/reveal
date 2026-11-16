@@ -9,7 +9,7 @@ prints the replaced-by note from the RETIREMENTS table until the cut (D5).
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional, cast
+from typing import Callable, Dict, Any, List, Optional, cast
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -103,7 +103,7 @@ def _number(name: str):
     return convert
 
 
-def _text(name: str):
+def _text(name: str) -> Callable[[Any], str]:
     """A value-carrying parameter: bare presence (``?since``) is not a value."""
     def convert(value: Any) -> str:
         if isinstance(value, bool) or not isinstance(value, str) or not value.strip():
@@ -112,7 +112,7 @@ def _text(name: str):
     return convert
 
 
-def _iso_date(name: str):
+def _iso_date(name: str) -> Callable[[Any], str]:
     """A churn-window start: an ISO date (or timestamp) in the form the churn walk parses (BACK-2621).
     A value it cannot parse was a churn_unavailable warning and exit 0; it is an invalid request."""
     def convert(value: Any) -> str:
