@@ -867,3 +867,35 @@ class TestStep4Additions:
         assert not {'match', 'kind', 'depth', 'until'} & set(params)
         assert {'where', 'detail', 'churn', 'merges', 'view'} <= set(params)
         assert '--match' not in run('metrics', '--help').stdout
+
+
+class TestCodeOnlySpelling:
+    """The map's spelling code-only (Scott 2026-11-15), declared as Imports declares scan-limit: the
+    underscore key is an alias that answers the same with no retirement note."""
+
+    @pytest.mark.parametrize('transport', ['cli', 'uri', 'api-keyword', 'mcp'])
+    def test_code_only_is_the_canonical_spelling(self, project, transport):
+        expected = query(uri(project, 'code_only=true'))
+        assert expected['summary']['total_files'] == 10, 'the walk drops config.yaml and .reveal.yaml'
+        if transport == 'cli':
+            result, answer = cli_json('metrics', str(project), '--code-only')
+            assert result.returncode == 0, result.stderr[-300:]
+        elif transport == 'uri':
+            result, answer = cli_json(uri(project, 'code-only=true'))
+            assert result.returncode == 0, result.stderr[-300:]
+        elif transport == 'mcp':
+            answer, failure = mcp_answer(uri(project, 'code-only=true'))
+            assert failure is None, failure
+        else:
+            answer = query(uri(project), **{'code-only': True})
+        assert_equal_answer(answer, expected)
+        assert not notes(answer) and not warnings_of(answer, 'unknown_query_param', *UNREAD_WARNINGS)
+
+    def test_the_underscore_alias_answers_without_a_note(self, project):
+        expected = query(uri(project, 'code-only=true'))
+        for answer in (query(uri(project, 'code_only=true')), query(uri(project), code_only=True)):
+            assert not notes(answer), notes(answer)
+            assert_equal_answer(answer, expected)
+        from reveal.adapters.stats import MetricsAdapter
+        params = MetricsAdapter.get_schema()['query_params']
+        assert 'code-only' in params and params['code-only'].get('aliases') == ['code_only']
