@@ -162,15 +162,17 @@ def element(
 
 
 def _bound_query_result(adapter, scheme: str, uri: str, overrides: Dict[str, Any]) -> Dict[str, Any]:
-    """Keep declared alias retirement metadata equal to the CLI's JSON answer."""
+    """Keep declared retirement metadata equal to the CLI's JSON answer: a retired alias, or a parameter
+    declared ``retired`` under its own name (BACK-2621), spelled in the URI or as a keyword."""
     from .cli.invocation import Invocation, invocation_scope, retirement_note, uri_retirement_keys
     from .utils.json_utils import attach_retirements
     from .utils.results import note_incomplete
-    aliases = {f'param:{scheme}.{alias}' for spec in adapter.PARAM_SPECS for alias in spec.aliases}
+    declared = {f'param:{scheme}.{name}' for spec in adapter.PARAM_SPECS
+                for name in ((spec.name,) if spec.retired else ()) + spec.aliases}
     keys = uri_retirement_keys(uri) + [f'param:{scheme}.{key}' for key in overrides]
     with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False):
         for key in keys:
-            if key in aliases:
+            if key in declared:
                 retirement_note(key)
         result: Dict[str, Any] = attach_retirements(adapter.get_structure())
         facts_of = getattr(type(adapter), 'execution_facts', None)

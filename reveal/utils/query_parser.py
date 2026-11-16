@@ -353,6 +353,9 @@ class ParamSpec:
     aliases: Tuple[str, ...] = ()
     legacy_selectors: Tuple[str, ...] = ()
     alias_normalize: Optional[Callable[[str, Any], Any]] = None
+    # A legacy spelling kept as a parameter of its own (not an alias of the canonical control, e.g. a
+    # threshold the noun translates into where): api.query notes it like a retired alias (BACK-2621).
+    retired: bool = False
 
     def read(self, params: Dict[str, Any]) -> Any:
         raw = params.get(self.name)

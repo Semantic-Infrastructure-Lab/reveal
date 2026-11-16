@@ -38,9 +38,12 @@ def test_binder_folds_bare_operator_keys_into_where():
 
 
 class _LegacyNoun:
-    """A bound adapter with a canonical control and a legacy one (its own declared name, not an alias)."""
+    """A bound adapter with a canonical control, a legacy one declared retired under its own name (not an
+    alias), and a legacy-named parameter that is not declared retired (calls ?root keeps no API note)."""
     from reveal.utils.query_parser import ParamSpec as _Spec
-    PARAM_SPECS = (_Spec('limit', 'integer', 'rows', None, int), _Spec('old', 'integer', 'legacy rows', None, int))
+    PARAM_SPECS = (_Spec('limit', 'integer', 'rows', None, int),
+                   _Spec('old', 'integer', 'legacy rows', None, int, retired=True),
+                   _Spec('kept', 'integer', 'a name with a row, not declared retired', None, int))
 
     def get_structure(self):
         return {'type': 'stub', 'meta': {'warnings': []}}
@@ -71,3 +74,11 @@ def test_api_does_not_note_a_retired_key_the_adapter_does_not_declare(legacy_row
     from reveal.cli import invocation
     monkeypatch.setitem(invocation.RETIREMENTS, 'param:stub.other', invocation.Retirement('stub ?other', '?limit'))
     assert _notes(_bound_query_result(_LegacyNoun(), 'stub', 'stub://p?other=1&limit=2', {})) == []
+
+
+def test_api_keeps_no_note_for_a_parameter_not_declared_retired(legacy_row, monkeypatch):
+    """Negative control: claude and calls compare legacy-named API answers with canonical ones exactly."""
+    from reveal.api import _bound_query_result
+    from reveal.cli import invocation
+    monkeypatch.setitem(invocation.RETIREMENTS, 'param:stub.kept', invocation.Retirement('stub ?kept', '?limit'))
+    assert _notes(_bound_query_result(_LegacyNoun(), 'stub', 'stub://p?kept=1', {'kept': 2})) == []
