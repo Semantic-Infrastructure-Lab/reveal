@@ -48,7 +48,6 @@ REVEAL_CONFORMANCE_REPORT=<path>: each cell appends one JSON line (state, case c
 """
 import json
 import os
-import re
 from dataclasses import dataclass
 
 import pytest
@@ -807,8 +806,9 @@ def probe_unknown_keys(noun):
 # --- rule 5: one legacy-spelling declaration ----------------------------------------------------------------
 
 def _replacement_elsewhere(noun, entry):
-    """A replacement in another scheme (``calls ?modules`` -> ``imports://``) has no canonical control here."""
-    return any(scheme != noun for scheme in re.findall(r'([a-z][a-z0-9+.-]*)://', entry.replacement))
+    """A replacement that is another noun or nothing (``calls ?modules`` -> ``imports://``) has no canonical control
+    here: its RETIREMENTS row says so (ruling A, rule 11), and the spelling stays a parameter of its own."""
+    return getattr(entry, 'standalone', False)
 
 
 def _legacy_names(spec):

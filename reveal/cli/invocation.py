@@ -230,6 +230,9 @@ class Retirement:
     replacement: str
     stage: str = 'note'
     removed: bool = False
+    # The replacement is another noun or nothing: the spelling stays a parameter of its own until the cut rather
+    # than a legacy entry on a canonical control (COMMAND_MODEL "Retirement notes", BACK-2654).
+    standalone: bool = False
 
     def __post_init__(self) -> None:
         if not self.old or not self.replacement:
@@ -318,16 +321,16 @@ RETIREMENTS: Dict[str, Retirement] = {
     # old shape without call_count, until the cut.
     'param:calls.modules': Retirement('calls ?modules (--modules)',
                                       'imports://<path>?importers&scope=path (reveal imports <path> --importers '
-                                      '--scope path), the same import edges as each module\'s importers'),
+                                      '--scope path), the same import edges as each module\'s importers', standalone=True),
     'param:calls.external': Retirement('calls ?external (--external)',
                                        'imports://<path>?importers (scope=root, the default), importers from the '
-                                       'whole project root'),
+                                       'whole project root', standalone=True),
     # D8 (BACK-2195): ?uncalled is retired. It answers unchanged in shape until the cut (BACK-2200), with no
     # confidence in any language; ?callers=NAME answers "is this used?" and the language's own tool answers the rest.
     'param:calls.uncalled': Retirement('calls ?uncalled (--uncalled)',
                                        '?callers=NAME (--callers NAME) for one function, or the language\'s own '
                                        'dead-code tool (vulture, knip, staticcheck/deadcode, rustc dead_code, '
-                                       'Roslyn IDE0051, Periphery, Psalm)'),
+                                       'Roslyn IDE0051, Periphery, Psalm)', standalone=True),
     # Decision (e): ast's call filters are retired, not kept as element filters; calls= matched call
     # text in every scanned file instead of the callers index, so the two could disagree.
     # Claude vocabulary retains its legacy readers/codecs until the cut (BACK-2617).
@@ -347,14 +350,14 @@ RETIREMENTS: Dict[str, Retirement] = {
         '--detail full (or ?detail=full) on a supported expanding view; unsupported views reject'),
     'param:claude.raw': Retirement('claude ?raw',
         '--view messages or --view prompts with --detail raw (or ?detail=raw); canonical raw also expands the text display'),
-    'param:ast.calls': Retirement('ast://?calls=', "calls://<path>?callers=NAME, or --grep 'PATTERN' for a pattern"),
+    'param:ast.calls': Retirement('ast://?calls=', "calls://<path>?callers=NAME, or --grep 'PATTERN' for a pattern", standalone=True),
     # Different words for one control are legacy spellings with a note (COMMAND_MODEL "Different words", BACK-2654);
     # AST show and Git type are D18-deferred and stay note-free.
     'param:ast.type': Retirement('ast ?type=KIND (--type KIND)', '?kind=KIND (--kind KIND), the same element kind'),
     'param:markdown.body-contains': Retirement('markdown ?body-contains=TEXT (--body-contains TEXT)',
                                                '?match=TEXT (--match TEXT), the same body match; repeats AND'),
     'param:markdown.fields': Retirement('markdown ?fields=A,B', '?columns=A,B (--columns A,B), the same frontmatter columns'),
-    'param:ast.callee_of': Retirement('ast://?callee_of=', 'calls://<path>?callees=NAME'),
+    'param:ast.callee_of': Retirement('ast://?callee_of=', 'calls://<path>?callees=NAME', standalone=True),
     'value:ast.show=calls': Retirement('ast://?show=calls',
                                        "calls://<path>?callers=NAME or ?callees=NAME, or --grep 'PATTERN'"),
     # stats became metrics and absorbed classify (D2, BACK-2069): both old schemes answer from the
@@ -374,10 +377,10 @@ RETIREMENTS: Dict[str, Retirement] = {
                                   'an unmeasured test-name heuristic, has no replacement field (use a coverage tool)'),
     'param:hotspots.functions_only': Retirement('hotspots ?functions_only (--functions-only)',
                                                 'ast://<path>?complexity>=10&sort=-complexity&limit=10, the same '
-                                                'function ranking (min_complexity=N is complexity>=N, top=N is limit=N)'),
+                                                'function ranking (min_complexity=N is complexity>=N, top=N is limit=N)', standalone=True),
     'param:hotspots.files_only': Retirement('hotspots ?files_only (--files-only)',
                                             'metrics://<path>?view=hotspots (reveal metrics <path> --view hotspots), the '
-                                            'same file ranking'),
+                                            'same file ranking', standalone=True),
     # testability became patches ?view=pressure (D2, Q-P4-2, BACK-2160): the old scheme answers from the patches owner,
     # unchanged, until the cut.
     'subcommand:testability': Retirement('reveal testability', 'reveal patches <path> --view pressure (the same answer)'),
