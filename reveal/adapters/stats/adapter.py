@@ -22,7 +22,7 @@ from ...utils.query import (
 from ...utils.query_control import sort_failed_warning, sort_nulls_last
 from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_parser import (
-    CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, nonnegative_display_limit,
+    CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression,
     param_schema, peek_query_items, split_exclude_param, whole_number,
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
@@ -85,7 +85,8 @@ def _analyze_file_worker(args: tuple):
 VIEWS = ('provenance',)
 
 def _count(name: str):
-    """A whole-number parameter: 5 and 5.0 are accepted, 5.5, text and booleans are not."""
+    """A whole-number parameter: 5 and 5.0 are accepted, 5.5, text and booleans are not. A spec's own
+    minimum rejects a negative row cap or offset as 'must be >= 0' (BACK-2621, the Imports wording)."""
     def convert(value: Any) -> int:
         if isinstance(value, bool):
             raise ValueError(f'{name} requires a whole number, not a boolean')
@@ -124,14 +125,6 @@ def _iso_date(name: str):
     return convert
 
 
-def _display_count(name: str):
-    def convert(value: Any) -> int:
-        if isinstance(value, bool):
-            raise ValueError(f'{name} must be a non-negative integer, not a boolean')
-        return nonnegative_display_limit(value, name)
-    return convert
-
-
 TEST_CHOICES = ('include', 'exclude')
 
 # The declaration `reveal metrics` and metrics:// are both generated from (BACK-2146). Operator filters
@@ -144,7 +137,7 @@ _HOTSPOTS = ParamSpec('hotspots', 'boolean', 'Include hotspot analysis (files ne
                       boolean_value, ('hotspots=true',), role='analysis',
                       cli=CliBinding(('--hotspots',), action='store_true'))
 _TOP = ParamSpec('top', 'integer', 'Max number of hotspot files to return when hotspots=true (default: 10, 0 = all)',
-                 10, _display_count('top'), ('top=25',), minimum=0, zero_policy='all', role='analysis',
+                 10, _count('top'), ('top=25',), minimum=0, zero_policy='all', role='analysis',
                  cli=CliBinding(('--top',), metavar='N'))
 _CODE_ONLY = ParamSpec('code_only', 'boolean', 'Exclude data/config files from analysis', False,
                        boolean_value, ('code_only=true',), role='analysis',
@@ -184,10 +177,10 @@ _SUMMARY_ONLY = ParamSpec('summary_only', 'boolean', 'Omit the per-file "files" 
 _SORT = ParamSpec('sort', 'string', 'Sort the files by a field, ascending; a leading - sorts descending', None,
                   _text('sort'), ('sort=-lines',), role='analysis', cli=CliBinding(('--sort',), metavar='FIELD'))
 _LIMIT = ParamSpec('limit', 'integer', 'Keep at most this many files (0 = no cap)', None,
-                   _display_count('limit'), ('limit=10',), minimum=0, zero_policy='no cap', role='analysis',
+                   _count('limit'), ('limit=10',), minimum=0, zero_policy='no cap', role='analysis',
                    cli=CliBinding(('--limit',), metavar='N'))
 _OFFSET = ParamSpec('offset', 'integer', 'Skip this many files before the first one kept', None,
-                    _display_count('offset'), ('offset=5',), minimum=0, role='analysis',
+                    _count('offset'), ('offset=5',), minimum=0, role='analysis',
                     cli=CliBinding(('--offset',), metavar='N'))
 
 PARAM_SPECS = (_VIEW, _HOTSPOTS, _TOP, _CODE_ONLY, _MIN_LINES, _MAX_LINES, _MIN_COMPLEXITY, _MAX_COMPLEXITY,

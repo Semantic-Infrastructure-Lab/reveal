@@ -85,8 +85,11 @@ def test_valid_zero_top_still_renders(tree):
 
 
 def test_scheme_without_top_contract_keeps_ignoring_it(tree):
+    # ast:// declares no top: an invalid value is not its to reject.
+    assert _run(f'ast://{tree}?top=-1').returncode == 0
+    # stats:// is metrics' retired spelling and binds metrics' declared top (BACK-2621), so -1 is
+    # rejected as on metrics:// (the legacy stats:// route exits 1; metrics:// exits 2).
     stats = _run(f'stats://{tree}?top=-1')
-    assert stats.returncode == 0
-    assert "query param 'top' has no effect" in stats.stderr
+    assert stats.returncode == 1 and 'top must be >= 0' in stats.stderr, stats.stderr
     # Surface now declares top; its earlier pilot rejects invalid values too.
     _bad_value_message(_run(f'surface://{tree}?top=-1'), '-1')
