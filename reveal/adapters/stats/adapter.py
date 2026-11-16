@@ -309,6 +309,9 @@ class MetricsAdapter(ResourceAdapter):
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     PARAM_SPECS = PARAM_SPECS
+    # api.query binds typed keywords through PARAM_SPECS like the URI query (BACK-2621): a declared keyword
+    # answers as its URI spelling does and beats the URI value; an undeclared one raises TypeError.
+    BOUND_QUERY_CALL = True
     CLI_QUERY_FLAGS = {
         'respect_gitignore': 'respect_gitignore=false',  # --no-gitignore (BACK-1202)
         'hotspots': 'hotspots=true',  # global --hotspots on the URI form (BACK-2621)
@@ -468,20 +471,11 @@ class MetricsAdapter(ResourceAdapter):
         return '&'.join(filter_expression(key, value)
                         for key, value in peek_query_items(self.query_params) if key not in claimed)
 
-    def _merge_query_params(self, hotspots, code_only, min_lines, max_lines,
-                           min_complexity, max_complexity, min_functions,
-                           summary_only) -> tuple:
-        """Merge query params with flag params (query params take precedence)."""
-        return (
-            self.query_params.get('hotspots', hotspots),
-            self.query_params.get('code_only', code_only),
-            self.query_params.get('min_lines', min_lines),
-            self.query_params.get('max_lines', max_lines),
-            self.query_params.get('min_complexity', min_complexity),
-            self.query_params.get('max_complexity', max_complexity),
-            self.query_params.get('min_functions', min_functions),
-            self.query_params.get('summary_only', summary_only)
-        )
+    def _analysis_controls(self) -> tuple:
+        """The bound controls of the per-file views, read where they apply (not on view=provenance)."""
+        params = self.query_params
+        return tuple(spec.read(params) for spec in (_HOTSPOTS, _CODE_ONLY, _MIN_LINES, _MAX_LINES, _MIN_COMPLEXITY,
+                                                     _MAX_COMPLEXITY, _MIN_FUNCTIONS, _SUMMARY_ONLY))
 
     def _collect_filtered_stats(self, code_only, min_lines, max_lines,
                                 min_complexity, max_complexity, min_functions) -> list:
@@ -813,34 +807,15 @@ class MetricsAdapter(ResourceAdapter):
                                 'files_excluded': len(file_stats) - len(kept)}
         return kept
 
-    def get_structure(self,
-                     hotspots: bool = False,
-                     code_only: bool = False,
-                     min_lines: Optional[int] = None,
-                     max_lines: Optional[int] = None,
-                     min_complexity: Optional[float] = None,
-                     max_complexity: Optional[float] = None,
-                     min_functions: Optional[int] = None,
-                     summary_only: bool = False,
-                     **kwargs) -> Dict[str, Any]:
-        """Get statistics for file or directory.
+    def get_structure(self) -> Dict[str, Any]:
+        """Get statistics for file or directory: the view the constructor-bound parameters select.
 
-        Args:
-            hotspots: If True, include hotspot analysis (flag - legacy)
-            code_only: If True, exclude data/config files from analysis
-            min_lines: Filter files with at least this many lines
-            max_lines: Filter files with at most this many lines
-            min_complexity: Filter files with avg complexity >= this
-            max_complexity: Filter files with avg complexity <= this
-            min_functions: Filter files with at least this many functions
-            summary_only: If True, omit the per-file 'files' array from the
-                result — just the aggregate summary (+ hotspots, if also
-                requested). BACK-1008: an unscoped whole-repo stats:// call
-                returns one entry per file, which dwarfs the summary block
-                that's usually the actual signal wanted (15.6MB/747K lines on
-                an 18K-file repo) and is impractical to consume directly in
-                an LLM context. The full per-file walk still runs (needed for
-                the aggregate and for hotspots) — this only trims the output.
+        Every control is a declared parameter bound at construction (BACK-2621); get_structure
+        takes no keywords. summary_only omits the per-file 'files' array from the result -- just
+        the aggregate summary (+ hotspots, if also requested). BACK-1008: an unscoped whole-repo
+        call returns one entry per file, which dwarfs the summary block that's usually the actual
+        signal wanted (15.6MB/747K lines on an 18K-file repo). The full per-file walk still runs
+        (needed for the aggregate and for hotspots) -- summary_only only trims the output.
 
         Returns:
             Dict containing statistics and optionally hotspots
@@ -850,11 +825,8 @@ class MetricsAdapter(ResourceAdapter):
             return provenance_report(self.path, respect_gitignore=respect_gitignore_param(self.query_params))
         self._traversal_failures = []
         self._record_analysis_results([])
-        # Merge query params with flag params
         hotspots, code_only, min_lines, max_lines, min_complexity, max_complexity, min_functions, summary_only = \
-            self._merge_query_params(hotspots, code_only, min_lines, max_lines,
-                                    min_complexity, max_complexity, min_functions,
-                                    summary_only)
+            self._analysis_controls()
 
         layout = None
         if hotspots and self.query_params.get('tests') is not None:

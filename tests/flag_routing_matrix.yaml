@@ -714,11 +714,9 @@ adapters:
     code_only:
       via:
       - declared
-      - structure-param
     hotspots:
       via:
       - declared
-      - structure-param
     respect_gitignore:
       via:
       - declared
@@ -1024,11 +1022,9 @@ adapters:
     code_only:
       via:
       - declared
-      - structure-param
     hotspots:
       via:
       - declared
-      - structure-param
     respect_gitignore:
       via:
       - declared

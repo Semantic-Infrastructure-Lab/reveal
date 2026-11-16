@@ -746,14 +746,15 @@ class TestEdgeCases:
         (tmp_path / "file1.py").write_text("def f(): pass")
         (tmp_path / "file2.py").write_text("def g(): pass")
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(
-            min_lines=None,
-            max_lines=None,
-            min_complexity=None,
-            max_complexity=None,
-            min_functions=None
-        )
+        # None is the declared default of every threshold (BACK-2621: bound at construction).
+        adapter = StatsAdapter(str(tmp_path), params={
+            'min_lines': None,
+            'max_lines': None,
+            'min_complexity': None,
+            'max_complexity': None,
+            'min_functions': None,
+        })
+        result = adapter.get_structure()
 
         # Should return results without filtering
         assert 'summary' in result
