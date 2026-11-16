@@ -969,6 +969,9 @@ class StatsAdapter(MetricsAdapter):
     (cli/invocation.py), printed where the URI is parsed; nothing here prints it.
     """
     QUICK_RANK = None
+    # The opt-in is class-local (factory.uses_bound_query_call): the retired spelling binds typed
+    # keywords as metrics:// does, since get_structure takes none (BACK-2621).
+    BOUND_QUERY_CALL = True
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
