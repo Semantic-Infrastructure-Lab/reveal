@@ -196,10 +196,23 @@ def _assert_text_as_written(harness, query, literal=False):
     return out
 
 
+def _without_format(argv):
+    """*argv* without its --format: a setting given twice with different values is an invalid request."""
+    kept, skip = [], False
+    for token in argv:
+        if skip:
+            skip = False
+        elif token == '--format':
+            skip = True
+        elif not token.startswith('--format='):
+            kept.append(token)
+    return kept
+
+
 def _assert_runs_as_written(harness, query, output_type, retired_note=None):
     """*retired_note* is the one note a retired scheme's own schema example prints (BACK-2066);
     any other note, a retired spelling's in a recipe included, is a problem."""
-    argv = _argv(query)
+    argv = _without_format(_argv(query))  # the JSON run replaces the recipe's format: one --format (BACK-2654)
     code, out, err, _ = harness.run_subcommand(argv[0], *argv[1:], '--format', 'json')
     if retired_note is not None:
         lines = err.splitlines()

@@ -33,7 +33,8 @@ def declared_adapter_class(name: str):
 
 
 def create_declared_parser(name: str) -> argparse.ArgumentParser:
-    from ..parser import _build_global_options_parser, _add_universal_filter_flags, _add_base_path_option, add_declared_presentation_options
+    from ..parser import (_build_global_options_parser, _add_universal_filter_flags, _add_base_path_option,
+                          add_declared_presentation_options, scalar_settings)
     from ..global_flags import add_exclude_argument, add_gitignore_arguments
     from ...utils.query_binding import add_declared_arguments
     adapter = declared_adapter_class(name)
@@ -45,6 +46,7 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
         prog=f'reveal {name}', parents=[_build_global_options_parser()],
         description=help_info['description'], epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter)
+    scalar_settings(parser)
     _describe_fail_on(parser, tuple(getattr(adapter, 'FINDINGS_POLICIES', ('none',))))
     add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC)
     add_declared_presentation_options(parser, getattr(adapter, 'CLI_PRESENTATION_FLAGS', ()))

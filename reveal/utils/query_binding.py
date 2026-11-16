@@ -323,8 +323,11 @@ class ScalarOnceAction(argparse.Action):
                 # Invalid values are rejected by the binder, preserving JSON
                 # request diagnostics instead of an argparse-only usage dump.
                 pass
-        submitted = getattr(namespace, '_declared_alias_values', {})
-        previous = submitted.setdefault(self.dest, {})
+        # What this option saw in this parse, kept on the action (a namespace attribute would read as a flag).
+        seen = self.__dict__.get('_seen')
+        if seen is None or seen[0] is not namespace:
+            seen = self._seen = (namespace, {})
+        previous = seen[1]
         for flag, value in previous.items():
             if value == values or (flag != option_string and self._same(value, values)):
                 continue  # one spelling compares as typed (as the URI does); two compare as the control reads them
@@ -333,7 +336,6 @@ class ScalarOnceAction(argparse.Action):
             raise argparse.ArgumentError(self, f'given twice with different values: {flag} {value} and '
                                                f'{option_string} {values}; give it once')
         previous[option_string] = values
-        setattr(namespace, '_declared_alias_values', submitted)
         setattr(namespace, self.dest, values)
 
 

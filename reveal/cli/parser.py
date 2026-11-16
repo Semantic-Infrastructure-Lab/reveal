@@ -273,8 +273,18 @@ def _build_global_options_parser() -> argparse.ArgumentParser:
     Call this function once per consumer (argparse parents= consumes the instance).
     """
     p = argparse.ArgumentParser(add_help=False)
+    scalar_settings(p)
     _add_global_options(p)
     return p
+
+
+def scalar_settings(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """Every plain value option of *parser* is a setting: typed twice with different values it is an invalid
+    request naming both, not last-wins (COMMAND_MODEL "Conflicting values", BACK-2654). Repeatable options
+    declare ``append`` and switches ``store_true``, so they are unaffected."""
+    parser.register('action', None, ScalarOnceAction)  # an add_argument with no action names None
+    parser.register('action', 'store', ScalarOnceAction)
+    return parser
 
 
 def _add_positional_arguments(parser: argparse.ArgumentParser, version: str) -> None:
@@ -815,6 +825,7 @@ def create_argument_parser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=build_help_epilog(full=full_help),
     )
+    scalar_settings(parser)
 
     # Positionals and --version go on the parser directly (not in any group)
     _add_positional_arguments(parser, version)
