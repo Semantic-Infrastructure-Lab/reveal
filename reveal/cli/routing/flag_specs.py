@@ -165,7 +165,7 @@ def _native_uncapped_value(adapter_class: Any, fragment: str, fallback: int) -> 
     """Use the declared native zero policy instead of approximating an uncapped answer."""
     parameter = fragment.partition('=')[0]
     declaration = next((p for p in getattr(adapter_class, 'PARAM_SPECS', ())
-                        if parameter in (p.name, *p.aliases)), None)
+                        if parameter in p.spellings), None)
     return 0 if declaration is not None and declaration.zero_policy == 'all' else fallback
 
 

@@ -31,7 +31,7 @@ from ..analyzers.imports.classify import classify_import, local_package_names, p
 from ..analyzers.imports.unused import describe_unused
 from ..conventions import family_for_path
 from ..analyzers.imports.layers import load_layer_config
-from ..utils.query_parser import (CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec, param_cli_flags,
+from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, param_cli_flags,
                                   param_schema, peek_query_items, whole_number)
 from ..errors import RequestValidationError
 from ..utils.query_binding import bind_declared_params, boolean_value
@@ -203,7 +203,7 @@ _SCAN_LIMIT = ParamSpec(
     'is incomplete (exit 3), disclosed in metadata.scan_budget and as a warning, never silently partial. '
     'Legacy max_files (--max-files) is the same budget',
     import_analysis.DEFAULT_FILE_CAP, _max_files_value, examples=('imports://.?importers&scan-limit=50000',), minimum=1,
-    role='analysis', aliases=('scan_limit', 'max_files'),
+    role='analysis', aliases=('scan_limit',), legacy=(LegacySpelling('max_files', flag='--max-files'),),
     cli=CliBinding(('--scan-limit', '--max-files'), dest='scan_limit', metavar='N'),
 )
 _IMPORTERS = ParamSpec(
@@ -266,13 +266,8 @@ def _sort_value(value: Any) -> str:
     return value
 
 
-def _sort_alias(name: str, value: Any) -> Any:
-    """``rank=fan-in`` is ``sort=-fan-in`` under its retired name (D5); both spellings validate here,
-    before the conflict check, so a wrong value names the supported one."""
-    if value is None:
-        return None
-    if name != 'rank':
-        return _sort_value(value)
+def _rank_value(value: Any) -> Any:
+    """``rank=fan-in`` is ``sort=-fan-in`` under its retired name (D5); a wrong value names the supported one."""
     legacy = {field.lstrip('-'): field for field in _SORT_FIELDS}
     if not isinstance(value, str):
         raise ParamValueError(f'rank must be a valid string, got {value!r}: use sort={_SORT_FIELDS[0]} '
@@ -292,12 +287,8 @@ def _detail_value(value: Any) -> str:
     return str(value)
 
 
-def _detail_alias(name: str, value: Any) -> Any:
+def _verbose_value(value: Any) -> Any:
     """``verbose`` (and the global ``--verbose``) is ``detail=full`` under its retired name (D5)."""
-    if value is None:
-        return None
-    if name != 'verbose':
-        return _detail_value(value)
     try:
         return 'full' if boolean_value(value) else 'normal'
     except ValueError:
@@ -330,17 +321,17 @@ _DETAIL = ParamSpec('detail', 'string', 'How much of the answer: normal (a summa
                     'group plus its cycle edges, all unused imports, all violations, every package; JSON adds '
                     '"verbose": true). Legacy verbose and the global --verbose mean full', 'normal', _detail_value,
                     ('imports://src?circular&detail=full',), choices=_DETAIL_LEVELS, role='presentation',
-                    aliases=('verbose',), alias_normalize=_detail_alias, cli_flags=(('verbose', 'full'),),
+                    legacy=(LegacySpelling('verbose', codec=_verbose_value),), cli_flags=(('verbose', 'full'),),
                     cli=CliBinding(('--detail',), metavar='LEVEL'))
 _SORT = ParamSpec('sort', 'string', 'Rank files by fan-in, most imported first: the count of files that import each '
                   'file (higher = more central; 0 = entry point or dead code). One value: -fan-in (legacy rank=fan-in)',
                   None, _sort_value, ('imports://src?sort=-fan-in', 'imports://src?sort=-fan-in&limit=20'),
-                  choices=_SORT_FIELDS, role='operation', aliases=('rank',), alias_normalize=_sort_alias,
-                  cli=CliBinding(('--sort', '--rank'), dest='sort', metavar='-fan-in'))
+                  choices=_SORT_FIELDS, role='operation', legacy=(LegacySpelling('rank', codec=_rank_value, flag='--rank'),),
+                  cli=CliBinding(('--sort',), dest='sort', metavar='-fan-in'))
 _LIMIT = ParamSpec('limit', 'integer', 'Ranking rows to show (default: all; 0 = all); the total is kept and other '
                    'views leave it unread with a warning. Legacy top is the same cap', None, _limit_value,
                    ('imports://src?sort=-fan-in&limit=20',), minimum=0, zero_policy='all', role='analysis',
-                   aliases=('top',), cli=CliBinding(('--limit', '--top'), dest='top', metavar='N'))
+                   legacy=(LegacySpelling('top', flag='--top'),), cli=CliBinding(('--limit',), dest='top', metavar='N'))
 
 # The declaration the `reveal imports` subcommand and the declared URI route bind (BACK-1054, D6):
 # every parameter imports:// reads. A view flag selects its view when its value is on (_selects):

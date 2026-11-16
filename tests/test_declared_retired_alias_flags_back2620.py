@@ -14,15 +14,14 @@ from reveal.cli import invocation
 from reveal.cli.invocation import Invocation, Retirement, invocation_scope, noted_retirements
 from reveal.cli.routing.declared import _bind_legacy_cli_values, _note_retired_flags
 from reveal.utils.query_binding import prepare_declared_params
-from reveal.utils.query_parser import CliBinding, ParamSpec
+from reveal.utils.query_parser import CliBinding, LegacySpelling, ParamSpec
 
-SCAN = ParamSpec('scan-limit', 'integer', 'Input budget', None, int, aliases=('scan_limit', 'max_files'),
-                 cli=CliBinding(('--scan-limit', '--max-files'), dest='scan_limit'))
-def _detail_alias(name, value):
-    return ('full' if value is True else 'normal') if name == 'verbose' else value
-
-
-DETAIL = ParamSpec('detail', 'string', 'How much', None, str, aliases=('verbose',), alias_normalize=_detail_alias,
+# scan_limit is a spelling variant (an alias); max_files and verbose are other words (legacy entries, BACK-2654).
+SCAN = ParamSpec('scan-limit', 'integer', 'Input budget', None, int, aliases=('scan_limit',),
+                 legacy=(LegacySpelling('max_files', flag='--max-files'),),
+                 cli=CliBinding(('--scan-limit',), dest='scan_limit'))
+DETAIL = ParamSpec('detail', 'string', 'How much', None, str,
+                   legacy=(LegacySpelling('verbose', codec=lambda value: 'full' if value is True else 'normal'),),
                    cli_flags=(('verbose', 'full'),), cli=CliBinding(('--detail',)))
 ROWS = ParamSpec('rows', 'integer', 'Row cap', None, int, cli_flags=(('all', '1000000'),),
                  cli=CliBinding(('--rows',)))

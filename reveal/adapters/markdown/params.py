@@ -1,7 +1,7 @@
 """Markdown controls bind directly; existing operations keep selection and source ownership."""
 from typing import Any
 
-from ...utils.query_parser import CliBinding, ParamSpec, QueryParams, peek_query_items
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, QueryParams, peek_query_items
 from ...utils.query_binding import boolean_value
 from ...utils.query import parse_query_filters
 from ...utils.query_control import declared_result_control as result_control
@@ -22,10 +22,10 @@ def fields(value: Any) -> list[str]:
 
 
 WHERE = ParamSpec('where', 'array', 'Frontmatter expressions, ANDed; repeat for multiple constraints',
-                  [], strings, role='filter-expression', cli=CliBinding(('--where',), action='append'))
+                  [], strings, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)))
 MATCH = ParamSpec('match', 'array', 'Body terms, ANDed; repeat to require multiple terms',
-                  [], strings, aliases=('body-contains',), uri_codec='percent',
-                  cli=CliBinding(('--match', '--body-contains'), action='append'))
+                  [], strings, legacy=(LegacySpelling('body-contains', flag='--body-contains'),), uri_codec='percent',
+                  repeatable=True, cli=CliBinding(('--match',)))
 VIEW = ParamSpec('view', 'string', 'Answer view: list, links, aggregate (or legacy lint)',
                  None, str, choices=('list', 'links', 'aggregate', 'lint'), cli=CliBinding(('--view',)))
 FIELD = ParamSpec('field', 'string', 'Frontmatter field counted by the aggregate view', None, str,
@@ -41,7 +41,7 @@ LINT = ParamSpec('lint', 'boolean', 'Legacy frontmatter lint selector', False, b
 LINT_FIELDS = ParamSpec('lint-fields', 'array', 'Required frontmatter fields for legacy lint', None, fields,
                         cli=CliBinding(('--lint-fields',)))
 FIELDS = ParamSpec('columns', 'array', 'Additional frontmatter fields displayed as listing columns', None, fields,
-                   aliases=('fields',), cli=CliBinding(('--columns',)))
+                   legacy=(LegacySpelling('fields'),), cli=CliBinding(('--columns',)))
 EXPLAIN = ParamSpec('explain', 'boolean', 'Include per-term body relevance evidence', False, boolean_value,
                     cli=CliBinding(('--explain',), action='store_true'))
 SORT = ParamSpec('sort', 'string', 'Frontmatter field; prefix - for descending', None, str,
@@ -62,7 +62,7 @@ def selected_view(params: Any, *, apply: bool = False) -> str:
     values = params if apply else dict(peek_query_items(params))
     if values.get('view'):
         return str(values['view'])
-    if any(_enabled(values.get(name)) for name in (LINKS.name, *LINKS.aliases)):
+    if any(_enabled(values.get(name)) for name in LINKS.spellings):
         return 'links'
     if _enabled(values.get('lint')):
         return 'lint'

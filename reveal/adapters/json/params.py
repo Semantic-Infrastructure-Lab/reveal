@@ -3,7 +3,7 @@ from typing import Any
 
 from ...errors import RequestValidationError
 from ...utils.query_binding import boolean_value
-from ...utils.query_parser import CliBinding, ParamSpec, ParamValueError, QueryParams, parse_query_params, peek_query_items
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, parse_query_params, peek_query_items
 from ...utils.query_control import declared_result_control as result_control, parse_result_control
 from ...utils.query import parse_query_filters
 
@@ -32,10 +32,11 @@ def nonnegative(name, value):
 
 
 VIEW = ParamSpec('view', 'string', 'Answer view: value, schema, flatten, type, keys or length',
-                 'value', view_name, choices=VIEWS, legacy_selectors=LEGACY_SELECTORS,
+                 'value', view_name, choices=VIEWS,
+                 legacy=tuple(LegacySpelling(selector, first=True) for selector in LEGACY_SELECTORS),
                  cli=CliBinding(('--view',)))
 WHERE = ParamSpec('where', 'array', 'Array-element predicates, ANDed; repeat for multiple constraints',
-                  [], expressions, role='filter-expression', cli=CliBinding(('--where',), action='append'))
+                  [], expressions, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)))
 DETAIL = ParamSpec('detail', 'string', 'Flatten text detail: full (default) or raw lines',
                    'full', str, choices=('full', 'raw'), cli=CliBinding(('--detail',)))
 SORT = ParamSpec('sort', 'string', 'Array field; prefix - for descending', None, str,

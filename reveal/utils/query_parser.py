@@ -327,6 +327,29 @@ class ResourceSpec:
 
 
 @dataclass(frozen=True)
+class LegacySpelling:
+    """A retired spelling of the control it is declared on (COMMAND_MODEL rule "Spellings", BACK-2654).
+
+    Keyed by ``name`` alone, or by ``name`` and ``value`` for a retired value (AST ``show=calls``); ``first`` marks
+    a bare first query word (JSON's ``?schema``). ``codec`` translates the legacy raw value into the canonical
+    control's value (identity when omitted) and may reject it; ``flag`` is the old CLI flag, which the declared
+    parser generates. Notes come only from RETIREMENTS: an entry without a row is note-free.
+    """
+    name: str
+    value: Optional[str] = None
+    codec: Optional[Callable[[Any], Any]] = None
+    flag: Optional[str] = None
+    first: bool = False
+    owner: str = ''  # the canonical control's name, bound by its ParamSpec
+
+    def translate(self, raw: Any) -> Dict[str, Any]:
+        """The canonical controls the legacy value stands for."""
+        if self.first:
+            return {self.owner: self.name}
+        return {self.owner: raw if self.codec is None else self.codec(raw)}
+
+
+@dataclass(frozen=True)
 class ParamSpec:
     """One declared query parameter; read explicitly where its value is applied.
 
@@ -350,12 +373,57 @@ class ParamSpec:
     # What a value names: 'file' (a path under the scan) or 'symbol' (a definition name). A parameter that
     # names a target exits 2 when it matches nothing (surface plan rule 9), never a clean zero.
     names: Optional[str] = None
+    # Spelling variants only (``scan_limit`` for ``scan-limit``): note-free. A different word is a ``legacy`` entry.
     aliases: Tuple[str, ...] = ()
-    legacy_selectors: Tuple[str, ...] = ()
-    alias_normalize: Optional[Callable[[str, Any], Any]] = None
+    legacy: Tuple[LegacySpelling, ...] = ()
     # A legacy spelling kept as a parameter of its own (not an alias of the canonical control, e.g. a
     # threshold the noun translates into where): api.query notes it like a retired alias (BACK-2621).
     retired: bool = False
+    # Selections and filters repeat and combine (where, match); settings are scalar. The CLI appends exactly
+    # when this is set (COMMAND_MODEL rule "Conflicting values").
+    repeatable: bool = False
+
+    def __post_init__(self) -> None:
+        from dataclasses import replace
+        object.__setattr__(self, 'legacy', tuple(entry if entry.owner else replace(entry, owner=self.name)
+                                                 for entry in self.legacy))
+
+    @property
+    def legacy_words(self) -> Tuple[str, ...]:
+        """The legacy entries keyed by name alone: other words for this control."""
+        return tuple(entry.name for entry in self.legacy if entry.value is None and not entry.first)
+
+    @property
+    def spellings(self) -> Tuple[str, ...]:
+        """Every URI key that spells this control: its name, spelling variants and legacy words."""
+        return (self.name, *self.aliases, *self.legacy_words)
+
+    @property
+    def first_selectors(self) -> Tuple[str, ...]:
+        return tuple(entry.name for entry in self.legacy if entry.first)
+
+    def legacy_entry(self, spelling: str) -> Optional[LegacySpelling]:
+        """The name-keyed legacy entry for *spelling* (or its old flag), or None."""
+        return next((entry for entry in self.legacy if entry.value is None and not entry.first
+                     and spelling in (entry.name, entry.flag)), None)
+
+    def canonical_value(self, spelling: str, value: Any) -> Any:
+        """*value* as this control's own: a legacy spelling's translation, otherwise unchanged."""
+        entry = self.legacy_entry(spelling)
+        return value if entry is None or value is None else entry.translate(value)[self.name]
+
+    @property
+    def flags(self) -> Tuple[str, ...]:
+        """The CLI flags the declared parser generates: the control's own, then its legacy entries' old flags."""
+        own = self.cli.flags if self.cli is not None else ()
+        return (*own, *(entry.flag for entry in self.legacy if entry.flag and entry.flag not in own))
+
+    @property
+    def cli_action(self) -> Optional[str]:
+        """The argparse action: ``append`` exactly when the control repeats."""
+        if self.repeatable:
+            return 'append'
+        return self.cli.action if self.cli is not None else None
 
     def read(self, params: Dict[str, Any]) -> Any:
         raw = params.get(self.name)
@@ -390,10 +458,10 @@ class ParamSpec:
     def schema(self) -> Dict[str, Any]:
         result = {'type': self.type, 'description': self.description,
                   'examples': list(self.examples), 'default': self.default}
-        if self.aliases:
-            result['aliases'] = list(self.aliases)
-        if self.legacy_selectors:
-            result['legacy_first_selectors'] = list(self.legacy_selectors)
+        if self.aliases or self.legacy_words:
+            result['aliases'] = list(self.aliases) + list(self.legacy_words)
+        if self.first_selectors:
+            result['legacy_first_selectors'] = list(self.first_selectors)
         if self.minimum is not None:
             result['minimum'] = self.minimum
         if self.zero_policy is not None:
@@ -405,9 +473,9 @@ class ParamSpec:
         if self.names is not None:
             result['names'] = self.names
         if self.cli is not None:
-            result['cli'] = {'flags': list(self.cli.flags), 'dest': self.cli.dest or self.name,
+            result['cli'] = {'flags': list(self.flags), 'dest': self.cli.dest or self.name,
                              'nargs': self.cli.nargs, 'required': self.cli.required,
-                             'action': self.cli.action, 'metavar': self.cli.metavar}
+                             'action': self.cli_action, 'metavar': self.cli.metavar}
             result['required'] = self.required
             result['uri_codec'] = self.uri_codec
         elif self.uri_codec != 'raw' or self.required:
@@ -435,7 +503,7 @@ def where_param(description: str, examples: Tuple[str, ...] = ()) -> ParamSpec:
     explicit ``where=`` values and ``--where`` flags; the noun's own filter parser evaluates them.
     """
     return ParamSpec('where', 'array', description, [], expression_list, examples, role='filter-expression',
-                     cli=CliBinding(('--where',), action='append'))
+                     repeatable=True, cli=CliBinding(('--where',)))
 
 
 def param_cli_flags(specs: Iterable[ParamSpec]) -> Dict[str, str]:

@@ -1,17 +1,18 @@
 """Declared AST controls; expressions continue through the existing AST filter parser."""
 
 from ...utils.query_binding import boolean_value
-from ...utils.query_parser import CliBinding, ParamSpec, QueryParams, where_param
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, QueryParams, where_param
 from ...utils.query_control import declared_result_control as result_control
 from .queries import ALL_OP, parse_query, validate_filter_values, _condition
 
 
 WHERE = where_param('Filter expressions, ANDed; repeat --where for multiple bounds')
 KIND = ParamSpec('kind', 'string', 'Element kind (function, method, class, struct, import, interface, ...)',
-                 None, str, aliases=('type',), cli=CliBinding(('--kind', '--type')))
+                 None, str, legacy=(LegacySpelling('type', flag='--type'),), cli=CliBinding(('--kind',)))
 VIEW = ParamSpec('view', 'string', 'Answer view: calls, dict-heatmap or dict-schemas (Python evidence)',
-                 None, lambda value: None if value is True else str(value), aliases=('show',),
-                 cli=CliBinding(('--view', '--show')))
+                 None, lambda value: None if value is True else str(value),
+                 legacy=(LegacySpelling('show', flag='--show'), LegacySpelling('show', value='calls')),
+                 cli=CliBinding(('--view',)))
 BUILTINS = ParamSpec('builtins', 'boolean', 'Include builtin calls in the calls view', False,
                      boolean_value, cli=CliBinding(('--builtins',), action='store_true'))
 REVEAL_TYPE = ParamSpec('reveal-type', 'string', 'Type evidence for a variable (Python only)',

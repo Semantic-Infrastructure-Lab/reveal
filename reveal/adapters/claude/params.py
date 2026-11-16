@@ -68,7 +68,7 @@ PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS
     ParamSpec('sort', 'string', 'Answer row field; prefix - for descending; supported fields depend on the selected reader', None, nonempty_scalar, cli=CliBinding(('--sort',))),
     ParamSpec('where', 'array', 'Reader-specific predicates, ANDed: catalog session~=TEXT substrings or workflow tool==NAME exact equality; case-insensitive',
               None, name_predicates, uri_codec='percent', role='name-predicate',
-              cli=CliBinding(('--where',), action='append')),
+              repeatable=True, cli=CliBinding(('--where',))),
     ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence, cli=CliBinding(('--timeline',), action='store_true')),
     ParamSpec('detail', 'string', 'summary, normal, full or raw; levels are qualified by the existing reader', None, text, choices=('summary', 'normal', 'full', 'raw'), cli=CliBinding(('--detail',))),
     ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES, cli=CliBinding(('--view',))),

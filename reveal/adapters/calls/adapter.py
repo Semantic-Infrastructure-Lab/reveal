@@ -33,7 +33,7 @@ from ..ast.analysis import collect_structures
 from ...core.definition_names import name_matches
 from .renderer import render_calls_structure
 from ...utils.query_binding import bind_declared_params, boolean_value
-from ...utils.query_parser import (CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
+from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
                                    clamped_whole, nonempty_scalar, nonnegative_display_limit, param_schema,
                                    peek_query_items)
 from ...utils.path_utils import to_posix, named_path_candidates, to_relative_display
@@ -63,15 +63,8 @@ def _calls_top(value: Any) -> int:
         raise ParamValueError(str(exc)) from None
 
 
-def _calls_limit_alias(name: str, value: Any) -> Any:
-    return None if value is None else _calls_top(value)
-
-
-def _calls_sort_alias(name: str, value: Any) -> Any:
-    if value is None:
-        return None
-    if name != 'rank':
-        return _calls_sort(value)
+def _calls_rank(value: Any) -> Any:
+    """Legacy ``rank=callers`` is ``sort=-callers``."""
     if value != 'callers':
         raise ParamValueError('rank requires callers; use sort=-callers (--sort=-callers)')
     return '-callers'
@@ -124,19 +117,19 @@ _DEPTH = ParamSpec('depth', 'integer', 'Levels to walk, a signed whole integer c
                    cli=CliBinding(('--depth',), metavar='N'))
 _RANK = ParamSpec('sort', 'string', 'Select caller ranking, most-called first: -callers (legacy --rank callers)', None,
                   _calls_sort, examples=('sort=-callers',), choices=('-callers',), role='operation',
-                  aliases=('rank',), alias_normalize=_calls_sort_alias,
-                  cli=CliBinding(('--sort', '--rank'), metavar='-callers'))
+                  legacy=(LegacySpelling('rank', codec=_calls_rank, flag='--rank'),),
+                  cli=CliBinding(('--sort',), metavar='-callers'))
 _TOP = ParamSpec('limit', 'integer', 'Max entries for rank (default 10) or uncalled (default all); 0 = all; '
                  'other modes ignore it with a warning', None, _calls_top, examples=('limit=20',), minimum=0,
-                 zero_policy='all', role='analysis', aliases=('top',), alias_normalize=_calls_limit_alias,
-                 cli=CliBinding(('--limit', '--top'), dest='top', metavar='N'))
+                 zero_policy='all', role='analysis', legacy=(LegacySpelling('top', codec=_calls_top, flag='--top'),),
+                 cli=CliBinding(('--limit',), dest='top', metavar='N'))
 _UNCALLED = _flag_spec('uncalled', 'List every function/method with no callers (retired, D8: ?callers=NAME for one '
                        'function, the language\'s own dead-code tool for the rest; prints no confidence)',
                        role='operation')
 _TYPE = ParamSpec('kind', 'string', 'For uncalled: function selects module-level functions; '
                  'legacy method keeps the unfiltered function-and-method population', None,
                   nonempty_scalar, examples=('kind=function',), choices=('function', 'method'), role='analysis',
-                  aliases=('type',), cli=CliBinding(('--kind', '--type'), dest='type', metavar='KIND'))
+                  legacy=(LegacySpelling('type', flag='--type'),), cli=CliBinding(('--kind',), dest='type', metavar='KIND'))
 _MODULES = _flag_spec('modules', 'Module-level dependency graph: one edge per import that resolves under the path '
                       '(retired: imports://<path>?importers&scope=path answers the same edges)', role='operation')
 _EXTERNAL = _flag_spec('external', 'With modules: also count importers from the rest of the project root '

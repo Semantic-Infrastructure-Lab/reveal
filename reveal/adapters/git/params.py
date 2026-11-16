@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...utils.query_binding import boolean_value
-from ...utils.query_parser import CliBinding, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit
 
 
 def expressions(value: Any) -> list[str]:
@@ -53,15 +53,15 @@ def merge_policy(value):
     return MergePolicy(included, not isinstance(value, bool) and positive not in ('on', 'off'))
 
 
-def string(name, description, *, aliases=(), choices=()):
-    return ParamSpec(name, 'string', description, None, nonempty_scalar, aliases=aliases, choices=choices,
+def string(name, description, *, legacy=(), choices=()):
+    return ParamSpec(name, 'string', description, None, nonempty_scalar, legacy=legacy, choices=choices,
                      cli=CliBinding(('--' + name,)))
 
 
 VIEW = string('view', 'history, blame, diff or ownership; omitted preserves resource-dependent inspection',
-              aliases=('type',), choices=('history', 'log', 'blame', 'diff', 'ownership'))
+              legacy=(LegacySpelling('type'),), choices=('history', 'log', 'blame', 'diff', 'ownership'))
 WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (Git DSL percent-decodes values)',
-                  [], predicates, role='filter-expression', cli=CliBinding(('--where',), action='append'))
+                  [], predicates, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)))
 DETAIL = ParamSpec('detail', 'string', 'normal, full blame, or raw historical file content', None, detail,
                    choices=('normal', 'full', 'raw'), cli=CliBinding(('--detail',)))
 MERGES = ParamSpec('merges', 'boolean', 'Include or exclude merge commits; omitted preserves each view default',
@@ -87,12 +87,12 @@ PARAM_SPECS = (VIEW, WHERE, DETAIL, VERBOSE, MERGES, NO_MERGES, RAW, SORT, LIMIT
                *(string(name, description) for name, description in (
                    ('ref', 'Starting branch, tag or commit'), ('element', 'Semantic element name'),
                    ('bucket', 'Timeline period: week or month'), ('ignore', 'Blame commit hash prefixes to suppress'))),
-               *(ParamSpec(name, 'array', description, [], expressions,
-                           cli=CliBinding(('--' + name,), action='append'))
+               *(ParamSpec(name, 'array', description, [], expressions, repeatable=True,
+                           cli=CliBinding(('--' + name,)))
                  for name, description in (('since', 'Inclusive starting date'), ('until', 'Inclusive ending date'))))
 
 
-QUERY_CONTROL_NAMES = frozenset(name for spec in PARAM_SPECS for name in (spec.name, *spec.aliases))
+QUERY_CONTROL_NAMES = frozenset(name for spec in PARAM_SPECS for name in spec.spellings)
 
 
 def runtime_query(params):

@@ -116,7 +116,7 @@ def _note_retired_flags(name: str, adapter) -> None:
     if invocation is None:
         return
     params = {flag: _flag_param(spec, flag) for spec in adapter.PARAM_SPECS if spec.cli is not None
-              for flag in spec.cli.flags}
+              for flag in spec.flags}
     for token in invocation.command_argv:
         if token == '--':
             break
@@ -126,10 +126,13 @@ def _note_retired_flags(name: str, adapter) -> None:
 
 
 def _flag_param(spec: ParamSpec, flag: str) -> str:
-    """The declared parameter a subcommand flag spells: the alias it names, else the canonical name."""
+    """The declared parameter a subcommand flag spells: the legacy word or alias it names, else the canonical name."""
     spelled = flag[2:]
     if spelled == spec.name:
         return spec.name
+    entry = spec.legacy_entry(flag)
+    if entry is not None:
+        return entry.name
     return next((alias for alias in spec.aliases if alias in (spelled, spelled.replace('-', '_'))), spec.name)
 
 
@@ -176,7 +179,7 @@ def _bind_legacy_cli_values(name, adapter, args, source):
         for flag, value in spec.cli_flags:
             if peek(args, flag, False) is not True:
                 continue
-            if flag in spec.aliases:
+            if flag in spec.spellings[1:]:
                 source[flag] = True
                 delegate(args, flag, spec.name)
                 retirement_note(f'param:{name}.{flag}')

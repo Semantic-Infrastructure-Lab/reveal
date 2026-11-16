@@ -550,8 +550,8 @@ def _alias_on_subcommand(noun, spec, alias, values):
 def probe_alias_and_name(noun):
     cases = []
     for spec in _specs(noun):
-        if spec.cli is not None and spec.cli.action == 'append':
-            continue  # a repeated control ANDs its values: not settled by the table (reported, not a cell)
+        if _repeatable(spec):
+            continue  # a repeatable control's spellings accumulate (rule 1): column 1d
         for alias in _other_spellings(spec):
             values = _alias_values(spec, alias)
             if values is None:
@@ -839,7 +839,8 @@ def _legacy_conflict_cases(noun, key, legacy, specs, sample):
         return []
     base, _, query = uri.partition('?')
     pairs = [pair for pair in query.split('&') if pair]
-    raw = next((pair.partition('=')[2] for pair in pairs if pair.partition('=')[0] == legacy), '')
+    raw = next(((pair.partition('=')[2] if '=' in pair else True) for pair in pairs
+                if pair.partition('=')[0] == legacy), True)  # a bare key is present: true
     without = base + '?' + '&'.join(pair for pair in pairs if pair.partition('=')[0] != legacy)
     cases = []
     for name, value in dict(entry.translate(raw)).items():
@@ -1033,6 +1034,45 @@ def test_one_legacy_declaration_replaces_the_opt_in_seams(owner, field, present)
     from reveal.utils.query_parser import ParamSpec
     names = {item.name for item in fields({'FlagSpec': FlagSpec, 'ParamSpec': ParamSpec}[owner])}
     assert (field in names) is present, f'{owner}.{field} should {"" if present else "not "}exist'
+
+
+# --- the legacy-spelling declaration (rule 10), as a unit ---------------------------------------------------
+
+def _legacy_demo():
+    from reveal.utils.query_parser import CliBinding, LegacySpelling, ParamSpec
+    return ParamSpec('sort', 'string', 'Order', None, str, aliases=('sort_by',),
+                     legacy=(LegacySpelling('rank', codec=lambda value: f'-{value}', flag='--rank'),
+                             LegacySpelling('rank', value='calls'), LegacySpelling('schema', first=True)),
+                     cli=CliBinding(('--sort',)))
+
+
+def test_a_legacy_entry_belongs_to_its_control_and_translates_into_it():
+    spec = _legacy_demo()
+    assert [entry.owner for entry in spec.legacy] == ['sort', 'sort', 'sort']
+    assert spec.spellings == ('sort', 'sort_by', 'rank') and spec.legacy_words == ('rank',)
+    assert spec.first_selectors == ('schema',) and spec.flags == ('--sort', '--rank')
+    assert spec.legacy[0].translate('fan-in') == {'sort': '-fan-in'}
+    assert spec.legacy[2].translate(True) == {'sort': 'schema'}
+    assert spec.canonical_value('rank', 'fan-in') == '-fan-in' and spec.canonical_value('--rank', 'x') == '-x'
+    assert spec.canonical_value('sort', 'fan-in') == 'fan-in' and spec.canonical_value('sort_by', 'a') == 'a'
+    schema = spec.schema()
+    assert schema['aliases'] == ['sort_by', 'rank'] and schema['legacy_first_selectors'] == ['schema']
+
+
+def test_the_binder_and_the_parser_read_a_legacy_entry_as_its_control():
+    import argparse
+    from reveal.utils.query_binding import add_declared_arguments, prepare_declared_params
+    from reveal.utils.query_parser import ResourceSpec
+    spec = _legacy_demo()
+    assert dict(prepare_declared_params((spec,), 'rank=fan-in', 'uri').peek_items()) == {'sort': '-fan-in'}
+    assert dict(prepare_declared_params((spec,), 'sort=-fan-in&rank=fan-in', 'uri').peek_items()) == {'sort': '-fan-in'}
+    with pytest.raises(ValueError, match='conflicting spellings: sort, rank'):
+        prepare_declared_params((spec,), 'sort=-x&rank=fan-in', 'uri')
+    parser = argparse.ArgumentParser(exit_on_error=False)
+    add_declared_arguments(parser, (spec,), ResourceSpec())
+    assert parser.parse_args(['--rank', 'fan-in']).sort == '-fan-in'
+    with pytest.raises(argparse.ArgumentError):
+        parser.parse_args(['--sort=-x', '--rank', 'fan-in'])
 
 
 def test_every_legacy_entry_names_its_spelling_and_translation():

@@ -168,7 +168,7 @@ def _bound_query_result(adapter, scheme: str, uri: str, overrides: Dict[str, Any
     from .utils.json_utils import attach_retirements
     from .utils.results import note_incomplete
     declared = {f'param:{scheme}.{name}' for spec in adapter.PARAM_SPECS
-                for name in ((spec.name,) if spec.retired else ()) + spec.aliases}
+                for name in ((spec.name,) if spec.retired else ()) + spec.spellings[1:]}
     keys = uri_retirement_keys(uri) + [f'param:{scheme}.{key}' for key in overrides]
     with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False):
         for key in keys:

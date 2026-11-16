@@ -75,22 +75,33 @@ def _decode_value(spec: ParamSpec, value: Any) -> Any:
     raise ValueError(f'Unknown URI codec {spec.uri_codec!r}')
 
 
+def _comparable(spec: ParamSpec, value: Any) -> Any:
+    """A value as its control reads it, so two spellings of one value compare equal; a value the control
+    rejects is rejected here, before the conflict check, so the message names the supported values."""
+    return spec.validate(value) if value is not None else None
+
+
+def _spellings_agree(spec: ParamSpec, values: list) -> bool:
+    """Two spellings give one value: compared as the control reads it when a legacy spelling translates."""
+    if len(values) < 2:
+        return True
+    if spec.legacy:
+        values = [_comparable(spec, value) for value in values]
+    return all(type(other) is type(values[0]) and other == values[0] for other in values[1:])
+
+
 def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str, Any]) -> Dict[str, Any]:
-    """Aliases have one value owner; mixed spellings cannot hide precedence."""
+    """Every spelling of a control has one value owner; mixed spellings cannot hide precedence. A legacy
+    spelling's value is translated into the control's own (``rank=fan-in`` is ``sort=-fan-in``)."""
     result = dict(peek_query_items(supplied))
     for spec in declarations:
-        present = [name for name in (spec.name, *spec.aliases) if name in result]
+        present = [name for name in spec.spellings if name in result]
         if not present:
             continue
-        if spec.alias_normalize is not None:
-            for name in present:
-                result[name] = spec.alias_normalize(name, result[name])
-        value = result[present[0]]
-        if any(type(result[name]) is not type(value) or result[name] != value for name in present[1:]):
+        values = [spec.canonical_value(name, result.pop(name)) for name in present]
+        if not _spellings_agree(spec, values):
             raise ValueError(f'{spec.name}: conflicting spellings: ' + ', '.join(present))
-        for name in present:
-            result.pop(name)
-        result[spec.name] = value
+        result[spec.name] = values[0]
     return result
 
 
@@ -98,9 +109,9 @@ def _prepare_repeated_params(declarations: tuple[ParamSpec, ...], source: str, p
     """Keep every occurrence for explicitly repeated controls; other controls stay last-wins."""
     parts = [part.strip().partition('=') for part in source.split('&')]
     for spec in declarations:
-        if spec.cli is None or spec.cli.action != 'append' or spec.role == 'filter-expression':
+        if not spec.repeatable or spec.role == 'filter-expression':
             continue
-        for name in (spec.name, *spec.aliases):
+        for name in spec.spellings:
             values = [value if separator else True for key, separator, value in parts if key == name]
             if values:
                 params[name] = [_decode_value(spec, value) if name == spec.name else value for value in values]
@@ -111,7 +122,7 @@ def _prepare_legacy_selectors(declarations: tuple[ParamSpec, ...], source: str, 
     first = source.partition('&')[0].lower()
     selected = {}
     for spec in declarations:
-        if first not in spec.legacy_selectors:
+        if first not in spec.first_selectors:
             continue
         if spec.name in params:
             raise RequestValidationError(f'{first} conflicts with {spec.name}')
@@ -122,7 +133,7 @@ def _prepare_legacy_selectors(declarations: tuple[ParamSpec, ...], source: str, 
 
 
 def _prepare_expression_params(declarations, source, params, selectors, expression) -> None:
-    known = {name for spec in declarations for name in (spec.name, *spec.aliases)}
+    known = {name for spec in declarations for name in spec.spellings}
     terms = []
     for index, part in enumerate(source.split('&')):
         if index == 0 and selectors:
@@ -150,10 +161,10 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     if expression is not None:
         _prepare_expression_params(declarations, source, params, selectors, expression)
     prepared = QueryParams(_normalize_aliases(declarations, params))
-    prepared._aliases = {spec.name: spec.aliases for spec in declarations}
+    prepared._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
     prepared._selectors = selectors
     prepared._source_query = source
-    prepared._supplied_aliases = {alias for spec in declarations for alias in spec.aliases
+    prepared._supplied_aliases = {alias for spec in declarations for alias in spec.spellings[1:]
                                   if alias in dict.keys(params)}
     for name, selector in selectors.items():
         prepared._aliases[name] += (selector,)
@@ -175,8 +186,8 @@ def prepare_declared_params(declarations: Iterable[ParamSpec],
         raise TypeError('Typed parameters must be a mapping')
     supplied = _normalize_aliases(declarations, source)
     params = QueryParams()
-    params._aliases = {spec.name: spec.aliases for spec in declarations}
-    params._supplied_aliases = {alias for spec in declarations for alias in spec.aliases if alias in source}
+    params._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
+    params._supplied_aliases = {alias for spec in declarations for alias in spec.spellings[1:] if alias in source}
     for spec in declarations:
         destination = spec.cli.dest if spec.cli and spec.cli.dest else spec.name
         if destination in supplied:
@@ -270,23 +281,30 @@ def bind_prepared_params(declarations: Iterable[ParamSpec], params: QueryParams,
 
 
 class _ScalarAliasAction(argparse.Action):
-    """Keep argparse's repeated-key policy without letting aliases hide conflicts."""
+    """Keep argparse's repeated-key policy without letting other spellings hide conflicts."""
 
-    def __init__(self, *args, alias_normalize=None, **kwargs):
+    def __init__(self, *args, translate=None, comparable=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.alias_normalize = alias_normalize
+        self.translate = translate
+        self.comparable = comparable or (lambda value: value)
+
+    def _same(self, left, right):
+        try:
+            return self.comparable(left) == self.comparable(right)
+        except ValueError:  # an invalid value is rejected by the binder; compare what was typed
+            return left == right
 
     def __call__(self, parser, namespace, values, option_string=None):
-        if self.alias_normalize is not None:
+        if self.translate is not None:
             try:
-                values = self.alias_normalize(option_string.lstrip('-'), values)
+                values = self.translate(option_string, values)
             except ValueError:
                 # Invalid values are rejected by the binder, preserving JSON
                 # request diagnostics instead of an argparse-only usage dump.
                 pass
         submitted = getattr(namespace, '_declared_alias_values', {})
         previous = submitted.setdefault(self.dest, {})
-        if any(flag != option_string and value != values for flag, value in previous.items()):
+        if any(flag != option_string and not self._same(value, values) for flag, value in previous.items()):
             raise argparse.ArgumentError(self, 'conflicting spellings: ' + ', '.join((*previous, option_string)))
         previous[option_string] = values
         setattr(namespace, '_declared_alias_values', submitted)
@@ -313,19 +331,20 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
             continue
         options: Dict[str, Any] = {'dest': cli.dest or spec.name, 'default': argparse.SUPPRESS,
                                    'required': cli.required, 'help': spec.description}
-        if cli.action is not None:
-            options['action'] = cli.action
+        if spec.cli_action is not None:
+            options['action'] = spec.cli_action
         else:
-            if len(cli.flags) > 1:
+            if len(spec.flags) > 1:
                 options['action'] = _ScalarAliasAction
-                options['alias_normalize'] = spec.alias_normalize
+                options['translate'] = spec.canonical_value
+                options['comparable'] = spec.validate
             if cli.nargs is not None:
                 options['nargs'] = cli.nargs
                 if cli.nargs == '?':
                     options['const'] = cli.const
             if cli.metavar is not None:
                 options['metavar'] = cli.metavar
-        parser.add_argument(*cli.flags, **options)
+        parser.add_argument(*spec.flags, **options)
 
 
 def _resource_exists(path: str) -> bool:

@@ -11,7 +11,7 @@ from reveal.utils.query_parser import CliBinding, expression_list, where_param
 def test_where_param_is_the_repeatable_filter_expression_declaration():
     spec = where_param('Filter rows', ('noun://p?where=lines>5',))
     assert (spec.name, spec.type, spec.default, spec.role) == ('where', 'array', [], 'filter-expression')
-    assert spec.cli == CliBinding(('--where',), action='append')
+    assert spec.cli == CliBinding(('--where',)) and spec.repeatable and spec.cli_action == 'append'  # BACK-2654
     assert spec.examples == ('noun://p?where=lines>5',) and spec.description == 'Filter rows'
 
 
