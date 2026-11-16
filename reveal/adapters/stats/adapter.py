@@ -311,6 +311,8 @@ class MetricsAdapter(ResourceAdapter):
     PARAM_SPECS = PARAM_SPECS
     CLI_QUERY_FLAGS = {
         'respect_gitignore': 'respect_gitignore=false',  # --no-gitignore (BACK-1202)
+        'hotspots': 'hotspots=true',  # global --hotspots on the URI form (BACK-2621)
+        'code_only': 'code_only=true',  # global --code-only on the URI form (BACK-2621)
         'all': 'top=1000000',  # lifts the hotspots=true top=10 default (BACK-1379)
         # BACK-1379: get_structure already reads since from query_params and threads
         # it into get_churn_counts() to bound hotspots=true's churn scoring, but

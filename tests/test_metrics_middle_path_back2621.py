@@ -348,6 +348,15 @@ class TestPreservation:
             assert result.returncode == 0
             assert answer['summary'].get('total_files', answer['summary'].get('total')) == 10, args
 
+    def test_global_switches_reach_the_uri_form(self, project):
+        """The main parser's --hotspots and --code-only on metrics:// answer as the URI keys do."""
+        for flag, controls in (('--hotspots', 'hotspots=true'), ('--code-only', 'code_only=true')):
+            result, answer = cli_json(uri(project), flag)
+            assert result.returncode == 0, result.stderr
+            assert not unread(answer), unread(answer)
+            assert_equal_answer(answer, query(uri(project, controls)))
+        assert query(uri(project, 'code_only=true'))['summary']['total_files'] == 10
+
     def test_global_verbose_stays_an_unused_flag(self, project):
         for args in (('metrics', str(project)), (uri(project),)):
             result, answer = cli_json(*args, '--verbose')

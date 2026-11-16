@@ -36,7 +36,7 @@ MATRIX_PATH = Path(__file__).parent / 'flag_routing_matrix.yaml'
 REVEAL_PKG = Path(__file__).resolve().parent.parent / 'reveal'
 
 # The global flags routed by cli/routing/flag_specs.py (a test below keeps this in step).
-FLAGS = ('verbose', 'all', 'since', 'until', 'respect_gitignore')
+FLAGS = ('verbose', 'all', 'since', 'until', 'respect_gitignore', 'hotspots', 'code_only')
 
 # Adapters whose --all/--verbose reach a renderer-level `top` kwarg via ACCEPTS_TOP
 # (handle_uri._render_structure_top_kwargs, BACK-1226/BACK-1379) are detected below,
@@ -109,6 +109,9 @@ PROBES = {
     # (uri, value) PROBES tuple can't express.
     ('stats', 'since'): ('stats://{churn_tree}?hotspots=true', '2099-01-01'),
     ('metrics', 'since'): ('metrics://{churn_tree}?hotspots=true', '2099-01-01'),
+    # BACK-2621: metrics' global switches, declared instead of matched to get_structure parameters.
+    ('metrics', 'hotspots'): ('metrics://{pkg}', True),
+    ('stats', 'hotspots'): ('stats://{pkg}', True),
 }
 
 

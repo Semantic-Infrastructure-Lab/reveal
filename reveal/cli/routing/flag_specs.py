@@ -77,6 +77,10 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     # nginx, overview), so a missing declaration is not evidence of a dropped flag.
     FlagSpec('all', '--all', _switch('all')),
     FlagSpec('verbose', '--verbose', _switch('verbose')),
+    # metrics' global switches (BACK-2621): forwarded as declared fragments, not by matching get_structure's
+    # parameter names; an adapter that declares neither reports them as unused flags.
+    FlagSpec('hotspots', '--hotspots', _switch('hotspots')),
+    FlagSpec('code_only', '--code-only', _switch('code_only')),
     # Result-control keys, injected without a per-adapter declaration. Only ast/markdown/json/
     # git/stats apply them; most other adapters warn "Unknown query param" and ignore them, and
     # those that cannot receive a query key at all set HONORS_RESULT_CONTROL = False and get the

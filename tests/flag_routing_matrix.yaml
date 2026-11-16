@@ -9,6 +9,16 @@ adapters:
       - declared
       - structure-param
       - routing-special
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -31,6 +41,16 @@ adapters:
     all:
       via:
       - declared
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -54,6 +74,16 @@ adapters:
     all:
       via:
       - structure-param
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       reason: resource is a fixed AutoSSL log directory (adapter.py:25 AUTOSSL_LOG_DIR),
         not a git-tracked project checkout; no .gitignore concept applies
@@ -74,6 +104,16 @@ adapters:
     all:
       via:
       - declared
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -100,6 +140,16 @@ adapters:
         slice to lift
       review: not-applicable
       via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -122,6 +172,16 @@ adapters:
     all:
       via:
       - adapter-reads-args
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       reason: enumerates session .jsonl logs under CONVERSATION_BASE (~/.claude/projects/,
         adapter.py:728,397-469) -- a fixed session-log directory, no .gitignore semantics
@@ -139,6 +199,16 @@ adapters:
   codex:
     all:
       review: unreviewed
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
       via: []
     respect_gitignore:
       reason: reads Codex's own SQLite-backed session store (adapter.py:213, sqlite3),
@@ -160,6 +230,16 @@ adapters:
   contracts:
     all:
       review: unreviewed
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
       via: []
     respect_gitignore:
       via:
@@ -184,6 +264,16 @@ adapters:
     all:
       reason: no result-count query param; domain/ssl/acl-check listings return every
         row (cpanel/adapter.py:704-717)
+      review: not-applicable
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
       review: not-applicable
       via: []
     respect_gitignore:
@@ -213,6 +303,16 @@ adapters:
         (depends.py:523-524)
       review: not-applicable
       via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -233,6 +333,16 @@ adapters:
     all:
       via:
       - routing-special
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -253,6 +363,16 @@ adapters:
     all:
       reason: output is "what changed" (additions/removals/modifications), not a ranked/truncatable
         list
+      review: not-applicable
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
       review: not-applicable
       via: []
     respect_gitignore:
@@ -282,6 +402,16 @@ adapters:
         a results list
       review: not-applicable
       via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       reason: does DNS/SSL lookups for one domain name (adapter.py:608); already rejects
         all query params with an explicit warning, confirmed live
@@ -306,6 +436,16 @@ adapters:
     all:
       reason: get_structure returns every var already (env.py:302-341); confirmed
         live, output identical
+      review: not-applicable
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
       review: not-applicable
       via: []
     respect_gitignore:
@@ -333,6 +473,16 @@ adapters:
     all:
       via:
       - declared
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       reason: 'operates entirely via git history/blame (pygit2), never walks the working-tree
         filesystem directly (grep for os.walk/rglob/gitignore across adapters/git/
@@ -353,6 +503,16 @@ adapters:
   help:
     all:
       review: unreviewed
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
       via: []
     respect_gitignore:
       reason: self-introspection over reveal's own static help/schema data (help.py:615);
@@ -380,6 +540,16 @@ adapters:
     all:
       via:
       - declared
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -404,6 +574,16 @@ adapters:
         (groups[:5]) belongs to --verbose, already declared
       review: not-applicable
       via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -424,6 +604,16 @@ adapters:
     all:
       reason: no default cap found in adapter or legacy modes; confirmed live, output
         identical
+      review: not-applicable
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
       review: not-applicable
       via: []
     respect_gitignore:
@@ -455,6 +645,16 @@ adapters:
         needs every cert); no cap in code
       review: not-applicable
       via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       reason: walks a fixed certbot config directory (adapter.py:250, iterdir/glob
         at :65,83,159,166) -- infra config, not a git-tracked checkout
@@ -481,6 +681,16 @@ adapters:
         confirmed live, output identical
       review: not-applicable
       via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -501,6 +711,14 @@ adapters:
     all:
       via:
       - declared
+    code_only:
+      via:
+      - declared
+      - structure-param
+    hotspots:
+      via:
+      - declared
+      - structure-param
     respect_gitignore:
       via:
       - declared
@@ -520,6 +738,16 @@ adapters:
   mysql:
     all:
       review: unreviewed
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
       via: []
     respect_gitignore:
       reason: queries a live MySQL connection (adapter.py:328), no filesystem walk
@@ -546,6 +774,16 @@ adapters:
     all:
       via:
       - adapter-reads-args
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       reason: globs nginx config files under /etc/nginx-style paths (adapter.py:953,
         glob.glob at :236,239,267,269,415) -- infra config, not a git-tracked checkout
@@ -572,6 +810,16 @@ adapters:
       - declared
       - structure-param
       - routing-special
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -590,6 +838,16 @@ adapters:
     all:
       reason: budget-constrained curation (?budget=) is the adapter's purpose; --all
         would contradict it
+      review: not-applicable
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
       review: not-applicable
       via: []
     respect_gitignore:
@@ -615,6 +873,16 @@ adapters:
     all:
       via:
       - declared
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -640,6 +908,16 @@ adapters:
         fixed-size, not paginated
       review: not-applicable
       via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       reason: returns fixed self-introspection metadata (adapter.py:78, registered
         adapters/rules/analyzers) -- no filesystem walk over a target path
@@ -663,6 +941,16 @@ adapters:
   sqlite:
     all:
       reason: schema/health inspection only, no row-listing feature exists to cap
+      review: not-applicable
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
       review: not-applicable
       via: []
     respect_gitignore:
@@ -691,6 +979,16 @@ adapters:
   ssl:
     all:
       reason: single-certificate detail view; no list-of-many-certs output type exists
+      review: not-applicable
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
       review: not-applicable
       via: []
     respect_gitignore:
@@ -723,6 +1021,14 @@ adapters:
     all:
       via:
       - declared
+    code_only:
+      via:
+      - declared
+      - structure-param
+    hotspots:
+      via:
+      - declared
+      - structure-param
     respect_gitignore:
       via:
       - declared
@@ -743,6 +1049,16 @@ adapters:
     all:
       reason: top defaults to None (surface.py:291,336) -- already unclamped; confirmed
         live, output identical
+      review: not-applicable
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
       review: not-applicable
       via: []
     respect_gitignore:
@@ -768,6 +1084,16 @@ adapters:
       via:
       - declared
       - routing-special
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -795,6 +1121,16 @@ adapters:
         working escape hatch for a user who wants more.
       review: not-applicable
       via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
     respect_gitignore:
       via:
       - declared
@@ -816,6 +1152,16 @@ adapters:
   xlsx:
     all:
       review: unreviewed
+      via: []
+    code_only:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
+        file filter; the flag ledger reports it unused here'
+      review: not-applicable
+      via: []
+    hotspots:
+      reason: 'metrics'' own switch (BACK-2621): no other adapter ranks file hotspots;
+        the flag ledger reports it unused here'
+      review: not-applicable
       via: []
     respect_gitignore:
       reason: operates on one spreadsheet file (xlsx.py:599,647), no directory walk
@@ -843,5 +1189,7 @@ flags:
 - since
 - until
 - respect_gitignore
+- hotspots
+- code_only
 paths:
 - uri
