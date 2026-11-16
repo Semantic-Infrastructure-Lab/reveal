@@ -83,7 +83,16 @@ filters:
   since: 'Bound the churn walk to commits on/after an ISO date'
   tests: 'In view=hotspots, include (default) or exclude test/support files selected by conventional names plus project test_layout.additional_paths; changes only the ranking, preserving totals'
   detail: 'normal (per-file rows) or summary (the aggregate only: --detail summary)'
-  replaced: 'hotspots=true (--hotspots) is replaced by view=hotspots; top by limit in that view; min_lines/max_lines/min_functions by where lines>=, lines<=, functions>=; min_complexity/max_complexity by where avg_complexity>=, avg_complexity<=; summary_only by detail=summary; --no-churn by --churn off; no_merges by merges=off. Each still answers, with a replaced-by note'
+  hotspots: 'Replaced by view=hotspots (hotspots=true still answers files plus the ranking, with a note)'
+  top: 'Replaced by limit in view=hotspots (with legacy hotspots=true it caps the ranking, with a note)'
+  min_lines: 'Replaced by where lines>=N (still answers, with a note)'
+  max_lines: 'Replaced by where lines<=N (still answers, with a note)'
+  min_functions: 'Replaced by where functions>=N (still answers, with a note)'
+  min_complexity: 'Replaced by where avg_complexity>=N, the file average (still answers, with a note)'
+  max_complexity: 'Replaced by where avg_complexity<=N, the file average (still answers, with a note)'
+  summary_only: 'Replaced by detail=summary (still answers, with a note)'
+  no_churn: 'Replaced by churn=off (--no-churn by --churn off; still answers, with a note)'
+  no_merges: 'Replaced by merges=off (still answers, with a note)'
 
 workflows:
   - name: 'Find Refactoring Targets'
