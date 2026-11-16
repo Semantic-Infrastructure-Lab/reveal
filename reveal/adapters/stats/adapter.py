@@ -14,7 +14,6 @@ from reveal.reveal_types import CONTRACT_VERSION
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from ...utils.query import (
-    parse_query_params,
     parse_query_filters,
     parse_result_control,
     unknown_sort_field_warning,
@@ -405,15 +404,14 @@ class MetricsAdapter(ResourceAdapter):
         self._churn_disclosure: Optional[str] = None  # BACK-1166: set by _compute_churn_counts
         self._traversal_failures: List[PathFailure] = []
 
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                PARAM_SPECS, params, transport='typed')
-            filter_query, self.result_control = parse_result_control(self._control_query())
-        else:
-            # Parse query string with type coercion (for legacy params)
-            self.query_params = parse_query_params(query or '', coerce=True)
-            # Parse result control (sort, limit, offset) - extract from query string
-            filter_query, self.result_control = parse_result_control(query or '')
+        # Every transport binds through PARAM_SPECS (BACK-2621): the raw-query constructor that library
+        # callers use validates and normalizes as the URI does; keys no parameter claims stay operator filters.
+        if params is None:
+            params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
+        elif not isinstance(params, QueryParams):
+            params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        self.query_params = params
+        filter_query, self.result_control = parse_result_control(self._control_query())
 
         # Declared controls are never file filters, in legacy API queries either.
         filter_query = self._expression_filters()
@@ -443,10 +441,7 @@ class MetricsAdapter(ResourceAdapter):
             extra_known_keys={'sort', 'limit', 'offset', 'exclude', 'respect_gitignore',
                               *(qf.field for qf in self.query_filters)},
         )
-        self.view = self.query_params.get('view')
-        if self.view is not None and self.view not in VIEWS:
-            raise ValueError(f"view={self.view!r} is not a metrics view; the one view is "
-                             f"{', '.join(VIEWS)} (omit view for per-file metrics)")
+        self.view = _VIEW.read(self.query_params)  # the binder already checked it against VIEWS
         self._analysis_failures: list = []
         self._population_findings = False
         self._analyzed_count = 0
