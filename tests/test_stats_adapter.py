@@ -1082,7 +1082,7 @@ class TestStatsAdapterSchema:
         assert 'max_complexity' in query_params
         assert 'min_functions' in query_params
         assert 'hotspots' in query_params
-        assert 'code_only' in query_params
+        assert 'code-only' in query_params and query_params['code-only']['aliases'] == ['code_only']  # BACK-2621
 
     def test_schema_boolean_params(self):
         """Schema should document boolean operation params."""
@@ -1091,8 +1091,8 @@ class TestStatsAdapterSchema:
         query_params = schema['query_params']
         assert 'hotspots' in query_params
         assert query_params['hotspots']['type'] == 'boolean'
-        assert 'code_only' in query_params
-        assert query_params['code_only']['type'] == 'boolean'
+        assert 'code-only' in query_params  # code_only is its alias (BACK-2621)
+        assert query_params['code-only']['type'] == 'boolean'
 
     def test_schema_output_types(self):
         """Schema should define output types."""

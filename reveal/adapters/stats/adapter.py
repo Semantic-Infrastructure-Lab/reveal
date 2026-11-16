@@ -177,9 +177,11 @@ _HOTSPOTS = ParamSpec('hotspots', 'boolean', 'Legacy: per-file rows plus the hot
 _TOP = ParamSpec('top', 'integer', 'Legacy hotspot cap: limit in view=hotspots; with legacy hotspots=true it caps the '
                  'ranking (default 10, 0 = all)', 10, _count('top'), ('top=25',), minimum=0, zero_policy='all',
                  role='analysis', retired=True, cli=CliBinding(('--top',), metavar='N'))
-_CODE_ONLY = ParamSpec('code_only', 'boolean', 'Exclude data/config files from analysis', False,
-                       boolean_value, ('code_only=true',), role='analysis',
-                       cli=CliBinding(('--code-only',), action='store_true'))
+# The map's spelling (BACK-2621); code_only is an alias that answers the same, as scan_limit is for Imports.
+_CODE_ONLY = ParamSpec('code-only', 'boolean', 'Exclude data/config files (xml, csv, sql, yaml, toml, large json) '
+                       'from the walk; totals describe the code files', False, boolean_value, ('code-only=true',),
+                       role='analysis', aliases=('code_only',),
+                       cli=CliBinding(('--code-only',), dest='code_only', action='store_true'))
 _MIN_LINES = ParamSpec('min_lines', 'integer', 'Legacy: where lines>=N', None,
                        _count('min_lines'), ('min_lines=50',), role='analysis', retired=True,
                        cli=CliBinding(('--min-lines',), metavar='N'))
@@ -420,7 +422,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'metrics://./src', 'description': 'Get codebase statistics for src directory', 'output_type': 'stats_summary'},
     {'uri': 'metrics://./src?view=hotspots', 'description': 'The ranked hotspot files (files needing attention), 10 by default', 'output_type': 'stats_summary'},
     {'uri': 'metrics://./src?where=avg_complexity>=5', 'description': 'Show only files with avg complexity >= 5', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src?code_only=true', 'description': 'Exclude data/config files', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src?code-only=true', 'description': 'Exclude data/config files', 'output_type': 'stats_summary'},
     {'uri': 'metrics://./src?detail=summary', 'description': 'Aggregate summary only, no per-file array — for large repos where the full file list is impractical to consume directly', 'output_type': 'stats_summary'},
     {'uri': 'metrics://src/core.py', 'description': 'File-level statistics', 'output_type': 'stats_file'},
     {'uri': 'metrics://./src?view=hotspots&limit=0', 'description': 'Every ranked hotspot file (limit=0 is uncapped)', 'output_type': 'stats_summary'},
@@ -476,7 +478,7 @@ class MetricsAdapter(ResourceAdapter):
     CLI_QUERY_FLAGS = {
         'respect_gitignore': 'respect_gitignore=false',  # --no-gitignore (BACK-1202)
         'hotspots': 'hotspots=true',  # global --hotspots on the URI form (BACK-2621)
-        'code_only': 'code_only=true',  # global --code-only on the URI form (BACK-2621)
+        'code_only': 'code-only=true',  # global --code-only on the URI form (BACK-2621)
         'all': 'top=1000000',  # lifts the hotspots=true top=10 default (BACK-1379)
         # BACK-1379: get_structure already reads since from query_params and threads
         # it into get_churn_counts() to bound hotspots=true's churn scoring, but
