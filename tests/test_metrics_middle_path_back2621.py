@@ -833,3 +833,37 @@ class TestProposedChanges:
         result = run(str(project / target), '--hotspots')
         assert result.returncode == 2, f'usage error must exit 2, got {result.returncode}'
         assert 'reveal metrics' in result.stderr and '--view hotspots' in result.stderr, result.stderr
+
+
+class TestStep4Additions:
+    """Behaviour Step 4 added beyond the Step 2 REDs (written after the change, not red first)."""
+
+    @pytest.mark.parametrize('controls,name', [
+        ('detail=normal&summary_only=true', 'detail'), ('detail=summary&summary_only=false', 'detail'),
+        ('view=hotspots&hotspots=false', 'hotspots'),
+    ])
+    def test_other_conflicting_old_and_new_spellings_reject(self, project, controls, name):
+        result, answer = cli_json(uri(project, controls))
+        assert_usage(result, answer, name)
+
+    def test_churn_on_beside_no_churn_rejects(self, project):
+        result, answer = cli_json('metrics', str(project), '--view', 'hotspots', '--churn', 'on', '--no-churn')
+        assert_usage(result, answer, 'churn')
+
+    def test_equal_detail_and_summary_only_are_accepted_once(self, project):
+        result, answer = cli_json(uri(project, 'detail=summary&summary_only=true'))
+        assert result.returncode == 0, result.stderr
+        assert_equal_answer(answer, query(uri(project, 'detail=summary')))
+
+    def test_sort_is_unread_in_the_hotspot_view(self, project):
+        result, answer = cli_json('metrics', str(project), '--view', 'hotspots', '--sort', '-lines')
+        assert result.returncode == 0
+        assert [w.get('fields') for w in unread(answer)] == [['--sort']]
+        assert hotspot_rows(answer) == HOTSPOTS
+
+    def test_unsupported_controls_stay_out_of_the_schema_and_help(self, project):
+        from reveal.adapters.stats import MetricsAdapter
+        params = MetricsAdapter.get_schema()['query_params']
+        assert not {'match', 'kind', 'depth', 'until'} & set(params)
+        assert {'where', 'detail', 'churn', 'merges', 'view'} <= set(params)
+        assert '--match' not in run('metrics', '--help').stdout
