@@ -91,7 +91,8 @@ def test_real_factory_answers_match_direct_construction(session_adapter, kind):
     resource = '' if kind in ('bare', 'query-only') else session
     uri = f'{scheme}://{resource}' + (f'?{params}' if params else '')
     expected = adapter(path, params).get_structure()
-    actual = query(uri)
+    from conftest import without_retirement_notes
+    actual = without_retirement_notes(query(uri))  # ?search=/?last are noted on api.query too (BACK-2654)
     assert not actual.get('error')
     assert actual == expected
 

@@ -258,11 +258,11 @@ reveal 'ast://.?name=get_*' --format=json | \
   jq -r '.results[] | "\(.file):\(.line) \(.name)"'
 
 # Count functions per file
-reveal 'ast://./src?type=function' --format=json | \
+reveal 'ast://./src?kind=function' --format=json | \
   jq -r '.results[].file' | sort | uniq -c | sort -rn
 
 # Find largest classes (potential god objects)
-reveal 'ast://./src?type=class' --format=json | \
+reveal 'ast://./src?kind=class' --format=json | \
   jq -r '[.results[] | {name, file, lines: .line_count}] |
          sort_by(.lines) | reverse | .[0:10][] |
          "\(.file) - \(.name) (\(.lines) lines)"'
@@ -419,7 +419,7 @@ reveal 'ast://./src?complexity>20'
 reveal 'ast://./src?complexity>15&lines>100'
 
 # Top 10 most complex functions in your codebase
-reveal 'ast://./src?type=function' --format=json | \
+reveal 'ast://./src?kind=function' --format=json | \
   jq -r '[.results[] | {name, file, complexity, lines: .line_count}] |
          sort_by(.complexity) | reverse | .[0:10][] |
          "\(.file) - \(.name) (complexity: \(.complexity), lines: \(.lines))"'
@@ -438,7 +438,7 @@ reveal 'ast://./src?complexity<5&lines>50'
 reveal 'ast://src/?name=*handle*&complexity>10'
 
 # Name glob + type — find all test functions
-reveal 'ast://tests/?name=test_*&type=function'
+reveal 'ast://tests/?name=test_*&kind=function'
 
 # Decorator + complexity — complex cached functions (may be hiding cost)
 reveal 'ast://src/?decorator=*cache*&complexity>5'
@@ -474,7 +474,7 @@ reveal 'ast://.?decorator=abstractmethod'
 reveal 'ast://.?decorator=property&lines>10'
 
 # Find all @dataclass classes
-reveal 'ast://.?decorator=dataclass&type=class'
+reveal 'ast://.?decorator=dataclass&kind=class'
 
 # Analyze decorator usage across your codebase
 reveal src/ --decorator-stats
@@ -598,7 +598,7 @@ Functions imported under aliases are resolved — `from utils import helper as h
 reveal 'calls://src/?callees=process&depth=2'
 # Each function's calls/called_by lists for one file (the ast:// calls=, callee_of= and
 # show=calls filters are retired and print a note naming calls://)
-reveal 'ast://src/auth.py?type=function' --format json
+reveal 'ast://src/auth.py?kind=function' --format json
 ```
 
 ---
@@ -676,13 +676,13 @@ reveal 'markdown://?!topics'
 
 ```bash
 # Find docs containing a keyword in the body (not just frontmatter)
-reveal 'markdown://docs/?body-contains=deployment'
+reveal 'markdown://docs/?match=deployment'
 
 # AND logic: both terms must appear
-reveal 'markdown://docs/?body-contains=authentication&body-contains=oauth'
+reveal 'markdown://docs/?match=authentication&match=oauth'
 
 # Combine with frontmatter filter: docs about auth that mention oauth
-reveal 'markdown://docs/?topics=authentication&body-contains=oauth'
+reveal 'markdown://docs/?topics=authentication&match=oauth'
 ```
 
 ### Count values across a field
@@ -738,10 +738,10 @@ inbound links.
 
 ```bash
 # Multi-term AND search, ranked best-first
-reveal 'markdown://docs/?body-contains=auth&body-contains=token'
+reveal 'markdown://docs/?match=auth&match=token'
 
 # Same, with a per-term score breakdown (term_counts, heading_hits)
-reveal 'markdown://docs/?body-contains=auth&body-contains=token&explain'
+reveal 'markdown://docs/?match=auth&match=token&explain'
 ```
 
 **Output:** `relevance_score` (term frequency + heading-proximity boost) on
@@ -1251,7 +1251,7 @@ git diff --name-only origin/main | reveal --stdin --check --format=grep
 reveal src/app.py --format=json | jq '.structure.functions'
 
 # Find large functions
-reveal 'ast://src?type=function&lines>100' --format=json | jq '.results[] | {file, name, line_count}'
+reveal 'ast://src?kind=function&lines>100' --format=json | jq '.results[] | {file, name, line_count}'
 
 # Get complexity metrics
 reveal metrics://src/ --format=json | jq '.summary.avg_quality_score'
@@ -1518,8 +1518,8 @@ reveal 'git://src/hotspot.py?type=blame&element=complex_function'
 reveal 'imports://src?circular'
 
 # 2. Identify functions involved in cycle
-reveal 'ast://src/module_a.py?type=function'
-reveal 'ast://src/module_b.py?type=function'
+reveal 'ast://src/module_a.py?kind=function'
+reveal 'ast://src/module_b.py?kind=function'
 
 # 3. When was the cycle introduced?
 reveal 'git://src/module_a.py?type=history'

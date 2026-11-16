@@ -5,7 +5,13 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct
-from reveal.api import query
+from conftest import without_retirement_notes
+from reveal.api import query as _api_query
+
+
+def query(*args, **kwargs):
+    """api.query without its retirement notes: legacy and canonical spellings answer alike (BACK-2654)."""
+    return without_retirement_notes(_api_query(*args, **kwargs))
 from reveal.adapters.calls.adapter import CallsAdapter
 
 
@@ -33,7 +39,7 @@ def test_actual_answers_equal_uri_and_generated_cli(project, mode, name, control
         command.append(str(value))
     cli = _run_reveal_direct(*command, '--format', 'json')
     assert cli.returncode == 0, cli.stderr
-    assert json.loads(cli.stdout) == expected
+    assert without_retirement_notes(json.loads(cli.stdout)) == expected
     if mode == 'callers':
         assert expected['depth'] == 2 and expected['total_callers'] == 2
     elif mode == 'rank':

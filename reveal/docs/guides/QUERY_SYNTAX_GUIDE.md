@@ -46,7 +46,7 @@ reveal file.py --name connection
 
 # Filter by element type
 reveal file.py --type function
-# Equivalent to: reveal 'ast://file.py?type=function'
+# Equivalent to: reveal 'ast://file.py?kind=function'
 
 # Sort results
 reveal file.py --sort complexity          # Ascending
@@ -55,7 +55,7 @@ reveal file.py --sort=-complexity         # Descending
 
 # Combine flags
 reveal file.py --name test --type function --sort=-line_count
-# Equivalent to: reveal 'ast://file.py?name~=test&type=function&sort=-line_count'
+# Equivalent to: reveal 'ast://file.py?name~=test&kind=function&sort=-line_count'
 ```
 
 ### When to Use Convenience Flags
@@ -83,9 +83,9 @@ reveal file.py --name test --type function --sort=-line_count
 | Task | Convenience Flag | URI Syntax |
 |------|-----------------|------------|
 | Find by name | `reveal file.py --name pattern` | `reveal 'ast://file.py?name~=pattern'` |
-| Filter type | `reveal file.py --type function` | `reveal 'ast://file.py?type=function'` |
+| Filter type | `reveal file.py --type function` | `reveal 'ast://file.py?kind=function'` |
 | Sort | `reveal file.py --sort complexity` | `reveal 'ast://file.py?sort=complexity'` |
-| Complex filter | ❌ (not supported) | `reveal 'ast://src/?complexity>10&lines>50&type=function&sort=-complexity'` |
+| Complex filter | ❌ (not supported) | `reveal 'ast://src/?complexity>10&lines>50&kind=function&sort=-complexity'` |
 
 ### Progressive Escalation
 
@@ -103,7 +103,7 @@ reveal file.py --name authenticate --type function --sort=-complexity
 
 # Step 4: Need complex conditions? Use URI syntax
 # Note: --name <pattern> becomes ?name~=<pattern> in URI form (intentional rename)
-reveal 'ast://file.py?name~=authenticate&type=function&complexity>10&lines>50&sort=-complexity'
+reveal 'ast://file.py?name~=authenticate&kind=function&complexity>10&lines>50&sort=-complexity'
 ```
 
 ---
@@ -117,7 +117,7 @@ These 5 adapters support the unified query syntax:
 | **json://** | Any JSON field | `json://data.json?age>25&role=admin` |
 | **markdown://** | Frontmatter fields | `markdown://docs/?status=draft&tags~=python` |
 | **metrics://** | File metrics | `metrics://src/?complexity>10&lines<100` |
-| **ast://** | Code elements | `ast://src/?type=function&lines>50` |
+| **ast://** | Code elements | `ast://src/?kind=function&lines>50` |
 | **git://** | Commit metadata | `git://.?author=John&message~=fix` |
 
 ---
@@ -179,7 +179,7 @@ the people with no age at the end. A missing value is not sorted as a zero.
 
 ```bash
 # Top 10 most complex functions
-reveal 'ast://src/?type=function&sort=-complexity&limit=10'
+reveal 'ast://src/?kind=function&sort=-complexity&limit=10'
 
 # Files 50-100 lines, by complexity
 reveal 'metrics://src/?lines=50..100&sort=-complexity'
@@ -259,9 +259,9 @@ leaves the results unsorted with a warning.
 
 **Body text search** (markdown-specific):
 ```bash
-reveal 'markdown://docs/?body-contains=nginx'                     # Body mentions "nginx"
-reveal 'markdown://docs/?body-contains=nginx&body-contains=ssl'   # Body mentions both (AND)
-reveal 'markdown://docs/?type=guide&body-contains=nginx&limit=5'  # Combine with frontmatter + limit
+reveal 'markdown://docs/?match=nginx'                     # Body mentions "nginx"
+reveal 'markdown://docs/?match=nginx&match=ssl'   # Body mentions both (AND)
+reveal 'markdown://docs/?type=guide&match=nginx&limit=5'  # Combine with frontmatter + limit
 ```
 
 **Field existence** (markdown-specific):
@@ -313,8 +313,8 @@ reveal 'metrics://src/?lines<100&complexity>15'
 
 **Type filtering** (AST-specific `in` operator):
 ```bash
-reveal 'ast://src/?type=function'                   # Functions only
-reveal 'ast://src/?type=class'                      # Classes only
+reveal 'ast://src/?kind=function'                   # Functions only
+reveal 'ast://src/?kind=class'                      # Classes only
 ```
 
 **Complexity filtering**:
@@ -338,7 +338,7 @@ reveal 'ast://src/?name~=^get_'                     # Getters (regex)
 **Quality queries**:
 ```bash
 # Top 10 most complex functions
-reveal 'ast://src/?type=function&sort=-complexity&limit=10'
+reveal 'ast://src/?kind=function&sort=-complexity&limit=10'
 
 # Long but simple functions (candidates for refactoring)
 reveal 'ast://src/?lines>100&complexity<5'
@@ -515,13 +515,13 @@ reveal 'metrics://src/?lines>200&complexity>10'
 reveal 'git://.?author=John&message~=bug&date>2026-01-01'
 
 # AST: Long, complex functions
-reveal 'ast://src/?type=function&lines>100&complexity>15'
+reveal 'ast://src/?kind=function&lines>100&complexity>15'
 ```
 
 **Behavior**:
 - Filters are ANDed together
 - Each filter narrows results
-- A key may repeat and every condition applies: `ast://src/?type=function&type!=method`, `json://data.json?age>30&age<40`
+- A key may repeat and every condition applies: `ast://src/?kind=function&kind!=method`, `json://data.json?age>30&age<40`
 - No general OR operator: ast:// accepts `type=a|b`; elsewhere use a regex `~=(foo|bar)`
 
 ---
@@ -554,7 +554,7 @@ Find worst/best items:
 
 ```bash
 # Top 10 most complex functions
-reveal 'ast://src/?type=function&sort=-complexity&limit=10'
+reveal 'ast://src/?kind=function&sort=-complexity&limit=10'
 
 # 20 largest files
 reveal 'metrics://src/?sort=-lines&limit=20'
@@ -657,10 +657,10 @@ reveal 'metrics://src/?lines>200&complexity>10&sort=-complexity'
 reveal 'metrics://src/?quality<50&sort=quality&limit=20'
 
 # Overly complex small functions
-reveal 'ast://src/?type=function&lines<50&complexity>10'
+reveal 'ast://src/?kind=function&lines<50&complexity>10'
 
 # Long functions needing splitting
-reveal 'ast://src/?type=function&lines>100&sort=-lines'
+reveal 'ast://src/?kind=function&lines>100&sort=-lines'
 ```
 
 ---

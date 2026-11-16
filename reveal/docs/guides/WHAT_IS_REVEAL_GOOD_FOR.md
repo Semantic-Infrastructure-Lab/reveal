@@ -295,7 +295,7 @@ Reveal is not only for code. It is also good for documentation systems with fron
 ```bash
 reveal 'markdown://docs/?aggregate=type'
 reveal 'markdown://docs/?link-graph'
-reveal 'markdown://docs/?body-contains=retry&type=procedure'
+reveal 'markdown://docs/?match=retry&type=procedure'
 reveal check docs/ --select L
 reveal check docs/ --select F
 ```

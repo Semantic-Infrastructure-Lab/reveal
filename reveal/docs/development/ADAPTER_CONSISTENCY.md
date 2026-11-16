@@ -470,7 +470,7 @@ echo -e "cpanel://user1/ssl?dns-verified\ncpanel://user2/ssl" | reveal --stdin -
 
 **`ast://` already proves this pattern:**
 ```bash
-reveal 'ast://src?complexity>10&type=function&sort=-lines'
+reveal 'ast://src?complexity>10&kind=function&sort=-lines'
 # --name, --type, --sort are convenience shorthands for the same query params
 ```
 

@@ -139,7 +139,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'security',
         'description': 'Security review — auth code, complex query construction, certificate expiry, the external attack surface',
         'recipes': [
-            {'goal': 'Find authentication functions', 'query': 'ast://src?name~=auth&type=function', 'description': 'Locate authentication-related code', 'output_type': 'ast_query'},
+            {'goal': 'Find authentication functions', 'query': 'ast://src?name~=auth&kind=function', 'description': 'Locate authentication-related code', 'output_type': 'ast_query'},
             {'goal': 'Check SSL certificate expiry', 'query': 'ssl://example.com --expiring-within=30', 'description': 'Find certificates expiring soon', 'output_type': 'ssl_check'},
             {'goal': 'Find SQL query construction', 'query': 'ast://src?name~=query&complexity>5', 'description': 'Locate complex database queries (SQL injection risk)', 'output_type': 'ast_query'},
             {'goal': 'Map the external attack surface', 'query': 'surface://src', 'description': 'Every CLI, HTTP route, env var, network call, and filesystem write the system touches — taxonomy-based, project-specific clients outside known libraries not detected', 'output_type': 'surface_scan'},
@@ -151,8 +151,8 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'description': 'Codebase exploration and understanding',
         'recipes': [
             {'goal': 'Get project overview', 'query': 'reveal src/', 'description': 'Progressive disclosure: structure first'},  # a directory_tree; file-mode views declare no adapter schema
-            {'goal': 'Find entry points', 'query': 'ast://src?name=main*&type=function', 'description': 'Locate main() and main_* entry point functions', 'output_type': 'ast_query'},
-            {'goal': 'List all classes', 'query': 'ast://src?type=class&sort=name', 'description': 'Enumerate class hierarchy for structural overview', 'output_type': 'ast_query'},
+            {'goal': 'Find entry points', 'query': 'ast://src?name=main*&kind=function', 'description': 'Locate main() and main_* entry point functions', 'output_type': 'ast_query'},
+            {'goal': 'List all classes', 'query': 'ast://src?kind=class&sort=name', 'description': 'Enumerate class hierarchy for structural overview', 'output_type': 'ast_query'},
             {'goal': 'Find complex code', 'query': 'ast://src?complexity>15', 'description': 'Locate high-complexity functions', 'output_type': 'ast_query'},
             {'goal': 'Find architectural seams', 'query': 'contracts://src', 'description': 'ABCs, Protocols, TypedDicts, dataclasses, BaseModels — where the interface boundaries are', 'output_type': 'contracts'},
         ]
@@ -179,9 +179,9 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'debugging',
         'description': 'Debugging and error investigation',
         'recipes': [
-            {'goal': 'Find error handlers', 'query': 'ast://src?name~=error&type=function', 'description': 'Locate error handling code', 'output_type': 'ast_query'},
+            {'goal': 'Find error handlers', 'query': 'ast://src?name~=error&kind=function', 'description': 'Locate error handling code', 'output_type': 'ast_query'},
             {'goal': 'Check recent changes', 'query': 'git://.?type=history', 'description': 'Review recent commit history', 'output_type': 'git_ref'},
-            {'goal': 'Find large functions', 'query': 'ast://src?lines>100&type=function', 'description': 'Locate potentially problematic large functions', 'output_type': 'ast_query'},
+            {'goal': 'Find large functions', 'query': 'ast://src?lines>100&kind=function', 'description': 'Locate potentially problematic large functions', 'output_type': 'ast_query'},
             {'goal': 'Walk the call chain from an entry point', 'query': 'calls://src?callees=main&depth=2&detail', 'description': 'Level-by-level callee walk with params and side effects — see the actual path a bug report walks', 'output_type': 'calls_callees'},
         ]
     },
@@ -194,7 +194,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Rank the most complex functions', 'query': 'ast://src?complexity>=10&sort=-complexity&limit=10', 'description': 'Functions by descending cyclomatic complexity across the tree (the function half of the retired hotspots://; JSON keeps the global order)', 'output_type': 'ast_query'},
             {'goal': 'Get an overall quality score', 'query': 'metrics://src', 'description': 'Codebase-wide metrics — lines, functions, quality score — the raw numbers the hotspot ranking scores', 'output_type': 'stats_summary'},
             {'goal': 'Check code complexity', 'query': 'ast://src?complexity>10', 'description': 'High complexity functions', 'output_type': 'ast_query'},
-            {'goal': 'Find long functions lacking simplicity', 'query': 'ast://src?type=function&lines>50&sort=-lines', 'description': 'Large functions sorted by size — prime documentation/refactor targets', 'output_type': 'ast_query'},
+            {'goal': 'Find long functions lacking simplicity', 'query': 'ast://src?kind=function&lines>50&sort=-lines', 'description': 'Large functions sorted by size — prime documentation/refactor targets', 'output_type': 'ast_query'},
             {'goal': 'Which third-party and stdlib packages the code uses', 'query': 'imports://src?external', 'description': 'Unresolved (third-party or unresolved-local) and stdlib packages by use, with the languages importing each — pair with ?circular and ?unused for the rest of a dependency health check', 'output_type': 'external_packages'},
             {'goal': 'Where test mocking hides real coupling', 'query': 'patches://src?view=pressure', 'description': 'Joins test patch/mock pressure with production boundary fan-out — over-mocked boundaries are untested boundaries', 'output_type': 'testability_report'},
         ]
@@ -220,10 +220,10 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'documentation',
         'description': 'Documentation search and analysis — markdown, front matter',
         'recipes': [
-            {'goal': 'Find docs by topic in body', 'query': "reveal 'markdown://docs/?body-contains=nginx'", 'description': 'Search doc body text (after frontmatter)', 'output_type': 'markdown_query'},
+            {'goal': 'Find docs by topic in body', 'query': "reveal 'markdown://docs/?match=nginx'", 'description': 'Search doc body text (after frontmatter)', 'output_type': 'markdown_query'},
             {'goal': 'Find all guides', 'query': "reveal 'markdown://docs/?type=guide'", 'description': 'Filter by frontmatter field value', 'output_type': 'markdown_query'},
-            {'goal': 'Find recent docs about deployment', 'query': "reveal 'markdown://docs/?body-contains=deploy&sort=-modified&limit=10'", 'description': 'Body search with recency sort', 'output_type': 'markdown_query'},
-            {'goal': 'Rank multi-word body search, best match first', 'query': "reveal 'markdown://docs/?body-contains=auth&body-contains=token&explain'", 'description': 'Results sort by relevance_score (term frequency + heading proximity); the explain param adds a per-term score breakdown', 'output_type': 'markdown_query'},
+            {'goal': 'Find recent docs about deployment', 'query': "reveal 'markdown://docs/?match=deploy&sort=-modified&limit=10'", 'description': 'Body search with recency sort', 'output_type': 'markdown_query'},
+            {'goal': 'Rank multi-word body search, best match first', 'query': "reveal 'markdown://docs/?match=auth&match=token&explain'", 'description': 'Results sort by relevance_score (term frequency + heading proximity); the explain param adds a per-term score breakdown', 'output_type': 'markdown_query'},
             {'goal': 'Validate internal links', 'query': 'reveal docs/README.md --links --link-type internal', 'description': 'Find broken internal links in a doc'},
             {'goal': 'Get document outline', 'query': 'reveal docs/README.md --outline', 'description': 'Hierarchical heading tree'},
             {'goal': 'Who links to this doc before I rename/move it', 'query': "reveal 'markdown://docs/?backlinks=auth.md'", 'description': 'Cheap single-doc pre-edit staleness check', 'output_type': 'markdown_backlinks'},
@@ -1536,7 +1536,7 @@ class HelpAdapter(ResourceAdapter):
         {'want': 'read one function or class by name',
          'use': 'reveal FILE NAME', 'example': "reveal src/app.py load_config"},
         {'want': 'query functions by complexity, size, type or decorator',
-         'use': 'ast://', 'example': "reveal 'ast://src/?type=function&complexity>10&sort=-complexity&limit=10'"},
+         'use': 'ast://', 'example': "reveal 'ast://src/?kind=function&complexity>10&sort=-complexity&limit=10'"},
         {'want': 'find the riskiest files (quality and complexity hotspots, with a --fail-on findings gate)',
          'use': 'metrics://', 'example': "reveal metrics src/ --view hotspots"},
         {'want': 'know who calls a function',
@@ -1568,7 +1568,7 @@ class HelpAdapter(ResourceAdapter):
         {'want': 'search git commit history by message, author, or date',
          'use': 'git://', 'example': "reveal 'git://.?type=history&message~=fix'"},
         {'want': 'search markdown docs or notes by content',
-         'use': 'markdown://', 'example': "reveal 'markdown://docs/?body-contains=keyword'"},
+         'use': 'markdown://', 'example': "reveal 'markdown://docs/?match=keyword'"},
         {'want': 'read one section of a markdown document',
          'use': 'reveal FILE --section HEADING', 'example': 'reveal README.md --section "Building"'},
         {'want': 'inspect a SQLite database or Excel workbook',

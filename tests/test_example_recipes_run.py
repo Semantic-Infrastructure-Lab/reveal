@@ -240,6 +240,9 @@ _AST_FIELDS = {'name': 'name', 'type': 'category', 'complexity': 'complexity', '
 _AST_TYPES = {'function': 'functions', 'class': 'classes', 'method': 'methods'}
 _MARKDOWN_FIELDS = {'type': 'type', 'status': 'status'}
 _IGNORED_KEYS = {'explain'}
+# The canonical spellings the docs teach, read as the claims the checker already knows (BACK-2654: AST type is
+# kind's legacy word, Markdown body-contains is match's).
+_CANONICAL_KEYS = {'ast_query': {'kind': 'type'}, 'markdown_query': {'match': 'body-contains'}}
 _SORT_FIELDS = {'name': 'name', 'lines': 'line_count', 'complexity': 'complexity',
                 'modified': 'modified'}
 
@@ -287,6 +290,7 @@ def _claim_violations(uri, payload, root):
         if not match:
             return None  # a flag (?!topics, ?circular) this checker has no reading of
         key, op, value = match.groups()
+        key = _CANONICAL_KEYS.get(family, {}).get(key, key)
         if key == 'sort' and value.lstrip('-') in _SORT_FIELDS:
             sort = value
         elif key == 'limit' and value.isdigit():

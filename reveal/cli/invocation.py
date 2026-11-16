@@ -348,6 +348,12 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:claude.raw': Retirement('claude ?raw',
         '--view messages or --view prompts with --detail raw (or ?detail=raw); canonical raw also expands the text display'),
     'param:ast.calls': Retirement('ast://?calls=', "calls://<path>?callers=NAME, or --grep 'PATTERN' for a pattern"),
+    # Different words for one control are legacy spellings with a note (COMMAND_MODEL "Different words", BACK-2654);
+    # AST show and Git type are D18-deferred and stay note-free.
+    'param:ast.type': Retirement('ast ?type=KIND (--type KIND)', '?kind=KIND (--kind KIND), the same element kind'),
+    'param:markdown.body-contains': Retirement('markdown ?body-contains=TEXT (--body-contains TEXT)',
+                                               '?match=TEXT (--match TEXT), the same body match; repeats AND'),
+    'param:markdown.fields': Retirement('markdown ?fields=A,B', '?columns=A,B (--columns A,B), the same frontmatter columns'),
     'param:ast.callee_of': Retirement('ast://?callee_of=', 'calls://<path>?callees=NAME'),
     'value:ast.show=calls': Retirement('ast://?show=calls',
                                        "calls://<path>?callers=NAME or ?callees=NAME, or --grep 'PATTERN'"),

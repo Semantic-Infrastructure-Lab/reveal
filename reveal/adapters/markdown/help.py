@@ -221,21 +221,21 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'output_type': 'markdown_query'
     },
     {
-        'uri': "markdown://docs/?body-contains=nginx",
+        'uri': "markdown://docs/?match=nginx",
         'description': 'Body text search — files whose body mentions "nginx"',
-        'cli_flag': '?body-contains=nginx',
+        'cli_flag': '?match=nginx',
         'output_type': 'markdown_query'
     },
     {
-        'uri': "markdown://docs/?body-contains=nginx&body-contains=ssl",
+        'uri': "markdown://docs/?match=nginx&match=ssl",
         'description': 'Body text search — AND logic, both terms must appear',
-        'cli_flag': '?body-contains=nginx&body-contains=ssl',
+        'cli_flag': '?match=nginx&match=ssl',
         'output_type': 'markdown_query'
     },
     {
-        'uri': "markdown://docs/?body-contains=authentication&explain",
+        'uri': "markdown://docs/?match=authentication&explain",
         'description': 'Ranked body text search — best match first, with a per-term score breakdown',
-        'cli_flag': '?body-contains=authentication&explain',
+        'cli_flag': '?match=authentication&explain',
         'output_type': 'markdown_query'
     },
     {
@@ -289,9 +289,9 @@ _HELP_EXAMPLES = [
     {'uri': 'markdown://?sort=-priority', 'description': 'Sort by priority descending'},
     {'uri': 'markdown://?priority>5&sort=-priority&limit=10', 'description': 'Filter, sort, and limit results'},
     {'uri': 'markdown://docs/?status=active --format=json', 'description': 'JSON output for scripting'},
-    {'uri': "markdown://docs/?body-contains=nginx", 'description': 'Find docs whose body mentions nginx (case-insensitive)'},
-    {'uri': "markdown://docs/?type=guide&body-contains=nginx&limit=5", 'description': 'Combine body text search with frontmatter filter and limit'},
-    {'uri': "markdown://docs/?body-contains=authentication&explain", 'description': 'Ranked multi-doc search — best match first, plus a score breakdown per hit'},
+    {'uri': "markdown://docs/?match=nginx", 'description': 'Find docs whose body mentions nginx (case-insensitive)'},
+    {'uri': "markdown://docs/?type=guide&match=nginx&limit=5", 'description': 'Combine body text search with frontmatter filter and limit'},
+    {'uri': "markdown://docs/?match=authentication&explain", 'description': 'Ranked multi-doc search — best match first, plus a score breakdown per hit'},
     {'uri': 'markdown://docs/?link-graph', 'description': 'Bidirectional link graph for every doc — forward links, backlinks, orphans'},
     {'uri': 'markdown://docs/?backlinks=auth.md', 'description': 'Who links to auth.md — pre-edit staleness check before renaming/restructuring'},
     {'uri': 'markdown://docs/?lint', 'description': 'Frontmatter maintenance queue — malformed YAML and files with no frontmatter, as one list'},

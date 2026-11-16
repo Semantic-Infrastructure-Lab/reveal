@@ -783,7 +783,7 @@ Top Hotspots (10):
 **Workflow**:
 1. **Identify** hotspots: `reveal metrics ./src --view hotspots`
 2. **Inspect** top file: `reveal metrics://./src/core.py` (detailed stats)
-3. **Analyze** structure: `reveal 'ast://./src/core.py?type=function'` (see functions)
+3. **Analyze** structure: `reveal 'ast://./src/core.py?kind=function'` (see functions)
 4. **Review** code: `reveal ./src/core.py` (read implementation)
 5. **Refactor** prioritizing highest hotspot scores
 
@@ -814,7 +814,7 @@ Top Hotspots (10):
 
 4. **Inspect code structure**:
    ```bash
-   reveal 'ast://./src/core.py?type=function'
+   reveal 'ast://./src/core.py?kind=function'
    ```
 
 5. **Review implementation**:
@@ -1562,7 +1562,7 @@ reveal metrics://./src/file.py
 reveal metrics://./src/file.py --format=json | jq '.files[0].issues'
 
 # Review specific functions
-reveal 'ast://./src/file.py?type=function'
+reveal 'ast://./src/file.py?kind=function'
 ```
 
 ### Issue 3: Analysis too slow
@@ -2012,7 +2012,7 @@ For **duplication detection**, use specialized tools like:
 **A**: The metrics adapter shows **aggregate metrics** (file-level, directory-level). For **function-level details**, use:
 ```bash
 # Function-level structure
-reveal 'ast://./src/file.py?type=function'
+reveal 'ast://./src/file.py?kind=function'
 
 # Then manually inspect specific functions
 reveal ./src/file.py

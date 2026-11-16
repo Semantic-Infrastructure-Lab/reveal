@@ -30,16 +30,18 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     BACK-2377 adds architecture aliases; BACK-2364 adds contextual navigation corrections;
     BACK-2461 adds the three effects replacement notes. BACK-2225 adds python://, removed outright.
     BACK-2149 adds the hotspots noun and its two only-flags. BACK-2620 adds the four Imports aliases.
-    BACK-2621 adds the ten Metrics legacy spellings.
+    BACK-2621 adds the ten Metrics legacy spellings. BACK-2654 adds the different words AST type and Markdown
+    body-contains and fields.
     """
     assert sorted(RETIREMENTS) == ['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
                                    'flag:--fanout', 'flag:--flowto', 'flag:--ifmap', 'flag:--loopmap', 'flag:--mutations',
                                    'flag:--returns', 'flag:--search', 'flag:--sideeffects', 'flag:--statewrites',
-                                   'flag:--writes', 'param:ast.callee_of', 'param:ast.calls',
+                                   'flag:--writes', 'param:ast.callee_of', 'param:ast.calls', 'param:ast.type',
                                    'param:calls.external', 'param:calls.modules', 'param:calls.rank', 'param:calls.root', 'param:calls.target', 'param:calls.top', 'param:calls.type', 'param:calls.uncalled',
                                    'param:claude.contains', 'param:claude.filter', 'param:claude.full', 'param:claude.last', 'param:claude.raw', 'param:claude.search', 'param:claude.summary', 'param:claude.tail',
                                    'param:hotspots.files_only', 'param:hotspots.functions_only',
                                    'param:imports.max_files', 'param:imports.rank', 'param:imports.top', 'param:imports.verbose',
+                                   'param:markdown.body-contains', 'param:markdown.fields',
                                    'param:metrics.hotspots', 'param:metrics.max_complexity', 'param:metrics.max_lines',
                                    'param:metrics.min_complexity', 'param:metrics.min_functions', 'param:metrics.min_lines',
                                    'param:metrics.no_churn', 'param:metrics.no_merges', 'param:metrics.summary_only',

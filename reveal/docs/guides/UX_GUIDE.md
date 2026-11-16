@@ -122,7 +122,7 @@ reveal file.py --name authenticate
 reveal file.py --name authenticate --type function --sort=-complexity
 
 # Step 3: Need complex conditions? Switch to URI — NOTE the rename
-reveal 'ast://file.py?name~=authenticate&type=function&complexity>10&sort=-complexity'
+reveal 'ast://file.py?name~=authenticate&kind=function&complexity>10&sort=-complexity'
 #                       ^^^^^^^^^^^                               ← --name becomes name~=
 ```
 
@@ -204,7 +204,7 @@ reveal file.py --name auth --type function --sort=-complexity
 
 # Step 4: Complex multi-condition query → switch to URI
 # (--name becomes ?name~=, rest maps cleanly)
-reveal 'ast://file.py?name~=auth&type=function&complexity>10&lines>20&sort=-complexity'
+reveal 'ast://file.py?name~=auth&kind=function&complexity>10&lines>20&sort=-complexity'
 
 # Step 5: Combine with cross-adapter patterns
 # (--stdin reads one path per line, so hand it file paths, not the text listing)

@@ -68,7 +68,7 @@ def test_a_list_item_is_judged_without_its_neighbours():
     "reveal 'imports://src/?importers'",
     "reveal 'metrics://src/?view=hotspots'",  # hotspots=true is retired (BACK-2621)
     "reveal 'patches://tests/?view=pressure'",
-    "reveal 'ast://src/?type=function&complexity>10'",
+    "reveal 'ast://src/?kind=function&complexity>10'",  # type is kind's legacy word since BACK-2654
     'reveal src/app.py --check-only',
     '| `reveal health [path]` | Ops health | `reveal health --help` |',
 ])

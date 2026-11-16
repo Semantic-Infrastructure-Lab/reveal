@@ -49,7 +49,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Outline a file | `reveal src/app.py` |
 | Read one function or class | `reveal src/app.py load_config` (also `Class.method`, `:120-160`) |
 | Riskiest code | `reveal metrics src/ --view hotspots` (files) and `reveal 'ast://src/?complexity>=10&sort=-complexity&limit=10'` (functions) |
-| Query functions by complexity/size/type | `reveal 'ast://src/?type=function&complexity>10&sort=-complexity&limit=10'` |
+| Query functions by complexity/size/type | `reveal 'ast://src/?kind=function&complexity>10&sort=-complexity&limit=10'` |
 | Who calls a function | `reveal 'calls://src/?callers=my_fn'` |
 | What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
 | A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--effects`, `--exits`) |
@@ -383,7 +383,7 @@ reveal 'ast://./src?complexity>10&lines>50'
 reveal 'ast://./src?complexity<3&lines<20'
 
 # All async functions
-reveal 'ast://./src?type=async_function'
+reveal 'ast://./src?kind=async_function'
 
 # All properties
 reveal 'ast://./src?decorator=property'
@@ -426,7 +426,7 @@ reveal file.py --name connection
 
 # Filter by element type
 reveal file.py --type function
-# Same as: reveal 'ast://file.py?type=function'
+# Same as: reveal 'ast://file.py?kind=function'
 
 # Sort results
 reveal file.py --sort complexity          # Ascending
@@ -434,7 +434,7 @@ reveal file.py --sort=-complexity         # Descending (note the = sign)
 
 # Combine flags
 reveal file.py --name test --type function --sort=-complexity
-# Same as: reveal 'ast://file.py?name~=test&type=function&sort=-complexity'
+# Same as: reveal 'ast://file.py?name~=test&kind=function&sort=-complexity'
 ```
 
 **Why use convenience flags?**
@@ -1264,7 +1264,7 @@ reveal contracts src/
 reveal 'imports://src/?sort=-fan-in'
 
 # Named functions in the tree
-reveal 'ast://src/?type=function'
+reveal 'ast://src/?kind=function'
 
 # Module edges: each module under src/ with the files that import it (calls ?modules is its retired spelling)
 reveal 'imports://src/?importers&scope=path'
@@ -1325,14 +1325,14 @@ so), a scanned call-source language with no recall snapshot (Elixir, Objective-C
 | `calls://src/?callers=fn` | Cross-file, whole project | "Who calls fn anywhere?" (reverse) |
 | `calls://src/?callees=fn` | Cross-file, whole project | "What does fn call?" (forward, builtins hidden; add `&builtins=true` to include) |
 | `calls://src/?sort=-callers` | Cross-file, whole project | "Which functions are called most?" (coupling metrics) |
-| `ast://src/?type=function` | Per file | Each function's `calls`/`called_by` lists (JSON) |
+| `ast://src/?kind=function` | Per file | Each function's `calls`/`called_by` lists (JSON) |
 
 The `ast://` call filters `calls=`, `callee_of=` and `show=calls` are retired: each still answers with
 a note naming `calls://?callers=`/`?callees=` (or `--grep` for a `calls=*pattern*`).
 
 **JSON output — call fields per function:**
 ```bash
-reveal 'ast://src/auth.py?type=function' --format=json | \
+reveal 'ast://src/auth.py?kind=function' --format=json | \
   jq '.results[] | {name, calls, called_by}'
 ```
 
@@ -2411,13 +2411,13 @@ reveal doc.md --grep 'search-term'
 reveal doc.md --grep 'EX-12h' -i      # case-insensitive; works for hyphenated IDs, version strings, etc.
 
 # Search across a directory of markdown files — hits with body content (not just frontmatter)
-reveal 'markdown://docs/?body-contains=nginx'
+reveal 'markdown://docs/?match=nginx'
 
 # Combine body search with frontmatter filter and sort
-reveal 'markdown://docs/?type=guide&body-contains=nginx&sort=-modified'
+reveal 'markdown://docs/?type=guide&match=nginx&sort=-modified'
 
 # Multiple body-contains terms are AND'd (all must appear)
-reveal 'markdown://docs/?body-contains=auth&body-contains=token'
+reveal 'markdown://docs/?match=auth&match=token'
 
 # Navigate related documents (from front matter)
 reveal doc.md --related
@@ -4464,7 +4464,7 @@ Run `reveal help://quick` for "which tool for which question". It is the routing
 ### Mistake 2: Using grep for structured data
 ```bash
 ❌ grep -n "class" *.py        # Text matching, false positives
-✅ reveal 'ast://.?type=class' # Semantic search, accurate
+✅ reveal 'ast://.?kind=class' # Semantic search, accurate
 ```
 
 ### Mistake 3: Not using wildcards

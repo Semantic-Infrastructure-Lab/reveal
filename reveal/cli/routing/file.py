@@ -183,7 +183,7 @@ def _build_ast_query_from_flags(path: Path, args: 'Namespace') -> str:
     if getattr(args, 'name', None):
         query_params.append(f"name~={args.name}")
     if getattr(args, 'type', None):
-        query_params.append(f"type={args.type}")
+        query_params.append(f"kind={args.type}")  # the canonical AST kind (BACK-2654: type is its legacy word)
     if getattr(args, 'sort', None):
         sort_field = args.sort
         if getattr(args, 'desc', False) and not sort_field.startswith('-'):

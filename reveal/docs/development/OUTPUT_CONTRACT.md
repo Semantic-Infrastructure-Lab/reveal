@@ -675,7 +675,7 @@ instead of raising a preflight traceback. Existing primary-JSON file-mirror
 suppression remains. Successful unused-input warning suffixes remain a separate
 JSON parseability limitation; this adoption does not suppress them.
 
-Direct ordinary `markdown://DIR?body-contains=TERM` searches with a nonempty term
+Direct ordinary `markdown://DIR?match=TERM` searches with a nonempty term
 retain `markdown_query` identity and use owner source-completeness facts
 (BACK-2406). Complete searches, including healthy empty results and presentation
 cuts, exit `0`; invalid resources or controls exit `2`; required source or output

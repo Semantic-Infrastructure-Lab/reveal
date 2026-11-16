@@ -189,7 +189,7 @@ Combine elements with query operators:
 reveal domain://google.com/dns --format json | jq '.records.a'
 
 # Complex functions, first 10 (ast:// applies filters, sort and limit)
-reveal 'ast://src?type=function&complexity>10&sort=-complexity&limit=10'
+reveal 'ast://src?kind=function&complexity>10&sort=-complexity&limit=10'
 ```
 
 ---

@@ -98,7 +98,7 @@ reveal README.md --links --format json
 | Progressive Disclosure | `reveal doc.md --head 5` | First 5 headings |
 | Cross-File Link Graph | `reveal 'markdown://docs/?link-graph'` | Whole-tree forward links, backlinks, orphans |
 | Single-Doc Backlinks | `reveal 'markdown://docs/?backlinks=file.md'` | Who links to this doc, before you rename it |
-| Ranked Body Search | `reveal 'markdown://docs/?body-contains=x&explain'` | Multi-doc search, best match first, with a score breakdown |
+| Ranked Body Search | `reveal 'markdown://docs/?match=x&explain'` | Multi-doc search, best match first, with a score breakdown |
 | Frontmatter Lint Queue | `reveal 'markdown://docs/?lint'` | Malformed YAML / missing frontmatter across a tree |
 
 ## The Problem This Solves
@@ -511,7 +511,7 @@ this, not a fallback:
 ```bash
 reveal 'markdown://docs/?aggregate=tags'          # frequency table of tag values across all docs
 reveal 'markdown://docs/?tags=tutorial'           # find docs by tag/category/any field
-reveal 'markdown://docs/?fields=author,date'      # extra columns per matched file
+reveal 'markdown://docs/?columns=author,date'      # extra columns per matched file
 ```
 
 See the "CLI Flags" section below (`?body-contains=`, `?fields=`) or
@@ -1058,13 +1058,13 @@ Search file body content (text after frontmatter) rather than frontmatter fields
 
 ```bash
 # Find docs mentioning "nginx" in the body
-reveal 'markdown://docs/?body-contains=nginx'
+reveal 'markdown://docs/?match=nginx'
 
 # AND — both terms must appear
-reveal 'markdown://docs/?body-contains=nginx&body-contains=ssl'
+reveal 'markdown://docs/?match=nginx&match=ssl'
 
 # Combine with frontmatter filter + limit
-reveal 'markdown://docs/?type=guide&body-contains=nginx&limit=10'
+reveal 'markdown://docs/?type=guide&match=nginx&limit=10'
 ```
 
 - Case-insensitive substring match
@@ -1109,7 +1109,7 @@ Add arbitrary frontmatter fields as inline columns in listing output:
 
 ```bash
 # Show book and cohort for each matched primitive
-reveal 'markdown://primitives/?type=framework&fields=book,cohort'
+reveal 'markdown://primitives/?type=framework&columns=book,cohort'
 
 # Output:
 # Matched: 3 of 47 files
@@ -1161,10 +1161,10 @@ reveal 'markdown://docs/?backlinks=auth.md'
 
 ```bash
 # Multi-term AND search, ranked best-first
-reveal 'markdown://docs/?body-contains=auth&body-contains=token'
+reveal 'markdown://docs/?match=auth&match=token'
 
 # Same, with a per-term score breakdown
-reveal 'markdown://docs/?body-contains=auth&body-contains=token&explain'
+reveal 'markdown://docs/?match=auth&match=token&explain'
 ```
 
 - `relevance_score` combines term frequency with a heading-proximity boost

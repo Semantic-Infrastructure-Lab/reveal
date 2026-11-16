@@ -19,11 +19,11 @@ _HELP_EXAMPLES = [
         'description': 'Complex functions (high cyclomatic complexity)'
     },
     {
-        'uri': 'ast://main.py?type=function',
+        'uri': 'ast://main.py?kind=function',
         'description': 'Functions and methods (not classes); type=method for methods only'
     },
     {
-        'uri': 'ast://.?type=class|function',
+        'uri': 'ast://.?kind=class|function',
         'description': 'Both classes and functions (OR logic)'
     },
     {
@@ -59,7 +59,7 @@ _HELP_EXAMPLES = [
         'description': 'Find complex properties (potential code smell)'
     },
     {
-        'uri': 'ast://.?type!=function',
+        'uri': 'ast://.?kind!=function',
         'description': 'All non-function elements (NEW: != operator)'
     },
     {
@@ -75,7 +75,7 @@ _HELP_EXAMPLES = [
         'description': 'Most complex functions first (NEW: sort)'
     },
     {
-        'uri': 'ast://.?type=function&sort=lines&limit=10',
+        'uri': 'ast://.?kind=function&sort=lines&limit=10',
         'description': 'Top 10 shortest functions (NEW: sort + limit)'
     },
     {
@@ -87,7 +87,7 @@ _HELP_EXAMPLES = [
         'description': 'Find deeply nested functions (exceeds C905 threshold)'
     },
     {
-        'uri': "ast://src/?has_annotations=false&type=function",
+        'uri': "ast://src/?has_annotations=false&kind=function",
         'description': 'Find fully unannotated functions for type coverage audit'
     },
     {
@@ -113,7 +113,7 @@ _HELP_WORKFLOWS = [
         'steps': [
             "reveal 'ast://.?name=main*'               # Find entry points",
             "reveal 'ast://.?name=*cli*|*command*'     # Find CLI handlers",
-            "reveal 'ast://.?type=class'               # See class hierarchy",
+            "reveal 'ast://.?kind=class'               # See class hierarchy",
             "reveal src/core.py --outline              # Drill into key file",
         ]
     },
@@ -129,7 +129,7 @@ _HELP_WORKFLOWS = [
         'name': 'Trace Function Call Graph',
         'scenario': 'Understand what calls what — trace execution paths and identify hotspots',
         'steps': [
-            "reveal 'ast://src/?type=function' --format json      # calls[] and called_by[] on every function",
+            "reveal 'ast://src/?kind=function' --format json      # calls[] and called_by[] on every function",
             "reveal 'calls://src/?callers=validate_item'           # Cross-file: who calls validate_item project-wide?",
             "reveal 'calls://src/?callees=validate_item'           # Cross-file: what does validate_item call?",
             "reveal 'calls://src/?callers=validate_item&depth=2'   # Callers-of-callers (transitive, 2 levels)",
@@ -162,12 +162,12 @@ _HELP_WORKFLOWS = [
 _HELP_ANTI_PATTERNS = [
     {
         'bad': "grep -r 'class UserManager' .",
-        'good': "reveal 'ast://.?name=UserManager&type=class'",
+        'good': "reveal 'ast://.?name=UserManager&kind=class'",
         'why': 'Semantic search vs text matching - no false positives from comments/strings'
     },
     {
         'bad': "find . -name '*.py' -exec grep -l 'def process' {} \\;",
-        'good': "reveal 'ast://.?name=process*&type=function'",
+        'good': "reveal 'ast://.?name=process*&kind=function'",
         'why': 'One command, structured output with line numbers and complexity'
     },
     {
@@ -476,7 +476,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://main.py?type=function',
+        'uri': 'ast://main.py?kind=function',
         'description': 'Functions and methods (not classes); type=method for methods only',
         'output_type': 'ast_query'
     },

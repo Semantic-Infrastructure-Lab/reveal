@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_in
+from conftest import _run_reveal_in, without_retirement_notes
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def tree(tmp_path):
 def answer(tree, *argv):
     result = _run_reveal_in(tree, *argv, '--format', 'json')
     assert result.returncode == 0, result.stderr
-    return json.loads(result.stdout)
+    return without_retirement_notes(json.loads(result.stdout))  # ?type= is noted (BACK-2654)
 
 
 def test_declared_cli_uri_api_preserve_two_bounds(tree):

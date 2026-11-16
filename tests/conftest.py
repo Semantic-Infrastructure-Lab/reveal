@@ -52,6 +52,16 @@ def _run_reveal_direct(*args):
     return _Result(rc, buf_out.getvalue(), buf_err.getvalue())
 
 
+def without_retirement_notes(answer):
+    """*answer* without its ``retired_spelling`` warnings: what a legacy spelling answers besides its note.
+    api.query notes legacy spellings as the CLI does (BACK-2654), so answers given in a legacy and a canonical
+    spelling compare equal once the note -- the designed difference -- is set aside."""
+    meta = answer.get('meta') if isinstance(answer, dict) else None
+    if isinstance(meta, dict) and isinstance(meta.get('warnings'), list):
+        meta['warnings'] = [w for w in meta['warnings'] if not (isinstance(w, dict) and w.get('code') == 'retired_spelling')]
+    return answer
+
+
 def _assert_same_answer_source_spelling(*answers):
     """Compare every field; normalize only the source path's separator spelling."""
     from reveal.utils.path_utils import to_posix

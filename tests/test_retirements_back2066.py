@@ -63,10 +63,10 @@ def _without_retirement_warning(doc):
 KINDS = {
     'subcommand': ('subcommand:check', 'reveal check',
                    lambda f: ['check', f, '--select', 'B001']),
-    'scheme': ('scheme:ast', 'ast://', lambda f: [f'ast://{f}?type=function']),
+    'scheme': ('scheme:ast', 'ast://', lambda f: [f'ast://{f}?kind=function']),
     'param': ('param:ast.name', 'ast://?name=', lambda f: [f'ast://{f}?name=auth*']),
-    'value': ('value:ast.type=function', 'ast://?type=function',
-              lambda f: [f'ast://{f}?type=function']),
+    'value': ('value:ast.kind=function', 'ast://?kind=function',
+              lambda f: [f'ast://{f}?kind=function']),
     # hotspots:// carries a production row since BACK-2149, so the declared-noun case uses metrics://.
     'declared scheme': ('scheme:metrics', 'metrics://', lambda f: [f'metrics://{f}']),
 }
@@ -110,8 +110,8 @@ def test_a_spelling_that_is_not_retired_prints_nothing(monkeypatch, source, kind
 
 def test_a_note_names_the_spelling_that_was_used_not_a_sibling(monkeypatch, source):
     """A retired value does not retire its parameter, and a retired parameter not its scheme."""
-    text = _retire(monkeypatch, 'value:ast.type=class', 'ast://?type=class')
-    result = _run_reveal_direct(f'ast://{source}?type=function', '--format', 'json')
+    text = _retire(monkeypatch, 'value:ast.kind=class', 'ast://?kind=class')
+    result = _run_reveal_direct(f'ast://{source}?kind=function', '--format', 'json')
     assert 'deprecated' not in result.stderr and text not in result.stderr
     _retire(monkeypatch, 'param:calls.root', 'calls://?root=')
     result = _run_reveal_direct(f'ast://{source}?name=auth*', '--format', 'json')
@@ -145,15 +145,15 @@ def test_a_repeated_spelling_notes_once_per_invocation(monkeypatch, source):
 
 def test_two_retired_spellings_are_two_notes_and_two_warnings(monkeypatch, source):
     one = _retire(monkeypatch, 'param:ast.name', 'ast://?name=', 'A')
-    two = _retire(monkeypatch, 'value:ast.type=function', 'ast://?type=function', 'B')
-    result = _run_reveal_direct(f'ast://{source}?type=function&name=auth*', '--format', 'json')
+    two = _retire(monkeypatch, 'value:ast.kind=function', 'ast://?kind=function', 'B')
+    result = _run_reveal_direct(f'ast://{source}?kind=function&name=auth*', '--format', 'json')
     assert _notes(result.stderr, one) == _notes(result.stderr, two) == 1
     assert sorted(w['replacement'] for w in _warnings(json.loads(result.stdout))) == ['A', 'B']
 
 
 def test_phase7_is_recorded_and_prints_nothing(monkeypatch, source):
     _retire(monkeypatch, 'scheme:ast', 'ast://', stage='phase7')
-    result = _run_reveal_direct(f'ast://{source}?type=function', '--format', 'json')
+    result = _run_reveal_direct(f'ast://{source}?kind=function', '--format', 'json')
     assert result.returncode == 0 and 'deprecated' not in result.stderr
     assert not _warnings(json.loads(result.stdout))
 
@@ -240,6 +240,10 @@ PRODUCTION_CASES = {
     'param:claude.full': lambda f: ['claude://session/my-session/exchanges?full'],
     'param:claude.raw': lambda f: ['claude://session/my-session/messages?raw'],
     'param:ast.calls': lambda f: [f'ast://{f}?calls=auth_gate'],
+    # BACK-2654: different-word aliases became legacy entries with rows.
+    'param:ast.type': lambda f: [f'ast://{f}?type=function'],
+    'param:markdown.body-contains': lambda f: [f'markdown://{Path(f).parent}?body-contains=auth'],
+    'param:markdown.fields': lambda f: [f'markdown://{Path(f).parent}?fields=title'],
     'param:ast.callee_of': lambda f: [f'ast://{f}?callee_of=auth_gate'],
     'value:ast.show=calls': lambda f: [f'ast://{f}?show=calls'],
     'subcommand:trace': lambda f: ['trace', str(Path(f).parent), '--from', 'auth_gate'],

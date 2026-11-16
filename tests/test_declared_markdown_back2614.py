@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_in
+from conftest import _run_reveal_in, without_retirement_notes
 from reveal.adapters.markdown.adapter import MarkdownQueryAdapter
 
 
@@ -33,7 +33,7 @@ def test_every_view_records_unreadable_required_sources(docs, monkeypatch, query
 def answer(docs, *argv):
     run = _run_reveal_in(docs, *argv, '--format', 'json')
     assert run.returncode == 0, run.stderr
-    return json.loads(run.stdout)
+    return without_retirement_notes(json.loads(run.stdout))  # ?fields= is noted (BACK-2654)
 
 
 def test_listing_cli_uri_api_agree_on_repeated_match_and_filters(docs):

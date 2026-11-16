@@ -161,25 +161,18 @@ def element(
     return None
 
 
-def _bound_query_result(adapter, scheme: str, uri: str, overrides: Dict[str, Any]) -> Dict[str, Any]:
-    """Keep declared retirement metadata equal to the CLI's JSON answer: a retired alias, or a parameter
-    declared ``retired`` under its own name (BACK-2621), spelled in the URI or as a keyword."""
+def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
+    """Answer inside an invocation scope that notes every retired spelling the request uses, as the CLI does:
+    RETIREMENTS is the one source (its scheme, parameters, values and typed keywords), and the notes reach the
+    result's ``meta.warnings`` as the CLI's JSON carries them (BACK-2654; it used to note declared aliases only)."""
     from .cli.invocation import Invocation, invocation_scope, retirement_note, uri_retirement_keys
     from .utils.json_utils import attach_retirements
-    from .utils.results import note_incomplete
-    declared = {f'param:{scheme}.{name}' for spec in adapter.PARAM_SPECS
-                for name in ((spec.name,) if spec.retired else ()) + spec.spellings[1:]}
     keys = uri_retirement_keys(uri) + [f'param:{scheme}.{key}' for key in overrides]
     with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False):
         for key in keys:
-            if key in declared:
-                retirement_note(key)
-        result: Dict[str, Any] = attach_retirements(adapter.get_structure())
-        facts_of = getattr(type(adapter), 'execution_facts', None)
-        if callable(facts_of):
-            # The same answer as the CLI's JSON: an incomplete one says so (COMMAND_MODEL 'Transports').
-            note_incomplete(result, facts_of(result))
-        return result
+            retirement_note(key)
+        result = answer()
+        return attach_retirements(result) if isinstance(result, dict) else result
 
 
 def query(
@@ -260,8 +253,13 @@ def query(
     with host_request(), gitignore_scope(respect_gitignore):
         from .adapters.factory import _canonical_init, uses_bound_query_call
         if not element_name and uses_bound_query_call(adapter_class):
-            bound_result: Dict[str, Any] = _bound_query_result(
-                _canonical_init(adapter_class, resource, overrides=kwargs), scheme, uri, kwargs)
+            bound = _canonical_init(adapter_class, resource, overrides=kwargs)
+            bound_result: Dict[str, Any] = _noted_answer(scheme, uri, kwargs, bound.get_structure)
+            facts_of = getattr(type(bound), 'execution_facts', None)
+            if callable(facts_of):
+                # The same answer as the CLI's JSON: an incomplete one says so (COMMAND_MODEL 'Transports').
+                from .utils.results import note_incomplete
+                note_incomplete(bound_result, facts_of(bound_result))
             return bound_result
         if isinstance(adapter_class, type) and hasattr(adapter_class, "from_uri"):
             adapter = adapter_class.from_uri(scheme, resource, element_name)
@@ -269,12 +267,13 @@ def query(
             adapter = _default_from_uri(adapter_class, scheme, resource, element_name)
 
         if element_name:
-            result = adapter.get_element(element_name, **kwargs)
+            result = _noted_answer(scheme, uri, kwargs, lambda: adapter.get_element(element_name, **kwargs))
             if result is None:
                 raise ValueError(f"Element {element_name!r} not found in {uri}")
             return result
 
-        return adapter.get_structure(**kwargs)
+        structure: Dict[str, Any] = _noted_answer(scheme, uri, kwargs, lambda: adapter.get_structure(**kwargs))
+        return structure
 
 
 def check(

@@ -94,13 +94,13 @@ _NO_LEGACY = 'no note-stage RETIREMENTS row spells this noun: there is no legacy
 EXEMPT = {
     **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'claude', 'codex', 'contracts', 'deps', 'hotspots', 'json',
                                             'overview', 'pack', 'patches', 'surface', 'testability', 'trace')},
-    **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'contracts', 'git', 'json', 'markdown', 'overview', 'pack',
-                                            'patches', 'surface')},
+    **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'contracts', 'git', 'json', 'overview', 'pack', 'patches',
+                                            'surface')},
     **{(noun, '1d'): 'declares no repeatable control with an alias'
        for noun in NOUNS if noun not in ('markdown', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
-        'architecture', 'ast', 'codex', 'contracts', 'deps', 'git', 'hotspots', 'json', 'markdown', 'overview', 'pack',
-        'patches', 'surface', 'testability', 'trace')},
+        'architecture', 'codex', 'contracts', 'deps', 'git', 'hotspots', 'json', 'overview', 'pack', 'patches',
+        'surface', 'testability', 'trace')},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
         'architecture', 'claude', 'codex', 'contracts', 'deps', 'hotspots', 'json', 'overview', 'pack', 'patches',
         'surface', 'testability', 'trace')},

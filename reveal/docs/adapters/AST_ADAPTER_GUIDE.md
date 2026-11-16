@@ -82,7 +82,7 @@ reveal 'ast://./src?complexity>10' --format=json
 **Note**: Quote URIs containing `>` or `<` to prevent shell redirection.
 
 URI resource paths use existing-path-first decoding. For example,
-`ast://src%20tree?type=function` targets `src tree`; encode a literal `?` in a
+`ast://src%20tree?kind=function` targets `src tree`; encode a literal `?` in a
 filename as `%3F` so it stays separate from the query. An existing literal percent
 path wins; otherwise an existing path is decoded once. `+` stays literal, malformed
 percent escapes stay literal, and invalid encoded UTF-8 or NUL is rejected before
@@ -202,20 +202,20 @@ Filter by code element type:
 
 ```bash
 # Functions, methods included (not classes)
-reveal 'ast://./src?type=function'
+reveal 'ast://./src?kind=function'
 
 # Only methods (functions that belong to a class, struct or impl)
-reveal 'ast://./src?type=method'
+reveal 'ast://./src?kind=method'
 
 # Only classes
-reveal 'ast://./src?type=class'
+reveal 'ast://./src?kind=class'
 
 # Multiple types (OR logic)
-reveal 'ast://./src?type=class|function'
-reveal 'ast://./src?type=class,function'   # Comma also works
+reveal 'ast://./src?kind=class|function'
+reveal 'ast://./src?kind=class,function'   # Comma also works
 
 # Everything except functions (NEW: != operator)
-reveal 'ast://./src?type!=function'
+reveal 'ast://./src?kind!=function'
 ```
 
 **Valid types:**
@@ -278,7 +278,7 @@ reveal 'ast://./tests?name=test_*&lines>100'
 reveal 'ast://./src?name=main*&complexity>10'
 
 # A key may repeat; every condition applies
-reveal 'ast://./src?type=function&type!=method'   # functions that are not methods
+reveal 'ast://./src?kind=function&kind!=method'   # functions that are not methods
 reveal 'ast://./src?lines>20&lines<50'            # same as lines=20..50 but exclusive
 ```
 
@@ -534,7 +534,7 @@ See [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) for full `calls://` documen
 ### JSON output — call fields
 
 ```bash
-reveal 'ast://src/auth.py?type=function' --format=json | \
+reveal 'ast://src/auth.py?kind=function' --format=json | \
   jq '.results[] | {name, calls, called_by}'
 ```
 
@@ -592,7 +592,7 @@ reveal 'ast://.?name=*main*'
 reveal 'ast://.?name=*cli*|*command*'
 
 # Step 3: Survey class hierarchy
-reveal 'ast://.?type=class'
+reveal 'ast://.?kind=class'
 
 # Step 4: Find configuration loading
 reveal 'ast://.?name=*config*'
@@ -677,17 +677,17 @@ reveal 'ast://./tests?name=test_*' --format=json | \
 
 ```bash
 # Step 1: Find all public classes
-reveal 'ast://./src?type=class' --format=json
+reveal 'ast://./src?kind=class' --format=json
 
 # Step 2: Find all public functions (not starting with _)
-reveal 'ast://./src?type=function' --format=json | \
+reveal 'ast://./src?kind=function' --format=json | \
   jq '.results[] | select(.name | startswith("_") | not)'
 
 # Step 3: Find all @property methods (getters/setters)
 reveal 'ast://./src?decorator=property' --format=json
 
 # Step 4: Create API index
-reveal 'ast://./src?type=class|function' --format=json | \
+reveal 'ast://./src?kind=class|function' --format=json | \
   jq -r '.results[] | "\(.file):\(.line) [\(.category)] \(.name)"' | \
   sort > api_index.txt
 ```
@@ -840,7 +840,7 @@ All three can be combined:
 reveal 'ast://./src?complexity>5&sort=-complexity&limit=20&offset=10'
 
 # Longest functions, top 10
-reveal 'ast://./src?type=function&sort=-lines&limit=10'
+reveal 'ast://./src?kind=function&sort=-lines&limit=10'
 ```
 
 **Performance note**: Result control happens **after** filtering, so:
@@ -884,7 +884,7 @@ AST queries require parsing source code, so they're slower than text search but 
 
 3. **Cache results**: For repeated queries, save JSON output
    ```bash
-   reveal 'ast://./src?type=function&limit=100000' --format=json > structure_cache.json
+   reveal 'ast://./src?kind=function&limit=100000' --format=json > structure_cache.json
    jq '.results[] | select(.complexity > 10)' structure_cache.json
    ```
 
@@ -926,7 +926,7 @@ For very large codebases, consider pre-computing structure:
 
 ```bash
 # Generate structure cache (run nightly); limit= lifts the 200-result cap
-reveal 'ast://./src?type=function&limit=100000' --format=json > structure_cache.json
+reveal 'ast://./src?kind=function&limit=100000' --format=json > structure_cache.json
 
 # Query cache with jq (instant)
 jq '.results[] | select(.complexity > 10)' structure_cache.json
@@ -1087,7 +1087,7 @@ reveal 'ast://./src?name=get_*'
 reveal 'ast://./tests?name~=^test_'
 
 # Only Manager classes (not ManagerFactory)
-reveal 'ast://./src?name~=.*Manager$&type=class'
+reveal 'ast://./src?name~=.*Manager$&kind=class'
 ```
 
 ### Filter Combination Strategies
@@ -1106,14 +1106,14 @@ reveal 'ast://.?decorator=property&lines>10'
 
 ```bash
 # Classes OR functions (methods are functions, so they are included)
-reveal 'ast://./src?type=class|function'
+reveal 'ast://./src?kind=class|function'
 ```
 
 **Negation** (exclude matching):
 
 ```bash
 # Everything except functions
-reveal 'ast://./src?type!=function'
+reveal 'ast://./src?kind!=function'
 
 # Everything not decorated with @property (undecorated elements included)
 reveal 'ast://.?decorator!=property'
@@ -1143,15 +1143,15 @@ When piping to other tools, use JSON output:
 
 ```bash
 # Count functions per file
-reveal 'ast://./src?type=function' --format=json | \
+reveal 'ast://./src?kind=function' --format=json | \
   jq -r '.results[].file' | sort | uniq -c | sort -rn
 
 # Find top 10 most complex functions
-reveal 'ast://./src?type=function&sort=-complexity&limit=10' --format=json | \
+reveal 'ast://./src?kind=function&sort=-complexity&limit=10' --format=json | \
   jq -r '.results[] | {name, file, complexity, line_count}'
 
 # Generate CSV report (limit= lifts the 200-result cap)
-reveal 'ast://./src?type=function&limit=100000' --format=json | \
+reveal 'ast://./src?kind=function&limit=100000' --format=json | \
   jq -r '.results[] | [.file, .name, .complexity, .line_count] | @csv' \
   > code_metrics.csv
 ```
@@ -1196,7 +1196,7 @@ reveal 'ast://.?complexity>10' --format=json
 
 ```bash
 # Top 10 most complex functions
-reveal 'ast://./src?type=function&sort=-complexity&limit=10' --format=json | \
+reveal 'ast://./src?kind=function&sort=-complexity&limit=10' --format=json | \
   jq '[.results[] | {name, complexity}]'
 
 # Functions by file with complexity
@@ -1205,7 +1205,7 @@ reveal 'ast://./src?complexity>10' --format=json | \
          .[] | "\(.[0].file): \(length) complex functions"'
 
 # Generate HTML report (limit= lifts the 200-result cap)
-reveal 'ast://./src?type=function&limit=100000' --format=json | \
+reveal 'ast://./src?kind=function&limit=100000' --format=json | \
   jq -r '.results[] |
          "<tr><td>\(.name)</td><td>\(.complexity)</td></tr>"' \
   > report.html
@@ -1285,7 +1285,7 @@ import pandas as pd
 
 # Get every function (limit= lifts the 200-result cap)
 result = subprocess.run(
-    ["reveal", "ast://./src?type=function&limit=100000", "--format=json"],
+    ["reveal", "ast://./src?kind=function&limit=100000", "--format=json"],
     capture_output=True,
     text=True
 )

@@ -38,12 +38,11 @@ def test_binder_folds_bare_operator_keys_into_where():
 
 
 class _LegacyNoun:
-    """A bound adapter with a canonical control, a legacy one declared retired under its own name (not an
-    alias), and a legacy-named parameter that is not declared retired (calls ?root keeps no API note)."""
+    """A bound adapter with a canonical control and a legacy parameter of its own (not an alias)."""
     from reveal.utils.query_parser import ParamSpec as _Spec
     PARAM_SPECS = (_Spec('limit', 'integer', 'rows', None, int),
-                   _Spec('old', 'integer', 'legacy rows', None, int, retired=True),
-                   _Spec('kept', 'integer', 'a name with a row, not declared retired', None, int))
+                   _Spec('old', 'integer', 'legacy rows', None, int),
+                   _Spec('kept', 'integer', 'a name with no row', None, int))
 
     def get_structure(self):
         return {'type': 'stub', 'meta': {'warnings': []}}
@@ -60,28 +59,30 @@ def _notes(result):
     return [w['message'] for w in result['meta']['warnings'] if w.get('code') == 'retired_spelling']
 
 
+def _api_answer(uri, overrides):
+    from reveal.api import _noted_answer
+    return _noted_answer('stub', uri, overrides, _LegacyNoun().get_structure)
+
+
 @pytest.mark.parametrize('uri,overrides', [('stub://p?old=3', {}), ('stub://p', {'old': 3})])
-def test_api_notes_a_declared_legacy_parameter_as_the_cli_does(legacy_row, uri, overrides):
-    """A retired spelling that is a declared parameter of its own (not an alias) gets its D5 note on
-    api.query as on the URI and subcommand routes, from the URI key or the typed keyword."""
-    from reveal.api import _bound_query_result
-    result = _bound_query_result(_LegacyNoun(), 'stub', uri, overrides)
+def test_api_notes_a_legacy_parameter_as_the_cli_does(legacy_row, uri, overrides):
+    """A retired spelling gets its D5 note on api.query as on the URI and subcommand routes, from the URI key
+    or the typed keyword (BACK-2621; BACK-2654: from its RETIREMENTS row alone, declared or not)."""
+    result = _api_answer(uri, overrides)
     assert any('stub ?old=N' in note and '?limit=N' in note for note in _notes(result)), result['meta']
 
 
-def test_api_does_not_note_a_retired_key_the_adapter_does_not_declare(legacy_row, monkeypatch):
-    from reveal.api import _bound_query_result
+def test_api_notes_a_retired_key_whatever_the_adapter_declares(legacy_row, monkeypatch):
+    """BACK-2654 rule 11: RETIREMENTS is the one source of notes, as on the CLI (api.query used to note only
+    declared aliases and ParamSpec.retired names)."""
     from reveal.cli import invocation
     monkeypatch.setitem(invocation.RETIREMENTS, 'param:stub.other', invocation.Retirement('stub ?other', '?limit'))
-    assert _notes(_bound_query_result(_LegacyNoun(), 'stub', 'stub://p?other=1&limit=2', {})) == []
+    assert _notes(_api_answer('stub://p?other=1&limit=2', {})) == ['stub ?other is deprecated; use ?limit.']
 
 
-def test_api_keeps_no_note_for_a_parameter_not_declared_retired(legacy_row, monkeypatch):
-    """Negative control: claude and calls compare legacy-named API answers with canonical ones exactly."""
-    from reveal.api import _bound_query_result
-    from reveal.cli import invocation
-    monkeypatch.setitem(invocation.RETIREMENTS, 'param:stub.kept', invocation.Retirement('stub ?kept', '?limit'))
-    assert _notes(_bound_query_result(_LegacyNoun(), 'stub', 'stub://p?kept=1', {'kept': 2})) == []
+def test_api_keeps_no_note_for_a_spelling_without_a_row(legacy_row):
+    """Negative control: a parameter with no RETIREMENTS row notes nothing on any transport."""
+    assert _notes(_api_answer('stub://p?kept=1&limit=2', {'kept': 2})) == []
 
 
 def test_a_global_switch_whose_uri_value_differs_is_rejected(monkeypatch):

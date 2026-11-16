@@ -185,7 +185,7 @@ reveal 'markdown://docs/?link-graph' | grep 'auth.md'
 reveal 'markdown://docs/?link-graph' | grep -A 20 'Isolated'
 
 # Full-text search combining with frontmatter filters
-reveal 'markdown://docs/?body-contains=retry&type=procedure'
+reveal 'markdown://docs/?match=retry&type=procedure'
 ```
 
 **What you get:** Bidirectional link graphs, taxonomy frequency tables, full-text search combined with structured metadata filtering. Knowledge graph functionality in a code tool.

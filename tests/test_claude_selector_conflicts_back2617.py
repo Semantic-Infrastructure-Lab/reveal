@@ -4,7 +4,13 @@ import json
 import pytest
 
 from conftest import _run_reveal_in
-from reveal import query
+from conftest import without_retirement_notes
+from reveal import query as _api_query
+
+
+def query(*args, **kwargs):
+    """api.query without its retirement notes (BACK-2654)."""
+    return without_retirement_notes(_api_query(*args, **kwargs))
 from reveal.errors import RequestValidationError
 from test_claude_source_evidence_back2617 import transcript
 

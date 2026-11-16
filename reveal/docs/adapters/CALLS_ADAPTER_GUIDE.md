@@ -51,7 +51,7 @@ reveal 'calls://src/?callers=validate_item&depth=2'
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > call_graph.svg
 
 # Per-function calls/called_by fields of one file (ast:// adapter — no project index)
-reveal 'ast://src/auth.py?type=function' --format json
+reveal 'ast://src/auth.py?kind=function' --format json
 
 # The same requests as a subcommand (flags generated from the same declarations)
 reveal calls src/ --callers validate_item --depth 2

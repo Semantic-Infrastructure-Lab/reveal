@@ -864,7 +864,7 @@ class TestBuildAstQueryFromFlags:
         args = _args(name='foo', type='function', sort=None, desc=False)
         result = _build_ast_query_from_flags(Path('app.py'), args)
         assert 'name~=foo' in result
-        assert 'type=function' in result
+        assert 'kind=function' in result  # the canonical AST kind; type is its legacy word (BACK-2654)
 
 
 # ─── _guard_nginx_flags ───────────────────────────────────────────────────────

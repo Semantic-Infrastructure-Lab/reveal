@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, without_retirement_notes
 from reveal import api
 from reveal.adapters.trace import TraceAdapter
 from reveal.utils.query_parser import collect_query_keys, peek_query_items
@@ -35,13 +35,13 @@ def without_retirement(answer):
 
 def test_api_depth_matches_working_uri_constructor_command_actual_frames(project):
     shallow = api.query(uri(project, 'from=main&depth=1'))
-    expected = api.query(uri(project, 'from=main&depth=3'))
+    expected = without_retirement_notes(api.query(uri(project, 'from=main&depth=3')))  # the trace:// note (BACK-2654)
     constructor = TraceAdapter(str(project), params={'root': 'main', 'depth': 3}).get_structure()
     command = _run_reveal_direct('trace', str(project), '--from', 'main', '--depth', '3', '--format', 'json')
     assert command.returncode == 0
     assert expected == constructor == without_retirement(json.loads(command.stdout))
     assert len(expected['frames']) > len(shallow['frames'])
-    assert api.query(uri(project, 'from=main&depth=1'), depth=3) == expected
+    assert without_retirement_notes(api.query(uri(project, 'from=main&depth=1'), depth=3)) == expected
 
 
 def test_canonical_from_overlay_changes_actual_root(project):

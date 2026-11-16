@@ -258,14 +258,14 @@ reveal 'markdown://docs/?title=*API*'    # Titles containing "API" (case-sensiti
 
 **Body Text Search** (markdown-specific, not frontmatter):
 ```bash
-reveal 'markdown://docs/?body-contains=nginx'                    # Body mentions "nginx"
-reveal 'markdown://docs/?body-contains=nginx&body-contains=ssl'  # Both terms (AND)
+reveal 'markdown://docs/?match=nginx'                    # Body mentions "nginx"
+reveal 'markdown://docs/?match=nginx&match=ssl'  # Both terms (AND)
 ```
 `body-contains=` is case-insensitive substring match. Multiple values are AND'd. Combines with frontmatter filters and result control (`sort=`, `limit=`) — this is why it's spelled `body-contains=` rather than `search=`: unlike `claude://`/`codex://`/`xlsx://`/`help://search`'s `?search=`, it's a structured filter, not a standalone free-text search. See [Search vs. Filter](#search-vs-filter-two-different-conventions-on-purpose) above.
 
 **Extra columns** (markdown-specific):
 ```bash
-reveal 'markdown://primitives/?type=framework&fields=book,cohort'  # Append book= cohort= inline per result
+reveal 'markdown://primitives/?type=framework&columns=book,cohort'  # Append book= cohort= inline per result
 ```
 `fields=f1,f2` appends comma-separated frontmatter values as `field=value` on each result row. Fields absent from a file are silently omitted.
 
@@ -306,8 +306,8 @@ reveal 'metrics://.?view=hotspots&code-only=true'
 
 - **`type`** - Filter by element type (`function`, `class`, `method`)
   ```bash
-  reveal 'ast://src?type=function'
-  reveal 'ast://src?type=class'
+  reveal 'ast://src?kind=function'
+  reveal 'ast://src?kind=class'
   ```
 
 - **`name`** / **`name~=`** - Filter by element name (exact or substring)
@@ -320,7 +320,7 @@ reveal 'metrics://.?view=hotspots&code-only=true'
 - **`complexity>`** - Filter by cyclomatic complexity
   ```bash
   reveal 'ast://src?complexity>10'       # complexity over 10
-  reveal 'ast://src?complexity>5&type=function'
+  reveal 'ast://src?complexity>5&kind=function'
   ```
 
 - **`lines`** / **`lines>`** - Filter by element length in lines
@@ -388,7 +388,7 @@ reveal 'metrics://.?view=hotspots&code-only=true'
   ```bash
   reveal 'ast://src?has_annotations=false'   # find unannotated functions
   reveal 'ast://src?has_annotations=true'    # only annotated functions
-  reveal 'ast://src?type=function&has_annotations=false'  # annotation coverage audit
+  reveal 'ast://src?kind=function&has_annotations=false'  # annotation coverage audit
   ```
 
 - **`callers>N`** - Filter by inbound caller count
