@@ -74,7 +74,7 @@ replaced-by note on stderr, and carries a `retired_spelling` entry in JSON
 | the rule pass over a git range | `reveal check --changed main..feature` |
 | the rule pass over a directory | `reveal check ./src` |
 | the structural changes section | `reveal 'diff://git://main/.:git://feature/.'` |
-| the hotspots section | `reveal metrics <path> --hotspots` |
+| the hotspots section | `reveal metrics <path> --view hotspots` |
 | the complex-functions section | `reveal 'ast://<path>?complexity>10&sort=-complexity'` |
 
 ### Exit Codes
@@ -597,25 +597,25 @@ reveal surface . --format json       # Machine-readable output
 
 ---
 
-## reveal hotspots — Retired (use `reveal metrics --hotspots` and the `ast://` complexity sort)
+## reveal hotspots — Retired (use `reveal metrics --view hotspots` and the `ast://` complexity sort)
 
 `reveal hotspots` and `hotspots://` are retired into two commands (BACK-2149): the file ranking and
-its findings gate are `reveal metrics --hotspots`, the function ranking is `ast://`'s complexity sort.
+its findings gate are `reveal metrics --view hotspots`, the function ranking is `ast://`'s complexity sort.
 Until the cut release they still answer as before (`hotspots_scan`, the same exits: 0 complete, 1 a
 `--fail-on findings` match, 2 invalid input, 3 incomplete), with one note on stderr and a
 `retired_spelling` entry in JSON `meta.warnings`.
 
 | Retired | Use instead |
 |---------|-------------|
-| `reveal hotspots PATH` (files) | `reveal metrics PATH --hotspots` (`metrics://PATH?hotspots=true`) |
+| `reveal hotspots PATH` (files) | `reveal metrics PATH --view hotspots` (`metrics://PATH?view=hotspots`) |
 | `reveal hotspots PATH` (functions), `--functions-only` | `reveal 'ast://PATH?complexity>=10&sort=-complexity&limit=10' --format json` |
-| `--files-only` | `reveal metrics PATH --hotspots` |
+| `--files-only` | `reveal metrics PATH --view hotspots` |
 | `--min-complexity N`, `--top N` (functions) | `complexity>=N`, `limit=N` on the `ast://` query |
-| `--top N` (files) | `reveal metrics PATH --hotspots --top N` |
-| `--fail-on findings` | `reveal metrics PATH --hotspots --fail-on findings` |
+| `--top N` (files) | `reveal metrics PATH --view hotspots --limit N` |
+| `--fail-on findings` | `reveal metrics PATH --view hotspots --fail-on findings` |
 | `has_test_hint` | no replacement field: it was an unmeasured test-name heuristic, not coverage; use the language's coverage tool |
 
-`metrics --hotspots --fail-on findings` exits 1 when any analysed file has quality below 70 or a
+`metrics --view hotspots --fail-on findings` exits 1 when any analysed file has quality below 70 or a
 function with complexity above 20 (`summary.has_findings`). The verdict is taken over every analysed
 file before the file filters and the `--top`, `--limit` and `--offset` cuts, so it does not move with
 `--min-complexity` (an average-complexity filter on metrics). Each file entry carries the same
@@ -623,9 +623,9 @@ path-only `provenance` tag the hotspots noun put on its file entries. `ast://`'s
 ranked functions by file; `--format json` keeps the global order.
 
 ```bash
-reveal metrics ./src --hotspots                       # Worst 10 files
-reveal metrics ./src --hotspots --top 20              # Worst 20 files
-reveal metrics . --hotspots --fail-on findings        # CI gate
+reveal metrics ./src --view hotspots                       # Worst 10 files
+reveal metrics ./src --view hotspots --limit 20              # Worst 20 files
+reveal metrics . --view hotspots --fail-on findings        # CI gate
 reveal 'ast://.?complexity>=10&sort=-complexity&limit=10' --format json   # Most complex functions
 ```
 
@@ -788,7 +788,7 @@ Healthy inventories retain their existing validation and reuse. This handling
 covers directory enumeration and importer-file reads; the separate per-target
 `__init__.py` fallback-read failure channel remains outside this handling.
 M102 is a cross-file rule, so it is not part
-of the quality scores and rankings of `metrics://` (and its `--hotspots` ranking), which count
+of the quality scores and rankings of `metrics://` (and its `--view hotspots` ranking), which count
 file-local rules only ([what the issue count counts](../adapters/METRICS_ADAPTER_GUIDE.md#what-the-issue-count-counts)).
 
 ### Usage
@@ -864,7 +864,7 @@ A requested `--output json=PATH` that cannot be written (the path is a directory
 ### See Also
 
 - `reveal check --changed RANGE` — Rules on the files a PR changed (replaces the retired review)
-- `reveal metrics --hotspots` — Complexity- and quality-ranked files
+- `reveal metrics --view hotspots` — Complexity- and quality-ranked files
 - `reveal check --help` — Full flag reference
 
 ---

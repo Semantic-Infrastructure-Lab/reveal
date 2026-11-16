@@ -201,7 +201,7 @@ json://config.json?keys&flatten
 markdown://docs/?status=active&tags=python
 
 # Stats filtering
-metrics://src?lines=50..200&hotspots=true
+metrics://src?lines=50..200&view=hotspots
 ```
 
 ### Display Flags (Output filtering)
@@ -347,7 +347,7 @@ It applies to `--format json` (help://fields).
 ast://src?lines>50&complexity>10&decorator=property
 json://config.json?schema&flatten&keys
 markdown://docs/?status=active&!deprecated
-metrics://src?lines=50..200&hotspots=true
+metrics://src?lines=50..200&view=hotspots
 ```
 
 ### Progressive Disclosure Adapters

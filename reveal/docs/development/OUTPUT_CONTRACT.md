@@ -171,7 +171,7 @@ These fields are OPTIONAL but recommended for common patterns:
   ```python
   'next_steps': [
       'reveal ast://src/main.py:MainClass',
-      'reveal metrics://src/ --hotspots'
+      "reveal 'metrics://src/?view=hotspots'"
   ]
   ```
 
@@ -1327,7 +1327,7 @@ reveal check reveal/adapters/ --select V023
     ],
     'next_steps': [
         'reveal ast://src/api/auth.py:authenticate',
-        'reveal metrics://src/api/ --hotspots'
+        "reveal 'metrics://src/api/?view=hotspots'"
     ],
     'status': {
         'health': 'warning',

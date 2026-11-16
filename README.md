@@ -22,7 +22,7 @@ reveal check src/                   # which rules find problems?
 | Content | Show me one thing | `reveal FILE FUNCTION`, `reveal DOC.md "Heading"`, `reveal FILE :20-40` |
 | Relations | What connects to it? | `reveal calls DIR --callers NAME`, `reveal imports DIR --importers FILE` |
 | Behavior | What does this function touch? | `reveal FILE FUNCTION --boundary` or `--effects` |
-| Judgment inputs | Where should I look closer? | `reveal metrics DIR --hotspots`, `reveal check DIR` |
+| Judgment inputs | Where should I look closer? | `reveal metrics DIR --view hotspots`, `reveal check DIR` |
 
 Search with enclosing structural context: `reveal src/ --grep 'timeout'`.
 Use `--format json` for machine-readable results. Counts name their scope and

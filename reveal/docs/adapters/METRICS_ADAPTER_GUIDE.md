@@ -106,9 +106,9 @@ Find top 10 files needing attention (the retired `reveal hotspots` subcommand an
 same ranking):
 
 ```bash
-reveal metrics ./src --hotspots
-reveal 'metrics://./src?hotspots=true'          # the same answer as a URI
-reveal metrics ./src --hotspots --fail-on findings   # exit 1 on a finding (see Findings gate)
+reveal metrics ./src --view hotspots
+reveal 'metrics://./src?view=hotspots'          # the same answer as a URI
+reveal metrics ./src --view hotspots --fail-on findings   # exit 1 on a finding (see Findings gate)
 ```
 
 **Output**:
@@ -267,56 +267,51 @@ Default penalties:
 
 ## Query Parameters Reference
 
-### Legacy Parameters (Backward Compatible)
+### Parameters
 
-| Parameter | Type | Description | Example |
-|-----------|------|-------------|---------|
-| `hotspots` | boolean | Include hotspot analysis | `?hotspots=true` |
-| `top` | integer | Max number of hotspot files to return when `hotspots=true` (default: 10) | `?hotspots=true&top=25` |
-| `code_only` | boolean | Exclude data/config files | `?code_only=true` |
-| `min_lines` | integer | Filter files with ≥ N lines | `?min_lines=50` |
-| `max_lines` | integer | Filter files with ≤ N lines | `?max_lines=500` |
-| `min_complexity` | float | Filter files with avg complexity ≥ N | `?min_complexity=5.0` |
-| `max_complexity` | float | Filter files with avg complexity ≤ N | `?max_complexity=10.0` |
-| `min_functions` | integer | Filter files with ≥ N functions | `?min_functions=5` |
-| `churn` | boolean | Fold commit-touch counts into hotspot scoring (default: on for git repos, silently off otherwise) | `?hotspots=true&churn=false` |
-| `since` | string (ISO date) | Bound the churn walk to commits on/after this date (default: full history) | `?hotspots=true&since=2026-01-01` |
-| `no_merges` | boolean | Exclude merge commits from the churn tally | `?hotspots=true&no_merges=1` |
-| `tests` | `include` (default), `exclude` | With `hotspots=true`: leave test/support files selected by conventional names plus the selected project's `test_layout.additional_paths` out of the ranking. Only the ranking is narrowed; totals and `files` still count them. A request that names it adds `test_scope` (`rule`, policy basis/anchor/source, current declaration when present, `tests`, `files_excluded`). The default here (and the retired `reveal hotspots`) ranks test files. Ordinary overview does not request this ranking. | `?hotspots=true&tests=exclude` |
-| `summary_only` | boolean | Omit the per-file `files` array — aggregate summary (+ hotspots, if requested) only. Use on large repos where the per-file array is impractically large. | `?summary_only=true` |
+| Parameter | Flag | Type | Description | Example |
+|-----------|------|------|-------------|---------|
+| `view` | `--view` | `hotspots`, `provenance` | `hotspots`: the ranked hotspot files are the rows (no `files` list), capped by `limit` (default 10, `0` = all) and paged by `offset`, with the `--fail-on findings` verdict. `provenance`: every file's provenance tag (see [Provenance view](#provenance-view)). Omitted: per-file metrics | `?view=hotspots&limit=25` |
+| `where` | `--where` (repeatable) | `FIELD OP VALUE` | Keep the files whose field matches; repeat to AND. A bare query key with an operator (`?lines>50`) is the same filter. See [Unified Query Syntax](#unified-query-syntax) | `?where=avg_complexity>=5` |
+| `code-only` | `--code-only` | boolean | Leave data/config files out of the walk; `code_only` is its alias | `?code-only=true` |
+| `churn` | `--churn on\|off` | switch | Fold commit-touch counts into the hotspot score (default: on in a git repository, silently off elsewhere) | `?view=hotspots&churn=off` |
+| `merges` | `--merges on\|off` | switch | Count merge commits in the churn tally (default on) | `?view=hotspots&merges=off` |
+| `since` | `--since DATE` | ISO date | Bound the churn walk to commits on/after this date (default: full history); an invalid date exits 2 | `?view=hotspots&since=2026-01-01` |
+| `tests` | `--tests include\|exclude` | `include` (default), `exclude` | In the hotspot ranking: leave test/support files selected by conventional names plus the selected project's `test_layout.additional_paths` out of the ranking. Only the ranking is narrowed; totals still count them. A request that names it adds `test_scope` (`rule`, policy basis/anchor/source, current declaration when present, `tests`, `files_excluded`). The default (and the retired `reveal hotspots`) ranks test files. Ordinary overview does not request this ranking. | `?view=hotspots&tests=exclude` |
+| `detail` | `--detail` | `normal` (default), `summary` | `summary` omits the per-file `files` array: the aggregate summary only (the walk still runs). Use on large repos. There is no fuller level: `detail=full` exits 2 | `?detail=summary` |
+| `sort`, `limit`, `offset` | `--sort=FIELD`, `--limit N`, `--offset N` | | Order and page the rows (`--sort=-lines` for descending); in `view=hotspots`, `limit`/`offset` page the ranking and `sort` does not apply | `?sort=-lines&limit=10` |
+| `exclude`, `respect_gitignore` | `--exclude`, `--no-gitignore` | | The walk's scope | `?exclude=vendor` |
 
-**Note**: Legacy parameters still work but unified query syntax (below) is preferred for new queries. `churn`/`since`/`no_merges` only affect hotspot scoring (`hotspots=true`) and are ignored otherwise.
-
-### Subcommand form
+`churn`, `merges` and `since` only affect the hotspot score and are unread otherwise. `match`, `kind`,
+`depth` and `until` are not metrics controls: they exit 2 naming `where` and the supported controls.
 
 `reveal metrics PATH` and `metrics://PATH` are two spellings of one answer: the same JSON, the
 same exit code, and (with `--provenance`) a manifest that differs only in `execution.command`.
-Every parameter above has a flag, and so do `view` and the result controls:
 
-| Parameter | Flag |
-|-----------|------|
-| `view` | `--view provenance` |
-| `hotspots` | `--hotspots` |
-| `top` | `--top N` (0 = all) |
-| `code_only` | `--code-only` |
-| `min_lines`, `max_lines` | `--min-lines N`, `--max-lines N` |
-| `min_complexity`, `max_complexity` | `--min-complexity N`, `--max-complexity N` |
-| `min_functions` | `--min-functions N` |
-| `churn` | `--no-churn` (churn is on by default) |
-| `since`, `no_merges` | `--since DATE`, `--no-merges` |
-| `tests` | `--tests include\|exclude` |
-| `summary_only` | `--summary-only` |
-| `sort`, `limit`, `offset` | `--sort=FIELD` (`--sort=-lines` for descending), `--limit N`, `--offset N` |
+### Replaced spellings
 
-The operator filters (`lines>50`, `complexity=5..15`) have no flag; they stay a `metrics://` query.
-`limit` and `offset` page the `files` list only: `hotspots=true` ranks the whole filtered
-population, whatever the page.
+Each still answers the same, with a one-line replaced-by note, until the cut release:
 
-Exit codes: 0 when every file was counted, 1 with `--hotspots --fail-on findings` when
+| Replaced | Use |
+|----------|-----|
+| `?hotspots=true` (`--hotspots`) | `?view=hotspots` (`--view hotspots`). The legacy request keeps its shape: per-file rows plus the ranking, `top` capping the ranking (default 10, `0` = all) and `limit`/`offset` paging the files |
+| `?top=N` (`--top N`) | `?limit=N` (`--limit N`) in `view=hotspots` |
+| `?min_lines=N`, `?max_lines=N`, `?min_functions=N` | `?where=lines>=N`, `?where=lines<=N`, `?where=functions>=N` |
+| `?min_complexity=N`, `?max_complexity=N` | `?where=avg_complexity>=N`, `?where=avg_complexity<=N` (the file average, not `max_complexity`, the most complex function) |
+| `--no-churn` (`?no_churn`) | `--churn off` (`?churn=off`) |
+| `?no_merges` (`--no-merges`) | `?merges=off` (`--merges off`) |
+| `?summary_only=true` (`--summary-only`) | `?detail=summary` (`--detail summary`) |
+
+Giving a replaced spelling and its replacement with different values exits 2 (`view=hotspots&top=2&limit=3`,
+`merges=on&no_merges=true`, `detail=normal&summary_only=true`, `?hotspots=false --hotspots`); equal values
+are accepted once.
+
+Exit codes: 0 when every file was counted, 1 with `--view hotspots --fail-on findings` when
 `summary.has_findings` is true (see [Findings gate](#findings-gate)), 2 for a rejected request (an unknown
-`view`, a negative `top`, a missing path, `--fail-on findings` without `--hotspots`), 3 when files were lost
-or not analyzed (an `analysis_failed`, `parse_degraded`, `check_rules_failed` or unreadable-directory
-warning in `meta.warnings`). The retired `stats://` spelling keeps its older exit 0 on those until the cut.
+`view`, a negative `limit`, an invalid `since`, a missing path, `--fail-on findings` without the hotspot
+ranking), 3 when files were lost or not analyzed (an `analysis_failed`, `parse_degraded`,
+`check_rules_failed` or unreadable-directory warning in `meta.warnings`). The retired `stats://` spelling
+keeps its older exit 0 on those until the cut.
 
 ### Unified Query Syntax (Recommended)
 
@@ -326,7 +321,11 @@ See [Unified Query Syntax](#unified-query-syntax) section for full details.
 
 ## Unified Query Syntax
 
-The metrics adapter supports **unified query operators** for flexible filtering:
+The metrics adapter supports **unified query operators** for flexible filtering. They are `where`'s
+terms: `reveal metrics ./src --where 'lines>100' --where 'avg_complexity>10'` is
+`reveal 'metrics://./src?where=lines>100&where=avg_complexity>10'`, and a bare query key with an operator
+(`?lines>100`) is the same filter. A bare `key=value` is a filter only beside one with an operator; alone
+it is an unknown parameter, warned and ignored.
 
 ### Operators
 
@@ -348,7 +347,8 @@ The metrics adapter supports **unified query operators** for flexible filtering:
 | `lines` | `lines.total` | `lines>100` |
 | `code_lines` | `lines.code` | `code_lines>80` |
 | `comment_lines` | `lines.comments` | `comment_lines>20` |
-| `complexity` | `complexity.average` | `complexity>10` |
+| `avg_complexity` | `complexity.average` (the file average) | `avg_complexity>10` |
+| `complexity` | alias of `avg_complexity` | `complexity>10` |
 | `max_complexity` | `complexity.max` | `max_complexity>20` |
 | `functions` | `elements.functions` | `functions>=5` |
 | `classes` | `elements.classes` | `classes!=0` |
@@ -484,7 +484,7 @@ When results are limited, output includes (text output ends with the same messag
 ```
 
 The summary aggregates all successfully analyzed files kept by the filters, before
-`limit` or `offset`. `summary_only=true` omits rows without changing those aggregates.
+`limit` or `offset`. `detail=summary` omits rows without changing those aggregates.
 The directory result's `population` names `filtered_analyzed_files` as the summary basis
 and distinguishes `analyzed_files`, `filtered_files` and `displayed_files`. Existing
 failure and exclusion diagnostics qualify what the scan could analyze.
@@ -514,7 +514,7 @@ failure and exclusion diagnostics qualify what the scan could analyze.
     "avg_quality_score": 78.5,
     "excluded": 0,
     "excluded_by_extension": {},
-    "has_findings": false  // Only if ?hotspots=true: see Findings gate
+    "has_findings": false  // Only with the hotspot ranking (view=hotspots): see Findings gate
   },
   "files": [
     {
@@ -539,7 +539,7 @@ failure and exclusion diagnostics qualify what the scan could analyze.
       }
     }
   ],
-  "hotspots": [  // Only if ?hotspots=true
+  "hotspots": [  // Only with the hotspot ranking (view=hotspots, which then has no files list)
     {
       "file": "core.py",
       "hotspot_score": 6.4,
@@ -726,14 +726,14 @@ Starting hotspot score: **0**
 - If `commit_count > 20`:
   - Add: `(commit_count - 20) × 0.2`
   - Example: touched 47 times → `(47-20)×0.2 = 5.4 points`
-- A complex file that's also under constant churn ranks higher than an equally complex file nobody touches — see [Query Parameters Reference](#query-parameters-reference) for `churn`/`since`/`no_merges`.
+- A complex file that's also under constant churn ranks higher than an equally complex file nobody touches — see [Query Parameters Reference](#query-parameters-reference) for `churn`/`since`/`merges`.
 - Silently omitted (no `commit_count` in `details`, no churn term in the score) when the target isn't inside a git repo, `pygit2` isn't installed, or `churn=false` is passed — falls back to complexity-only scoring, never a hard error.
 
 **Total hotspot score**: Sum of all factors
 
 ### Hotspot Ranking
 
-Hotspots are sorted by **hotspot score** (descending) and limited to **top 10**. Each entry carries
+Hotspots are sorted by **hotspot score** (descending) and limited to **10** (`limit=N` for more, `0` for all). Each entry carries
 `provenance`, the path-only tag of its file under the scan root: `"test"`, `"vendor"`, `"minified"`, or
 `null` for first party (text output appends `[test]`, `[vendor]` or `[minified]`). It is the tag
 `reveal hotspots` put on its file entries; `view=provenance` answers for every file, adds banner and
@@ -742,18 +742,18 @@ so `tests/proj`, `./tests/proj`, `.` from inside it and the absolute path give t
 
 ### Findings gate
 
-`hotspots=true` adds `summary.has_findings`: true when an analysed file has a quality score below 70
+`view=hotspots` adds `summary.has_findings`: true when an analysed file has a quality score below 70
 or a function with complexity above 20 (`complexity.max > 20`; exactly 20 is not a finding). The
-thresholds are fixed. The verdict is taken over every analysed file, before the file filters
-(`--min-complexity` is an average-complexity filter), `tests=` and the `top`, `limit` and `offset`
-cuts, so a cut or a filter never hides a finding from the gate. `--fail-on findings` exits 1 on it;
-the default `--fail-on none` reports it with exit 0. The default and `view=provenance` answers have
-no findings verdict, so `--fail-on findings` there is refused with exit 2 naming `--hotspots` (it exited 0,
-so a CI run that forgot `--hotspots` passed; BACK-2528).
+thresholds are fixed. The verdict is taken over every analysed file, before `where` (an
+`avg_complexity` filter is an average), `tests=` and the `limit` and `offset` cuts, so a cut or a
+filter never hides a finding from the gate. `--fail-on findings` exits 1 on it; the default
+`--fail-on none` reports it with exit 0. The default and `view=provenance` answers have no findings
+verdict, so `--fail-on findings` there is refused with exit 2 naming `--view hotspots` (it exited 0,
+so a CI run that forgot the ranking passed; BACK-2528).
 
 ```bash
-reveal metrics ./src --hotspots --fail-on findings          # CI gate: exit 1 on a finding
-reveal 'metrics://./src?hotspots=true' --fail-on findings   # the same answer and exit
+reveal metrics ./src --view hotspots --fail-on findings          # CI gate: exit 1 on a finding
+reveal 'metrics://./src?view=hotspots' --fail-on findings   # the same answer and exit
 ```
 
 This is the gate `reveal hotspots --fail-on findings` had. The functions themselves are ranked by
@@ -763,7 +763,7 @@ This is the gate `reveal hotspots --fail-on findings` had. The functions themsel
 
 **Request**:
 ```bash
-reveal 'metrics://./src?hotspots=true'
+reveal 'metrics://./src?view=hotspots'
 ```
 
 **Result**:
@@ -781,7 +781,7 @@ Top Hotspots (10):
 ### Using Hotspots
 
 **Workflow**:
-1. **Identify** hotspots: `reveal metrics ./src --hotspots`
+1. **Identify** hotspots: `reveal metrics ./src --view hotspots`
 2. **Inspect** top file: `reveal metrics://./src/core.py` (detailed stats)
 3. **Analyze** structure: `reveal 'ast://./src/core.py?type=function'` (see functions)
 4. **Review** code: `reveal ./src/core.py` (read implementation)
@@ -799,7 +799,7 @@ Top Hotspots (10):
 
 1. **Get hotspot overview**:
    ```bash
-   reveal 'metrics://./src?hotspots=true'
+   reveal 'metrics://./src?view=hotspots'
    ```
 
 2. **Filter high complexity files**:
@@ -997,7 +997,7 @@ Top Hotspots (10):
 
 1. **Get baseline hotspots**:
    ```bash
-   reveal 'metrics://./src?hotspots=true' --format=json > hotspots-baseline.json
+   reveal 'metrics://./src?view=hotspots' --format=json > hotspots-baseline.json
    ```
 
 2. **Target top 5 files**:
@@ -1032,7 +1032,7 @@ Top Hotspots (10):
 5. **Repeat for remaining hotspots**:
    ```bash
    # Track progress
-   reveal 'metrics://./src?hotspots=true'
+   reveal 'metrics://./src?view=hotspots'
    ```
 
 **Result**: Systematic codebase quality improvement campaign.
@@ -1056,11 +1056,11 @@ reveal metrics://./src --format=json | \
   jq -r '.files[] | select(.quality.score < 60) | .file'
 
 # Count hotspots
-reveal 'metrics://./src?hotspots=true' --format=json | \
+reveal 'metrics://./src?view=hotspots' --format=json | \
   jq '.hotspots | length'
 
 # Get worst file
-reveal 'metrics://./src?hotspots=true' --format=json | \
+reveal 'metrics://./src?view=hotspots' --format=json | \
   jq -r '.hotspots[0].file'
 ```
 
@@ -1325,7 +1325,7 @@ reveal 'metrics://./src?limit=10' --format=json
 reveal metrics://./src
 
 # ✅ Good: Code files only
-reveal 'metrics://./src?code_only=true'
+reveal 'metrics://./src?code-only=true'
 ```
 
 **4. Use specific paths**:
@@ -1379,7 +1379,7 @@ reveal metrics://./src/core
 - Combine with manual code review
 - Track trends, not just absolute values
 - Focus on relative improvement over time
-- Exclude non-source files with `code_only=true`
+- Exclude non-source files with `code-only=true`
 
 ---
 
@@ -1485,7 +1485,7 @@ No CLI flag needed - config is detected automatically.
 **Not supported**:
 - Assembly, shell scripts, SQL, HTML/CSS (skipped during analysis)
 
-Every file with a registered analyzer is counted, including Markdown, YAML/TOML and notebooks; they add lines and a quality score but no functions. `code_only=true` drops data/config files (YAML, JSON, TOML), not Markdown. `.ipynb` is counted as raw text with 0 functions.
+Every file with a registered analyzer is counted, including Markdown, YAML/TOML and notebooks; they add lines and a quality score but no functions. `code-only=true` drops data/config files (YAML, JSON, TOML), not Markdown. `.ipynb` is counted as raw text with 0 functions.
 
 ### 2. Complexity Estimation
 
@@ -1498,7 +1498,7 @@ Every file with a registered analyzer is counted, including Markdown, YAML/TOML 
 
 The metrics adapter **does not distinguish** generated code from hand-written code:
 - May inflate metrics if analyzing generated files
-- Use `code_only=true` to reduce noise
+- Use `code-only=true` to reduce noise
 - Manually exclude directories like `node_modules/`, `vendor/`, `dist/`
 
 ### 4. Large Codebases
@@ -1580,7 +1580,7 @@ reveal metrics://./
 reveal metrics://./src/core
 
 # ✅ Exclude non-code files
-reveal 'metrics://./src?code_only=true'
+reveal 'metrics://./src?code-only=true'
 
 # ✅ Use filters to reduce results
 reveal 'metrics://./src?lines>100&limit=20'
@@ -1610,7 +1610,7 @@ reveal 'metrics://./src?lines>100'
 
 **Symptom**:
 ```bash
-reveal 'metrics://./src?hotspots=true'
+reveal 'metrics://./src?view=hotspots'
 # No hotspots section in output
 ```
 
@@ -1716,7 +1716,7 @@ reveal metrics://./src/plugins
 reveal metrics://./src/api
 
 # 3. Get hotspots in worst subsystem
-reveal 'metrics://./src/core?hotspots=true'
+reveal 'metrics://./src/core?view=hotspots'
 
 # 4. Analyze specific hotspot
 reveal metrics://./src/core/worst-file.py
@@ -1732,7 +1732,7 @@ reveal ./src/core/worst-file.py
 #!/bin/bash
 # generate-report.sh
 
-STATS=$(reveal 'metrics://./src?hotspots=true' --format=json)
+STATS=$(reveal 'metrics://./src?view=hotspots' --format=json)
 
 cat > report.html <<EOF
 <!DOCTYPE html>
@@ -1815,7 +1815,7 @@ done
 `?view=provenance` tags every analyzable file under a directory with its provenance
 (`first_party`, `test`, `vendor`, `minified`): one row per file, over the **full, unranked**
 population. It is what `classify://` answered (`classify://` is a retired spelling of it). It
-is the full-population counterpart to the `provenance` field of `?hotspots=true` entries (and the retired `hotspots`) and `pack`, which only tag the ranked or capped subset each of them selects.
+is the full-population counterpart to the `provenance` field of `view=hotspots` entries (and the retired `hotspots`) and `pack`, which only tag the ranked or capped subset each of them selects.
 
 ```bash
 reveal 'metrics://src?view=provenance'
@@ -1826,7 +1826,7 @@ No file is analyzed and no rule runs: classification reads paths, plus at most t
 lines of a file its path did not classify. It walks the same files as the default view
 (respecting `REVEAL_IGNORE`, `config.yaml`'s `ignore:`, the well-known skip directories, and
 what git ignores; `?respect_gitignore=false` or `--no-gitignore` includes gitignored files).
-The other parameters of the default view (`hotspots`, filters, `sort`) do not apply here, and
+The other parameters of the default view (`where`, `sort`, `limit`) do not apply here, and
 the CLI says so. A file path lists its whole parent directory, not just that file.
 
 `files` is one entry per analyzable file: `{"file": <relative path>, "provenance": <tag>}`.
@@ -1847,7 +1847,7 @@ directory such as `config/locales/`). It is not general generated-code detection
 
 | Retired | Use instead |
 |---------|-------------|
-| `reveal 'stats://src?hotspots=true'` | `reveal 'metrics://src?hotspots=true'` |
+| `reveal 'stats://src?view=hotspots'` | `reveal 'metrics://src?view=hotspots'` |
 | `reveal 'classify://src'` | `reveal 'metrics://src?view=provenance'` |
 
 Both retired spellings still answer exactly as before, with one
@@ -1908,7 +1908,7 @@ A file with quality 65 but 5 long functions may rank higher as a hotspot than a 
 
 **A**: Yes: `--exclude PATTERN` (repeatable) or `?exclude=a,b` (comma-separated globs; the CLI percent-escapes a literal `,`, `&`, `=` or `%` inside a pattern). Other options:
 1. **Target specific paths**: `reveal metrics://./src/core` (skip other dirs)
-2. **Use code_only**: `reveal 'metrics://./src?code_only=true'` (skip data/config)
+2. **Use code-only**: `reveal 'metrics://./src?code-only=true'` (skip data/config)
 3. **Filter in post-processing**: `jq '.files[] | select(.file | contains("test") | not)'`
 
 For permanent exclusions, consider using reveal's config system (check reveal docs).
@@ -1952,7 +1952,7 @@ jq -s '.[0].summary as $a | .[1].summary as $b | {
 
 **A**: The metrics adapter parses **every supported file** recursively. For large repos:
 1. **Use specific paths**: `metrics://./src/core` instead of `metrics://./`
-2. **Use code_only**: Skip data/config files
+2. **Use code-only**: Skip data/config files
 3. **Use filters**: `lines>50` to skip tiny files
 4. **Run in background**: Long analyses can run async
 
@@ -1962,7 +1962,7 @@ jq -s '.[0].summary as $a | .[1].summary as $b | {
 
 **A**: Yes! The metrics adapter is designed for CI/CD:
 - **JSON output**: `--format=json` for machine parsing
-- **Exit codes**: 0 when every file was counted, 1 with `--hotspots --fail-on findings` when an analysed file has quality below 70 or a function with complexity above 20 ([Findings gate](#findings-gate)), 2 for a rejected request (unknown view, bad `top`, missing path, `--fail-on findings` without `--hotspots`), 3 when files were lost or not analyzed. Without `--fail-on findings` a low score never fails the run.
+- **Exit codes**: 0 when every file was counted, 1 with `--view hotspots --fail-on findings` when an analysed file has quality below 70 or a function with complexity above 20 ([Findings gate](#findings-gate)), 2 for a rejected request (unknown view, bad `limit`, invalid `since`, missing path, `--fail-on findings` without the hotspot ranking), 3 when files were lost or not analyzed. Without `--fail-on findings` a low score never fails the run.
 - **Deterministic**: Same code → same stats
 - **Fast**: 1000 files analyzed in ~5 seconds
 

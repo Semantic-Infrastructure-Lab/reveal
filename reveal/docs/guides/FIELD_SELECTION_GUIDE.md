@@ -479,7 +479,7 @@ reveal metrics://src --fields=file,quality.score,complexity.max --format=json
 reveal 'metrics://src' --fields=file,quality.score --max-items=100 --format=json
 
 # Level 2: Identify hotspots
-reveal 'metrics://src?hotspots=true' --fields=summary,hotspots --format=json
+reveal 'metrics://src?view=hotspots' --fields=summary,hotspots --format=json
 
 # Level 3: Deep dive on specific file
 reveal 'ast://src/problematic_file.py' --format=json
@@ -575,7 +575,7 @@ Common fields (result items):
 #### Stats Adapter
 
 Top-level (directory): `summary` (`summary.total_files`, `summary.avg_quality_score`, ...),
-`files` (list), and `hotspots` with `?hotspots=true`.
+`files` (list), or `hotspots` with `?view=hotspots`.
 
 Items of `files`:
 - `file`

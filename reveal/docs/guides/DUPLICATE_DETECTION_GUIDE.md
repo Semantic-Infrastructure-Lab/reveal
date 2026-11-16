@@ -251,7 +251,7 @@ reveal 'ast://./src?complexity>10&lines>50'
 **3. Find hotspot files:**
 ```bash
 # Identify files with quality issues
-reveal 'metrics://./src' --hotspots
+reveal 'metrics://./src?view=hotspots'
 
 # Output (after the "Codebase Statistics" block):
 Top Hotspots (10):
@@ -288,13 +288,13 @@ Use metrics:// to find files with similar characteristics (may indicate copy-pas
 
 ```bash
 # Find files with 200-300 lines
-reveal 'metrics://./src?min_lines=200&max_lines=300'
+reveal 'metrics://./src?lines>=200&lines<=300'
 
 # Find files with similar complexity
-reveal 'metrics://./src?min_complexity=10&max_complexity=15'
+reveal 'metrics://./src?avg_complexity>=10&avg_complexity<=15'
 
 # Find files with many functions (>20)
-reveal 'metrics://./src?min_functions=20'
+reveal 'metrics://./src?functions>=20'
 ```
 
 ---
@@ -373,7 +373,7 @@ reveal check src/ --select D001
 
 5. **Combine with stats for context**
 ```bash
-reveal 'metrics://./src' --hotspots
+reveal 'metrics://./src?view=hotspots'
 ```
 
 ### ❌ DON'T

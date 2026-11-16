@@ -92,7 +92,7 @@ reveal imports . --sort=-fan-in
 reveal imports . --components
 reveal imports . --entrypoints
 reveal imports . --circular
-reveal metrics . --hotspots
+reveal metrics . --view hotspots
 reveal 'ast://.?type=function&sort=-complexity&limit=20'
 reveal check .
 reveal 'git://.?type=history&limit=10'

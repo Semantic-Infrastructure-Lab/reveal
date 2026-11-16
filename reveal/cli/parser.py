@@ -405,7 +405,7 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
                         help='Flat file list with timestamps sorted by mtime — replaces find|sort. '
                              'Combine with --ext to filter by type, --sort name/size/mtime, --desc.')
     parser.add_argument('--hotspots', action='store_true',
-                        help='Identify quality hotspots (requires metrics:// adapter, shows worst 10 files by quality)')
+                        help='Replaced by ?view=hotspots on metrics:// (reveal metrics PATH --view hotspots); still adds the hotspot ranking to metrics://, with a note')
     parser.add_argument('--code-only', action='store_true',
                         help='Exclude data/config files from analysis (requires metrics:// adapter, filters .json>10KB, .yaml, .xml, .csv, .toml)')
 

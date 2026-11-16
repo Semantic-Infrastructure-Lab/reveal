@@ -19,7 +19,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `date`, `since`, `until`, `ref`, `sort`, `limit`, `offset` | `git://file.py?type=history` |
 | **json://** | `schema`, `flatten`, `gron`, `type`, `keys`, `length`, field filters, `sort`, `limit`, `offset` | `json://data.json?type=object` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
-| **metrics://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `exclude`, `sort`, `limit`, `offset` | `metrics://.?hotspots` |
+| **metrics://** | `view` (`hotspots`, `provenance`), `where` (field filters), `code-only`, `churn`, `merges`, `since`, `tests`, `detail`, `exclude`, `sort`, `limit`, `offset` (retired, with a note: `hotspots`, `top`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `no_merges`, `summary_only`) | `metrics://.?view=hotspots` |
 | **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `show`, `sort`, `limit`, `offset`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` (retired, with a note: `calls`, `callee_of`, `show=calls`) | `ast://src?complexity>10` |
 | **calls://** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `uncalled`, `target`, `root`) | `calls://src?callers=fn` |
 | **claude://** | `view`, `detail`, `errors`, `tools`, `match`, `where`, `sort`, `offset`, `limit`, `tokens` | `claude://session/NAME?detail=summary` |
@@ -277,21 +277,23 @@ reveal 'markdown://primitives/?type=framework&fields=book,cohort'  # Append book
 
 **Query Parameters**:
 
-- **`hotspots`** (flag) - Identify quality hotspots (worst 10 files)
+- **`view=hotspots`** - The ranked hotspot files are the rows (the worst 10; `limit=N` for more, `0` for all)
   ```bash
-  reveal 'metrics://.?hotspots'
+  reveal 'metrics://.?view=hotspots'
   ```
-  Shows files with lowest quality scores (most in need of refactoring).
+  Shows files with lowest quality scores (most in need of refactoring). Replaces `hotspots=true`.
 
-- **`code_only`** (flag) - Exclude data/config files from analysis
+- **`where`** - Field filters, repeatable (`where=lines>50`, `where=avg_complexity>=5`; the bare key `?lines>50` is the same)
+
+- **`code-only`** (flag) - Exclude data/config files from analysis (`code_only` is its alias)
   ```bash
-  reveal 'metrics://.?code_only'
+  reveal 'metrics://.?code-only=true'
   ```
   Filters out `.json` > 10KB, `.yaml`, `.xml`, `.csv`, `.toml` files.
 
 **Combining Parameters**:
 ```bash
-reveal 'metrics://.?hotspots&code_only'
+reveal 'metrics://.?view=hotspots&code-only=true'
 ```
 
 ---

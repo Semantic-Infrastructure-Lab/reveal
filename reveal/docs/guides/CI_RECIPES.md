@@ -141,7 +141,7 @@ jobs:
       - run: pip install reveal-cli
 
       - name: Top 10 hotspot files
-        run: reveal metrics src/ --hotspots --top 10
+        run: reveal metrics src/ --view hotspots --limit 10
         # Exits 0 unless incomplete (3); --fail-on findings makes it a gate
 
       - name: Top 10 complex functions
@@ -269,7 +269,7 @@ check:
 
 # Complexity hotspots (informational; add --fail-on findings to gate)
 hotspots:
-	reveal metrics src/ --hotspots --top 20
+	reveal metrics src/ --view hotspots --limit 20
 
 # Health dashboard (code, then certificates and DNS)
 health:
@@ -295,8 +295,8 @@ pack:
 
 `ssl:// --check` uses 0 pass / 1 warning / 2 failure, so an expired cert exits 2 there, while `reveal health`
 reports the same cert as a failed check (a finding) and exits 1; `--fail-on none` keeps it advisory. A critical rule violation under `check` is still 1.
-`check` and `health` fail on findings by default. `metrics --hotspots` and `pack` are informational:
-they exit 0 unless the request is rejected (2) or the run is incomplete (3), and `metrics --hotspots`
+`check` and `health` fail on findings by default. `metrics --view hotspots` and `pack` are informational:
+they exit 0 unless the request is rejected (2) or the run is incomplete (3), and `metrics --view hotspots`
 exits 1 only with `--fail-on findings` (a file below quality 70 or a function above complexity 20; the
 retired `hotspots` gates the same way). Treat 3 as a failure too: it means the finding count
 may be wrong. Each command's `--help` ends with its own exit-code block.
@@ -307,7 +307,7 @@ may be wrong. Each command's `--help` ends with its own exit-code block.
 
 **Speed up CI**: `reveal check` and `reveal check --changed` are fast (typically < 5 seconds for medium codebases). No indexing required.
 
-**Baseline first**: Run `reveal metrics src/ --hotspots` on your main branch before adding the complexity gate — this lets you set a realistic threshold rather than failing immediately.
+**Baseline first**: Run `reveal metrics src/ --view hotspots` on your main branch before adding the complexity gate — this lets you set a realistic threshold rather than failing immediately.
 
 **Advisory vs blocking**: add `--fail-on none` for first-time adoption (findings are reported but the run exits 0; an incomplete scan still exits 3), then drop it once the team is used to the output.
 

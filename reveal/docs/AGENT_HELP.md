@@ -48,7 +48,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Orient in an unfamiliar repo | `reveal overview://src/` |
 | Outline a file | `reveal src/app.py` |
 | Read one function or class | `reveal src/app.py load_config` (also `Class.method`, `:120-160`) |
-| Riskiest code | `reveal metrics src/ --hotspots` (files) and `reveal 'ast://src/?complexity>=10&sort=-complexity&limit=10'` (functions) |
+| Riskiest code | `reveal metrics src/ --view hotspots` (files) and `reveal 'ast://src/?complexity>=10&sort=-complexity&limit=10'` (functions) |
 | Query functions by complexity/size/type | `reveal 'ast://src/?type=function&complexity>10&sort=-complexity&limit=10'` |
 | Who calls a function | `reveal 'calls://src/?callers=my_fn'` |
 | What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
@@ -69,7 +69,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 - **Limit results:** `calls --sort=-callers` and `imports --sort=-fan-in` accept `--limit N` (legacy `--top N` and `--rank` note their replacements); `overview --limit N` caps each map section. Caps depend on the selected view: Calls caller/callee walks and the default Imports summary do not use `limit`. Other nouns and URI forms list their caps in `help://schemas/<adapter>`; a note names an unused cap. `--head N` slices list output.
 - **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
 - **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~15,000 tokens); rules are `reveal --rules`.
-- **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `check --changed RANGE` uses `check`'s codes, with 2 for an unusable range; `imports` defaults to no findings gate, with `--fail-on findings` for exit 1 on a `--circular`, `--unused` or `--violations` row, usage 2 and incomplete/output failure 3; `metrics --hotspots` (and the retired `hotspots`) defaults to no findings gate; `--fail-on findings` exits 1 for an analysed file with quality below 70 or a function with complexity above 20, usage exits 2, and incomplete/output failure exits 3.
+- **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `check --changed RANGE` uses `check`'s codes, with 2 for an unusable range; `imports` defaults to no findings gate, with `--fail-on findings` for exit 1 on a `--circular`, `--unused` or `--violations` row, usage 2 and incomplete/output failure 3; `metrics --view hotspots` (and the retired `hotspots`) defaults to no findings gate; `--fail-on findings` exits 1 for an analysed file with quality below 70 or a function with complexity above 20, usage exits 2, and incomplete/output failure exits 3.
 
 ---
 
@@ -249,7 +249,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal architecture [path] [--against REF]` | Retired: use reveal overview [path] [--against REF] | `reveal architecture --help` |
 | `reveal imports [path]` | Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations | `reveal imports --help` |
 | `reveal deps [path]` | Retired: use reveal imports <path> --external, --circular or --unused (one graph build); dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
-| `reveal hotspots [path]` | Retired: use reveal metrics <path> --hotspots (files, --fail-on findings) and the ast:// complexity sort (functions); high-complexity files and functions | `reveal hotspots --help` |
+| `reveal hotspots [path]` | Retired: use reveal metrics <path> --view hotspots (files, --fail-on findings) and the ast:// complexity sort (functions); high-complexity files and functions | `reveal hotspots --help` |
 | `reveal metrics [path]` | Per-file lines, complexity and quality; --view hotspots ranks files; --view provenance tags every file | `reveal metrics --help` |
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal contracts --help` |
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
@@ -1151,7 +1151,7 @@ reveal check src/changed_file.py
 reveal src/changed_file.py changed_function
 ```
 
-**`reveal check --changed RANGE` output:** the same report as `reveal check <dir>`, over the files the range changed under PATH (default `.`). `scope.changed` in JSON, and a `Scope:` line in text, name the range and how many files git listed, so a clean result cannot be read as a whole-tree pass. Hotspots and complexity: `reveal metrics <path> --hotspots` and `reveal 'ast://<path>?complexity>10&sort=-complexity'`.
+**`reveal check --changed RANGE` output:** the same report as `reveal check <dir>`, over the files the range changed under PATH (default `.`). `scope.changed` in JSON, and a `Scope:` line in text, name the range and how many files git listed, so a clean result cannot be read as a whole-tree pass. Hotspots and complexity: `reveal metrics <path> --view hotspots` and `reveal 'ast://<path>?complexity>10&sort=-complexity'`.
 
 **`reveal check --changed` is a CI gate.** Exit codes are `check`'s: `0` no findings, `1` findings, `2` an unusable range (unknown revision such as `main..nosuchbranch`, not inside a git repository), `3` a file could not be checked, so an empty result is not proof of a clean change. `--fail-on none` reports findings without failing.
 ```bash
@@ -1471,14 +1471,14 @@ Output: one line per violation with file, line, and direction. Clean output = �
 
 **Pattern:**
 ```bash
-reveal metrics . --hotspots                         # Worst 10 files by hotspot score
-reveal metrics ./src --hotspots --top 20            # Top 20 files
-reveal metrics . --hotspots --fail-on findings      # CI gate: exit 1 on quality <70 or complexity >20
+reveal metrics . --view hotspots                         # Worst 10 files by hotspot score
+reveal metrics ./src --view hotspots --limit 20            # Top 20 files
+reveal metrics . --view hotspots --fail-on findings      # CI gate: exit 1 on quality <70 or complexity >20
 reveal 'ast://.?complexity>=10&sort=-complexity&limit=10' --format json   # Most complex functions
 reveal 'ast://.?complexity>=15&sort=-complexity&limit=10' --format json   # Raise the threshold
 ```
 
-**Output:** `metrics --hotspots` ranks files by hotspot score (low quality, high average complexity,
+**Output:** `metrics --view hotspots` ranks files by hotspot score (low quality, high average complexity,
 long or deeply nested functions, churn), each with its quality score, issues and a path-only
 `provenance` tag (`test`/`vendor`/`minified`, `null` = first party). `summary.has_findings` is true when
 any analysed file has quality below 70 or a function with complexity above 20, taken over every analysed
@@ -1487,7 +1487,7 @@ The `ast://` query ranks functions by cyclomatic complexity across the tree (tex
 JSON keeps the global order).
 
 `reveal hotspots` (and `hotspots://`) is retired: it answers as before until the cut and prints a note
-naming these two commands; `--files-only` is `metrics --hotspots`, `--functions-only` the `ast://` query
+naming these two commands; `--files-only` is `metrics --view hotspots`, `--functions-only` the `ast://` query
 (`--min-complexity N` is `complexity>=N`, `--top N` is `limit=N`). Its `has_test_hint` field is retired with
 no replacement: it was an unmeasured test-name heuristic, not coverage; use the language's coverage tool.
 See the [metrics guide](adapters/METRICS_ADAPTER_GUIDE.md#findings-gate).
@@ -2849,7 +2849,7 @@ reveal file.py --format=typed
 # Copy to clipboard (also prints normally) — works on subcommands too
 reveal file.py --copy
 reveal file.py process_request --copy
-reveal metrics . --hotspots --copy
+reveal metrics . --view hotspots --copy
 
 # Suppress breadcrumb hints (clean output for scripts / agents)
 reveal file.py -q                    # -q / --no-breadcrumbs
@@ -3329,21 +3329,22 @@ reveal docs/setup.md --links --link-type internal
 
 ## Troubleshooting
 
-### Issue: "Nothing happens when I use --hotspots"
+### Issue: "--hotspots on a path exits 2"
 
-**Problem:** `--hotspots` is a `metrics` flag; on another command or a plain file path it does nothing
-useful.
+**Problem:** the hotspot ranking is the `metrics` noun's view (`--view hotspots`), not a path option:
+`reveal src/ --hotspots` exits 2 and names the command. The legacy `reveal metrics . --hotspots` still
+answers (files plus the ranking), with a note naming `--view hotspots`.
 
 **Correct — on metrics (the subcommand or the URI):**
 ```bash
-reveal metrics . --hotspots                  # Hotspots in current directory
-reveal metrics ./src --hotspots --top 20     # Show top 20 instead of default 10
-reveal 'metrics://.?hotspots=true'           # The same answer as a URI
-reveal metrics . --hotspots --format json    # JSON output for CI/scripting
+reveal metrics . --view hotspots                  # Hotspots in current directory
+reveal metrics ./src --view hotspots --limit 20     # Show top 20 instead of default 10
+reveal 'metrics://.?view=hotspots'           # The same answer as a URI
+reveal metrics . --view hotspots --format json    # JSON output for CI/scripting
 ```
 
 **`reveal metrics --help`** — full options. The retired `reveal hotspots` still answers and prints a note
-naming `metrics --hotspots` (files) and the `ast://` complexity sort (functions).
+naming `metrics --view hotspots` (files) and the `ast://` complexity sort (functions).
 
 ---
 
@@ -3565,7 +3566,7 @@ reveal deep_dir/
 | `reveal health` | all targets pass | findings (warnings or failing checks, severe ones included) | usage error (no target) | a check failed, could not reach its target (a missing local path included) or was incomplete (a skipped oversized directory, a degraded parse) |
 | `ssl://… --check`, `domain://… --check` | pass | warning (e.g. cert expiring <30 days) | critical/failure (expired, <7 days, DNS/HTTP failure) | — |
 | nginx `--validate-nginx-acme` / `--check-acl` / `--cpanel-certs`, `cpanel://USER/full-audit`, `nginx:// --audit` | pass | — | failure / gaps found | — |
-| Direct `deps` / `hotspots` / `imports` / `metrics` (subcommand or URI) | complete without an enabled gate matching | explicit `--fail-on findings` matches (imports: the `--circular`, `--unused` or `--violations` answer has a row; metrics: the `--hotspots` answer has `summary.has_findings`) | invalid request, including `--fail-on findings` on a view with no findings verdict (imports without `--circular`/`--unused`/`--violations`, metrics without `--hotspots` or with `--view provenance`) | incomplete analysis/output failure |
+| Direct `deps` / `hotspots` / `imports` / `metrics` (subcommand or URI) | complete without an enabled gate matching | explicit `--fail-on findings` matches (imports: the `--circular`, `--unused` or `--violations` answer has a row; metrics: the `--view hotspots` answer has `summary.has_findings`) | invalid request, including `--fail-on findings` on a view with no findings verdict (imports without `--circular`/`--unused`/`--violations`, metrics without `--view hotspots` or with `--view provenance`) | incomplete analysis/output failure |
 | Direct `surface` / `contracts` / `overview` / `pack` / `testability` / `trace`, including retired aliases (subcommand or URI) | completed requested analysis | — | invalid resource/parameter or unsupported gate | required analysis/output incomplete or failed |
 | Other URI commands given a path that doesn't exist (`markdown://`, `json://`, `git://` outside every repository, ...) | — | — | `Error: … Path not found` (a directory that exists outside a repository is `git://`'s not-applicable answer, exit `0`); inside a repository, `git://` on a file not in the tree at the ref (`File not found at <ref>`) or an unknown ref (`Cannot resolve ref`) | — |
 | The retired `stats://` and `classify://`, and `diff://`, given a path that doesn't exist | — | `Error: … not found` | — | — |
@@ -3744,7 +3745,7 @@ CMD ["python", "app.py"]
 - Complexity > 10 suggests function is too complex
 - Consider breaking into smaller functions
 - Default threshold 10 (override in `.reveal.yaml`: `rules: {C901: {threshold: 15}}`); `reveal --explain C901` describes the rule but does not print the threshold
-- One shared score: C901, `ast://?complexity` and `metrics://` (its `--hotspots` ranking included) report the same number for every language — `if`/loops/`catch`, `&&`/`||`/`??`/`?:`, and match/switch arms count (a catch-all `default`/`else`/`_` arm does not); Rust `?` and Zig `try` count as early exits
+- One shared score: C901, `ast://?complexity` and `metrics://` (its `--view hotspots` ranking included) report the same number for every language — `if`/loops/`catch`, `&&`/`||`/`??`/`?:`, and match/switch arms count (a catch-all `default`/`else`/`_` arm does not); Rust `?` and Zig `try` count as early exits
 
 **C902: Function too long**
 - Function exceeds maximum line count
@@ -4347,7 +4348,7 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 | Extract 2nd function | `reveal file.py function:2` |
 | Quality check | `reveal check file.py` |
 | Security check only | `reveal check file.py --select S` |
-| Find hotspots | `reveal metrics . --hotspots` |
+| Find hotspots | `reveal metrics . --view hotspots` |
 | Find by name | `reveal 'ast://./src?name=*pattern*'` |
 | Find complex code | `reveal 'ast://./src?complexity>10'` |
 | Find long functions | `reveal 'ast://./src?lines>50'` |

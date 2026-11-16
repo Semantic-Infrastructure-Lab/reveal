@@ -9,7 +9,7 @@
  "reveal/docs/adapters/DOMAIN_ADAPTER_GUIDE.md": 1,
  "reveal/docs/adapters/HOTSPOTS_ADAPTER_GUIDE.md": 4,
  "reveal/docs/adapters/IMPORTS_ADAPTER_GUIDE.md": 4,
- "reveal/docs/adapters/METRICS_ADAPTER_GUIDE.md": 7,
+ "reveal/docs/adapters/METRICS_ADAPTER_GUIDE.md": 5,
  "reveal/docs/adapters/SQLITE_ADAPTER_GUIDE.md": 1,
  "reveal/docs/adapters/TESTABILITY_ADAPTER_GUIDE.md": 3,
  "reveal/docs/adapters/TRACE_ADAPTER_GUIDE.md": 2,
@@ -18,7 +18,7 @@
  "reveal/docs/guides/CONFIGURATION_GUIDE.md": 1,
  "reveal/docs/guides/FIELD_SELECTION_GUIDE.md": 1,
  "reveal/docs/guides/INSTALL_GUIDE.md": 1,
- "reveal/docs/guides/QUERY_PARAMETER_REFERENCE.md": 7,
+ "reveal/docs/guides/QUERY_PARAMETER_REFERENCE.md": 5,
  "reveal/docs/guides/SUBCOMMANDS_GUIDE.md": 6,
  "reveal/docs/guides/UX_GUIDE.md": 1
 }

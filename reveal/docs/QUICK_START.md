@@ -207,8 +207,8 @@ reveal pack src/ --focus authentication --budget 4000
 reveal pack src/ --architecture   # + entry points and core abstractions brief
 
 # Complexity hotspots: worst files (exit 1 on a finding with --fail-on findings), then the most complex functions
-reveal metrics src/ --hotspots
-reveal metrics src/ --hotspots --fail-on findings
+reveal metrics src/ --view hotspots
+reveal metrics src/ --view hotspots --fail-on findings
 reveal 'ast://src/?complexity>=10&sort=-complexity&limit=10' --format json
 
 # Project map and architectural comparison

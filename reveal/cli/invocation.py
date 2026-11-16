@@ -109,7 +109,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
     'hotspots':     _declared('hotspots',
                      'reveal hotspots [path]',
-                     'Retired: use reveal metrics <path> --hotspots (files, --fail-on findings) and the ast:// '
+                     'Retired: use reveal metrics <path> --view hotspots (files, --fail-on findings) and the ast:// '
                      'complexity sort (functions); high-complexity files and functions'),
     'imports':      _declared('imports',
                      'reveal imports [path]',
@@ -359,18 +359,18 @@ RETIREMENTS: Dict[str, Retirement] = {
     # cut, which waits on the due-diligence script moving off hotspots:// (BACK-2153). has_test_hint is retired
     # with no replacement field (the D8 pattern of ?uncalled).
     'subcommand:hotspots': Retirement('reveal hotspots',
-                                      "reveal metrics <path> --hotspots [--fail-on findings] (files) and "
+                                      "reveal metrics <path> --view hotspots [--fail-on findings] (files) and "
                                       "reveal 'ast://<path>?complexity>=10&sort=-complexity&limit=10' --format json "
                                       '(functions); has_test_hint, an unmeasured test-name heuristic, has no '
                                       'replacement field (use a coverage tool)'),
-    'scheme:hotspots': Retirement('hotspots://', 'metrics://<path>?hotspots=true (files) and '
+    'scheme:hotspots': Retirement('hotspots://', 'metrics://<path>?view=hotspots (files) and '
                                   'ast://<path>?complexity>=10&sort=-complexity&limit=10 (functions); has_test_hint, '
                                   'an unmeasured test-name heuristic, has no replacement field (use a coverage tool)'),
     'param:hotspots.functions_only': Retirement('hotspots ?functions_only (--functions-only)',
                                                 'ast://<path>?complexity>=10&sort=-complexity&limit=10, the same '
                                                 'function ranking (min_complexity=N is complexity>=N, top=N is limit=N)'),
     'param:hotspots.files_only': Retirement('hotspots ?files_only (--files-only)',
-                                            'metrics://<path>?hotspots=true (reveal metrics <path> --hotspots), the '
+                                            'metrics://<path>?view=hotspots (reveal metrics <path> --view hotspots), the '
                                             'same file ranking'),
     # testability became patches ?view=pressure (D2, Q-P4-2, BACK-2160): the old scheme answers from the patches owner,
     # unchanged, until the cut.
