@@ -38,6 +38,8 @@ class FlagSpec:
                                           # (sort=/limit=; applied by a few, warned about by the rest)
     unbounded: int | None = None          # value a declared fragment gets for a 0 ("no cap"): an
                                           # adapter's own `top=0` may mean "nothing" (hotspots)
+    reject_conflict: bool = False         # a URI value that differs from the flag's is an invalid
+                                          # request (exit 2), not "the URI wins" (BACK-2621)
 
 
 # The value functions `peek`: reading a flag here is not using it. inject_query_flags marks a
@@ -118,6 +120,10 @@ def _note_uri_wins(args: Any, spec: Any, scheme: str, resource: str, key: str, f
     if uri_value == fragment.partition('=')[2]:
         return
     mark(args, spec.dest)
+    if spec.reject_conflict:
+        from ...errors import RequestValidationError
+        raise RequestValidationError(f"{spec.option} conflicts with {key}={uri_value} in the URI: "
+                                     f"{key} is set twice with different values; give it once")
     print(f"Note: {spec.option} ignored on {scheme}:// -- the URI already sets {key}={uri_value}.",
           file=sys.stderr)
 

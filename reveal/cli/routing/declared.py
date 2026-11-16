@@ -230,7 +230,11 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     query_resource = '?' + source if transport == 'uri' else ''
     if transport == 'uri':
         from .flag_specs import inject_query_flags
-        query_resource = inject_query_flags(query_resource, name, args)
+        try:
+            query_resource = inject_query_flags(query_resource, name, args)
+        except ValueError as exc:  # a global flag that conflicts with the URI's own value (FlagSpec.reject_conflict)
+            consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
+            return
     # Global query policy keeps its existing codec; never split the decoded path.
     query_resource, respect = split_respect_gitignore(query_resource)
     if transport == 'uri':

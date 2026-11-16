@@ -82,3 +82,23 @@ def test_api_keeps_no_note_for_a_parameter_not_declared_retired(legacy_row, monk
     from reveal.cli import invocation
     monkeypatch.setitem(invocation.RETIREMENTS, 'param:stub.kept', invocation.Retirement('stub ?kept', '?limit'))
     assert _notes(_bound_query_result(_LegacyNoun(), 'stub', 'stub://p?kept=1', {'kept': 2})) == []
+
+
+@pytest.mark.parametrize('reject', [False, True])
+def test_flag_spec_reject_conflict(monkeypatch, capsys, reject):
+    """A global switch whose URI value differs: "the URI wins" with a note by default (BACK-1685), an
+    invalid request when the FlagSpec declares reject_conflict. Equal values are accepted once."""
+    from argparse import Namespace
+    from reveal.cli.routing import flag_specs
+    from reveal.errors import RequestValidationError
+    spec = flag_specs.FlagSpec('hotspots', '--hotspots', flag_specs._switch('hotspots'), reject_conflict=reject)
+    monkeypatch.setattr(flag_specs, 'FLAG_SPECS', (spec,))
+    args = Namespace(hotspots=True)
+    assert flag_specs.inject_query_flags('?hotspots=true', 'metrics', args) == '?hotspots=true'
+    if reject:
+        with pytest.raises(RequestValidationError, match='--hotspots conflicts with hotspots=false'):
+            flag_specs.inject_query_flags('?hotspots=false', 'metrics', args)
+    else:
+        assert flag_specs.inject_query_flags('?hotspots=false', 'metrics', args) == '?hotspots=false'
+        assert 'the URI already sets hotspots=false' in capsys.readouterr().err
+    assert flag_specs.inject_query_flags('?view=provenance', 'metrics', args) == '?view=provenance&hotspots=true'
