@@ -227,14 +227,9 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
         args = ledger.track(args)
     mark(args, *consumed)
     _delegate_typed_parameters(name, adapter, args, source, transport)
-    query_resource = '?' + source if transport == 'uri' else ''
-    if transport == 'uri':
-        from .flag_specs import inject_query_flags
-        try:
-            query_resource = inject_query_flags(query_resource, name, args)
-        except ValueError as exc:  # a global flag that conflicts with the URI's own value (FlagSpec.reject_conflict)
-            consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
-            return
+    query_resource = _flagged_query(adapter, name, path, source, transport, args, consume)
+    if query_resource is None:
+        return
     # Global query policy keeps its existing codec; never split the decoded path.
     query_resource, respect = split_respect_gitignore(query_resource)
     if transport == 'uri':
@@ -290,6 +285,21 @@ def _resource_error_message(error, path: str) -> str:
     if isinstance(error, (FileNotFoundError, NotADirectoryError)):
         return f'Path not found: {to_posix(path)}'
     return str(error)
+
+
+def _flagged_query(adapter, name, path, source, transport: str, args, consume) -> str | None:
+    """The URI query with the global flags injected; None after answering a flag that conflicts with the
+    URI's own value as an invalid request (FlagSpec.reject_conflict, BACK-2621)."""
+    query_resource: str = '?' + source if transport == 'uri' else ''
+    if transport != 'uri':
+        return query_resource
+    from .flag_specs import inject_query_flags
+    try:
+        flagged: str = inject_query_flags(query_resource, name, args)
+    except ValueError as exc:
+        consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
+        return None
+    return flagged
 
 
 def _invalid_prepared_answer(adapter, name, path, resource, message, args):

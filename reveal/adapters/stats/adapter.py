@@ -139,7 +139,7 @@ def _iso_date(name: str) -> Callable[[Any], str]:
 def _switch(value: Any) -> bool:
     """An on/off switch (churn, merges): Git's merges codec, on|off or a boolean (BACK-2621)."""
     from ..git.params import merge_policy  # deferred: the git package imports its adapter
-    return merge_policy(value).include
+    return bool(merge_policy(value).include)
 
 
 def _detail(value: Any) -> str:
@@ -251,30 +251,55 @@ def _supplied(params: Any) -> Dict[str, Any]:
     return dict(peek_query_items(params))  # validating is not reading
 
 
-def _validate_request(params: Any) -> None:
-    """Reject the combinations binding cannot see (D18: conflicting old/new controls exit 2; an equal
-    pair is accepted once)."""
-    supplied = _supplied(params)
-    view = supplied.get('view')
-    if 'hotspots' in supplied:
-        if view == 'provenance' and supplied['hotspots'] is True:
-            raise RequestValidationError('hotspots conflicts with view=provenance: one request has one view; '
-                                         'the hotspot ranking is view=hotspots (--view hotspots)')
-        if view == 'hotspots' and supplied['hotspots'] is False:
-            raise RequestValidationError('hotspots=false conflicts with view=hotspots: drop the legacy hotspots')
-    if view == 'hotspots' and 'top' in supplied and 'limit' in supplied and supplied['top'] != supplied['limit']:
-        raise RequestValidationError(f"top={supplied['top']} conflicts with limit={supplied['limit']}: in view=hotspots "
-                                     'legacy top is limit; give limit=N (--limit N) once')
+def _hotspots_conflict(supplied: Dict[str, Any]) -> Optional[str]:
+    view, hotspots = supplied.get('view'), supplied.get('hotspots')
+    if view == 'provenance' and hotspots is True:
+        return ('hotspots conflicts with view=provenance: one request has one view; '
+                'the hotspot ranking is view=hotspots (--view hotspots)')
+    if view == 'hotspots' and hotspots is False:
+        return 'hotspots=false conflicts with view=hotspots: drop the legacy hotspots'
+    return None
+
+
+def _top_conflict(supplied: Dict[str, Any]) -> Optional[str]:
+    if supplied.get('view') == 'hotspots' and 'top' in supplied and 'limit' in supplied \
+            and supplied['top'] != supplied['limit']:
+        return (f"top={supplied['top']} conflicts with limit={supplied['limit']}: in view=hotspots legacy top "
+                'is limit; give limit=N (--limit N) once')
+    return None
+
+
+def _churn_conflict(supplied: Dict[str, Any]) -> Optional[str]:
     if supplied.get('no_churn') is True and supplied.get('churn') is True:
-        raise RequestValidationError('--no-churn conflicts with churn=on: give churn once (--churn off)')
+        return '--no-churn conflicts with churn=on: give churn once (--churn off)'
+    return None
+
+
+def _merges_conflict(supplied: Dict[str, Any]) -> Optional[str]:
     if 'no_merges' in supplied and 'merges' in supplied and supplied['merges'] == supplied['no_merges']:
-        raise RequestValidationError(f"no_merges={str(supplied['no_merges']).lower()} conflicts with "
-                                     f"merges={'on' if supplied['merges'] else 'off'}: give merges=on|off "
-                                     '(--merges on|off) once')
+        return (f"no_merges={str(supplied['no_merges']).lower()} conflicts with "
+                f"merges={'on' if supplied['merges'] else 'off'}: give merges=on|off (--merges on|off) once")
+    return None
+
+
+def _detail_conflict(supplied: Dict[str, Any]) -> Optional[str]:
     if 'summary_only' in supplied and 'detail' in supplied and \
             (supplied['detail'] == 'summary') != supplied['summary_only']:
-        raise RequestValidationError(f"summary_only={str(supplied['summary_only']).lower()} conflicts with "
-                                     f"detail={supplied['detail']}: give detail=normal|summary (--detail) once")
+        return (f"summary_only={str(supplied['summary_only']).lower()} conflicts with detail={supplied['detail']}: "
+                'give detail=normal|summary (--detail) once')
+    return None
+
+
+# The combinations binding cannot see (D18: conflicting old/new controls exit 2; an equal pair is accepted once).
+_CONFLICTS = (_hotspots_conflict, _top_conflict, _churn_conflict, _merges_conflict, _detail_conflict)
+
+
+def _validate_request(params: Any) -> None:
+    supplied = _supplied(params)
+    for conflict in _CONFLICTS:
+        message = conflict(supplied)
+        if message:
+            raise RequestValidationError(message)
 
 
 def _explicit_where(params: Any, terms: List[str]) -> List[str]:
@@ -935,6 +960,47 @@ class MetricsAdapter(ResourceAdapter):
                                 'files_excluded': len(file_stats) - len(kept)}
         return kept
 
+    def _ranking_layout(self) -> Optional[TestLayout]:
+        """The test layout the ranking narrows by, when tests= was given (validated before analysis)."""
+        if self.query_params.get('tests') is None:
+            return None
+        _TESTS.read(self.query_params)  # reject direct/raw invalid modes before policy or analysis
+        from ...config import RevealConfig
+        layout = TestLayout.for_path(self.path, fallback_root=self.path)
+        return RevealConfig.get(layout.anchor).apply_test_layout(layout)
+
+    def _file_structure(self, hotspots: bool, rows_omitted: bool, layout: Optional[TestLayout]) -> Dict[str, Any]:
+        """The answer for a single-file target: its stats, filtered like a directory's rows."""
+        file_stats = analyze_file(
+            self.path,
+            lambda fp, structure, content: calculate_file_stats(
+                fp, structure, content, self._quality_config,
+                lambda p: get_file_display_path(p, self.path)
+            )
+        )
+        if is_failure(file_stats):
+            return dict(ResultBuilder.create_error(
+                result_type='stats_file', source=self.path,
+                error=f"analysis failed: {file_stats['analysis_failed']}"))  # type: ignore[index]
+        kept = self._filter_analyzed([file_stats] if file_stats else [])
+        result = aggregate_stats(kept, self.path)
+        self._record_analysis_results([file_stats])
+        note_warning(result, unknown_sort_field_warning(
+            self.result_control.sort_field, kept, field_value, SORT_FIELDS))
+        note_warning(result, self._unknown_filter_field_warning())
+        self._disclose_failures(result)
+        result.update(
+            contract_version=CONTRACT_VERSION,
+            type='stats_file',
+            source=str(self.path),
+            source_type='file',
+        )
+        if hotspots:
+            self._add_hotspots(result, kept, layout)
+        if rows_omitted:
+            result.pop('files', None)
+        return result
+
     def get_structure(self) -> Dict[str, Any]:
         """Get statistics for file or directory: the view the constructor-bound parameters select.
 
@@ -957,44 +1023,9 @@ class MetricsAdapter(ResourceAdapter):
         # view=hotspots: the ranked files are the rows; no per-file rows, so sort/limit/offset page the ranking.
         rows_omitted = summary_only or self.view == 'hotspots'
 
-        layout = None
-        if hotspots and self.query_params.get('tests') is not None:
-            _TESTS.read(self.query_params)  # reject direct/raw invalid modes before policy or analysis
-            from ...config import RevealConfig
-            layout = TestLayout.for_path(self.path, fallback_root=self.path)
-            layout = RevealConfig.get(layout.anchor).apply_test_layout(layout)
-
-        # Handle single file analysis
+        layout = self._ranking_layout() if hotspots else None
         if self.path.is_file():
-            file_stats = analyze_file(
-                self.path,
-                lambda fp, structure, content: calculate_file_stats(
-                    fp, structure, content, self._quality_config,
-                    lambda p: get_file_display_path(p, self.path)
-                )
-            )
-            if is_failure(file_stats):
-                return dict(ResultBuilder.create_error(
-                    result_type='stats_file', source=self.path,
-                    error=f"analysis failed: {file_stats['analysis_failed']}"))  # type: ignore[index]
-            kept = self._filter_analyzed([file_stats] if file_stats else [])
-            result = aggregate_stats(kept, self.path)
-            self._record_analysis_results([file_stats])
-            note_warning(result, unknown_sort_field_warning(
-                self.result_control.sort_field, kept, field_value, SORT_FIELDS))
-            note_warning(result, self._unknown_filter_field_warning())
-            self._disclose_failures(result)
-            result.update(
-                contract_version=CONTRACT_VERSION,
-                type='stats_file',
-                source=str(self.path),
-                source_type='file',
-            )
-            if hotspots:
-                self._add_hotspots(result, kept, layout)
-            if rows_omitted:
-                result.pop('files', None)
-            return result
+            return self._file_structure(hotspots, rows_omitted, layout)
 
         # Collect filtered directory statistics
         dir_file_stats = self._collect_filtered_stats(code_only)
