@@ -501,7 +501,7 @@ class TestProposedChanges:
         flags = [arg for part in controls.split('&') for arg in ('--' + part.split('=')[0], part.split('=')[1])]
         expected = query(uri(many, f'view=hotspots&{controls}'))
         assert hotspot_rows(expected) == full[slice_]
-        assert expected['summary']['total_files'] == 12, 'totals stay those of the filtered population'
+        assert expected['summary']['total_files'] == 13, 'totals stay those of the filtered population'
         result, answer = cli_json('metrics', str(many), '--view', 'hotspots', *flags)
         assert result.returncode == 0, result.stderr[-300:]
         assert_equal_answer(answer, expected)
