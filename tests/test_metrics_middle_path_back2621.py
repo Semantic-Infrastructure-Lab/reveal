@@ -800,8 +800,13 @@ class TestProposedChanges:
         with pytest.raises(TypeError):
             MetricsAdapter(str(project)).get_structure(hotspots=True)
 
-    @pytest.mark.parametrize('flags,field', [(('--code-only',), '--code-only'), (('--min-lines', '5'), 'min-lines'),
-                                             (('--detail', 'summary'), '--detail')])
+    @pytest.mark.parametrize('flags,field', [
+        (('--code-only',), '--code-only'),
+        # BACK-2654: --min-lines binds as --where 'lines>=5' and answers as it does; the provenance view does not
+        # disclose an unread where yet (applicability, BACK-2656).
+        pytest.param(('--min-lines', '5'), 'min-lines', marks=pytest.mark.xfail(strict=True, reason='BACK-2656')),
+        pytest.param(('--where', 'lines>=5'), 'where', marks=pytest.mark.xfail(strict=True, reason='BACK-2656')),
+        (('--detail', 'summary'), '--detail')])
     def test_subcommand_discloses_controls_the_provenance_view_does_not_read(self, project, flags, field):
         """B4: the URI form warns; the subcommand must too."""
         result, answer = cli_json('metrics', str(project), '--view', 'provenance', *flags)

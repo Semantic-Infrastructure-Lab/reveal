@@ -140,6 +140,7 @@ def _flag_param(spec: ParamSpec, flag: str) -> str:
 
 def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
     """Bind original argparse values; no URI string is constructed."""
+    from ...utils.query_binding import legacy_flag_dests
     adapter = declared_adapter_class(name)
     _note_retired_flags(name, adapter)
     source = {}
@@ -153,6 +154,9 @@ def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
         dest = spec.cli.dest or spec.name
         if dest in vars(args):
             source[dest] = peek(args, dest)
+        for legacy in legacy_flag_dests(spec):  # an old flag keeps its legacy name; the binder translates it
+            if legacy in vars(args):
+                source[legacy] = peek(args, legacy)
     _run_declared(name, args, getattr(args, adapter.RESOURCE_SPEC.name), source, 'typed',
                   answer_consumer=answer_consumer)
 
@@ -195,10 +199,14 @@ def _delegate_typed_parameters(name, adapter, args, source, transport: str) -> N
     if transport != 'typed':
         return
     _bind_legacy_cli_values(name, adapter, args, source)
+    from ...utils.query_binding import legacy_flag_dests
     for spec in adapter.PARAM_SPECS:
         dest = (spec.cli.dest if spec.cli else None) or spec.name
         if dest in source:
             delegate(args, dest, spec.name)
+        for legacy in legacy_flag_dests(spec):
+            if legacy in source:
+                delegate(args, legacy, spec.name)
 
 
 def _validate_walk_policy(adapter, args, query_policy) -> None:

@@ -341,6 +341,8 @@ class LegacySpelling:
     flag: Optional[str] = None
     first: bool = False
     owner: str = ''  # the canonical control's name, bound by its ParamSpec
+    # The old flag took no value (``--no-churn``): it stands for this legacy value. None: the flag takes one.
+    flag_value: Any = None
 
     def translate(self, raw: Any) -> Dict[str, Any]:
         """The canonical controls the legacy value stands for."""
@@ -376,9 +378,6 @@ class ParamSpec:
     # Spelling variants only (``scan_limit`` for ``scan-limit``): note-free. A different word is a ``legacy`` entry.
     aliases: Tuple[str, ...] = ()
     legacy: Tuple[LegacySpelling, ...] = ()
-    # A legacy spelling kept as a parameter of its own (not an alias of the canonical control, e.g. a
-    # threshold the noun translates into where): api.query notes it like a retired alias (BACK-2621).
-    retired: bool = False
     # Selections and filters repeat and combine (where, match); settings are scalar. The CLI appends exactly
     # when this is set (COMMAND_MODEL rule "Conflicting values").
     repeatable: bool = False
@@ -410,7 +409,11 @@ class ParamSpec:
     def canonical_value(self, spelling: str, value: Any) -> Any:
         """*value* as this control's own: a legacy spelling's translation, otherwise unchanged."""
         entry = self.legacy_entry(spelling)
-        return value if entry is None or value is None else entry.translate(value)[self.name]
+        if entry is None or value is None:
+            return value
+        if self.repeatable and isinstance(value, list):  # each repeat of a repeatable control's legacy word
+            return [entry.translate(item)[self.name] for item in value]
+        return entry.translate(value)[self.name]
 
     @property
     def flags(self) -> Tuple[str, ...]:
@@ -496,14 +499,15 @@ def expression_list(value: Any) -> List[str]:
     return list(values)
 
 
-def where_param(description: str, examples: Tuple[str, ...] = ()) -> ParamSpec:
+def where_param(description: str, examples: Tuple[str, ...] = (),
+                legacy: Tuple['LegacySpelling', ...] = ()) -> ParamSpec:
     """The one declaration of a noun's repeatable where (D18; AST and Metrics, BACK-2621).
 
     Its role makes the binder fold bare URI operator keys (``?lines>50``) into the same list as
     explicit ``where=`` values and ``--where`` flags; the noun's own filter parser evaluates them.
     """
     return ParamSpec('where', 'array', description, [], expression_list, examples, role='filter-expression',
-                     repeatable=True, cli=CliBinding(('--where',)))
+                     repeatable=True, legacy=legacy, cli=CliBinding(('--where',)))
 
 
 def param_cli_flags(specs: Iterable[ParamSpec]) -> Dict[str, str]:

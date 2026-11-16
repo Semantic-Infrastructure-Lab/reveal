@@ -56,8 +56,11 @@ def _spec(name, schema):
     retired = {'summary', 'search', 'contains', 'filter', 'tail', 'last', 'full', 'raw'}
     cli = None if name in retired else CliBinding(('--' + name,), action='store_true' if kind == 'flag' else None)
     description = ('Deprecated compatibility control; ' if name in retired else '') + schema['description']
+    # tail and last answer differently from any canonical request (a chronological slice, zero empty): legacy
+    # operations that select the answer (COMMAND_MODEL "Legacy operations", BACK-2654).
+    role = 'operation' if name in ('tail', 'last') else None
     return ParamSpec(name, kind, description, None, convert,
-                     examples=tuple(schema.get('examples', ())), cli=cli)
+                     examples=tuple(schema.get('examples', ())), cli=cli, role=role)
 
 
 PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS.items()) + (

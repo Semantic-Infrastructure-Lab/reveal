@@ -230,8 +230,9 @@ class Retirement:
     replacement: str
     stage: str = 'note'
     removed: bool = False
-    # The replacement is another noun or nothing: the spelling stays a parameter of its own until the cut rather
-    # than a legacy entry on a canonical control (COMMAND_MODEL "Retirement notes", BACK-2654).
+    # The replacement is another noun or nothing, or answers differently (a legacy operation: Calls root, Claude
+    # tail/last, Metrics hotspots and its top): the spelling stays a parameter of its own until the cut rather than a
+    # legacy entry on a canonical control (COMMAND_MODEL "Retirement notes", "Legacy operations", BACK-2654).
     standalone: bool = False
 
     def __post_init__(self) -> None:
@@ -288,7 +289,7 @@ RETIREMENTS: Dict[str, Retirement] = {
     'subcommand:trace': Retirement('reveal trace', 'reveal calls <path> --callees FUNC --depth N --detail'),
     'scheme:trace': Retirement('trace://', 'calls://<path>?callees=FUNC&depth=N&detail'),
     'param:calls.root': Retirement('calls ?root= (--root)',
-                                   '?callees=FUNC&depth=N (--callees FUNC --depth N), the same walk'),
+                                   '?callees=FUNC&depth=N (--callees FUNC --depth N), the same walk', standalone=True),
     # Decision (a): an alias that answers identically until the cut.
     'param:calls.target': Retirement('calls ?target= (--target)', '?callers=FUNC (--callers FUNC), the same answer'),
     'param:calls.rank': Retirement('calls ?rank=callers (--rank callers)', '?sort=-callers (--sort=-callers)'),
@@ -304,8 +305,8 @@ RETIREMENTS: Dict[str, Retirement] = {
     # Metrics' vocabulary (BACK-2621, Scott 2026-11-15): the hotspot ranking is a view whose rows limit caps,
     # filters are where (the complexity pair is the file average, avg_complexity), switches take on|off.
     'param:metrics.hotspots': Retirement('metrics ?hotspots=true (--hotspots)',
-                                         '?view=hotspots (--view hotspots): the ranked files are the rows'),
-    'param:metrics.top': Retirement('metrics ?top=N (--top N)', '?limit=N (--limit N) in view=hotspots; 0 is uncapped'),
+                                         '?view=hotspots (--view hotspots): the ranked files are the rows', standalone=True),
+    'param:metrics.top': Retirement('metrics ?top=N (--top N)', '?limit=N (--limit N) in view=hotspots; 0 is uncapped', standalone=True),
     'param:metrics.min_lines': Retirement('metrics ?min_lines=N (--min-lines N)', "?where=lines>=N (--where 'lines>=N')"),
     'param:metrics.max_lines': Retirement('metrics ?max_lines=N (--max-lines N)', "?where=lines<=N (--where 'lines<=N')"),
     'param:metrics.min_functions': Retirement('metrics ?min_functions=N (--min-functions N)',
@@ -343,9 +344,9 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:claude.filter': Retirement('claude ?filter',
         'sessions --where session~=TEXT (or ?where=session~=TEXT), a case-insensitive session-name substring; URI expressions percent-decode once'),
     'param:claude.tail': Retirement('claude ?tail',
-        '--view messages --sort=-message_index --limit N selects latest-first; the legacy slice stays chronological, zero is empty and negative counts retain all turns; canonical limit=0 is uncapped'),
+        '--view messages --sort=-message_index --limit N selects latest-first; the legacy slice stays chronological, zero is empty and negative counts retain all turns; canonical limit=0 is uncapped', standalone=True),
     'param:claude.last': Retirement('claude ?last',
-        '--view messages --sort=-message_index --limit N selects latest-first; the legacy slice stays chronological, bare last or zero selects one; canonical limit=0 is uncapped'),
+        '--view messages --sort=-message_index --limit N selects latest-first; the legacy slice stays chronological, bare last or zero selects one; canonical limit=0 is uncapped', standalone=True),
     'param:claude.full': Retirement('claude ?full',
         '--detail full (or ?detail=full) on a supported expanding view; unsupported views reject'),
     'param:claude.raw': Retirement('claude ?raw',

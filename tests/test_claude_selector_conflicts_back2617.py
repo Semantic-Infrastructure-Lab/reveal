@@ -28,7 +28,8 @@ from test_claude_source_evidence_back2617 import transcript
     ('plans/my-plan', {'search': 'token'}),
 ])
 def test_invalid_selector_combination_rejects_in_api_and_uri(transcript, resource, params):
-    with pytest.raises(RequestValidationError, match='selector'):
+    # tail and last are legacy operations (BACK-2654 rule 16): two of them are two answers (rule 17).
+    with pytest.raises(RequestValidationError, match='selector|select different answers'):
         query('claude://' + resource, **params)
     query_string = '&'.join(name + '=' + str(value).lower() for name, value in params.items())
     result = _run_reveal_in(transcript.parent, 'claude://' + resource + '?' + query_string, '--format', 'json')
@@ -36,9 +37,12 @@ def test_invalid_selector_combination_rejects_in_api_and_uri(transcript, resourc
     assert any(e['code'] == 'invalid_request' for e in json.loads(result.stdout)['meta']['errors'])
 
 
-def test_equivalent_tail_aliases_keep_chronological_slice(transcript):
-    expected = query('claude://session/my-session', tail=2)
-    assert query('claude://session/my-session', tail=2, last=2) == expected
+def test_tail_and_last_together_are_two_answers(transcript):
+    """BACK-2654 rules 16-17 (Scott 2026-11-16): tail and last are legacy operations, each selecting its answer, so
+    giving both is two answers, exit 2 naming both (BACK-2617 coalesced them when the counts agreed)."""
+    assert query('claude://session/my-session', tail=2)['type']
+    with pytest.raises(RequestValidationError, match='tail and last select different answers'):
+        query('claude://session/my-session', tail=2, last=2)
 
 
 @pytest.mark.parametrize('params', [{'tools': 'Bash', 'errors': True},

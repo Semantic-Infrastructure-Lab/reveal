@@ -783,8 +783,7 @@ class TestURIQueryParameters:
 
         adapter = StatsAdapter(str(tmp_path), query="min_complexity=5")
 
-        assert 'min_complexity' in adapter.query_params
-        assert adapter.query_params['min_complexity'] == 5
+        assert adapter.query_params['where'] == ['avg_complexity>=5.0']  # BACK-2654: a legacy threshold binds as its where term
 
     def test_parse_query_with_multiple_params(self, tmp_path):
         """Test parsing multiple query parameters."""
@@ -797,8 +796,7 @@ class TestURIQueryParameters:
         )
 
         assert adapter.query_params['hotspots'] is True
-        assert adapter.query_params['min_complexity'] == 10
-        assert adapter.query_params['min_lines'] == 50
+        assert sorted(adapter.query_params['where']) == ['avg_complexity>=10.0', 'lines>=50']  # BACK-2654: a legacy threshold binds as its where term
 
     def test_parse_query_with_float_values(self, tmp_path):
         """Test parsing float query parameters."""
@@ -807,8 +805,7 @@ class TestURIQueryParameters:
 
         adapter = StatsAdapter(str(tmp_path), query="max_complexity=3.5")
 
-        assert 'max_complexity' in adapter.query_params
-        assert adapter.query_params['max_complexity'] == 3.5
+        assert adapter.query_params['where'] == ['avg_complexity<=3.5']  # BACK-2654: a legacy threshold binds as its where term
 
     def test_parse_query_with_boolean_variants(self, tmp_path):
         """Test parsing various boolean representations."""
@@ -898,8 +895,7 @@ def complex_function(a, b, c):
         adapter = StatsAdapter(str(tmp_path), query="hotspots&min_lines=50")
 
         # Only properly formed params should be parsed
-        assert 'min_lines' in adapter.query_params
-        assert adapter.query_params['min_lines'] == 50
+        assert adapter.query_params['where'] == ['lines>=50']  # BACK-2654: a legacy threshold binds as its where term
 
 
 class TestUnifiedQuerySyntax:
@@ -1076,11 +1072,9 @@ class TestStatsAdapterSchema:
         query_params = schema['query_params']
 
         # Should have filtering params
-        assert 'min_lines' in query_params
-        assert 'max_lines' in query_params
-        assert 'min_complexity' in query_params
-        assert 'max_complexity' in query_params
-        assert 'min_functions' in query_params
+        # BACK-2654: the legacy thresholds are where's legacy spellings, listed with it, not parameters of their own
+        assert {'min_lines', 'max_lines', 'min_complexity', 'max_complexity', 'min_functions'} <= set(
+            query_params['where']['aliases'])
         assert 'hotspots' in query_params
         assert 'code-only' in query_params and query_params['code-only']['aliases'] == ['code_only']  # BACK-2621
 

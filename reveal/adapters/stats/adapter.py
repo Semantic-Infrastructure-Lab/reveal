@@ -23,7 +23,7 @@ from ...utils.query import (
 from ...utils.query_control import sort_failed_warning, sort_nulls_last
 from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_parser import (
-    CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, mark_query_keys, param_schema,
+    CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, mark_query_keys, param_schema,
     peek_query_items, split_exclude_param, where_param, whole_number,
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
@@ -168,51 +168,58 @@ _VIEW = ParamSpec('view', 'string', 'hotspots: the ranked hotspot files are the 
                   'analyzed and no rule runs (was classify://). Omitted: per-file metrics',
                   None, _text('view'), ('view=hotspots', 'view=provenance'), choices=VIEWS, role='operation',
                   cli=CliBinding(('--view',), metavar='VIEW'))
+def _threshold(name: str, field: str, convert, what: str) -> LegacySpelling:
+    """A legacy threshold is its where term (min_lines=N is lines>=N); the value keeps the legacy validation, and
+    the complexity pair is the file average, avg_complexity, never the highest function's max_complexity."""
+    def codec(value: Any) -> str:
+        try:
+            return f'{field}{convert(value)}'
+        except (TypeError, ValueError):
+            raise ParamValueError(f'{name} must be {what}, got {value!r}') from None
+    return LegacySpelling(name, codec=codec, flag='--' + name.replace('_', '-'))
+
+
+def _legacy_switch(name: str, on: str, off: str):
+    """A legacy boolean (no_churn, summary_only) as the canonical value it stands for."""
+    def codec(value: Any) -> str:
+        try:
+            return on if boolean_value(value) else off
+        except ValueError:
+            raise ParamValueError(f'{name} must be a valid boolean, got {value!r}') from None
+    return codec
+
+
 _WHERE = where_param('Keep the files whose field matches: FIELD OP VALUE (lines>50, avg_complexity>=5, '
                      'complexity=5..15, functions!=0, a dotted path such as lines.total); repeat to AND. A bare URI '
-                     'key with an operator (?lines>50) is the same filter', ('where=lines>50', 'where=avg_complexity>=5'))
+                     'key with an operator (?lines>50) is the same filter', ('where=lines>50', 'where=avg_complexity>=5'),
+                     legacy=(_threshold('min_lines', 'lines>=', _count('min_lines'), 'a whole number'),
+                             _threshold('max_lines', 'lines<=', _count('max_lines'), 'a whole number'),
+                             _threshold('min_functions', 'functions>=', _count('min_functions'), 'a whole number'),
+                             _threshold('min_complexity', 'avg_complexity>=', _number('min_complexity'), 'a valid number'),
+                             _threshold('max_complexity', 'avg_complexity<=', _number('max_complexity'), 'a valid number')))
 _HOTSPOTS = ParamSpec('hotspots', 'boolean', 'Legacy: per-file rows plus the hotspot ranking, top capping it; '
                       'replaced by view=hotspots', False, boolean_value, ('hotspots=true',), role='operation',
-                      retired=True, cli=CliBinding(('--hotspots',), action='store_true'))
+                      cli=CliBinding(('--hotspots',), action='store_true'))
 _TOP = ParamSpec('top', 'integer', 'Legacy hotspot cap: limit in view=hotspots; with legacy hotspots=true it caps the '
                  'ranking (default 10, 0 = all)', 10, _count('top'), ('top=25',), minimum=0, zero_policy='all',
-                 role='analysis', retired=True, cli=CliBinding(('--top',), metavar='N'))
+                 role='analysis', cli=CliBinding(('--top',), metavar='N'))
 # The map's spelling (BACK-2621); code_only is an alias that answers the same, as scan_limit is for Imports.
 _CODE_ONLY = ParamSpec('code-only', 'boolean', 'Exclude data/config files (xml, csv, sql, yaml, toml, large json) '
                        'from the walk; totals describe the code files', False, boolean_value, ('code-only=true',),
                        role='analysis', aliases=('code_only',),
                        cli=CliBinding(('--code-only',), dest='code_only', action='store_true'))
-_MIN_LINES = ParamSpec('min_lines', 'integer', 'Legacy: where lines>=N', None,
-                       _count('min_lines'), ('min_lines=50',), role='analysis', retired=True,
-                       cli=CliBinding(('--min-lines',), metavar='N'))
-_MAX_LINES = ParamSpec('max_lines', 'integer', 'Legacy: where lines<=N', None,
-                       _count('max_lines'), ('max_lines=500',), role='analysis', retired=True,
-                       cli=CliBinding(('--max-lines',), metavar='N'))
-_MIN_COMPLEXITY = ParamSpec('min_complexity', 'number', 'Legacy: where avg_complexity>=N (the file average)', None,
-                            _number('min_complexity'), ('min_complexity=5.0',), role='analysis', retired=True,
-                            cli=CliBinding(('--min-complexity',), metavar='N'))
-_MAX_COMPLEXITY = ParamSpec('max_complexity', 'number', 'Legacy: where avg_complexity<=N (the file average)', None,
-                            _number('max_complexity'), ('max_complexity=15.0',), role='analysis', retired=True,
-                            cli=CliBinding(('--max-complexity',), metavar='N'))
-_MIN_FUNCTIONS = ParamSpec('min_functions', 'integer', 'Legacy: where functions>=N', None,
-                           _count('min_functions'), ('min_functions=10',), role='analysis', retired=True,
-                           cli=CliBinding(('--min-functions',), metavar='N'))
-# Legacy threshold -> the where term it is: field and operator; the value keeps the legacy validation.
-_LEGACY_THRESHOLDS = ((_MIN_LINES, 'lines>='), (_MAX_LINES, 'lines<='), (_MIN_FUNCTIONS, 'functions>='),
-                      (_MIN_COMPLEXITY, 'avg_complexity>='), (_MAX_COMPLEXITY, 'avg_complexity<='))
 _CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into the hotspot score: on (default in a git '
                    'repository; silently off elsewhere) or off for complexity-only scoring',
-                   True, _switch, ('churn=off',), role='analysis', cli=CliBinding(('--churn',), metavar='on|off'))
-_NO_CHURN = ParamSpec('no_churn', 'boolean', 'Legacy --no-churn: churn off', None, boolean_value, role='analysis',
-                      retired=True, cli=CliBinding(('--no-churn',), action='store_true'))
+                   True, _switch, ('churn=off',), role='analysis', cli=CliBinding(('--churn',), metavar='on|off'),
+                   legacy=(LegacySpelling('no_churn', codec=_legacy_switch('no_churn', 'off', 'on'),
+                                          flag='--no-churn', flag_value=True),))
 _SINCE = ParamSpec('since', 'string', 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.',
                    None, _iso_date('since'), ('since=2026-01-01',), role='analysis',
                    cli=CliBinding(('--since',), metavar='DATE'))
 _MERGES = ParamSpec('merges', 'boolean', 'Count merge commits in the churn tally: on (default) or off', None,
-                    _switch, ('merges=off',), role='analysis', cli=CliBinding(('--merges',), metavar='on|off'))
-_NO_MERGES = ParamSpec('no_merges', 'boolean', 'Legacy: merges=off', None,
-                       boolean_value, ('no_merges=1',), role='analysis', retired=True,
-                       cli=CliBinding(('--no-merges',), action='store_true'))
+                    _switch, ('merges=off',), role='analysis', cli=CliBinding(('--merges',), metavar='on|off'),
+                    legacy=(LegacySpelling('no_merges', codec=_legacy_switch('no_merges', 'off', 'on'),
+                                           flag='--no-merges', flag_value=True),))
 _TESTS = ParamSpec('tests', 'string',
                    'Test/support files in the hotspot ranking, selected by conventional names plus project test_layout.additional_paths: '
                    'include them (default) or exclude them from the ranking. Only the ranking changes; totals and files still count them',
@@ -221,10 +228,9 @@ _TESTS = ParamSpec('tests', 'string',
 _DETAIL = ParamSpec('detail', 'string', 'normal: the per-file rows; summary: the aggregate summary only (the per-file '
                     'walk still runs; use it on unscoped whole-repo calls, where the rows can reach tens of MB)',
                     'normal', _detail, ('detail=summary',), choices=DETAIL_LEVELS, role='presentation',
-                    cli=CliBinding(('--detail',), metavar='LEVEL'))
-_SUMMARY_ONLY = ParamSpec('summary_only', 'boolean', 'Legacy: detail=summary', False, boolean_value,
-                          ('summary_only=true',), role='analysis', retired=True,
-                          cli=CliBinding(('--summary-only',), action='store_true'))
+                    cli=CliBinding(('--detail',), metavar='LEVEL'),
+                    legacy=(LegacySpelling('summary_only', codec=_legacy_switch('summary_only', 'summary', 'normal'),
+                                           flag='--summary-only', flag_value=True),))
 _SORT = ParamSpec('sort', 'string', 'Sort the files by a field, ascending; a leading - sorts descending', None,
                   _text('sort'), ('sort=-lines',), role='analysis', cli=CliBinding(('--sort',), metavar='FIELD'))
 _LIMIT = ParamSpec('limit', 'integer', 'Keep at most this many rows: files, or the ranked files of view=hotspots '
@@ -247,8 +253,7 @@ _RESPECT_GITIGNORE = ParamSpec('respect_gitignore', 'string', 'false includes fi
                                'fills it', None, lambda value: value, role='scope')
 
 # Every control the schema documents; the unsupported shared controls are declared only to reject them.
-DECLARED_SPECS = (_VIEW, _WHERE, _HOTSPOTS, _TOP, _CODE_ONLY, _MIN_LINES, _MAX_LINES, _MIN_COMPLEXITY, _MAX_COMPLEXITY,
-                  _MIN_FUNCTIONS, _CHURN, _NO_CHURN, _SINCE, _MERGES, _NO_MERGES, _TESTS, _DETAIL, _SUMMARY_ONLY,
+DECLARED_SPECS = (_VIEW, _WHERE, _HOTSPOTS, _TOP, _CODE_ONLY, _CHURN, _SINCE, _MERGES, _TESTS, _DETAIL,
                   _SORT, _LIMIT, _OFFSET, _EXCLUDE, _RESPECT_GITIGNORE)
 _UNSUPPORTED_SPECS = tuple(ParamSpec(name, 'string', argparse.SUPPRESS, None, _unsupported(name), role='unsupported',
                                      cli=CliBinding((f'--{name}',), metavar='VALUE'))
@@ -267,29 +272,8 @@ def _top_conflict(supplied: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _churn_conflict(supplied: Dict[str, Any]) -> Optional[str]:
-    if supplied.get('no_churn') is True and supplied.get('churn') is True:
-        return '--no-churn conflicts with churn=on: give churn once (--churn off)'
-    return None
-
-
-def _merges_conflict(supplied: Dict[str, Any]) -> Optional[str]:
-    if 'no_merges' in supplied and 'merges' in supplied and supplied['merges'] == supplied['no_merges']:
-        return (f"no_merges={str(supplied['no_merges']).lower()} conflicts with "
-                f"merges={'on' if supplied['merges'] else 'off'}: give merges=on|off (--merges on|off) once")
-    return None
-
-
-def _detail_conflict(supplied: Dict[str, Any]) -> Optional[str]:
-    if 'summary_only' in supplied and 'detail' in supplied and \
-            (supplied['detail'] == 'summary') != supplied['summary_only']:
-        return (f"summary_only={str(supplied['summary_only']).lower()} conflicts with detail={supplied['detail']}: "
-                'give detail=normal|summary (--detail) once')
-    return None
-
-
 # The combinations binding cannot see (D18: conflicting old/new controls exit 2; an equal pair is accepted once).
-_CONFLICTS = (_top_conflict, _churn_conflict, _merges_conflict, _detail_conflict)
+_CONFLICTS = (_top_conflict,)
 
 
 def _validate_request(params: Any) -> None:
@@ -315,7 +299,7 @@ def _explicit_where(params: Any, terms: List[str]) -> List[str]:
     return explicit
 
 
-def _filter_terms(params: Any, *, legacy_thresholds: bool = True) -> tuple:
+def _filter_terms(params: Any) -> tuple:
     """The filter expressions of a bound request, and the bare keys that are no filter.
 
     where's explicit terms always filter; a bare URI key does when any bare key carries an operator
@@ -334,10 +318,7 @@ def _filter_terms(params: Any, *, legacy_thresholds: bool = True) -> tuple:
         ignored = [(key, value if separator else True)
                    for key, separator, value in (term.partition('=') for term in bare)]
         terms = explicit
-    if not legacy_thresholds:  # view=provenance reads no file filter: they stay unread, and say so
-        return terms, ignored
-    legacy = [f'{field}{spec.read(params)}' for spec, field in _LEGACY_THRESHOLDS if spec.read(params) is not None]
-    return terms + legacy, ignored
+    return terms, ignored
 
 
 # The warning types _disclose_failures emits that say the answer lacks files it should have counted.
@@ -589,7 +570,7 @@ class MetricsAdapter(ResourceAdapter):
         # where's terms, the legacy thresholds translated into it. No fallback to "no filters": that
         # would answer an unfiltered query as if it were the filtered one (BACK-1059); a ValueError
         # here fails the query.
-        terms, ignored = _filter_terms(params, legacy_thresholds=self.view != 'provenance')
+        terms, ignored = _filter_terms(params)
         self.query_filters = parse_query_filters('&'.join(terms)) if terms else []
 
         # Load quality scoring config (with defaults)
@@ -618,8 +599,7 @@ class MetricsAdapter(ResourceAdapter):
         whether the ranking runs, the code-only walk, and whether the per-file rows are omitted."""
         params = self.query_params
         hotspots = _HOTSPOTS.read(params) or self.view == 'hotspots'  # legacy beside the view: read, accepted once
-        legacy_summary = _SUMMARY_ONLY.read(params)  # read beside detail: an equal pair is accepted once
-        summary = _DETAIL.read(params) == 'summary' or legacy_summary
+        summary = _DETAIL.read(params) == 'summary'  # legacy summary_only binds as detail (BACK-2654)
         return hotspots, _CODE_ONLY.read(params), summary
 
     def _collect_filtered_stats(self, code_only) -> list:
@@ -888,7 +868,7 @@ class MetricsAdapter(ResourceAdapter):
 
             since = self.query_params.get('since')
             # merges=off, or legacy no_merges: the churn cache key keeps its no_merges meaning.
-            no_merges = _NO_MERGES.read(self.query_params) is True or _MERGES.read(self.query_params) is False
+            no_merges = _MERGES.read(self.query_params) is False  # legacy no_merges binds as merges=off
 
             # Map each file's display path (relative to self.path, what
             # identify_hotspots/hotspot output key on) to its repo-relative
@@ -929,7 +909,7 @@ class MetricsAdapter(ResourceAdapter):
         """Rank the same analyzed population for file and directory requests."""
         file_stats = self._rank_population(result, file_stats, layout)
         churn_counts = None
-        if _CHURN.read(self.query_params) and not _NO_CHURN.read(self.query_params):
+        if _CHURN.read(self.query_params):  # legacy no_churn binds as churn=off
             churn_counts = self._compute_churn_counts(file_stats)
             if self._churn_disclosure:
                 # In the envelope, so the text answer prints it too (it sat in a top-level list, BACK-2621).

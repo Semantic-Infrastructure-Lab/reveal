@@ -102,7 +102,7 @@ EXEMPT = {
     **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'contracts', 'git', 'json', 'overview', 'pack', 'patches',
                                             'surface')},
     **{(noun, '1d'): 'declares no repeatable control with an alias'
-       for noun in NOUNS if noun not in ('markdown', 'stats')},
+       for noun in NOUNS if noun not in ('markdown', 'metrics', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'git', 'hotspots', 'json', 'overview', 'pack', 'patches',
         'surface', 'testability', 'trace')},
@@ -116,7 +116,7 @@ EXEMPT = {
         'architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview', 'pack', 'patches',
         'surface', 'testability', 'trace')},
     **{(noun, '16'): 'no legacy word and no standalone legacy parameter: nothing to translate or mark' for noun in (
-        'architecture', 'claude', 'codex', 'contracts', 'deps', 'hotspots', 'json', 'metrics', 'overview', 'pack',
+        'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'json', 'overview', 'pack',
         'patches', 'surface', 'testability', 'trace')},
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
@@ -136,7 +136,10 @@ OUT_OF_SCOPE = {('architecture', '10'): _OVERVIEW_TOP, ('overview', '10'): _OVER
                 ('contracts', '10'): _SWITCH + ' (--no-implementations)',
                 ('patches', '10'): _SWITCH + ' (--no-suppress)'}
 # Cells stopped for a ruling (a case the rules do not settle); each must still fail, and the manager owns the list.
-STOPPED = {('claude', '12'): 'stopped: rule 12 makes match a repeating selection, but Claude match is one search term '
+STOPPED = {('metrics', '16'): 'stopped: the ruling makes metrics top a legacy operation (role=operation), but top caps '
+                              'the legacy --hotspots ranking, so with one answer per request (rule 17) --hotspots --top N '
+                              'would exit 2; top stays standalone with role=analysis (reported in Step 3)',
+           ('claude', '12'): 'stopped: rule 12 makes match a repeating selection, but Claude match is one search term '
                              'handed to its legacy search/contains readers; repeating it means Claude ANDs terms, '
                              'a new evaluator capability (reported in BACK-2654 Step 3)'}
 # Rule 9: the retired stats:// scheme is exempt (deleted at the cut); metrics' cells measure the owner it shares.
@@ -557,7 +560,14 @@ def _alias_on_subcommand(noun, spec, alias, values):
         return []
     value, same, other = values
     base = spec.role != 'operation'
-    if alias_flag is not None and alias_flag != name_flag:
+    entry = _entry(spec, alias)
+    if entry is not None and getattr(entry, 'flag_value', None) is not None and alias_flag:
+        value = entry.translate(entry.flag_value)[spec.name]
+        other = _other(spec, value)
+        conflict = _sub(noun, f'{name_flag}={other}', alias_flag, base=base)
+        pair = _sub(noun, f'{name_flag}={value}', alias_flag, base=base)
+        names = (name_flag, alias_flag)
+    elif alias_flag is not None and alias_flag != name_flag:
         conflict = _sub(noun, f'{name_flag}={other}', f'{alias_flag}={same}', base=base) if other else None
         pair = _sub(noun, f'{name_flag}={value}', f'{alias_flag}={same}', base=base)
         names = (name_flag, alias_flag)
@@ -655,6 +665,14 @@ def probe_repeated_spelling(noun):
 
 # --- rule 1d: a repeatable control's aliases accumulate ----------------------------------------------------
 
+def _translates(entry, raw):
+    try:
+        entry.translate(raw)
+    except ValueError:
+        return False
+    return True
+
+
 def probe_repeatable_aliases(noun):
     cases = []
     for spec in _specs(noun):
@@ -662,15 +680,20 @@ def probe_repeatable_aliases(noun):
             continue
         for alias in _other_spellings(spec):
             label = f'?{spec.name}= with ?{alias}='
-            mixed = _run(_uri(noun, f'{spec.name}=a', f'{alias}=b'), '--format', 'json')
-            same = _run(_uri(noun, f'{spec.name}=a', f'{spec.name}=b'), '--format', 'json')
+            a, b, b_canonical = 'a', 'b', 'b'
+            entry = _entry(spec, alias)
+            if entry is not None and getattr(entry, 'codec', None) is not None:  # a translated word: its own value
+                b = next(raw for raw in ('5', 'true') if _translates(entry, raw))
+                a = b_canonical = entry.translate(b)[spec.name]
+            mixed = _run(_uri(noun, f'{spec.name}={a}', f'{alias}={b}'), '--format', 'json')
+            same = _run(_uri(noun, f'{spec.name}={a}', f'{spec.name}={b_canonical}'), '--format', 'json')
             cases.append(Case(f'{label} accumulates', same.rc != 2 and _answer(mixed, noun) == _answer(same, noun),
                               f'{mixed.brief()} answers differently from {same.brief()}'))
             name_flag, alias_flag = _flag_spelling(spec, spec.name), _flag_spelling(spec, alias)
             if _sub(noun) is None or name_flag is None or alias_flag is None or alias_flag == name_flag:
                 continue
-            mixed = _run(*_sub(noun, name_flag, 'a', alias_flag, 'b'), '--format', 'json')
-            same = _run(*_sub(noun, name_flag, 'a', name_flag, 'b'), '--format', 'json')
+            mixed = _run(*_sub(noun, name_flag, a, alias_flag, b), '--format', 'json')
+            same = _run(*_sub(noun, name_flag, a, name_flag, b_canonical), '--format', 'json')
             cases.append(Case(f'{name_flag} with {alias_flag} accumulates',
                               same.rc != 2 and _answer(mixed, noun) == _answer(same, noun),
                               f'{mixed.brief()} answers differently from {same.brief()}'))
@@ -696,8 +719,10 @@ def _uri_of(argv):
     pairs, index = [], 0
     while index < len(flags):
         option = flags[index]
-        spec = next(s for s in _specs(noun) if s.cli is not None and option in s.cli.flags)
-        key = next((n for n in (spec.name, *spec.aliases) if option[2:] in (n, n.replace('_', '-'))), spec.name)
+        spec = next(s for s in _specs(noun) if s.cli is not None and option in getattr(s, 'flags', s.cli.flags))
+        entry = spec.legacy_entry(option) if hasattr(spec, 'legacy_entry') else None
+        key = entry.name if entry is not None else next(
+            (n for n in (spec.name, *spec.aliases) if option[2:] in (n, n.replace('_', '-'))), spec.name)
         if actions[option].nargs == 0:
             pairs.append(f'{key}=true')
             index += 1
@@ -1036,7 +1061,11 @@ def probe_legacy_operations(noun):
     cases = []
     for spec in _specs(noun):
         for entry in _named_entries(spec):
-            values = _alias_values(spec, entry.name)
+            if getattr(entry, 'codec', None) is not None:  # a translated word: its own value, then its translation
+                same = next((raw for raw in ('5', 'true') if _translates(entry, raw)), None)
+                values = None if same is None else (entry.translate(same)[spec.name], same, None)
+            else:
+                values = _alias_values(spec, entry.name)
             if values is None:
                 continue
             value, same, _other_value = values

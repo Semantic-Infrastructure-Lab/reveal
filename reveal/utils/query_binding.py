@@ -104,6 +104,8 @@ def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str,
         if not present:
             continue
         values = [spec.canonical_value(name, result.pop(name)) for name in present]
+        if spec.repeatable and len(values) > 1:  # an omitted spelling (None) adds no term
+            values = [value for value in values if value is not None] or [None]
         if not _spellings_agree(spec, values):
             raise ValueError(f'{spec.name}: conflicting spellings: ' + ', '.join(present))
         result[spec.name] = _accumulated(values) if spec.repeatable and len(values) > 1 else values[0]
@@ -118,7 +120,8 @@ def _prepare_repeated_params(declarations: tuple[ParamSpec, ...], source: str, p
         if not spec.repeatable:
             _reject_repeated_setting(spec, parts)
             continue
-        if spec.role == 'filter-expression':
+        if spec.role == 'filter-expression':  # its own terms are the expression list; its legacy words repeat too
+            _keep_repeated_words(spec, parts, params)
             continue
         values = [_decode_value(spec, value) if separator else True
                   for key, separator, value in parts if key in spec.spellings]
@@ -126,6 +129,14 @@ def _prepare_repeated_params(declarations: tuple[ParamSpec, ...], source: str, p
             for name in spec.spellings:
                 dict.pop(params, name, None)
             params[spec.name] = values
+
+
+def _keep_repeated_words(spec: ParamSpec, parts: list, params: QueryParams) -> None:
+    """Every occurrence of a filter expression's legacy words (``min_lines`` twice is two terms)."""
+    for word in spec.legacy_words:
+        values = [value if separator else True for key, separator, value in parts if key == word]
+        if values:
+            params[word] = values
 
 
 def _reject_repeated_setting(spec: ParamSpec, parts: list) -> None:
@@ -332,10 +343,11 @@ class ScalarOnceAction(argparse.Action):
     """A setting typed twice: equal values are one, different values are an invalid request naming both, whichever
     spellings carried them (COMMAND_MODEL "Conflicting values"; argparse alone keeps the last)."""
 
-    def __init__(self, *args, translate=None, comparable=None, **kwargs):
+    def __init__(self, *args, translate=None, comparable=None, seen=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.translate = translate
         self.comparable = comparable or (lambda value: value)
+        self.box = seen if seen is not None else {}  # shared by the actions that spell one control
 
     def _same(self, left, right):
         try:
@@ -351,11 +363,14 @@ class ScalarOnceAction(argparse.Action):
                 # Invalid values are rejected by the binder, preserving JSON
                 # request diagnostics instead of an argparse-only usage dump.
                 pass
-        # What this option saw in this parse, kept on the action (a namespace attribute would read as a flag).
-        seen = self.__dict__.get('_seen')
-        if seen is None or seen[0] is not namespace:
-            seen = self._seen = (namespace, {})
-        previous = seen[1]
+        self._store(namespace, values, option_string)
+
+    def _store(self, namespace, values, option_string):
+        # What this control's spellings saw in this parse, kept off the namespace (an attribute would read as a flag).
+        if self.box.get('namespace') is not namespace:
+            self.box.clear()
+            self.box.update(namespace=namespace, values={})
+        previous = self.box['values']
         for flag, value in previous.items():
             if value == values or (flag != option_string and self._same(value, values)):
                 continue  # one spelling compares as typed (as the URI does); two compare as the control reads them
@@ -375,6 +390,42 @@ def _add_legacy_cli_arguments(parser, spec):
                                 help=f'Legacy {option}: sets --{spec.name}={value}')
 
 
+class _LegacyFlagAction(ScalarOnceAction):
+    """An old flag generated from its legacy entry, kept under the legacy name as the URI key is: the binder
+    translates it, so its value errors and conflicts read alike on both spellings. A flag that took no value stands
+    for its entry's value; a repeatable control's legacy flag appends."""
+
+    def __init__(self, *args, entry=None, repeatable=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.entry, self.repeatable = entry, repeatable
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        value = self.entry.flag_value if self.nargs == 0 else values
+        if self.repeatable:
+            setattr(namespace, self.dest, [*(getattr(namespace, self.dest, None) or []), value])
+            return
+        self._store(namespace, value, option_string)
+
+
+def _separate_legacy_flags(spec: ParamSpec) -> list:
+    """The legacy entries whose old flag needs an argument of its own: no value, or a translation (the shared
+    argument stores what it is given under the control's name)."""
+    return [entry for entry in spec.legacy if entry.flag and entry.value is None and not entry.first
+            and (entry.flag_value is not None or (spec.repeatable and entry.codec is not None))]
+
+
+def legacy_flag_dests(spec: ParamSpec) -> Dict[str, str]:
+    """The argparse dests of the legacy flags with arguments of their own -> the legacy name they carry."""
+    return {entry.name: entry.name for entry in _separate_legacy_flags(spec)}
+
+
+def _add_legacy_flag_arguments(parser, spec) -> None:
+    for entry in _separate_legacy_flags(spec):
+        parser.add_argument(entry.flag, dest=entry.name, default=argparse.SUPPRESS, action=_LegacyFlagAction,
+                            nargs=0 if entry.flag_value is not None else None, entry=entry,
+                            repeatable=spec.repeatable, help=f'Legacy {entry.flag}: {spec.name}')
+
+
 def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[ParamSpec],
                            resource: ResourceSpec) -> None:
     """Generate local arguments; global presentation/exclusion owners remain unchanged."""
@@ -385,6 +436,7 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
         cli = spec.cli
         if cli is None:
             continue
+        box: Dict[str, Any] = {}
         options: Dict[str, Any] = {'dest': cli.dest or spec.name, 'default': argparse.SUPPRESS,
                                    'required': cli.required, 'help': spec.description}
         if spec.cli_action is not None:
@@ -394,13 +446,16 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
                 options['action'] = ScalarOnceAction
                 options['translate'] = spec.canonical_value
                 options['comparable'] = spec.validate
+                options['seen'] = box
             if cli.nargs is not None:
                 options['nargs'] = cli.nargs
                 if cli.nargs == '?':
                     options['const'] = cli.const
             if cli.metavar is not None:
                 options['metavar'] = cli.metavar
-        parser.add_argument(*spec.flags, **options)
+        separate = {entry.flag for entry in _separate_legacy_flags(spec)}
+        parser.add_argument(*(flag for flag in spec.flags if flag not in separate), **options)
+        _add_legacy_flag_arguments(parser, spec)
 
 
 def _resource_exists(path: str) -> bool:
