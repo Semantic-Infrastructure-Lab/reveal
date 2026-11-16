@@ -71,7 +71,7 @@ PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS
               repeatable=True, cli=CliBinding(('--where',))),
     ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence, cli=CliBinding(('--timeline',), action='store_true')),
     ParamSpec('detail', 'string', 'summary, normal, full or raw; levels are qualified by the existing reader', None, text, choices=('summary', 'normal', 'full', 'raw'), cli=CliBinding(('--detail',))),
-    ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES, cli=CliBinding(('--view',))),
+    ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES, role='operation', cli=CliBinding(('--view',))),
     ParamSpec('match', 'string', 'Match text in this resource: session content, narrative messages, tool results, workflow tool/detail text, cross-session content, workspace lists or history; unsupported views reject',
               None, text, uri_codec='percent', cli=CliBinding(('--match',))),
 )

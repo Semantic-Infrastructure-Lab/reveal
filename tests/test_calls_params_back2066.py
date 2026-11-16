@@ -128,7 +128,7 @@ def test_callers_subcommand_flag_equals_the_uri(project):
 def test_callers_is_one_mode_selector(project, query):
     result, answer = jrun(f'calls://proj?{query}')
     assert result.returncode == 2, result.stderr
-    assert 'one mode per request' in answer['error'] and 'callers' in answer['error']
+    assert 'one answer per request' in answer['error'] and 'callers' in answer['error']  # BACK-2654 rule 17
 
 
 @pytest.mark.parametrize('query', ['callers=app.py:helper', 'target=app.py:helper'])

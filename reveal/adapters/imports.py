@@ -1408,12 +1408,9 @@ def _selected_views(params: Any) -> List[str]:
 
 
 def _validate_request(params: Any) -> None:
-    """Reject what binding cannot: a shared control Imports does not support, or two views."""
+    """Reject what binding cannot: a shared control Imports does not support (one view per request is the
+    binder's, generated from role='operation', BACK-2654)."""
     unsupported = [key for key, _value in peek_query_items(params) if key in _UNSUPPORTED_SHARED]
-    views = _selected_views(params)
-    if len(views) > 1:
-        raise RequestValidationError(f'imports takes one view per request, got {" and ".join(views)}: choose one of '
-                                     + ', '.join(spec.name for spec in _VIEW_SPECS) + ' (sort is the legacy rank)')
     if unsupported:
         raise RequestValidationError(f'imports does not support {", ".join(unsupported)}: it has no offset, filter, walk depth '
                          'or time window. Use limit=N (--limit N) to cap the ranking or importers=FILE (--importers '

@@ -27,7 +27,7 @@ MATCH = ParamSpec('match', 'array', 'Body terms, ANDed; repeat to require multip
                   [], strings, legacy=(LegacySpelling('body-contains', flag='--body-contains'),), uri_codec='percent',
                   repeatable=True, cli=CliBinding(('--match',)))
 VIEW = ParamSpec('view', 'string', 'Answer view: list, links, aggregate (or legacy lint)',
-                 None, str, choices=('list', 'links', 'aggregate', 'lint'), cli=CliBinding(('--view',)))
+                 None, str, choices=('list', 'links', 'aggregate', 'lint'), role='operation', cli=CliBinding(('--view',)))
 FIELD = ParamSpec('field', 'string', 'Frontmatter field counted by the aggregate view', None, str,
                   cli=CliBinding(('--field',)))
 BACKLINKS = ParamSpec('backlinks', 'string', 'Reverse link target, relative to the scanned directory',

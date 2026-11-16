@@ -335,7 +335,19 @@ def _scope_path(adapter_class, path: str) -> str:
     return str(resolve(path)) if resolve is not None else path
 
 
+def _typed_spellings(adapter) -> set:
+    """The parameter spellings the subcommand's flags named (``--rank`` is ``rank``), as the URI's keys are."""
+    from ..invocation import current_invocation
+    invocation = current_invocation()
+    if invocation is None:
+        return set()
+    flags = {flag: _flag_param(spec, flag) for spec in adapter.PARAM_SPECS if spec.cli is not None for flag in spec.flags}
+    return {flags[token.partition('=')[0]] for token in invocation.command_argv if token.partition('=')[0] in flags}
+
+
 def _validate_bound_request(adapter_class, params, path, args):
+    from ...utils.query_binding import reject_two_answers
+    reject_two_answers(adapter_class.PARAM_SPECS, params, _typed_spellings(adapter_class))  # one answer (BACK-2654)
     validate = getattr(adapter_class, 'validate_request', None)
     if validate is not None:
         validate(params, args)

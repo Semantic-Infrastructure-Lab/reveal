@@ -166,13 +166,13 @@ _VIEW = ParamSpec('view', 'string', 'hotspots: the ranked hotspot files are the 
                   'findings verdict; provenance: the provenance tag (first_party/test/vendor/minified) of every '
                   'analyzable file, with summary.total, by_provenance, excluded and excluded_by_extension; no file is '
                   'analyzed and no rule runs (was classify://). Omitted: per-file metrics',
-                  None, _text('view'), ('view=hotspots', 'view=provenance'), choices=VIEWS, role='analysis',
+                  None, _text('view'), ('view=hotspots', 'view=provenance'), choices=VIEWS, role='operation',
                   cli=CliBinding(('--view',), metavar='VIEW'))
 _WHERE = where_param('Keep the files whose field matches: FIELD OP VALUE (lines>50, avg_complexity>=5, '
                      'complexity=5..15, functions!=0, a dotted path such as lines.total); repeat to AND. A bare URI '
                      'key with an operator (?lines>50) is the same filter', ('where=lines>50', 'where=avg_complexity>=5'))
 _HOTSPOTS = ParamSpec('hotspots', 'boolean', 'Legacy: per-file rows plus the hotspot ranking, top capping it; '
-                      'replaced by view=hotspots', False, boolean_value, ('hotspots=true',), role='analysis',
+                      'replaced by view=hotspots', False, boolean_value, ('hotspots=true',), role='operation',
                       retired=True, cli=CliBinding(('--hotspots',), action='store_true'))
 _TOP = ParamSpec('top', 'integer', 'Legacy hotspot cap: limit in view=hotspots; with legacy hotspots=true it caps the '
                  'ranking (default 10, 0 = all)', 10, _count('top'), ('top=25',), minimum=0, zero_policy='all',
@@ -259,16 +259,6 @@ def _supplied(params: Any) -> Dict[str, Any]:
     return dict(peek_query_items(params))  # validating is not reading
 
 
-def _hotspots_conflict(supplied: Dict[str, Any]) -> Optional[str]:
-    view, hotspots = supplied.get('view'), supplied.get('hotspots')
-    if view == 'provenance' and hotspots is True:
-        return ('hotspots conflicts with view=provenance: one request has one view; '
-                'the hotspot ranking is view=hotspots (--view hotspots)')
-    if view == 'hotspots' and hotspots is False:
-        return 'hotspots=false conflicts with view=hotspots: drop the legacy hotspots'
-    return None
-
-
 def _top_conflict(supplied: Dict[str, Any]) -> Optional[str]:
     if supplied.get('view') == 'hotspots' and 'top' in supplied and 'limit' in supplied \
             and supplied['top'] != supplied['limit']:
@@ -299,7 +289,7 @@ def _detail_conflict(supplied: Dict[str, Any]) -> Optional[str]:
 
 
 # The combinations binding cannot see (D18: conflicting old/new controls exit 2; an equal pair is accepted once).
-_CONFLICTS = (_hotspots_conflict, _top_conflict, _churn_conflict, _merges_conflict, _detail_conflict)
+_CONFLICTS = (_top_conflict, _churn_conflict, _merges_conflict, _detail_conflict)
 
 
 def _validate_request(params: Any) -> None:

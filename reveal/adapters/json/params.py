@@ -33,7 +33,7 @@ def nonnegative(name, value):
 
 VIEW = ParamSpec('view', 'string', 'Answer view: value, schema, flatten, type, keys or length',
                  'value', view_name, choices=VIEWS,
-                 legacy=tuple(LegacySpelling(selector, first=True) for selector in LEGACY_SELECTORS),
+                 legacy=tuple(LegacySpelling(selector, first=True) for selector in LEGACY_SELECTORS), role='operation',
                  cli=CliBinding(('--view',)))
 WHERE = ParamSpec('where', 'array', 'Array-element predicates, ANDed; repeat for multiple constraints',
                   [], expressions, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)))

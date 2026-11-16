@@ -29,12 +29,19 @@ def cyclic(tmp_path, monkeypatch):
     ['imports', 'proj/pkg', '--rank', 'fan-in'],
     ['imports://proj/pkg?entrypoints'],
     ['imports://proj/pkg?components'],
-    ['imports://proj/pkg?importers=a.py&circular'],  # ?importers wins over the findings views
 ])
 def test_a_view_with_no_verdict_refuses_the_gate(cyclic, argv):
     result = run(*argv, '--fail-on', 'findings', '--no-gitignore', '--format', 'json')
     assert result.returncode == 2, (result.stdout, result.stderr)
     assert 'imports gates --circular, --unused and --violations' in json.loads(result.stdout)['error']
+
+
+def test_importers_beside_a_findings_view_is_two_answers(cyclic):
+    """BACK-2654 rule 17: ?importers used to win over the findings views (then the gate refused); two answers now
+    exit 2 naming both, before the gate is consulted."""
+    result = run('imports://proj/pkg?importers=a.py&circular', '--fail-on', 'findings', '--no-gitignore', '--format', 'json')
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert 'circular and importers select different answers' in json.loads(result.stdout)['error']
 
 
 @pytest.mark.parametrize('argv', [

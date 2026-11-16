@@ -39,7 +39,7 @@ def test_a_second_view_is_rejected_before_graph_work(project, monkeypatch):
     calls = []
     monkeypatch.setattr(ImportsAdapter, '_build_graph', lambda *args: calls.append(args))
     with collect_query_keys() as keys:
-        with pytest.raises(ValueError, match='one view per request, got unused and sort'):
+        with pytest.raises(ValueError, match='unused and rank select different answers'):  # BACK-2654 rule 17
             ImportsAdapter(str(project), 'unused&rank=fan-in').get_structure()
     assert calls == [] and 'rank' not in keys.used
 

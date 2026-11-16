@@ -557,12 +557,11 @@ class TestProposedChanges:
         assert _first_note_with(answer, 'hotspots', 'view'), notes(answer)
         assert 'deprecated' in result.stderr
 
-    def test_equal_view_and_legacy_flag_are_accepted_once(self, project):
-        expected = query(uri(project, 'view=hotspots'))
+    def test_the_view_and_the_legacy_flag_are_two_answers(self, project):
+        """BACK-2654 rule 17 (Scott 2026-11-16): --hotspots answers files plus the ranking, --view hotspots the ranked
+        files, so together they are two answers: exit 2 naming both (BACK-2621 accepted the pair once)."""
         result, answer = cli_json('metrics', str(project), '--view', 'hotspots', '--hotspots')
-        assert result.returncode == 0, result.stderr[-300:]
-        assert_equal_answer(answer, expected)
-        assert not unread(answer), unread(answer)
+        assert result.returncode == 2 and 'view and hotspots select different answers' in answer['error']
 
     @pytest.mark.parametrize('args', [
         ('URI', 'hotspots=false', '--hotspots'),
@@ -840,11 +839,18 @@ class TestStep4Additions:
 
     @pytest.mark.parametrize('controls,name', [
         ('detail=normal&summary_only=true', 'detail'), ('detail=summary&summary_only=false', 'detail'),
-        ('view=hotspots&hotspots=false', 'hotspots'),
     ])
     def test_other_conflicting_old_and_new_spellings_reject(self, project, controls, name):
         result, answer = cli_json(uri(project, controls))
         assert_usage(result, answer, name)
+
+    def test_a_false_legacy_hotspots_selects_nothing_beside_the_view(self, project):
+        """BACK-2654 rule 17: one answer per request is generated from role='operation', and a switch that is off
+        selects no answer (the Imports ?mode=false rule), so ?view=hotspots&hotspots=false is the hotspots view
+        with the legacy note. BACK-2621 rejected it by hand."""
+        result, answer = cli_json(uri(project, 'view=hotspots&hotspots=false'))
+        assert result.returncode == 0, result.stderr
+        assert_equal_answer(answer, query(uri(project, 'view=hotspots')))
 
     def test_churn_on_beside_no_churn_rejects(self, project):
         result, answer = cli_json('metrics', str(project), '--view', 'hotspots', '--churn', 'on', '--no-churn')

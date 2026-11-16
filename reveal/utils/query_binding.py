@@ -251,7 +251,35 @@ def bind_declared_params(specs: Iterable[ParamSpec], source: Union[str, Mapping[
     params = bind_prepared_params(declarations, params, transport=transport)
     if validate is not None:
         validate(params)
-    return apply_declared_overrides(declarations, params, overrides)
+    params = apply_declared_overrides(declarations, params, overrides)
+    reject_two_answers(declarations, params)
+    return params
+
+
+def _selects(spec: ParamSpec, value: Any) -> bool:
+    """Whether a supplied answer selector picks its answer: a switch when on, any other when given."""
+    if value is None:
+        return False
+    if spec.type not in ('boolean', 'flag'):
+        return True
+    try:
+        return bool(spec.validate(value))
+    except ValueError:  # an invalid switch value is the binder's error, reported on its own
+        return True
+
+
+def reject_two_answers(declarations: Iterable[ParamSpec], params: Mapping[str, Any],
+                       spelled: Iterable[str] = ()) -> None:
+    """One answer per request (COMMAND_MODEL "One answer per request", BACK-2654): two controls that select the
+    answer (role='operation': views, modes, rankings, legacy operations) are an invalid request naming both."""
+    operations = [spec for spec in declarations if spec.role == 'operation']
+    supplied = dict(peek_query_items(params))
+    spelled = set(spelled) | set(getattr(params, '_supplied_aliases', set()))  # the URI's, and the CLI's flags
+    picked = [next((name for name in spec.spellings[1:] if name in spelled), spec.name)  # as the caller spelled it
+              for spec in operations if spec.name in supplied and _selects(spec, supplied[spec.name])]
+    if len(picked) > 1:
+        raise RequestValidationError(f'{picked[0]} and {picked[1]} select different answers: one answer per request; '
+                                     'give one of ' + ', '.join(spec.name for spec in operations))
 
 
 def _unsupported_override_message(declarations: Iterable[ParamSpec], unknown: list[str]) -> str:

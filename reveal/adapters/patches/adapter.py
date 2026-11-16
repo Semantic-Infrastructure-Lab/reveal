@@ -49,7 +49,7 @@ def _whole(value: Any) -> int:
 
 _VIEW = ParamSpec('view', 'string', 'pressure: testability\'s report (was testability://), patch hotspots joined with production '
                   'boundary fan-out; the path is then the production root. Omitted: the raw patch scan of a test root',
-                  None, _text, ('view=pressure',), choices=VIEWS, role='analysis',
+                  None, _text, ('view=pressure',), choices=VIEWS, role='operation',
                   cli=CliBinding(('--view',), metavar='VIEW'))
 _GROUP = ParamSpec('group', 'string', 'Grouping mode: target, test, or file', 'target', _text,
                    ('group=target',), choices=GROUPS, role='analysis', cli=CliBinding(('--group',), metavar='MODE'))

@@ -677,11 +677,7 @@ class CallsAdapter(ResourceAdapter):
         """Exactly one mode per request: two used to resolve by a hidden precedence (BACK-2066).
         callers takes no FILE:NAME and detail belongs to callees: both would be new capabilities.
         format=dot on a view with no graph is rejected, not answered in text (BACK-2108)."""
-        modes = _selected_modes(params)
-        if len(modes) > 1:
-            named = ', '.join(modes[:-1]) + ' and ' + modes[-1]
-            raise ValueError(f'calls takes one mode per request, got {named}: choose one of '
-                             f'{", ".join(_MODES)} (target is the older name of callers)')
+        modes = _selected_modes(params)  # one mode per request is the binder's (role='operation', BACK-2654)
         supplied = dict(peek_query_items(params))
         unsupported = sorted(set(supplied) & {'where', 'match', 'offset', 'since', 'until'})
         if unsupported:

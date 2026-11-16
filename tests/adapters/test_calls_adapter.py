@@ -885,9 +885,8 @@ def validate():
 
     def test_two_modes_are_rejected_not_resolved_by_precedence(self):
         """?callees=X&target=Y used to answer callees silently; one mode per request (BACK-2066)."""
-        adapter = CallsAdapter(self.tmpdir, 'callees=worker&target=helper')
-        with self.assertRaisesRegex(ValueError, 'target and callees'):
-            adapter.get_structure()
+        with self.assertRaisesRegex(ValueError, 'target and callees'):  # at binding (BACK-2654 rule 17)
+            CallsAdapter(self.tmpdir, 'callees=worker&target=helper').get_structure()
 
     def test_missing_both_params_returns_error(self):
         adapter = CallsAdapter(self.tmpdir, '')

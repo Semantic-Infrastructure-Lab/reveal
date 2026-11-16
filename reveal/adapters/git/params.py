@@ -53,13 +53,13 @@ def merge_policy(value):
     return MergePolicy(included, not isinstance(value, bool) and positive not in ('on', 'off'))
 
 
-def string(name, description, *, legacy=(), choices=()):
-    return ParamSpec(name, 'string', description, None, nonempty_scalar, legacy=legacy, choices=choices,
+def string(name, description, *, legacy=(), choices=(), role=None):
+    return ParamSpec(name, 'string', description, None, nonempty_scalar, legacy=legacy, choices=choices, role=role,
                      cli=CliBinding(('--' + name,)))
 
 
 VIEW = string('view', 'history, blame, diff or ownership; omitted preserves resource-dependent inspection',
-              legacy=(LegacySpelling('type'),), choices=('history', 'log', 'blame', 'diff', 'ownership'))
+              legacy=(LegacySpelling('type'),), choices=('history', 'log', 'blame', 'diff', 'ownership'), role='operation')
 WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (Git DSL percent-decodes values)',
                   [], predicates, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)))
 DETAIL = ParamSpec('detail', 'string', 'normal, full blame, or raw historical file content', None, detail,

@@ -11,7 +11,7 @@ KIND = ParamSpec('kind', 'string', 'Element kind (function, method, class, struc
                  None, str, legacy=(LegacySpelling('type', flag='--type'),), cli=CliBinding(('--kind',)))
 VIEW = ParamSpec('view', 'string', 'Answer view: calls, dict-heatmap or dict-schemas (Python evidence)',
                  None, lambda value: None if value is True else str(value),
-                 legacy=(LegacySpelling('show', flag='--show'), LegacySpelling('show', value='calls')),
+                 legacy=(LegacySpelling('show', flag='--show'), LegacySpelling('show', value='calls')), role='operation',
                  cli=CliBinding(('--view',)))
 BUILTINS = ParamSpec('builtins', 'boolean', 'Include builtin calls in the calls view', False,
                      boolean_value, cli=CliBinding(('--builtins',), action='store_true'))
