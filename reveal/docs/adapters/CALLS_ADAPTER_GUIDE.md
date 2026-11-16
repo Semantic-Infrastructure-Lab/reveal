@@ -191,7 +191,6 @@ callee → [(file, caller_func, line), ...]
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `callers` | string | — | Function name to find **callers of** (reverse lookup). A bare name: `callers=FILE:NAME` exits 2, because the callers index has no file filter |
-| `target` | string | — | Retired name of `callers`: the same mode and answer, with a replaced-by note |
 | `callees` | string | — | Function name, or `FILE:NAME` for the definitions in one file, to find **callees of** (forward lookup). Depth 1 lists each definition's calls (`matches`); depth 2-5 walks level by level (see [`callees`](#callees)) |
 | `detail` | normal/full or legacy boolean | normal | `?callees` only: full adds `params` and `effects` to every definition the walk reaches (`definitions[]`); with any other mode it exits 2. Not measured (W-CALLS-9) |
 | `sort` | string | — | `-callers` selects the existing in-degree ranking operation |
@@ -206,7 +205,7 @@ callee → [(file, caller_func, line), ...]
 | `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?sort=-callers`, and as dead-code candidates in `?uncalled` |
 
 > Exactly one of `callers`, `callees`, `sort`, `uncalled` or `modules` per request (the retired
-> `target` and `root` count as selectors too, so `callers` and `target` together are two). The `path:name` shorthand is the
+> `root` counts as a selector too; the retired `target` is `callers` under its older name). The `path:name` shorthand is the
 > callers mode, so with any other mode it exits 2. Two modes exit 2 and name both;
 > before calls was a declared noun they resolved silently by a hidden precedence. No mode exits 2.
 > Values are typed, never coerced: `callers=123` is the name `123`; a malformed value (`depth=abc`,
@@ -216,7 +215,7 @@ callee → [(file, caller_func, line), ...]
 Canonical `sort=-callers`, `limit=N` and `kind=KIND` share their declared
 CLI/URI/API binding. Legacy `rank=callers`, `top=N` and `type=KIND` keep working
 with one replaced-by note until the cut. Equal cap aliases coalesce; conflicting
-values exit 2. `callers` plus `target` remains two modes even for the same name.
+values exit 2. `target` is `callers` spelled the old way: the same name twice is one value, two names exit 2.
 
 `kind=function` retains the module-function selection for `uncalled`.
 `kind=method` retains the current unfiltered function-and-method population;
