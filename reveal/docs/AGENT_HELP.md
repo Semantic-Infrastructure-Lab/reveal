@@ -250,7 +250,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal imports [path]` | Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations | `reveal imports --help` |
 | `reveal deps [path]` | Retired: use reveal imports <path> --external, --circular or --unused (one graph build); dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
 | `reveal hotspots [path]` | Retired: use reveal metrics <path> --hotspots (files, --fail-on findings) and the ast:// complexity sort (functions); high-complexity files and functions | `reveal hotspots --help` |
-| `reveal metrics [path]` | Per-file lines, complexity and quality; --hotspots ranks files; --view provenance tags every file | `reveal metrics --help` |
+| `reveal metrics [path]` | Per-file lines, complexity and quality; --view hotspots ranks files; --view provenance tags every file | `reveal metrics --help` |
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal contracts --help` |
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
 | `reveal patches [path]` | Mock/patch pressure in tests, grouped by target; --view pressure joins it with production boundary fan-out *(Python and TS/JS test suites)* | `reveal patches --help` |

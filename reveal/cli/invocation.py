@@ -122,7 +122,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Find documents by frontmatter/body; inspect links and aggregate fields'),
     'metrics':      _declared('metrics',
                      'reveal metrics [path]',
-                     'Per-file lines, complexity and quality; --hotspots ranks files; --view provenance tags every file'),
+                     'Per-file lines, complexity and quality; --view hotspots ranks files; --view provenance tags every file'),
     'offline':      _spec('offline',
                      'reveal offline',
                      'Pre-download tree-sitter grammars for offline/air-gapped use'),
