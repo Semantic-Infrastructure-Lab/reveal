@@ -417,6 +417,24 @@ def param_schema(specs: Iterable[ParamSpec]) -> Dict[str, Any]:
     return {spec.name: spec.schema() for spec in specs}
 
 
+def expression_list(value: Any) -> List[str]:
+    """A where value: one expression or a list of nonempty ones, ANDed by the owning noun's parser."""
+    values = [value] if isinstance(value, str) else value
+    if not isinstance(values, (list, tuple)) or any(not isinstance(v, str) or not v.strip() for v in values):
+        raise ValueError('where requires one or more nonempty expressions')
+    return list(values)
+
+
+def where_param(description: str, examples: Tuple[str, ...] = ()) -> ParamSpec:
+    """The one declaration of a noun's repeatable where (D18; AST and Metrics, BACK-2621).
+
+    Its role makes the binder fold bare URI operator keys (``?lines>50``) into the same list as
+    explicit ``where=`` values and ``--where`` flags; the noun's own filter parser evaluates them.
+    """
+    return ParamSpec('where', 'array', description, [], expression_list, examples, role='filter-expression',
+                     cli=CliBinding(('--where',), action='append'))
+
+
 def param_cli_flags(specs: Iterable[ParamSpec]) -> Dict[str, str]:
     return {flag: f'{spec.name}={value}' for spec in specs for flag, value in spec.cli_flags}
 
