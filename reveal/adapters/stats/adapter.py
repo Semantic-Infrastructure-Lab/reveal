@@ -620,7 +620,8 @@ class MetricsAdapter(ResourceAdapter):
         whether the ranking runs, the code-only walk, and whether the per-file rows are omitted."""
         params = self.query_params
         hotspots = _HOTSPOTS.read(params) or self.view == 'hotspots'  # legacy beside the view: read, accepted once
-        summary = _DETAIL.read(params) == 'summary' or _SUMMARY_ONLY.read(params)
+        legacy_summary = _SUMMARY_ONLY.read(params)  # read beside detail: an equal pair is accepted once
+        summary = _DETAIL.read(params) == 'summary' or legacy_summary
         return hotspots, _CODE_ONLY.read(params), summary
 
     def _collect_filtered_stats(self, code_only) -> list:
