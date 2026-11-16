@@ -398,7 +398,7 @@ class TestRunHotspots(unittest.TestCase):
         MockAdapter.return_value.get_structure.return_value = {'hotspots': hotspots}
         result = _run_hotspots(Path('/tmp'))
         self.assertEqual(len(result), 15)
-        self.assertIn('top=0', MockAdapter.call_args.args[1])
+        self.assertEqual(MockAdapter.call_args.kwargs['params'], {'hotspots': True, 'top': 0})  # declared, BACK-2621
 
     @patch('reveal.adapters.stats.adapter.MetricsAdapter', side_effect=Exception("fail"))
     def test_exception_returns_empty(self, _mock):

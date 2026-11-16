@@ -122,7 +122,7 @@ def test_two_root_owner_loss_changes_no_measured_row_in_any_view(tmp_path, actua
     query = {'quality-filter': 'quality<99', 'offset': 'offset=999',
              'filtered-summary': 'min_lines=999&summary_only=true'}[view]
     actual.update(enabled=True, denied={hidden})
-    result = StatsAdapter(str(tmp_path), query).get_structure(code_only=True)
+    result = StatsAdapter(str(tmp_path), f'{query}&code_only=true').get_structure()
     nothing_ran_for_the_owner(actual)
     measured = [row for path, row in actual['measured'] if path.suffix == '.py']
     assert len(measured) == 6 and all(not row.get('parse_degraded') for row in measured)

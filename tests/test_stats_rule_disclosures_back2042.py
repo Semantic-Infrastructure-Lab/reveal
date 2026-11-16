@@ -140,8 +140,8 @@ def test_cross_file_rule_owner_loss_never_reaches_stats_counts_or_scores(
     observed.update(mode=mode, hidden=root / 'included')
     if mode == 'cap':
         monkeypatch.setenv('REVEAL_D005_MAX_FILES', '2')
-    adapter = StatsAdapter(str(root / 'checked.py' if target == 'file' else root))
-    result = adapter.get_element('checked.py') if target == 'element' else adapter.get_structure(code_only=True)
+    adapter = StatsAdapter(str(root / 'checked.py' if target == 'file' else root), 'code_only=true')
+    result = adapter.get_element('checked.py') if target == 'element' else adapter.get_structure()
     # D005 never ran inside Stats: no index, no scan, so no denied read or directory, and nothing to disclose.
     assert observed['builds'] == [] and observed['events'] == []
     assert not get_scan_disclosures([root / 'checked.py'], ['D005'], None)
@@ -187,7 +187,7 @@ def test_filter_summary_and_pagination_carry_no_rule_loss_and_keep_the_counting_
         tmp_path, observed, monkeypatch, query):
     root = project(tmp_path / 'project')
     monkeypatch.setenv('REVEAL_D005_MAX_FILES', '2')
-    result = StatsAdapter(str(root), query).get_structure(code_only=True)
+    result = StatsAdapter(str(root), f'{query}&code_only=true').get_structure()
     assert len([row for row in native_events(observed) if row['kind'] == 'registry']) == 3
     assert not get_scan_disclosures([root / 'checked.py'], ['D005'], None)
     if query == 'min_lines=99':
@@ -212,8 +212,8 @@ def test_other_cross_file_rule_caps_do_not_reach_stats(tmp_path, observed, monke
 def test_controlled_file_local_rule_crash_keeps_counts_and_score_direction_distinct(tmp_path, observed, target):
     root = project(tmp_path / 'project')
     observed['mode'] = 'controlled_crash'
-    adapter = StatsAdapter(str(root / 'checked.py' if target == 'file' else root))
-    result = adapter.get_element('checked.py') if target == 'element' else adapter.get_structure(code_only=True)
+    adapter = StatsAdapter(str(root / 'checked.py' if target == 'file' else root), 'code_only=true')
+    result = adapter.get_element('checked.py') if target == 'element' else adapter.get_structure()
     assert any(row['kind'] == 'controlled_rule_exception' for row in native_events(observed))
     assert not get_scan_disclosures([root / 'checked.py'], ['D005'], None)
     warnings = [row for row in result.get('meta', {}).get('warnings', []) if row.get('type') == 'check_rules_failed']
@@ -227,8 +227,8 @@ def test_a_crash_of_the_cross_file_rule_is_not_a_stats_failure(tmp_path, observe
     """Negative control: the owner is not run, so its crash is not a check_rules_failed."""
     root = project(tmp_path / 'project')
     observed['mode'] = 'owner_crash'
-    adapter = StatsAdapter(str(root / 'checked.py' if target == 'file' else root))
-    result = adapter.get_structure(code_only=True)
+    adapter = StatsAdapter(str(root / 'checked.py' if target == 'file' else root), 'code_only=true')
+    result = adapter.get_structure()
     assert not [row for row in native_events(observed) if row['kind'] == 'owner_rule_exception']
     assert not [row for row in result.get('meta', {}).get('warnings', [])
                 if row.get('type') == 'check_rules_failed']
@@ -244,7 +244,7 @@ def test_actual_pool_runs_file_local_rules_only_and_builds_no_index(
     monkeypatch.setenv('REVEAL_MAX_WORKERS', '2')
     monkeypatch.setenv('REVEAL_D005_MAX_FILES', '2' if 'cap' in mode else '5000')
     observed.update(mode=mode, hidden=root / 'included')
-    result = StatsAdapter(str(root)).get_structure(code_only=True)
+    result = StatsAdapter(str(root), 'code_only=true').get_structure()
     events = native_events(observed)
     assert result['summary']['total_files'] == 23
     assert observed['builds'] == [] and observed['events'] == [], 'the parent preloaded an index'
@@ -269,15 +269,15 @@ def request(call):
 def test_same_adapter_answers_alike_whether_or_not_a_rule_owner_loses_files(tmp_path, observed):
     root = project(tmp_path / 'project')
     sibling = project(tmp_path / 'sibling')
-    adapter = StatsAdapter(str(root))
+    adapter = StatsAdapter(str(root), 'code_only=true')
     observed.update(mode='directory', hidden=root / 'included')
-    lost = request(lambda: adapter.get_structure(code_only=True))
+    lost = request(lambda: adapter.get_structure())
     assert observed['events'] == [] and not get_scan_disclosures([root / 'checked.py'], ['D005'], None)
     observed['mode'] = 'healthy'
-    repaired = request(lambda: adapter.get_structure(code_only=True))
+    repaired = request(lambda: adapter.get_structure())
     assert repaired == lost, 'a denied directory in a rule owner scan changed the answer'
-    assert request(lambda: adapter.get_structure(code_only=True)) == repaired
-    other = request(lambda: StatsAdapter(str(sibling)).get_structure(code_only=True))
+    assert request(lambda: adapter.get_structure()) == repaired
+    other = request(lambda: StatsAdapter(str(sibling), 'code_only=true').get_structure())
     assert not other.get('meta', {}).get('warnings')
     assert repaired['summary']['avg_quality_score'] == 100.0
     assert_no_scan_note(lost)
@@ -296,7 +296,7 @@ def test_disabled_rule_controls_are_not_scan_loss(tmp_path, observed, monkeypatc
 
 def test_genuine_empty_stats_is_not_incomplete(tmp_path, observed):
     root = tmp_path / 'empty'; root.mkdir()
-    result = StatsAdapter(str(root)).get_structure(code_only=True)
+    result = StatsAdapter(str(root), 'code_only=true').get_structure()
     assert result['summary']['total_files'] == 0 and not result.get('meta', {}).get('warnings')
     assert observed['events'] == observed['builds'] == []
 

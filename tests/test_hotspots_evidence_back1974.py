@@ -24,7 +24,7 @@ def critical_file(tmp_path):
 
 
 def test_real_single_file_hotspots_retains_quality_ranking(critical_file):
-    stats = MetricsAdapter(str(critical_file)).get_structure(hotspots=True)
+    stats = MetricsAdapter(str(critical_file), 'hotspots=true').get_structure()
     assert stats['summary']['avg_quality_score'] < 70  # real producer prerequisite
     assert len(stats['hotspots']) == 1
     assert stats['hotspots'][0]['quality_score'] == stats['summary']['avg_quality_score']
@@ -39,7 +39,7 @@ def test_check_rule_failure_disclosed_for_each_stats_resource(tmp_path, single):
     file.write_text(function('small', 0), encoding='utf-8')
     with patch.object(metrics, '_count_local_check_issues', return_value=(
             {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}, ['E501'])):
-        result = MetricsAdapter(str(file if single else tmp_path)).get_structure(hotspots=True)
+        result = MetricsAdapter(str(file if single else tmp_path), 'hotspots=true').get_structure()
     assert result['files'][0]['check_rules_failed'] == ['E501']
     warning, = [w for w in result.get('meta', {}).get('warnings', [])
                  if w.get('type') == 'check_rules_failed']
@@ -228,7 +228,7 @@ def test_actual_optional_churn_warning_survives_stats_composition(tmp_path):
         self._churn_disclosure = 'controlled optional churn unavailable'
         return None
     with patch.object(MetricsAdapter, '_compute_churn_counts', unavailable):
-        child = MetricsAdapter(str(tmp_path)).get_structure(hotspots=True)
+        child = MetricsAdapter(str(tmp_path), 'hotspots=true').get_structure()
         assert child['warnings'][0]['type'] == 'churn_unavailable'
         assert not any(w.get('type') == 'churn_unavailable'
                        for w in child.get('meta', {}).get('warnings', []))

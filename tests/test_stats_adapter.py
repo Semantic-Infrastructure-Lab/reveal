@@ -250,8 +250,8 @@ class TestFiltering:
         (tmp_path / "small.py").write_text("def f(): pass")
         (tmp_path / "large.py").write_text("\n".join([f"def f{i}(): pass" for i in range(20)]))
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(min_lines=10)
+        adapter = StatsAdapter(str(tmp_path), 'min_lines=10')
+        result = adapter.get_structure()
 
         # Should only include large.py
         assert result['summary']['total_files'] >= 1
@@ -264,8 +264,8 @@ class TestFiltering:
         (tmp_path / "small.py").write_text("def f(): pass")
         (tmp_path / "large.py").write_text("\n".join([f"def f{i}(): pass" for i in range(20)]))
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(max_lines=5)
+        adapter = StatsAdapter(str(tmp_path), 'max_lines=5')
+        result = adapter.get_structure()
 
         # All files should have <= 5 lines
         for file_stat in result['files']:
@@ -290,8 +290,8 @@ def complex_func(x):
         return "zero"
 """)
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(min_complexity=3.0)
+        adapter = StatsAdapter(str(tmp_path), 'min_complexity=3.0')
+        result = adapter.get_structure()
 
         # All files should have avg complexity >= 3.0
         for file_stat in result['files']:
@@ -301,8 +301,8 @@ def complex_func(x):
         """Test filtering files by maximum complexity."""
         (tmp_path / "simple.py").write_text("def f(): return 1")
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(max_complexity=2.0)
+        adapter = StatsAdapter(str(tmp_path), 'max_complexity=2.0')
+        result = adapter.get_structure()
 
         # All files should have avg complexity <= 2.0
         for file_stat in result['files']:
@@ -313,8 +313,8 @@ def complex_func(x):
         (tmp_path / "one_func.py").write_text("def f(): pass")
         (tmp_path / "many_funcs.py").write_text("def f1(): pass\ndef f2(): pass\ndef f3(): pass")
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(min_functions=2)
+        adapter = StatsAdapter(str(tmp_path), 'min_functions=2')
+        result = adapter.get_structure()
 
         # All files should have >= 2 functions
         for file_stat in result['files']:
@@ -357,8 +357,8 @@ def complex2(y):
         return "zero"
 """)
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(hotspots=True)
+        adapter = StatsAdapter(str(tmp_path), 'hotspots=true')
+        result = adapter.get_structure()
 
         assert 'hotspots' in result
         # Hotspots might be empty if quality is good, but should be a list
@@ -377,8 +377,8 @@ def complex2(y):
         """Test that hotspots is empty for clean, simple code."""
         (tmp_path / "clean.py").write_text("def add(a, b): return a + b")
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(hotspots=True)
+        adapter = StatsAdapter(str(tmp_path), 'hotspots=true')
+        result = adapter.get_structure()
 
         assert 'hotspots' in result
         # Hotspots list might be empty or have low scores
@@ -398,8 +398,8 @@ def complex_func(x):
         return "zero"
 """)
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(hotspots=True)
+        adapter = StatsAdapter(str(tmp_path), 'hotspots=true')
+        result = adapter.get_structure()
 
         assert 'hotspots' in result
         assert len(result['hotspots']) <= 10
@@ -525,8 +525,8 @@ class TestStatsAdapterHotspotsTop:
         return tmp_path
 
     def test_default_top_caps_at_ten(self, many_hotspot_files):
-        adapter = StatsAdapter(str(many_hotspot_files))
-        result = adapter.get_structure(hotspots=True)
+        adapter = StatsAdapter(str(many_hotspot_files), 'hotspots=true')
+        result = adapter.get_structure()
         assert len(result['hotspots']) == 10
 
     def test_top_query_param_expands_past_ten(self, many_hotspot_files):
@@ -585,8 +585,8 @@ class TestStatsAdapterChurnIntegration:
         return repo_dir
 
     def test_hotspots_include_commit_count_for_git_repo(self, churn_dir):
-        adapter = StatsAdapter(str(churn_dir))
-        result = adapter.get_structure(hotspots=True)
+        adapter = StatsAdapter(str(churn_dir), 'hotspots=true')
+        result = adapter.get_structure()
 
         core_hotspot = next(h for h in result['hotspots'] if h['file'] == 'core.py')
         assert core_hotspot['details']['commit_count'] == 26
@@ -606,8 +606,8 @@ class TestStatsAdapterChurnIntegration:
         """A plain (non-git) directory must not error and must omit commit_count."""
         (tmp_path / "core.py").write_text(TestHotspotsChurn.COMPLEX_CODE)
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(hotspots=True)
+        adapter = StatsAdapter(str(tmp_path), 'hotspots=true')
+        result = adapter.get_structure()
 
         assert 'hotspots' in result
         if result['hotspots']:
@@ -618,8 +618,8 @@ class TestStatsAdapterChurnIntegration:
         as a churn failure (distinct from an actual pygit2/scan error)."""
         (tmp_path / "core.py").write_text(TestHotspotsChurn.COMPLEX_CODE)
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(hotspots=True)
+        adapter = StatsAdapter(str(tmp_path), 'hotspots=true')
+        result = adapter.get_structure()
 
         assert not any(w.get('type') == 'churn_unavailable' for w in result.get('warnings', []))
 
@@ -637,8 +637,8 @@ class TestStatsAdapterChurnIntegration:
 
         monkeypatch.setattr(builtins, '__import__', fake_import)
 
-        adapter = StatsAdapter(str(churn_dir))
-        result = adapter.get_structure(hotspots=True, summary_only=True)
+        adapter = StatsAdapter(str(churn_dir), 'hotspots=true&summary_only=true')
+        result = adapter.get_structure()
 
         warnings = result.get('warnings', [])
         assert any(w.get('type') == 'churn_unavailable' for w in warnings)
@@ -832,8 +832,8 @@ class TestURIQueryParameters:
         adapter5 = StatsAdapter(str(tmp_path), query="hotspots=0")
         assert adapter5.query_params['hotspots'] is False
 
-    def test_query_params_override_flag_params(self, tmp_path):
-        """Test that query params take precedence over flag params."""
+    def test_query_params_select_hotspots(self, tmp_path):
+        """The query selects the ranking: get_structure takes no flag parameters (BACK-2621)."""
         # Create test files with different complexity
         (tmp_path / "simple.py").write_text("def f(): pass")
         (tmp_path / "complex.py").write_text("""
@@ -846,11 +846,9 @@ def complex_function(a, b, c):
     return a + b + c
 """)
 
-        # Query param says hotspots=true, flag param says False
         adapter = StatsAdapter(str(tmp_path), query="hotspots=true")
-        result = adapter.get_structure(hotspots=False)
+        result = adapter.get_structure()
 
-        # Query param should win
         assert 'hotspots' in result
 
     def test_query_params_with_filters_applied(self, tmp_path):

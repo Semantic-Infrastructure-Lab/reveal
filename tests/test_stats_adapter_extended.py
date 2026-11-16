@@ -185,8 +185,8 @@ class TestStatsAdapterSummaryOnly:
         (tmp_path / "a.py").write_text("def f():\n    pass\n")
         (tmp_path / "b.py").write_text("def g():\n    pass\n")
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(summary_only=True)
+        adapter = StatsAdapter(str(tmp_path), 'summary_only=true')
+        result = adapter.get_structure()
 
         assert 'files' not in result
         assert result['summary']['total_files'] == 2
@@ -211,8 +211,8 @@ class TestStatsAdapterSummaryOnly:
     def test_summary_only_keeps_hotspots(self, tmp_path):
         (tmp_path / "a.py").write_text("def f():\n    pass\n")
 
-        adapter = StatsAdapter(str(tmp_path))
-        result = adapter.get_structure(summary_only=True, hotspots=True)
+        adapter = StatsAdapter(str(tmp_path), 'summary_only=true&hotspots=true')
+        result = adapter.get_structure()
 
         assert 'files' not in result
         assert 'hotspots' in result
@@ -221,8 +221,8 @@ class TestStatsAdapterSummaryOnly:
         f = tmp_path / "a.py"
         f.write_text("def f():\n    pass\n")
 
-        adapter = StatsAdapter(str(f))
-        result = adapter.get_structure(summary_only=True)
+        adapter = StatsAdapter(str(f), 'summary_only=true')
+        result = adapter.get_structure()
 
         assert 'files' not in result
         assert result['summary']['total_files'] == 1

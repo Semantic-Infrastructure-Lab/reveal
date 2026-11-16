@@ -160,7 +160,8 @@ def test_directory_file_and_element_transitions_cannot_leak_loss(tmp_path, monke
         assert adapter.get_structure() == clean_file
         adapter.path = tmp_path
         assert not warnings(adapter.get_element('visible.py'))
-        assert warnings(adapter.get_structure(summary_only=True))
+        # get_structure takes no flag parameters (BACK-2621): the summary request is its own adapter.
+        assert warnings(StatsAdapter(str(tmp_path), 'summary_only=true').get_structure())
     adapter.path = file
     assert adapter.get_structure() == clean_file
     adapter.path = tmp_path

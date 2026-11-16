@@ -313,8 +313,8 @@ def _run_hotspots(path: Optional[Path],
         hotspots: List[Dict[str, Any]] = []
         for target in targets:
             try:
-                adapter = MetricsAdapter(str(target), 'hotspots=true&top=0')  # all: cut once, above
-                data = adapter.get_structure(hotspots=True)
+                # Declared parameters, not a query string: top=0 is every hotspot, cut once above.
+                data = MetricsAdapter(str(target), params={'hotspots': True, 'top': 0}).get_structure()
                 if data.get('error'):
                     warnings.append({'type': 'analysis_failed', 'count': 1,
                                      'message': f"hotspots: {target}: {data['error']}"})

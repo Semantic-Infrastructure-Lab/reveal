@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set, cast
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, cast
 
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -160,17 +160,19 @@ def _scan_has_findings(adapter: 'HotspotsAdapter', files: List[Dict[str, Any]],
         (fn.get('complexity', 0) for fn in functions))
 
 
-def _compose_stats(adapter: 'HotspotsAdapter', path: Path, **params: Any) -> Dict[str, Any]:
-    """Run MetricsAdapter through compose() and keep its summary as the scan's coverage record."""
+def _compose_stats(adapter: 'HotspotsAdapter', path: Path, *, cut_as: Optional[Tuple[str, str]] = None,
+                   **params: Any) -> Dict[str, Any]:
+    """Run MetricsAdapter on its declared parameters and keep its summary as the scan's coverage record.
+
+    The parameters bind through metrics' PARAM_SPECS (BACK-2621), not a hand-built query string.
+    --exclude reaches metrics' walk through the shared exclusion scope (BACK-1257), as it reaches
+    ast:// for the function list; the ?exclude= forwarded here before was urlencoded from a list
+    and matched nothing.
+    """
     from reveal.adapters.stats import MetricsAdapter
-    from reveal.utils.exclusions import active_exclusions
-    # BACK-1257: stats:// filters via its own ?exclude= param, not the walk-scope
-    # context, so the scope has to be forwarded explicitly here -- overview://'s
-    # _run_stats already does this. Without it hotspots:// would honor --exclude
-    # for its function list (via ast://) but not its file list.
-    _root, _patterns = active_exclusions()
-    extra: Dict[str, Any] = {'exclude': list(_patterns)} if _patterns else {}
-    data = adapter.compose(MetricsAdapter, str(path), default=_COMPOSE_FAILED, **params, **extra)
+    data = adapter.compose_answer(MetricsAdapter, str(path),
+                                  lambda: MetricsAdapter(str(path), params=params).get_structure(),
+                                  default=_COMPOSE_FAILED, cut_as=cut_as)
     if data is _COMPOSE_FAILED:
         return {}
     if not _stats_proof_valid(data, bool(params.get('hotspots'))) and not (isinstance(data, dict) and data.get('error')):

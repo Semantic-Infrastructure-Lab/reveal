@@ -191,8 +191,8 @@ def test_alias_ordinary_provenance_element_and_parent_normalization(project):
         alias.symlink_to(project / 'helpersish', target_is_directory=True)
     except (OSError, NotImplementedError) as error:
         pytest.skip(f'directory symlink unavailable: {error}')
-    ordinary = MetricsAdapter(str(alias)).get_structure(code_only=True)
-    physical = MetricsAdapter(str(project / 'helpersish')).get_structure(code_only=True)
+    ordinary = MetricsAdapter(str(alias), 'code_only=true').get_structure()
+    physical = MetricsAdapter(str(project / 'helpersish'), 'code_only=true').get_structure()
     assert ordinary['files'] == physical['files']
     assert ordinary['summary'] == physical['summary']
     assert MetricsAdapter(str(alias)).get_element('probe.py') == MetricsAdapter(str(project / 'helpersish')).get_element('probe.py')

@@ -44,7 +44,7 @@ def test_single_file_unknown_sort_text_warns_once(source):
 
 
 def test_single_file_summary_retains_warning(source):
-    answer = MetricsAdapter(str(source), 'sort=typo').get_structure(summary_only=True)
+    answer = MetricsAdapter(str(source), 'sort=typo&summary_only=true').get_structure()
     assert 'files' not in answer
     assert len(warnings(answer, 'unknown_sort_field')) == 1
 
