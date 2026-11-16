@@ -74,7 +74,8 @@
       "args": [
         "metrics",
         "{corpus}",
-        "--hotspots",
+        "--view",
+        "hotspots",
         "--format",
         "json"
       ],
