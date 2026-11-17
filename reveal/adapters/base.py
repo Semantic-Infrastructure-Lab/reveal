@@ -88,7 +88,8 @@ class ResourceAdapter(ABC):
     # Override in subclasses to name the top-level list field that budget
     # constraints (--max-items, --max-snippet-chars) and --head/--tail/--range apply to.
     # A tuple names several lists (a result with more than one, e.g. hotspots://); each
-    # present one is sliced by --head/--tail/--range (BACK-1497). None = not declared:
+    # present one is sliced by --head/--tail/--range (BACK-1497). A dotted name ('commits.recent')
+    # reaches a nested list (BACK-2667). None = not declared:
     # the router probes a few common names, and says the flag had no effect otherwise.
     BUDGET_LIST_FIELD: Optional['str | Tuple[str, ...]'] = None
 

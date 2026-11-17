@@ -286,7 +286,8 @@ reveal 'git://src/app.py?type=history' --fields=hash,date,message --format=json
 ### JSON Adapter
 
 **Large dataset filtering** (json:// pages with `limit`/`offset`; `--max-items` and
-`--max-snippet-chars` apply to list results, not to a JSON value):
+`--head/--tail/--range` cut a value that is an array, the rows `limit` pages, and say so;
+an object value is left whole):
 ```bash
 reveal 'json://data.json?status=active&limit=100' --format=json
 ```
