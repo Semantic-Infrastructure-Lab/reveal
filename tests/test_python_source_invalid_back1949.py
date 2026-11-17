@@ -203,8 +203,9 @@ def test_ast_query_discloses_repeated_bom_as_failure_not_recovery(tmp_path, quer
     assert warning['count'] == 1
     assert warning['files'] == [path.as_posix()]
     assert not [w for w in warnings if w['type'] == 'parse_recovered']
-    # The JSON states the failure by class; its full reason is the text answer's per-file line, which
-    # is not printed beside a JSON answer (BACK-2659).
+    # The JSON states the failure by class in its message and the full reason in ``failures``; the text
+    # answer prints it as a per-file line, which is not printed beside a JSON answer (BACK-2659).
+    assert warning['failures'] == [{'path': path.as_posix(), 'cause': 'invalid Python source', 'reason': REASON}]
     assert REASON not in result.stderr
     assert REASON in _run_reveal_direct(f'ast://{tmp_path}{query}').stderr
 
