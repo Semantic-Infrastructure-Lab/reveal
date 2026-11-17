@@ -8,7 +8,7 @@ import os
 from concurrent.futures import Future, ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from ..logging_setup import worker_bootstrap
-from .invocation_log import current_log, open_worker_log, record_warning
+from .invocation_log import current_log, record_warning, task_log
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 from ..reveal_types import PathFailure
@@ -55,7 +55,7 @@ def submit_each(executor, fn, items: Iterable) -> list[Future]:
     futures = []
     for item in items:
         try:
-            carried = executor.submit(_carrying_warnings, fn, item)
+            carried = executor.submit(functools.partial(_carrying_warnings, fn), item)
         except BrokenProcessPool as e:
             refused: Future = Future()
             refused.set_exception(e)
@@ -69,12 +69,10 @@ def submit_each(executor, fn, items: Iterable) -> list[Future]:
 
 def _carrying_warnings(fn, item) -> tuple:
     """Worker side of ``submit_each``: ``fn(item)`` and the invocation warnings it recorded first."""
-    if current_log() is None:  # a pool started without worker_bootstrap
-        open_worker_log()
-    log = current_log()
-    before = set(log.warnings) if log is not None else set()
-    result = fn(item)
-    return result, [entry for key, entry in (log.warnings.items() if log is not None else ()) if key not in before]
+    with task_log() as log:
+        before = set(log.warnings)
+        result = fn(item)
+        return result, [entry for key, entry in log.warnings.items() if key not in before]
 
 
 def _settle(answer: Future, log, carried: Future) -> None:

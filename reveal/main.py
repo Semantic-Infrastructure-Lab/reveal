@@ -18,6 +18,7 @@ from collections.abc import Callable, Iterator, Sequence
 
 
 from .logging_setup import configure_stderr_logging
+from .utils.invocation_log import answer_is_json
 from .registry import FALLBACK_SUPPORT_NOTE, display_name_for_extension, fallback_languages, get_all_analyzers
 from . import __version__
 from .utils import copy_to_clipboard, check_for_updates
@@ -282,6 +283,8 @@ def _dispatch_and_run(invocation: Invocation) -> None:
     from .cli.routing.declared import validate_execution_policy
     validate_execution_policy(args, invocation.command)
     apply_global_flags(args)
+    # A JSON answer carries the invocation's warnings itself; any other prints them once at the end.
+    answer_is_json(getattr(args, 'format', None) == 'json')
     # --copy comes from the parsed args, so every spelling argparse accepts (-c, -qc,
     # --copy) is honored. A raw scan of argv missed the combined short form.
     with _copy_scope(bool(getattr(args, 'copy', False))):

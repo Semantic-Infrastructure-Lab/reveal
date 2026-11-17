@@ -10,6 +10,7 @@ import pytest
 
 from reveal.checks import capability_disclosures
 from reveal.config import RevealConfig
+from reveal.utils.invocation_log import invocation_warnings, log_scope
 
 pytestmark = pytest.mark.component
 
@@ -37,8 +38,16 @@ def project(tmp_path, monkeypatch):
 
 
 def _config_notes(root):
-    return [n for n in capability_disclosures([str(root / 'a.py')], None, None)
-            if n.startswith('config ')]
+    """The ``config_load_failed`` warnings an invocation reading *root*'s config records: the one
+    disclosure every answer carries (BACK-2659), which replaced check's own capability note."""
+    with log_scope(to_stderr=False):
+        RevealConfig.get(root)
+        return [w['message'] for w in invocation_warnings() if w['code'] == 'config_load_failed']
+
+
+def test_check_no_longer_adds_its_own_config_note(project):
+    (project / '.reveal.yaml').write_text(BROKEN_YAML, encoding='utf-8')
+    assert not [n for n in capability_disclosures([str(project / 'a.py')], None, None) if n.startswith('config ')]
 
 
 def test_broken_yaml_is_recorded_on_the_config(project):

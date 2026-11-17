@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List, Type, Optional, Dict, Any, FrozenSet, Tuple
 
 from .base import BaseRule, Detection, RulePrefix, RuleScope, Severity
-from reveal.config import get_config
+from reveal.config import config_warning, get_config, note_config_warning
 from reveal.utils.request_cache import register_request_cache
 from reveal.utils.path_utils import TestLayout
 from reveal.errors import TestLayoutValidationError, TestLayoutConfigError
@@ -710,7 +710,11 @@ class RuleRegistry:
         """Apply config key-value pairs to a rule instance."""
         for key, value in rule_config.items():
             if key not in cls._ALLOWED_RULE_CONFIG_KEYS:
-                logger.warning(f"Unknown rule config key {key!r} for rule {rule.code} — ignored")
+                note_config_warning(
+                    config_warning('config_key_unknown',
+                                   f"config key {key!r} for rule {rule.code} is not a setting of that rule, so it was ignored",
+                                   rule=rule.code, key=key),
+                    logging.WARNING, "Unknown rule config key %r for rule %s — ignored", key, rule.code)
                 continue
             if hasattr(rule, key):
                 setattr(rule, key, value)

@@ -55,3 +55,21 @@ def test_submit_each_hands_a_worker_warning_to_the_submitting_invocation():
         futures = submit_each(pool, _record_in_worker, [1, 2, 2])
         assert [future.result() for future in futures] == [2, 4, 4]
         assert sorted(entry['message'] for entry in log.warnings.values()) == ['from worker 1', 'from worker 2']
+
+
+class _InlineExecutor:
+    """An executor that runs each task in the caller, as several tests' fakes do."""
+
+    def submit(self, fn, *args):
+        from concurrent.futures import Future
+        future = Future()
+        future.set_result(fn(*args))
+        return future
+
+
+def test_a_task_run_in_the_caller_leaves_no_log_behind():
+    """A task outside any invocation records into a log of its own for that task only: a log left
+    on the thread would swallow every later invocation's notes (each would join it)."""
+    from reveal.utils.parallel import submit_each
+    assert [f.result() for f in submit_each(_InlineExecutor(), _record_in_worker, [3])] == [6]
+    assert current_log() is None

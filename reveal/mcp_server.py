@@ -346,14 +346,18 @@ def _tool_content(result: str):
                           structured_content={'result': str(result)})
 
 
-def _with_retirement_notes(output: str) -> str:
-    """Append the retired-spelling notes this call used to a text result (ground rule 7). The MCP
-    server never prints them to stderr; a JSON result carries them as ``meta.warnings`` already."""
+def _with_invocation_notes(output: str) -> str:
+    """Append what this call recorded for its answer to a text result: each retired spelling's note
+    (ground rule 7) and each configuration warning (BACK-2659), as a terminal would show them after
+    the answer. The MCP server never prints them to stderr; a JSON result carries them in
+    ``meta.warnings`` already."""
     from .cli.invocation import noted_retirements
-    notes = noted_retirements()
-    if not notes or isinstance(output, _ToolFailure) or _is_json_document(output):
+    from .utils.invocation_log import unreported_warnings
+    lines = ([f'[note: {entry.text}]' for entry in noted_retirements().values()]
+             + [f"[warning: {entry['message']}]" for entry in unreported_warnings()])
+    if not lines or not isinstance(output, str) or isinstance(output, _ToolFailure) or _is_json_document(output):
         return output
-    return output.rstrip('\n') + ''.join(f'\n[note: {entry.text}]' for entry in notes.values()) + '\n'
+    return output.rstrip('\n') + ''.join(f'\n{line}' for line in lines) + '\n'
 
 
 def _run_declared_tool(fn, *args, quiet_usage: bool = False, render=None, **kwargs) -> str:
@@ -385,8 +389,8 @@ def _run_declared_tool(fn, *args, quiet_usage: bool = False, render=None, **kwar
         if failure is not None:
             return failure
     if rendered:
-        return _with_retirement_notes(rendered[-1])
-    return _with_retirement_notes(output)
+        return rendered[-1]
+    return output
 
 
 def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = None):
@@ -396,10 +400,12 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = 
         @functools.wraps(fn)
         def request(*args, **kwargs):
             from .utils.request_cache import host_request
+            from .utils.invocation_log import log_scope
             # Direct Python callers and registered tools have the same evidence
             # lifetime, while retaining their distinct error-sentinel contracts.
-            with _capture_lock, host_request():
-                return fn(*args, **kwargs)
+            # One invocation log per call: what it records rides in the result, never on stderr.
+            with _capture_lock, host_request(), log_scope(to_stderr=False):
+                return _with_invocation_notes(fn(*args, **kwargs))
 
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
@@ -674,7 +680,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '', *,
             retirement_note('flag:--' + flag)
         except RetiredSpellingError as exc:
             return _tool_failure(str(exc))
-        return _with_retirement_notes(_run_and_capture(handle_file, path, element, False, 'text', args))
+        return _run_and_capture(handle_file, path, element, False, 'text', args)
 
 
 @mcp_tool(annotations=_OPEN_WORLD_READONLY, title='Reveal: URI Query')

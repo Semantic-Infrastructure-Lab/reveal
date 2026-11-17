@@ -166,13 +166,13 @@ def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
     RETIREMENTS is the one source (its scheme, parameters, values and typed keywords), and the notes reach the
     result's ``meta.warnings`` as the CLI's JSON carries them (BACK-2654; it used to note declared aliases only)."""
     from .cli.invocation import Invocation, invocation_scope, retirement_note, uri_retirement_keys
-    from .utils.json_utils import attach_retirements
+    from .utils.json_utils import attach_invocation_warnings
     keys = uri_retirement_keys(uri) + [f'param:{scheme}.{key}' for key in overrides]
     with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False):
         for key in keys:
             retirement_note(key)
-        result = answer()
-        return attach_retirements(result) if isinstance(result, dict) else result
+        # The retirement notes and every config_warning this invocation recorded (BACK-2659).
+        return attach_invocation_warnings(answer())
 
 
 def query(
@@ -247,10 +247,13 @@ def query(
         )
 
     from .utils.request_cache import host_request
+    from .utils.invocation_log import log_scope
 
     # One host request, as an MCP tool call is: owner-registered caches (the calls
     # indexes among them) are reset or revalidated against the tree first (BACK-2093).
-    with host_request(), gitignore_scope(respect_gitignore):
+    # One invocation log for the whole call, so a config problem met while the adapter is
+    # built reaches the answer as the CLI's JSON carries it (BACK-2659).
+    with host_request(), log_scope(to_stderr=False), gitignore_scope(respect_gitignore):
         from .adapters.factory import _canonical_init, uses_bound_query_call
         if not element_name and uses_bound_query_call(adapter_class):
             bound = _canonical_init(adapter_class, resource, overrides=kwargs)

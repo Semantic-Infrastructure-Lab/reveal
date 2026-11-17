@@ -15,6 +15,7 @@ YAML is the primary format. TOML support via pyproject.toml [tool.reveal] sectio
 """
 
 from .utils.request_cache import register_request_cache, in_host_request
+from .utils.invocation_log import record_warning
 from pathlib import Path
 import os
 import sys
@@ -25,6 +26,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 from dataclasses import dataclass, replace
 import functools
 import hashlib
+from contextvars import ContextVar
 
 from .utils.path_utils import TestLayout, resolve_project_root, reveal_yaml_is_root, failure_of, to_posix
 from .errors import TestLayoutValidationError, TestLayoutConfigError
@@ -44,6 +46,46 @@ NO_CONFIG_ENV = 'REVEAL_NO_CONFIG'
 CUSTOM_CONFIG_ENV = 'REVEAL_CONFIG'
 
 _EnvApplier = Callable[[Dict[str, Any], str, str], None]
+
+# A configuration problem is a ``meta.warnings`` entry of this type (BACK-2659, COMMAND_MODEL
+# "Transports"): the answer carries it in its JSON, and says it once on stderr otherwise. It never
+# changes the exit code or completeness: the answer is complete under the settings that applied.
+CONFIG_WARNING = 'config_warning'
+
+# The entries one RevealConfig load collects, set by RevealConfig.get around the load; each
+# instance keeps them, and every get() of it records them in the running invocation.
+_LoadNote = Tuple[Dict[str, Any], int, str, Tuple[Any, ...]]  # (entry, log level, log format, its args)
+_LOAD_NOTES: ContextVar[Optional[List[_LoadNote]]] = ContextVar('reveal_config_load_notes', default=None)
+
+
+def config_warning(code: str, message: str, path: Optional[str] = None, **fields: Any) -> Dict[str, Any]:
+    """A ``config_warning`` entry; *path* is the config file (POSIX) or the variable's name, when
+    one is known (a rule's merged settings come from no single file)."""
+    entry: Dict[str, Any] = {'type': CONFIG_WARNING, 'code': code, 'message': message}
+    if path is not None:
+        entry['path'] = path
+    return {**entry, **fields}
+
+
+def _config_note(entry: Dict[str, Any], level: int, log_format: str, *log_args: Any) -> None:
+    """Say a configuration problem: into the load that met it, which hands it to the invocation;
+    into the running invocation for a reader outside a load; logged as before outside both."""
+    notes = _LOAD_NOTES.get()
+    if notes is not None:
+        notes.append((entry, level, log_format, log_args))
+    elif not record_warning(entry):
+        logger.log(level, log_format, *log_args)
+
+
+def note_config_warning(entry: Dict[str, Any], level: int, log_format: str, *log_args: Any) -> None:
+    """A config reader outside the loader (a rule's settings) reports a problem it met."""
+    _config_note(entry, level, log_format, *log_args)
+
+
+def _load_failed_warning(path: Path, why: str) -> Dict[str, Any]:
+    return config_warning('config_load_failed',
+                          f"config {to_posix(path)} could not be loaded ({why}): its settings were not applied, "
+                          "so this run used the defaults for them", to_posix(path), reason=why)
 
 
 def _env_csv(value: str) -> List[str]:
@@ -72,7 +114,9 @@ def _env_int_rule(rule_key: str, field_key: str) -> _EnvApplier:
         try:
             config.setdefault('rules', {})[rule_key] = {field_key: int(value)}
         except ValueError:
-            logger.warning(f"Invalid {name} value: {value}")
+            _config_note(config_warning('config_env_invalid',
+                                        f"{name}={value!r} is not an integer, so it was ignored", name),
+                         logging.WARNING, "Invalid %s value: %s", name, value)
     return apply
 
 
@@ -440,6 +484,8 @@ class RevealConfig:
         # (config file, why) for each file that exists but could not be loaded, so its
         # settings are NOT in this config; ``check`` discloses them (BACK-1857).
         self.load_failures: List[Tuple[str, str]] = []
+        # The config_warning entries its load met (BACK-2659), recorded by every get().
+        self.warnings: List[Dict[str, Any]] = []
         # The files that were read into this config, lowest precedence first (BACK-2275).
         self.sources: List[ConfigSource] = []
         self._selected_custom_config: Optional[str] = None
@@ -570,22 +616,16 @@ class RevealConfig:
             env_key, custom_identity, user_identity = cls._cache_inputs()
             cache_key = (project_root, start_path, cli_key, env_key, custom_identity, user_identity)
             if cache_key in cls._cache:
-                return cls._cache[cache_key]
+                cached = cls._cache[cache_key]
+                cached._record_warnings()
+                return cached
         else:
             project_root = start_path
 
-        # Load and merge configs
-        failures: List[Tuple[str, str]] = []
-        sources: List[ConfigSource] = []
-        merged = cls._load_and_merge(start_path, cli_overrides, no_config, failures, sources)
-
-        # Create instance
-        instance = cls(merged, project_root)
-        instance.load_failures = failures
-        instance.sources = sources
+        instance = cls._load_instance(start_path, project_root, cli_overrides, no_config)
         instance._selected_custom_config = os.path.abspath(selected_custom) if selected_custom else None
-        if selected_custom and not any(source.layer == 'custom' for source in sources):
-            instance._selected_custom_failure = next((why for path, why in failures if path == selected_custom),
+        if selected_custom and not any(source.layer == 'custom' for source in instance.sources):
+            instance._selected_custom_failure = next((why for path, why in instance.load_failures if path == selected_custom),
                                                     'FileNotFoundError: selected configuration file was not found')
 
         # Cache it
@@ -593,6 +633,34 @@ class RevealConfig:
             cls._cache[cache_key] = instance
 
         return instance
+
+    @classmethod
+    def _load_instance(cls, start_path: Path, project_root: Path, cli_overrides: Optional[Dict[str, Any]],
+                       no_config: bool) -> 'RevealConfig':
+        """Load and merge the configs for *start_path* into a new instance, with the problems the
+        load met kept on it (``warnings``) and recorded in the running invocation."""
+        failures: List[Tuple[str, str]] = []
+        sources: List[ConfigSource] = []
+        notes: List[_LoadNote] = []
+        token = _LOAD_NOTES.set(notes)
+        try:
+            merged = cls._load_and_merge(start_path, cli_overrides, no_config, failures, sources)
+        finally:
+            _LOAD_NOTES.reset(token)
+        instance = cls(merged, project_root)
+        instance.load_failures = failures
+        instance.warnings = [entry for entry, _level, _format, _args in notes]
+        for entry, level, log_format, log_args in notes:
+            if not record_warning(entry):  # outside an invocation: logged once per load, as before
+                logger.log(level, log_format, *log_args)
+        instance.sources = sources
+        return instance
+
+    def _record_warnings(self) -> None:
+        """Record this config's problems in the running invocation (once per invocation however
+        many get() calls reach it, and whichever request filled the cache)."""
+        for entry in self.warnings:
+            record_warning(entry)
 
     @classmethod
     def _cache_inputs(cls) -> Tuple[Tuple[Tuple[str, str], ...], Optional[str], Optional[str]]:
@@ -688,9 +756,12 @@ class RevealConfig:
                 custom_config, why = cls._read_layer('custom', Path(custom_config_path),
                                                      configs, read, failures)
                 if custom_config is None and why is None:
-                    logger.warning(
-                        f"REVEAL_CONFIG specified but file not found: {custom_config_path}"
-                    )
+                    _config_note(config_warning(
+                        'config_file_missing',
+                        f"REVEAL_CONFIG names {to_posix(custom_config_path)}, which does not exist: "
+                        "no config file was read, so this run used the defaults",
+                        to_posix(custom_config_path)),
+                        logging.WARNING, "REVEAL_CONFIG specified but file not found: %s", custom_config_path)
             else:
                 # Normal config discovery: 1. system config, 2. user config
                 cls._read_layer('system', Path('/etc/reveal/config.yaml'), configs, read, failures)
@@ -743,9 +814,10 @@ class RevealConfig:
                 data = tomllib.load(f)
             return data.get('tool', {}).get('reveal')
         except (OSError, ValueError) as e:  # unreadable, or tomllib.TOMLDecodeError / UnicodeDecodeError
-            logger.debug(f"Failed to load {pyproject}: {e}")
+            cause = failure_of(e).cause
+            _config_note(_load_failed_warning(pyproject, cause), logging.DEBUG, "Failed to load %s: %s", pyproject, e)
             if failures is not None:
-                failures.append((str(pyproject), failure_of(e).cause))
+                failures.append((str(pyproject), cause))
             return None
 
     @classmethod
@@ -789,7 +861,8 @@ class RevealConfig:
 
     @classmethod
     def _validate_config_schema(cls, config: Dict[str, Any], path: Path) -> None:
-        """Validate config against schema if jsonschema is available (warns, never raises)."""
+        """Validate config against schema if jsonschema is available (warns, never raises); each
+        problem is a ``config_schema_invalid`` warning (BACK-2659)."""
         try:
             import jsonschema  # deferred: ~25 ms, and only a run that finds a config file validates
         except ImportError:
@@ -797,9 +870,11 @@ class RevealConfig:
         # jsonschema.validate() re-checks CONFIG_SCHEMA against the metaschema on every
         # call (~20 ms, once per config file); the schema is ours and tests check it once.
         validator = jsonschema.validators.validator_for(CONFIG_SCHEMA)(CONFIG_SCHEMA)
-        error = jsonschema.exceptions.best_match(validator.iter_errors(config))
-        if error is not None:
-            logger.warning(f"Invalid config in {path}: {error.message}")
+        for error in validator.iter_errors(config):
+            key = '.'.join(str(part) for part in error.absolute_path)
+            _config_note(config_warning('config_schema_invalid', f"config {to_posix(path)}: {error.message}",
+                                        to_posix(path), key=key),
+                         logging.WARNING, "Invalid config in %s: %s", path, error.message)
 
     @classmethod
     def _load_file(cls, path: Path) -> Optional[Dict[str, Any]]:
@@ -816,8 +891,8 @@ class RevealConfig:
         if not path.exists():
             return None, None
         if not yaml:
-            logger.warning(f"PyYAML not installed, cannot load {path}")
             why = 'PyYAML is not installed'
+            _config_note(_load_failed_warning(path, why), logging.WARNING, "PyYAML not installed, cannot load %s", path)
         else:
             try:
                 with open(path, encoding='utf-8') as f:
@@ -831,9 +906,9 @@ class RevealConfig:
                 cls._validate_config_schema(config, path)
                 return cast(Dict[str, Any], config), None
             except (OSError, ValueError, yaml.YAMLError) as e:  # unreadable, not UTF-8, or not YAML
-                logger.error(f"Failed to load config {path}: {e}")
                 first_line = str(e).split('\n', 1)[0]
                 why = f"{type(e).__name__}: {first_line}".rstrip(': ')
+                _config_note(_load_failed_warning(path, why), logging.ERROR, "Failed to load config %s: %s", path, e)
         if failures is not None:
             failures.append((str(path), why))
         return None, why

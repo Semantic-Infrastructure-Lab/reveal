@@ -1,6 +1,6 @@
 """Independent public-consumer controls for contextual suite selection."""
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
 import pytest
@@ -181,10 +181,12 @@ def test_trusted_suite_bypasses_required_missing_config_through_registered_sdk(p
             result = await session.call_tool('reveal_query', {
                 'uri': _pressure(project / 'src', scheme, explicit), 'provenance': True})
             assert not result.is_error, _text(result)
-            # The first block is the CLI's JSON exactly; a stderr-only diagnostic rides in a second block (BACK-2650).
+            # One block, the CLI's JSON exactly: the missing config file is a config_warning in it (BACK-2659),
+            # no longer a second stderr block (BACK-2650's interim).
+            assert len(result.content) == 1, [block.text for block in result.content[1:]]
             answer = json.loads(result.content[0].text)
-            # Rich can wrap a long path inside the filename in the stderr block.
-            assert 'missing-policy.yaml' in ''.join(result.content[1].text.split())
+            missing = [w for w in answer['meta']['warnings'] if w.get('code') == 'config_file_missing']
+            assert [PurePosixPath(w['path']).name for w in missing] == ['missing-policy.yaml']  # path is POSIX by contract
             assert answer['summary']['total_patch_uses'] == 2
             assert answer['test_scope']['rule'] == 'tests='
 

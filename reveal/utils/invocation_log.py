@@ -95,6 +95,23 @@ def answer_is_json(is_json: bool) -> None:
         log.json_answer = is_json
 
 
+@contextmanager
+def task_log() -> Iterator[InvocationLog]:
+    """The log a pool task records into: its worker's (``open_worker_log``), else, for a pool
+    started without that initializer or an executor that runs the task in the caller, the open
+    one, else a silent one for this task only, so a task never leaves a log behind in its thread."""
+    log = _LOG.get()
+    if log is not None:
+        yield log
+        return
+    own = InvocationLog(to_stderr=False)
+    token = _LOG.set(own)
+    try:
+        yield own
+    finally:
+        _LOG.reset(token)
+
+
 def open_worker_log() -> None:
     """A pool worker records into a log of its own that is never printed: its parent states the
     invocation's warnings, so the worker's process (spawn, forkserver) never prints them a
