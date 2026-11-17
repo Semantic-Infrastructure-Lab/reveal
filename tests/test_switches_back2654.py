@@ -114,7 +114,9 @@ def test_the_old_flag_and_an_equal_switch_count_once(project, monkeypatch, case)
     switch = SWITCH_OF[case]
     both, once = (_run(case, f'--no-{switch}', f'--{switch}', 'off', monkeypatch=monkeypatch),
                   _run(case, f'--{switch}', 'off', monkeypatch=monkeypatch))
-    assert 'conflicting spellings' not in both[2] and _answer(both) == _answer(once), both  # fallback's answer exits 2
+    old = _run(case, f'--no-{switch}', monkeypatch=monkeypatch)
+    # Both must be the old flag's own answer: two rejections would compare equal too (fallback's answer exits 2).
+    assert 'conflicting spellings' not in both[2] and _answer(both) == _answer(once) == _answer(old), both
 
 
 @pytest.mark.parametrize('case', sorted(CASES))
