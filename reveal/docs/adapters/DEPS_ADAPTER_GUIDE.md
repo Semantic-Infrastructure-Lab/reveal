@@ -27,9 +27,10 @@ path. The circular verdict counts load-time edges only, as before; `imports://` 
 `note: reveal deps is deprecated; use ...` line on stderr. At the cut the same text becomes an
 exit-2 error.
 
-- **Parameters:** `top` (text rows per section, default `10`; `0` shows none; JSON always
+- **Parameters:** `top` (text rows per section, default `10`; `0` shows every row; JSON always
   returns all), `no_unused`, `no_circular`, `summary_only` (primary JSON only: replaces
-  `base.files` with `total_files`/`total_imports`). `--verbose` lifts the text cap.
+  `base.files` with `total_files`/`total_imports`). `--top 0` (`?top=0`) lifts the text cap; the
+  legacy `--verbose` is the same, with a note.
 - **Exits:** the default findings policy is `--fail-on none`, so a completed analysis exits 0
   even when cycles or unused imports are present. `--fail-on findings` exits 1 when there are
   any. Invalid requests exit 2; incomplete or failed required analysis or output exits 3.

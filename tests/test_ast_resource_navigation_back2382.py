@@ -23,7 +23,7 @@ def test_overview_ast_hint_uses_encoded_resource_and_preserves_scope(tmp_path, n
              if step['question'] == 'Function complexity ranking']
     assert len(steps) == 1
     command, = steps
-    assert command[1] == 'ast://' + quote(root.as_posix(), safe='/.:') + '?type=function&sort=-complexity'
+    assert command[1] == 'ast://' + quote(root.as_posix(), safe='/.:') + '?kind=function&sort=-complexity'
     assert 'cannot represent' not in answer['reading_note']
     response = run(*command[1:], '--format', 'json')
     assert response.returncode == 0, (response.stdout, response.stderr)

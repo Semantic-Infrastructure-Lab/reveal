@@ -158,7 +158,7 @@ def _render_claude_tool_calls(result: dict) -> None:
             desc = inp.get('description', '')
             if cmd_limit is not None and len(cmd) > cmd_limit:
                 display_cmd = cmd[:cmd_limit]
-                truncation = f"\n        ... ({len(cmd)} chars — use --verbose or --max-snippet-chars {len(cmd)} for full)"
+                truncation = f"\n        ... ({len(cmd)} chars — use --detail full (?detail=full) or --max-snippet-chars {len(cmd)} for full)"
             else:
                 display_cmd = cmd
                 truncation = ""
@@ -373,7 +373,7 @@ def _render_claude_assistant_messages(result: dict) -> None:
         if text:
             if not full and len(text) > 600:
                 print(text[:600])
-                print(f"  ... ({len(text) - 600} more chars, use /message/{msg_idx} for full text or add ?full)")
+                print(f"  ... ({len(text) - 600} more chars, use /message/{msg_idx} for full text or add ?detail=full)")
             else:
                 print(text)
         elif tool_summaries:
@@ -428,7 +428,7 @@ def _render_claude_message(result: dict) -> None:
 def _render_truncated_text(text: str, full: bool, msg_idx: object) -> None:
     if not full and len(text) > 600:
         print(text[:600])
-        print(f"  ... ({len(text) - 600} more chars — use ?full or /message/{msg_idx} for full text)")
+        print(f"  ... ({len(text) - 600} more chars — use ?detail=full or /message/{msg_idx} for full text)")
     else:
         print(text)
 
@@ -567,7 +567,7 @@ def _render_claude_messages(result: dict) -> None:
         print(f"[turn {turn} / msg {msg_idx}] {ts}")
         if truncate_at is not None and char_count > truncate_at:
             print(text[:truncate_at])
-            print(f"  ... ({char_count - truncate_at} more chars — use --verbose or --max-snippet-chars {char_count})")
+            print(f"  ... ({char_count - truncate_at} more chars — use --detail full (?detail=full) or --max-snippet-chars {char_count})")
         else:
             print(text)
         print()

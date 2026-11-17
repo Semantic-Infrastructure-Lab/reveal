@@ -894,7 +894,8 @@ Stats loss as failed when healthy AST analysis yields no function matching the
 requested threshold. Optional churn/test convention warnings, confidence and ranking cuts do not.
 Top caps retained JSON and text rankings (zero all); negative top now rejects.
 Signed min_complexity remains accepted; whole decimal/scientific numeric values
-normalize consistently. Both transports' `--verbose` lifts caps. CLI `--all`
+normalize consistently. `top=0` lifts caps on both transports (the legacy `--verbose` is `top=0`, with a
+note). CLI `--all`
 remains rejected; URI `--all` preserves an explicit top. Default text findings
 now exit 0; explicit `--fail-on findings` restores the findings gate in either
 format and transport. Neither fields nor output cuts erase captured facts.

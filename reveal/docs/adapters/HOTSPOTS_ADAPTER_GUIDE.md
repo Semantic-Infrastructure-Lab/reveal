@@ -48,7 +48,8 @@ both numeric parameters; fractions and booleans reject. Negative `top` now rejec
 with usage code 2 rather than expanding the rankings; signed `min_complexity`
 thresholds remain valid. The two only-flags are independent strict booleans.
 
-`--verbose` lifts both ranking caps in either transport. URI `--all` lifts caps
+`top=0` (`--top 0`) lifts both ranking caps in either transport; the legacy `--verbose` is the
+same, with a note, and conflicts with a different explicit `top`. URI `--all` lifts caps
 when no explicit `top` is present; explicit `top` wins. The subcommand rejects
 `--all`. These controls retain their existing acceptance boundaries.
 

@@ -33,7 +33,7 @@ These controls describe the ordinary map; comparison controls are listed below.
 | `no_imports` | Explicit scope-only map, with graph analysis marked not requested. Strict boolean spellings are accepted. |
 | `exclude` | Comma-separated globs narrowing the configured census and graph scope. An excluded file can remain resolvable as an import target. |
 | `respect_gitignore` | True by default. False or `--no-gitignore` includes ignored candidates subject to other scope exclusions; tracked files remain eligible. |
-| `--all`, `--verbose` | Expand map rows, overriding top. They do not request quality or history analysis. |
+| `--all` (`?all=true`) | Expand map rows, overriding top. It does not request quality or history analysis. The legacy `--verbose` is the same, with a note. |
 
 `no_git` and `tests` were dashboard controls and now reject with a correction.
 Use Git queries for history and metrics/AST queries for assessment rankings.

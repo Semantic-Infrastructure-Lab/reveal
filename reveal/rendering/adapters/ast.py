@@ -12,16 +12,19 @@ from reveal.utils.formatting import lines_label
 
 # Maps bare shorthand names users commonly try to the correct filter syntax
 _FILTER_SHORTHANDS = {
-    'functions': '?type=function',
-    'function': '?type=function',
-    'classes': '?type=class',
-    'class': '?type=class',
-    'methods': '?type=method',
-    'imports': '?type=import',
+    'functions': '?kind=function',
+    'function': '?kind=function',
+    'classes': '?kind=class',
+    'class': '?kind=class',
+    'methods': '?kind=method',
+    'imports': '?kind=import',
 }
 
-# All keys that ast:// actually understands
-_KNOWN_FILTER_KEYS = {'type', 'method', 'name', 'complexity', 'size', 'lines', 'depth', 'decorator', 'calls', 'callee_of', 'callers', 'has_annotations', 'param_type', 'return_type', 'reveal_type'}
+# All keys that ast:// actually understands (a request's kind= is shown as its field, type)
+_KNOWN_FILTER_KEYS = {'type', 'kind', 'method', 'name', 'complexity', 'size', 'lines', 'depth', 'decorator', 'calls', 'callee_of', 'callers', 'has_annotations', 'param_type', 'return_type', 'reveal_type'}
+# The keys the hint teaches: legacy spellings print their own replaced-by note, so the list names their replacements
+# (type is kind; calls/callee_of are calls://; a bare depth is where=depth) and never the old words (BACK-2654).
+_TAUGHT_FILTER_KEYS = sorted((_KNOWN_FILTER_KEYS - {'type', 'calls', 'callee_of', 'depth'}) | {'kind'})
 
 
 def _render_meta_warnings(data: Dict[str, Any]) -> None:
@@ -327,7 +330,7 @@ def _suggest_filter_correction(query: str) -> None:
     # Check for unknown keys not in any known set
     unknown = [f for f in fields if f.lower() not in _KNOWN_FILTER_KEYS and f.lower() not in _FILTER_SHORTHANDS]
     if unknown:
-        valid = ', '.join(sorted(_KNOWN_FILTER_KEYS))
+        valid = ', '.join(_TAUGHT_FILTER_KEYS)
         print()
         for key in unknown:
             print(f"Hint: '{key}' is not a recognized filter key.")

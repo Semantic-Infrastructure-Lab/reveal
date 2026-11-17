@@ -62,7 +62,7 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'full': {
         'type': 'flag',
-        'description': 'Disable per-message 600-char truncation on /messages?detail=raw, /message --range and /exchanges. No effect on plain /messages (use --verbose) or on /message/<n> (use --verbose)',
+        'description': 'Disable per-message 600-char truncation on /messages?detail=raw, /message --range and /exchanges. No effect on plain /messages or on /message/<n> (use --detail full there)',
         'examples': ['?full']
     },
     'raw': {
@@ -163,7 +163,7 @@ _SCHEMA_OUTPUT_TYPES = [
     _make_output_type('claude_thinking', 'All thinking blocks with content previews and token estimates', {
         'blocks': {'type': 'array'}, 'total_tokens': {'type': 'integer'}
     }),
-    _make_output_type('claude_message', 'Single message by zero-based JSONL index: text, tool_use name and key params, tool_result preview (--verbose for all)', {
+    _make_output_type('claude_message', 'Single message by zero-based JSONL index: text, tool_use name and key params, tool_result preview (--detail full for all)', {
         # Corrected to match get_message()'s actual returned keys (was declaring
         # index/role/content, which never matched the real output — BACK-513).
         'message_index': {'type': 'integer'},

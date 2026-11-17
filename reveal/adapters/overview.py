@@ -183,7 +183,7 @@ def _obsolete_git(value: Any) -> bool:
 
 
 def _obsolete_tests(value: Any) -> str:
-    raise ParamValueError('overview no longer ranks complexity or hotspots; omit tests and use metrics:// or ast:// with type=function')
+    raise ParamValueError('overview no longer ranks complexity or hotspots; omit tests and use metrics:// or ast:// with kind=function')
 
 
 _AGAINST = ParamSpec('against', 'string', 'Compare the live working tree against a Git ref',
@@ -216,7 +216,7 @@ def _next_steps(path: str, exclude_patterns: List[str], respect_gitignore: bool)
     for pattern in exclude_patterns:
         flags += ['--exclude', pattern]
     steps = [(question, ['reveal', uri]) for question, uri in questions]
-    steps.append(('Function complexity ranking', ['reveal', f'ast://{target}?type=function&sort=-complexity']))
+    steps.append(('Function complexity ranking', ['reveal', f'ast://{target}?kind=function&sort=-complexity']))
     steps.append(('Concrete rule findings', ['reveal', 'check', path]))
     return [{'question': question, 'command': shlex.join(tokens + flags)} for question, tokens in steps]
 
