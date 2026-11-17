@@ -138,10 +138,12 @@ def test_q_is_a_note_free_short_spelling_of_breadcrumbs_off(project, monkeypatch
 def test_every_switch_is_declared_once_and_its_retirement_row_is_generated():
     from reveal.cli.global_flags import SWITCHES
     from reveal.cli.invocation import RETIREMENTS
-    assert set(SWITCHES) == {'breadcrumbs', 'fallback', 'group', 'snippets'}
+    assert set(SWITCHES) == {'breadcrumbs', 'fallback', 'group', 'snippets', 'respect-gitignore'}
+    legacy = {name: f'--no-{name}' for name in SWITCHES} | {'respect-gitignore': '--no-gitignore'}
     for name in SWITCHES:
-        row = RETIREMENTS[f'flag:--no-{name}']
-        assert (row.old, row.replacement, row.stage, row.standalone) == (f'--no-{name}', f'--{name} off', 'note', False)
+        row = RETIREMENTS[f'flag:{legacy[name]}']
+        assert (row.old, row.replacement, row.stage, row.standalone) == (legacy[name], f'--{name} off', 'note', False)
+    assert 'flag:--no-respect-gitignore' not in RETIREMENTS
 
 
 def _parsers():
@@ -164,10 +166,10 @@ def test_each_parser_carrying_a_switch_generates_both_spellings_on_one_positive_
                 ('breadcrumbs', 'fallback', 'group', 'snippets') and actions[option].dest.startswith('no_')]
 
 
-@pytest.mark.parametrize('flag', ['--no-implementations', '--no-suppress', '--no-gitignore'])
+@pytest.mark.parametrize('flag', ['--no-implementations', '--no-suppress'])
 def test_other_no_flags_are_not_switches_yet(flag):
-    """Negative control: contracts --no-implementations and patches --no-suppress belong to their packages, and
-    --no-gitignore is not one of the four presentation switches; none has a generated row."""
+    """Negative control: contracts --no-implementations and patches --no-suppress belong to their packages; neither
+    has a generated row."""
     from reveal.cli.invocation import RETIREMENTS
     assert f'flag:{flag}' not in RETIREMENTS
 
@@ -192,3 +194,64 @@ def test_the_old_no_flag_note_reaches_every_file_view_json_answer(project, switc
     warnings = json.loads(result.stdout).get('meta', {}).get('warnings', [])
     assert result.returncode == 0 and [w.get('field') for w in warnings if w.get('code') == 'retired_spelling'] == [
         f'flag:--no-{switch}'], result.stdout
+
+
+
+# --- item D2: --respect-gitignore on|off, --no-gitignore its named legacy spelling ---------------------------
+
+@pytest.mark.parametrize('parser_name', ['main', 'check', 'ast'])
+def test_respect_gitignore_is_a_switch_on_every_walking_parser(parser_name):
+    actions = _parsers()[parser_name]._option_string_actions
+    positive, legacy = actions['--respect-gitignore'], actions['--no-gitignore']
+    assert positive.dest == legacy.dest == 'respect_gitignore' and positive.metavar == 'on|off', parser_name
+    assert type(positive) is type(legacy) and type(positive).__name__ == '_SwitchAction', parser_name
+
+
+def _walk(*extra):
+    from conftest import _run_reveal_direct
+    result = _run_reveal_direct('.', *extra)
+    return result.returncode, result.stdout, result.stderr
+
+
+def test_no_gitignore_notes_its_replacement_and_conflicts_with_an_opposite_switch(project):
+    old = _walk('--no-gitignore')
+    assert 'note: --no-gitignore is deprecated; use --respect-gitignore off.' in _notes(old), old[2]
+    rc, _out, err = _walk('--no-gitignore', '--respect-gitignore', 'on')
+    assert rc == 2 and 'conflicting spellings: --no-gitignore, --respect-gitignore' in err, (rc, err)
+    both = _walk('--no-gitignore', '--respect-gitignore', 'off')
+    assert _answer(both) == _answer(old) == _answer(_walk('--respect-gitignore', 'off')), both
+
+
+def test_bare_respect_gitignore_still_means_on(project):
+    """The old no-value --respect-gitignore (the default, on) answers as before without a note (the control half, green
+    before and after); --respect-gitignore on answers the same (red until the switch exists)."""
+    bare, on, default = _walk('--respect-gitignore'), _walk('--respect-gitignore', 'on'), _walk()
+    assert bare[0] == 0 and _answer(bare) == _answer(default) and not _notes(bare), bare
+    assert _answer(on) == _answer(default), on
+
+
+# --- item D2: notes name a switch as typed (the item F principle) -------------------------------------------
+
+@pytest.mark.parametrize('typed, named', [(['--no-group'], '--no-group'), (['--group', 'off'], '--group'),
+                                          (['-q'], '-q'), (['--no-breadcrumbs'], '--no-breadcrumbs')])
+def test_the_ledger_names_a_switch_as_typed(project, typed, named):
+    from conftest import _run_reveal_direct
+    target = ['a.py', 'f'] if named.endswith('group') else ['ast', '.']
+    err = _run_reveal_direct(*target, *typed).stderr
+    note = next((line for line in err.splitlines() if 'has no effect' in line), '')
+    assert note.startswith(f'Note: {named} has no effect'), err
+
+
+@pytest.mark.parametrize('typed, hint', [(['--no-group'], 'reveal --stdin --no-group'),
+                                         (['--group', 'off'], 'reveal --stdin --group on|off')])
+def test_the_second_path_refusal_names_a_switch_as_typed(project, typed, hint):
+    from conftest import _run_reveal_direct
+    err = _run_reveal_direct('a.py', 'long.py', *typed).stderr
+    refusal = '\n'.join(line for line in err.splitlines() if not line.startswith('note:'))
+    assert hint in refusal and (typed[0] != '--no-group' or '--group ' not in refusal.replace('--no-group', '')), err
+
+
+def test_a_flag_spec_note_names_respect_gitignore_as_typed(project):
+    from conftest import _run_reveal_direct
+    err = _run_reveal_direct('env://', '--respect-gitignore', 'off').stderr
+    assert '--respect-gitignore has no effect on env://' in err, err

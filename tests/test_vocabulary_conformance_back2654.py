@@ -1981,3 +1981,49 @@ def test_an_explicit_switch_overrides_its_environment_default(workspace):
         enabled = _run('proj/app.py')
     assert 'Next:' in enabled.out and 'Next:' not in default.out, (enabled.brief(), default.brief())
     assert explicit.rc == 0 and explicit.out == enabled.out, explicit.brief()
+
+
+_WALKING = [noun for noun in NOUNS if noun not in RULED_EXEMPT_NOUNS
+            and getattr(_adapter(noun).RESOURCE_SPEC, 'walks', False)]
+
+
+def _with_an_ignored_file():
+    with open(os.path.join('proj', '.gitignore'), 'w', encoding='utf-8') as handle:
+        handle.write('ignored_mod.py\n')
+    with open(os.path.join('proj', 'ignored_mod.py'), 'w', encoding='utf-8') as handle:
+        handle.write('def hidden(x):\n    return x\n')
+
+
+@pytest.mark.parametrize('noun', _WALKING)
+def test_no_gitignore_answers_as_respect_gitignore_off(workspace, noun):
+    """Rule 16 parity before --no-gitignore becomes the legacy spelling of --respect-gitignore off (rule 15, item D2):
+    on every noun that walks, URI and subcommand, JSON and text, the two answer identically (notes aside)."""
+    _with_an_ignored_file()
+    forms = {'URI': [_uri(noun)]}
+    if _sub(noun) is not None:
+        forms['subcommand'] = _sub(noun)
+    for form, request in forms.items():
+        legacy, canonical = _run(*request, '--no-gitignore', '--format', 'json'), _run(*request, '--respect-gitignore', 'off', '--format', 'json')
+        assert canonical.rc != 2 and _answer(legacy, noun) == _answer(canonical, noun), (form, legacy.brief(), canonical.brief())
+        legacy, canonical = _run(*request, '--no-gitignore'), _run(*request, '--respect-gitignore', 'off')
+        assert canonical.rc != 2 and (legacy.rc, legacy.out) == (canonical.rc, canonical.out), (form, legacy.brief(), canonical.brief())
+
+
+@pytest.mark.parametrize('request_argv', [['proj'], ['check', 'proj', '--select', 'E501', '--severity', 'low']],
+                         ids=['file-tree', 'check'])
+def test_no_gitignore_answers_as_respect_gitignore_off_on_the_file_route_and_check(workspace, request_argv):
+    _with_an_ignored_file()
+    for extra in ([], ['--format', 'json']):
+        legacy, canonical = _run(*request_argv, '--no-gitignore', *extra), _run(*request_argv, '--respect-gitignore', 'off', *extra)
+        assert canonical.rc != 2 and (legacy.rc, legacy.out) == (canonical.rc, canonical.out), (legacy.brief(), canonical.brief())
+
+
+def test_the_ignored_file_fixture_changes_walking_answers(workspace):
+    """Positive control for the parity tests: with the ignored file present, --no-gitignore changes the answer of the
+    file tree, check and the walking nouns named here, so an equal answer above is evidence."""
+    _with_an_ignored_file()
+    changed = [noun for noun in _WALKING
+               if _answer(_run(_uri(noun), '--no-gitignore', '--format', 'json'), noun)
+               != _answer(_run(_uri(noun), '--format', 'json'), noun)]
+    assert _run('proj', '--no-gitignore').out != _run('proj').out
+    assert {'ast', 'metrics', 'overview'} <= set(changed), changed
