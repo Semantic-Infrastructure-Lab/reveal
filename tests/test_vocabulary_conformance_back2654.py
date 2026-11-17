@@ -161,9 +161,8 @@ RECORDED_EXCEPTIONS = {('metrics', '_top_conflict'): 'BACK-2656: in view=hotspot
                                                      'top and limit exit 2; top is standalone, so no legacy entry '
                                                      'generates the conflict'}
 # Cells stopped for a ruling (a case the rules do not settle); each must still fail, and the manager owns the list.
-STOPPED = {('claude', '12'): 'stopped: rule 12 makes match a repeating selection, but Claude match is one search term '
-                             'handed to its legacy search/contains readers; repeating it means Claude ANDs terms, '
-                             'a new evaluator capability (reported in BACK-2654 Step 3)'}
+# Empty since rule 19 (Step 4) settled claude x 12.
+STOPPED: dict = {}
 # Rule 9: the retired stats:// scheme is exempt (deleted at the cut); metrics' cells measure the owner it shares.
 RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted at the cut; metrics:// is measured'}
 
@@ -1331,6 +1330,80 @@ def test_claude_where_is_the_shared_where_declaration():
     assert spec.validate(['session~=a', 'tool==Bash']) == ['session~=a', 'tool==Bash']
     with pytest.raises(ValueError, match='session~=TEXT'):
         spec.validate(['lines>3'])
+
+
+# Rule 19 (Scott 2026-11-16; Step 4 rows settled by the manager): repeated match terms AND per row of the answer. The
+# row is the answer's row; in a session search a message qualifies and keeps its block excerpts that hold any term.
+# Each case: (URI, term A, term B, the row identity). AND must answer exactly the rows both single terms answer.
+_ZERO = 'zzz-no-such-term'
+MATCH_AND = [
+    ('claude://session/my-session', 'validate', 'path', lambda d: {m['message_index'] for m in d['matches']}),
+    ('claude://session/my-session/messages', 'validate', 'path', lambda d: {t['message_index'] for t in d['messages']}),
+    ('claude://session/my-session?tools=Read,Bash,Edit', 'd', 'file',
+     lambda d: {r['tool_use_id'] for r in d['results']}),
+    ('claude://session/my-session?errors', 'error', 'failed', lambda d: {r['tool_use_id'] for r in d['results']}),
+    ('claude://history', 'fix', 'e', lambda d: {e['prompt'] for e in d['entries']}),
+    ('claude://search', 'validate', 'traversal', lambda d: {m['session'] for m in d['matches']}),
+    ('claude://sessions', 'validate', 'traversal', lambda d: {m['session'] for m in d['matches']}),
+    ('claude://plans', 'token', 'signed', lambda d: {p['name'] for p in d['plans']}),
+    ('claude://agents', 'review', 'diff', lambda d: {a['name'] for a in d['agents']}),
+    ('claude://memory', 'feedback', 'first', lambda d: {m['name'] for m in d['memories']}),
+    ('claude://session/my-session/workflow', 'auth', 'edit', lambda d: {r['step'] for r in d['workflow']}),
+]
+
+
+@pytest.fixture
+def claude_home(workspace, monkeypatch):
+    """The workspace's Claude home for every Claude directory (plans and agents too, not the real home)."""
+    adapter = declared_adapter_class('claude')
+    monkeypatch.setattr(adapter, 'PLANS_DIR', adapter.CLAUDE_HOME / 'plans')
+    monkeypatch.setattr(adapter, 'AGENTS_DIR', adapter.CLAUDE_HOME / 'agents')
+    return workspace
+
+
+def _with(uri, *terms):
+    return uri + ('&' if '?' in uri else '?') + '&'.join(f'match={term}' for term in terms)
+
+
+def _rows_of(uri, rows):
+    run = _run(uri, '--format', 'json')
+    assert run.rc == 0, run.brief()
+    return rows(json.loads(run.out))
+
+
+@pytest.mark.parametrize('uri,a,b,rows', MATCH_AND, ids=[case[0].partition('://')[2] for case in MATCH_AND])
+def test_claude_repeated_match_terms_and_per_row(claude_home, uri, a, b, rows):
+    single_a, single_b = _rows_of(_with(uri, a), rows), _rows_of(_with(uri, b), rows)
+    assert single_a, f'{a} must match a row of {uri} (a positive control)'
+    assert _rows_of(_with(uri, a, b), rows) == single_a & single_b
+    assert _rows_of(_with(uri, a, _ZERO), rows) == set()
+
+
+def test_claude_session_search_keeps_the_qualifying_messages_excerpts(claude_home):
+    """A qualifying message keeps each block excerpt that holds any of the terms (the row is the message)."""
+    uri = 'claude://session/my-session'
+    both = json.loads(_run(_with(uri, 'validate', 'path'), '--format', 'json').out)['matches']
+    either = [m for term in ('validate', 'path') for m in json.loads(_run(_with(uri, term), '--format', 'json').out)['matches']]
+    kept = {m['message_index'] for m in both}
+    assert both and all(m in either for m in both)
+    assert {json.dumps(m, sort_keys=True) for m in either if m['message_index'] in kept} == \
+        {json.dumps(m, sort_keys=True) for m in both}
+
+
+@pytest.mark.parametrize('uri', ['claude://session/my-session?match=validate', 'claude://history?match=fix',
+                                 'claude://session/my-session/messages?match=validate'])
+def test_claude_one_match_term_answers_as_before_even_repeated(claude_home, uri):
+    """One term answers byte for byte as today; the same term twice is one term."""
+    term = uri.rpartition('=')[2]
+    for case in (_parity_case('claude', 'json', f'{uri}&match={term}', uri),
+                 _text_parity_case('text', f'{uri}&match={term}', uri)):
+        assert case.ok, case.evidence
+
+
+def test_claude_match_repeats_on_the_subcommand_as_on_the_uri(claude_home):
+    sub = _run('claude', 'session/my-session', '--match', 'validate', '--match', 'path', '--format', 'json')
+    uri = _run('claude://session/my-session?match=validate&match=path', '--format', 'json')
+    assert sub.rc == 0 and _answer(sub, 'claude') == _answer(uri, 'claude'), sub.brief()
 
 
 def test_every_legacy_entry_names_its_spelling_and_translation():
