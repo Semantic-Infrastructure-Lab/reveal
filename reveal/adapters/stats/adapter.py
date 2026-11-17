@@ -24,7 +24,7 @@ from ...utils.query_control import sort_failed_warning, sort_nulls_last
 from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_parser import (
     CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, mark_query_keys, param_schema,
-    peek_query_items, split_exclude_param, where_param, whole_number,
+    exclude_param, peek_query_items, split_exclude_param, where_param, whole_number,
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.gitignore import respect_gitignore_param
@@ -241,14 +241,7 @@ _OFFSET = ParamSpec('offset', 'integer', 'Skip this many rows before the first o
                     cli=CliBinding(('--offset',), metavar='N'))
 # The walk's scope, from the URI or the global --exclude/--no-gitignore (overview composes them); declared so
 # where does not take them for filters. No subcommand flag: the global flags carry them.
-def _patterns(value: Any) -> str:
-    """Exclusion patterns: one comma-separated value, or every repeat of it (exclude repeats and combines)."""
-    values = value if isinstance(value, (list, tuple)) else [value]
-    return ','.join(_text('exclude')(item) for item in values)
-
-
-_EXCLUDE = ParamSpec('exclude', 'string', 'Exclusion patterns, comma-separated (.gitignore syntax); repeat to add more; '
-                     '--exclude fills it', None, _patterns, role='scope', repeatable=True)
+_EXCLUDE = exclude_param()
 _RESPECT_GITIGNORE = ParamSpec('respect_gitignore', 'string', 'false includes files git ignores; --no-gitignore '
                                'fills it', None, lambda value: value, role='scope')
 

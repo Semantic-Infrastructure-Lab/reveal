@@ -25,7 +25,8 @@ from ..utils.path_utils import (HiddenTally, as_spelled, failure_of, hidden_entr
                                traversal_failed_warning)
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
-                                  nonempty_scalar, nonnegative_display_limit, param_schema, split_exclude_param)
+                                  exclude_param, nonempty_scalar, nonnegative_display_limit, param_schema,
+                                  split_exclude_param)
 from ..utils.query_parser import peek_query_items
 from ..utils.results import ResultBuilder, note_truncation
 
@@ -452,6 +453,7 @@ class OverviewAdapter(ResourceAdapter):
         ParamSpec('verbose', 'boolean', 'Expand map evidence; diagnostic details remain capped at 50',
                   False, boolean_value, role='presentation'),
         _AGAINST,
+        exclude_param(),
     )
 
     def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):

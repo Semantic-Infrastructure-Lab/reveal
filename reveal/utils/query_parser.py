@@ -382,6 +382,11 @@ class ParamSpec:
     # Selections and filters repeat and combine (where, match); settings are scalar. The CLI appends exactly
     # when this is set (COMMAND_MODEL rule "Conflicting values").
     repeatable: bool = False
+    # A where control's filterable fields (COMMAND_MODEL "Bare URI keys"): a bare ``FIELD OP VALUE`` on one of
+    # them is that where filter, and the unknown-key check names them. ``open_fields`` describes a field set the
+    # data defines (Markdown frontmatter keys, JSON row keys; BACK-2654 note #14): every bare key there is a field.
+    fields: Tuple[str, ...] = ()
+    open_fields: str = ''
 
     def __post_init__(self) -> None:
         from dataclasses import replace
@@ -502,16 +507,34 @@ def expression_list(value: Any) -> List[str]:
 
 def where_param(description: str, examples: Tuple[str, ...] = (),
                 legacy: Tuple['LegacySpelling', ...] = (), *,
-                convert: Optional[Callable[[Any], Any]] = None, default: Any = ()) -> ParamSpec:
+                convert: Optional[Callable[[Any], Any]] = None, default: Any = (),
+                fields: Tuple[str, ...] = (), open_fields: str = '') -> ParamSpec:
     """The one declaration of a noun's repeatable where (D18; AST, Metrics and Claude, BACK-2621/2654).
 
     Its role makes the binder fold bare URI operator keys (``?lines>50``) into the same list as
     explicit ``where=`` values and ``--where`` flags; the noun's own filter parser evaluates them.
     *convert* is a noun's own term validation (Claude's name predicates); *default* None means an
-    omitted where is absent rather than an empty list.
+    omitted where is absent rather than an empty list. *fields* are its filterable fields, or *open_fields*
+    describes a field set the data defines.
     """
     return ParamSpec('where', 'array', description, [] if default == () else default, convert or expression_list,
-                     examples, role='filter-expression', repeatable=True, legacy=legacy, cli=CliBinding(('--where',)))
+                     examples, role='filter-expression', repeatable=True, legacy=legacy, cli=CliBinding(('--where',)),
+                     fields=fields, open_fields=open_fields)
+
+
+def _exclude_patterns(value: Any) -> str:
+    """Exclusion patterns: one comma-separated value, or every repeat of it (exclude repeats and combines)."""
+    values = value if isinstance(value, (list, tuple)) else [value]
+    for item in values:
+        if isinstance(item, bool) or not isinstance(item, str) or not item.strip():
+            raise ValueError('exclude requires a value')
+    return ','.join(values)
+
+
+def exclude_param() -> ParamSpec:
+    """The one declaration of a walking noun's ``exclude`` (``--exclude`` fills it; split_exclude_param reads it)."""
+    return ParamSpec('exclude', 'string', 'Exclusion patterns, comma-separated (.gitignore syntax); repeat to add more; '
+                     '--exclude fills it', None, _exclude_patterns, role='scope', repeatable=True)
 
 
 def param_cli_flags(specs: Iterable[ParamSpec]) -> Dict[str, str]:

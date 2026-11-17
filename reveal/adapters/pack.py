@@ -28,8 +28,8 @@ from ..utils.path_utils import (
     traversal_failed_warning,
     failure_of,
 )
-from ..utils.query_binding import bind_declared_params
-from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema,
+from ..utils.query_binding import bind_declared_params, boolean_value
+from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, exclude_param, param_schema,
                                   split_exclude_param)
 from ..utils.results import AnalysisCompleteness, ResultBuilder, result_execution_facts
 from reveal.utils.lines import split_lines
@@ -811,6 +811,8 @@ _SINCE = ParamSpec('since', 'string', 'Git ref to diff against; changed files ra
 _CONTENT = ParamSpec('content', 'boolean', 'Include tiered file content (full/structure/name_only)',
                      False, _legacy_flag, ('content=true',), role='presentation',
                      cli=CliBinding(('--content',), action='store_true'))
+_VERBOSE = ParamSpec('verbose', 'boolean', 'Show the per-file token/line-count breakdown (the CLI --verbose fills it)',
+                     False, boolean_value, role='presentation')
 _ARCHITECTURE = ParamSpec('architecture', 'boolean', 'Boost high fan-in files; include an architecture hint',
                           False, _legacy_flag, ('architecture=true',), role='analysis',
                           cli=CliBinding(('--architecture',), action='store_true'))
@@ -885,7 +887,7 @@ class PackAdapter(ResourceAdapter):
     FINDINGS_POLICIES = ('none',)
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(cli_default=None, required=True, uri_codec='existing-path-first')
-    PARAM_SPECS = (_BUDGET, _FOCUS, _SINCE, _CONTENT, _ARCHITECTURE)
+    PARAM_SPECS = (_BUDGET, _FOCUS, _SINCE, _CONTENT, _ARCHITECTURE, _VERBOSE, exclude_param())
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):
