@@ -1195,7 +1195,7 @@ def test_missing_partial_files_is_disclosed_not_failed_or_crashed():
     notes = []
     assert gate.regressions(lost, baseline, notes) == []
     assert notes == ['c-curl: partial_files not compared (measurement has no partial_files)']
-    # Calls measurements never carry the field: nothing to compare, nothing to disclose.
+    # Neither side carries the field (rows from before it existed): nothing to compare, nothing to disclose.
     notes = []
     calls = {'calls': {k: v for k, v in baseline['c'].items() if k != 'partial_files'}}
     assert gate.regressions(calls, calls, notes) == [] and notes == []

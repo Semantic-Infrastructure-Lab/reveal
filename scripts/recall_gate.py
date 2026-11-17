@@ -181,13 +181,10 @@ def _test_policy_config(path: Path):
         reset_request_caches()
 
 
-def _cli_json(uri: str, label: str, *, incomplete_ok: bool = False) -> dict[str, Any]:
-    """One request through ``reveal.main.main`` with the argv a user would type, read back as JSON.
-
-    Flag routing, the project-root choice, the rendered path spelling and the disclosures are the
-    CLI's own; no adapter internals are read. A failed answer raises instead of becoming a smaller
-    truth (BACK-2062).
-    """
+def _cli_answer(uri: str, label: str) -> tuple[int, dict[str, Any], str]:
+    """One request through ``reveal.main.main`` with the argv a user would type: its exit code, its JSON
+    answer and its stderr. Flag routing, the project-root choice, the rendered path spelling and the
+    disclosures are the CLI's own; no adapter internals are read."""
     scheme = uri.split('://', 1)[0]
     out, err = io.StringIO(), io.StringIO()
     code = 0
@@ -200,9 +197,17 @@ def _cli_json(uri: str, label: str, *, incomplete_ok: bool = False) -> dict[str,
         result = json.loads(out.getvalue())
     except json.JSONDecodeError as exc:
         raise RuntimeError(f'{scheme}:// printed no JSON for {label} (exit {code}): {err.getvalue()[:200]}') from exc
+    return code, result, err.getvalue()
+
+
+def _cli_json(uri: str, label: str, *, incomplete_ok: bool = False) -> dict[str, Any]:
+    """The CLI's JSON answer for *uri* (``_cli_answer``). A failed answer raises instead of becoming a smaller
+    truth (BACK-2062)."""
+    code, result, err = _cli_answer(uri, label)
     # Exit 3 is 'complete answer, incomplete analysis' (a file parsed with errors): the caller qualifies it.
     if (code and not (incomplete_ok and code == 3)) or result.get('error'):
-        raise RuntimeError(f'{scheme}:// failed for {label} (exit {code}): {result.get("error") or err.getvalue()[:200]}')
+        raise RuntimeError(f'{uri.split("://", 1)[0]}:// failed for {label} (exit {code}): '
+                           f'{result.get("error") or err[:200]}')
     return result
 
 
@@ -493,15 +498,39 @@ def _measure_tests(scope: Scope, edges: dict[str, list[str]], cap: int | None,
             'target_population': _target_population(truth, graph, scope.root, population)}
 
 
-def rendered_callers(scan: Path, target: str) -> list[dict[str, Any]]:
-    """Callers of one name as ``calls://<scan>?callers=<name>`` prints them; a cut answer raises."""
-    result = _cli_json(f'calls://{scan.as_posix()}?callers={urllib.parse.quote(target, safe="")}', target)
+# Warnings that mean the calls answer lost evidence (an unreadable file, a dead worker, a capped walk); an
+# ``analysis_incomplete`` entry with a count is the owner's lost directories, not the outcome marker.
+_CALLS_LOSS_TYPES = frozenset({'analysis_failed', 'worker_lost', 'scan_capped'})
+
+
+def _calls_partial_files(result: dict[str, Any], code: int, label: str) -> int:
+    """Files the answer read only through error recovery (its ``parse_recovered`` count, BACK-2658).
+
+    calls:// exits 3 for them: a complete answer from partial input, which the gate counts like imports'
+    ``partial_files`` (more is a regression). Exit 3 for anything else is lost evidence, so it raises."""
+    warnings = [w for w in (result.get('meta') or {}).get('warnings') or [] if isinstance(w, dict)]
+    recovered = sum(w.get('count', 0) for w in warnings if w.get('type') == 'parse_recovered')
+    lost = [w.get('type') for w in warnings if w.get('type') in _CALLS_LOSS_TYPES
+            or (w.get('type') == 'analysis_incomplete' and 'count' in w)]
+    if code == 3 and (lost or not recovered):
+        raise RuntimeError(f'calls:// answer for {label} is incomplete (exit 3): '
+                           f'{", ".join(map(str, lost)) or "no recovered file named"}; measurement unavailable')
+    return recovered
+
+
+def rendered_callers(scan: Path, target: str) -> tuple[list[dict[str, Any]], int]:
+    """Callers of one name as ``calls://<scan>?callers=<name>`` prints them, and the count of files read only
+    through error recovery; a cut answer raises, and so does exit 3 for any other reason."""
+    code, result, err = _cli_answer(f'calls://{scan.as_posix()}?callers={urllib.parse.quote(target, safe="")}', target)
+    if code not in (0, 3) or result.get('error'):
+        raise RuntimeError(f'calls:// failed for {target} (exit {code}): {result.get("error") or err[:200]}')
     if result.get('meta', {}).get('errors'):
         raise RuntimeError(f'calls:// reported errors for {target}: {result["meta"]["errors"][:3]}')
+    partial = _calls_partial_files(result, code, target)
     rows = [row for level in result['levels'] for row in level['callers']]
     if len(rows) != result['total_callers']:
         raise RuntimeError(f'calls:// answer truncated for {target}: {len(rows)} of {result["total_callers"]} shown')
-    return rows
+    return rows, partial
 
 
 def measure_calls(entry: dict, root: Path) -> dict[str, Any]:
@@ -523,13 +552,15 @@ def measure_calls(entry: dict, root: Path) -> dict[str, Any]:
     expected = sum(map(len, edges.values()))
     if not expected:
         raise RuntimeError('Call oracle produced zero claims')
-    hit = extra = 0
+    hit = extra = partial_files = 0
     differences = []
     reset_request_caches()
     for target, truth_list in edges.items():
         truth = set(truth_list)
+        rows, partial = rendered_callers(scan, target)
+        partial_files = max(partial_files, partial)  # one scan root: every answer names the same files
         found = {f"{Path(row['file']).relative_to(root).as_posix()}::{row['caller']}"
-                 for row in rendered_callers(scan, target)
+                 for row in rows
                  if row.get('caller_kind') != 'module' and Path(row['file']) in files}
         matched, missed, surplus = truth & found, truth - found, found - truth
         hit += len(matched)
@@ -541,7 +572,7 @@ def measure_calls(entry: dict, root: Path) -> dict[str, Any]:
     return {'oracle': 'python-ast-callers', 'sha': head, 'targets': len(edges),
             'oracle_edges': expected, 'hit_edges': hit, 'extra_edges': extra,
             'recall': hit / expected, 'precision': hit / (hit + extra),
-            'coverage': coverage, 'differences': differences}
+            'coverage': coverage, 'partial_files': partial_files, 'differences': differences}
 
 
 def regressions(current: dict, baseline: dict, notes: list[str] | None = None) -> list[str]:
@@ -631,7 +662,8 @@ def _compare_test_policy(key: str, measured: dict, reference: dict, failures: li
 def _compare_partial_files(key: str, measured: dict, reference: dict, failures: list[str],
                            notes: list[str] | None) -> None:
     """More partially parsed files than the baseline is a regression; fewer is not. A side without the
-    field (calls measurements, baselines written before it existed) is disclosed as not compared."""
+    field (a baseline written before it existed: imports before BACK-1840, calls before BACK-2658) is
+    disclosed as not compared."""
     now, before = measured.get('partial_files'), reference.get('partial_files')
     if now is None and before is None:
         return
