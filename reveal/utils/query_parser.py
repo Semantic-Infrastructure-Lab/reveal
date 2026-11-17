@@ -119,6 +119,7 @@ class QueryParams(Dict[str, Any]):
         self._aliases: Dict[str, Tuple[str, ...]] = {}
         self._selectors: Dict[str, str] = {}
         self._supplied_aliases: set[str] = set()
+        self._folded: Tuple[str, ...] = ()  # bare field keys the binder folded into where
         self._source_query: Optional[str] = None
         self._overrides: set[str] = set()
         self._transport = "typed"
@@ -500,14 +501,17 @@ def expression_list(value: Any) -> List[str]:
 
 
 def where_param(description: str, examples: Tuple[str, ...] = (),
-                legacy: Tuple['LegacySpelling', ...] = ()) -> ParamSpec:
-    """The one declaration of a noun's repeatable where (D18; AST and Metrics, BACK-2621).
+                legacy: Tuple['LegacySpelling', ...] = (), *,
+                convert: Optional[Callable[[Any], Any]] = None, default: Any = ()) -> ParamSpec:
+    """The one declaration of a noun's repeatable where (D18; AST, Metrics and Claude, BACK-2621/2654).
 
     Its role makes the binder fold bare URI operator keys (``?lines>50``) into the same list as
     explicit ``where=`` values and ``--where`` flags; the noun's own filter parser evaluates them.
+    *convert* is a noun's own term validation (Claude's name predicates); *default* None means an
+    omitted where is absent rather than an empty list.
     """
-    return ParamSpec('where', 'array', description, [], expression_list, examples, role='filter-expression',
-                     repeatable=True, legacy=legacy, cli=CliBinding(('--where',)))
+    return ParamSpec('where', 'array', description, [] if default == () else default, convert or expression_list,
+                     examples, role='filter-expression', repeatable=True, legacy=legacy, cli=CliBinding(('--where',)))
 
 
 def param_cli_flags(specs: Iterable[ParamSpec]) -> Dict[str, str]:

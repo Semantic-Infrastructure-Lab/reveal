@@ -2,7 +2,7 @@
 from typing import Any, Callable
 
 from ...utils.query_binding import bind_declared_params, legacy_presence_value as presence, string_value as text
-from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, QueryParams, peek_query_items, nonnegative_display_limit, nonempty_scalar
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, where_param, peek_query_items, nonnegative_display_limit, nonempty_scalar
 from .schema import _SCHEMA_QUERY_PARAMS
 from .resources import SESSION_VIEW_NAMES
 
@@ -28,7 +28,7 @@ def snippet(value):
 def name_predicates(value):
     terms = [value] if isinstance(value, str) else value
     if not isinstance(terms, (list, tuple)) or any(not isinstance(term, str) for term in terms):
-        raise ValueError('where requires session~=TEXT expressions')
+        raise ParamValueError('where requires session~=TEXT expressions')
     for term in terms:
         if not term:
             continue
@@ -38,7 +38,7 @@ def name_predicates(value):
             continue
         if tool[0].strip() == 'tool' and tool[1] and tool[2]:
             continue
-        raise ValueError('where supports session~=TEXT on catalogs or tool==NAME on workflows')
+        raise ParamValueError('where supports session~=TEXT on catalogs or tool==NAME on workflows')
     return [term for term in terms if term]
 
 
@@ -83,9 +83,10 @@ PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS
     ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', None,
               lambda value: nonnegative_display_limit(value, name='offset'), minimum=0, cli=CliBinding(('--offset',))),
     ParamSpec('sort', 'string', 'Answer row field; prefix - for descending; supported fields depend on the selected reader', None, nonempty_scalar, cli=CliBinding(('--sort',))),
-    ParamSpec('where', 'array', 'Reader-specific predicates, ANDed: catalog session~=TEXT substrings or workflow tool==NAME exact equality; case-insensitive',
-              None, name_predicates, uri_codec='percent', role='name-predicate',
-              repeatable=True, legacy=(LegacySpelling('filter', codec=_session_substring),), cli=CliBinding(('--where',))),
+    # The shared where declaration with Claude's evaluator (rule 13): a bare ?session~=TEXT is the same filter.
+    where_param('Reader-specific predicates, ANDed: catalog session~=TEXT substrings or workflow tool==NAME exact '
+                'equality; case-insensitive. A bare URI key with its operator (?session~=TEXT) is the same filter',
+                legacy=(LegacySpelling('filter', codec=_session_substring),), convert=name_predicates, default=None),
     ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence, cli=CliBinding(('--timeline',), action='store_true')),
     ParamSpec('detail', 'string', 'summary, normal, full or raw; levels are qualified by the existing reader', None, text, choices=('summary', 'normal', 'full', 'raw'), cli=CliBinding(('--detail',))),
     ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES, role='operation', cli=CliBinding(('--view',))),
@@ -100,6 +101,9 @@ def bind_request(query, params, resource=''):
     runtime = QueryParams({key: value for key, value in peek_query_items(bound)
                            if value is not None and not (key in PRESENCE_FLAGS and value is False)})
     runtime._aliases = dict(getattr(bound, '_aliases', {}))  # reading where reads legacy filter (last: tail)
+    folded = tuple(getattr(bound, '_folded', ()))
+    if folded:  # and a bare ?session~=TEXT folded into it
+        runtime._aliases['where'] = (*runtime._aliases.get('where', ()), *folded)
     from .controls import apply_view, apply_detail, apply_match, validate_where_scope, validate_modifier_scope, validate_selectors
     resource = apply_view(runtime, resource)
     apply_detail(runtime, resource)

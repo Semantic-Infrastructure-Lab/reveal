@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import quote, unquote
 
 from ..errors import RequestValidationError
-from .query_parser import ParamSpec, QueryParams, ResourceSpec, parse_query_params, peek_query_items
+from .query_parser import ParamSpec, QueryParams, ResourceSpec, parse_query_params, peek_query_items, query_key
 
 
 def boolean_value(value: Any) -> bool:
@@ -163,9 +163,10 @@ def _prepare_legacy_selectors(declarations: tuple[ParamSpec, ...], source: str, 
     return selected
 
 
-def _prepare_expression_params(declarations, source, params, selectors, expression) -> None:
+def _prepare_expression_params(declarations, source, params, selectors, expression) -> tuple:
+    """Fold explicit where= values and bare field keys into the expression list; return the folded keys."""
     known = {name for spec in declarations for name in spec.spellings}
-    terms = []
+    terms, folded = [], []
     for index, part in enumerate(source.split('&')):
         if index == 0 and selectors:
             continue
@@ -174,9 +175,11 @@ def _prepare_expression_params(declarations, source, params, selectors, expressi
             terms.append(unquote(value, encoding='utf-8', errors='strict'))
         elif key and key not in known:
             terms.append(part.strip())
+            folded.append(query_key(part))
             dict.pop(params, key, None)
     if terms:
         params[expression.name] = terms
+    return tuple(folded)
 
 
 def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> QueryParams:
@@ -189,10 +192,10 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     _prepare_repeated_params(declarations, source, params)
     selectors = _prepare_legacy_selectors(declarations, source, params)
     expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
-    if expression is not None:
-        _prepare_expression_params(declarations, source, params, selectors, expression)
+    folded = _prepare_expression_params(declarations, source, params, selectors, expression) if expression else ()
     prepared = QueryParams(_normalize_aliases(declarations, params))
     prepared._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
+    prepared._folded = folded  # the bare field keys folded into where (a noun reading where reads them)
     prepared._selectors = selectors
     prepared._source_query = source
     prepared._supplied_aliases = {alias for spec in declarations for alias in spec.spellings[1:]

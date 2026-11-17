@@ -2449,12 +2449,13 @@ class TestRawQueryParam:
     @patch.object(ClaudeAdapter, '_find_conversation')
     def test_role_query_param_removed_no_longer_routes(self, mock_find):
         """The old ?role=user query param (session-root, no /prompts or
-        /messages path) is gone — it's not a recognized param anymore and
-        falls through to the default overview."""
+        /messages path) is gone. Claude's where is the shared where (BACK-2654 rule 13), so a bare key that is
+        no control is a where term, and role=user is no session~=/tool== predicate: an invalid request, never
+        the user-messages answer (it fell through to the overview before)."""
+        from reveal.errors import RequestValidationError
         mock_find.return_value = TEST_CONVERSATION
-        adapter = ClaudeAdapter('session/test-session-123', query='role=user')
-        result = adapter.get_structure()
-        assert result['type'] != 'claude_user_messages'
+        with pytest.raises(RequestValidationError, match='session~=TEXT'):
+            ClaudeAdapter('session/test-session-123', query='role=user')
 
 
 # Run tests with pytest
