@@ -817,7 +817,14 @@ class RevealConfig:
         try:
             with open(pyproject, 'rb') as f:
                 data = tomllib.load(f)
-            return data.get('tool', {}).get('reveal')
+            tool = data.get('tool', {})
+            section = tool.get('reveal') if isinstance(tool, dict) else None
+            if section is None:
+                return None
+            if not isinstance(section, dict):  # read like a .reveal.yaml: a mapping, schema-checked (BACK-2663)
+                raise ValueError(f"[tool.reveal] must be a table, not {type(section).__name__}")
+            cls._validate_config_schema(section, pyproject)
+            return section
         except (OSError, ValueError) as e:  # unreadable, or tomllib.TOMLDecodeError / UnicodeDecodeError
             cause = failure_of(e).cause
             _config_note(_load_failed_warning(pyproject, cause), logging.DEBUG, "Failed to load %s: %s", pyproject, e)
@@ -873,6 +880,9 @@ class RevealConfig:
         BACK-2663). Each problem is a ``config_schema_invalid`` warning. A key the schema does not
         know is only warned about (nothing reads it), and a key whose reader validates it and fails
         the request naming the file (``_SELF_VALIDATED_KEYS``) keeps that, rather than falling back.
+
+        Validation repeats until nothing more is removed: dropping a required value (an override's
+        ``files: 5``) leaves its object invalid, and the next pass drops the object too.
         """
         try:
             import jsonschema  # deferred: ~25 ms, and only a run that finds a config file validates
@@ -881,6 +891,23 @@ class RevealConfig:
         # jsonschema.validate() re-checks CONFIG_SCHEMA against the metaschema on every
         # call (~20 ms, once per config file); the schema is ours and tests check it once.
         validator = jsonschema.validators.validator_for(CONFIG_SCHEMA)(CONFIG_SCHEMA)
+        said: set = set()
+        while True:
+            removed = cls._schema_pass(validator, config, path, said)
+            if not removed:
+                return
+            # Deepest and highest list index first, so an earlier removal never moves a later one.
+            for where in sorted(removed, key=lambda parts: [(1, p) if isinstance(p, int) else (0, p) for p in parts],
+                                reverse=True):
+                container: Any = config
+                for part in where[:-1]:
+                    container = container[part]
+                del container[where[-1]]
+
+    @staticmethod
+    def _schema_pass(validator: Any, config: Dict[str, Any], path: Path, said: set) -> List[List[Any]]:
+        """One validation pass: note each problem not already *said*, and return the paths of the
+        values that fall back to their defaults."""
         removed: List[List[Any]] = []
         for error in validator.iter_errors(config):
             where = list(error.absolute_path)
@@ -888,17 +915,13 @@ class RevealConfig:
             falls_back = bool(where) and where[0] not in _SELF_VALIDATED_KEYS and error.validator != 'additionalProperties'
             message = (f"config {to_posix(path)}: {key}: {error.message}; that value was ignored and its default used"
                        if falls_back else f"config {to_posix(path)}: {error.message}")
-            _config_note(config_warning('config_schema_invalid', message, to_posix(path), key=key),
-                         logging.WARNING, "Invalid config in %s: %s", path, error.message)
+            if message not in said:
+                said.add(message)
+                _config_note(config_warning('config_schema_invalid', message, to_posix(path), key=key),
+                             logging.WARNING, "Invalid config in %s: %s", path, error.message)
             if falls_back and where not in removed:
                 removed.append(where)
-        # Deepest and highest list index first, so an earlier removal never moves a later one.
-        for where in sorted(removed, key=lambda parts: [(1, p) if isinstance(p, int) else (0, p) for p in parts],
-                            reverse=True):
-            container: Any = config
-            for part in where[:-1]:
-                container = container[part]
-            del container[where[-1]]
+        return removed
 
     @classmethod
     def _load_file(cls, path: Path) -> Optional[Dict[str, Any]]:
