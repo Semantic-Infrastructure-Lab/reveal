@@ -77,58 +77,57 @@ def test_fixture_dates_are_what_the_test_assumes(repo):
     assert sorted(c['date'] for c in history) == [when for _, when in _COMMITS]
 
 
-# An unknown field with an operator warns.
+# An undeclared field exits 2 naming the supported fields (BACK-2654 rule 3, note #15: Git declares its commit
+# fields; this used to answer with an unknown_filter_field warning, and != even matched every commit).
 
-@pytest.mark.parametrize('query, expected', [
-    ('authr~=T', []),
-    ('authr>a', []),
-    ('authr!=T', ['a', 'b', 'c', 'd']),   # != matches a missing value: every commit, still a typo
-])
-def test_an_unknown_field_with_an_operator_warns(repo, query, expected):
-    result = GitAdapter(str(repo), f'type=log&{query}').get_structure()
-    assert sorted(c['message'].strip() for c in result['history']) == expected
-    [warning] = _unknown(result)
-    assert "'authr'" in warning['message'] and 'author' in warning['message']
+def _rejected(repo, query):
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError) as rejected:
+        GitAdapter(str(repo), f'type=log&{query}')
+    return str(rejected.value)
+
+
+@pytest.mark.parametrize('query', ['authr~=T', 'authr>a', 'authr!=T', '!authr', 'authr'])
+def test_an_unknown_field_with_an_operator_warns(repo, query):
+    message = _rejected(repo, query)
+    assert "unsupported control 'authr'" in message and 'fields' in message and 'author' in message
 
 
 def test_the_repository_overview_warns(repo, monkeypatch):
-    result = _router(repo, monkeypatch, 'git://.?authr~=T', '--format', 'json')
-    data = json.loads(result.stdout)
-    assert data['commits']['recent'] == []
-    [warning] = _unknown(data)
-    assert "'authr'" in warning['message']
+    monkeypatch.chdir(repo)
+    result = _run_reveal_direct('git://.?authr~=T', '--format', 'json')
+    assert result.returncode == 2 and "unsupported control 'authr'" in result.stderr and 'author' in result.stderr
 
 
 def test_file_history_warns(repo, monkeypatch):
-    result = _router(repo, monkeypatch, 'git://b?type=history&authr~=T', '--format', 'json')
-    assert len(_unknown(json.loads(result.stdout))) == 1
+    monkeypatch.chdir(repo)
+    result = _run_reveal_direct('git://b?type=history&authr~=T', '--format', 'json')
+    assert result.returncode == 2 and "unsupported control 'authr'" in result.stderr
 
 
 def test_only_the_unknown_field_is_named(repo):
-    [warning] = _unknown(GitAdapter(str(repo), 'type=log&author~=T&mesage~=b').get_structure())
-    assert "'mesage'" in warning['message'] and "'author'" not in warning['message']
+    message = _rejected(repo, 'author~=T&mesage~=b')
+    assert "'mesage'" in message and "'author'" not in message
 
 
 def test_the_text_output_shows_the_warning_once(repo, monkeypatch):
-    result = _router(repo, monkeypatch, 'git://.?authr~=T')
-    assert result.stdout.count("'authr'") == 1
+    monkeypatch.chdir(repo)
+    result = _run_reveal_direct('git://.?authr~=T')
+    assert result.returncode == 2 and result.stderr.count("'authr'") == 1
 
 
 @pytest.mark.parametrize('query', [
     'author~=T', 'email~=example', 'message~=a', 'hash~=^[0-9a-f]', 'date>2020-01-01',
     'timestamp>0',       # a field of every commit record (declared in the schema since BACK-2309)
     'since=2026-01-01',  # rewritten to date>=
-    '!authr',            # absent: matches every commit, not a typo's zero
 ])
 def test_a_known_field_or_an_absence_filter_does_not_warn(repo, query):
     assert _unknown(GitAdapter(str(repo), f'type=log&{query}').get_structure()) == []
 
 
 def test_a_bare_unknown_key_keeps_its_one_warning(repo, capsys):
-    # BACK-909 already says "Unknown query param" for a key with no operator; not twice.
-    result = GitAdapter(str(repo), 'type=log&authr').get_structure()
-    assert _unknown(result) == []
-    assert "Unknown query param 'authr'" in capsys.readouterr().err
+    # A bare key with no operator on no declared field: one rejection naming it (BACK-2654 rule 3; was a warning).
+    assert _rejected(repo, 'authr').count("'authr'") == 1
 
 
 def test_a_bare_timestamp_is_a_declared_presence_filter(repo, capsys):

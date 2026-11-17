@@ -70,9 +70,7 @@ def test_repeated_since_aliases_and_date_conditions(history_repo):
 
 
 def test_repeated_unknown_filter_is_reported_once(history_repo):
+    # BACK-2654 rule 3 (note #15): an undeclared field exits 2, named once (it was one warning on an answer).
     result = run(f'git://{history_repo}?type=history&authr~=a&authr~=b', '--format', 'json')
-    body = json.loads(result.stdout)
-    warnings = [w for w in body['meta']['warnings'] if w['type'] == 'unknown_filter_field']
-    assert len(warnings) == 1
-    assert warnings[0]['message'].count("'authr'") == 1
+    assert result.returncode == 2 and result.stderr.count("'authr'") == 1
     assert 'has no effect' not in result.stderr

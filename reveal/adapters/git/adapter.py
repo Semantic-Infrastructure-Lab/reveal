@@ -454,15 +454,6 @@ class GitAdapter(ResourceAdapter):
         self._initialize_result_control(result_control_parts)
         self._initialize_query_filters(filter_parts)
 
-        # BACK-909: warn on unrecognized params (e.g. ?verbose=1, which isn't a
-        # git:// param). Mixed adapter: skip filter-expression keys (author~=john,
-        # date>=2026-01-01 — these carry an operator char in the raw key) and the
-        # cross-cutting result-control params handled separately.
-        self._warn_unknown_query_params(
-            self.query,
-            skip_filter_keys=True,
-            extra_known_keys={'sort', 'limit', 'offset'},
-        )
         self._warn_view_scoped_query_params()
         self._unknown_filter_fields = self._find_unknown_filter_fields()
 

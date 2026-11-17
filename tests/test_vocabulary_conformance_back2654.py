@@ -199,10 +199,8 @@ NOT_YET = {
     ('ast', '3b'): '?zz-unknown=1 is read as a where field: a zero-row answer, exit 0; subcommand: argparse error',
     ('ast', '8a'): 'bare match, detail, depth, tests, since, until, against are read as where fields, exit 0 (depth '
                    'is nesting depth, with no note)',
-    ('git', '8a'): 'bare match, kind, depth, tests, against: exit 0',
     ('json', '8a'): 'bare match, kind, depth, tests, since, until, against: exit 0',
     ('markdown', '8a'): 'bare detail, kind, depth, tests, since, until, against: exit 0',
-    ('metrics', '8a'): 'bare against: exit 0 (match, kind, depth, until reject)',
     ('metrics', '8b'): '?lines=5 is warned unknown and ignored; ?where=lines=5 filters (?lines>10 already filters)',
     ('json', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('markdown', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
@@ -218,7 +216,7 @@ NOT_YET = {
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 3, '3b': 3, '4': 17, '5': 0, '6': 0,
-                    '8a': 5, '8b': 1, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6}
+                    '8a': 3, '8b': 1, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -1475,7 +1473,9 @@ def test_cell(workspace, noun, rule):
 _OWN_UNKNOWN_KEY_WARNING = {'ast', 'json', 'markdown'}
 # A call kept for another rule: unknown keys never reach it, so it is not an unknown-key check.
 _KEPT_FOR_ANOTHER_RULE = {'codex': 'warns that full is unread outside exchanges (rule 20 applicability, BACK-2656), '
-                                   'on api.query and the adapter too, where the CLI ledger does not reach'}
+                                   'on api.query and the adapter too, where the CLI ledger does not reach',
+                          **{noun: 'warns that a declared field written FIELD=VALUE (?lines=5) is not yet a filter '
+                                   '(rule 8b, item C); unknown keys never reach it' for noun in ('metrics', 'stats')}}
 
 
 @pytest.mark.parametrize('noun', [noun for noun in NOUNS

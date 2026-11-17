@@ -483,7 +483,6 @@ class ClaudeAdapter(ResourceAdapter):
         self.resource = resource
         self.query = query if query is not None else getattr(params, '_source_query', None)
         self.resource, self.query_params = bind_request(query, params, resource)
-        self._warn_unknown_query_params(self.query_params)  # BACK-507
         self.session_name = self._parse_session_name(self.resource) or "unknown"
         self.conversation_path: Optional[Path] = None
         self.messages: Optional[List[Dict]] = None  # Lazy load

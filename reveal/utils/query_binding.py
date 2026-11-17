@@ -1,6 +1,7 @@
 """Declared CLI/URI binding; legacy raw queries and exclusion/filter codecs stay separate."""
 
 import argparse
+import re
 import stat
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Union
@@ -215,10 +216,21 @@ def _declared_keys(declarations: tuple[ParamSpec, ...]) -> set:
 # The walk policy every transport splits off before binding (split_respect_gitignore); an adapter built directly
 # receives it from its own CLI_QUERY_FLAGS fragment, which it accepts by definition (BACK-1361).
 _TRANSPORT_KEYS = frozenset({'respect_gitignore'})
+# A where term's field ends at its operator; a dotted path (lines.total) stays whole.
+_FIELD_END = re.compile(r'[=<>!~]')
 
 
-def _field_of(key: str) -> str:
-    return key.split('.', 1)[0]
+def _declared_field(key: str, fields: tuple) -> bool:
+    """A field the noun declares, or a dotted path under a declared field or a declared record section (``lines.*``)."""
+    head = key.split('.', 1)[0]
+    return key in fields or ('.' in key and (head in fields or f'{head}.*' in fields))
+
+
+def _where_fields(params: QueryParams, expression: ParamSpec) -> list:
+    """The field of every where term, written explicitly or folded from a bare key."""
+    terms = params.get(expression.name) or ()  # a decoded where= value may hold a literal '&': one term, one field
+    fields = (_FIELD_END.split(str(term).strip().lstrip('!'), 1)[0].strip() for term in terms)
+    return [field for field in fields if field]
 
 
 def _reject_unknown_keys(declarations: tuple[ParamSpec, ...], params: QueryParams, folded: tuple,
@@ -228,7 +240,7 @@ def _reject_unknown_keys(declarations: tuple[ParamSpec, ...], params: QueryParam
     known = _declared_keys(declarations) | _TRANSPORT_KEYS
     unknown = [key for key in dict.keys(params) if key not in known]
     if expression is not None and expression.fields and not expression.open_fields:
-        unknown += [key for key in folded if _field_of(key) not in expression.fields]
+        unknown += [key for key in _where_fields(params, expression) if not _declared_field(key, expression.fields)]
     if unknown:
         raise RequestValidationError(unsupported_controls_message(declarations, unknown))
 

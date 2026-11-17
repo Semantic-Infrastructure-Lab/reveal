@@ -196,7 +196,9 @@ _WHERE = where_param('Keep the files whose field matches: FIELD OP VALUE (lines>
                              _threshold('max_lines', 'lines<=', _count('max_lines'), 'a whole number'),
                              _threshold('min_functions', 'functions>=', _count('min_functions'), 'a whole number'),
                              _threshold('min_complexity', 'avg_complexity>=', _number('min_complexity'), 'a valid number'),
-                             _threshold('max_complexity', 'avg_complexity<=', _number('max_complexity'), 'a valid number')))
+                             _threshold('max_complexity', 'avg_complexity<=', _number('max_complexity'), 'a valid number')),
+                     # file and the alias names, and a dotted path under a record section (BACK-2654 note #15)
+                     fields=(*SORT_FIELDS, 'lines.*', 'complexity.*', 'elements.*', 'quality.*'))
 _HOTSPOTS = ParamSpec('hotspots', 'boolean', 'Legacy: per-file rows plus the hotspot ranking, top capping it; '
                       'replaced by view=hotspots', False, boolean_value, ('hotspots=true',), role='operation',
                       cli=CliBinding(('--hotspots',), action='store_true'))

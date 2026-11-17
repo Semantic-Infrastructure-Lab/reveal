@@ -29,23 +29,29 @@ def _run(tree, monkeypatch, query, scheme='metrics'):
     return len(data['files']), unknown
 
 
+# An undeclared field exits 2 naming the supported fields (BACK-2654 rule 3, note #15: Metrics declares file, the
+# alias names and dotted paths under a record section). It used to answer zero files with a warning.
+def _rejected(tree, monkeypatch, query, scheme='metrics'):
+    monkeypatch.chdir(tree)
+    result = _run_reveal_direct(f'{scheme}://.?{query}', '--format', 'json')
+    # The retired stats:// answers every invalid request with exit 1 (limit=-1 too); rule 9 exempts it.
+    assert result.returncode == (1 if scheme == 'stats' else 2), result.stdout[:300]
+    return result.stderr
+
+
 @pytest.mark.parametrize('query', ['complxity>5', 'complxity=5..15', 'complxity!=0'])
 def test_a_filter_on_a_field_no_file_has_warns(tree, monkeypatch, query):
-    files, unknown = _run(tree, monkeypatch, query)
-    assert files == 0
-    [warning] = unknown
-    assert "'complxity'" in warning['message']
+    stderr = _rejected(tree, monkeypatch, query)
+    assert "unsupported control 'complxity'" in stderr and 'avg_complexity' in stderr
 
 
 def test_only_the_unknown_field_is_named(tree, monkeypatch):
-    files, [warning] = _run(tree, monkeypatch, 'lines>1&complxity>1')
-    assert files == 0
-    assert "'complxity'" in warning['message'] and "'lines'" not in warning['message']
+    stderr = _rejected(tree, monkeypatch, 'lines>1&complxity>1')
+    assert "'complxity'" in stderr and "'lines'" not in stderr
 
 
 def test_the_retired_stats_spelling_warns_too(tree, monkeypatch):
-    files, unknown = _run(tree, monkeypatch, 'complxity>5', scheme='stats')
-    assert files == 0 and len(unknown) == 1
+    assert "unsupported control 'complxity'" in _rejected(tree, monkeypatch, 'complxity>5', scheme='stats')
 
 
 def test_the_human_output_shows_the_warning(tree, monkeypatch):

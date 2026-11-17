@@ -91,7 +91,8 @@ PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS
     # The shared where declaration with Claude's evaluator (rule 13): a bare ?session~=TEXT is the same filter.
     where_param('Reader-specific predicates, ANDed: catalog session~=TEXT substrings or workflow tool==NAME exact '
                 'equality; case-insensitive. A bare URI key with its operator (?session~=TEXT) is the same filter',
-                legacy=(LegacySpelling('filter', codec=_session_substring),), convert=name_predicates, default=None),
+                legacy=(LegacySpelling('filter', codec=_session_substring),), convert=name_predicates, default=None,
+                fields=('session', 'tool')),
     ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence, cli=CliBinding(('--timeline',), action='store_true')),
     ParamSpec('detail', 'string', 'summary, normal, full or raw; levels are qualified by the existing reader', None, text, choices=('summary', 'normal', 'full', 'raw'), cli=CliBinding(('--detail',))),
     ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES, role='operation', cli=CliBinding(('--view',))),

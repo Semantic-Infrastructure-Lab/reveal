@@ -51,10 +51,10 @@ def test_a_single_file_legacy_bound_is_applied(tree, monkeypatch):
 
 
 def test_a_single_file_unknown_filter_field_warns(tree, monkeypatch):
-    data = _json(tree, monkeypatch, 'metrics://small.py?complxity>5')
-    assert data['files'] == []
-    [warning] = _warnings(data, 'unknown_filter_field')
-    assert "'complxity'" in warning['message']
+    # BACK-2654 rule 3 (note #15): an undeclared field exits 2 naming the supported fields (it was a warning).
+    monkeypatch.chdir(tree)
+    result = _run_reveal_direct('metrics://small.py?complxity>5', '--format', 'json')
+    assert result.returncode == 2 and "unsupported control 'complxity'" in result.stderr
 
 
 def test_a_single_file_answer_matches_the_directory_answer(tree, monkeypatch):
@@ -78,8 +78,8 @@ def test_a_single_file_that_passes_is_returned(tree, monkeypatch, query):
 def test_a_single_file_human_output_says_the_field_is_unknown(tree, monkeypatch):
     monkeypatch.chdir(tree)
     result = _run_reveal_direct('metrics://small.py?complxity>5')
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.count("'complxity'") == 1
+    assert result.returncode == 2  # BACK-2654 rule 3 (note #15): named once, on stderr
+    assert result.stderr.count("'complxity'") == 1
 
 
 # (b) A sort that fails says so.

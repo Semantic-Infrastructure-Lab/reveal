@@ -52,14 +52,12 @@ def test_a_key_nothing_reads_still_warns(tree, monkeypatch):
     assert [(w['type'], w['code'], w['fields']) for w in warnings] == [
         ('unknown_query_param', 'unknown_query_param', ['lines'])]
     assert "Unknown query param 'lines'" not in stderr
-    _, stderr, warnings = _run(tree, monkeypatch, 'bogus=1')
-    assert [(w['type'], w['code'], w['fields']) for w in warnings] == [
-        ('unknown_query_param', 'unknown_query_param', ['bogus'])]
-    assert "Unknown query param 'bogus'" not in stderr
-    for key in ('lines', 'bogus'):
-        text = _run_reveal_direct(f'metrics://.?{key}=1')
-        assert text.returncode == 0, text.stderr
-        assert text.stderr.count(f"Unknown query param '{key}'") == 1
+    # bogus is no declared field: exit 2 naming the supported fields (BACK-2654 rule 3, note #15; it was warned).
+    rejected = _run_reveal_direct('metrics://.?bogus=1', '--format', 'json')
+    assert rejected.returncode == 2 and "unsupported control 'bogus'" in rejected.stderr and 'lines' in rejected.stderr
+    text = _run_reveal_direct('metrics://.?lines=1')
+    assert text.returncode == 0, text.stderr
+    assert text.stderr.count("Unknown query param 'lines'") == 1
 
 
 def test_direct_adapter_construction_agrees(tree, capsys):

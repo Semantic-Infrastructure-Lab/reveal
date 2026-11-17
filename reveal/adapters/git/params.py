@@ -61,7 +61,8 @@ def string(name, description, *, legacy=(), choices=(), role=None):
 VIEW = string('view', 'history, blame, diff or ownership; omitted preserves resource-dependent inspection',
               legacy=(LegacySpelling('type'),), choices=('history', 'log', 'blame', 'diff', 'ownership'), role='operation')
 WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (Git DSL percent-decodes values)',
-                  [], predicates, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)))
+                  [], predicates, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)),
+                  fields=('author', 'email', 'date', 'hash', 'message', 'timestamp', 'content'))
 DETAIL = ParamSpec('detail', 'string', 'normal, full blame, or raw historical file content', None, detail,
                    choices=('normal', 'full', 'raw'), cli=CliBinding(('--detail',)))
 MERGES = ParamSpec('merges', 'boolean', 'Include or exclude merge commits; omitted preserves each view default',

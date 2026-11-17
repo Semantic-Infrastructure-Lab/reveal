@@ -67,10 +67,12 @@ def test_bare_presence_beside_a_value_filter(repo):
 
 
 def test_negated_presence_and_an_unknown_bare_key_still_match_nothing(repo, capsys):
-    # Controls: `!author` (absent) and a bare key no commit has stay empty, and the typo still warns.
+    # Controls: `!author` (absent) stays empty; a bare key on no declared field exits 2 naming it (BACK-2654 rule 3,
+    # note #15; it used to match nothing with a warning).
     assert _messages(repo, '!author') == []
-    assert _messages(repo, 'authr') == []
-    assert "Unknown query param 'authr'" in capsys.readouterr().err
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match=r"unsupported control 'authr'.*fields.*author"):
+        _messages(repo, 'authr')
 
 
 # Month bounds name the whole month.

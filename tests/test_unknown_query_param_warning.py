@@ -119,7 +119,7 @@ def test_declared_params_never_warn(adapter_name):
 
 # BACK-2654 rule 3: these declared nouns reject an unknown key at the shared binder (exit 2 naming the supported
 # controls) instead of warning; the others here still warn until their own declarations land.
-_REJECTED_BY_THE_BINDER = {'imports', 'calls', 'patches'}
+_REJECTED_BY_THE_BINDER = {'imports', 'calls', 'patches', 'stats', 'git'}
 
 
 @pytest.mark.parametrize('adapter_name', list(_wired_adapters().keys()))

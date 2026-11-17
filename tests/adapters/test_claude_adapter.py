@@ -2450,11 +2450,13 @@ class TestRawQueryParam:
     def test_role_query_param_removed_no_longer_routes(self, mock_find):
         """The old ?role=user query param (session-root, no /prompts or
         /messages path) is gone. Claude's where is the shared where (BACK-2654 rule 13), so a bare key that is
-        no control is a where term, and role=user is no session~=/tool== predicate: an invalid request, never
-        the user-messages answer (it fell through to the overview before)."""
+        no control is a where term, and role is no declared field (session, tool): an invalid request naming the
+        supported controls and fields (rule 3's shared teaching), never the user-messages answer (it fell through
+        to the overview before)."""
         from reveal.errors import RequestValidationError
         mock_find.return_value = TEST_CONVERSATION
-        with pytest.raises(RequestValidationError, match='session~=TEXT'):
+        with pytest.raises(RequestValidationError,
+                           match=r"unsupported control 'role'; supported controls: .*; fields .*: session, tool"):
             ClaudeAdapter('session/test-session-123', query='role=user')
 
 
