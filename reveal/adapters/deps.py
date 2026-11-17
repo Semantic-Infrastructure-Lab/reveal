@@ -16,7 +16,6 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .imports import ImportsAdapter
 from ..analyzers.imports import service as import_analysis
 from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema
-from ..defaults import UNLIMITED_TOP
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..rendering.adapters.deps import DepsRenderer
 from ..utils.results import AnalysisCompleteness, ExecutionFacts, ResultBuilder, merge_execution_facts, result_execution_facts
@@ -171,12 +170,11 @@ def _deps_top(value: Any) -> int:
     return nonnegative_display_limit(value)
 
 
-_TOP = ParamSpec('top', 'integer', 'Items per text section (JSON retains all)', 10,
-                 _deps_top, ('top=15',), minimum=0, zero_policy='no text entries',
+_TOP = ParamSpec('top', 'integer', 'Items per text section (0 = all; JSON retains all)', 10,
+                 _deps_top, ('top=15',), minimum=0, zero_policy='all',
                  role='presentation', cli=CliBinding(('--top',), metavar='N'),
-                 # verbose lifts every text section's cap: the legacy word of the renderer's uncapped top (rule 16
-                 # parity, BACK-2654 note #17); deps has no zero that uncaps (0 shows none)
-                 legacy=(verbose_legacy(UNLIMITED_TOP, 'top=N (--top N)'),))
+                 # verbose lifts every text section's cap: the legacy word of top=0 (rule 16 parity, BACK-2654 note #17)
+                 legacy=(verbose_legacy(0, 'top=0 (--top 0)'),))
 _NO_UNUSED = ParamSpec('no_unused', 'boolean', 'Skip unused-import analysis', False,
                        boolean_value, ('no_unused=true',), role='analysis',
                        cli=CliBinding(('--no-unused',), action='store_true'))
@@ -392,7 +390,7 @@ class DepsAdapter(ResourceAdapter):
                 '--fail-on findings exits 1 for circular groups or unused imports. '
                 'Required analysis/output failures exit 3; invalid requests exit 2.',
                 'summary_only applies only to primary JSON; text and its JSON artifact retain base.files. '
-                'top affects text only (0 shows none); legacy --verbose expands text (top uncapped), and URI --all also expands text.',
+                'top affects text only (0 = all); legacy --verbose is top=0, and URI --all also expands text.',
                 'Not depends:// (one character apart) — deps:// is a dashboard '
                 'over the whole tree; depends:// answers "who imports this one '
                 'module" for a single target.',

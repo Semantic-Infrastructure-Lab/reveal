@@ -701,7 +701,7 @@ reveal deps [PATH] [--top N] [--no-unused] [--no-circular]   # retired: reveal i
 
 | Flag | Description |
 |------|-------------|
-| `--top N` | Top packages/importers to show (default: 10) |
+| `--top N` | Items per text section (default: 10; `0` = all) |
 | `--no-unused` | Skip unused imports section (Health says "not checked"; JSON `skipped`) |
 | `--no-circular` | Skip circular dependency section (Health says "not checked", not ✅; JSON `skipped`) |
 | `--summary-only` | Primary JSON only: replace `base.files` with counts, keeping analysis/findings evidence |
@@ -719,8 +719,8 @@ reveal deps [PATH] [--top N] [--no-unused] [--no-circular]   # retired: reveal i
 
 Use `--fail-on findings` to retain the previous text-mode findings gate. Both
 spellings and formats now use this policy and `deps_scan` identity. Summary and
-text caps preserve full analysis/gate counts. `--verbose` expands text in both
-forms; `--all` remains available only on the URI form.
+text caps preserve full analysis/gate counts. `--top 0` (legacy `--verbose`) expands
+text in both forms; `--all` remains available only on the URI form.
 
 ### Examples
 

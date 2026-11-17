@@ -1534,16 +1534,18 @@ def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace', adapte
     from here, and forwarding blind would either crash them or silently change
     behavior nobody asked this ticket to touch.
     """
+    from ...defaults import UNLIMITED_TOP
     detail_kwargs = _render_structure_detail_kwargs(renderer_class, adapter)
     if getattr(renderer_class, 'ACCEPTS_TOP', False) is True and peek(args, 'all', False):
         mark(args, 'all')
-        from ...defaults import UNLIMITED_TOP
         return {'top': UNLIMITED_TOP, **detail_kwargs}
     declarations = getattr(type(adapter), 'PARAM_SPECS', ())
     if isinstance(declarations, tuple):
         for spec in declarations:
             if spec.name == 'top' and spec.role == 'presentation':
-                return {'top': spec.read(adapter.query_params), **detail_kwargs}
+                top = spec.read(adapter.query_params)
+                # Caps row: a top whose declared zero is 'all' reaches the renderer uncapped (BACK-2654)
+                return {'top': UNLIMITED_TOP if top == 0 and spec.zero_policy == 'all' else top, **detail_kwargs}
     if getattr(renderer_class, 'ACCEPTS_TOP', False) is not True:
         return detail_kwargs
     params = getattr(adapter, 'query_params', None)

@@ -316,8 +316,7 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:hotspots.verbose': Retirement('hotspots ?verbose (--verbose)', '?top=0 (--top 0), both rankings uncapped'),
     'param:testability.verbose': Retirement('testability ?verbose (--verbose)',
                                             'patches://<path>?view=pressure&top=0 (--top 0), every group'),
-    'param:deps.verbose': Retirement('deps ?verbose (--verbose)',
-                                     '?top=N (--top N) with N at least the longest text section; JSON is uncapped'),
+    'param:deps.verbose': Retirement('deps ?verbose (--verbose)', '?top=0 (--top 0), every text section uncapped'),
     # Metrics' vocabulary (BACK-2621, Scott 2026-11-15): the hotspot ranking is a view whose rows limit caps,
     # filters are where (the complexity pair is the file average, avg_complexity), switches take on|off.
     # The row names the parameter, not one value: ?hotspots=false is noted too (it answers as if omitted).
