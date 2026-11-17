@@ -232,6 +232,12 @@ def _assert_runs_as_written(harness, query, output_type, retired_note=None):
     warnings = [w for w in (payload.get('meta') or {}).get('warnings') or []
                 if isinstance(w, dict) and DRIFT_WARNING.match(str(w.get('type', '')))]
     assert not warnings, f"{query}: meta.warnings {warnings[:2]}"
+    # A JSON answer carries its notes and prints none on stderr (BACK-2659), so the stderr check above no longer sees a
+    # recipe that teaches a retired spelling: the answer's own retired_spelling entries are the evidence (BACK-2654).
+    expected = retired_note.removeprefix('note: ') if retired_note else None
+    notes = [w.get('message') for w in (payload.get('meta') or {}).get('warnings') or []
+             if isinstance(w, dict) and w.get('code') == 'retired_spelling' and w.get('message') != expected]
+    assert not notes, f"{query}: teaches a retired spelling: {notes[:2]}"
     if output_type:
         assert payload.get('type') == output_type, (
             f"{query}: type {payload.get('type')!r}, the recipe says {output_type!r}")
@@ -505,6 +511,11 @@ def test_the_recipe_gate_bites(harness):
         _assert_text_as_written(harness, 'reveal ast://proj --expiring-within 30')
     with pytest.raises(AssertionError, match='the recipe says'):
         _assert_runs_as_written(harness, 'reveal ast://proj', 'contracts')
+    # A retired spelling's note rides in the JSON answer, not on stderr: the gate reads it there (BACK-2654), and a
+    # retired scheme's own expected note still passes.
+    with pytest.raises(AssertionError, match='teaches a retired spelling'):
+        _assert_runs_as_written(harness, "reveal 'ast://proj?type=function'", 'ast_query')
+    _assert_runs_as_written(harness, "reveal 'ast://proj?kind=function'", 'ast_query')
     _, out, _, _ = harness.run_subcommand('ast://proj?no_such_key=1', '--format', 'json')
     payload = json.loads(out)
     assert [w['type'] for w in payload['meta']['warnings']] == ['unknown_filter_field']  # one type (note #15)
