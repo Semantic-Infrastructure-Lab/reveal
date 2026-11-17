@@ -208,3 +208,20 @@ def test_a_clean_answer_has_no_failures_field(tmp_path):
     result = _cli(tmp_path, f'ast://{root.as_posix()}', '--format', 'json')
     assert result.returncode == 0 and result.stderr == ''
     assert '"failures"' not in result.stdout
+
+
+# --- the shared record builder (failure_records) ---------------------------------------------------
+
+def test_failure_records_spell_sort_and_classify(tmp_path):
+    from reveal.utils.path_utils import failure_records
+    records = failure_records([(str(tmp_path / 'b.py'), 'OSError: x'), (None, 'ValueError: y'),
+                               (str(tmp_path / 'a.py'), 'invalid Python source: z')], tmp_path)
+    assert records == [{'path': None, 'cause': 'ValueError', 'reason': 'ValueError: y'},
+                       {'path': 'a.py', 'cause': 'invalid Python source', 'reason': 'invalid Python source: z'},
+                       {'path': 'b.py', 'cause': 'OSError', 'reason': 'OSError: x'}]
+
+
+def test_failure_records_without_a_reason_take_the_given_cause_and_keep_posix_spelling():
+    from reveal.utils.path_utils import failure_records
+    assert failure_records([('pkg\\a.py', None)], cause='worker_lost') == [  # noqa: win-path
+        {'path': 'pkg/a.py', 'cause': 'worker_lost'}]

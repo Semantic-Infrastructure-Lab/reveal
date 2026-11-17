@@ -24,6 +24,17 @@ from typing import Any, Dict, List, NamedTuple, Optional, TypedDict
 CONTRACT_VERSION = '1.1'
 
 
+class _FailureRecordRequired(TypedDict):
+    path: Optional[str]
+    cause: str
+
+
+class FailureRecord(_FailureRecordRequired, total=False):
+    """One subject of a capped warning (``failure_records``, BACK-2659): its path as the warning's
+    ``files`` spells it, its cause class, and the full per-subject reason when one was recorded."""
+    reason: str
+
+
 class _DiagnosticFields(TypedDict, total=False):
     code: str
     message: str
@@ -38,6 +49,8 @@ class _DiagnosticFields(TypedDict, total=False):
     directories: List[str]
     causes: List[str]
     unknown_directory_events: int
+    # Every subject a capped list counts, uncapped, with its cause and reason (BACK-2659).
+    failures: List[FailureRecord]
     # What a walk hid by cause and how to show it ('scope_hidden', BACK-2065).
     hidden: Dict[str, int]
     suggestion: str

@@ -27,7 +27,7 @@ from ..defaults import (
     MINIFIED_FILENAME_RE,
     DisplayDefaults,
 )
-from ..reveal_types import PathFailure, WarningEntry
+from ..reveal_types import FailureRecord, PathFailure, WarningEntry
 from .causes import failure_cause
 from .request_cache import register_request_cache
 from ..registry import _is_cpp_header_content, display_name_for_extension, language_for_extension, LANGUAGE_DISPLAY_NAMES
@@ -1920,6 +1920,34 @@ def get_relative_to_root(
             pass
 
     return path
+
+
+def cause_class(reason: str) -> str:
+    """The class of an ``"ErrorType: message"`` failure text: what precedes its first colon."""
+    return reason.split(':', 1)[0].strip()
+
+
+def failure_records(failures: Iterable[Tuple[Optional[str], Optional[str]]], base: Optional[Path] = None, *,
+                    cause: Optional[str] = None) -> List[FailureRecord]:
+    """Every subject a capped warning counts, uncapped, as ``{path, cause, reason}`` (BACK-2659).
+
+    A warning's ``files`` and ``message`` name five subjects and count the rest, so this list is where
+    each ``(path, reason)`` reaches a JSON answer. ``path`` is spelled as ``files`` spells it (relative to
+    *base*, else POSIX; None for an event with no path). ``cause`` is *cause* when given (a warning whose
+    subjects share one cause), else the class of the reason. ``reason`` is the per-subject text when one
+    was recorded; a raw spelling of the subject's path in it becomes ``path``, so ``str(OSError)`` does
+    not leak the absolute path the answer spells relatively (BACK-2249)."""
+    records: List[FailureRecord] = []
+    for path, reason in failures:
+        shown = None if path is None else to_relative_display(path, base)
+        record: FailureRecord = {'path': shown, 'cause': cause or cause_class(reason or '')}
+        if reason:
+            if path is not None and shown is not None:
+                for raw in {str(path), to_posix(path)} - {shown}:
+                    reason = reason.replace(raw, shown)
+            record['reason'] = reason
+        records.append(record)
+    return sorted(records, key=lambda r: (r['path'] or '', r['cause'], r.get('reason', '')))
 
 
 def analysis_skipped_warning(skipped: List[Tuple[str, str]], base: Optional[Path] = None,
