@@ -221,7 +221,8 @@ class GitAdapter(ResourceAdapter):
     HELP_CLUSTER = ('Code Analysis', 'Sessions & Docs')
     QUICK_RANK = 4
 
-    BUDGET_LIST_FIELD = ('commits', 'history')  # path views / repo and ref views (BACK-1645)
+    # path views / log view (BACK-1645); the repository and ref views nest theirs (BACK-2667)
+    BUDGET_LIST_FIELD = ('commits', 'history', 'commits.recent')
     LEGACY_INIT = False
     BOUND_QUERY_CALL = True
     PARAM_SPECS = PARAM_SPECS

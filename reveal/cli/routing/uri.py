@@ -22,7 +22,7 @@ from ...utils.json_utils import attach_provenance, write_requested_artifact
 from ...utils.path_utils import to_posix
 from ...display.formatting import print_result_control_notes
 from ...utils.results import (ExecutionFacts, FailureCause, Outcome, ResultBuilder, echo_source,
-                             failure_execution_facts, note_truncation, outcome_of, restate_shown_counts, slice_items,
+                             dotted_holder, failure_execution_facts, note_truncation, outcome_of, restate_shown_counts, slice_items,
                              truncations_of)
 from ..invocation import RetiredSpellingError, retirement_note, uri_retirement_keys
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
@@ -1191,16 +1191,29 @@ def _budget_list_fields(result: dict, adapter=None) -> list[str]:
     with several lists, e.g. hotspots://); falls back to probing for adapters that
     predate it (transition period only). A declared field missing from this result
     (another mode's shape) yields nothing -- never a guess at other lists (BACK-1497).
+    A dotted name reaches a nested list (git's repository view, ``commits.recent``; BACK-2667).
     """
     declared = getattr(adapter, 'BUDGET_LIST_FIELD', None) if adapter is not None else None
     if declared:
         names = ((declared,) if isinstance(declared, str)
                  else tuple(declared) if isinstance(declared, (tuple, list)) else ())
-        return [name for name in names if isinstance(result.get(name), list)]
+        return [name for name in names if isinstance(_list_at(result, name), list)]
     for field_name in ['items', 'results', 'checks', 'commits', 'files']:
         if isinstance(result.get(field_name), list):
             return [field_name]
     return []
+
+
+def _list_at(result: dict, field: str) -> Any:
+    """The value at a budget field's (possibly dotted) name, or None."""
+    holder, key = dotted_holder(result, field)
+    return holder.get(key) if holder is not None else None
+
+
+def _put_list(result: dict, field: str, items: list) -> None:
+    holder, key = dotted_holder(result, field)
+    if holder is not None:
+        holder[key] = items
 
 
 def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None,
@@ -1227,10 +1240,10 @@ def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None,
     offset = _page_start(adapter) if len(fields) == 1 else 0
     for field in fields:
         budget_result = apply_budget_limits(
-            result[field], max_items=max_items,
+            _list_at(result, field), max_items=max_items,
             truncate_strings=peek(args, 'max_snippet_chars'), offset=offset)
-        total = len(result[field])
-        result[field] = budget_result['items']
+        total = len(_list_at(result, field))
+        _put_list(result, field, budget_result['items'])
         if budget_result['meta']['truncated']:
             _record_cut(result, field, total, 'max_items', sole=len(fields) == 1, adapter=adapter)
             if len(fields) == 1:
@@ -1281,7 +1294,7 @@ def _record_cut(result: dict, field: str, total: int, cause: str, sole: bool, ad
     prints; a sole list's ``displayed_results`` and every count the adapter declares for
     the list in ``BUDGET_COUNT_FIELDS`` are corrected to what is left (BACK-2653).
     """
-    shown = len(result[field])
+    shown = len(_list_at(result, field))
     note_truncation(result, field, shown, total, cause)
     if shown >= total:
         return
@@ -1333,8 +1346,9 @@ def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None,
     mark(args, 'head', 'tail', 'range')
     cause = flag.lstrip('-')
     for field in fields:
-        total = len(result[field])
-        result[field] = slice_items(result[field], head, tail, range_)
+        items = _list_at(result, field)
+        _put_list(result, field, slice_items(items, head, tail, range_))
+        total = len(items)
         _record_cut(result, field, total, cause, sole=len(fields) == 1, adapter=adapter)
     if len(fields) > 1:
         print(f"Note: {flag} applied to each of {', '.join(fields)} -- {scheme or 'this'}:// "

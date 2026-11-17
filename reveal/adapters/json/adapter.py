@@ -86,6 +86,7 @@ class JsonAdapter(ResourceAdapter):
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True
     RESULT_TYPE = 'json_value'
+    BUDGET_LIST_FIELD = 'value'  # the value view's array, which ?limit pages (BACK-2667)
     DEFAULT_FAIL_ON = 'none'
     FINDINGS_POLICIES = ('none',)
     BOUND_QUERY_CALL = True
