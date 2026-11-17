@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from ...utils.query_binding import boolean_value, verbose_legacy
+from ...utils.query_binding import boolean_value, switch_value, verbose_legacy
 from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit
 
 
@@ -48,9 +48,8 @@ class MergePolicy:
 
 
 def merge_policy(value):
-    positive = str(value).lower()
-    included = positive == 'on' if positive in ('on', 'off') else boolean_value(value)
-    return MergePolicy(included, not isinstance(value, bool) and positive not in ('on', 'off'))
+    """The shared on/off codec, remembering whether the value was a legacy boolean spelling rather than on|off."""
+    return MergePolicy(switch_value(value), not isinstance(value, bool) and str(value).lower() not in ('on', 'off'))
 
 
 def string(name, description, *, legacy=(), choices=(), role=None):

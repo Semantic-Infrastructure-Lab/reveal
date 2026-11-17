@@ -21,6 +21,14 @@ def boolean_value(value: Any) -> bool:
     raise ValueError('expected true or false')
 
 
+def switch_value(value: Any) -> bool:
+    """The one on/off codec every switch reads (COMMAND_MODEL "Switches"): ``on``/``off`` in any case, or a boolean
+    spelling ``boolean_value`` accepts; anything else is a ValueError."""
+    if isinstance(value, str) and value.lower() in ('on', 'off'):
+        return value.lower() == 'on'
+    return boolean_value(value)
+
+
 def verbose_legacy(value: Any, replacement: str) -> LegacySpelling:
     """The legacy word ``verbose`` on the control it stands for (COMMAND_MODEL "Detail", BACK-2654 note #17):
     ``detail=full`` where it adds detail, the uncapping value of the cap it lifts elsewhere. ``verbose=false`` is the

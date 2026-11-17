@@ -25,7 +25,7 @@ from ...utils.query_parser import (
     CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, param_schema,
     exclude_param, peek_query_items, split_exclude_param, where_param, whole_number,
 )
-from ...utils.query_binding import bind_declared_params, boolean_value
+from ...utils.query_binding import bind_declared_params, boolean_value, switch_value
 from ...utils.gitignore import respect_gitignore_param
 from ...utils.path_utils import (TestLayout, failure_of, failure_records, provenance_for_display_path,
                                  to_relative_display)
@@ -131,12 +131,6 @@ def _iso_date(name: str) -> Callable[[Any], str]:
     return convert
 
 
-def _switch(value: Any) -> bool:
-    """An on/off switch (churn, merges): Git's merges codec, on|off or a boolean (BACK-2621)."""
-    from ..git.params import merge_policy  # deferred: the git package imports its adapter
-    return bool(merge_policy(value).include)
-
-
 def _detail(value: Any) -> str:
     if value not in DETAIL_LEVELS:
         raise ParamValueError(f'detail must be normal or summary, got {value!r}: metrics has no fuller level '
@@ -199,14 +193,14 @@ _CODE_ONLY = ParamSpec('code-only', 'boolean', 'Exclude data/config files (xml, 
                        cli=CliBinding(('--code-only',), dest='code_only', action='store_true'))
 _CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into the hotspot score: on (default in a git '
                    'repository; silently off elsewhere) or off for complexity-only scoring',
-                   True, _switch, ('churn=off',), role='analysis', cli=CliBinding(('--churn',), metavar='on|off'),
+                   True, switch_value, ('churn=off',), role='analysis', cli=CliBinding(('--churn',), metavar='on|off'),
                    legacy=(LegacySpelling('no_churn', codec=_legacy_switch('no_churn', 'off', 'on'),
                                           flag='--no-churn', flag_value=True),))
 _SINCE = ParamSpec('since', 'string', 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.',
                    None, _iso_date('since'), ('since=2026-01-01',), role='analysis',
                    cli=CliBinding(('--since',), metavar='DATE'))
 _MERGES = ParamSpec('merges', 'boolean', 'Count merge commits in the churn tally: on (default) or off', None,
-                    _switch, ('merges=off',), role='analysis', cli=CliBinding(('--merges',), metavar='on|off'),
+                    switch_value, ('merges=off',), role='analysis', cli=CliBinding(('--merges',), metavar='on|off'),
                     legacy=(LegacySpelling('no_merges', codec=_legacy_switch('no_merges', 'off', 'on'),
                                            flag='--no-merges', flag_value=True),))
 _TESTS = ParamSpec('tests', 'string',
