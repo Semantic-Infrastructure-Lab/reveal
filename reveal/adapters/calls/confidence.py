@@ -22,7 +22,8 @@ from ...defaults import (
     CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB,
 )
 from ...utils.path_utils import HiddenTally, OnHidden, census_for_path, hidden_entries_warning, failure_of
-from ..ast.analysis import analysis_skipped_warning, function_values_dropped_warning, traversal_failed_warning
+from ..ast.analysis import (analysis_skipped_warning, function_values_dropped_warning, recovered_files_warning,
+                            traversal_failed_warning)
 from ...reveal_types import PathFailure
 
 # Capability metadata for v1.1 contract (BACK-307).
@@ -202,7 +203,8 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
                skipped: Sequence[Tuple[str, str]] = (),
                traversal_failures: Sequence[PathFailure] = (),
                census: Optional[Dict[str, int]] = None,
-               dropped: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+               dropped: Optional[Dict[str, Any]] = None,
+               recovered: Sequence[str] = ()) -> Dict[str, Any]:
     """Per-request calls:// meta kwargs (BACK-1198).
 
     Replaces the prior flat ``confidence: 0.85`` (identical for a language
@@ -221,6 +223,9 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
     *census* is the per-language file count a caller already holds for this very *path* and scope
     (``CalleeSource.language_census``, BACK-2132); None walks the tree for it. A held census had
     no walk error and kept files, so there is neither a census failure nor a hidden tree to report.
+
+    *recovered* names the files tree-sitter read only through error recovery: partial input on every
+    noun (COMMAND_MODEL 'Degraded input', BACK-2658), so it is known loss like a skipped file.
     """
     census_failures: List[PathFailure] = []
     census_unavailable: List[PathFailure] = []
@@ -270,7 +275,7 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
     declines = _declines(per_language, unmeasured_walk, uncalled,
                          census_unavailable[0].cause if census_unavailable else None)
     warnings.extend(declines)
-    known_loss = bool(skipped or directory_failures)
+    known_loss = any((skipped, directory_failures, recovered))
     if uncalled:
         heuristic = _UNCALLED_DERIVED_SIGNAL_WARNING
         if known_loss:
@@ -304,7 +309,8 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
     scope_hidden = hidden_entries_warning(hidden, total)
     # Not a loss: what the JS function-value rule left out of the answer, named (BACK-2229).
     left_out = function_values_dropped_warning(dropped)
-    warnings.extend(w for w in (failed, traversal_warning, scope_hidden, left_out) if w)
+    warnings.extend(w for w in (failed, recovered_files_warning(recovered), traversal_warning, scope_hidden, left_out)
+                    if w)
 
     return {
         'parse_mode': 'tree_sitter_partial' if known_loss else 'tree_sitter_full',

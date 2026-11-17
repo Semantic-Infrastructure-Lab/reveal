@@ -496,9 +496,10 @@ _ANSWER_FIELDS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], Tuple[str, ...
     'calls_uncalled': ((), ('entries',), ('total_uncalled',)),
     'calls_module_graph': ((), ('nodes', 'edges'), ('total_nodes', 'total_edges')),
 }
-# Required evidence lost to an unreadable file or directory (confidence.build_meta); for ?modules, also
+# Required evidence lost to an unreadable file or directory, or partial input from a file tree-sitter read only
+# through error recovery (confidence.build_meta; COMMAND_MODEL 'Degraded input', BACK-2658); for ?modules, also
 # the imports engine's own loss: files a dead pool worker took and a walk the file cap cut short.
-_LOSS_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete', 'worker_lost', 'scan_capped'})
+_LOSS_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete', 'worker_lost', 'scan_capped', 'parse_recovered'})
 
 
 # A name answer that can prove absence: the field it names and its observation count.
@@ -819,7 +820,7 @@ class CallsAdapter(ResourceAdapter):
         meta = _call_graph_meta(self.path, uncalled=uncalled, unmeasured_walk=unmeasured_walk,
                                 skipped=data.pop('analysis_skipped', ()),
                                 traversal_failures=data.pop('analysis_traversal_failures', ()),
-                                census=census, dropped=dropped)
+                                recovered=data.pop('analysis_recovered', ()), census=census, dropped=dropped)
         if analysis_capped:  # not a loss of evidence: what the answer's resolution did not cover (BACK-2570)
             meta['warnings'].append({'type': 'analysis_capped', 'code': 'W-CALLS-13', 'message': analysis_capped})
         if rule is not None:

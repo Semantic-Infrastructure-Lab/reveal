@@ -13,7 +13,7 @@ _RULE_FIELDS = ('walk_rule.text', 'rule', 'edge_rule.text')
 # The languages actually encountered are request-specific uncertainty, not boilerplate.
 _REQUEST_WARNING_CODES = frozenset({'W-CALLS-10', 'W-CALLS-11', 'W-CALLS-12'})
 
-_REQUIRED_LOSS_TYPES = frozenset({'analysis_failed', 'analysis_incomplete'})
+_REQUIRED_LOSS_TYPES = frozenset({'analysis_failed', 'analysis_incomplete', 'parse_recovered'})  # BACK-2658
 # Printed above every view: what the answer lost, what no measurement covers (W-CALLS-9/10) and what the
 # function-value rule left out (BACK-2229).
 _ALWAYS_SHOWN = _REQUIRED_LOSS_TYPES | {'not_measured', 'function_values_dropped', 'analysis_capped'}
