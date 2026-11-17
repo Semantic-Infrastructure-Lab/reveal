@@ -169,6 +169,8 @@ class TestabilityAdapter(ResourceAdapter):
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     BUDGET_LIST_FIELD = ('patch_hotspots', 'boundary_hotspots')
+    BUDGET_COUNT_FIELDS = {'patch_hotspots': ('summary.patch_groups_reported',),  # BACK-2653
+                           'boundary_hotspots': ('summary.boundary_profiles_reported',)}
     # verbose lifts the group caps: the legacy word of top=0 (rule 16 parity, BACK-2654 note #17). patches'
     # pressure view declares PRESSURE_SPECS without it: the word belongs to the retired spelling.
     PARAM_SPECS = tuple(replace(spec, legacy=(verbose_legacy(0, 'top=0 (--top 0)'),)) if spec.name == 'top' else spec

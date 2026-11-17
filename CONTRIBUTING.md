@@ -134,6 +134,7 @@ from .renderer import MySchemeRenderer
 @register_renderer(MySchemeRenderer)
 class MySchemeAdapter(ResourceAdapter):
     BUDGET_LIST_FIELD = 'items'   # field --max-items applies to; omit if not applicable
+    BUDGET_COUNT_FIELDS = {'items': ('displayed_items',)}  # counts of the rows shown; the cut restates them
 
     def __init__(self, resource: str):
         self.resource = resource

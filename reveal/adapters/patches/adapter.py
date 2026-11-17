@@ -78,6 +78,7 @@ class PatchesAdapter(ResourceAdapter):
     HELP_CLUSTER = 'Code Analysis'
 
     BUDGET_LIST_FIELD = 'groups'
+    BUDGET_COUNT_FIELDS = {'groups': ('displayed_groups',)}  # BACK-2653
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESULT_TYPE = 'patches_scan'
     FINDINGS_POLICIES = ('none',)  # patch pressure is advisory; there is no findings gate

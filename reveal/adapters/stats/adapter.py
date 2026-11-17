@@ -382,6 +382,7 @@ class MetricsAdapter(ResourceAdapter):
     QUICK_RANK: Optional[int] = 2
 
     BUDGET_LIST_FIELD = 'files'
+    BUDGET_COUNT_FIELDS = {'files': ('population.displayed_files',)}  # BACK-2653
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESULT_TYPE = 'stats_summary'
     # --fail-on findings gates the hotspots=true view only (imports' findings views are the precedent): its

@@ -629,6 +629,7 @@ class CallsAdapter(ResourceAdapter):
     QUICK_RANK = 1
 
     BUDGET_LIST_FIELD = ('levels', 'entries')  # ?target= depth levels; ?rank=callers / ?uncalled entries (BACK-1497)
+    BUDGET_COUNT_FIELDS = {'entries': ('top',)}  # ?rank=callers: 'top' is the number shown (BACK-2653)
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
     CLI_QUERY_FLAGS = {'all': 'top=1000000', 'limit': 'limit={value}', 'respect_gitignore': 'respect_gitignore=false'}  # limit caps ranking/uncalled only; legacy all keeps its existing finite expansion.

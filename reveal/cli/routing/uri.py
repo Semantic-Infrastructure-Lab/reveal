@@ -22,7 +22,8 @@ from ...utils.json_utils import attach_provenance, write_requested_artifact
 from ...utils.path_utils import to_posix
 from ...display.formatting import print_result_control_notes
 from ...utils.results import (ExecutionFacts, FailureCause, Outcome, ResultBuilder, echo_source,
-                             failure_execution_facts, note_truncation, outcome_of, slice_items, truncations_of)
+                             failure_execution_facts, note_truncation, outcome_of, restate_shown_counts, slice_items,
+                             truncations_of)
 from ..invocation import RetiredSpellingError, retirement_note, uri_retirement_keys
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
@@ -1231,7 +1232,7 @@ def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None,
         total = len(result[field])
         result[field] = budget_result['items']
         if budget_result['meta']['truncated']:
-            _record_cut(result, field, total, 'max_items', sole=len(fields) == 1)
+            _record_cut(result, field, total, 'max_items', sole=len(fields) == 1, adapter=adapter)
             if len(fields) == 1:
                 result['meta']['budget'] = _budget_meta_of_cut(
                     budget_result['meta'], result, field)
@@ -1271,18 +1272,22 @@ def _budget_meta_of_cut(budget: dict, result: dict, field: str) -> dict:
     return budget
 
 
-def _record_cut(result: dict, field: str, total: int, cause: str, sole: bool) -> None:
+def _record_cut(result: dict, field: str, total: int, cause: str, sole: bool, adapter=None) -> None:
     """Disclose a cut the router made to ``result[field]`` (BACK-1059).
 
     ``--max-items`` and ``--head/--tail/--range`` slice a list after the adapter built its
     counts, so the result said "45 results" while holding 3, and text renderers showed
     the 3 as complete. The cut becomes a ``note_truncation`` entry, which the router
-    prints; a sole list's ``displayed_results`` is corrected to what is left.
+    prints; a sole list's ``displayed_results`` and every count the adapter declares for
+    the list in ``BUDGET_COUNT_FIELDS`` are corrected to what is left (BACK-2653).
     """
     shown = len(result[field])
     note_truncation(result, field, shown, total, cause)
-    if sole and shown < total and isinstance(result.get('displayed_results'), int):
+    if shown >= total:
+        return
+    if sole and isinstance(result.get('displayed_results'), int):
         result['displayed_results'] = shown
+    restate_shown_counts(result, getattr(adapter, 'BUDGET_COUNT_FIELDS', {}).get(field, ()), shown)
 
 
 def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None,
@@ -1330,7 +1335,7 @@ def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None,
     for field in fields:
         total = len(result[field])
         result[field] = slice_items(result[field], head, tail, range_)
-        _record_cut(result, field, total, cause, sole=len(fields) == 1)
+        _record_cut(result, field, total, cause, sole=len(fields) == 1, adapter=adapter)
     if len(fields) > 1:
         print(f"Note: {flag} applied to each of {', '.join(fields)} -- {scheme or 'this'}:// "
               f"returns several lists.", file=sys.stderr)
