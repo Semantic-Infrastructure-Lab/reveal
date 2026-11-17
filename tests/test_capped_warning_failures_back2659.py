@@ -254,3 +254,21 @@ def test_a_real_unreadable_file_is_listed_with_its_reason_and_no_absolute_path(t
     records = [r for w in json.loads(result.stdout)['meta']['warnings'] for r in w.get('failures', ())]
     assert [(r['path'], r['cause']) for r in records] == [('locked.py', 'PermissionError')]
     assert 'Permission denied' in records[0]['reason'] and root.as_posix() not in records[0]['reason']
+
+
+def test_architecture_diff_strips_the_snapshot_root_from_failures_too(tmp_path):
+    """architecture diff removes its temporary snapshot root from a warning's file fields before the
+    answer; ``failures`` is one of them, path and reason alike."""
+    from reveal.diff import architecture_diff as diff
+    from reveal.utils.path_utils import analysis_skipped_warning as skipped_warning
+    root = tmp_path / 'reveal-archdiff-snapshot'
+    target = root / 'pkg' / 'a.py'
+    warning = skipped_warning([(str(target), f"PermissionError: [Errno 13] Permission denied: '{target}'")])
+    raw = {'root': root, 'meta': {'warnings': [warning]}}
+    entry = diff._snapshot_meta(raw, 'base')[0][1]
+    assert entry['files'] == ['pkg/a.py']
+    (record,) = entry['failures']
+    assert record['path'] == 'pkg/a.py' and record['cause'] == 'PermissionError'
+    assert 'reveal-archdiff-snapshot' not in json.dumps(entry['failures'])
+    assert 'Permission denied' in record['reason']
+    assert warning['failures'][0]['path'] == target.as_posix()  # the builder's own entry is not mutated
