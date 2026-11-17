@@ -88,8 +88,8 @@ def test_repeated_where_and_per_call_overrides_are_isolated(tree):
     assert query(uri)['total_results'] == 1
     assert query(uri, where=[])['total_results'] == 2
     assert query(uri)['total_results'] == 1
-    with pytest.raises(TypeError, match='Unsupported'):
-        query(uri, nonexistent_control=True)
+    with pytest.raises(TypeError, match="unsupported control 'nonexistent_control'; supported controls: where"):
+        query(uri, nonexistent_control=True)  # rule 7's one message (BACK-2654), still a TypeError to the caller
 
 
 def test_original_semantic_predicate_is_validated_before_typed_override(tree):

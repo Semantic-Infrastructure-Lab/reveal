@@ -738,7 +738,29 @@ def probe_unsupported_controls(noun):
         if flag is not None and _received(noun, flag) is None:
             run = _run(_uri(noun), f'--{control}', value, '--format', 'json')
             cases.append(Case(f'URI with global --{control}', _teaches(run, noun, control), f'{run.brief()} ({wants})'))
+    # One rejection wording on every transport (BACK-2654 item B): a flag reveal does not have on a URI request, and
+    # a typed api.query override the noun does not declare, meet the same shared message.
+    run = _run(_uri(noun), '--zz-unknown', '1')
+    cases.append(Case('URI with an unknown flag --zz-unknown', _teaches(run, noun, '--zz-unknown'),
+                      f'{run.brief()} ({wants})'))
+    cases.append(_typed_override_case(noun))
     return cases
+
+
+def _typed_override_case(noun):
+    """``api.query(uri, zz_unknown=...)`` raises the shared message, as a RequestValidationError (a usage error to
+    every transport) that is still the TypeError an unexpected keyword is to a library caller."""
+    from reveal import api
+    from reveal.errors import RequestValidationError
+    from reveal.utils.query_binding import unsupported_controls_message
+    wanted = unsupported_controls_message(_specs(noun), ['zz_unknown'])
+    try:
+        api.query(_uri(noun), zz_unknown='1')
+    except Exception as exc:  # the raised class and its message are the measured outcome
+        ok = isinstance(exc, RequestValidationError) and isinstance(exc, TypeError) and str(exc) == wanted
+        return Case('api.query typed zz_unknown', ok, f'raised {type(exc).__name__}: {str(exc)[:160]} (wants '
+                                                      f'RequestValidationError and TypeError: {wanted[:80]}...)')
+    return Case('api.query typed zz_unknown', False, f'answered (wants RequestValidationError: {wanted[:80]}...)')
 
 
 # --- rule 4: global --verbose is --detail full ------------------------------------------------------------
@@ -1780,3 +1802,17 @@ def test_metrics_rejects_an_unsupported_shared_control_through_the_shared_messag
     assert run.rc == 2, run.brief()
     expected = unsupported_controls_message(_adapter('metrics').PARAM_SPECS, [key])
     assert expected in run.err, run.err
+
+
+@pytest.mark.parametrize('noun,flag,value', [('ast', '--where', 'lines>1'), ('markdown', '--match', 'x'),
+                                             ('metrics', '--view', 'hotspots')])
+def test_a_declared_control_given_as_a_flag_on_a_uri_names_its_query_key(workspace, noun, flag, value):
+    """A control the noun declares but reveal has no flag for on a URI request: the shared message, plus where the
+    control goes on a URI (its query key), in text and in the JSON document."""
+    from reveal.utils.query_binding import unsupported_controls_message
+    taught = unsupported_controls_message(_specs(noun), [flag])
+    key = f'?{flag[2:]}=VALUE'
+    text = _run(_uri(noun), flag, value)
+    assert text.rc == 2 and taught in text.err and key in text.err and not text.out.strip(), text.brief()
+    run = _run(_uri(noun), flag, value, '--format', 'json')
+    assert run.rc == 2 and taught in json.loads(run.out)['error'] and key in json.loads(run.out)['error'], run.brief()

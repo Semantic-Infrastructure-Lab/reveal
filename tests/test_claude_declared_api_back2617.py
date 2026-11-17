@@ -51,8 +51,8 @@ def test_tail_zero_is_not_an_omitted_override(claude):
 
 
 def test_unknown_typed_override_rejects(claude):
-    with pytest.raises(TypeError, match='Unsupported declared'):
-        query('claude://session/my-session', invented_control=True)
+    with pytest.raises(TypeError, match="unsupported control 'invented_control'; supported controls: "):
+        query('claude://session/my-session', invented_control=True)  # rule 7's one message (BACK-2654)
 
 
 def test_false_raw_override_restores_narrative_messages(claude):
