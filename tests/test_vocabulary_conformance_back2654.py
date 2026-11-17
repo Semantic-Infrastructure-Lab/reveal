@@ -67,6 +67,7 @@ from reveal.adapters.factory import uses_bound_query_call
 from reveal.cli.invocation import COMMANDS, RETIREMENTS
 from reveal.cli.routing.declared import create_declared_parser, declared_adapter_class
 from reveal.cli.routing.flag_specs import FLAG_SPECS
+from reveal.utils.query_parser import query_key
 
 
 def _declared_nouns():
@@ -712,10 +713,17 @@ def probe_unsupported_controls(noun):
     global_flags = {flag.option[2:]: flag for flag in FLAG_SPECS}
     wants = 'wants exit 2 naming the control and the supported controls'
     cases = []
+    open_fields = _has_where(noun) and bool(_spec_for(noun, 'where').open_fields)
     for control, value in SHARED_CONTROLS.items():
         if control not in keys:
             run = _run(_uri(noun, f'{control}={value}'), '--format', 'json')
-            cases.append(Case(f'?{control}=', _teaches(run, noun, control), f'{run.brief()} ({wants})'))
+            if open_fields:  # rule 8: a translated legacy spelling of where=CONTROL... until the cut, with its note
+                doc = json.loads(run.out) if run.out.strip().startswith('{') else None
+                ok = run.rc == 0 and f'param:{noun}.{control}' in _retired_fields(doc)
+                cases.append(Case(f'?{control}= (legacy where term until the cut)', ok,
+                                  f'{run.brief()} (wants exit 0 with the param:{noun}.{control} note)'))
+            else:
+                cases.append(Case(f'?{control}=', _teaches(run, noun, control), f'{run.brief()} ({wants})'))
         if _sub(noun) is not None and f'--{control}' not in flags:
             run = _run(*_sub(noun, f'--{control}', value), '--format', 'json')
             cases.append(Case(f'subcommand --{control}', _teaches(run, noun, control), f'{run.brief()} ({wants})'))
@@ -1578,16 +1586,60 @@ def test_the_typo_warning_has_one_builder():
 
 # --- rule 8 (Step 4 item C): bare shared-control keys, AST's legacy depth, Metrics' FIELD=VALUE -------------------
 
-@pytest.mark.parametrize('uri,key', [('markdown://proj?kind=guide', 'kind'), ('markdown://proj?depth>1', 'depth'),
-                                     ('json://proj/rows.json?match=a', 'match'),
-                                     ('json://proj/rows.json?kind>=1', 'kind'), ('ast://proj?since=2020-01-01', 'since'),
-                                     ('ast://proj?detail=full', 'detail')])
-def test_a_bare_shared_control_name_is_never_a_field(workspace, uri, key):
-    """Rule 8a on the open-field nouns: a bare key spelling a shared control the noun does not declare exits 2,
-    naming it and teaching where=KEY for the field of that name; it used to filter on a field of that name."""
+@pytest.fixture
+def kinded(workspace):
+    """Markdown front matter and JSON rows whose keys are named like shared controls (kind, match, depth)."""
+    from pathlib import Path
+    Path('proj/kinded.md').write_text('---\nkind: guide\ndepth: 3\n---\n# Kinded\n', encoding='utf-8')
+    Path('proj/kinds.json').write_text('[{"kind": "a", "match": 1}, {"kind": "b", "match": 2}]', encoding='utf-8')
+    return workspace
+
+
+# (bare URI, the where URI it translates to, rows the where answer has: the filter binds or answers a disclosed zero)
+SHARED_NAMED_FIELDS = [('markdown://proj?kind=guide', 'markdown://proj?where=kind=guide', 1),
+                       ('markdown://proj?depth>1', 'markdown://proj?where=depth>1', 1),
+                       ('json://proj/kinds.json?kind=a', 'json://proj/kinds.json?where=kind=a', 1),
+                       ('json://proj/kinds.json?match>=2', 'json://proj/kinds.json?where=match>=2', 1),
+                       ('ast://proj?since=2020-01-01', 'ast://proj?where=since=2020-01-01', 0),
+                       ('ast://proj?detail=full', 'ast://proj?where=detail=full', 0)]
+
+
+def _rows_found(uri, answer):
+    return answer['value'] if noun_of(uri) == 'json' else answer['results']
+
+
+@pytest.mark.parametrize('bare,where,rows', SHARED_NAMED_FIELDS)
+def test_a_bare_shared_named_field_is_a_translated_legacy_spelling_until_the_cut(kinded, bare, where, rows):
+    """Rule 8 on the open-field nouns: a bare key named like a shared control the noun does not declare is a legacy
+    spelling of the identical where term until the cut (old spellings work until 1.0), with its replaced-by note on
+    every transport; generated once at the binder, not a row per key. At the cut it exits 2 with the rule 3 teaching."""
+    from conftest import without_retirement_notes
+    from reveal import api
+    noun, key = noun_of(bare), query_key(bare.partition('?')[2])
+    old, new = _run(bare, '--format', 'json'), _run(where, '--format', 'json')
+    assert old.rc == new.rc == 0, (old.brief(), new.brief())
+    assert len(_rows_found(where, json.loads(new.out))) == rows
+    assert f'param:{noun}.{key}' in _retired_fields(json.loads(old.out)) and not _retired_fields(json.loads(new.out))
+    assert without_retirement_notes(json.loads(old.out)) == json.loads(new.out)
+    text_old, text_new = _run(bare), _run(where)
+    assert text_old.out == text_new.out and f'where={key}' in text_old.err and 'note:' not in text_new.err
+    assert f'param:{noun}.{key}' in _retired_fields(api.query(bare))
+
+
+@pytest.mark.parametrize('uri,key', [('git://proj?match=x', 'match'), ('metrics://proj?depth=1', 'depth'),
+                                     ('claude://sessions?kind=x', 'kind')])
+def test_a_closed_field_noun_still_rejects_a_bare_shared_name(workspace, uri, key):
+    """Negative control: on a closed-field noun a shared name was never a field; rule 3's exit 2 stands, no note."""
     run = _run(uri, '--format', 'json')
-    assert run.rc == 2, run.brief()
-    assert run.says(f"'{key}'", 'supported controls', f'where={key}'), run.err
+    assert run.rc == 2 and key in run.err and 'supported controls' in run.err, run.brief()  # rule 7 unifies the wording
+    assert 'note:' not in run.err
+
+
+def test_the_cut_time_teaching_names_where_for_an_open_field_noun():
+    from reveal.utils.query_binding import unsupported_controls_message
+    open_noun = _adapter('markdown').PARAM_SPECS
+    assert 'where=kind OP VALUE' in unsupported_controls_message(open_noun, ['kind'])
+    assert 'never a bare field' not in unsupported_controls_message(_adapter('git').PARAM_SPECS, ['match'])
 
 
 def noun_of(uri):
