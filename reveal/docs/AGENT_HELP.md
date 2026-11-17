@@ -79,7 +79,7 @@ One name per idea: --limit/--offset, --sort [-]FIELD, --where 'FIELD OP VALUE',
   --match TEXT, --detail LEVEL, --view NAME, --since/--until DATE, --against REF, --tests MODE
 --limit 0 means no cap.
 On a URI, ?FIELD OP VALUE is the same filter as --where.
-Switches take on/off: --churn off.
+Switches take on/off: --churn off, --breadcrumbs off, --respect-gitignore off.
 Filters and selections repeat and combine; settings take one value (twice, differently: exit 2).
 One answer per request (two: exit 2); an option the selected answer does not use is named in a note.
 An unknown option or field exits 2 naming the ones the noun takes (a field the data defines warns).
