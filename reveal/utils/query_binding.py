@@ -123,7 +123,7 @@ def _prepare_repeated_params(declarations: tuple[ParamSpec, ...], source: str, p
         if spec.role == 'filter-expression':  # its own terms are the expression list; its legacy words repeat too
             _keep_repeated_words(spec, parts, params)
             continue
-        values = [_decode_value(spec, value) if separator else True
+        values = [spec.canonical_value(key, _decode_value(spec, value) if separator else True)
                   for key, separator, value in parts if key in spec.spellings]
         if values:
             for name in spec.spellings:
