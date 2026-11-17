@@ -19,7 +19,6 @@ from test_claude_source_evidence_back2617 import transcript
     ('session/my-session', {'tokens': True, 'digest': True}),
     ('session/my-session', {'tools': 'Bash', 'search': 'token'}),
     ('session/my-session', {'errors': True, 'timeline': True}),
-    ('session/my-session', {'tail': 2, 'last': 1}),  # one operation, two spellings, two counts
     ('sessions', {'errors': True}),
     ('plans', {'tools': 'Bash'}),
     ('history', {'tokens': True}),
@@ -28,8 +27,7 @@ from test_claude_source_evidence_back2617 import transcript
     ('plans/my-plan', {'search': 'token'}),
 ])
 def test_invalid_selector_combination_rejects_in_api_and_uri(transcript, resource, params):
-    # tail and last are one legacy operation with two spellings (BACK-2654 note #9): two counts conflict (rule 1).
-    with pytest.raises(RequestValidationError, match='selector|conflicting spellings'):
+    with pytest.raises(RequestValidationError, match='selector'):
         query('claude://' + resource, **params)
     query_string = '&'.join(name + '=' + str(value).lower() for name, value in params.items())
     result = _run_reveal_in(transcript.parent, 'claude://' + resource + '?' + query_string, '--format', 'json')
@@ -42,8 +40,11 @@ def test_tail_and_last_are_one_operation_with_two_spellings(transcript):
     equal pair answers once and two counts exit 2 naming both spellings."""
     single = query('claude://session/my-session', tail=2)
     assert query('claude://session/my-session', tail=2, last=2) == single
-    with pytest.raises(RequestValidationError, match='conflicting spellings: tail, last'):
+    with pytest.raises(ValueError, match='conflicting spellings: tail, last'):
         query('claude://session/my-session', tail=2, last=1)
+    result = _run_reveal_in(transcript.parent, 'claude://session/my-session?tail=2&last=1', '--format', 'json')
+    assert result.returncode == 2
+    assert any(e['code'] == 'invalid_request' for e in json.loads(result.stdout)['meta']['errors'])
 
 
 @pytest.mark.parametrize('params', [{'tools': 'Bash', 'errors': True},

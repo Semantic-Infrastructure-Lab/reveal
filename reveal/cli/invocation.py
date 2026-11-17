@@ -231,8 +231,9 @@ class Retirement:
     stage: str = 'note'
     removed: bool = False
     # The replacement is another noun or nothing, or answers differently (a legacy operation: Calls root, Claude
-    # tail/last, Metrics hotspots and its top): the spelling stays a parameter of its own until the cut rather than a
-    # legacy entry on a canonical control (COMMAND_MODEL "Retirement notes", "Legacy operations", BACK-2654).
+    # tail, Metrics hotspots; or a legacy cap or detail level: Metrics top, Claude full/raw): the spelling stays a
+    # parameter of its own until the cut rather than a legacy entry on a canonical control (COMMAND_MODEL "Retirement
+    # notes", "Legacy operations", BACK-2654).
     standalone: bool = False
 
     def __post_init__(self) -> None:
@@ -345,12 +346,14 @@ RETIREMENTS: Dict[str, Retirement] = {
         'sessions --where session~=TEXT (or ?where=session~=TEXT), a case-insensitive session-name substring; URI expressions percent-decode once'),
     'param:claude.tail': Retirement('claude ?tail',
         '--view messages --sort=-message_index --limit N selects latest-first; the legacy slice stays chronological, zero is empty and negative counts retain all turns; canonical limit=0 is uncapped', standalone=True),
+    # last is tail's other spelling (last == tail=1, last=N == tail=N): a legacy entry on tail, not a parameter.
     'param:claude.last': Retirement('claude ?last',
-        '--view messages --sort=-message_index --limit N selects latest-first; the legacy slice stays chronological, bare last or zero selects one; canonical limit=0 is uncapped', standalone=True),
+        '--view messages --sort=-message_index --limit N selects latest-first; the legacy slice stays chronological, bare last or zero selects one; canonical limit=0 is uncapped'),
+    # full and raw answer differently from detail=full/raw (BACK-2654 note #9): legacy settings of their own until the cut.
     'param:claude.full': Retirement('claude ?full',
-        '--detail full (or ?detail=full) on a supported expanding view; unsupported views reject'),
+        '--detail full (or ?detail=full) on a supported expanding view; unsupported views reject', standalone=True),
     'param:claude.raw': Retirement('claude ?raw',
-        '--view messages or --view prompts with --detail raw (or ?detail=raw); canonical raw also expands the text display'),
+        '--view messages or --view prompts with --detail raw (or ?detail=raw); canonical raw also expands the text display', standalone=True),
     'param:ast.calls': Retirement('ast://?calls=', "calls://<path>?callers=NAME, or --grep 'PATTERN' for a pattern", standalone=True),
     # Different words for one control are legacy spellings with a note (COMMAND_MODEL "Different words", BACK-2654);
     # AST show and Git type are D18-deferred and stay note-free.

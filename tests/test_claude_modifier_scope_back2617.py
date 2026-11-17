@@ -9,19 +9,20 @@ from reveal.errors import RequestValidationError
 from test_claude_source_evidence_back2617 import transcript
 
 
-@pytest.mark.parametrize('resource,control,value', [
-    ('session/my-session', 'key', 'model'),
-    ('settings', 'project', 'proj'),
-    ('session/my-session/messages', 'patches', True),
-    ('sessions', 'word', True),
-    ('session/my-session', 'snippet', 80),
-    ('session/my-session/messages', 'since', '2026-01-01'),
-    ('history', 'until', '2026-01-01'),
-    ('sessions?match=token', 'filter', 'my-session'),
+@pytest.mark.parametrize('resource,control,value,named', [
+    ('session/my-session', 'key', 'model', 'key'),
+    ('settings', 'project', 'proj', 'project'),
+    ('session/my-session/messages', 'patches', True, 'patches'),
+    ('sessions', 'word', True, 'word'),
+    ('session/my-session', 'snippet', 80, 'snippet'),
+    ('session/my-session/messages', 'since', '2026-01-01', 'since'),
+    ('history', 'until', '2026-01-01', 'until'),
+    # legacy filter is where=session~=TEXT (BACK-2654 note #9): the rejection names where, its note names filter
+    ('sessions?match=token', 'filter', 'my-session', 'where'),
 ])
-def test_misplaced_modifier_rejects_in_api_and_both_cli_forms(transcript, resource, control, value):
+def test_misplaced_modifier_rejects_in_api_and_both_cli_forms(transcript, resource, control, value, named):
     uri = 'claude://' + resource
-    with pytest.raises(RequestValidationError, match=control):
+    with pytest.raises(RequestValidationError, match=named):
         query(uri, **{control: value})
     separator = '&' if '?' in resource else '?'
     encoded = str(value).lower() if isinstance(value, bool) else str(value)

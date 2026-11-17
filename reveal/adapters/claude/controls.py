@@ -28,7 +28,7 @@ def apply_view(params, resource):
 def _validate_view_selectors(params, view):
     compatible = {'summary': ('overview',), 'digest': ('digest',), 'timeline': ('timeline',),
                   'errors': ('errors',), 'tokens': ('tokens',), 'tools': ('tools',),
-                  'search': ('search',), 'tail': ('messages',), 'last': ('messages',)}
+                  'search': ('search',), 'tail': ('messages',)}
     for selector, views in compatible.items():
         if selector in params and view not in views:
             raise RequestValidationError(f'view={view} conflicts with {selector}')
@@ -170,7 +170,7 @@ def _match_target(params, resource):
 
 
 def _session_match_target(params, resource, noun, suffix):
-    selectors = ('summary', 'digest', 'timeline', 'tokens', 'tail', 'last')
+    selectors = ('summary', 'digest', 'timeline', 'tokens', 'tail')
     if any(params.get(key) is not None for key in selectors):
         raise RequestValidationError('match is not supported with this session view selector')
     if 'raw' in params:
@@ -197,7 +197,6 @@ MODIFIER_SCOPES = {
     'patches': ('claude_files',),
     'word': ('claude_cross_session_search',),
     'snippet': ('claude_cross_session_search',),
-    'filter': ('claude_session_list',),
     'since': ('claude_session_list', 'claude_cross_session_search', 'claude_file_sessions', 'claude_history'),
     'until': ('claude_session_list', 'claude_cross_session_search'),
 }
@@ -211,7 +210,7 @@ def validate_modifier_scope(params, resource):
             raise RequestValidationError(f'{name} is supported only by: ' + ', '.join(supported))
 
 
-SESSION_SELECTORS = frozenset(('summary', 'digest', 'timeline', 'errors', 'tokens', 'tools', 'tail', 'last'))
+SESSION_SELECTORS = frozenset(('summary', 'digest', 'timeline', 'errors', 'tokens', 'tools', 'tail'))
 SEARCH_POPULATIONS = frozenset(('claude_cross_session_search', 'claude_search_results', 'claude_history',
                                 'claude_plans', 'claude_agents', 'claude_memory'))
 
@@ -229,10 +228,5 @@ def validate_selectors(params, resource):
         selected.discard('search')
     if 'search' in selected and operation_type(resource, params) not in SEARCH_POPULATIONS:
         raise RequestValidationError('search selector is unsupported on this resource')
-    if {'tail', 'last'} <= selected:
-        last_count = params['last'] or 1
-        if params['tail'] != last_count:
-            raise RequestValidationError('Conflicting tail/last selectors select different counts')
-        selected.remove('last')
     if len(selected) > 1 and not selected <= {'tools', 'errors'}:
         raise RequestValidationError('Conflicting Claude selectors: ' + ', '.join(sorted(selected)))

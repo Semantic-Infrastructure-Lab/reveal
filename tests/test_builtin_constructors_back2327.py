@@ -67,7 +67,9 @@ def test_real_session_resources_construct_once_without_legacy_warning(session_ad
     assert calls == [((expected_resource, query), {})]
     assert result.resource == expected_resource and result.query == query
     assert result.query_params == ({'search': 'auth'} if kind == 'query-only'
-                                   else {'last': 2 if scheme == 'claude' else True} if kind == 'session-query' else {})
+                                   # claude's last binds as tail, its other spelling (BACK-2654 note #9)
+                                   else ({'tail': 2} if scheme == 'claude' else {'last': True}) if kind == 'session-query'
+                                   else {})
     assert not [notice for notice in caught if issubclass(notice.category, DeprecationWarning)]
     if scheme == 'claude':
         assert result.CONVERSATION_BASE.is_dir()

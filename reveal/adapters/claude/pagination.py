@@ -56,7 +56,7 @@ def validate_page_scope(params, resource):
     field = sort[1:] if sort and sort.startswith('-') else sort
     if sort and field not in PAGE_SPECS[kind][1]:
         raise RequestValidationError(f'Unsupported sort field for {kind}: {sort}')
-    if params.get('tail') is not None or params.get('last') is not None:
+    if params.get('tail') is not None:
         raise RequestValidationError('limit/offset/sort cannot combine with legacy tail/last')
 
 

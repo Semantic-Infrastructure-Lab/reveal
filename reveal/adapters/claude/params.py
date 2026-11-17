@@ -2,7 +2,7 @@
 from typing import Any, Callable
 
 from ...utils.query_binding import bind_declared_params, legacy_presence_value as presence, string_value as text
-from ...utils.query_parser import CliBinding, ParamSpec, QueryParams, peek_query_items, nonnegative_display_limit, nonempty_scalar
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, QueryParams, peek_query_items, nonnegative_display_limit, nonempty_scalar
 from .schema import _SCHEMA_QUERY_PARAMS
 from .resources import SESSION_VIEW_NAMES
 
@@ -42,25 +42,37 @@ def name_predicates(value):
     return [term for term in terms if term]
 
 
+def _last_count(value):
+    """Legacy ``last`` is tail's other spelling: ``last=N`` is ``tail=N``, and bare ``last`` or ``last=0`` is one turn."""
+    count = 1 if value is True or value == '' else int(value)
+    return str(count or 1)
+
+
+def _session_substring(value):
+    """Legacy ``filter=TEXT`` is ``where=session~=TEXT``: the same case-insensitive session-name substring."""
+    return f'session~={text(value)}'
+
+
 def _spec(name, schema):
     convert: Callable[[Any], Any] = text
     if name in PRESENCE_FLAGS:
         convert = presence
     elif name == 'patches':
         convert = patches
-    elif name in ('tail', 'last'):
+    elif name == 'tail':
         convert = int
     elif name == 'snippet':
         convert = snippet
-    kind = 'integer' if name in ('tail', 'last') else schema['type']
-    retired = {'summary', 'search', 'contains', 'filter', 'tail', 'last', 'full', 'raw'}
+    kind = 'integer' if name == 'tail' else schema['type']
+    retired = {'summary', 'search', 'contains', 'tail', 'full', 'raw'}
     cli = None if name in retired else CliBinding(('--' + name,), action='store_true' if kind == 'flag' else None)
     description = ('Deprecated compatibility control; ' if name in retired else '') + schema['description']
-    # tail and last answer differently from any canonical request (a chronological slice, zero empty): legacy
-    # operations that select the answer (COMMAND_MODEL "Legacy operations", BACK-2654).
-    role = 'operation' if name in ('tail', 'last') else None
+    # tail answers differently from any canonical request (a chronological slice, zero empty): a legacy operation that
+    # selects the answer, with last as its other spelling (COMMAND_MODEL "Legacy operations", BACK-2654 note #9).
+    role = 'operation' if name == 'tail' else None
+    legacy = (LegacySpelling('last', codec=_last_count),) if name == 'tail' else ()
     return ParamSpec(name, kind, description, None, convert,
-                     examples=tuple(schema.get('examples', ())), cli=cli, role=role)
+                     examples=tuple(schema.get('examples', ())), cli=cli, role=role, legacy=legacy)
 
 
 PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS.items()) + (
@@ -71,7 +83,7 @@ PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS
     ParamSpec('sort', 'string', 'Answer row field; prefix - for descending; supported fields depend on the selected reader', None, nonempty_scalar, cli=CliBinding(('--sort',))),
     ParamSpec('where', 'array', 'Reader-specific predicates, ANDed: catalog session~=TEXT substrings or workflow tool==NAME exact equality; case-insensitive',
               None, name_predicates, uri_codec='percent', role='name-predicate',
-              repeatable=True, cli=CliBinding(('--where',))),
+              repeatable=True, legacy=(LegacySpelling('filter', codec=_session_substring),), cli=CliBinding(('--where',))),
     ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence, cli=CliBinding(('--timeline',), action='store_true')),
     ParamSpec('detail', 'string', 'summary, normal, full or raw; levels are qualified by the existing reader', None, text, choices=('summary', 'normal', 'full', 'raw'), cli=CliBinding(('--detail',))),
     ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES, role='operation', cli=CliBinding(('--view',))),
@@ -85,6 +97,7 @@ def bind_request(query, params, resource=''):
     # Presence readers must not mistake an explicit False/None override for a flag.
     runtime = QueryParams({key: value for key, value in peek_query_items(bound)
                            if value is not None and not (key in PRESENCE_FLAGS and value is False)})
+    runtime._aliases = dict(getattr(bound, '_aliases', {}))  # reading where reads legacy filter (last: tail)
     from .controls import apply_view, apply_detail, apply_match, validate_where_scope, validate_modifier_scope, validate_selectors
     resource = apply_view(runtime, resource)
     apply_detail(runtime, resource)

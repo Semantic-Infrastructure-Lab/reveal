@@ -82,6 +82,9 @@ RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10'
 BASE = {**CASES, 'stats': (None, ''), 'codex': (None, '')}
 # Targets that are not the fixture project directory.
 TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json'}
+# A control that answers only on another target than its noun's default (Claude's turn slice reads one session):
+# the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
+CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session'}
 
 # The shared controls of COMMAND_MODEL section 1 rule 3, each with a value a supporting noun would accept.
 # Left out: view (the deferred row, D18), format/output (global presentation), head/tail/range (path reads only)
@@ -97,17 +100,17 @@ SHARED_CONTROLS = {'limit': '1', 'offset': '1', 'sort': 'name', 'where': 'lines>
 _NO_ALIAS = 'declares no aliased control: there is no alias and name to give twice'
 _NO_LEGACY = 'no note-stage RETIREMENTS row spells this noun: there is no legacy spelling to note'
 EXEMPT = {
-    **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'claude', 'codex', 'contracts', 'deps', 'hotspots', 'json',
+    **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'codex', 'contracts', 'deps', 'hotspots', 'json',
                                             'overview', 'pack', 'patches', 'surface', 'testability', 'trace')},
     **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'contracts', 'git', 'json', 'overview', 'pack', 'patches',
                                             'surface')},
     **{(noun, '1d'): 'declares no repeatable control with an alias'
-       for noun in NOUNS if noun not in ('markdown', 'metrics', 'stats')},
+       for noun in NOUNS if noun not in ('claude', 'markdown', 'metrics', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'git', 'hotspots', 'json', 'overview', 'pack', 'patches',
         'surface', 'testability', 'trace')},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
-        'architecture', 'claude', 'codex', 'contracts', 'deps', 'hotspots', 'json', 'overview', 'pack', 'patches',
+        'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'json', 'overview', 'pack', 'patches',
         'surface', 'testability', 'trace')},
     **{(noun, '8a'): 'no where expression: a bare key is never read as a field (claude\'s where is a name predicate)'
        for noun in ('architecture', 'calls', 'claude', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview',
@@ -335,12 +338,13 @@ def _spec_for(noun, key):
     return next((spec for spec in _specs(noun) if key in (spec.name, *_other_spellings(spec))), None)
 
 
-def _uri(noun, *pairs, base=True):
+def _uri(noun, *pairs, base=True, control=None):
     """The noun's default URI plus *pairs*; ``base=False`` drops its default operation (an operation control
-    under test would otherwise be a second mode)."""
+    under test would otherwise be a second mode). *control* names the control under test (CONTROL_TARGETS)."""
     query = BASE[noun][1].lstrip('?') if base else ''
     parts = [part for part in (query, *pairs) if part]
-    return f'{noun}://{TARGETS.get(noun, "proj")}' + ('?' + '&'.join(parts) if parts else '')
+    target = CONTROL_TARGETS.get((noun, control), TARGETS.get(noun, 'proj'))
+    return f'{noun}://{target}' + ('?' + '&'.join(parts) if parts else '')
 
 
 def _sub(noun, *extra, base=True):
@@ -606,11 +610,11 @@ def probe_alias_and_name(noun):
             base = spec.role != 'operation'
             label = f'?{spec.name}= vs ?{alias}='
             if other is not None:  # a control with one valid value cannot be given two
-                conflict = _uri(noun, f'{spec.name}={other}', f'{alias}={same}', base=base)
+                conflict = _uri(noun, f'{spec.name}={other}', f'{alias}={same}', base=base, control=spec.name)
                 cases.append(_conflict_case(label, _run(conflict, '--format', 'json'), (spec.name, alias)))
-            pair = _uri(noun, f'{spec.name}={value}', f'{alias}={same}', base=base)
-            cases.append(_equal_case(label, noun, _run(pair, '--format', 'json'),
-                                     _run(_uri(noun, f'{spec.name}={value}', base=base), '--format', 'json')))
+            pair = _uri(noun, f'{spec.name}={value}', f'{alias}={same}', base=base, control=spec.name)
+            single = _uri(noun, f'{spec.name}={value}', base=base, control=spec.name)
+            cases.append(_equal_case(label, noun, _run(pair, '--format', 'json'), _run(single, '--format', 'json')))
             cases += _alias_on_subcommand(noun, spec, alias, values)
     return cases
 
@@ -938,7 +942,7 @@ def probe_alias_notes(noun, sample):
             if values is None:
                 continue
             key = f'param:{noun}.{alias}'
-            uri = _uri(noun, f'{alias}={values[1]}', base=spec.role != 'operation')
+            uri = _uri(noun, f'{alias}={values[1]}', base=spec.role != 'operation', control=spec.name)
             noted = not _spelling_only(spec, alias) and (noun, alias) not in DEFERRED_ALIASES
             as_json = _run(uri, '--format', 'json')
             doc = json.loads(as_json.out) if as_json.out.strip().startswith('{') else None
@@ -1079,8 +1083,8 @@ def probe_legacy_operations(noun):
                 continue
             value, same, _other_value = values
             base = spec.role != 'operation'
-            legacy_uri, canonical_uri = _uri(noun, f'{entry.name}={same}', base=base), _uri(noun, f'{spec.name}={value}',
-                                                                                          base=base)
+            legacy_uri = _uri(noun, f'{entry.name}={same}', base=base, control=spec.name)
+            canonical_uri = _uri(noun, f'{spec.name}={value}', base=base, control=spec.name)
             cases.append(_parity_case(noun, f'?{entry.name}= answers as ?{spec.name}=', legacy_uri, canonical_uri))
             cases.append(_text_parity_case(f'?{entry.name}= renders as ?{spec.name}=', legacy_uri, canonical_uri))
     for key in _rows(noun):

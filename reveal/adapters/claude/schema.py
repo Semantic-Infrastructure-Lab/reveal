@@ -30,11 +30,6 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Characters of context around search match (cross-session search only). Default 120, range 60–500.',
         'examples': ['?search=term&snippet=300', '?search=term&snippet=250']
     },
-    'filter': {
-        'type': 'string',
-        'description': 'Deprecated catalog-name substring filter; use where=session~=TEXT. Does not select cross-session content search.',
-        'examples': ['?filter=auth-refactor']
-    },
     'project': {
         'type': 'string',
         'description': 'Filter by project name (claude://history only). Scopes results to sessions in the specified project directory.',
@@ -49,11 +44,6 @@ _SCHEMA_QUERY_PARAMS = {
         'type': 'integer',
         'description': 'Show last N assistant turns — fast session recovery ("where did it stop?")',
         'examples': ['?tail=3', '?tail=1']
-    },
-    'last': {
-        'type': 'flag',
-        'description': 'Show last assistant turn (shorthand for ?tail=1)',
-        'examples': ['?last']
     },
     'tokens': {
         'type': 'flag',

@@ -629,10 +629,7 @@ class ClaudeAdapter(ResourceAdapter):
         return self.query_params.get(name) is not None
 
     def _resolve_tail_count(self) -> int:
-        last_val = self.query_params.get('last')
-        if last_val is not None:
-            return int(last_val) if last_val else 1
-        return int(self.query_params['tail'])
+        return int(self.query_params['tail'])  # legacy last binds as tail (bare or zero last is tail=1)
 
     def _route_by_query(self, messages: List[Dict], conversation_path_str: str,
                         contract_base: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -651,8 +648,8 @@ class ClaudeAdapter(ResourceAdapter):
             return get_tool_calls(messages, self.query_params['tools'], self.session_name, contract_base)
         if 'search' in self.query_params:
             return search_messages(messages, self.query_params['search'], self.session_name, contract_base)
-        # ?tail=N or ?last=N — last N turns; bare ?last — shorthand for ?tail=1
-        if self.query_params.get('tail') is not None or self.query_params.get('last') is not None:
+        # ?tail=N (or its other spelling ?last=N; bare ?last is ?tail=1): the last N turns
+        if self.query_params.get('tail') is not None:
             tail = self._resolve_tail_count()
             result = get_messages(messages, self.session_name, contract_base)
             turns = result.get('messages', [])
@@ -1008,7 +1005,7 @@ class ClaudeAdapter(ResourceAdapter):
                 'session_only': sorted(SESSION_SELECTORS),
                 'search_populations': sorted(SEARCH_POPULATIONS),
                 'combined_selectors': [['tools', 'errors']],
-                'turn_aliases': 'tail and last coalesce only when their resolved counts agree; bare/zero last resolves to one',
+                'turn_aliases': 'last is the other spelling of tail (bare or zero last is tail=1): equal counts answer once, different counts exit 2',
             },
             'elements': _SCHEMA_ELEMENTS,
             'cli_flags': _SCHEMA_CLI_FLAGS,

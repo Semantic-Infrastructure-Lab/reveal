@@ -46,8 +46,8 @@ class TestTailQueryParam:
         adapter = ClaudeAdapter.__new__(ClaudeAdapter)
         adapter.resource = 'session/test'
         adapter.query = query_str
-        from reveal.utils.query import parse_query_params
-        adapter.query_params = parse_query_params(query_str) if query_str else {}
+        from reveal.adapters.claude.params import bind_query  # the declared binding: legacy last is tail (BACK-2654)
+        adapter.query_params = bind_query(query_str, None, 'session/test') if query_str else {}
         adapter.session_name = 'test-session'
         return adapter
 

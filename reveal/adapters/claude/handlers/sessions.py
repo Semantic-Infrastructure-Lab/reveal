@@ -246,14 +246,14 @@ def list_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Dict
     """List available Claude Code sessions.
 
     Supports query params:
-        ?filter=term  - filter session names by substring (case-insensitive)
-        ?search=term  - alias for ?filter=term
+        ?search=term  - filter session names by substring (case-insensitive); the declared
+                        where=session~=TEXT filter (legacy ?filter=TEXT) is applied by the adapter
 
     CLI flags (applied by routing.py):
         --head N      - show N most recent (default: 20)
         --all         - show all sessions
         --since DATE  - filter by modified date (e.g. 2026-02-27)
-        --search TERM - filter session names (overrides ?filter=)
+        --search TERM - filter session names
 
     Returns:
         Dictionary with full session list (routing.py applies display limits)
@@ -265,7 +265,7 @@ def list_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Dict
         contract_version=CONTRACT_VERSION,
     )
 
-    name_filter = (query_params.get('filter') or query_params.get('search', '')).lower()
+    name_filter = query_params.get('search', '').lower()
 
     catalog = collect_session_entries(conversation_base, _collect_sessions_from_dir)
     sessions = sorted(catalog, key=lambda x: x['modified'], reverse=True)

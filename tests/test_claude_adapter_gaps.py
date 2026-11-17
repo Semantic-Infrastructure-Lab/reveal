@@ -25,6 +25,7 @@ from unittest.mock import patch
 import pytest
 
 from reveal.adapters.claude.adapter import ClaudeAdapter
+from reveal.adapters.claude.params import bind_query
 from reveal.adapters.claude.handlers.post_process import _normalize_date
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
@@ -167,7 +168,7 @@ class TestRouteByQuery:
         msgs = [_user_msg('hello'), _assistant_msg('hi')]
         adapter = self._make_session(tmp_path, msgs)
         adapter.query = 'last'
-        adapter.query_params = {'last': ''}
+        adapter.query_params = bind_query('last', None, 'session/x')  # last binds as tail=1 (BACK-2654)
         base = adapter._get_contract_base()
         result = adapter._route_by_query(msgs, '', base)
         assert result is not None
@@ -1441,9 +1442,10 @@ class TestClaudeSchemaParamParity:
     # 'role' removed (consolidation: ?role=user|assistant folded into ?raw on
     # /prompts and /messages, see schema.py's _SCHEMA_NOTES entry on the
     # /user + /assistant element removal).
+    # filter and last are legacy spellings of where and tail (BACK-2654 note #9): documented as their aliases.
     HANDLER_PARAMS = {'summary', 'errors', 'tools', 'contains', 'raw',
-                      'search', 'since', 'word', 'filter', 'project', 'key',
-                      'tail', 'last', 'tokens'}
+                      'search', 'since', 'word', 'project', 'key',
+                      'tail', 'tokens'}
 
     def _schema_params(self):
         _SCHEMA_QUERY_PARAMS = ClaudeAdapter.get_schema()['query_params']
@@ -1466,7 +1468,8 @@ class TestClaudeSchemaParamParity:
 
     def test_filter_documented(self):
         _SCHEMA_QUERY_PARAMS = ClaudeAdapter.get_schema()['query_params']
-        assert 'filter' in _SCHEMA_QUERY_PARAMS
+        assert 'filter' in _SCHEMA_QUERY_PARAMS['where']['aliases']
+        assert 'last' in _SCHEMA_QUERY_PARAMS['tail']['aliases']
 
     def test_project_documented(self):
         _SCHEMA_QUERY_PARAMS = ClaudeAdapter.get_schema()['query_params']
@@ -2345,13 +2348,16 @@ class TestResolveTailCount:
         a.query_params = params
         return a
 
+    # last is tail's other spelling, bound by the declared params (BACK-2654 note #9): last=N is tail=N, bare last
+    # or last=0 is tail=1.
     def test_last_with_value(self):
-        a = self._adapter({'last': '3'})
+        a = self._adapter(bind_query('last=3', None, 'session/x'))
         assert a._resolve_tail_count() == 3
 
     def test_last_bare_resolves_to_1(self):
-        a = self._adapter({'last': ''})
+        a = self._adapter(bind_query('last', None, 'session/x'))
         assert a._resolve_tail_count() == 1
+        assert self._adapter(bind_query('last=0', None, 'session/x'))._resolve_tail_count() == 1
 
     def test_tail_with_value(self):
         a = self._adapter({'tail': '5'})

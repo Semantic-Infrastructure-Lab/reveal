@@ -50,7 +50,7 @@ SESSION_VIEWS = frozenset(('', 'messages', 'prompts', 'thinking', 'tools', 'file
 QUERY_VIEWS = (('summary', 'claude_analytics'), ('digest', 'claude_digest'),
                ('timeline', 'claude_timeline'), ('errors', 'claude_errors'),
                ('tokens', 'claude_token_breakdown'), ('tools', 'claude_tool_calls'),
-               ('search', 'claude_search_results'), ('tail', 'claude_messages'), ('last', 'claude_messages'))
+               ('search', 'claude_search_results'), ('tail', 'claude_messages'))
 RESOURCE_VIEWS = (('thinking', 'claude_thinking'), ('tools', 'claude_tool_summary'),
                   ('files', 'claude_files'), ('workflow', 'claude_workflow'),
                   ('agents', 'claude_session_agents'), ('context', 'claude_context'),
