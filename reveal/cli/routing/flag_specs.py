@@ -45,6 +45,9 @@ class FlagSpec:
     # A declared noun (PARAM_SPECS) binds the flag from its own declarations, never from CLI_QUERY_FLAGS:
     # declarations -> (key, value); raises when the noun declares nothing to receive it (rule 4, note #17).
     declared_binding: Callable[[Any], tuple] | None = None
+    # Lifts the cap of the answer the request selects (an answer selector's declared ``cap``), keeping the value the
+    # noun's own declaration gives; a request whose answer declares no cap gets that declaration as it is (--all).
+    answer_cap: bool = False
 
 
 # The value functions `peek`: reading a flag here is not using it. inject_query_flags marks a
@@ -85,15 +88,16 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     FlagSpec('since', '--since', _typed('since'), warn_unsupported=True, already_scoped=('date>',), control=True),
     FlagSpec('until', '--until', _typed('until'), warn_unsupported=True, already_scoped=('date<',), control=True),
     FlagSpec('respect_gitignore', '--no-gitignore', _no_gitignore, warn_unsupported=True),
-    # --all / --verbose: undeclared adapters honor them without a query fragment (nginx),
+    # --verbose / --all: undeclared adapters honor them without a query fragment (nginx),
     # so a missing declaration is not evidence of a dropped flag.
-    FlagSpec('all', '--all', _switch('all')),
     # --verbose is --detail full on a declared noun, or the noun's own legacy word verbose (rule 4, note #17).
     FlagSpec('verbose', '--verbose', _switch('verbose'), declared_binding=_verbose_binding),
     # metrics' global switches (BACK-2621): forwarded as declared fragments, not by matching get_structure's
     # parameter names; an adapter that declares neither reports them as unused flags.
     FlagSpec('hotspots', '--hotspots', _switch('hotspots')),
     FlagSpec('code_only', '--code-only', _switch('code_only')),
+    # After the answer selectors above, so --all sees the answer --hotspots selects (BACK-2654 Step 5).
+    FlagSpec('all', '--all', _switch('all'), answer_cap=True),
     # Result-control keys, injected without a per-adapter declaration. Only ast/markdown/json/
     # git/stats apply them; most other adapters warn "Unknown query param" and ignore them, and
     # those that cannot receive a query key at all set HONORS_RESULT_CONTROL = False and get the
@@ -227,13 +231,21 @@ def _declared_fragment(args: Any, spec: FlagSpec, binding: Callable[[Any], tuple
     return f"{key}={'true' if value is True else value}"
 
 
-def _fragment_for(args: Any, spec: FlagSpec, adapter_class: Any, scheme: str, declared: Mapping) -> str | None:
+def _fragment_for(args: Any, spec: FlagSpec, adapter_class: Any, scheme: str, declared: Mapping,
+                  resource: str) -> str | None:
     """The fragment *spec* reaches this adapter with: from a declared noun's own declarations when the flag binds
-    that way (rule 4), else the adapter's CLI_QUERY_FLAGS declaration."""
+    that way (rule 4), else the adapter's CLI_QUERY_FLAGS declaration, re-keyed to the cap the selected answer
+    declares when the flag lifts a cap (--all on Metrics' legacy hotspots ranking lifts top, elsewhere limit)."""
     declarations = getattr(adapter_class, 'PARAM_SPECS', None)
     if spec.declared_binding is not None and declarations:
         return _declared_fragment(args, spec, spec.declared_binding, declarations, scheme)
-    return declared.get(spec.dest)
+    fragment = declared.get(spec.dest)
+    if spec.answer_cap and fragment and declarations:
+        from ...utils.query_binding import selected_cap
+        cap = selected_cap(declarations, resource.partition('?')[2])
+        if cap:
+            return f"{cap}={fragment.partition('=')[2]}"
+    return fragment
 
 
 def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
@@ -253,7 +265,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             print(f"Note: {spec.option} has no effect on {scheme}:// -- it does not take "
                   f"sort=/limit=/offset=.", file=sys.stderr)
             continue
-        fragment = _fragment_for(args, spec, adapter_class, scheme, declared)
+        fragment = _fragment_for(args, spec, adapter_class, scheme, declared, resource)
         if fragment and spec.unbounded is not None and value == 0:
             value = _native_uncapped_value(adapter_class, fragment, spec.unbounded)
         fragment = fragment or spec.universal

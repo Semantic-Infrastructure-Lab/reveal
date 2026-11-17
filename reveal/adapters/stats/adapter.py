@@ -188,7 +188,7 @@ _WHERE = where_param('Keep the files whose field matches: FIELD OP VALUE (lines>
                      fields=(*SORT_FIELDS, 'lines.*', 'complexity.*', 'elements.*', 'quality.*'))
 _HOTSPOTS = ParamSpec('hotspots', 'boolean', 'Legacy: per-file rows plus the hotspot ranking, top capping it; '
                       'replaced by view=hotspots', False, boolean_value, ('hotspots=true',), role='operation',
-                      cli=CliBinding(('--hotspots',), action='store_true'))
+                      cli=CliBinding(('--hotspots',), action='store_true'), cap='top')
 _TOP = ParamSpec('top', 'integer', 'Legacy hotspot cap: limit in view=hotspots; with legacy hotspots=true it caps the '
                  'ranking (default 10, 0 = all)', 10, _count('top'), ('top=25',), minimum=0, zero_policy='all',
                  role='analysis', cli=CliBinding(('--top',), metavar='N'))
@@ -399,7 +399,9 @@ class MetricsAdapter(ResourceAdapter):
         'respect_gitignore': 'respect_gitignore=false',  # --no-gitignore (BACK-1202)
         'hotspots': 'hotspots=true',  # global --hotspots on the URI form (BACK-2621)
         'code_only': 'code-only=true',  # global --code-only on the URI form (BACK-2621)
-        'all': 'top=1000000',  # lifts the hotspots=true top=10 default (BACK-1379)
+        # --all lifts the row cap, limit; on the legacy hotspots=true ranking it lifts that answer's own cap, top
+        # (its top=10 default, BACK-1379), so the legacy answer is unchanged (_HOTSPOTS cap, BACK-2654 Step 5).
+        'all': 'limit=1000000',
         # BACK-1379: get_structure already reads since from query_params and threads
         # it into get_churn_counts() to bound hotspots=true's churn scoring, but
         # nothing declared the flag, so --since was silently dropped on the CLI path
