@@ -82,3 +82,49 @@ def test_architecture_keeps_its_own_validation():
     config = {'architecture': {'layers': ['not-a-dict']}}
     RevealConfig._validate_config_schema(config, Path('p') / '.reveal.yaml')
     assert config == {'architecture': {'layers': ['not-a-dict']}}
+
+
+@pytest.mark.cli
+@pytest.mark.parametrize('noun', ['ast', 'metrics'])
+def test_an_override_with_an_invalid_files_pattern_is_dropped_whole(project, noun):
+    """Dropping only ``files`` left an override without its required pattern, and loading the
+    config raised ``KeyError: 'files'`` on every noun. The whole override goes."""
+    (project / '.reveal.yaml').write_text('root: true\noverrides:\n  - files: 5\n    rules: {}\n', encoding='utf-8')
+    result = _cli(project.parent / 'xdg', f'{noun}://{project.as_posix()}', '--format', 'json', cwd=project.parent)
+    assert 'Traceback' not in result.stderr, result.stderr
+    assert result.returncode == 0, result.stderr
+    keys = [w['key'] for w in json.loads(result.stdout)['meta']['warnings'] if w.get('type') == 'config_warning']
+    assert 'overrides.0.files' in keys and 'overrides.0' in keys
+
+
+def test_a_dropped_required_value_takes_its_object_with_it():
+    config = {'overrides': [{'files': 5, 'rules': {}}, {'files': 'a/*'}]}
+    RevealConfig._validate_config_schema(config, Path('p') / '.reveal.yaml')
+    assert config == {'overrides': [{'files': 'a/*'}]}
+    RevealConfig(config, Path('p'))  # parses its overrides
+
+
+@pytest.mark.cli
+@pytest.mark.parametrize('pyproject,key', [('[tool.reveal]\nroot = true\nignore = 5\n', 'ignore'),
+                                           ('[tool]\nreveal = "x"\n', None)],
+                         ids=['schema-invalid-value', 'not-a-table'])
+def test_pyproject_tool_reveal_is_validated_like_a_reveal_yaml(project, pyproject, key):
+    """``[tool.reveal]`` skipped the schema: ``ignore = 5`` crashed with the same TypeError, and a
+    section that is not a table with ``AttributeError: 'str' object has no attribute 'get'``."""
+    (project / 'pyproject.toml').write_text(pyproject, encoding='utf-8')
+    result = _cli(project.parent / 'xdg', f'ast://{project.as_posix()}', '--format', 'json', cwd=project.parent)
+    assert 'Traceback' not in result.stderr, result.stderr
+    assert result.returncode == 0, result.stderr
+    entries = [w for w in json.loads(result.stdout)['meta']['warnings'] if w.get('type') == 'config_warning']
+    expected = [('config_schema_invalid', key)] if key else [('config_load_failed', None)]
+    assert [(w['code'], w.get('key')) for w in entries] == expected
+    assert entries[0]['path'] == (project / 'pyproject.toml').as_posix()
+
+
+@pytest.mark.cli
+def test_a_valid_pyproject_tool_reveal_still_applies(project):
+    """Control: a valid ``[tool.reveal]`` ignore list is used and says nothing."""
+    (project / 'pyproject.toml').write_text('[tool.reveal]\nroot = true\nignore = ["*.gen.py"]\n', encoding='utf-8')
+    result = _cli(project.parent / 'xdg', f'ast://{project.as_posix()}', '--format', 'json', cwd=project.parent)
+    assert result.returncode == 0 and 'skip.gen.py' not in result.stdout and 'ok.py' in result.stdout
+    assert not [w for w in json.loads(result.stdout)['meta']['warnings'] if w.get('type') == 'config_warning']
