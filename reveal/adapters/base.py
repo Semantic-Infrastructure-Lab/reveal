@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
-from typing import Callable, Dict, Any, Iterable, Iterator, Optional, List, Tuple
+from typing import Callable, Dict, Any, Iterable, Iterator, Mapping, Optional, List, Tuple
 
 from reveal.reveal_types import ErrorEntry, RevealMeta, RevealResult, WarningEntry
 
@@ -91,6 +91,13 @@ class ResourceAdapter(ABC):
     # present one is sliced by --head/--tail/--range (BACK-1497). None = not declared:
     # the router probes a few common names, and says the flag had no effect otherwise.
     BUDGET_LIST_FIELD: Optional['str | Tuple[str, ...]'] = None
+
+    # The counts that state how many rows of a BUDGET_LIST_FIELD list are shown, by list:
+    # dotted paths into the result ({'files': ('population.displayed_files',)}). When the
+    # router cuts the list (--max-items, --head/--tail/--range), it sets each to the rows
+    # left (BACK-2653). Population totals are not listed: a cut never changes them. A
+    # top-level ``displayed_results`` on a one-list answer is restated without a declaration.
+    BUDGET_COUNT_FIELDS: Mapping[str, Tuple[str, ...]] = {}
 
     # Set True in subclasses where scheme://RESOURCE means "get element RESOURCE"
     # rather than "analyze path RESOURCE" (e.g. env, python, help).

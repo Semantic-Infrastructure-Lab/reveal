@@ -44,7 +44,7 @@ recorded with ``note_truncation``, and the router prints it; a renderer does not
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePath
-from typing import Dict, Any, Optional, List, Literal, Union
+from typing import Dict, Any, Optional, List, Literal, Sequence, Union
 
 from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealMeta, RevealResult, WarningEntry
 
@@ -293,6 +293,22 @@ def note_truncation(result: Any, field: str, shown: int, total: int,
         entry['label'] = label
     entry.update(shown=shown, total=total, exact=exact, cause=cause,
                  message=_truncation_message(label or field, shown, total, hint, exact))
+
+
+def restate_shown_counts(result: Any, paths: Sequence[str], shown: int) -> None:
+    """Set each count at the dotted *paths* of *result* to *shown*, the rows a cut left (BACK-2653).
+
+    A noun's own "rows shown" count (``population.displayed_files``) is computed before the router
+    cuts its list, so it read 11 beside 2 rows. Only an integer already at the path is set: a path
+    another mode of the noun does not produce stays absent.
+    """
+    for path in paths:
+        *parents, key = path.split('.')
+        holder = result
+        for part in parents:
+            holder = holder.get(part) if isinstance(holder, dict) else None
+        if isinstance(holder, dict) and type(holder.get(key)) is int:
+            holder[key] = shown
 
 
 def relabel_truncations(result: Any, field: str, hint: str) -> None:
