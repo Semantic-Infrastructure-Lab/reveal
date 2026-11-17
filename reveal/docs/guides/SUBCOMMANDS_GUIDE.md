@@ -282,23 +282,25 @@ Near-empty files (e.g., stub `__init__.py`) are excluded automatically.
 
 ### Optional graph ranking
 
-Fan-in and focus graph relevance are additive ranking signals. When their
-Imports graph carries native directory or file-integrity diagnostics, Pack
-rejects that partial numeric input and uses filename/entry-point heuristics and
-recency instead. `meta.relevance_warning` is present on every run that did not compute
-graph signals: always without `--architecture`/`--focus` (it then says the signals were not
-computed), and when the Imports graph had diagnostics (it then retains the requested root and
-original causes, explaining that the signals were not computed completely). In text output, the
-command and the URI both print this advisory notice on stderr; JSON carries it in meta. Primary candidate measurements and selected
-content remain available, with exit 0; an unusable `--since` ref is advisory in the
-same way, with its cause in `meta.since_error`.
+Fan-in (`--architecture`) and focus graph relevance (`--focus`) are additive ranking signals read
+from the Imports graph. When that graph is partial, Pack keeps it, as `overview` does, and ranks by
+the files it read. A fan-in count is then a lower bound. Pack names each loss once in `meta.warnings`
+and exits 3. Text output prints a warning line after the pack. The losses are:
 
-A file Pack parsed only through tree-sitter error recovery is degraded input: the Imports
-graph behind `--architecture`/`--focus` and the structure outlines `--content` shows for key files
-both read files with a parser, and such a file is named in a `parse_recovered` entry of
-`meta.warnings` (text: a warning line after the pack) with exit 3, as `ast://` and `metrics://` do.
-The graph is still rejected for ranking as above. A plain `reveal pack` ranks by name, size and
-path and parses no file, so it never reports one.
+- a file parsed only through tree-sitter error recovery (`parse_recovered`, as `ast://` and
+  `metrics://` name it);
+- a directory the graph could not list (`analysis_incomplete` with `subject: import_graph`, folded into
+  Pack's own candidate-discovery entry when Pack's walk lost the same directory);
+- an unreadable file (`analysis_failed`, unless Pack's file-measurement warning already names it);
+- a file a dead worker took (`worker_lost`).
+
+The structure outlines `--content` shows for key files also name a recovered file in `parse_recovered`.
+A plain `reveal pack` ranks by name, size and path and parses no file, so it never reports one.
+
+`meta.relevance_warning` is advisory and keeps exit 0. It is present when no graph signal was computed:
+without `--architecture`/`--focus` (the signals were not requested), or when building the graph raised
+(it then names the cause). Files are then ranked by filename/entry-point heuristics and recency. An
+unusable `--since` ref is advisory in the same way, with its cause in `meta.since_error`.
 
 Lost candidate discovery or file measurement is different: Pack exits 3 (incomplete, or
 failed when no candidate survived) on the command and the URI, and the generic MCP tool
