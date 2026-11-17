@@ -171,12 +171,8 @@ RECORDED_EXCEPTIONS = {('metrics', '_top_conflict'): 'BACK-2656: in view=hotspot
                                                      'top and limit exit 2; top is standalone, so no legacy entry '
                                                      'generates the conflict'}
 # Cells stopped for a ruling (a case the rules do not settle); each must still fail, and the manager owns the list.
-# Rule 19 (Step 4) settled claude x 12. Rule 14 (L1c item C): REVEAL_IGNORE / config ``ignore:`` is applied by every walk,
-# evidence walks included (path_utils.walk_filter, BACK-1201), while --exclude narrows the report only (EVIDENCE walks
-# do not honour it, BACK-1259); the table's "config exclude" does not exist. Hotspots' test hints read an evidence
-# walk, so the env pattern and an equal --exclude answer differently (has_test_hint).
-STOPPED: dict = {('hotspots', '14'): 'ruling pending: is config/env ignore a default of exclude (rule 14) or its own '
-                                     'always-on setting? has_test_hint differs (evidence walk)'}
+# Rule 19 (Step 4) settled claude x 12; ruling #28 settled hotspots x 14 (see EVIDENCE_FIELDS).
+STOPPED: dict = {}
 # Rule 9: the retired stats:// scheme is exempt (deleted at the cut); metrics' cells measure the owner it shares.
 RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted at the cut; metrics:// is measured'}
 
@@ -1214,14 +1210,30 @@ class _env:
 # Two of the fixture project's paths: the environment ignores one, the request excludes the other.
 _IGNORED, _EXCLUDED = 'tests', 'guide.md'
 
+# Fields an evidence walk feeds, left out of rule 14's ignore-versus-exclude comparison. Ruling #28: config/env
+# ``ignore`` is its own always-on scoping setting, not a default of ``--exclude``; every walk honours it, while an
+# EVIDENCE walk (path_utils.EVIDENCE) does not honour ``--exclude``, so narrowing a report never shrinks the facts that
+# judge it. Hotspots' has_test_hint is the only such field (the test-name index, ``_build_test_name_index``).
+EVIDENCE_FIELDS = {'hotspots': (('has_test_hint',), 'ignore hides evidence, --exclude does not (BACK-1201, BACK-1259; '
+                                                    'COMMAND_MODEL Defaults)')}
+
+
+def _without_fields(value, names):
+    if isinstance(value, dict):
+        return {key: _without_fields(item, names) for key, item in value.items() if key not in names}
+    if isinstance(value, list):
+        return [_without_fields(item, names) for item in value]
+    return value
+
 
 def _excluded_answer(run, noun):
     """The answer with the two places that name an exclusion's source left out: next-step commands echo the
     request's own ``--exclude`` values (the environment applies to the next command by itself), and
-    ``scope.hidden.by_cause`` says which source hid a path (``exclude`` versus ``reveal_ignore``); its total stays."""
+    ``scope.hidden.by_cause`` says which source hid a path (``exclude`` versus ``reveal_ignore``); its total stays.
+    The noun's EVIDENCE_FIELDS are left out too (ignore hides evidence, --exclude does not)."""
     rc, doc = _answer(run, noun)
     if isinstance(doc, dict):
-        doc = json.loads(json.dumps(doc))
+        doc = _without_fields(doc, EVIDENCE_FIELDS.get(noun, ((), ''))[0])
         doc.pop('next_steps', None)
         hidden = (doc.get('scope') or {}).get('hidden') if isinstance(doc.get('scope'), dict) else None
         if isinstance(hidden, dict) and isinstance(hidden.get('by_cause'), dict):
@@ -1905,3 +1917,17 @@ def test_the_environment_ignore_pattern_binds_on_the_fixture(workspace):
     with _env(REVEAL_IGNORE=_IGNORED):
         ignored = _run('ast://proj?kind=function', '--format', 'json')
     assert 'test_app.py' in plain.out and 'test_app.py' not in ignored.out, (plain.brief(), ignored.brief())
+
+
+@pytest.mark.parametrize('noun', sorted(EVIDENCE_FIELDS))
+def test_each_evidence_field_left_out_of_rule_14_is_the_whole_difference(workspace, noun):
+    """Control for EVIDENCE_FIELDS: on the fixture, REVEAL_IGNORE and an equal --exclude answer differently in those
+    fields (so leaving them out is needed, not a stale exemption) and in nothing else (so it hides nothing more)."""
+    names, _reason = EVIDENCE_FIELDS[noun]
+    excluded = _run(_uri(noun), '--exclude', _IGNORED, '--format', 'json')
+    with _env(REVEAL_IGNORE=_IGNORED):
+        ignored = _run(_uri(noun), '--exclude', _IGNORED, '--format', 'json')
+    (rc_a, doc_a), (rc_b, doc_b) = _answer(excluded, noun), _answer(ignored, noun)
+    assert (rc_a, rc_b) == (0, 0) and isinstance(doc_a, dict) and isinstance(doc_b, dict), (excluded.brief(), ignored.brief())
+    assert doc_a != doc_b, f'{noun}: {names} no longer differ between ignore and --exclude; drop it from EVIDENCE_FIELDS'
+    assert _without_fields(doc_a, names) == _without_fields(doc_b, names), f'{noun}: differs beyond {names}'
