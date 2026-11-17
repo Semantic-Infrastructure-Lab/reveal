@@ -909,8 +909,9 @@ def _snapshot_meta(raw: Dict[str, Any], side: str) -> List[Tuple[str, Dict[str, 
             entry = dict(entry, snapshot=side, component=entry.get('component', 'imports'))
             if entry.get('file'):
                 entry['file'] = _diagnostic_path(entry['file'], root)
-            if entry.get('files'):
-                entry['files'] = [_diagnostic_path(file, root) for file in entry['files']]
+            for key in ('files', 'directories'):
+                if entry.get(key):
+                    entry[key] = [_diagnostic_path(path, root) for path in entry[key]]
             if entry.get('causes'):
                 entry['causes'] = [_diagnostic_message(cause, root) for cause in entry['causes']]
             if entry.get('failures'):
