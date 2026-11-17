@@ -323,6 +323,10 @@ CONFIG_SCHEMA = {
             "properties": {"additional_paths": {"type": "array", "items": {"type": "string", "minLength": 1}}},
             "additionalProperties": False,
         },
+        "health": {  # `reveal health --all` reads health.targets
+            "type": "object",
+            "properties": {"targets": {"type": "array", "items": {"type": "string"}}},
+        },
         "imports": {"type": "object"},
         "adapters": {"type": "object"},
         "plugins": {"type": "object"},

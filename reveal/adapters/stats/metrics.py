@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from reveal.complexity import fallback_complexity
 from reveal.utils.lines import split_lines
+from reveal.utils.path_utils import failure_of
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +69,15 @@ def _get_check_thresholds(file_path: Optional[Path]) -> tuple:
         long_threshold = c902.THRESHOLD_ERROR if c902 else 100
         depth_threshold = c905.MAX_DEPTH if c905 else 4
         return long_threshold, depth_threshold
-    except Exception as e:  # boundary-ok: broad-except -- config resolution loads the project's .reveal.yaml and instantiates rule classes (YAML, OSError, and rule-constructor failures that this module cannot enumerate); the default thresholds apply and the reason is logged at warning
-        logger.warning("Rule config for %s could not be resolved, using the default "
-                       "long-function and nesting thresholds: %s", file_path, e)
+    except Exception as e:  # boundary-ok: broad-except -- config resolution loads the project's .reveal.yaml and instantiates rule classes (YAML, OSError, and rule-constructor failures that this module cannot enumerate); the default thresholds apply and the answer says so (config_load_failed)
+        from ...config import config_warning, note_config_warning
+        cause = failure_of(e).cause
+        note_config_warning(
+            config_warning('config_load_failed',
+                           f"rule settings could not be resolved ({cause}), so the default long-function "
+                           "and nesting thresholds were used", reason=cause),
+            logging.WARNING, "Rule config for %s could not be resolved, using the default "
+            "long-function and nesting thresholds: %s", file_path, e)
         return 100, 4
 
 

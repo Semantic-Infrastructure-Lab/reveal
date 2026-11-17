@@ -1,6 +1,5 @@
 """reveal health — unified health check across resources."""
 
-import logging
 import argparse
 import sys
 from argparse import Namespace
@@ -13,9 +12,9 @@ from ...utils.results import (AnalysisCompleteness, ExecutionFacts, execution_ex
 from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
+from ...config import CONFIG_WARNING
+from ...utils.invocation_log import record_warning
 from ...utils.path_utils import failure_of
-
-logger = logging.getLogger(__name__)
 
 
 def create_health_parser() -> argparse.ArgumentParser:
@@ -75,13 +74,12 @@ def _detect_targets() -> List[str]:
     """
     # 1. Check .reveal.yaml for configured targets under `health.targets`
     from reveal.config import get_config
-    raw: dict = get_config(Path('.'))._config  # get_config reports a file it can't load
-    try:
-        health_targets = raw.get('health', {}).get('targets', [])
-        if health_targets:
-            return [str(t) for t in health_targets]
-    except (AttributeError, TypeError) as e:  # `health:` or its `targets:` has the wrong shape
-        logger.warning(".reveal.yaml health.targets ignored (%s); detecting targets instead", e)
+    # get_config reports a file it can't load, and its schema drops a `health:` or `targets:` of
+    # the wrong shape (saying so in the answer), so what is left is a list of strings.
+    raw: dict = get_config(Path('.'))._config
+    health_targets = raw.get('health', {}).get('targets', [])
+    if health_targets:
+        return list(health_targets)
 
     # 2. Look for common source directories
     _SOURCE_DIRS = ['src', 'lib', 'app']
@@ -308,6 +306,7 @@ def _code_result(data: dict, returncode: int, accounting: dict) -> HealthResult:
     """Interpret a validated answer before allowing a clean health result."""
     if not isinstance(data, dict):
         raise ValueError('check result is not an object')
+    _relay_config_warnings(data)
     if outcome_of(data) == 'failed':
         return HealthResult(2, f"code: check failed ({data['error']})", 'failed', accounting)
     if outcome_of(data) == 'not_applicable':
@@ -355,7 +354,7 @@ def _incomplete_code_result(data: dict, report: CodeReport, accounting: dict,
         raise ValueError('invalid check metadata')
     if report.checked == 0:
         return HealthResult(1, 'code: no applicable files were checked', 'not_applicable', accounting)
-    if changed or report.degraded or (report.disclosures and returncode == 3) or meta.get('errors') or meta.get('warnings'):
+    if changed or report.degraded or (report.disclosures and returncode == 3) or meta.get('errors') or _answer_warnings(meta):
         notices = [*report.disclosures, *(['file population changed between preflight and check'] if changed else [])]
         detail = '; '.join(str(d) for d in notices)
         return HealthResult(1, f'code: incomplete check ({report.total} violations, {report.degraded} degraded files)'
@@ -424,10 +423,21 @@ def _failing_check_result(scheme: str, output: str) -> Optional[HealthResult]:
 
 
 def _answer_warnings(meta: dict) -> list:
-    """The child's warnings about its answer. A retired spelling (stats://) is noted by run_health and
-    says nothing about the answer's completeness, so its ``retired_spelling`` entry is not one."""
+    """The child's warnings about its answer. A retired spelling (stats://) is noted by run_health, and
+    a config warning is relayed into this run's answer (``_relay_config_warnings``); neither says
+    anything about the answer's completeness, so neither entry is one."""
     return [w for w in meta.get('warnings') or []
-            if not (isinstance(w, dict) and w.get('code') == 'retired_spelling')]
+            if not (isinstance(w, dict) and (w.get('code') == 'retired_spelling' or w.get('type') == CONFIG_WARNING))]
+
+
+def _relay_config_warnings(data: dict) -> None:
+    """A child's config warnings are this run's: they join its invocation log, so health's answer
+    carries them (BACK-2659), as a pool worker's do."""
+    meta = data.get('meta')
+    for entry in (meta.get('warnings') or []) if isinstance(meta, dict) else []:
+        if (isinstance(entry, dict) and entry.get('type') == CONFIG_WARNING
+                and isinstance(entry.get('code'), str) and isinstance(entry.get('message'), str)):
+            record_warning(entry)
 
 
 def _completed_uri_result(scheme: str, returncode: int, output: str) -> HealthResult:
@@ -436,6 +446,7 @@ def _completed_uri_result(scheme: str, returncode: int, output: str) -> HealthRe
     data = json.loads(output)
     if not isinstance(data, dict):
         raise ValueError('expected an object')
+    _relay_config_warnings(data)
     outcome = outcome_of(data)
     if outcome == 'failed':
         return HealthResult(1, f"{scheme}: {data['error']}", 'failed')

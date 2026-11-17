@@ -5,7 +5,8 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, cast
 
-from ...utils.path_utils import resolve_project_root
+from ...config import config_load_failed_warning, note_config_warning
+from ...utils.path_utils import failure_of, resolve_project_root
 from ...utils.query import compare_values
 from .issue_count import DEPRECATED_FIELDS
 
@@ -128,9 +129,11 @@ def get_quality_config(path: Path) -> Dict[str, Any]:
             if _apply_yaml_config_file(config_path, config):
                 break
         # Unreadable, not YAML, or a section of the wrong shape: the user's file
-        # is ignored, which changes every score, so say which file and why.
+        # is ignored, which changes every score, so the answer says which file and why.
         except (OSError, yaml.YAMLError, TypeError, ValueError, AttributeError) as e:
-            logger.warning("%s ignored, quality scores use the defaults: %s", config_path, e)
+            why = failure_of(e).cause.split('\n', 1)[0]
+            note_config_warning(config_load_failed_warning(config_path, why), logging.WARNING,
+                                "%s ignored, quality scores use the defaults: %s", config_path, e)
             return copy.deepcopy(QUALITY_DEFAULTS)
 
     return config

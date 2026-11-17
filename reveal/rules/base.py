@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
 from pathlib import Path
-from ..utils.path_utils import TestLayout
+from ..utils.path_utils import TestLayout, failure_of
 import re
 import logging
 
@@ -351,11 +351,15 @@ class BaseRule(ABC):
             try:
                 from reveal.config import RevealConfig
                 self._config = RevealConfig.get()
-            except Exception as e:  # boundary-ok: broad-except -- RevealConfig.get merges user YAML of any shape (deep_merge/override parsing raise TypeError/KeyError/AttributeError on foreign data) and a rule must still run, on its defaults; the warning says so
-                logger.warning(
-                    f"{self.code}: could not load reveal config ({type(e).__name__}: {e}); "
-                    f"using this rule's built-in defaults"
-                )
+            except Exception as e:  # boundary-ok: broad-except -- RevealConfig.get merges user YAML of any shape (deep_merge/override parsing raise TypeError/KeyError/AttributeError on foreign data) and a rule must still run, on its defaults; the answer says so (config_load_failed)
+                from reveal.config import config_warning, note_config_warning
+                cause = failure_of(e).cause
+                note_config_warning(
+                    config_warning('config_load_failed',
+                                   f"rule {self.code} could not load the reveal config ({cause}), so it used "
+                                   "its built-in defaults", rule=self.code, reason=cause),
+                    logging.WARNING, "%s: could not load reveal config (%s); using this rule's built-in defaults",
+                    self.code, cause)
                 # Return a mock config that always uses defaults
 
                 class MockConfig:

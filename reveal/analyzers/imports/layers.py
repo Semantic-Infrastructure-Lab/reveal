@@ -310,7 +310,14 @@ def load_layer_config(start_path: Path) -> Optional[LayerConfig]:
 
         architecture = RevealConfig.get(start_path).get_architecture()
     except Exception as e:  # boundary-ok: broad-except -- RevealConfig.get/get_layers span config discovery, schema validation and merging; any failure there falls back to reading the nearest .reveal.yaml directly, which raises LayerConfigError naming the file if it is bad
-        logger.warning(f"Unified config load failed for {start_path} ({type(e).__name__}: {e}); reading the nearest .reveal.yaml directly")
+        from ...config import config_warning, note_config_warning
+        cause = failure_of(e).cause
+        note_config_warning(
+            config_warning('config_load_failed',
+                           f"config for {to_posix(start_path)} could not be loaded ({cause}), so the layers were read "
+                           "from the nearest .reveal.yaml directly", reason=cause),
+            logging.WARNING, "Unified config load failed for %s (%s); reading the nearest .reveal.yaml directly",
+            start_path, cause)
 
         # Fallback to old direct loading for backwards compatibility
         # This ensures existing .reveal.yaml files still work during migration
