@@ -46,8 +46,12 @@ def _ignored(answer, field):
 
 
 def test_cli_json_and_text_preserve_unknown_and_unused_inputs(resources):
+    # BACK-2654 rule 3: trace, a declared noun, rejects the unknown key (exit 2 naming its controls) in both formats;
+    # it used to answer with the key disclosed as ignored.
+    for fmt in ('json', 'text'):
+        code, out, err = _cli(f'trace://{resources}?from=main&bogus=1', '--format', fmt)
+        assert code == 2 and "unsupported control 'bogus'; supported controls: from, depth" in err, (fmt, err)
     for uri, field, options in (
-        (f'trace://{resources}?from=main&bogus=1', 'bogus', ()),
         (f'json://{resources / "object.json"}?bogus=1', 'bogus', ()),
         (f'sqlite://{resources / "data.db"}?bogus=1', 'bogus', ()),
         (f'sqlite://{resources / "data.db"}?limit=1', 'limit', ()),
@@ -125,9 +129,11 @@ def test_nested_and_failed_dispatches_restore_outer_warning_context():
 
 def test_sdk_provenance_keeps_one_json_value_and_diagnostics_without_leaking(resources):
     async def scenario(session):
+        # BACK-2654 rule 3: trace rejects the unknown key (it used to answer with it disclosed as ignored).
+        for uri in (f'trace://{resources}?from=main&bogus=1', f'trace://{resources}?from=absent&bogus=1'):
+            rejected = await session.call_tool('reveal_query', {'uri': uri, 'provenance': True})
+            assert rejected.is_error and "unsupported control 'bogus'" in _text(rejected), _text(rejected)
         for uri in (
-            f'trace://{resources}?from=main&bogus=1',
-            f'trace://{resources}?from=absent&bogus=1',
             f'json://{resources / "object.json"}?bogus=1',
             f'sqlite://{resources / "data.db"}?bogus=1',
         ):
@@ -136,9 +142,9 @@ def test_sdk_provenance_keeps_one_json_value_and_diagnostics_without_leaking(res
             answer = json.loads(_text(result))
             assert len(_ignored(answer, 'bogus')) == 1, answer
             assert answer['execution']['command']
-        # Text still discloses ignored input. A later clean JSON answer has no stale warning.
+        # Text names the rejected input too. A later clean JSON answer has no stale warning.
         text = await session.call_tool('reveal_query', {'uri': f'trace://{resources}?from=main&bogus=1'})
-        assert not text.is_error and 'bogus' in _text(text)
+        assert text.is_error and 'bogus' in _text(text)
         clean = await session.call_tool('reveal_query', {
             'uri': f'trace://{resources}?from=main', 'provenance': True})
         assert not clean.is_error

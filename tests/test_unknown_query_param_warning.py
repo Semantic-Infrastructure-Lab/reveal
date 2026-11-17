@@ -117,10 +117,21 @@ def test_declared_params_never_warn(adapter_name):
         )
 
 
+# BACK-2654 rule 3: these declared nouns reject an unknown key at the shared binder (exit 2 naming the supported
+# controls) instead of warning; the others here still warn until their own declarations land.
+_REJECTED_BY_THE_BINDER = {'imports', 'calls', 'patches'}
+
+
 @pytest.mark.parametrize('adapter_name', list(_wired_adapters().keys()))
 def test_typo_param_warns(adapter_name):
-    """A clearly-unknown param triggers the warning on every wired adapter."""
+    """A clearly-unknown param triggers the warning on every wired adapter (or the rule-3 rejection)."""
     cls, factory = _wired_adapters()[adapter_name]
+    if adapter_name in _REJECTED_BY_THE_BINDER:
+        from reveal.errors import RequestValidationError
+        with pytest.raises(RequestValidationError,
+                           match="unsupported control 'definitely_not_a_real_param_xyz'; supported controls: "):
+            factory('definitely_not_a_real_param_xyz=1')
+        return
     stderr = _stderr_of(lambda: factory('definitely_not_a_real_param_xyz=1'))
     assert 'Unknown query param' in stderr, (
         f'{adapter_name}: a bogus param did not warn. stderr:\n{stderr}'

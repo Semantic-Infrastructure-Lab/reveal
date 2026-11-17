@@ -95,9 +95,10 @@ def test_invalid_full_boolean_is_rejected(session, query):
 
 
 def test_limit_zero_remains_a_warned_unsupported_count_control(session):
+    """BACK-2654 rule 3: codex declares no limit, so ?limit=0 exits 2 naming its controls (was warned, exit 0)."""
     result = run(session + '?limit=0')
-    assert result.returncode == 0, result.stderr
-    assert 'limit' in result.stderr and 'ignored' in result.stderr
+    assert result.returncode == 2, result.stderr
+    assert "unsupported control 'limit'; supported controls: " in result.stderr and 'full' in result.stderr
     assert 'ANSWER_END' not in result.stdout
 
 

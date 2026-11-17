@@ -182,6 +182,57 @@ def _prepare_expression_params(declarations, source, params, selectors, expressi
     return tuple(folded)
 
 
+def _fields_clause(declarations: tuple[ParamSpec, ...]) -> str:
+    expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
+    fields = (', '.join(expression.fields) or expression.open_fields) if expression is not None else ''
+    return f"; fields (FIELD OP VALUE, bare or in {expression.name}=): {fields}" if expression and fields else ''
+
+
+def _symbol_clause(declarations: tuple[ParamSpec, ...]) -> str:
+    symbol = next((spec for spec in declarations if spec.names == 'symbol' and spec.role == 'operation'), None)
+    if symbol is None:
+        return ''
+    flag = f' (--{symbol.name} NAME)' if symbol.cli else ''
+    return f'. Use {symbol.name}=NAME{flag} for a supported per-symbol lookup; no equivalent filter is implied'
+
+
+def unsupported_controls_message(declarations: Iterable[ParamSpec], unknown: Iterable[str]) -> str:
+    """Rule 3's teaching (COMMAND_MODEL "Unsupported controls", BACK-2654): the keys a request named that the noun
+    does not declare, then every control it does declare, its where fields and its per-symbol lookup."""
+    declarations = tuple(declarations)
+    unknown = list(dict.fromkeys(unknown))
+    controls = ', '.join(spec.name for spec in declarations if spec.role != 'unsupported') or '(none)'
+    return (f"unsupported control{'s' if len(unknown) > 1 else ''} {', '.join(repr(key) for key in unknown)}; "
+            f"supported controls: {controls}{_fields_clause(declarations)}{_symbol_clause(declarations)}")
+
+
+def _declared_keys(declarations: tuple[ParamSpec, ...]) -> set:
+    """Every URI key a declaration spells: names, spelling variants and every legacy word (value-keyed and
+    first-position selectors included)."""
+    return {key for spec in declarations for key in (*spec.spellings, *(entry.name for entry in spec.legacy))}
+
+
+# The walk policy every transport splits off before binding (split_respect_gitignore); an adapter built directly
+# receives it from its own CLI_QUERY_FLAGS fragment, which it accepts by definition (BACK-1361).
+_TRANSPORT_KEYS = frozenset({'respect_gitignore'})
+
+
+def _field_of(key: str) -> str:
+    return key.split('.', 1)[0]
+
+
+def _reject_unknown_keys(declarations: tuple[ParamSpec, ...], params: QueryParams, folded: tuple,
+                         expression: Optional[ParamSpec]) -> None:
+    """The one unknown-key check (rule 3): a key that is neither a declared control nor a declared field exits 2.
+    A where noun whose fields are not declared yet keeps folding every bare key into where (rule 8 owns them)."""
+    known = _declared_keys(declarations) | _TRANSPORT_KEYS
+    unknown = [key for key in dict.keys(params) if key not in known]
+    if expression is not None and expression.fields and not expression.open_fields:
+        unknown += [key for key in folded if _field_of(key) not in expression.fields]
+    if unknown:
+        raise RequestValidationError(unsupported_controls_message(declarations, unknown))
+
+
 def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> QueryParams:
     """A declared expression-list owns the remaining raw DSL, including repeated bounds.
 
@@ -193,6 +244,7 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     selectors = _prepare_legacy_selectors(declarations, source, params)
     expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
     folded = _prepare_expression_params(declarations, source, params, selectors, expression) if expression else ()
+    _reject_unknown_keys(declarations, params, folded, expression)
     prepared = QueryParams(_normalize_aliases(declarations, params))
     prepared._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
     prepared._folded = folded  # the bare field keys folded into where (a noun reading where reads them)

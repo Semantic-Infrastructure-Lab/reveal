@@ -114,11 +114,15 @@ def test_no_gitignore_injects_the_declared_fragment():
 
 
 def test_unsupported_flag_gets_a_note_naming_the_supporting_schemes():
-    out, err = _inject('.', 'ast', since='2026-01-01')
+    """An undeclared scheme keeps the note; a declared noun exits 2 naming its controls (BACK-2654 rule 3)."""
+    out, err = _inject('.', 'env', since='2026-01-01')
     assert out == '.'
     # Not a fixed list -- schemes gain since/until support over time (BACK-1379);
-    # just confirm the note names ast:// and includes a real supporting scheme.
-    assert '--since has no effect on ast://' in err and 'git://' in err
+    # just confirm the note names env:// and includes a real supporting scheme.
+    assert '--since has no effect on env://' in err and 'git://' in err
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match=r"'--since'; supported controls: where, "):
+        _inject('.', 'ast', since='2026-01-01')
 
 
 def test_note_lists_every_declaring_scheme():

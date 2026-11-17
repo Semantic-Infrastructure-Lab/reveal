@@ -975,7 +975,6 @@ class ContractsAdapter(ResourceAdapter):
                 self.PARAM_SPECS, params, transport='typed')
         else:
             self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
-        self._warn_unknown_query_params(self.query_params)  # BACK-507
 
     @staticmethod
     def execution_facts(result):

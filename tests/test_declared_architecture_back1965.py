@@ -237,7 +237,8 @@ def test_diff_actual_scope_and_fast_proof(project, flags):
 def test_all_keeps_explicit_cli_boundary_and_expands_uri_map(project):
     rejected = run('architecture', 'proj', '--all')
     assert rejected.returncode == 2 and not rejected.stdout
-    assert 'unrecognized arguments: --all' in rejected.stderr
+    # BACK-2654 rule 3: the unknown flag gets the teaching (supported controls), not argparse's bare error.
+    assert "unsupported control '--all'; supported controls: top, " in rejected.stderr
     for number in range(6):
         folder = project / f'component{number}'
         folder.mkdir()

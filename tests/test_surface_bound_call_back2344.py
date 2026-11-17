@@ -169,18 +169,21 @@ def test_bound_uri_and_declared_calls_bypass_legacy_kwargs_builder(project, monk
 
 
 def test_uri_unknowns_remain_disclosed_and_api_question_split_stays_legacy(project, capsys):
-    result = query(project, 'type=env&unrecognized=example', source_only=True)
-    assert result['total'] == 1
-    assert "Unknown query param 'unrecognized'" in capsys.readouterr().err
+    # BACK-2654 rule 3: an unknown key exits 2 naming the supported controls (it was disclosed and ignored).
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match="unsupported control 'unrecognized'; supported controls: "):
+        query(project, 'type=env&unrecognized=example', source_only=True)
+    assert query(project, 'type=env', source_only=True)['total'] == 1
     calls = []
     class Target:
         CANONICAL_EMPTY_RESOURCE = '.'
         PARAM_SPECS = SurfaceAdapter.PARAM_SPECS
         def __init__(self, resource, query=None, *, params=None):
             calls.append((resource, query, params))
-    _canonical_init(Target, 'literal?name?type=env', overrides={})
-    assert calls[0][0] == 'literal'
-    assert calls[0][2]['name?type'] == 'env'
+    # The split stays legacy (path 'literal', key 'name?type'); that key is unknown, so it exits 2 (rule 3).
+    with pytest.raises(RequestValidationError, match=r"unsupported control 'name\?type'"):
+        _canonical_init(Target, 'literal?name?type=env', overrides={})
+    assert calls == []
 
 
 def test_bare_kwargs_inventory_ratchet_and_surface_mutation():

@@ -32,6 +32,21 @@ def declared_adapter_class(name: str):
     return adapter
 
 
+class _DeclaredParser(argparse.ArgumentParser):
+    """A noun's parser: an unknown flag gets rule 3's teaching (the supported controls and fields, exit 2), the
+    same message the URI gives, not argparse's bare usage error (COMMAND_MODEL "Unsupported controls")."""
+    declarations: tuple = ()
+
+    def error(self, message: str):
+        flags = [token for token in message.partition(':')[2].split() if token.startswith('-')]
+        if message.startswith('unrecognized arguments:') and flags:
+            from ...utils.query_binding import unsupported_controls_message
+            self._print_message(f'{self.prog}: error: {unsupported_controls_message(self.declarations, flags)}\n',
+                                sys.stderr)
+            self.exit(2)
+        super().error(message)
+
+
 def create_declared_parser(name: str) -> argparse.ArgumentParser:
     from ..parser import (_build_global_options_parser, _add_universal_filter_flags, _add_base_path_option,
                           add_declared_presentation_options, scalar_settings)
@@ -42,10 +57,11 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
     from ..invocation import exit_codes_text
     exits = exit_codes_text(name, getattr(adapter, 'FINDINGS_POLICIES', ('none',)))
     epilog = '\n\n'.join(part for part in (help_info.get('epilog'), exits) if part)
-    parser = argparse.ArgumentParser(
+    parser = _DeclaredParser(
         prog=f'reveal {name}', parents=[_build_global_options_parser()],
         description=help_info['description'], epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.declarations = tuple(adapter.PARAM_SPECS)
     scalar_settings(parser)
     _describe_fail_on(parser, tuple(getattr(adapter, 'FINDINGS_POLICIES', ('none',))))
     add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC)

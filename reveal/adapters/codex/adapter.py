@@ -12,9 +12,9 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import CodexRenderer
-from ...utils.query import warn_unknown_query_params
 from ...utils.jsonl_records import TranscriptRecords
 from ...utils.results import note_warning
+from ...utils.query import warn_unknown_query_params
 from ...utils.query_parser import ResourceSpec, param_schema, peek_query_items
 from .params import PARAM_SPECS, _MATCHES, _FULL, bind_query
 from .lookup import SessionLookup, attach_lookup_evidence
@@ -172,6 +172,8 @@ class CodexAdapter(ResourceAdapter):
         self._request_index_error = None
         self.query = query if query is not None else getattr(params, '_source_query', None)
         self.query_params = bind_query(query, params)
+        # Unknown keys never reach here (the binder rejects them, rule 3); what remains is the applicability
+        # disclosure for full on a mode that does not read it (rule 20, BACK-2656), on every transport.
         known = set(self.get_schema()['query_params'])
         query_keys = {key for key, _ in peek_query_items(self.query_params)}
         if (self._session_id_from_resource() is None or self._session_sub_path() != 'exchanges'

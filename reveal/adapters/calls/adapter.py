@@ -658,7 +658,6 @@ class CallsAdapter(ResourceAdapter):
         else:
             self.query_params = bind_declared_params(
                 self.PARAM_SPECS, query if isinstance(query, str) else '', transport='uri')
-        self._warn_unknown_query_params(self.query_params)  # BACK-507
         path, name = self._split_name_shorthand(expanded)
         # path:name is the callers mode: with an explicit mode it is a second one (BACK-2102).
         self._shorthand_conflict = resource if name and _selected_modes(self.query_params) else None
@@ -679,10 +678,6 @@ class CallsAdapter(ResourceAdapter):
         format=dot on a view with no graph is rejected, not answered in text (BACK-2108)."""
         modes = _selected_modes(params)  # one mode per request is the binder's (role='operation', BACK-2654)
         supplied = dict(peek_query_items(params))
-        unsupported = sorted(set(supplied) & {'where', 'match', 'offset', 'since', 'until'})
-        if unsupported:
-            raise ValueError(f'Calls does not support {", ".join(unsupported)}; no equivalent filter is available. '
-                             'Use --callers NAME (callers=NAME) for a supported per-symbol lookup.')
         for key in ('callers',):
             value = supplied.get(key)
             if isinstance(value, str) and _split_root(value)[0]:

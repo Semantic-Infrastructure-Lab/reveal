@@ -549,7 +549,6 @@ class TraceAdapter(ResourceAdapter):
                 self.PARAM_SPECS, params, transport='typed')
         else:
             self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
-        self._warn_unknown_query_params(self.query_params)
 
     def answer_requirement_error(self, result, expected_type, prior_facts=None):
         from ..utils.results import AnalysisCompleteness, FailureCause

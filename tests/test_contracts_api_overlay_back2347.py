@@ -115,8 +115,9 @@ def test_bound_carrier_and_existing_impls_read_accounting_remain(project):
 
 
 def test_unknown_uri_and_declared_api_resource_codec(project, capsys):
-    assert api.query(uri(project, 'nonsense=true'))['total_contracts'] > 0
-    assert "Unknown query param 'nonsense'" in capsys.readouterr().err
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match="unsupported control 'nonsense'; supported controls: "):
+        api.query(uri(project, 'nonsense=true'))  # BACK-2654 rule 3 (was warned and ignored)
     decoded = project / 'literal space'
     decoded.mkdir()
     (decoded / 'contract.py').write_text(SOURCE, encoding='utf-8')

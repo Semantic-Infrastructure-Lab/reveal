@@ -343,7 +343,6 @@ class HotspotsAdapter(ResourceAdapter):
                 self.PARAM_SPECS, params, transport='typed')
         else:
             self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
-        self._warn_unknown_query_params(self.query_params)  # BACK-507
         # Populated by get_structure(); text rendering needs the raw set for
         # its coverage overlay, but it must never appear in the JSON contract
         # (only the per-function `has_test_hint` boolean derived from it does).

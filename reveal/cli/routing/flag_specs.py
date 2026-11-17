@@ -39,6 +39,8 @@ class FlagSpec:
                                           # (sort=/limit=; applied by a few, warned about by the rest)
     unbounded: int | None = None          # value a declared fragment gets for a 0 ("no cap"): an
                                           # adapter's own `top=0` may mean "nothing" (hotspots)
+    control: bool = False                 # sets a request control: a declared noun that does not receive it
+                                          # exits 2 naming its controls (rule 3, BACK-2654)
 
 
 # The value functions `peek`: reading a flag here is not using it. inject_query_flags marks a
@@ -71,8 +73,8 @@ def _no_gitignore(args: Any) -> bool | None:
 
 # Order is the order fragments are appended to the query string.
 FLAG_SPECS: tuple[FlagSpec, ...] = (
-    FlagSpec('since', '--since', _typed('since'), warn_unsupported=True, already_scoped=('date>',)),
-    FlagSpec('until', '--until', _typed('until'), warn_unsupported=True, already_scoped=('date<',)),
+    FlagSpec('since', '--since', _typed('since'), warn_unsupported=True, already_scoped=('date>',), control=True),
+    FlagSpec('until', '--until', _typed('until'), warn_unsupported=True, already_scoped=('date<',), control=True),
     FlagSpec('respect_gitignore', '--no-gitignore', _no_gitignore, warn_unsupported=True),
     # --all / --verbose: many adapters honor them without a query fragment (claude,
     # nginx, overview), so a missing declaration is not evidence of a dropped flag.
@@ -192,6 +194,16 @@ def _native_uncapped_value(adapter_class: Any, fragment: str, fallback: int) -> 
     return 0 if declaration is not None and declaration.zero_policy == 'all' else fallback
 
 
+def _reject_unreceived_control(adapter_class: Any, spec: FlagSpec) -> None:
+    """An explicit control flag a declared noun does not receive (rule 3, BACK-2654): exit 2 with the binder's
+    teaching (its supported controls), not a note."""
+    declarations = getattr(adapter_class, 'PARAM_SPECS', None)
+    if spec.control and declarations:
+        from ...errors import RequestValidationError
+        from ...utils.query_binding import unsupported_controls_message
+        raise RequestValidationError(unsupported_controls_message(declarations, [spec.option]))
+
+
 def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
     """Append the query fragment for every CLI flag in effect that this scheme's adapter
     declares; print a note for the flags it does not support (where the spec says to)."""
@@ -228,6 +240,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             else:
                 _join_uri_value(args, spec, adapter_class, resource, key, fragment)
         elif spec.warn_unsupported:
+            _reject_unreceived_control(adapter_class, spec)
             mark(args, spec.dest)
             aware = ', '.join(f'{s}://' for s in _supporting_schemes(spec.dest))
             print(f"Note: {spec.option} has no effect on {scheme}:// -- only {aware} support it.",

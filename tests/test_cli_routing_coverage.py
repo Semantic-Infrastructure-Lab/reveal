@@ -258,14 +258,16 @@ class TestHandleUriSinceUntil:
         assert mock_handler.call_args[0][2].count('since=') == 1
 
     def test_since_warns_on_non_supporting_scheme(self, capsys):
+        """BACK-2654 rule 3: a control flag the noun does not take exits 2 naming its controls (was a note)."""
         with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
             from reveal.cli.routing import handle_uri
             args = _args(sort=None, exclude=None, since='2026-01-01', until=None, base_path=None)
-            handle_uri('ast://.', None, args)
-        resource_arg = mock_handler.call_args[0][2]
-        assert 'since=' not in resource_arg
+            with pytest.raises(SystemExit) as rejected:
+                handle_uri('ast://.', None, args)
+            assert rejected.value.code == 2
+        assert not mock_handler.called
         captured = capsys.readouterr()
-        assert '--since has no effect on ast://' in captured.err
+        assert "unsupported control '--since'; supported controls: where, " in captured.err
 
 
 # ─── handle_uri — BACK-1202 / BACK-1514: an unused flag gets one note ────────

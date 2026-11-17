@@ -170,8 +170,9 @@ def test_qualified_json_does_not_silence_ignored_query_warning(tmp_path):
     async def scenario(session):
         answer = await session.call_tool('reveal_query', {
             'uri': f'trace://{tmp_path}?from=main&bogus=1', 'provenance': True})
-        assert not answer.is_error
-        assert 'Unknown query param' in _text(answer)
-        assert 'bogus' in _text(answer)
+        # BACK-2654 rule 3: the unknown key is an invalid request naming it and the supported controls (it was a
+        # warning on an answer); provenance still does not silence it.
+        assert answer.is_error
+        assert "unsupported control 'bogus'; supported controls: from, depth" in _text(answer)
 
     _run(tmp_path, scenario)

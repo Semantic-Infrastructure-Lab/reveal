@@ -156,9 +156,11 @@ def test_api_raw_resource_spelling_and_literal_constructor_path_remain(project):
 
 
 def test_unknown_uri_key_still_warns_and_ignores(project, capsys):
-    answer = api.query(uri(project, 'type=env&nonsense=true'))
-    assert names(answer) == {'PRODUCTION_VAR', 'TEST_VAR'}
-    assert "Unknown query param 'nonsense'" in capsys.readouterr().err
+    """BACK-2654 rule 3: an unknown key exits 2 naming the supported controls (it was warned and ignored)."""
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match="unsupported control 'nonsense'; supported controls: "):
+        api.query(uri(project, 'type=env&nonsense=true'))
+    assert names(api.query(uri(project, 'type=env'))) == {'PRODUCTION_VAR', 'TEST_VAR'}
 
 
 def test_overlay_constructs_once(project, monkeypatch):

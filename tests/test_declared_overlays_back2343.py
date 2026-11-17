@@ -90,12 +90,15 @@ def test_omitted_override_retains_uri_normalization_and_unknown_uri_key():
 
     spec = ParamSpec('name', 'string', '', '', convert)
     with collect_query_keys() as log:
-        params = bind_declared_params([spec], 'name=value&unknown=true', transport='uri', overrides={})
+        params = bind_declared_params([spec], 'name=value', transport='uri', overrides={})
         assert log.used == set()
         assert spec.read(params) == 'value!'
         assert calls == ['value']
-        assert dict(params.peek_items())['unknown'] == 'true'
         assert log.used == {'name'}
+    # BACK-2654 rule 3: an unknown URI key exits 2 naming the supported controls (it used to be kept unread).
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match="unsupported control 'unknown'; supported controls: name"):
+        bind_declared_params([spec], 'name=value&unknown=true', transport='uri', overrides={})
 
 
 def test_typed_source_and_override_queryparams_are_not_read_as_applied():

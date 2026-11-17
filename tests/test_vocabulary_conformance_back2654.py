@@ -1482,9 +1482,13 @@ def test_cell(workspace, noun, rule):
 # at the declared binder and parser, not by a per-adapter opt-in (plan section 5). The nouns still waiting on their
 # field declarations (rule 8) keep their own warning until then; this list only shrinks.
 _OWN_UNKNOWN_KEY_WARNING = {'ast', 'claude', 'git', 'json', 'markdown', 'metrics', 'stats'}
+# A call kept for another rule: unknown keys never reach it, so it is not an unknown-key check.
+_KEPT_FOR_ANOTHER_RULE = {'codex': 'warns that full is unread outside exchanges (rule 20 applicability, BACK-2656), '
+                                   'on api.query and the adapter too, where the CLI ledger does not reach'}
 
 
-@pytest.mark.parametrize('noun', [noun for noun in NOUNS if noun not in _OWN_UNKNOWN_KEY_WARNING])
+@pytest.mark.parametrize('noun', [noun for noun in NOUNS
+                                  if noun not in _OWN_UNKNOWN_KEY_WARNING and noun not in _KEPT_FOR_ANOTHER_RULE])
 def test_no_declared_noun_warns_about_unknown_keys_itself(noun):
     import inspect
     source = inspect.getsource(inspect.getmodule(_adapter(noun)))

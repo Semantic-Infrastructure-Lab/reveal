@@ -55,6 +55,6 @@ def test_the_flag_alone_is_supported_and_prints_no_note(tree):
 
 
 def test_a_flag_the_adapter_does_not_support_keeps_its_own_note(tree):
-    """Control: the 'not supported' wording is still right where it is true."""
+    """Control: a flag the noun does not take is rejected naming its controls (BACK-2654 rule 3; was a note)."""
     err = _stderr(tree, '', '--since', '1.day')
-    assert '--since has no effect on ast://' in err
+    assert "unsupported control '--since'; supported controls: where, " in err

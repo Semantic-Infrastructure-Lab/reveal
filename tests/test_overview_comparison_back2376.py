@@ -371,7 +371,8 @@ def test_comparison_controls_preserve_population_and_symmetric_policy(project, f
 
 def test_comparison_head_preserves_existing_transport_boundary(project):
     rejected = invoke(project, flags=['--head', '1'])
-    assert rejected.returncode == 2 and 'unrecognized arguments: --head' in rejected.stderr
+    # BACK-2654 rule 3: the unknown flag gets the teaching (supported controls), not argparse's bare error.
+    assert rejected.returncode == 2 and "unsupported control '--head'; supported controls: " in rejected.stderr
     original = canonical(invoke(project, transport='uri'))
     response = invoke(project, transport='uri', flags=['--head', '1'])
     selected = canonical(response)

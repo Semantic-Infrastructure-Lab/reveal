@@ -461,7 +461,6 @@ class OverviewAdapter(ResourceAdapter):
         self.query_params = (params if isinstance(params, QueryParams) else bind_declared_params(
             self.PARAM_SPECS, params if params is not None else query or '',
             transport='typed' if params is not None else 'uri'))
-        self._warn_unknown_query_params(self.query_params)
         self.exclude_patterns = split_exclude_param(self.query_params.get('exclude'))
         self.respect_gitignore = respect_gitignore_param(self.query_params)
 
