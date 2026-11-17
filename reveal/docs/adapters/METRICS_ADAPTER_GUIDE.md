@@ -313,6 +313,11 @@ ranking), 3 when files were lost or not analyzed (an `analysis_failed`, `parse_d
 `check_rules_failed` or unreadable-directory warning in `meta.warnings`). The retired `stats://` spelling
 keeps its older exit 0 on those until the cut.
 
+A `.py` file Python's parser rejects carries `parse_error` on its row (`invalid syntax (line 4)`): the
+check rules that read it with Python skipped it, so its `local_check_issues` is a lower bound. The same
+text is the `reason` of its `parse_degraded` entry in `failures`. A file tree-sitter still reads
+(`a := 1`) carries only the row field and does not change the exit code.
+
 ### Unified Query Syntax (Recommended)
 
 See [Unified Query Syntax](#unified-query-syntax) section for full details.

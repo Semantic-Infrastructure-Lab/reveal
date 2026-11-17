@@ -457,7 +457,8 @@ A `--format json` answer is the whole answer: nothing is printed on stderr besid
 failures are in the JSON (`analysis_failed`, `parse_degraded`, a rule's `unavailable` outcome, a
 file's `check_rules_failed`), so the per-file lines a text answer prints (`Warning: Failed to analyze
 <file>: <cause>`, `AST parse failed ... for <file>`, I003's `layer config ... could not be used`,
-`Check rules failed for <file>`) are not printed in JSON mode, by pool workers either. Where a warning
+`Check rules failed for <file>`, diff's `Skipping <file>@<ref> in directory scan`) are not printed in
+JSON mode, by pool workers either. Where a warning
 caps its file list, nothing is lost either: see the next section.
 
 ### Every failed subject (`failures`)
@@ -474,7 +475,8 @@ text the text answer's per-file lines print.
 - `cause`: the class of the reason, the text before its first colon (`PermissionError`,
   `invalid Python source`); for a warning whose subjects share one cause and record no per-file text it
   is the warning's kind (`worker_lost`, `partial_parse`, `parse_recovered`, `check_rules_failed`;
-  `parse_degraded` also carries the parse error's line as its reason).
+  `parse_degraded`'s reason is Python's parse message and line for a `.py` file, as in
+  `invalid syntax (line 4)`, else the line of the parse error).
 - `reason`: the full per-subject text (`PermissionError: Permission denied`), present when one was
   recorded.
 
