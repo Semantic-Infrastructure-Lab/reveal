@@ -1183,20 +1183,20 @@
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:python\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 2,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
@@ -1214,7 +1214,7 @@
       "parser_versions": {
         "python.ast": "3.12.16",
         "tree-sitter": "0.25.2",
-        "tree-sitter-language-pack": "1.23.1"
+        "tree-sitter-language-pack": "1.25.0"
       },
       "runtime": {
         "implementation": "CPython",
@@ -1240,36 +1240,6 @@
         "result": {
           "contract_version": "1.1",
           "files": [
-            {
-              "complexity": {
-                "average": 2.0,
-                "max": 2,
-                "min": 2
-              },
-              "elements": {
-                "classes": 0,
-                "functions": 1,
-                "imports": 0
-              },
-              "file": "second.ts",
-              "issues": {
-                "deep_nesting": [],
-                "long_functions": []
-              },
-              "lines": {
-                "code": 3,
-                "comments": 0,
-                "empty": 0,
-                "total": 3
-              },
-              "quality": {
-                "avg_function_length": 3.0,
-                "deep_nesting": 0,
-                "local_check_issues": 0,
-                "long_functions": 0,
-                "score": 100.0
-              }
-            },
             {
               "complexity": {
                 "average": 1.0,
@@ -1312,6 +1282,36 @@
                 "imports": 0
               },
               "file": "first.ts",
+              "issues": {
+                "deep_nesting": [],
+                "long_functions": []
+              },
+              "lines": {
+                "code": 3,
+                "comments": 0,
+                "empty": 0,
+                "total": 3
+              },
+              "quality": {
+                "avg_function_length": 3.0,
+                "deep_nesting": 0,
+                "local_check_issues": 0,
+                "long_functions": 0,
+                "score": 100.0
+              }
+            },
+            {
+              "complexity": {
+                "average": 2.0,
+                "max": 2,
+                "min": 2
+              },
+              "elements": {
+                "classes": 0,
+                "functions": 1,
+                "imports": 0
+              },
+              "file": "second.ts",
               "issues": {
                 "deep_nesting": [],
                 "long_functions": []
@@ -1408,19 +1408,19 @@
       "counts": {
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:python\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 2,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 2,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:python\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
@@ -1436,7 +1436,7 @@
       "parser_versions": {
         "python.ast": "3.12.16",
         "tree-sitter": "0.25.2",
-        "tree-sitter-language-pack": "1.23.1"
+        "tree-sitter-language-pack": "1.25.0"
       },
       "runtime": {
         "implementation": "CPython",
@@ -1665,12 +1665,12 @@
       },
       "counts": {
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:python\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:python\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1
@@ -1683,7 +1683,7 @@
       "parser_versions": {
         "python.ast": "3.12.16",
         "tree-sitter": "0.25.2",
-        "tree-sitter-language-pack": "1.23.1"
+        "tree-sitter-language-pack": "1.25.0"
       },
       "runtime": {
         "implementation": "CPython",
@@ -1772,14 +1772,14 @@
               },
               {
                 "expr": "process.env",
-                "file": "second.ts",
+                "file": "first.ts",
                 "line": 2,
                 "name": "REVEAL_PARSE_GATE_NAME",
                 "type": "env_var"
               },
               {
                 "expr": "process.env",
-                "file": "first.ts",
+                "file": "second.ts",
                 "line": 2,
                 "name": "REVEAL_PARSE_GATE_NAME",
                 "type": "env_var"
@@ -1796,12 +1796,12 @@
       },
       "counts": {
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
+        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1
@@ -1814,7 +1814,7 @@
       "parser_versions": {
         "python.ast": "3.12.16",
         "tree-sitter": "0.25.2",
-        "tree-sitter-language-pack": "1.23.1"
+        "tree-sitter-language-pack": "1.25.0"
       },
       "runtime": {
         "implementation": "CPython",
