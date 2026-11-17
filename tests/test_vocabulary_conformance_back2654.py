@@ -172,16 +172,10 @@ NOT_YET = {
     ('ast', '3'): 'URI match, detail, depth, tests, since, until, against: exit 0 (bare keys become where fields); '
                   'subcommand match, detail, depth, tests, since, until, against: argparse error; global --since, '
                   '--until on the URI: exit 0',
-    ('claude', '3'): 'URI kind, depth, tests, against: exit 0; subcommand kind, depth, tests, against: argparse '
-                     'error',
-    ('git', '3'): 'URI match, kind, depth, tests, against: exit 0; subcommand match, kind, depth, tests, against: '
-                  'argparse error',
     ('json', '3'): 'URI match, kind, depth, tests, since, until, against: exit 0; subcommand the same seven: '
                    'argparse error; global --since, --until on the URI: exit 0',
     ('markdown', '3'): 'URI detail, kind, depth, tests, since, until, against: exit 0; subcommand the same seven: '
                        'argparse error; global --since, --until on the URI: exit 0',
-    ('metrics', '3'): 'URI against: exit 0; subcommand against: argparse error; global --until on the URI: exit 0 '
-                      '(match, kind, depth, until are declared to reject; against is not in that list)',
     ('architecture', '4'): 'no detail declaration; --verbose is its own verbose control (expanded sections), exit 0',
     ('ast', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
     ('calls', '4'): 'the callers view rejects detail=full (exit 2) but --verbose answers with a "has no effect" '
@@ -210,11 +204,8 @@ NOT_YET = {
     ('markdown', '8a'): 'bare detail, kind, depth, tests, since, until, against: exit 0',
     ('metrics', '8a'): 'bare against: exit 0 (match, kind, depth, until reject)',
     ('metrics', '8b'): '?lines=5 is warned unknown and ignored; ?where=lines=5 filters (?lines>10 already filters)',
-    ('claude', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('git', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('json', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('markdown', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('metrics', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('calls', '20'): 'unread by the default answer, warned and exit 0: kind, external, builtins, test-framework',
     ('codex', '20'): 'unread by the default answer, warned and exit 0: since, until, key, last, tokens, goal, '
                      'matches',
@@ -226,7 +217,7 @@ NOT_YET = {
                        'include_unresolved',
 }
 
-NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 6, '3b': 6, '4': 17, '5': 0, '6': 0,
+NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 3, '3b': 3, '4': 17, '5': 0, '6': 0,
                     '8a': 5, '8b': 1, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6}
 
 
@@ -1481,7 +1472,7 @@ def test_cell(workspace, noun, rule):
 # Rule 3 (Scott 2026-11-16; BACK-2654 note #14): unknown keys and unsupported controls are rejected by ONE shared check
 # at the declared binder and parser, not by a per-adapter opt-in (plan section 5). The nouns still waiting on their
 # field declarations (rule 8) keep their own warning until then; this list only shrinks.
-_OWN_UNKNOWN_KEY_WARNING = {'ast', 'claude', 'git', 'json', 'markdown', 'metrics', 'stats'}
+_OWN_UNKNOWN_KEY_WARNING = {'ast', 'json', 'markdown'}
 # A call kept for another rule: unknown keys never reach it, so it is not an unknown-key check.
 _KEPT_FOR_ANOTHER_RULE = {'codex': 'warns that full is unread outside exchanges (rule 20 applicability, BACK-2656), '
                                    'on api.query and the adapter too, where the CLI ledger does not reach'}
@@ -1503,3 +1494,25 @@ def test_the_unknown_key_message_names_the_controls_and_fields():
     assert all(word in message for word in ('zz', 'limit', 'where', 'name', 'lines')), message
     open_message = unsupported_controls_message((limit, where_param('w', open_fields='any frontmatter key')), ['zz'])
     assert 'any frontmatter key' in open_message, open_message
+
+
+# Closed where fields (BACK-2654 note #15): Metrics declares file and the alias names, and a dotted path whose first
+# segment is a declared field or a record section; Claude declares session and tool; Git its commit fields. A bare
+# key or a where term on any other field exits 2 naming the supported fields.
+@pytest.mark.parametrize('noun,fields', [('metrics', ('file', 'lines', 'avg_complexity', 'elements.*')),
+                                         ('claude', ('session', 'tool')),
+                                         ('git', ('author', 'message', 'content'))])
+def test_closed_where_fields_are_declared(noun, fields):
+    spec = _spec_for(noun, 'where')
+    assert set(fields) <= set(spec.fields) and not spec.open_fields, spec.fields
+
+
+@pytest.mark.parametrize('query,ok', [('lines>1', True), ('lines.total>1', True), ('elements.functions>=0', True),
+                                      ('quality.score>0', True), ('where=lines.code>0', True),
+                                      ('bogus>1', False), ('bogus.total>1', False), ('where=bogus>1', False)])
+def test_metrics_where_fields_and_dotted_paths(workspace, query, ok):
+    run = _run(f'metrics://proj?{query}', '--format', 'json')
+    if ok:
+        assert run.rc == 0, run.brief()
+    else:
+        assert run.rc == 2 and run.says('bogus', 'supported controls', 'lines', 'elements.*'), run.brief()
