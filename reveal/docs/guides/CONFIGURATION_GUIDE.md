@@ -855,7 +855,8 @@ on import — no manual registry entry needed. `reveal a.myext` then prints `Sec
 ### Discovery Behavior
 
 - Discovery runs once per process (lazy, on first `get_analyzer()` call)
-- Bad plugin files emit a warning and are skipped without crashing reveal
+- A plugin file that fails to import is skipped without crashing reveal; the answer says so as a
+  `plugin_warning` entry (`meta.warnings` with `--format json`, one `warning:` line on stderr otherwise)
 - No command lists the loaded plugins; a successful load is logged only at debug level
   (`Loaded plugin: <path>`)
 

@@ -1383,7 +1383,7 @@ class MyFormatAnalyzer(FileAnalyzer):
         return {'type': 'myformat', 'lines': len(self.lines)}
 ```
 
-On the next `reveal` run, `.myfmt` files are handled by `MyFormatAnalyzer` automatically — no source edits, no registration step. Bad plugin files log a warning and are skipped without crashing.
+On the next `reveal` run, `.myfmt` files are handled by `MyFormatAnalyzer` automatically — no source edits, no registration step. A plugin file that fails to import is skipped without crashing, and the answer says so: a `plugin_warning` entry in `meta.warnings` with `--format json`, one `warning:` line on stderr otherwise.
 
 ---
 

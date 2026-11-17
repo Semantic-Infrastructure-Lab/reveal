@@ -434,6 +434,22 @@ prints it once on stderr after the answer, as `warning: <message>`, and an MCP t
 with a `[warning: <message>]` line. A plain library call outside any invocation (for example
 `RevealConfig.get()`) logs it through the `reveal.config` logger as before.
 
+### Plugin warnings (`plugin_warning`)
+
+Code reveal loads from the user's or project's directories that did not load as written is a
+`meta.warnings` entry of type `plugin_warning`, delivered exactly like a `config_warning` (once per
+invocation, informational, never on stderr beside a JSON answer) (BACK-2659):
+
+| `code` | When | Extra fields |
+|---|---|---|
+| `plugin_load_failed` | an analyzer plugin (`.reveal/analyzers/*_analyzer.py`, `~/.reveal/plugins/`), an adapter plugin (`.reveal/adapters/<name>/`, `~/.reveal/adapters/`) or a rule module (`.reveal/rules/<category>/<CODE>.py`, the user rules directory) raised on import; it is skipped (the traceback is logged at debug level only) | `path`, `kind` (`analyzer`, `adapter` or `rule`), `reason` |
+| `rule_class_missing` | a rule module has no rule class named after its file; it is skipped | `path`, `rule` |
+| `rule_severity_unknown` | a rule's `severity` is not one reveal knows; it is treated as `medium` | `rule`, `severity` |
+| `rules_dir_legacy` | rules are read from the legacy `~/.reveal/rules/` directory | `path`, `replacement` (the directory to move them to) |
+
+Plugins are discovered once per process; every later discovery replays what the first one met, so a
+long-lived MCP server reports a broken plugin in every answer, not only the first.
+
 ---
 
 ## Outcomes: failed, not applicable, truncated, ok
