@@ -1239,98 +1239,6 @@
         "excluded": 0,
         "result": {
           "contract_version": "1.1",
-          "files": [
-            {
-              "complexity": {
-                "average": 1.0,
-                "max": 1,
-                "min": 1
-              },
-              "elements": {
-                "classes": 0,
-                "functions": 1,
-                "imports": 1
-              },
-              "file": "config.py",
-              "issues": {
-                "deep_nesting": [],
-                "long_functions": []
-              },
-              "lines": {
-                "code": 5,
-                "comments": 0,
-                "empty": 2,
-                "total": 7
-              },
-              "quality": {
-                "avg_function_length": 3.0,
-                "deep_nesting": 0,
-                "local_check_issues": 0,
-                "long_functions": 0,
-                "score": 100.0
-              }
-            },
-            {
-              "complexity": {
-                "average": 2.0,
-                "max": 2,
-                "min": 2
-              },
-              "elements": {
-                "classes": 0,
-                "functions": 1,
-                "imports": 0
-              },
-              "file": "first.ts",
-              "issues": {
-                "deep_nesting": [],
-                "long_functions": []
-              },
-              "lines": {
-                "code": 3,
-                "comments": 0,
-                "empty": 0,
-                "total": 3
-              },
-              "quality": {
-                "avg_function_length": 3.0,
-                "deep_nesting": 0,
-                "local_check_issues": 0,
-                "long_functions": 0,
-                "score": 100.0
-              }
-            },
-            {
-              "complexity": {
-                "average": 2.0,
-                "max": 2,
-                "min": 2
-              },
-              "elements": {
-                "classes": 0,
-                "functions": 1,
-                "imports": 0
-              },
-              "file": "second.ts",
-              "issues": {
-                "deep_nesting": [],
-                "long_functions": []
-              },
-              "lines": {
-                "code": 3,
-                "comments": 0,
-                "empty": 0,
-                "total": 3
-              },
-              "quality": {
-                "avg_function_length": 3.0,
-                "deep_nesting": 0,
-                "local_check_issues": 0,
-                "long_functions": 0,
-                "score": 100.0
-              }
-            }
-          ],
           "hotspots": [],
           "meta": {
             "errors": [],
@@ -1382,7 +1290,7 @@
           },
           "population": {
             "analyzed_files": 3,
-            "displayed_files": 3,
+            "displayed_files": 0,
             "filtered_files": 3,
             "summary": "filtered_analyzed_files"
           },
@@ -1856,7 +1764,8 @@
         "args": [
           "metrics",
           "{corpus}",
-          "--hotspots",
+          "--view",
+          "hotspots",
           "--format",
           "json"
         ],
