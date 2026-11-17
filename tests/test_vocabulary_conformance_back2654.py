@@ -112,8 +112,8 @@ EXEMPT = {
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'json', 'overview', 'pack', 'patches',
         'surface', 'testability', 'trace')},
-    **{(noun, '8a'): 'no where expression: a bare key is never read as a field (claude\'s where is a name predicate)'
-       for noun in ('architecture', 'calls', 'claude', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview',
+    **{(noun, '8a'): 'no where expression: a bare key is never read as a field'
+       for noun in ('architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview',
                     'pack', 'patches', 'surface', 'testability', 'trace')},
     **{(noun, '8b'): 'declares no where control: there are no field filters' for noun in (
         'architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview', 'pack', 'patches',
@@ -245,7 +245,6 @@ NOT_YET = {
     ('json', '8a'): 'bare match, kind, depth, tests, since, until, against: exit 0',
     ('markdown', '8a'): 'bare detail, kind, depth, tests, since, until, against: exit 0',
     ('metrics', '8a'): 'bare against: exit 0 (match, kind, depth, until reject)',
-    ('claude', '8b'): '?session~=session is warned unknown and ignored; ?where=session~=session filters',
     ('metrics', '8b'): '?lines=5 is warned unknown and ignored; ?where=lines=5 filters (?lines>10 already filters)',
     ('architecture', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('calls', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
@@ -276,7 +275,7 @@ NOT_YET = {
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 19, '3b': 19, '4': 17, '5': 0, '6': 0,
-                    '8a': 5, '8b': 2, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6}
+                    '8a': 5, '8b': 1, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -1323,6 +1322,15 @@ def test_claude_tail_and_last_are_one_operation(workspace, pair, single):
 def test_claude_tail_and_last_with_different_counts_conflict(workspace):
     run = _run('claude://session/my-session?tail=2&last=1', '--format', 'json')
     assert run.rc == 2 and run.says('tail', 'last', 'conflicting spellings'), run.brief()
+
+
+def test_claude_where_is_the_shared_where_declaration():
+    """Rule 13: Claude's where is the shared where_param (a filter expression list) with Claude's own evaluator."""
+    spec = _spec_for('claude', 'where')
+    assert spec.role == 'filter-expression' and spec.repeatable and spec.cli_action == 'append'
+    assert spec.validate(['session~=a', 'tool==Bash']) == ['session~=a', 'tool==Bash']
+    with pytest.raises(ValueError, match='session~=TEXT'):
+        spec.validate(['lines>3'])
 
 
 def test_every_legacy_entry_names_its_spelling_and_translation():
