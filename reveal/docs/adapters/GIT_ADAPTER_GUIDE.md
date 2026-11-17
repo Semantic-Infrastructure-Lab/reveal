@@ -69,7 +69,7 @@ Python `query()` binds declared controls before calling the existing Git owners:
 from reveal.api import query
 
 history = query("git://.", view="history", where=["author~=Scott", "timestamp>1700000000"], limit=5)
-empty = query("git://.?type=history&limit=5", limit=0)
+everything = query("git://.?type=history&limit=5", limit=0)  # limit=0 is no cap
 raw_file = query("git://src/app.py@HEAD~1", detail="raw")
 ```
 

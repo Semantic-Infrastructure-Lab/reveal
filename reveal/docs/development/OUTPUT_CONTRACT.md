@@ -823,7 +823,7 @@ stdin and mixed batches keep their separate transport policy.
 `fields=` remains an alias for listing columns; shared `--fields` still projects
 JSON. Typed overrides now apply (including empty lists, zero and false) after the
 original URI validates. Negative page controls reject before analysis; `limit=0`
-is an empty page, not an unbounded scan. Canonical repeated controls retain every
+is every row, as when `limit` is omitted (the Caps row, BACK-2654; it used to be an empty page). Canonical repeated controls retain every
 value. Legacy inline expressions keep their codec and selection semantics.
 
 Direct Markdown link-graph and backlink answers disclose root-stat or directory

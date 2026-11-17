@@ -19,7 +19,7 @@ element type; `view` selects `dict-heatmap`, `dict-schemas` or the legacy `calls
 `reveal-type`; mixing two spellings of one control is rejected. The Calls noun
 remains the home for call-graph questions.
 
-`limit=0` returns an empty page while retaining the full matching count; negative
+`limit=0` is no cap: every result, past the 200-result automatic cap (it used to return an empty page); negative
 limit/offset values reject before analysis. Typed API keyword controls now apply
 after validated URI controls, including zero and false; unsupported keywords reject.
 Typed filenames keep literal `?` and percent signs, while URI resources retain
@@ -296,7 +296,7 @@ Declared controls (CLI flags use the same names):
 | `builtins` | boolean | Include builtin calls in the legacy calls view |
 | `reveal-type` | string | Python type evidence for a named variable |
 | `sort` | string | Field, prefixed with `-` for descending |
-| `limit` | integer | Page size; zero is empty; omitted retains the automatic cap |
+| `limit` | integer | Page size; `0` = no cap (every result); omitted retains the automatic 200-result cap |
 | `offset` | integer | Rows to skip after sorting |
 
 Expression fields for `where` (legacy inline expressions remain accepted):

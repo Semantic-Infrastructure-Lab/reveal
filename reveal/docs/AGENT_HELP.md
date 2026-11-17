@@ -77,7 +77,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 reveal NOUN TARGET --option value  ==  NOUN://TARGET?option=value  (same answer, same exit)
 One name per idea: --limit/--offset, --sort [-]FIELD, --where 'FIELD OP VALUE',
   --match TEXT, --detail LEVEL, --view NAME, --since/--until DATE, --against REF, --tests MODE
---limit 0 means no cap (on ast, git, json and markdown it is still an empty page).
+--limit 0 means no cap.
 On a URI, ?FIELD OP VALUE is the same filter as --where.
 Switches take on/off: --churn off.
 Filters and selections repeat and combine; settings take one value (twice, differently: exit 2).

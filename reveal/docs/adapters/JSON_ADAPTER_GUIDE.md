@@ -46,7 +46,7 @@ reveal 'json://data.json?where=price%3E10&limit=5'
 
 `view` selects `value` (default), `schema`, `flatten`, `type`, `keys`, or `length`.
 `where` accepts the existing array predicate language and repeats to AND constraints.
-Sorting and pagination apply to arrays; zero limit returns an empty page. A filter
+Sorting and pagination apply to arrays; `limit=0` is no cap (every row; it used to return an empty page). A filter
 such as `?type=book` still refers to a data field; the first bare `?type` selects
 inspection. Existing first bare inspection selectors remain accepted, including
 `?gron&data-only`, whose JSON document remains a bare array of lines. Canonical

@@ -30,7 +30,7 @@ reveal markdown docs/ --backlinks guide.md
 | `columns` | Additional frontmatter columns; `fields=` remains a URI alias |
 | `explain` | Per-term evidence for body relevance scores |
 | `sort` | Frontmatter field; prefix `-` for descending |
-| `limit` | Answer rows; zero returns an empty page with the full matching count |
+| `limit` | Answer rows; `0` = no cap, every row (it used to return an empty page) |
 | `offset` | Answer rows skipped after sorting |
 | `aggregate` | Legacy field selector; use `view=aggregate&field=FIELD` |
 | `link-graph` | Legacy selector; use `view=links` |
