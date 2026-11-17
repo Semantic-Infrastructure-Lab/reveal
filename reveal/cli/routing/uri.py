@@ -42,14 +42,22 @@ class Answer:
     element). ``emit`` prints it the way the CLI does and exits as its outcome says.
     handle_uri emits; stdin --batch reads ``result`` and aggregates, so both answer a URI
     through the same resolution.
+
+    ``printer`` is called with the answer it prints, so it never closes over the answer: a
+    printer that did formed a reference cycle that kept the answer and its adapter alive past
+    the request, until a garbage collection on another MCP thread finalized the adapter (a
+    SQLite connection closed off its thread) inside a later call's captured stderr (BACK-2674).
     """
     result: Any
     kind: str
-    emit: Callable[..., None]
+    printer: Callable[..., None]
     execution_facts: Optional[ExecutionFacts] = None
     exception: Optional[Exception] = field(default=None, repr=False)
     public_diagnostic: Optional[str] = None
     private_diagnostic: Optional[str] = field(default=None, repr=False)
+
+    def emit(self, **options: Any) -> None:
+        self.printer(self, **options)
 
 
 class _Answered(Exception):
@@ -199,8 +207,8 @@ def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
     if facts is not None and facts_of is None and default_fail_on is None:
         # A router-classified failure (test layout, element miss) on a legacy operation has no findings policy.
         default_fail_on = 'none'
-    answer = Answer(result, 'router',
-                    lambda *, announce_error=True: _emit_result(
+    return Answer(result, 'router',
+                    lambda answer, *, announce_error=True: _emit_result(
                         result, args, scheme, _render_router_result, execution_facts=facts,
                         execution_answer=answer, announce_error=announce_error, detail=detail,
                         default_fail_on=default_fail_on),
@@ -208,7 +216,6 @@ def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
                     public_diagnostic=(result.get('error') if facts is not None and
                                        any(e.get('code') in _PUBLIC_REJECTION_CODES
                                            for e in result['meta']['errors']) else None))
-    return answer
 
 
 def _render_router_result(result: Any, output_format: str,
@@ -821,7 +828,7 @@ def _check_answer(adapter, renderer_class: type[Any], args: 'Namespace',
     check_kwargs = _build_check_kwargs(adapter, args)
     result = _call_adapter(lambda: adapter.check(**check_kwargs),
                            scheme or 'unknown', resource, type(adapter))
-    return Answer(result, 'check', lambda: _emit_check(result, adapter, renderer_class, args))
+    return Answer(result, 'check', lambda _answer: _emit_check(result, adapter, renderer_class, args))
 
 
 def _emit_check(result: Any, adapter, renderer_class: type[Any], args: 'Namespace') -> NoReturn:
@@ -1087,7 +1094,7 @@ def _element_answer(adapter, renderer_class: type[Any], element: Optional[str],
                 result = {**result, field: '\n'.join(lines)}
                 break
 
-    return Answer(result, 'element', lambda: _emit_element(result, renderer_class, args, scheme))
+    return Answer(result, 'element', lambda _answer: _emit_element(result, renderer_class, args, scheme))
 
 
 def _emit_element(result: Any, renderer_class: type[Any], args: 'Namespace',
@@ -1448,15 +1455,14 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
 
     # Last, so it selects from the result the user would otherwise see (BACK-1607).
     result = _apply_field_selection(result, args, scheme)
-    answer = Answer(result, 'structure',
-                    lambda *, announce_error=True: _emit_result(result, args, scheme, renderer_class.render_structure,
+    return Answer(result, 'structure',
+                    lambda answer, *, announce_error=True: _emit_result(result, args, scheme, renderer_class.render_structure,
                                          exit_code=getattr(renderer_class, 'exit_code', None),
                                          execution_facts=facts, execution_answer=answer, announce_error=announce_error,
                                          default_fail_on=default_fail_on,
                                          json_document=getattr(renderer_class, 'json_document', None),
                                          **_render_structure_top_kwargs(renderer_class, args, adapter)),
                     execution_facts=facts, private_diagnostic=private_diagnostic, public_diagnostic=public_diagnostic)
-    return answer
 
 
 def _echo_source(result: Any, adapter_class: type, resource: Optional[str]) -> None:

@@ -590,11 +590,10 @@ def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_ty
         (result_type or adapter.RESULT_TYPE), path, contract_version=CONTRACT_VERSION,
         source_type='unknown', errors=[{'code': cause.value, 'message': message}], error=message)
     facts = failure_execution_facts(cause)
-    answer = Answer(result, 'router', lambda *, announce_error=True: _emit_result(
+    return Answer(result, 'router', lambda answer, *, announce_error=True: _emit_result(
         result, args, name, _render_router_result, execution_facts=facts, execution_answer=answer,
         announce_error=announce_error, default_fail_on=default_fail_on),
         execution_facts=facts, public_diagnostic=message)
-    return answer
 
 
 def is_closed_reader(exc: BaseException) -> bool:
