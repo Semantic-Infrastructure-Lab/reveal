@@ -233,7 +233,7 @@
   "reveal/rules/__init__.py::_effective_codes_cache": {
    "owner": "request"
   },
-  "reveal/rules/base_mixins.py::_cached_ast_parse": {
+  "reveal/rules/base_mixins.py::_cached_ast_outcome": {
    "owner": "pure",
    "holds": "plain"
   },
