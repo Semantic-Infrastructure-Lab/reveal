@@ -479,12 +479,12 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
             print(
                 "Note: --frontmatter has no effect on markdown:// directory queries "
                 "(frontmatter is already the primary output). "
-                "Use ?fields=field1,field2 to select specific frontmatter keys.",
+                "Use ?columns=field1,field2 to select specific frontmatter keys.",
                 file=sys.stderr,
             )
 
     # --sort/--limit/--since/--until/... become query fragments here (flag_specs.FLAG_SPECS);
-    # a value already in the URI wins over the flag.
+    # a different value already in the URI is an invalid request naming both (BACK-2654); an equal one is one request.
     # Resolve the adapter before preparing its filesystem scope. Resource codecs
     # bind paths without serializing decoded '?' characters back into the URI.
     from ...adapters.base import get_adapter_class
