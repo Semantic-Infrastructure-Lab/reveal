@@ -135,11 +135,20 @@ _SWITCH = 'out of scope: the Switches rule renames this noun\'s no_* flag in its
 OUT_OF_SCOPE = {('architecture', '10'): _OVERVIEW_TOP, ('overview', '10'): _OVERVIEW_TOP,
                 ('contracts', '10'): _SWITCH + ' (--no-implementations)',
                 ('patches', '10'): _SWITCH + ' (--no-suppress)'}
+# Standalone legacy parameters that cap or detail the answer rather than select it (Scott 2026-11-16, BACK-2654
+# note #9): they keep their own parameter until the cut without role='operation', so a legacy cap still combines with
+# the legacy answer it caps (--hotspots --top N). CUT_READINESS: this table is empty at the cut.
+LEGACY_SETTINGS = {('metrics', 'top'): 'caps the legacy hotspots ranking; limit caps the files beside it',
+                   ('claude', 'full'): 'not identical to detail=full: /messages text stays unexpanded, ignored on the '
+                                       'overview where detail=full exits 2',
+                   ('claude', 'raw'): 'not identical to detail=raw: alone it keeps the 600-character truncation'}
+# Hand-written checks a rule would otherwise generate, each kept by a ruling and owned by the named package.
+# CUT_READINESS: zero recorded exceptions at the cut.
+RECORDED_EXCEPTIONS = {('metrics', '_top_conflict'): 'BACK-2656: in view=hotspots legacy top is limit, so a different '
+                                                     'top and limit exit 2; top is standalone, so no legacy entry '
+                                                     'generates the conflict'}
 # Cells stopped for a ruling (a case the rules do not settle); each must still fail, and the manager owns the list.
-STOPPED = {('metrics', '16'): 'stopped: the ruling makes metrics top a legacy operation (role=operation), but top caps '
-                              'the legacy --hotspots ranking, so with one answer per request (rule 17) --hotspots --top N '
-                              'would exit 2; top stays standalone with role=analysis (reported in Step 3)',
-           ('claude', '12'): 'stopped: rule 12 makes match a repeating selection, but Claude match is one search term '
+STOPPED = {('claude', '12'): 'stopped: rule 12 makes match a repeating selection, but Claude match is one search term '
                              'handed to its legacy search/contains readers; repeating it means Claude ANDs terms, '
                              'a new evaluator capability (reported in BACK-2654 Step 3)'}
 # Rule 9: the retired stats:// scheme is exempt (deleted at the cut); metrics' cells measure the owner it shares.
@@ -1070,21 +1079,40 @@ def probe_legacy_operations(noun):
                 continue
             value, same, _other_value = values
             base = spec.role != 'operation'
-            legacy = _run(_uri(noun, f'{entry.name}={same}', base=base), '--format', 'json')
-            canonical = _run(_uri(noun, f'{spec.name}={value}', base=base), '--format', 'json')
-            same_answer = _answer(legacy, noun) == _answer(canonical, noun)
-            cases.append(Case(f'?{entry.name}= answers as ?{spec.name}=', same_answer,
-                              f'{legacy.brief()} answers differently from {canonical.brief()}'))
+            legacy_uri, canonical_uri = _uri(noun, f'{entry.name}={same}', base=base), _uri(noun, f'{spec.name}={value}',
+                                                                                          base=base)
+            cases.append(_parity_case(noun, f'?{entry.name}= answers as ?{spec.name}=', legacy_uri, canonical_uri))
+            cases.append(_text_parity_case(f'?{entry.name}= renders as ?{spec.name}=', legacy_uri, canonical_uri))
     for key in _rows(noun):
         entry = RETIREMENTS[key]
         name = key.partition('.')[2]
         spec = next((s for s in _adapter(noun).PARAM_SPECS if s.name == name), None)
         if not key.startswith('param:') or spec is None or not getattr(entry, 'standalone', False):
             continue
-        if not any(f'{scheme}://' in entry.replacement for scheme in NOUNS if scheme != noun):
+        if any(f'{scheme}://' in entry.replacement for scheme in NOUNS if scheme != noun):
+            continue  # the replacement is another noun (rule 11)
+        if (noun, name) in LEGACY_SETTINGS:
+            cases.append(Case(f'{name} is a legacy setting', spec.role != 'operation',
+                              f'{name} caps or details the answer but its role is {spec.role!r}'))
+        else:
             cases.append(Case(f'{name} is a legacy operation', spec.role == 'operation',
                               f'{name} is standalone (answers differently) but its role is {spec.role!r}'))
     return cases
+
+
+def _parity_case(noun, label, legacy_uri, canonical_uri):
+    """Rule 16's JSON half: exit and answer equal; only the spelling's retirement note may differ."""
+    legacy, canonical = _run(legacy_uri, '--format', 'json'), _run(canonical_uri, '--format', 'json')
+    return Case(label, _answer(legacy, noun) == _answer(canonical, noun),
+                f'{legacy.brief()} answers differently from {canonical.brief()}')
+
+
+def _text_parity_case(label, legacy_uri, canonical_uri):
+    """Rule 16's text half ("identical" includes the rendered text, Scott 2026-11-16): exit and stdout equal; the
+    note is stderr."""
+    legacy, canonical = _run(legacy_uri), _run(canonical_uri)
+    return Case(label, (legacy.rc, legacy.out) == (canonical.rc, canonical.out),
+                f'{legacy.brief()} renders differently from {canonical.brief()}')
 
 
 # --- rule 17: one answer per request ------------------------------------------------------------------------
@@ -1216,6 +1244,61 @@ def test_the_binder_and_the_parser_read_a_legacy_entry_as_its_control():
     assert parser.parse_args(['--rank', 'fan-in']).sort == '-fan-in'
     with pytest.raises(argparse.ArgumentError):
         parser.parse_args(['--sort=-x', '--rank', 'fan-in'])
+
+
+def test_a_repeatable_controls_legacy_word_translates_on_every_transport():
+    """A legacy word of a repeatable control (Claude ``filter`` on ``where``) translates each repeat into a term."""
+    from reveal.utils.query_binding import prepare_declared_params
+    from reveal.utils.query_parser import LegacySpelling, ParamSpec
+    spec = ParamSpec('where', 'array', 'Terms', None, list, repeatable=True, uri_codec='percent',
+                     legacy=(LegacySpelling('filter', codec=lambda value: f'session~={value}'),))
+    uri = prepare_declared_params((spec,), 'where=session~=a&filter=b%20c&filter=d', 'uri')
+    assert dict(uri.peek_items()) == {'where': ['session~=a', 'session~=b c', 'session~=d']}
+    typed = prepare_declared_params((spec,), {'filter': 'b'}, 'typed')
+    assert dict(typed.peek_items()) == {'where': 'session~=b'}
+
+
+def test_recorded_exceptions_are_the_only_hand_written_checks():
+    """Metrics' one remaining hand-written conflict is the recorded top-vs-limit exception (BACK-2656)."""
+    from reveal.adapters.stats import adapter as metrics
+    recorded = sorted(name for noun, name in RECORDED_EXCEPTIONS if noun == 'metrics')
+    assert sorted(check.__name__ for check in metrics._CONFLICTS) == recorded
+
+
+def test_legacy_settings_are_standalone_rows():
+    for noun, name in LEGACY_SETTINGS:
+        row = RETIREMENTS[f'param:{noun}.{name}']
+        assert row.standalone and row.stage == 'note', (noun, name)
+
+
+# Rule 16 per resource for Claude's translated words: the generated probe runs one request per noun, but a Claude
+# word's answer depends on the resource, so each resource where the word answers is compared, JSON and text.
+CLAUDE_PARITY = [
+    ('claude://sessions?filter=my', 'claude://sessions?where=session~=my'),
+    ('claude://?filter=my', 'claude://?where=session~=my'),
+    ('claude://session/my-session?last', 'claude://session/my-session?tail=1'),
+    ('claude://session/my-session?last=3', 'claude://session/my-session?tail=3'),
+    ('claude://session/my-session?last=0', 'claude://session/my-session?tail=1'),
+]
+
+
+@pytest.mark.parametrize('legacy,canonical', CLAUDE_PARITY)
+def test_claude_legacy_words_answer_as_their_replacement(workspace, legacy, canonical):
+    for case in (_parity_case('claude', 'json', legacy, canonical), _text_parity_case('text', legacy, canonical)):
+        assert case.ok, case.evidence
+
+
+@pytest.mark.parametrize('pair,single', [('tail=2&last=2', 'tail=2'), ('last&tail=1', 'tail=1'),
+                                         ('last=0&tail=1', 'tail=1')])
+def test_claude_tail_and_last_are_one_operation(workspace, pair, single):
+    """Scott 2026-11-16 (BACK-2654 note #9): last is tail's other spelling, so an equal pair answers once."""
+    case = _parity_case('claude', pair, f'claude://session/my-session?{pair}', f'claude://session/my-session?{single}')
+    assert case.ok, case.evidence
+
+
+def test_claude_tail_and_last_with_different_counts_conflict(workspace):
+    run = _run('claude://session/my-session?tail=2&last=1', '--format', 'json')
+    assert run.rc == 2 and run.says('tail', 'last', 'conflicting spellings'), run.brief()
 
 
 def test_every_legacy_entry_names_its_spelling_and_translation():

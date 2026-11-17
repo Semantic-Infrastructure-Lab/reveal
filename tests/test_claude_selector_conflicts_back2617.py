@@ -19,7 +19,7 @@ from test_claude_source_evidence_back2617 import transcript
     ('session/my-session', {'tokens': True, 'digest': True}),
     ('session/my-session', {'tools': 'Bash', 'search': 'token'}),
     ('session/my-session', {'errors': True, 'timeline': True}),
-    ('session/my-session', {'tail': 2, 'last': 1}),
+    ('session/my-session', {'tail': 2, 'last': 1}),  # one operation, two spellings, two counts
     ('sessions', {'errors': True}),
     ('plans', {'tools': 'Bash'}),
     ('history', {'tokens': True}),
@@ -28,8 +28,8 @@ from test_claude_source_evidence_back2617 import transcript
     ('plans/my-plan', {'search': 'token'}),
 ])
 def test_invalid_selector_combination_rejects_in_api_and_uri(transcript, resource, params):
-    # tail and last are legacy operations (BACK-2654 rule 16): two of them are two answers (rule 17).
-    with pytest.raises(RequestValidationError, match='selector|select different answers'):
+    # tail and last are one legacy operation with two spellings (BACK-2654 note #9): two counts conflict (rule 1).
+    with pytest.raises(RequestValidationError, match='selector|conflicting spellings'):
         query('claude://' + resource, **params)
     query_string = '&'.join(name + '=' + str(value).lower() for name, value in params.items())
     result = _run_reveal_in(transcript.parent, 'claude://' + resource + '?' + query_string, '--format', 'json')
@@ -37,12 +37,13 @@ def test_invalid_selector_combination_rejects_in_api_and_uri(transcript, resourc
     assert any(e['code'] == 'invalid_request' for e in json.loads(result.stdout)['meta']['errors'])
 
 
-def test_tail_and_last_together_are_two_answers(transcript):
-    """BACK-2654 rules 16-17 (Scott 2026-11-16): tail and last are legacy operations, each selecting its answer, so
-    giving both is two answers, exit 2 naming both (BACK-2617 coalesced them when the counts agreed)."""
-    assert query('claude://session/my-session', tail=2)['type']
-    with pytest.raises(RequestValidationError, match='tail and last select different answers'):
-        query('claude://session/my-session', tail=2, last=2)
+def test_tail_and_last_are_one_operation_with_two_spellings(transcript):
+    """BACK-2654 note #9 (Scott 2026-11-16): last is tail's other spelling (last == tail=1, last=N == tail=N), so an
+    equal pair answers once and two counts exit 2 naming both spellings."""
+    single = query('claude://session/my-session', tail=2)
+    assert query('claude://session/my-session', tail=2, last=2) == single
+    with pytest.raises(RequestValidationError, match='conflicting spellings: tail, last'):
+        query('claude://session/my-session', tail=2, last=1)
 
 
 @pytest.mark.parametrize('params', [{'tools': 'Bash', 'errors': True},

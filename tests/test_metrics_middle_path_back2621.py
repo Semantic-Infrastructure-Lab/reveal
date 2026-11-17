@@ -563,6 +563,15 @@ class TestProposedChanges:
         result, answer = cli_json('metrics', str(project), '--view', 'hotspots', '--hotspots')
         assert result.returncode == 2 and 'view and hotspots select different answers' in answer['error']
 
+    def test_the_view_with_false_hotspots_is_the_view_and_its_note_names_what_was_typed(self, project):
+        """BACK-2654 note #9 (Scott 2026-11-16): view=hotspots&hotspots=false is the view; its note named
+        ?hotspots=true, a spelling the request did not use."""
+        result, answer = cli_json(uri(project, 'view=hotspots&hotspots=false'))
+        assert result.returncode == 0, result.stderr[-300:]
+        assert_equal_answer(answer, query(uri(project, 'view=hotspots')))
+        assert 'hotspots=true' not in result.stderr and 'deprecated' in result.stderr, result.stderr
+        assert not [m for m in notes(answer) if 'hotspots=true' in m], notes(answer)
+
     @pytest.mark.parametrize('args', [
         ('URI', 'hotspots=false', '--hotspots'),
         ('CLI', '--view', 'provenance', '--hotspots'),
