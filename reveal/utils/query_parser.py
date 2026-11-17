@@ -352,6 +352,12 @@ class LegacySpelling:
         return {self.owner: raw if self.codec is None else self.codec(raw)}
 
 
+# The shared control names (COMMAND_MODEL "Shared control names", BACK-2654 rule 7): one name per idea on every noun.
+# A noun declares the ones it supports; a bare URI key spelling one is that control, never a field filter (rule 8).
+SHARED_CONTROL_NAMES = ('limit', 'offset', 'sort', 'where', 'match', 'detail', 'kind', 'depth', 'tests', 'since',
+                        'until', 'against', 'view')
+
+
 @dataclass(frozen=True)
 class ParamSpec:
     """One declared query parameter; read explicitly where its value is applied.

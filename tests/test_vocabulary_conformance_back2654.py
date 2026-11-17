@@ -1518,6 +1518,14 @@ def test_no_declared_noun_warns_about_unknown_keys_itself(noun):
     assert 'warn_unknown_query_params(' not in source, f'{noun} keeps its own unknown-key warning'
 
 
+def test_the_shared_control_names_are_declared_once_in_shared_code():
+    """COMMAND_MODEL "Shared control names": one declared list in shared code (rule 7) that the binder reads (rule 8)."""
+    from reveal.utils.query_parser import SHARED_CONTROL_NAMES
+    assert SHARED_CONTROL_NAMES == ('limit', 'offset', 'sort', 'where', 'match', 'detail', 'kind', 'depth', 'tests',
+                                    'since', 'until', 'against', 'view')
+    assert set(SHARED_CONTROLS) <= set(SHARED_CONTROL_NAMES)
+
+
 def test_the_unknown_key_message_names_the_controls_and_fields():
     from reveal.utils.query_binding import unsupported_controls_message
     from reveal.utils.query_parser import ParamSpec, where_param
