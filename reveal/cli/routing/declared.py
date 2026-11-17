@@ -8,7 +8,7 @@ import os
 import sys
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Optional
 
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from ...utils.severity import CHECK_GATES
@@ -309,25 +309,34 @@ def _flag_param(spec: ParamSpec, flag: str) -> str:
 
 def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
     """Bind original argparse values; no URI string is constructed."""
-    from ...utils.query_binding import legacy_flag_dests
+    from ...utils.query_binding import flag_spellings, legacy_flag_dests
     adapter = declared_adapter_class(name)
     _note_retired_flags(name, adapter)
-    source = {}
+    source: dict = {}
+    spelled: Dict[str, str] = {}  # each key -> the flag that carried it, so errors name what was typed
     for spec in adapter.PARAM_SPECS:
         if spec.cli is None:
             # A boolean with no flag of its own is carried by the global flag of its name
             # (`--all` is `&all`), supplied only when set, as the URI spells it.
             if spec.type == 'boolean' and peek(args, spec.name, False) is True:
-                source[spec.name] = True
+                source[spec.name], spelled[spec.name] = True, _global_option(spec.name)
             continue
+        flags = flag_spellings(spec)
         dest = spec.cli.dest or spec.name
         if dest in vars(args):
             source[dest] = peek(args, dest)
+            spelled[dest] = flags.get(dest, dest)
         for legacy in legacy_flag_dests(spec):  # an old flag keeps its legacy name; the binder translates it
             if legacy in vars(args):
-                source[legacy] = peek(args, legacy)
+                source[legacy], spelled[legacy] = peek(args, legacy), flags[legacy]
     _run_declared(name, args, getattr(args, adapter.RESOURCE_SPEC.name), source, 'typed',
-                  answer_consumer=answer_consumer)
+                  answer_consumer=answer_consumer, spelled=spelled)
+
+
+def _global_option(dest: str) -> str:
+    """The global flag that carries *dest* (its option string; ``--verbose`` is not a query flag)."""
+    from .flag_specs import FLAG_SPECS
+    return next((flag.option for flag in FLAG_SPECS if flag.dest == dest), '--' + dest.replace('_', '-'))
 
 
 def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer_consumer=None) -> None:
@@ -343,17 +352,19 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
     _run_declared(name, args, path, query, 'uri', consumed, answer_consumer=answer_consumer)
 
 
-def _bind_legacy_cli_values(name, adapter, args, source):
+def _bind_legacy_cli_values(name, adapter, args, source, spelled=None):
     """Apply opted-in global flag values (``--all`` lifting a declared cap) through the same declaration as URI
     forwarding."""
     for spec in adapter.PARAM_SPECS:
         for flag, value in spec.cli_flags:
             if peek(args, flag, False) is True and spec.name not in source:
                 source[spec.name] = value
+                if spelled is not None:
+                    spelled[spec.name] = _global_option(flag)
                 delegate(args, flag, spec.name)
 
 
-def _bind_global_verbose(name, adapter, args, source) -> None:
+def _bind_global_verbose(name, adapter, args, source, spelled=None) -> None:
     """The subcommand's global ``--verbose`` through the declarations, as the URI route binds it (rule 4, BACK-2654
     note #17): the noun's own legacy word ``verbose`` (the binder translates it and rejects a conflicting canonical
     value; noted under its ``param:`` row) or ``detail=full`` (noted under ``flag:--verbose``)."""
@@ -367,16 +378,18 @@ def _bind_global_verbose(name, adapter, args, source) -> None:
     if key == 'detail' and given is not None and given != value:
         raise RequestValidationError(f'--verbose conflicts with --detail {given}: --verbose is --detail full; give one')
     source[key] = value
+    if spelled is not None:
+        spelled[key] = '--verbose'
     owner = next(spec.name for spec in adapter.PARAM_SPECS if key in spec.spellings)
     delegate(args, 'verbose', owner)  # unread when the answer does not read the control it stands for
     retirement_note('flag:--verbose' if key == 'detail' else f'param:{name}.verbose')
 
 
-def _delegate_typed_parameters(name, adapter, args, source, transport: str) -> None:
+def _delegate_typed_parameters(name, adapter, args, source, transport: str, spelled=None) -> None:
     """Forward declaration accounting only after the receiving ledger exists."""
     if transport != 'typed':
         return
-    _bind_legacy_cli_values(name, adapter, args, source)
+    _bind_legacy_cli_values(name, adapter, args, source, spelled)
     from ...utils.query_binding import legacy_flag_dests
     for spec in adapter.PARAM_SPECS:
         dest = (spec.cli.dest if spec.cli else None) or spec.name
@@ -403,7 +416,7 @@ def _walk_scope(adapter, path, args):
     return dispatch_scope(path, peek(args, 'exclude')) if adapter.RESOURCE_SPEC.walks else (None, [])
 
 def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=(), *,
-                  answer_consumer=None) -> None:
+                  answer_consumer=None, spelled: Optional[Dict[str, str]] = None) -> None:
     from ...utils.exclusions import exclusion_scope
     from ...utils.gitignore import gitignore_scope, split_respect_gitignore
     from ...utils.query_binding import bind_resource_path, prepare_declared_params
@@ -417,8 +430,8 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
         ledger = FlagLedger(args)
         args = ledger.track(args)
     mark(args, *consumed)
-    _delegate_typed_parameters(name, adapter, args, source, transport)
-    query_resource = _flagged_query(adapter, name, path, source, transport, args, consume)
+    _delegate_typed_parameters(name, adapter, args, source, transport, spelled)
+    query_resource = _flagged_query(adapter, name, path, source, transport, args, consume, spelled)
     if query_resource is None:
         return
     # Global query policy keeps its existing codec; never split the decoded path.
@@ -432,7 +445,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
         with dispatch:
             try:
                 _validate_walk_policy(adapter, args, query_walk_policy)
-                source = prepare_declared_params(adapter.PARAM_SPECS, source, transport)
+                source = prepare_declared_params(adapter.PARAM_SPECS, source, transport, spelled=spelled)
             except ValueError as exc:
                 consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
                 return
@@ -478,13 +491,13 @@ def _resource_error_message(error, path: str) -> str:
     return str(error)
 
 
-def _flagged_query(adapter, name, path, source, transport: str, args, consume) -> str | None:
+def _flagged_query(adapter, name, path, source, transport: str, args, consume, spelled=None) -> str | None:
     """The URI query with the global flags injected; None after answering a flag that conflicts with the
     URI's own value as an invalid request (BACK-2654)."""
     query_resource: str = '?' + source if transport == 'uri' else ''
     if transport != 'uri':
         try:
-            _bind_global_verbose(name, adapter, args, source)
+            _bind_global_verbose(name, adapter, args, source, spelled)
         except ValueError as exc:
             consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
             return None

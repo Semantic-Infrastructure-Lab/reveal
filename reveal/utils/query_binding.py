@@ -121,9 +121,17 @@ def _accumulated(values: list) -> list:
     return [item for value in values for item in (value if isinstance(value, (list, tuple)) else [value])]
 
 
-def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str, Any]) -> Dict[str, Any]:
+def _conflicting_spellings(spec: ParamSpec, present: list, spelled: Optional[Mapping[str, str]]) -> str:
+    """Rule 1's conflict, naming each spelling as typed (*spelled*: key -> the flag that carried it)."""
+    return f'{spec.name}: conflicting spellings: ' + ', '.join((spelled or {}).get(name, name) for name in present)
+
+
+def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str, Any],
+                       spelled: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
     """Every spelling of a control has one value owner; mixed spellings cannot hide precedence. A legacy
-    spelling's value is translated into the control's own (``rank=fan-in`` is ``sort=-fan-in``)."""
+    spelling's value is translated into the control's own (``rank=fan-in`` is ``sort=-fan-in``). A conflict names
+    each spelling as the request typed it: *spelled* maps a key to the flag that carried it (the subcommand form);
+    without it the key is what was typed (a URI key, an ``api.query`` keyword)."""
     result = dict(peek_query_items(supplied))
     for spec in declarations:
         present = [name for name in spec.spellings if name in result]
@@ -133,7 +141,7 @@ def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str,
         if spec.repeatable and len(values) > 1:  # an omitted spelling (None) adds no term
             values = [value for value in values if value is not None] or [None]
         if not _spellings_agree(spec, values):
-            raise ValueError(f'{spec.name}: conflicting spellings: ' + ', '.join(present))
+            raise ValueError(_conflicting_spellings(spec, present, spelled))
         result[spec.name] = _accumulated(values) if spec.repeatable and len(values) > 1 else values[0]
     return result
 
@@ -335,7 +343,9 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
 
 
 def prepare_declared_params(declarations: Iterable[ParamSpec],
-                   source: Union[str, Mapping[str, Any]], transport: str) -> QueryParams:
+                   source: Union[str, Mapping[str, Any]], transport: str, *,
+                   spelled: Optional[Mapping[str, str]] = None) -> QueryParams:
+    """*spelled*: for a typed source built from flags, the flag each key came from (see ``_normalize_aliases``)."""
     declarations = tuple(declarations)
     if transport == 'uri':
         if not isinstance(source, str):
@@ -347,7 +357,7 @@ def prepare_declared_params(declarations: Iterable[ParamSpec],
         raise ValueError(f'Unknown parameter transport {transport!r}')
     if isinstance(source, str):
         raise TypeError('Typed parameters must be a mapping')
-    supplied = _normalize_aliases(declarations, source)
+    supplied = _normalize_aliases(declarations, source, spelled)
     params = QueryParams()
     params._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
     params._supplied_aliases = {alias for spec in declarations for alias in spec.spellings[1:] if alias in source}
@@ -552,6 +562,14 @@ def _separate_legacy_flags(spec: ParamSpec) -> list:
 def legacy_flag_dests(spec: ParamSpec) -> Dict[str, str]:
     """The argparse dests of the legacy flags with arguments of their own -> the legacy name they carry."""
     return {entry.name: entry.name for entry in _separate_legacy_flags(spec)}
+
+
+def flag_spellings(spec: ParamSpec) -> Dict[str, str]:
+    """The key each of the control's generated arguments stores -> the flag that spells it (``add_declared_arguments``):
+    its own argument's first flag, and each legacy flag with an argument of its own."""
+    separate = {entry.name: entry.flag for entry in _separate_legacy_flags(spec)}
+    own = [flag for flag in (spec.cli.flags if spec.cli is not None else ()) if flag not in separate.values()]
+    return {**({(spec.cli.dest or spec.name): own[0]} if spec.cli is not None and own else {}), **separate}
 
 
 def _add_legacy_flag_arguments(parser, spec) -> None:
