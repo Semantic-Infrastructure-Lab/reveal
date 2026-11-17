@@ -49,13 +49,15 @@ def submit_each(executor, fn, items: Iterable) -> list[Future]:
 
     What the worker recorded for the invocation (a config problem met only there: a nested
     ``.reveal.yaml`` no parent-side read reaches) comes back with its result and joins the
-    parent's invocation log before the Future resolves; the worker never prints it (BACK-2659).
+    parent's invocation log before the Future resolves; the worker never prints it (BACK-2659). The
+    task also runs in the parent's answer format (``_carrying_warnings``).
     """
     log = current_log()
+    json_answer = log is not None and log.json_answer  # the worker answers in the parent's format
     futures = []
     for item in items:
         try:
-            carried = executor.submit(functools.partial(_carrying_warnings, fn), item)
+            carried = executor.submit(functools.partial(_carrying_warnings, fn, json_answer), item)
         except BrokenProcessPool as e:
             refused: Future = Future()
             refused.set_exception(e)
@@ -67,11 +69,17 @@ def submit_each(executor, fn, items: Iterable) -> list[Future]:
     return futures
 
 
-def _carrying_warnings(fn, item) -> tuple:
-    """Worker side of ``submit_each``: ``fn(item)`` and the invocation warnings it recorded first."""
+def _carrying_warnings(fn, json_answer: bool, item) -> tuple:
+    """Worker side of ``submit_each``: ``fn(item)`` and the invocation warnings it recorded first.
+    The task runs in the submitting invocation's answer format, so a per-file line the JSON states
+    is not printed by the worker either (``json_answer_running``)."""
     with task_log() as log:
-        before = set(log.warnings)
-        result = fn(item)
+        before, was_json = set(log.warnings), log.json_answer
+        log.json_answer = json_answer
+        try:
+            result = fn(item)
+        finally:
+            log.json_answer = was_json
         return result, [entry for key, entry in log.warnings.items() if key not in before]
 
 

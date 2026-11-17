@@ -112,6 +112,14 @@ def answer_is_json(is_json: bool) -> None:
         log.json_answer = is_json
 
 
+def json_answer_running() -> bool:
+    """True when the running invocation answers with a JSON document. A per-file stderr line that
+    repeats what that document states is then not printed: the JSON is the whole answer (COMMAND_MODEL
+    "Transports"); any other answer still prints it."""
+    log = _LOG.get()
+    return log is not None and log.json_answer
+
+
 @contextmanager
 def task_log() -> Iterator[InvocationLog]:
     """The log a pool task records into: its worker's (``open_worker_log``), else, for a pool

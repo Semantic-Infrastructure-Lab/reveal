@@ -15,6 +15,7 @@ from argparse import Namespace
 from typing import Any
 
 from ..utils.gitignore import set_gitignore_enabled
+from ..utils.invocation_log import answer_is_json
 from ..utils.json_utils import set_provenance_enabled
 
 
@@ -70,6 +71,9 @@ def rule_patterns(value: str) -> str:
 def apply_global_flags(args: Namespace) -> None:
     """Apply flags whose effect is process-global state, from a parsed ``args``."""
     set_provenance_enabled(bool(getattr(args, 'provenance', False)))
+    # A JSON answer carries the invocation's warnings and per-file diagnostics itself; any other
+    # prints them on stderr (the CLI and MCP's reveal_query both pass here).
+    answer_is_json(getattr(args, 'format', None) == 'json')
     # BACK-1386: --no-gitignore reaches every walker, not only the three
     # adapters that used to declare it.
     set_gitignore_enabled(getattr(args, 'respect_gitignore', True) is not False)

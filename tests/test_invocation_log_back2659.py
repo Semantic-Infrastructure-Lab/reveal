@@ -73,3 +73,33 @@ def test_a_task_run_in_the_caller_leaves_no_log_behind():
     from reveal.utils.parallel import submit_each
     assert [f.result() for f in submit_each(_InlineExecutor(), _record_in_worker, [3])] == [6]
     assert current_log() is None
+
+
+def test_json_answer_running_follows_the_answer_format():
+    from argparse import Namespace
+    from reveal.cli.global_flags import apply_global_flags
+    from reveal.utils.invocation_log import json_answer_running
+    assert json_answer_running() is False  # no invocation
+    with log_scope(to_stderr=False):
+        apply_global_flags(Namespace(format='json'))
+        assert json_answer_running() is True
+        apply_global_flags(Namespace(format='text'))
+        assert json_answer_running() is False
+
+
+def _format_in_worker(item):
+    from reveal.utils.invocation_log import json_answer_running
+    return json_answer_running()
+
+
+def test_a_pool_task_runs_in_the_submitting_invocations_answer_format():
+    from concurrent.futures import ThreadPoolExecutor
+    from reveal.utils.parallel import submit_each
+    for is_json in (True, False):
+        with log_scope(to_stderr=False), ThreadPoolExecutor(max_workers=2) as pool:
+            answer_is_json(is_json)
+            assert [f.result() for f in submit_each(pool, _format_in_worker, [1, 2])] == [is_json, is_json]
+    with log_scope(to_stderr=False) as log:  # a task run in the caller leaves the caller's format as it was
+        answer_is_json(True)
+        submit_each(_InlineExecutor(), _format_in_worker, [1])
+        assert log.json_answer is True
