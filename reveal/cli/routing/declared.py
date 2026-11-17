@@ -158,8 +158,8 @@ class _DeclaredParser(JsonUsageParser):
         return _invalid_answer(adapter, self.noun, path, message, args)
 
 
-def invalid_uri_request(target, message: str, args):
-    """The invalid-request Answer for a URI target whose noun is declared, or None (a file, another scheme)."""
+def _declared_uri(target):
+    """(adapter, scheme, path, query) for a URI target whose noun is declared, or None (a file, another scheme)."""
     from ...adapters.registry import get_adapter_class
     if not isinstance(target, str) or '://' not in target:
         return None
@@ -169,9 +169,34 @@ def invalid_uri_request(target, message: str, args):
             or getattr(adapter, 'PARAM_SPECS', None) is None):
         return None
     path, _, query = resource.partition('?')
+    return adapter, scheme, path, query
+
+
+def invalid_uri_request(target, message: str, args):
+    """The invalid-request Answer for a URI target whose noun is declared, or None (a file, another scheme)."""
+    declared = _declared_uri(target)
+    if declared is None:
+        return None
+    adapter, scheme, path, query = declared
     # A URI-only noun (codex) has no subcommand declaration to read its findings policy from.
     return _invalid_prepared_answer(adapter, scheme, path, '?' + query if query else '', message, args,
                                     default_fail_on=getattr(adapter, 'DEFAULT_FAIL_ON', 'none'))
+
+
+def uri_flag_message(target, message: str) -> str | None:
+    """Rule 3's one message for flags reveal does not have on a URI request of a declared noun, or None (argparse's
+    own error stands: another error, a file, an undeclared scheme). A flag spelling a control the noun declares
+    names where that control goes on a URI: its query key."""
+    from ...utils.query_binding import declared_spelling, unsupported_controls_message
+    declared = _declared_uri(target)
+    flags = [token for token in message.partition(':')[2].split() if token.startswith('-')]
+    if declared is None or not message.startswith('unrecognized arguments:') or not flags:
+        return None
+    declarations = declared[0].PARAM_SPECS
+    keys = [flag.lstrip('-').partition('=')[0] for flag in flags]
+    keys = [key for key in keys if declared_spelling(declarations, key) is not None]
+    where = '; on a URI, a control is a query key: ' + ', '.join(f'?{key}=VALUE' for key in keys) if keys else ''
+    return unsupported_controls_message(declarations, flags) + where
 
 
 def create_declared_parser(name: str) -> argparse.ArgumentParser:

@@ -19,6 +19,12 @@ class RequestValidationError(ValueError):
     """
 
 
+class UnsupportedOverrideError(RequestValidationError, TypeError):
+    """A typed keyword (``api.query(uri, NAME=...)``) that names no control the noun declares: rule 3's one message
+    (COMMAND_MODEL "Unsupported controls", BACK-2654), a request validation error to every transport, and still the
+    TypeError an unexpected keyword argument is to a library caller."""
+
+
 class NavRequestValidationError(RequestValidationError):
     """The file-navigation owner rejected an unsupported analysis or depth control.
 

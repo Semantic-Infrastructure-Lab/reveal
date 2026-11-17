@@ -14,7 +14,7 @@ from typing import Optional
 _PACKAGE_DIR = Path(__file__).resolve().parent.parent
 from .global_flags import add_exclude_argument, add_gitignore_arguments, rule_patterns
 from ..utils.query_binding import ScalarOnceAction
-from .routing.declared import JsonUsageParser, invalid_uri_request
+from .routing.declared import JsonUsageParser, invalid_uri_request, uri_flag_message
 from ..rules.base import category_legend
 
 
@@ -776,8 +776,8 @@ class _ScopedErrorArgumentParser(JsonUsageParser):
     regardless of what was actually invoked — misleading for a plain `.py`
     file error. This only narrows the *unrecognized arguments* case; other
     argparse errors (bad choice, missing value) keep the default behavior
-    since their usage context is still relevant to the flag involved. In JSON mode a URI target whose noun is
-    declared answers with the invalid-request document instead (``JsonUsageParser``).
+    since their usage context is still relevant to the flag involved. A URI target whose noun is declared gets rule
+    3's one message for an unknown flag instead, and in JSON mode the invalid-request document (``JsonUsageParser``).
     """
 
     def invalid_request(self, message: str, args):
@@ -785,7 +785,12 @@ class _ScopedErrorArgumentParser(JsonUsageParser):
 
     def error(self, message: str) -> None:
         self.stop_tolerant_reread(message)
-        self.answer_in_json(message)
+        args = self._typed_request()
+        taught = uri_flag_message(getattr(args, 'path', None), message)  # rule 3's one message (BACK-2654)
+        self.answer_in_json(taught or message, args)
+        if taught is not None:
+            self._print_message(f'{self.prog}: error: {taught}\n', sys.stderr)
+            self.exit(2)
         if message.startswith('unrecognized arguments:'):
             positional_usage = ' '.join(
                 self._format_positional_usage(action)

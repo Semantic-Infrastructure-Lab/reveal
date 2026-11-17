@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import quote, unquote
 
-from ..errors import RequestValidationError
+from ..errors import RequestValidationError, UnsupportedOverrideError
 from .query_parser import (SHARED_CONTROL_NAMES, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
                            parse_query_params, peek_query_items, query_key)
 
@@ -263,6 +263,14 @@ def unsupported_controls_message(declarations: Iterable[ParamSpec], unknown: Ite
             f"{_shared_name_clause(declarations, unknown)}")
 
 
+def declared_spelling(declarations: Iterable[ParamSpec], word: str) -> Optional[str]:
+    """The declared control a word spells (a name, spelling variant or legacy word; ``_`` and ``-`` alike), or None."""
+    declarations = tuple(declarations)
+    wanted = word.replace('_', '-')
+    return next((spec.name for spec in declarations
+                 if wanted in {key.replace('_', '-') for key in _declared_keys((spec,))}), None)
+
+
 def _declared_keys(declarations: tuple[ParamSpec, ...]) -> set:
     """Every URI key a declaration spells: names, spelling variants and every legacy word (value-keyed and
     first-position selectors included)."""
@@ -417,13 +425,16 @@ def reject_two_answers(declarations: Iterable[ParamSpec], params: Mapping[str, A
                                      'give one of ' + ', '.join(spec.name for spec in operations))
 
 
-def _unsupported_override_message(declarations: Iterable[ParamSpec], unknown: list[str]) -> str:
-    message = 'Unsupported declared parameter override(s): ' + ', '.join(repr(key) for key in unknown)
-    symbol = next((spec.name for spec in declarations
-                   if spec.names == 'symbol' and spec.role == 'operation'), None)
-    if symbol is not None:
-        message += f'. Use {symbol}=NAME for a supported per-symbol lookup; no equivalent filter is implied.'
-    return message
+def reject_unsupported_overrides(declarations: Iterable[ParamSpec], overrides: Mapping[str, Any]) -> None:
+    """A typed override that names no declared spelling of the noun (``_`` and ``-`` alike) is rule 3's invalid
+    request, with the one shared message (BACK-2654). ``api.query`` reads it for a declared noun whose structure call
+    takes the overrides itself; a bound noun's binder checks canonical names after alias translation
+    (``apply_declared_overrides``) and raises the same error and message."""
+    declarations = tuple(declarations)
+    keys = {key.replace('-', '_') for key in _declared_keys(declarations)}
+    unknown = [key for key in overrides if str(key).replace('-', '_') not in keys]
+    if unknown:
+        raise UnsupportedOverrideError(unsupported_controls_message(declarations, unknown))
 
 
 def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryParams,
@@ -437,7 +448,7 @@ def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryPar
         names = {spec.name for spec in declarations}
         unknown = [key for key in supplied if key not in names]
         if unknown:
-            raise TypeError(_unsupported_override_message(declarations, unknown))
+            raise UnsupportedOverrideError(unsupported_controls_message(declarations, unknown))
         from .query_parser import query_key_recorder
         query_key_recorder(*supplied)
         params._overrides.update(supplied)

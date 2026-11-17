@@ -267,6 +267,14 @@ def query(
                 return result
             bound_result: Dict[str, Any] = _noted_answer(scheme, uri, kwargs, bound_answer)
             return bound_result
+        # Only a class's own declaration adopts the check, as with BOUND_QUERY_CALL: a plugin subclass that inherits
+        # PARAM_SPECS keeps forwarding its keywords to its own structure call.
+        declarations = vars(adapter_class).get('PARAM_SPECS') if isinstance(adapter_class, type) else None
+        if not element_name and kwargs and declarations is not None:
+            # A declared noun whose structure call takes the overrides itself: an undeclared one is the same invalid
+            # request, with the same message, as on a bound noun (rule 3, BACK-2654).
+            from .utils.query_binding import reject_unsupported_overrides
+            reject_unsupported_overrides(declarations, kwargs)
         if isinstance(adapter_class, type) and hasattr(adapter_class, "from_uri"):
             adapter = adapter_class.from_uri(scheme, resource, element_name)
         else:
