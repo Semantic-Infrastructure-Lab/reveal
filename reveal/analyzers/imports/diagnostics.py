@@ -5,7 +5,7 @@ from typing import Any, Callable, List, Optional, Tuple, cast
 from .types import ImportAnalysis
 from ...reveal_types import PathFailure, WarningEntry
 from ...utils.parallel import worker_lost_warning as _worker_lost_warning
-from ...utils.path_utils import failure_records, to_posix, to_relative_display
+from ...utils.path_utils import failure_records, respell_reason, to_posix, to_relative_display
 
 def worker_lost_warning(lost_files: List[str], base: Optional[Path] = None) -> Optional[WarningEntry]:
     """One meta warning for the files a dead pool worker took down before they were
@@ -65,7 +65,7 @@ def file_loss_warnings(analysis: ImportAnalysis, base: Optional[Path] = None, *,
             continue
         cause = _unread_cause(analysis, path)
         if cause is not None:
-            unread.append((name(path), cause))
+            unread.append((name(path), respell_reason(cause, path, name(path))))
     warnings = [parse_failure_warning(partial, base), worker_lost_warning([name(p) for p in lost], base),
                 analysis_skipped_warning(unread, base, 'analysis is incomplete; its imports are missing from the '
                                                        'import graph')]
@@ -116,7 +116,8 @@ def integrity_warnings(analysis: ImportAnalysis, base: Optional[Path] = None, *,
         base = None
     traversal = [PathFailure(name(path) if path else path, cause)
                  for path, cause in getattr(analysis.graph, 'traversal_failures', ())]
-    structure_failures = [(name(path), cause) for path, cause in analysis.structure_failures]
+    structure_failures = [(name(path), respell_reason(cause, path, name(path)))
+                          for path, cause in analysis.structure_failures]
     warnings = [traversal_failed_warning(traversal, base),
                 *file_loss_warnings(analysis, base, spell=spell),
                 analysis_skipped_warning(
