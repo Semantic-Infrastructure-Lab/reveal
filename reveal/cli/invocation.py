@@ -27,6 +27,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterator, NamedTuple, Optional, Sequence, Tuple
 
+from ..utils.invocation_log import current_log, log_scope
+
 
 class CommandSpec(NamedTuple):
     """A named subcommand: where its parser and runner live, and what it renders."""
@@ -549,17 +551,6 @@ def retired_flag_key(option: str) -> Optional[str]:
     return matches[0] if len(matches) == 1 else None
 
 
-class RetirementLog:
-    """The retired spellings one invocation used. ``to_stderr`` is False for a host (MCP) that
-    returns the fact in its result instead of printing it."""
-
-    def __init__(self, to_stderr: bool = True) -> None:
-        self.to_stderr = to_stderr
-        self.noted: Dict[str, Retirement] = {}
-        self.recorded: Dict[str, Retirement] = {}
-
-
-_LOG: ContextVar[Optional[RetirementLog]] = ContextVar('reveal_retirement_log', default=None)
 
 
 def _shared_name_retirement(key: str) -> Optional[Retirement]:
@@ -590,7 +581,7 @@ def retirement_note(key: str) -> Optional[Retirement]:
         return None
     if entry.stage == 'error':
         raise RetiredSpellingError(key, entry)
-    log = _LOG.get()
+    log = current_log()
     if log is None:  # a library call outside any invocation: nobody to tell
         return entry
     if entry.stage == 'phase7':
@@ -604,7 +595,7 @@ def retirement_note(key: str) -> Optional[Retirement]:
 
 def noted_retirements() -> Dict[str, Retirement]:
     """The ``note``-stage spellings this invocation used, by key."""
-    log = _LOG.get()
+    log = current_log()
     return dict(log.noted) if log is not None else {}
 
 
@@ -789,12 +780,11 @@ def current_invocation() -> Optional[Invocation]:
 @contextmanager
 def invocation_scope(invocation: Invocation, *, retirements_to_stderr: bool = True) -> Iterator[Invocation]:
     """Publish ``invocation`` for the code it runs, and restore the previous one on exit. It
-    also opens the invocation's RetirementLog; the MCP server passes
+    also opens the invocation's log (``utils.invocation_log``); the MCP server passes
     ``retirements_to_stderr=False`` and returns the fact in the tool result."""
     token = _CURRENT.set(invocation)
-    log_token = _LOG.set(RetirementLog(retirements_to_stderr))
     try:
-        yield invocation
+        with log_scope(retirements_to_stderr):
+            yield invocation
     finally:
-        _LOG.reset(log_token)
         _CURRENT.reset(token)
