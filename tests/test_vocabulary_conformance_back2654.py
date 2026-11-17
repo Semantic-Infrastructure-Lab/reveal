@@ -1972,7 +1972,7 @@ def test_each_evidence_field_left_out_of_rule_14_is_the_whole_difference(workspa
     assert _without_fields(doc_a, names) == _without_fields(doc_b, names), f'{noun}: differs beyond {names}'
 
 
-def test_an_explicit_switch_overrides_its_environment_default(workspace):
+def test_an_explicit_switch_overrides_its_environment_default(workspace, settled_hints):
     """Rule 14 on a switch (rule 15): REVEAL_BREADCRUMBS=0 is a default, so --breadcrumbs on overrides it; the control
     is the same environment without the switch, which prints no breadcrumbs (and REVEAL_BREADCRUMBS=1 does)."""
     with _env(REVEAL_BREADCRUMBS='0'):

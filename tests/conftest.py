@@ -148,6 +148,20 @@ def hosted() -> Generator[None, None, None]:
 
 
 @pytest.fixture
+def settled_hints(monkeypatch):
+    """Every one-time breadcrumb hint counts as already shown.
+
+    ``_show_hint_once`` and ``_show_breadcrumb_hint_once`` remember what they printed under the
+    user data directory, so in a fresh home (CI) the first breadcrumb run of a test prints lines
+    the second run suppresses, while a developer's home has seen them all and both runs match.
+    A test that compares two breadcrumb runs as one answer needs this fixture, or it passes
+    locally and fails on every CI job.
+    """
+    monkeypatch.setattr('reveal.utils.breadcrumbs._show_hint_once', lambda hint_id, lines: False)
+    monkeypatch.setattr('reveal.utils.breadcrumbs._show_breadcrumb_hint_once', lambda: None)
+
+
+@pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for test files.
 

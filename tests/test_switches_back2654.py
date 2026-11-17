@@ -46,7 +46,7 @@ SWITCH_OF = {label: label.split('-')[0] for label in CASES}
 
 
 @pytest.fixture
-def project(tmp_path, monkeypatch):
+def project(tmp_path, monkeypatch, settled_hints):
     (tmp_path / 'a.py').write_text('def f(x):\n    return x\n', encoding='utf-8')
     (tmp_path / 'long.py').write_text(_LONG_LINES, encoding='utf-8')
     (tmp_path / 'x.unknownext').write_text('hello\n', encoding='utf-8')
