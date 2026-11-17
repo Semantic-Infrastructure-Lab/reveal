@@ -67,7 +67,7 @@ from reveal.adapters.factory import uses_bound_query_call
 from reveal.cli.invocation import COMMANDS, RETIREMENTS
 from reveal.cli.routing.declared import create_declared_parser, declared_adapter_class
 from reveal.cli.routing.flag_specs import FLAG_SPECS
-from reveal.utils.query_parser import query_key
+from reveal.utils.query_parser import SHARED_CONTROL_NAMES, query_key
 
 
 def _declared_nouns():
@@ -88,12 +88,13 @@ TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json'}
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
 CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session'}
 
-# The shared controls of COMMAND_MODEL section 1 rule 3, each with a value a supporting noun would accept.
-# Left out: view (the deferred row, D18), format/output (global presentation), head/tail/range (path reads only)
-# and max-entries/dir-limit (directory reads only).
-SHARED_CONTROLS = {'limit': '1', 'offset': '1', 'sort': 'name', 'where': 'lines>1', 'match': 'x', 'detail': 'full',
-                   'kind': 'function', 'depth': '1', 'tests': 'exclude', 'since': '2020-01-01',
-                   'until': '2030-01-01', 'against': 'HEAD'}
+# The shared controls (rule 7: the one declared list, query_parser.SHARED_CONTROL_NAMES), each probed with a value a
+# supporting noun would accept. Left out: view (the deferred row, D18). Not shared controls: format/output (global
+# presentation), head/tail/range (path reads only) and max-entries/dir-limit (directory reads only).
+_PROBE_VALUES = {'limit': '1', 'offset': '1', 'sort': 'name', 'where': 'lines>1', 'match': 'x', 'detail': 'full',
+                 'kind': 'function', 'depth': '1', 'tests': 'exclude', 'since': '2020-01-01',
+                 'until': '2030-01-01', 'against': 'HEAD'}
+SHARED_CONTROLS = {name: _PROBE_VALUES[name] for name in SHARED_CONTROL_NAMES if name != 'view'}
 
 # --- the recorded matrix -----------------------------------------------------------------------------------
 
@@ -1515,10 +1516,9 @@ def test_no_declared_noun_warns_about_unknown_keys_itself(noun):
 
 def test_the_shared_control_names_are_declared_once_in_shared_code():
     """COMMAND_MODEL "Shared control names": one declared list in shared code (rule 7) that the binder reads (rule 8)."""
-    from reveal.utils.query_parser import SHARED_CONTROL_NAMES
     assert SHARED_CONTROL_NAMES == ('limit', 'offset', 'sort', 'where', 'match', 'detail', 'kind', 'depth', 'tests',
                                     'since', 'until', 'against', 'view')
-    assert set(SHARED_CONTROLS) <= set(SHARED_CONTROL_NAMES)
+    assert set(SHARED_CONTROLS) == set(SHARED_CONTROL_NAMES) - {'view'}  # the probes read the one list
 
 
 def test_the_unknown_key_message_names_the_controls_and_fields():
@@ -1691,3 +1691,26 @@ def test_ast_bare_depth_answers_as_where_depth(deep, term):
     text_old, text_new = _run(legacy), _run(canonical)
     assert text_old.rc == text_new.rc == 0 and text_old.out == text_new.out
     assert 'ast ?depth' in text_old.err and 'ast ?depth' not in text_new.err
+
+
+# --- rule 7 (Step 4 item C): one declared shared-control list feeds every noun's rejection ------------------------
+
+@pytest.mark.parametrize('noun', NOUNS)
+def test_no_noun_declares_a_control_only_to_reject_it(noun):
+    """A shared control a noun does not take is rejected by the binder and the declared parser from the one list
+    (query_parser.SHARED_CONTROL_NAMES), never by a per-noun hand-typed list of reject-only declarations."""
+    import inspect
+    assert not [spec.name for spec in _adapter(noun).PARAM_SPECS if spec.role == 'unsupported']
+    assert 'UNSUPPORTED_SHARED' not in inspect.getsource(inspect.getmodule(_adapter(noun)))
+
+
+@pytest.mark.parametrize('argv', [('metrics://proj?match=x',), ('metrics://proj?kind=function',),
+                                  ('metrics://proj?until=2030-01-01',), ('metrics', 'proj', '--match', 'x'),
+                                  ('metrics', 'proj', '--depth', '1')])
+def test_metrics_rejects_an_unsupported_shared_control_through_the_shared_message(workspace, argv):
+    from reveal.utils.query_binding import unsupported_controls_message
+    key = argv[0].rpartition('?')[2].partition('=')[0] if len(argv) == 1 else argv[2]
+    run = _run(*argv, '--format', 'json')
+    assert run.rc == 2, run.brief()
+    expected = unsupported_controls_message(_adapter('metrics').PARAM_SPECS, [key])
+    assert expected in run.err, run.err
