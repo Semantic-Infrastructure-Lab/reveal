@@ -44,6 +44,10 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       naming both; every ``view`` is such a control.
   18  every scalar global flag repeated with different values exits 2 (presentation flags included); equal is one.
   20  applicability (BACK-2656, measured only): a declared control the selected answer does not read exits 2.
+  14  defaults (Scott 2026-11-16): an environment or config value is a default, never a conflict: with
+      ``REVEAL_FORMAT=json`` a request answers as ``--format json``, and ``--format text`` / ``--output text`` answer as
+      with no default (no exit 2); on a noun that walks, ``REVEAL_IGNORE=P`` combines with ``--exclude Q`` (the answer
+      of ``--exclude P --exclude Q``), and an equal ``--exclude P`` is one; a declared ``exclude`` URI key combines too.
   21j transports, JSON mode (manager ruling, BACK-2654 note #23 (A)): an invalid request in ``--format json`` or
       ``--output json`` (an unknown flag, a flag missing its value, a value outside its choices, an extra argument, a
       malformed ``--output`` spec), on the URI and on the subcommand, answers with the invalid-request JSON document
@@ -83,7 +87,7 @@ def _declared_nouns():
 
 NOUNS = _declared_nouns()
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
-         '21j')
+         '14', '21j')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the two declared nouns it has no row for. None: no subcommand (codex is URI-only; stats is metrics' retired scheme).
@@ -137,7 +141,7 @@ EXEMPT = {
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
 # conform on every noun, and none may be recorded below except OUT_OF_SCOPE cells (the prompt names their package).
-DEFAULT_NOW = ('1a', '1b', '1c', '1d', '2', '5', '6', '10', '12', '16', '17', '18', '21j')
+DEFAULT_NOW = ('1a', '1b', '1c', '1d', '2', '5', '6', '10', '12', '14', '16', '17', '18', '21j')
 # Cells of those rules owned by another package, named by the prompt: each must still fail (a fixed one is removed).
 _OVERVIEW_TOP = 'out of scope: Overview/Architecture top is its own package (--limit is hand-listed on top)'
 _SWITCH = 'out of scope: the Switches rule renames this noun\'s no_* flag in its own package'
@@ -167,8 +171,12 @@ RECORDED_EXCEPTIONS = {('metrics', '_top_conflict'): 'BACK-2656: in view=hotspot
                                                      'top and limit exit 2; top is standalone, so no legacy entry '
                                                      'generates the conflict'}
 # Cells stopped for a ruling (a case the rules do not settle); each must still fail, and the manager owns the list.
-# Empty since rule 19 (Step 4) settled claude x 12.
-STOPPED: dict = {}
+# Rule 19 (Step 4) settled claude x 12. Rule 14 (L1c item C): REVEAL_IGNORE / config ``ignore:`` is applied by every walk,
+# evidence walks included (path_utils.walk_filter, BACK-1201), while --exclude narrows the report only (EVIDENCE walks
+# do not honour it, BACK-1259); the table's "config exclude" does not exist. Hotspots' test hints read an evidence
+# walk, so the env pattern and an equal --exclude answer differently (has_test_hint).
+STOPPED: dict = {('hotspots', '14'): 'ruling pending: is config/env ignore a default of exclude (rule 14) or its own '
+                                     'always-on setting? has_test_hint differs (evidence walk)'}
 # Rule 9: the retired stats:// scheme is exempt (deleted at the cut); metrics' cells measure the owner it shares.
 RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted at the cut; metrics:// is measured'}
 
@@ -187,7 +195,7 @@ NOT_YET = {
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6, '21j': 0}
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6, '14': 0, '21j': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -1183,6 +1191,79 @@ def probe_applicability(noun):
     return cases
 
 
+# --- rule 14: environment and config values are defaults ---------------------------------------------------
+
+class _env:
+    """Set environment variables for the requests inside the block, then restore them."""
+
+    def __init__(self, **values):
+        self.values, self.saved = values, {}
+
+    def __enter__(self):
+        self.saved = {name: os.environ.get(name) for name in self.values}
+        os.environ.update(self.values)
+
+    def __exit__(self, *exc):
+        for name, value in self.saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+# Two of the fixture project's paths: the environment ignores one, the request excludes the other.
+_IGNORED, _EXCLUDED = 'tests', 'guide.md'
+
+
+def _excluded_answer(run, noun):
+    """The answer with the two places that name an exclusion's source left out: next-step commands echo the
+    request's own ``--exclude`` values (the environment applies to the next command by itself), and
+    ``scope.hidden.by_cause`` says which source hid a path (``exclude`` versus ``reveal_ignore``); its total stays."""
+    rc, doc = _answer(run, noun)
+    if isinstance(doc, dict):
+        doc = json.loads(json.dumps(doc))
+        doc.pop('next_steps', None)
+        hidden = (doc.get('scope') or {}).get('hidden') if isinstance(doc.get('scope'), dict) else None
+        if isinstance(hidden, dict) and isinstance(hidden.get('by_cause'), dict):
+            hidden['by_cause'] = sum(v for v in hidden['by_cause'].values() if isinstance(v, int))
+    return rc, doc
+
+
+def probe_defaults(noun):
+    forms = {'URI': [_uri(noun)]}
+    if _sub(noun) is not None:
+        forms['subcommand'] = _sub(noun)
+    walks = bool(getattr(_adapter(noun).RESOURCE_SPEC, 'walks', False))
+    cases = []
+    for form, request in forms.items():
+        json_answer, text = _run(*request, '--format', 'json'), _run(*request)
+        with _env(REVEAL_FORMAT='json'):
+            default, explicit, sink = _run(*request), _run(*request, '--format', 'text'), _run(*request, '--output', 'text')
+        cases.append(Case(f'{form} REVEAL_FORMAT=json is the default', _answer(default, noun) == _answer(json_answer, noun),
+                          f'{default.brief()} answers differently from --format json'))
+        for label, run in (('--format text', explicit), ('--output text', sink)):
+            cases.append(Case(f'{form} {label} overrides REVEAL_FORMAT=json', (run.rc, run.out) == (text.rc, text.out),
+                              f'{run.brief()} answers differently from no default (exit {text.rc})'))
+        if not walks:
+            continue
+        both = _run(*request, '--exclude', _IGNORED, '--exclude', _EXCLUDED, '--format', 'json')
+        alone = _run(*request, '--exclude', _IGNORED, '--format', 'json')
+        with _env(REVEAL_IGNORE=_IGNORED):
+            combined = _run(*request, '--exclude', _EXCLUDED, '--format', 'json')
+            equal = _run(*request, '--exclude', _IGNORED, '--format', 'json')
+        cases.append(Case(f'{form} REVEAL_IGNORE combines with --exclude', _excluded_answer(combined, noun) == _excluded_answer(both, noun),
+                          f'{combined.brief()} answers differently from --exclude {_IGNORED} --exclude {_EXCLUDED}'))
+        cases.append(Case(f'{form} REVEAL_IGNORE and an equal --exclude are one', _excluded_answer(equal, noun) == _excluded_answer(alone, noun),
+                          f'{equal.brief()} answers differently from --exclude {_IGNORED}'))
+    if _spec_for(noun, 'exclude') is not None:
+        both = _run(_uri(noun, f'exclude={_IGNORED}', f'exclude={_EXCLUDED}'), '--format', 'json')
+        with _env(REVEAL_IGNORE=_IGNORED):
+            combined = _run(_uri(noun, f'exclude={_EXCLUDED}'), '--format', 'json')
+        cases.append(Case('URI ?exclude= combines with REVEAL_IGNORE', _excluded_answer(combined, noun) == _excluded_answer(both, noun),
+                          f'{combined.brief()} answers differently from ?exclude=A&exclude=B'))
+    return cases
+
+
 # --- rule 21 (Transports), JSON mode: an invalid request answers with its JSON document ------------------
 
 def _value_flag(noun):
@@ -1248,7 +1329,7 @@ PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repe
           '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
           '8b': probe_bare_field_filters, '10': probe_spellings_declared, '12': probe_repeatability_declared,
           '16': probe_legacy_operations, '17': probe_one_answer, '18': probe_repeated_global_flags,
-          '20': probe_applicability, '21j': probe_invalid_requests_answer_json}
+          '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json}
 # These also run the retirement cases' sample file.
 SAMPLE_PROBES = {'2': probe_retirement_notes, '5': probe_legacy_declarations, '6': probe_alias_notes}
 
@@ -1816,3 +1897,11 @@ def test_a_declared_control_given_as_a_flag_on_a_uri_names_its_query_key(workspa
     assert text.rc == 2 and taught in text.err and key in text.err and not text.out.strip(), text.brief()
     run = _run(_uri(noun), flag, value, '--format', 'json')
     assert run.rc == 2 and taught in json.loads(run.out)['error'] and key in json.loads(run.out)['error'], run.brief()
+
+
+def test_the_environment_ignore_pattern_binds_on_the_fixture(workspace):
+    """Positive control for rule 14's combine cases: REVEAL_IGNORE alone hides the fixture's tests directory."""
+    plain = _run('ast://proj?kind=function', '--format', 'json')
+    with _env(REVEAL_IGNORE=_IGNORED):
+        ignored = _run('ast://proj?kind=function', '--format', 'json')
+    assert 'test_app.py' in plain.out and 'test_app.py' not in ignored.out, (plain.brief(), ignored.brief())
