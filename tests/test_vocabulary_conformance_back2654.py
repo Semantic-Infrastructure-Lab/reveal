@@ -1400,6 +1400,39 @@ def test_claude_one_match_term_answers_as_before_even_repeated(claude_home, uri)
         assert case.ok, case.evidence
 
 
+# Rule 19 echo (Scott 2026-11-16, BACK-2654 note #13): every Claude reader echoes its match terms as a list, one term
+# included (one type per field). Each case: (URI, the echo field, a term that matches a row there).
+MATCH_ECHO = [
+    ('claude://session/my-session', lambda d: d['term'], 'validate'),
+    ('claude://session/my-session/messages', lambda d: d['search'], 'validate'),
+    ('claude://session/my-session?tools=Read,Bash,Edit', lambda d: json.loads(d['query'])['contains'], 'file'),
+    ('claude://session/my-session?errors', lambda d: json.loads(d['query'])['contains'], 'error'),
+    ('claude://history', lambda d: d['search'], 'fix'),
+    ('claude://search', lambda d: d['term'], 'validate'),
+    ('claude://sessions', lambda d: d['term'], 'validate'),
+    ('claude://plans', lambda d: d['search'], 'token'),
+    ('claude://agents', lambda d: d['search'], 'review'),
+    ('claude://memory', lambda d: d['search'], 'feedback'),
+    ('claude://session/my-session/workflow', lambda d: d['meta']['workflow_selection']['match'], 'auth'),
+]
+
+
+@pytest.mark.parametrize('uri,echo,term', MATCH_ECHO, ids=[case[0].partition('://')[2] for case in MATCH_ECHO])
+def test_claude_match_echo_is_always_a_list_of_terms(claude_home, uri, echo, term):
+    one = json.loads(_run(_with(uri, term), '--format', 'json').out)
+    assert echo(one) == [term], (uri, echo(one))
+    two = json.loads(_run(_with(uri, term, _ZERO), '--format', 'json').out)
+    assert echo(two) == [term, _ZERO], (uri, echo(two))
+    repeated = json.loads(_run(_with(uri, term, term), '--format', 'json').out)
+    assert echo(repeated) == [term], (uri, echo(repeated))
+
+
+def test_claude_match_text_prints_one_term_as_itself_and_several_joined_by_and():
+    from reveal.adapters.claude.match_terms import term_echo, term_label
+    assert term_echo(['a']) == ['a'] and term_echo(['a', 'b']) == ['a', 'b']
+    assert term_label(term_echo(['a'])) == 'a' and term_label(term_echo(['a', 'b'])) == 'a AND b'
+
+
 def test_claude_match_repeats_on_the_subcommand_as_on_the_uri(claude_home):
     sub = _run('claude', 'session/my-session', '--match', 'validate', '--match', 'path', '--format', 'json')
     uri = _run('claude://session/my-session?match=validate&match=path', '--format', 'json')
