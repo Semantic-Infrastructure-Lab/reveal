@@ -116,7 +116,11 @@ def test_two_requested_signals_keep_primary_rows_and_deduplicate_native_causes(
         row['relative'] for row in answer['files']}
     assert answer['meta']['selected'] == answer['meta']['total_candidates']
     assert not answer.get('error')
-    assert not answer['meta'].get('warnings')  # Optional loss is not required inventory loss.
+    # Optional loss is not required inventory loss; a file the build parsed only through error
+    # recovery is degraded input, which every noun names (COMMAND_MODEL 'Degraded input', BACK-2665).
+    expected = [[(tmp_path / 'bad.py').as_posix()]] if profile in ('parse', 'combined') else []
+    assert [w['files'] for w in answer['meta'].get('warnings', [])] == expected
+    assert all(w['type'] == 'parse_recovered' for w in answer['meta'].get('warnings', []))
     note = answer['meta'].get('relevance_warning', '')
     assert 'not computed completely' in note and 'unavailable or incomplete' in note, answer
     assert 'heuristics and recency only' in note
@@ -136,12 +140,16 @@ def test_public_legacy_success_reports_optional_fallback_with_healthy_candidates
     if route.endswith('json'):
         args += ['--format', 'json']
     result = _run_reveal_direct(*args)
-    assert result.returncode == 0, result.stderr
+    # The 'combined' loss includes a file parsed only through error recovery: degraded input is an
+    # incomplete answer (exit 3) on every noun (COMMAND_MODEL 'Degraded input', BACK-2665).
+    assert result.returncode == 3, result.stderr
     warnings = _assert_native_loss(native_fault, 'combined')
     assert len(native_fault['builds']) == 2
     if route.endswith('json'):
         answer = json.loads(result.stdout)
         assert answer['files'] and not answer.get('error')
+        (recovered,) = [w for w in answer['meta']['warnings'] if w['type'] == 'parse_recovered']
+        assert [f.rsplit('/', 1)[-1] for f in recovered['files']] == ['bad.py']
         note = answer['meta'].get('relevance_warning', '')
     else:
         assert 'focus.py' in result.stdout

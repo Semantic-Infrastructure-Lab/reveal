@@ -23,6 +23,7 @@ from ..rendering.adapters.pack import PackRenderer
 from ..utils.path_utils import (
     DISPLAY,
     _walk_code_files,
+    as_spelled,
     classify_path_provenance,
     to_posix,
     traversal_failed_warning,
@@ -130,20 +131,24 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
 
 
 def _build_pack_import_graph(
-    path: Path, failures: Optional[List[str]] = None,
+    path: Path, failures: Optional[List[str]] = None, *, recovered: Optional[List[str]] = None,
 ) -> Tuple[Optional[Any], Set[Path]]:
     """Build reveal's multi-language import/dependency graph for *path*.
 
     Returns ``(graph, scanned_files)``, or ``(None, set())`` on any failure, and
     appends the failure's ``Type: message`` to *failures* when given, so the caller
-    can say the signal it asked for is missing.
+    can say the signal it asked for is missing. The files the build read only through
+    tree-sitter error recovery are appended to *recovered* (spelled as *path* is) whether
+    or not the graph is kept: Pack parsed them, so its answer names them (BACK-2665).
     Shared by ``_fetch_fan_in`` (--architecture) and ``_compute_graph_relevance``
     (--focus, BACK-833) so there is exactly one lazy-import/build site for
     the public import-analysis service in this module.
     """
     try:
-        from ..analyzers.imports.diagnostics import integrity_warnings
+        from ..analyzers.imports.diagnostics import integrity_warnings, recovered_paths
         built = import_analysis.analyze(import_analysis.path_scope(path.resolve()))
+        if recovered is not None:
+            recovered.extend(as_spelled(found, path) for found in recovered_paths(built.analysis))
         warnings = integrity_warnings(built.analysis, path)
         if warnings:
             if failures is not None:
@@ -184,14 +189,16 @@ def _pack_edge_rule(graphs: List[Tuple[str, Any]]) -> Dict[str, Any]:
 
 
 def _fetch_fan_in(path: Path, failures: Optional[List[str]] = None, *,
-                  graphs: Optional[List[Tuple[str, Any]]] = None) -> Dict[str, int]:
+                  graphs: Optional[List[Tuple[str, Any]]] = None,
+                  recovered: Optional[List[str]] = None) -> Dict[str, int]:
     """Return {abs_path: fan_in} for all files under *path* via the import-analysis service.
 
     Returns empty dict on any failure — callers treat missing entries as fan_in=0
     (the failure is appended to *failures* when given). The graph the counts came from
-    is appended to *graphs* when given (as ``('fan_in', graph)``), so the caller can state the rule they follow.
+    is appended to *graphs* when given (as ``('fan_in', graph)``), so the caller can state the rule they follow,
+    and the recovered files to *recovered* (see ``_build_pack_import_graph``).
     """
-    graph, scanned_files = _build_pack_import_graph(path, failures)
+    graph, scanned_files = _build_pack_import_graph(path, failures, recovered=recovered)
     if graph is None:
         return {}
     _note_graph(graphs, 'fan_in', graph)
@@ -201,7 +208,7 @@ def _fetch_fan_in(path: Path, failures: Optional[List[str]] = None, *,
 
 def _compute_graph_relevance(
     path: Path, focus: Optional[str], failures: Optional[List[str]] = None, *,
-    graphs: Optional[List[Tuple[str, Any]]] = None,
+    graphs: Optional[List[Tuple[str, Any]]] = None, recovered: Optional[List[str]] = None,
 ) -> Dict[str, float]:
     """Personalized-PageRank relevance score per file, seeded from --focus (BACK-833).
 
@@ -218,11 +225,12 @@ def _compute_graph_relevance(
     Returns {abs_path: score in [0, 1]}; empty on no focus, no matching seed
     files, or any graph-construction failure — callers treat missing entries
     as 0 (pure relevance signal, additive on top of the existing heuristic). The graph
-    the scores walked is appended to *graphs* when given (see ``_fetch_fan_in``).
+    the scores walked is appended to *graphs* and the recovered files to *recovered* when given
+    (see ``_fetch_fan_in``).
     """
     if not focus:
         return {}
-    graph, scanned_files = _build_pack_import_graph(path, failures)
+    graph, scanned_files = _build_pack_import_graph(path, failures, recovered=recovered)
     if graph is None:
         return {}
 
@@ -281,12 +289,14 @@ def _get_file_raw_content(file_path: str, max_lines: int = 500) -> str:
     return text
 
 
-def _get_file_structure(file_path: str) -> str:
+def _get_file_structure(file_path: str, recovered: Optional[List[str]] = None) -> str:
     """Return reveal structure output for a file as a string.
 
     Uses reveal's own progressive-disclosure analysis — same output as `reveal file.py`.
     Returns an empty string if no analyzer handles the file; an analysis failure
-    raises, and _tiered_content records it.
+    raises, and _tiered_content records it. A file whose parse went through error
+    recovery (the structure's ``_has_errors``, which ast:// reports as ``parse_recovered``)
+    is appended to *recovered* when given (BACK-2665).
     """
     from types import SimpleNamespace  # noqa: I006 — avoid circular import at module level
     from reveal.registry import get_analyzer  # noqa: I006
@@ -308,9 +318,11 @@ def _get_file_structure(file_path: str) -> str:
         # leak a small file's full content into a confidentiality-sensitive
         # DD pack.
         # all=True: pack budgets its own output; the interactive per-file item cap must not apply.
-        show_structure(analyzer, 'text', args=SimpleNamespace(no_raw_fallback=True, all=True))
+        structure = show_structure(analyzer, 'text', args=SimpleNamespace(no_raw_fallback=True, all=True))
     finally:
         sys.stdout = old_stdout
+    if recovered is not None and isinstance(structure, dict) and structure.get('_has_errors'):
+        recovered.append(to_posix(file_path))
 
     return buffer.getvalue()
 
@@ -318,12 +330,14 @@ def _get_file_structure(file_path: str) -> str:
 _STRUCTURE_THRESHOLD = 2.0
 
 
-def _tiered_content(file_info: Dict[str, Any]) -> Tuple[str, str, Optional[str]]:
+def _tiered_content(file_info: Dict[str, Any],
+                    recovered: Optional[List[str]] = None) -> Tuple[str, str, Optional[str]]:
     """(content_type, content, error) for one selected file, by tier.
 
     ``error`` names why the content is missing, so an unreadable file or a crashed
     analysis is never shown as an empty one (BACK-1614). Analysis catches anything:
-    one file's analyzer bug must not abort the whole pack.
+    one file's analyzer bug must not abort the whole pack. A structure-tier file read
+    only through error recovery is appended to *recovered* when given.
     """
     path = file_info['path']
     if file_info.get('changed', False):
@@ -333,23 +347,25 @@ def _tiered_content(file_info: Dict[str, Any]) -> Tuple[str, str, Optional[str]]
             return 'full', '', f'unreadable: {failure_of(e).cause}'
     if file_info.get('priority', _STRUCTURE_THRESHOLD) >= _STRUCTURE_THRESHOLD:
         try:
-            return 'structure', _get_file_structure(path), None
+            return 'structure', _get_file_structure(path, recovered), None
         except Exception as e:  # boundary-ok: broad-except -- the analyzer runs on an arbitrary user file in any of reveal's languages (tree-sitter, custom parsers; failure set not bounded) and one file must not abort the pack; the entry carries `error` and a warning is logged
             logger.warning('Structure analysis failed for %s: %s', path, e)
             return 'structure', '', f'structure analysis failed: {type(e).__name__}: {e}'
     return 'name_only', '', None
 
 
-def _collect_file_contents(selected: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _collect_file_contents(selected: List[Dict[str, Any]],
+                           recovered: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """Return tiered content for each selected file as a list of dicts (JSON mode).
 
     Each entry includes ``content_type``: ``'full'`` (changed files), ``'structure'``
     (key files), or ``'name_only'`` (low-priority files), and ``error`` when the
-    file could not be read or analyzed.
+    file could not be read or analyzed. Structure-tier files read only through error
+    recovery are appended to *recovered* when given.
     """
     result = []
     for file_info in selected:
-        content_type, content, error = _tiered_content(file_info)
+        content_type, content, error = _tiered_content(file_info, recovered)
         entry = {
             'file': file_info['relative'],
             'changed': file_info.get('changed', False),
@@ -448,6 +464,16 @@ def _record_file_measurement_warning(failures: Sequence[_FileMeasurementFailure]
                     'observed measured candidates only; unknown line costs are unavailable '
                     f'and excluded from line budgets: {detail}{suffix}'),
     })
+
+
+def _record_recovered_warning(recovered: Sequence[str], meta: Dict[str, Any]) -> None:
+    """Name the files Pack parsed only through error recovery (COMMAND_MODEL 'Degraded input',
+    BACK-2665): the import graph behind --architecture/--focus and the --content outlines read
+    them, so the answer is incomplete. One finding per file, however many reads saw it."""
+    from .ast.analysis import recovered_files_warning
+    warning = recovered_files_warning(sorted(set(recovered)))
+    if warning:
+        meta.setdefault('warnings', []).append(warning)
 
 
 def _changed_in_scope(path: Path, changed_files: Set[str]) -> Set[str]:
@@ -823,7 +849,7 @@ _ARCHITECTURE = ParamSpec('architecture', 'boolean', 'Boost high fan-in files; i
                           cli=CliBinding(('--architecture',), action='store_true'))
 
 
-_REQUIRED_WARNINGS = {'analysis_incomplete', 'file_measurement_failed'}
+_REQUIRED_WARNINGS = {'analysis_incomplete', 'file_measurement_failed', 'parse_recovered'}
 
 _HELP_EPILOG = (
     "Examples:\n"
@@ -1024,8 +1050,11 @@ class PackAdapter(ResourceAdapter):
 
         graph_failures: List[str] = []
         graphs: List[Tuple[str, Any]] = []
-        fan_in_scores = _fetch_fan_in(path, graph_failures, graphs=graphs) if architecture else None
-        graph_relevance_scores = (_compute_graph_relevance(path, focus, graph_failures, graphs=graphs)
+        recovered: List[str] = []
+        fan_in_scores = (_fetch_fan_in(path, graph_failures, graphs=graphs, recovered=recovered)
+                         if architecture else None)
+        graph_relevance_scores = (_compute_graph_relevance(path, focus, graph_failures, graphs=graphs,
+                                                           recovered=recovered)
                                   if focus else {})
 
         if graph_failures:
@@ -1075,7 +1104,8 @@ class PackAdapter(ResourceAdapter):
             report['architecture'] = True
         report.update(_pack_edge_rule(graphs))
         if emit_content:
-            report['content'] = _collect_file_contents(selected)
+            report['content'] = _collect_file_contents(selected, recovered)
+        _record_recovered_warning(recovered, meta)
         # BACK-1379: carry the breakdown through the result dict since handle_uri
         # doesn't forward a verbose= render kwarg for this renderer.
         if _DETAIL.read(self.query_params) == 'full':

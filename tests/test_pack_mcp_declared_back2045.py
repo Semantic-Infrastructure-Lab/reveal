@@ -95,7 +95,7 @@ def test_architecture_and_focus_compute_the_graph_signals_once(repo, monkeypatch
 def test_content_is_collected_once(repo, monkeypatch):
     calls = []
     real = pack._collect_file_contents
-    monkeypatch.setattr(pack, '_collect_file_contents', lambda selected: calls.append(1) or real(selected))
+    monkeypatch.setattr(pack, '_collect_file_contents', lambda selected, *rest: calls.append(1) or real(selected, *rest))
     assert 'CONTENT' in reveal_pack(str(repo))
     assert len(calls) == 1
 

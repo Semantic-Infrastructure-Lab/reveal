@@ -293,6 +293,13 @@ command and the URI both print this advisory notice on stderr; JSON carries it i
 content remain available, with exit 0; an unusable `--since` ref is advisory in the
 same way, with its cause in `meta.since_error`.
 
+A file Pack parsed only through tree-sitter error recovery is degraded input: the Imports
+graph behind `--architecture`/`--focus` and the structure outlines `--content` shows for key files
+both read files with a parser, and such a file is named in a `parse_recovered` entry of
+`meta.warnings` (text: a warning line after the pack) with exit 3, as `ast://` and `metrics://` do.
+The graph is still rejected for ranking as above. A plain `reveal pack` ranks by name, size and
+path and parses no file, so it never reports one.
+
 Lost candidate discovery or file measurement is different: Pack exits 3 (incomplete, or
 failed when no candidate survived) on the command and the URI, and the generic MCP tool
 returns the attributed cause as an error only when nothing survived. The check uses the
