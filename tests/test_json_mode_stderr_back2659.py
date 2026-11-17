@@ -160,3 +160,14 @@ def test_real_stdio_session_sends_one_block_per_noun_in_json_mode(tmp_path):
 
     asyncio.run(asyncio.wait_for(exercise(), timeout=300))
     assert {name: extra for name, extra in blocks.items() if extra} == {}
+
+
+def test_stderr_beside_a_json_answer_is_logged_for_the_operator_not_sent(caplog):
+    """The second MCP block is gone. Should a defect still put text on stderr beside a JSON answer,
+    the client gets the JSON exactly and the server's log names the text; a text answer keeps it."""
+    from reveal import mcp_server
+    document = '{"type": "ast_query", "meta": {"warnings": []}}'
+    with caplog.at_level(logging.WARNING, logger='reveal.mcp_server'):
+        assert mcp_server._with_stderr(document, 'stray line') == document
+    assert 'stray line' in caplog.text
+    assert mcp_server._with_stderr('text answer\n', 'stray line') == 'text answer\n\n[stderr: stray line]'

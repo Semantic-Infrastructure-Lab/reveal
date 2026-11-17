@@ -307,43 +307,17 @@ def _is_json_document(text: str) -> bool:
         return False
 
 
-class _JsonAnswer(str):
-    """The CLI's JSON answer, exactly, plus the stderr a terminal would also have shown beside it.
-
-    Direct Python callers get the JSON string; the registered tool sends that stderr as a second
-    content block, never appended into the JSON (COMMAND_MODEL 'Transports', BACK-2650). A diagnostic
-    that exists only on stderr (a missing REVEAL_CONFIG file) is not dropped while it waits for its
-    home in ``meta.warnings``.
-    """
-
-    stderr: str
-
-    def __new__(cls, text: str, *, stderr: str) -> '_JsonAnswer':
-        answer = super().__new__(cls, text)
-        answer.stderr = stderr
-        return answer
-
-
 def _with_stderr(out: str, err: str) -> str:
-    """The CLI's stdout followed by its stderr, as a terminal shows them; a JSON answer stays exactly the
-    CLI's JSON, with stderr carried beside it (_JsonAnswer)."""
+    """The CLI's stdout followed by its stderr, as a terminal shows them. A JSON answer is the CLI's JSON
+    exactly and the whole answer (COMMAND_MODEL 'Transports'): every diagnostic is in it (config and plugin
+    warnings, per-file failures; BACK-2659), so a JSON answer has no stderr beside it, and anything that
+    still reaches stderr is a defect, logged for the server's operator rather than sent to the client."""
     if not err:
         return out
     if _is_json_document(out):
-        return _JsonAnswer(out, stderr=err)
+        logging.getLogger(__name__).warning('stderr beside a JSON answer, not sent to the client: %s', err)
+        return out
     return f"{out}\n[stderr: {err}]"
-
-
-def _tool_content(result: str):
-    """What the registered tool returns: the text, or for a JSON answer with stderr beside it, two text
-    blocks, so the first block is the CLI's JSON exactly and still parses."""
-    residual = getattr(result, 'stderr', '')
-    if not residual:
-        return result
-    from mcp.types import CallToolResult, TextContent
-    return CallToolResult(content=[TextContent(type='text', text=str(result)),
-                                   TextContent(type='text', text=f'[stderr: {residual}]')],
-                          structured_content={'result': str(result)})
 
 
 def _with_invocation_notes(output: str) -> str:
@@ -423,7 +397,7 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = 
                         raise
                     logging.getLogger(__name__).exception("Native extension panic in MCP tool %s", fn.__name__)
                     raise ToolError(f"Internal error executing tool {fn.__name__}") from None
-                return _tool_content(_raise_if_tool_failure(result, fn.__name__))
+                return _raise_if_tool_failure(result, fn.__name__)
 
         mcp.tool(annotations=annotations, title=title)(wrapper)
         return request

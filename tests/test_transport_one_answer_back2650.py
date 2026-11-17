@@ -161,7 +161,7 @@ def test_real_stdio_session_returns_parseable_json_per_noun(degraded, tmp_path):
                         result = await session.call_tool(
                             'reveal_query', {'uri': _uri(noun, query, degraded), 'provenance': True})
                         assert not result.is_error, noun
-                        # The first block is the CLI's JSON exactly; any stderr rides in a second block.
+                        # The first block is the CLI's JSON exactly (and the only one, BACK-2659).
                         seen[noun] = json.loads(result.content[0].text)
 
     asyncio.run(asyncio.wait_for(exercise(), timeout=180))
