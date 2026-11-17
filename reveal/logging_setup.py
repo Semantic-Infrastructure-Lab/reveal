@@ -47,6 +47,8 @@ def worker_bootstrap(inner=None, inner_args=()) -> None:
     inherited anyway.
     """
     configure_stderr_logging()
+    from .utils.invocation_log import open_worker_log
+    open_worker_log()
     _exit_with_parent()
     if inner is not None:
         inner(*inner_args)

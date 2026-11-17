@@ -1,6 +1,6 @@
 """The per-invocation log lives below the CLI (BACK-2659): code at any layer records into it."""
 from reveal.cli.invocation import Invocation, invocation_scope, noted_retirements, retirement_note
-from reveal.utils.invocation_log import current_log, log_scope
+from reveal.utils.invocation_log import answer_is_json, current_log, invocation_warnings, log_scope, record_warning
 
 
 def test_no_log_outside_an_invocation():
@@ -10,10 +10,26 @@ def test_no_log_outside_an_invocation():
 def test_scope_opens_a_log_and_restores_the_previous_one():
     with log_scope(to_stderr=False) as outer:
         assert current_log() is outer and outer.to_stderr is False
-        with log_scope() as inner:
-            assert current_log() is inner and inner is not outer
+        with log_scope() as inner:  # a request inside another joins it (an MCP call's invocation)
+            assert current_log() is inner is outer
         assert current_log() is outer
     assert current_log() is None
+
+
+def test_a_warning_is_recorded_once_and_printed_once_unless_a_json_answer_carried_it(capsys):
+    entry = {'type': 'config_warning', 'code': 'c', 'message': 'm'}
+    assert record_warning(entry) is False  # outside an invocation the caller logs it
+    with log_scope():
+        assert record_warning(entry) and record_warning(dict(entry))
+    assert capsys.readouterr().err == 'warning: m\n'
+    with log_scope():
+        record_warning(entry)
+        answer_is_json(True)
+        assert invocation_warnings() == [entry]
+    assert capsys.readouterr().err == ''
+    with log_scope(to_stderr=False):
+        record_warning(entry)
+    assert capsys.readouterr().err == ''
 
 
 def test_invocation_scope_records_retirements_in_that_log():
@@ -23,3 +39,19 @@ def test_invocation_scope_records_retirements_in_that_log():
         retirement_note('flag:--calls')
         assert list(log.noted) == ['flag:--calls'] == list(noted_retirements())
     assert current_log() is None and noted_retirements() == {}
+
+
+def _record_in_worker(item):
+    record_warning({'type': 'config_warning', 'code': 'c', 'message': f'from worker {item}'})
+    return item * 2
+
+
+def test_submit_each_hands_a_worker_warning_to_the_submitting_invocation():
+    """A worker records into a log of its own and never prints; the parent's log gets the entry
+    before the caller's Future resolves (BACK-2659)."""
+    from concurrent.futures import ThreadPoolExecutor
+    from reveal.utils.parallel import submit_each
+    with log_scope(to_stderr=False) as log, ThreadPoolExecutor(max_workers=2) as pool:
+        futures = submit_each(pool, _record_in_worker, [1, 2, 2])
+        assert [future.result() for future in futures] == [2, 4, 4]
+        assert sorted(entry['message'] for entry in log.warnings.values()) == ['from worker 1', 'from worker 2']

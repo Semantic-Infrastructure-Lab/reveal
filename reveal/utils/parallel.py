@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 from concurrent.futures import Future, ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from ..logging_setup import worker_bootstrap
+from .invocation_log import current_log, open_worker_log, record_warning
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 from ..reveal_types import PathFailure
@@ -44,16 +46,48 @@ def submit_each(executor, fn, items: Iterable) -> list[Future]:
     handling treats them like the pending futures the dead worker failed: lost items,
     never a whole-run failure or a serial re-run of the culprit (BACK-1717, BACK-1718;
     seen only on a fast-dying worker, macOS under fork).
+
+    What the worker recorded for the invocation (a config problem met only there: a nested
+    ``.reveal.yaml`` no parent-side read reaches) comes back with its result and joins the
+    parent's invocation log before the Future resolves; the worker never prints it (BACK-2659).
     """
+    log = current_log()
     futures = []
     for item in items:
         try:
-            futures.append(executor.submit(fn, item))
+            carried = executor.submit(_carrying_warnings, fn, item)
         except BrokenProcessPool as e:
             refused: Future = Future()
             refused.set_exception(e)
             futures.append(refused)
+            continue
+        answer: Future = Future()
+        carried.add_done_callback(functools.partial(_settle, answer, log))
+        futures.append(answer)
     return futures
+
+
+def _carrying_warnings(fn, item) -> tuple:
+    """Worker side of ``submit_each``: ``fn(item)`` and the invocation warnings it recorded first."""
+    if current_log() is None:  # a pool started without worker_bootstrap
+        open_worker_log()
+    log = current_log()
+    before = set(log.warnings) if log is not None else set()
+    result = fn(item)
+    return result, [entry for key, entry in (log.warnings.items() if log is not None else ()) if key not in before]
+
+
+def _settle(answer: Future, log, carried: Future) -> None:
+    """Parent side: record the worker's warnings in *log* (the submitting invocation's, captured at
+    submit time: this runs on the pool's management thread), then resolve the caller's Future."""
+    try:
+        result, warnings = carried.result()
+    except Exception as e:  # boundary-ok: broad-except -- whatever the worker raised (or BrokenProcessPool) reaches the caller through its Future, as the bare submit did
+        answer.set_exception(e)
+        return
+    for entry in warnings:
+        record_warning(entry, log)
+    answer.set_result(result)
 
 
 def _scan_one(args: tuple) -> Path | PathFailure | None:
