@@ -1928,6 +1928,15 @@ def cause_class(reason: str) -> str:
     return reason.split(':', 1)[0].strip()
 
 
+def respell_reason(reason: str, path: Any, shown: str) -> str:
+    """*reason* with each raw spelling of *path* in it replaced by *shown*, the answer's spelling:
+    ``str(OSError)`` embeds the absolute filename, which must not reach an answer that spells the
+    file relatively (BACK-2249)."""
+    for raw in {str(path), to_posix(path)} - {shown}:
+        reason = reason.replace(raw, shown)
+    return reason
+
+
 def failure_records(failures: Iterable[Tuple[Optional[str], Optional[str]]], base: Optional[Path] = None, *,
                     cause: Optional[str] = None) -> List[FailureRecord]:
     """Every subject a capped warning counts, uncapped, as ``{path, cause, reason}`` (BACK-2659).
@@ -1943,10 +1952,7 @@ def failure_records(failures: Iterable[Tuple[Optional[str], Optional[str]]], bas
         shown = None if path is None else to_relative_display(path, base)
         record: FailureRecord = {'path': shown, 'cause': cause or cause_class(reason or '')}
         if reason:
-            if path is not None and shown is not None:
-                for raw in {str(path), to_posix(path)} - {shown}:
-                    reason = reason.replace(raw, shown)
-            record['reason'] = reason
+            record['reason'] = reason if shown is None else respell_reason(reason, path, shown)
         records.append(record)
     return sorted(records, key=lambda r: (r['path'] or '', r['cause'], r.get('reason', '')))
 
