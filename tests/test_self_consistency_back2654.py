@@ -586,12 +586,19 @@ def _fresh_run(harness, *argv):
             pass
 
 
-# Compositions kept by a ruling, (parent noun, child noun, legacy key) -> reason. CUT_READINESS: empty at the cut.
+# Built legacy spellings kept until a ruling or the cut, (noun typed, noun bound, legacy key) -> reason.
+# CUT_READINESS: empty at the cut.
 _RETIRED_COMPOSITIONS = {
-    ('hotspots', 'metrics', key): "the retired hotspots noun is built on metrics' legacy hotspots operation and its "
-                                  'legacy top, which answer differently from view=hotspots (rule 16, BACK-2654 note '
-                                  '#9): all three are deleted together at the cut'
-    for key in ('hotspots', 'top')}
+    **{('hotspots', 'metrics', key): "the retired hotspots noun is built on metrics' legacy hotspots operation and its "
+                                     'legacy top, which answer differently from view=hotspots (rule 16, BACK-2654 note '
+                                     '#9): all three are deleted together at the cut'
+       for key in ('hotspots', 'top')},
+    **{(noun, 'metrics', 'top'): "--all is injected as metrics' legacy top=1000000: it lifts the legacy hotspots=true "
+                                 'ranking, which limit does not cap (top is a standalone modifier, rule 16), and on '
+                                 'every other metrics answer it is unread; spelling it limit changes the legacy answer '
+                                 '(168 -> 10 rows on reveal/), so it waits for a ruling (BACK-2654 Step 5 report)'
+       for noun in ('metrics', 'stats')},
+}
 
 
 def _built_legacy(bindings, harness, requests):

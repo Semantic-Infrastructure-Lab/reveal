@@ -632,7 +632,9 @@ class CallsAdapter(ResourceAdapter):
     BUDGET_COUNT_FIELDS = {'entries': ('top',)}  # ?rank=callers: 'top' is the number shown (BACK-2653)
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'limit': 'limit={value}', 'respect_gitignore': 'respect_gitignore=false'}  # limit caps ranking/uncalled only; legacy all keeps its existing finite expansion.
+    # limit caps ranking/uncalled only; --all keeps its finite expansion, spelled with the canonical limit (top is
+    # limit's legacy word, deleted at the cut: BACK-2654 Step 5).
+    CLI_QUERY_FLAGS = {'all': 'limit=1000000', 'limit': 'limit={value}', 'respect_gitignore': 'respect_gitignore=false'}
 
     RESULT_TYPE = 'calls_query'
     FINDINGS_POLICIES = ('none',)

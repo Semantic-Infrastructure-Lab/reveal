@@ -29,7 +29,7 @@ def test_hotspots_declares_top():
 
 
 @pytest.mark.parametrize('scheme,fragment', [
-    ('ast', 'limit=1000000'), ('calls', 'top=1000000'), ('patches', 'limit=1000000'),
+    ('ast', 'limit=1000000'), ('calls', 'limit=1000000'), ('patches', 'limit=1000000'),
     ('testability', 'top=1000000'), ('stats', 'top=1000000'), ('git', 'limit=1000000'),
     ('overview', 'all=true'),  # Constructor-bound map expansion; does not request assessments.
 ])
