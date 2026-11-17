@@ -138,13 +138,23 @@ _SWITCH = 'out of scope: the Switches rule renames this noun\'s no_* flag in its
 OUT_OF_SCOPE = {('architecture', '10'): _OVERVIEW_TOP, ('overview', '10'): _OVERVIEW_TOP,
                 ('contracts', '10'): _SWITCH + ' (--no-implementations)',
                 ('patches', '10'): _SWITCH + ' (--no-suppress)'}
-# Standalone legacy parameters that cap or detail the answer rather than select it (Scott 2026-11-16, BACK-2654
-# note #9): they keep their own parameter until the cut without role='operation', so a legacy cap still combines with
-# the legacy answer it caps (--hotspots --top N). CUT_READINESS: this table is empty at the cut.
-LEGACY_SETTINGS = {('metrics', 'top'): 'caps the legacy hotspots ranking; limit caps the files beside it',
-                   ('claude', 'full'): 'not identical to detail=full: /messages text stays unexpanded, ignored on the '
-                                       'overview where detail=full exits 2',
-                   ('claude', 'raw'): 'not identical to detail=raw: alone it keeps the 600-character truncation'}
+# Standalone legacy words kept by a ruling because they answer differently from their replacement (rule 16; Scott
+# 2026-11-16, BACK-2654 notes #9 and #12): (kind, reason). 'operation' selects the answer (role='operation', rule 17);
+# 'modifier' caps, details or filters it and stays without that role, so a legacy cap still combines with the legacy
+# answer it caps (--hotspots --top N). A standalone row not listed here is a legacy operation. CUT_READINESS: each
+# word's answer loses its only spelling at the cut, with a recorded decision; this table is empty then.
+STANDALONE_WORDS = {
+    ('metrics', 'top'): ('modifier', 'caps the legacy hotspots ranking; limit caps the files beside it'),
+    ('claude', 'full'): ('modifier', 'not identical to detail=full: /messages text stays unexpanded, ignored on the '
+                                     'overview where detail=full exits 2'),
+    ('claude', 'raw'): ('modifier', 'not identical to detail=raw: alone it keeps the 600-character truncation'),
+    ('claude', 'search'): ('operation', 'not identical to match: on every session sub-resource it answers a session-wide '
+                                        'search in place of the path\'s view, where match filters that view or exits 2'),
+    ('claude', 'summary'): ('operation', 'not identical to detail=summary: on every session sub-resource it answers the '
+                                         'overview analytics in place of the path\'s view, where detail=summary exits 2'),
+    ('claude', 'contains'): ('modifier', 'not identical to match: a filter modifier that is silently ignored on about '
+                                         'twenty resources where match answers a search or exits 2 (rule 20, BACK-2656)'),
+}
 # Hand-written checks a rule would otherwise generate, each kept by a ruling and owned by the named package.
 # CUT_READINESS: zero recorded exceptions at the cut.
 RECORDED_EXCEPTIONS = {('metrics', '_top_conflict'): 'BACK-2656: in view=hotspots legacy top is limit, so a different '
@@ -1095,9 +1105,9 @@ def probe_legacy_operations(noun):
             continue
         if any(f'{scheme}://' in entry.replacement for scheme in NOUNS if scheme != noun):
             continue  # the replacement is another noun (rule 11)
-        if (noun, name) in LEGACY_SETTINGS:
-            cases.append(Case(f'{name} is a legacy setting', spec.role != 'operation',
-                              f'{name} caps or details the answer but its role is {spec.role!r}'))
+        if STANDALONE_WORDS.get((noun, name), ('operation',))[0] == 'modifier':
+            cases.append(Case(f'{name} is a legacy modifier', spec.role != 'operation',
+                              f'{name} caps, details or filters the answer but its role is {spec.role!r}'))
         else:
             cases.append(Case(f'{name} is a legacy operation', spec.role == 'operation',
                               f'{name} is standalone (answers differently) but its role is {spec.role!r}'))
@@ -1269,10 +1279,20 @@ def test_recorded_exceptions_are_the_only_hand_written_checks():
     assert sorted(check.__name__ for check in metrics._CONFLICTS) == recorded
 
 
-def test_legacy_settings_are_standalone_rows():
-    for noun, name in LEGACY_SETTINGS:
+def test_ruled_standalone_words_are_standalone_rows():
+    for (noun, name), (kind, reason) in STANDALONE_WORDS.items():
         row = RETIREMENTS[f'param:{noun}.{name}']
-        assert row.standalone and row.stage == 'note', (noun, name)
+        assert row.standalone and row.stage == 'note' and kind in ('operation', 'modifier') and reason, (noun, name)
+
+
+@pytest.mark.parametrize('pair', ['view=overview&summary', 'view=search&search=token', 'search=token&summary',
+                                  'tail=2&summary', 'tail=2&search=token'])
+def test_claude_search_and_summary_are_legacy_operations(workspace, pair):
+    """Note #12 (Scott 2026-11-16): search and summary select an answer, so beside another selection they are two
+    answers, exit 2 naming both (rule 17); view=overview&summary and view=search&search= used to answer."""
+    run = _run(f'claude://session/my-session?{pair}', '--format', 'json')
+    names = [part.partition('=')[0] for part in pair.split('&')]
+    assert run.rc == 2 and run.says(*names, 'select different answers'), run.brief()
 
 
 # Rule 16 per resource for Claude's translated words: the generated probe runs one request per noun, but a Claude
