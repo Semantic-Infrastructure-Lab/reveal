@@ -305,8 +305,10 @@ RETIREMENTS: Dict[str, Retirement] = {
                                           '?scan-limit=N (--scan-limit N), the same input budget'),
     # Metrics' vocabulary (BACK-2621, Scott 2026-11-15): the hotspot ranking is a view whose rows limit caps,
     # filters are where (the complexity pair is the file average, avg_complexity), switches take on|off.
-    'param:metrics.hotspots': Retirement('metrics ?hotspots=true (--hotspots)',
-                                         '?view=hotspots (--view hotspots): the ranked files are the rows', standalone=True),
+    # The row names the parameter, not one value: ?hotspots=false is noted too (it answers as if omitted).
+    'param:metrics.hotspots': Retirement('metrics ?hotspots (--hotspots)',
+                                         '?view=hotspots (--view hotspots): the ranked files are the rows; '
+                                         'hotspots=false is the default, so omit it', standalone=True),
     'param:metrics.top': Retirement('metrics ?top=N (--top N)', '?limit=N (--limit N) in view=hotspots; 0 is uncapped', standalone=True),
     'param:metrics.min_lines': Retirement('metrics ?min_lines=N (--min-lines N)', "?where=lines>=N (--where 'lines>=N')"),
     'param:metrics.max_lines': Retirement('metrics ?max_lines=N (--max-lines N)', "?where=lines<=N (--where 'lines<=N')"),
