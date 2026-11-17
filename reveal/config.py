@@ -255,6 +255,11 @@ def glob_match(path: Path, pattern: str) -> bool:
     return _compile_glob_regex(pattern).match(path_str) is not None
 
 
+# Keys whose reader validates them and fails the request naming the config file, so a schema
+# failure there is only reported: test_layout (TestLayoutValidationError) and architecture
+# (LayerConfig.from_dict, BACK-1059). Every other invalid value falls back to its default (BACK-2663).
+_SELF_VALIDATED_KEYS = ('test_layout', 'architecture')
+
 # JSON Schema for .reveal.yaml validation
 CONFIG_SCHEMA = {
     "type": "object",
@@ -861,8 +866,14 @@ class RevealConfig:
 
     @classmethod
     def _validate_config_schema(cls, config: Dict[str, Any], path: Path) -> None:
-        """Validate config against schema if jsonschema is available (warns, never raises); each
-        problem is a ``config_schema_invalid`` warning (BACK-2659)."""
+        """Validate config against the schema if jsonschema is available (never raises).
+
+        A value that fails the schema falls back to its default: it is removed here, so no reader
+        meets a shape it cannot read (``ignore: 5`` crashed every walking noun with a traceback,
+        BACK-2663). Each problem is a ``config_schema_invalid`` warning. A key the schema does not
+        know is only warned about (nothing reads it), and a key whose reader validates it and fails
+        the request naming the file (``_SELF_VALIDATED_KEYS``) keeps that, rather than falling back.
+        """
         try:
             import jsonschema  # deferred: ~25 ms, and only a run that finds a config file validates
         except ImportError:
@@ -870,11 +881,24 @@ class RevealConfig:
         # jsonschema.validate() re-checks CONFIG_SCHEMA against the metaschema on every
         # call (~20 ms, once per config file); the schema is ours and tests check it once.
         validator = jsonschema.validators.validator_for(CONFIG_SCHEMA)(CONFIG_SCHEMA)
+        removed: List[List[Any]] = []
         for error in validator.iter_errors(config):
-            key = '.'.join(str(part) for part in error.absolute_path)
-            _config_note(config_warning('config_schema_invalid', f"config {to_posix(path)}: {error.message}",
-                                        to_posix(path), key=key),
+            where = list(error.absolute_path)
+            key = '.'.join(str(part) for part in where)
+            falls_back = bool(where) and where[0] not in _SELF_VALIDATED_KEYS and error.validator != 'additionalProperties'
+            message = (f"config {to_posix(path)}: {key}: {error.message}; that value was ignored and its default used"
+                       if falls_back else f"config {to_posix(path)}: {error.message}")
+            _config_note(config_warning('config_schema_invalid', message, to_posix(path), key=key),
                          logging.WARNING, "Invalid config in %s: %s", path, error.message)
+            if falls_back and where not in removed:
+                removed.append(where)
+        # Deepest and highest list index first, so an earlier removal never moves a later one.
+        for where in sorted(removed, key=lambda parts: [(1, p) if isinstance(p, int) else (0, p) for p in parts],
+                            reverse=True):
+            container: Any = config
+            for part in where[:-1]:
+                container = container[part]
+            del container[where[-1]]
 
     @classmethod
     def _load_file(cls, path: Path) -> Optional[Dict[str, Any]]:

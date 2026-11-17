@@ -74,3 +74,11 @@ def test_test_layout_keeps_its_own_fail_closed_validation():
     config = {'test_layout': {'additional_paths': 'tests'}}
     RevealConfig._validate_config_schema(config, Path('p') / '.reveal.yaml')
     assert config == {'test_layout': {'additional_paths': 'tests'}}
+
+
+def test_architecture_keeps_its_own_validation():
+    """LayerConfig fails the request naming the config file (BACK-1059); the schema does not
+    silently drop the layer it would reject."""
+    config = {'architecture': {'layers': ['not-a-dict']}}
+    RevealConfig._validate_config_schema(config, Path('p') / '.reveal.yaml')
+    assert config == {'architecture': {'layers': ['not-a-dict']}}
