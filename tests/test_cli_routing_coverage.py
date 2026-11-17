@@ -1591,7 +1591,7 @@ class TestHandleUriMarkdownFlags:
              patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
             handle_uri('markdown://docs/', None, args)
         err = capsys.readouterr().err
-        assert 'fields=' in err
+        assert 'columns=' in err  # the canonical spelling; fields is markdown's legacy word (BACK-2654)
 
 
 # ─── _build_adapter_kwargs — uri param in signature (line 296) ───────────────
