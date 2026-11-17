@@ -43,10 +43,21 @@ def parse_recovered_warning(structures: Sequence[Dict[str, Any]]) -> Optional[Wa
     """One ``parse_recovered`` meta warning for files whose syntax tree-sitter recovered
     from (BACK-1847): their elements are what survived, so the list may be incomplete.
     None when every file parsed cleanly."""
-    paths = sorted(s['file'] for s in structures if s.get('parse_recovered'))
+    return recovered_files_warning(recovered_files(structures))
+
+
+def recovered_files(structures: Sequence[Dict[str, Any]]) -> Tuple[str, ...]:
+    """The '/'-spelled paths of the *structures* whose parse tree-sitter recovered (``parse_recovered``,
+    BACK-1847), sorted: what an answer built from them carries to its ``parse_recovered`` warning."""
+    return tuple(sorted(to_posix(s['file']) for s in structures if s.get('parse_recovered')))
+
+
+def recovered_files_warning(paths: Sequence[str]) -> Optional[WarningEntry]:
+    """The ``parse_recovered`` warning naming *paths* (up to five, then a count). None when empty."""
+    paths = sorted(to_posix(f) for f in paths)
     if not paths:
         return None
-    shown = [to_posix(f) for f in paths[:5]]
+    shown = paths[:5]
     more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
     return {
         'type': 'parse_recovered',

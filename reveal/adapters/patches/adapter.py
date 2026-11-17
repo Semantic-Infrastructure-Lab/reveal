@@ -256,7 +256,7 @@ class PatchesAdapter(ResourceAdapter):
             'code': 'W-PATCHES-1',
             'message': 'Patch pressure is advisory; mocking external boundaries can be correct.',
         }]
-        from ..ast.analysis import analysis_skipped_warning, parse_recovered_warning, traversal_failed_warning
+        from ..ast.analysis import analysis_skipped_warning, recovered_files_warning, traversal_failed_warning
 
         unscanned = language_not_scanned_warning(patches.unscanned_to_report())
         if unscanned:
@@ -268,8 +268,7 @@ class PatchesAdapter(ResourceAdapter):
             patches.skipped, None, 'their patch uses are missing from the result')
         if failed:
             warnings.append(failed)
-        recovered = parse_recovered_warning([
-            {'file': f, 'parse_recovered': True} for f in patches.recovered_files])
+        recovered = recovered_files_warning(patches.recovered_files)
         if recovered:
             recovered['message'] += ' Patch uses may be incomplete.'
             warnings.append(recovered)

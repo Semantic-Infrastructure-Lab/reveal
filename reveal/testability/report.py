@@ -100,7 +100,7 @@ def build_testability_report(
 ) -> Dict[str, Any]:
     """Build the composed testability pressure report (*by_test_path*: the test files are discovered
     under *test_paths* by the supplied project policy instead of trusting them as the suite)."""
-    from ..adapters.ast.analysis import analysis_skipped_warning, parse_recovered_warning, traversal_failed_warning
+    from ..adapters.ast.analysis import analysis_skipped_warning, recovered_files_warning, traversal_failed_warning
 
     patches = scan_patches(test_paths, by_test_path=by_test_path, test_layout=test_layout)
     _decline_unscannable(patches, src_path, by_test_path)
@@ -130,7 +130,7 @@ def build_testability_report(
         (patches.recovered_files, 'Patch uses may be incomplete.'),
         (profiles.recovered_files, 'Boundary profiles may be incomplete.'),
     ):
-        recovered = parse_recovered_warning([{'file': f, 'parse_recovered': True} for f in files])
+        recovered = recovered_files_warning(files)
         if recovered:
             recovered['message'] += f' {consequence}'
             warnings.append(recovered)
