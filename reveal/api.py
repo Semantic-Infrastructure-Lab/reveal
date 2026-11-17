@@ -254,12 +254,15 @@ def query(
         from .adapters.factory import _canonical_init, uses_bound_query_call
         if not element_name and uses_bound_query_call(adapter_class):
             bound = _canonical_init(adapter_class, resource, overrides=kwargs)
-            bound_result: Dict[str, Any] = _noted_answer(scheme, uri, kwargs, bound.get_structure)
-            facts_of = getattr(type(bound), 'execution_facts', None)
-            if callable(facts_of):
-                # The same answer as the CLI's JSON: an incomplete one says so (COMMAND_MODEL 'Transports').
-                from .utils.results import note_incomplete
-                note_incomplete(bound_result, facts_of(bound_result))
+            def bound_answer(bound=bound):
+                result = bound.get_structure()
+                facts_of = getattr(type(bound), 'execution_facts', None)
+                if callable(facts_of) and isinstance(result, dict):
+                    # The CLI's order: the incomplete marker, then the retirement notes (COMMAND_MODEL 'Transports').
+                    from .utils.results import note_incomplete
+                    note_incomplete(result, facts_of(result))
+                return result
+            bound_result: Dict[str, Any] = _noted_answer(scheme, uri, kwargs, bound_answer)
             return bound_result
         if isinstance(adapter_class, type) and hasattr(adapter_class, "from_uri"):
             adapter = adapter_class.from_uri(scheme, resource, element_name)
