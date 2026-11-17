@@ -412,6 +412,27 @@ same text is an error and the exit code is 2. A spelling deleted outright rather
 `error: <old> was removed; use <replacement>.` (`python://`, BACK-2225). A `phase7` row is recorded
 and prints nothing yet.
 
+### Configuration warnings (`config_warning`)
+
+A configuration problem met while answering is a `meta.warnings` entry of type `config_warning`
+in every JSON answer: the CLI's, `reveal.api.query`'s and MCP's (BACK-2659). The `code` says what
+happened:
+
+| `code` | When | Extra fields |
+|---|---|---|
+| `config_file_missing` | `REVEAL_CONFIG` names a file that does not exist (no config file is read) | `path` |
+| `config_load_failed` | a config file exists but is unreadable, not UTF-8, not YAML/TOML, or not a mapping (its settings are not applied) | `path`, `reason` |
+| `config_schema_invalid` | a value fails the config schema; it is ignored and its default used (`test_layout` keeps its own validation, which fails the request; a key the schema does not know is only reported) | `path`, `key` |
+| `config_env_invalid` | `REVEAL_C901_THRESHOLD` or `REVEAL_E501_MAX_LENGTH` is not an integer (it is ignored) | `path` (the variable's name) |
+| `config_key_unknown` | a `rules.<CODE>` setting the rule does not have (it is ignored) | `rule`, `key` |
+
+`path` is POSIX. Each problem is one entry however many times the config is read in one
+invocation, including reads inside pool workers. The entry never changes the exit code or the
+answer's completeness. With `--format json` it is not also printed on stderr; any other answer
+prints it once on stderr after the answer, as `warning: <message>`, and an MCP text result ends
+with a `[warning: <message>]` line. A plain library call outside any invocation (for example
+`RevealConfig.get()`) logs it through the `reveal.config` logger as before.
+
 ---
 
 ## Outcomes: failed, not applicable, truncated, ok

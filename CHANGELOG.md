@@ -34,6 +34,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- A config problem is now part of the answer: a missing `REVEAL_CONFIG` file, a config file that cannot be loaded, a value that fails the schema, a non-integer `REVEAL_C901_THRESHOLD`/`REVEAL_E501_MAX_LENGTH` or an unknown rule setting is a `config_warning` entry in `meta.warnings` of every `--format json`, `reveal.api.query` and MCP answer (MCP returns one block again), and one `warning:` line on stderr after a text answer, instead of a log line per config read (twice on most commands) that JSON never carried; `check` no longer adds its own "config ... could not be loaded" note beside it (BACK-2659).
+
+- A config value that fails the schema (`ignore: 5`) is ignored and its default used, with a `config_schema_invalid` warning; every walking command (`ast://`, `metrics://`, `calls://`, `imports://`, `check`) exited 1 with a traceback (BACK-2663).
+
 - `reveal.api.query('imports://...', **keywords)` dropped every typed keyword except `unused`, `circular`, `violations` and `verbose` without saying so; each declared keyword now answers like its URI spelling, an unknown one raises `TypeError`, and `importers=None` gives the default view instead of the importer summary (BACK-2620).
 
 - An empty `calls PATH --callers NAME` answer (also `calls://PATH?callers=NAME`) still suggests widening to the parent directory, but no longer prints `Warning: Failed to analyze` for files outside PATH, or twice for files inside it; over MCP those lines followed the JSON as `[stderr: ...]`, so `reveal_query` did not return one JSON document. When the parent scan skips a file it cannot analyze, the hint now reads "at least N potential caller(s)" (BACK-2649).
