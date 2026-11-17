@@ -261,11 +261,26 @@ class Switch:
     name: str
     help: str
     short_off: Tuple[str, ...] = ()
+    # The old flag for off when it is not --no-NAME (respect-gitignore's --no-gitignore), named here explicitly.
+    legacy: str = ''
+    # The value when the switch is not typed; None lets a later default decide (config/env for breadcrumbs).
+    default: Optional[bool] = None
+    # The switch typed without a value means on: respect-gitignore's old no-value --respect-gitignore.
+    bare_on: bool = False
+
+    @property
+    def dest(self) -> str:
+        return self.name.replace('-', '_')
+
+    @property
+    def legacy_flag(self) -> str:
+        return self.legacy or f'--no-{self.name}'
 
 
 # The one declaration: each parser that carries a switch calls global_flags.add_switch_argument, and RETIREMENTS
 # below generates each switch's flag:--no-NAME row from it. The namespace holds the switch's boolean under NAME, or
-# None when it was not typed (the default applies: config/env for breadcrumbs, on for the others).
+# None when it was not typed (the default applies: config/env for breadcrumbs, on for the others); respect-gitignore
+# keeps its old dest and default (respect_gitignore=True), which every walker reads.
 SWITCHES: Dict[str, Switch] = {switch.name: switch for switch in (
     Switch('breadcrumbs', 'Navigation hints after the output: on, or off for scripting (default: on in a terminal, '
            'off when piped; REVEAL_BREADCRUMBS and display.breadcrumbs set the default)', short_off=('-q',)),
@@ -274,6 +289,8 @@ SWITCHES: Dict[str, Switch] = {switch.name: switch for switch in (
            'every check result'),
     Switch('snippets', 'The source-code excerpt in each violation (the 📝 line / JSON "context" field): on (default), '
            'or off to keep only rule/file/line/severity/suggestion, so the output embeds no source (BACK-1182)'),
+    Switch('respect-gitignore', 'Skip files git ignores: on (default; tracked files are never skipped) or off to '
+           'include them', legacy='--no-gitignore', default=True, bare_on=True),
 )}
 
 
@@ -305,9 +322,9 @@ RETIREMENTS: Dict[str, Retirement] = {
     # Rule 4 (COMMAND_MODEL "Detail", BACK-2654): the global --verbose on a declared noun is --detail full; a noun whose
     # verbose lifts its caps declares it as a legacy word of the uncapping control instead (param:<noun>.verbose rows).
     'flag:--verbose': Retirement('--verbose', '--detail full (?detail=full)'),
-    # Switches (COMMAND_MODEL "Switches", BACK-2654 rule 15): each presentation switch's --no-NAME is --NAME off, one
-    # row per SWITCHES entry, generated rather than typed. A short spelling of off (-q) is the same word: no row.
-    **{f'flag:--no-{name}': Retirement(f'--no-{name}', f'--{name} off') for name in SWITCHES},
+    # Switches (COMMAND_MODEL "Switches", BACK-2654 rule 15): each switch's legacy off flag (--no-NAME, or the one its
+    # declaration names) is --NAME off, one row per SWITCHES entry, generated. A short spelling of off (-q): no row.
+    **{f'flag:{switch.legacy_flag}': Retirement(switch.legacy_flag, f'--{switch.name} off') for switch in SWITCHES.values()},
     # review folded into check --changed plus the diff:// adapter (D3, BACK-2068 slice 3b): it answers as before until the
     # cut. Its hotspots and complexity sections have no new home until stats becomes metrics (BACK-2069);
     # the MCP tool reveal_review keeps its name until Phase 7.
@@ -578,6 +595,26 @@ def retired_flag_key(option: str) -> Optional[str]:
     return matches[0] if len(matches) == 1 else None
 
 
+# dest -> the option string the user typed for it, for controls with several spellings (a switch's --NAME, its legacy
+# flag and its short spelling): notes name a flag as typed (BACK-2654, the item F principle). One per invocation.
+_TYPED: ContextVar[Optional[Dict[str, str]]] = ContextVar('reveal_typed_spellings', default=None)
+
+
+def record_spelling(dest: str, option: str) -> None:
+    """The parser saw *option* for *dest* in this invocation; the first spelling typed is the one notes name."""
+    typed = _TYPED.get()
+    if typed is not None:
+        typed.setdefault(dest, option)
+
+
+def typed_spelling(dest: str, default: str) -> str:
+    """The option string the user typed for *dest*, else *default* (outside an invocation, or not typed)."""
+    return (_TYPED.get() or {}).get(dest, default)
+
+
+def typed_spellings() -> Dict[str, str]:
+    """Every dest -> typed option string recorded in this invocation."""
+    return dict(_TYPED.get() or {})
 
 
 def _shared_name_retirement(key: str) -> Optional[Retirement]:
@@ -824,8 +861,10 @@ def invocation_scope(invocation: Invocation, *, retirements_to_stderr: bool = Tr
     also opens the invocation's log (``utils.invocation_log``); the MCP server passes
     ``retirements_to_stderr=False`` and returns the fact in the tool result."""
     token = _CURRENT.set(invocation)
+    typed_token = _TYPED.set({})
     try:
         with log_scope(retirements_to_stderr):
             yield invocation
     finally:
+        _TYPED.reset(typed_token)
         _CURRENT.reset(token)

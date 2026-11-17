@@ -171,7 +171,7 @@ def argv_for(noun, spelling, resource='proj'):
 
 
 def run(noun, spelling, *extra, resource='proj'):
-    walk_flags = ['--no-gitignore'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
+    walk_flags = ['--respect-gitignore=off'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
     return _run_reveal_direct(*argv_for(noun, spelling, resource), *walk_flags, *extra)
 
 
@@ -307,7 +307,7 @@ def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
     """The project carries an unused import and a branchy function, so a declared gate has something to match."""
     cli, query = FINDINGS_VIEWS.get(noun, CASES[noun])
     target = 'proj/data.json' if noun == 'json' else ('sessions' if noun == 'claude' else 'proj')
-    walk_flags = ['--no-gitignore'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
+    walk_flags = ['--respect-gitignore=off'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
     spellings = {
         'after': [noun, target, *cli, '--fail-on', gate],
         'before': ['--fail-on', gate, noun, target, *cli],

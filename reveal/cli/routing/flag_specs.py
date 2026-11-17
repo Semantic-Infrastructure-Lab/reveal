@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...utils.query_parser import join_exclude_patterns
-from ..invocation import retirement_note
+from ..invocation import retirement_note, typed_spelling
 from .ledger import delegate, mark, peek
 
 
@@ -81,6 +81,12 @@ def _no_gitignore(args: Any) -> bool | None:
     # --respect-gitignore's argparse default is True, indistinguishable from typing it,
     # so only the True -> False transition (--no-gitignore) is a real signal.
     return False if peek(args, 'respect_gitignore', True) is False else None
+
+
+def typed_option(spec: FlagSpec) -> str:
+    """The option string the user typed for *spec*'s dest (``--respect-gitignore`` or ``--no-gitignore``), for notes
+    and errors; ``spec.option`` when it was not recorded."""
+    return typed_spelling(spec.dest, spec.option)
 
 
 # Order is the order fragments are appended to the query string.
@@ -151,7 +157,7 @@ def _join_uri_value(args: Any, spec: Any, adapter_class: Any, resource: str, key
         return
     mark(args, spec.dest)
     from ...errors import RequestValidationError
-    raise RequestValidationError(f"{spec.option} conflicts with {key}={uri_value} in the URI: "
+    raise RequestValidationError(f"{typed_option(spec)} conflicts with {key}={uri_value} in the URI: "
                                  f"{key} is set twice with different values; give it once")
 
 
@@ -164,7 +170,7 @@ def _join_flag_value(args: Any, spec: Any, adapter_class: Any, key: str, fragmen
         return
     mark(args, spec.dest)
     from ...errors import RequestValidationError
-    raise RequestValidationError(f"{spec.option} conflicts with {option}: both set {key} with different values; "
+    raise RequestValidationError(f"{typed_option(spec)} conflicts with {option}: both set {key} with different values; "
                                  "give one")
 
 
@@ -215,7 +221,7 @@ def _reject_unreceived_control(adapter_class: Any, spec: FlagSpec) -> None:
     if spec.control and declarations:
         from ...errors import RequestValidationError
         from ...utils.query_binding import unsupported_controls_message
-        raise RequestValidationError(unsupported_controls_message(declarations, [spec.option]))
+        raise RequestValidationError(unsupported_controls_message(declarations, [typed_option(spec)]))
 
 
 def _declared_fragment(args: Any, spec: FlagSpec, binding: Callable[[Any], tuple], declarations: Any,
@@ -268,7 +274,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             continue
         if spec.universal and not honors_result_control:
             mark(args, spec.dest)
-            print(f"Note: {spec.option} has no effect on {scheme}:// -- it does not take "
+            print(f"Note: {typed_option(spec)} has no effect on {scheme}:// -- it does not take "
                   f"sort=/limit=/offset=.", file=sys.stderr)
             continue
         fragment = _fragment_for(args, spec, adapter_class, scheme, resource)
@@ -285,7 +291,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
                 mark(args, spec.dest)  # the caller scoped it in the URI (date>...)
             elif not _has_key(resource, key):
                 resource = f"{resource}{'&' if '?' in resource else '?'}{fragment}"
-                injected[key] = (spec.option, fragment)
+                injected[key] = (typed_option(spec), fragment)
                 delegate(args, spec.dest, key)
             else:
                 _join_uri_value(args, spec, adapter_class, resource, key, fragment)
@@ -293,6 +299,6 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             _reject_unreceived_control(adapter_class, spec)
             mark(args, spec.dest)
             aware = ', '.join(f'{s}://' for s in _supporting_schemes(spec.dest))
-            print(f"Note: {spec.option} has no effect on {scheme}:// -- only {aware} support it.",
+            print(f"Note: {typed_option(spec)} has no effect on {scheme}:// -- only {aware} support it.",
                   file=sys.stderr)
     return resource

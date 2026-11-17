@@ -32,7 +32,7 @@ These controls describe the ordinary map; comparison controls are listed below.
 | `top` | Nonnegative whole-number presentation limit, default 5. Bounds each graph section and each cycle's member and witness lists. Zero shows totals without graph rows. Whole-valued `3.0` and `3e0` normalize; fractions, booleans and negatives reject. |
 | `no_imports` | Explicit scope-only map, with graph analysis marked not requested. Strict boolean spellings are accepted. |
 | `exclude` | Comma-separated globs narrowing the configured census and graph scope. An excluded file can remain resolvable as an import target. |
-| `respect_gitignore` | True by default. False or `--no-gitignore` includes ignored candidates subject to other scope exclusions; tracked files remain eligible. |
+| `respect_gitignore` | True by default. False or `--respect-gitignore off` includes ignored candidates subject to other scope exclusions; tracked files remain eligible. |
 | `--all` (`?all=true`) | Expand map rows, overriding top. It does not request quality or history analysis. The legacy `--verbose` is the same, with a note. |
 
 `no_git` and `tests` were dashboard controls and now reject with a correction.

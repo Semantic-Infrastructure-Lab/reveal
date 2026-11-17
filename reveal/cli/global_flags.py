@@ -18,7 +18,7 @@ from ..utils.gitignore import set_gitignore_enabled
 from ..utils.invocation_log import answer_is_json
 from ..utils.json_utils import set_provenance_enabled
 from ..utils.query_binding import ScalarOnceAction, switch_value
-from .invocation import SWITCHES, retirement_note
+from .invocation import SWITCHES, record_spelling, retirement_note
 
 
 # Flags in effect for every command once parsed: applied by apply_global_flags below, or, for
@@ -27,15 +27,12 @@ PROCESS_GLOBAL_FLAGS = frozenset({'provenance', 'respect_gitignore', 'copy'})
 
 
 def add_gitignore_arguments(parser: Any) -> None:
-    """--respect-gitignore / --no-gitignore, for every parser whose command walks a tree.
+    """--respect-gitignore on|off (legacy --no-gitignore), for every parser whose command walks a tree.
 
-    One declaration so the spelling, default and help cannot drift between the
+    One declaration (the respect-gitignore switch) so the spelling, default and help cannot drift between the
     main parser and the subcommands; apply_global_flags() is what honors it.
     """
-    parser.add_argument('--respect-gitignore', action='store_true', default=True,
-                        help='Skip files git ignores (default: enabled; tracked files are never skipped)')
-    parser.add_argument('--no-gitignore', action='store_false', dest='respect_gitignore',
-                        help='Include files git ignores')
+    add_switch_argument(parser, 'respect-gitignore')
 
 
 def _on_off(value: str) -> str:
@@ -56,18 +53,21 @@ class _SwitchAction(ScalarOnceAction):
         typed = 'off' if self.nargs == 0 else values
         self._store(namespace, typed, option_string)
         setattr(namespace, self.dest, switch_value(typed))
-        if option_string == '--no-' + self.dest:
+        record_spelling(self.dest, option_string)
+        if self.nargs == 0 and option_string.startswith('--'):  # the legacy off flag; a short spelling has no row
             retirement_note('flag:' + option_string)
 
 
 def add_switch_argument(parser: Any, name: str) -> None:
-    """``--NAME on|off`` and its legacy ``--no-NAME`` (plus any short spelling of off), from ``SWITCHES[name]``."""
+    """``--NAME on|off`` and its legacy off flag (``--no-NAME`` or the one declared; plus any short spelling of off),
+    from ``SWITCHES[name]``."""
     switch = SWITCHES[name]
-    shared: Dict[str, Any] = {'dest': name, 'default': None, 'action': _SwitchAction, 'comparable': switch_value,
-                              'seen': {}}
-    parser.add_argument('--' + name, type=_on_off, metavar='on|off', help=switch.help, **shared)
-    parser.add_argument('--no-' + name, *switch.short_off, nargs=0, **shared,
-                        help=f'Same as --{name} off (--no-{name} is deprecated)')
+    shared: Dict[str, Any] = {'dest': switch.dest, 'default': switch.default, 'action': _SwitchAction,
+                              'comparable': switch_value, 'seen': {}}
+    bare: Dict[str, Any] = {'nargs': '?', 'const': 'on'} if switch.bare_on else {}
+    parser.add_argument('--' + name, type=_on_off, metavar='on|off', help=switch.help, **bare, **shared)
+    parser.add_argument(switch.legacy_flag, *switch.short_off, nargs=0, **shared,
+                        help=f'Same as --{name} off ({switch.legacy_flag} is deprecated)')
 
 
 _EXCLUDE_HELP = ('Exclude files/directories matching pattern from analysis entirely '

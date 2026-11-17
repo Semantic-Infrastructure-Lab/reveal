@@ -250,7 +250,7 @@ def _check_code(path: Path, args: Namespace) -> HealthResult:
     select = getattr(args, 'select', None) or 'B,S,I,C'
     cmd, env = _reveal_child('check', str(path), f'--select={select}', '--only-failures', '--format=json')
     if not gitignore_enabled():
-        cmd.append('--no-gitignore')
+        cmd.append('--respect-gitignore=off')
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120,
                             encoding='utf-8', errors='replace', env=env)
     try:

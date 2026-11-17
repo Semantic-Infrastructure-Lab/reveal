@@ -97,7 +97,7 @@ def test_loss_repair_reuse_and_siblings_keep_evidence(tmp_path, fault, stage):
 def test_cli_json_text_and_artifact_preserve_requested_rows(tmp_path, spelling):
     _project(tmp_path)
     args = ['surface', str(tmp_path), '--type', 'env'] if spelling == 'noun' else [f'surface://{tmp_path}?type=env']
-    response = run(*args, '--format', 'json', '--no-gitignore')
+    response = run(*args, '--format', 'json', '--respect-gitignore=off')
     assert response.returncode == 0
     result = json.loads(response.stdout)
     _assert_same_answer_source_spelling(
@@ -107,7 +107,7 @@ def test_cli_json_text_and_artifact_preserve_requested_rows(tmp_path, spelling):
     artifact = tmp_path / 'answer.json'
     # a one-row text cap (top=0 is uncapped, BACK-2654 Caps row); the artifact keeps every row
     text_args = [*args, '--top', '1'] if spelling == 'noun' else [args[0] + '&top=1']
-    text = run(*text_args, '--also-json', str(artifact), '--no-gitignore')
+    text = run(*text_args, '--also-json', str(artifact), '--respect-gitignore=off')
     assert text.returncode == 0
     assert '1 more' in text.stdout
     saved = json.loads(artifact.read_text(encoding='utf-8'))

@@ -385,7 +385,7 @@ def test_comparison_gitignore_policy_selects_live_ignored_files(project):
     (project / 'ignored.py').write_text('from app import choose\n', encoding='utf-8')
     ignored = canonical(invoke(project))
     assert ignored['analysis']['basis'] == 'identical_tree'
-    included = canonical(invoke(project, flags=['--no-gitignore']))
+    included = canonical(invoke(project, flags=['--respect-gitignore=off']))
     uri = canonical(invoke(project, transport='uri', query='respect_gitignore=false'))
     same_answer(included, uri)
     assert included['analysis']['basis'] == 'snapshots'

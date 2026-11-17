@@ -45,7 +45,7 @@ and `limit=N` for their ranking and reject `offset` (`top` is calls' legacy spel
 `metrics://?hotspots=true` ranking, the retired `hotspots://` and `depends://`, and `patches://?view=pressure` cap with
 `top=N` (on `hotspots://` and `depends://` the `--limit N` flag maps to it). A declared noun rejects a key it does not
 take (exit 2, naming its controls); other adapters answer `Unknown query param ... ignored`.
-Every adapter that walks a directory also takes `respect_gitignore=false` (the same as `--no-gitignore`).
+Every adapter that walks a directory also takes `respect_gitignore=false` (the same as `--respect-gitignore off`).
 
 ## Detailed Documentation
 

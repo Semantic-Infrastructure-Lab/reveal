@@ -3569,7 +3569,7 @@ reveal deep_dir/
    reveal project/ --exclude node_modules,venv,.git
    ```
    What git ignores is already skipped by every directory walk (git's own answer, so
-   tracked files are never dropped); `--no-gitignore` includes it.
+   tracked files are never dropped); `--respect-gitignore off` includes it.
 
 ---
 

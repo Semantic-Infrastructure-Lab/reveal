@@ -24,6 +24,8 @@ from ...file_handler import handle_file  # noqa: E402
 from .grep import handle_grep, handle_grep_directory
 from .ledger import FlagLedger, ledger_of, mark, peek  # noqa: E402
 from ..defaults import _parser_defaults  # noqa: E402
+from ..invocation import typed_spelling  # noqa: E402
+from ...utils.json_utils import attach_invocation_warnings  # noqa: E402
 from ...utils.path_utils import to_posix  # noqa: E402
 from ...registry import get_markdown_extensions  # noqa: E402
 
@@ -157,9 +159,9 @@ def _show_directory_meta(path: Path, args: 'Namespace') -> None:
     if output_format == 'json':
         from ...utils.results import ResultBuilder
         from ...reveal_types import CONTRACT_VERSION
-        print(safe_json_dumps(ResultBuilder.create(
+        print(safe_json_dumps(attach_invocation_warnings(ResultBuilder.create(
             'directory_metadata', path, data=meta, source_type='directory',
-            contract_version=CONTRACT_VERSION)))
+            contract_version=CONTRACT_VERSION))))
     else:
         _render_dir_meta_text(meta)
 
@@ -349,12 +351,12 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
         sort_desc = not getattr(args, 'asc', False)
         if output_format == 'json':
             from ...utils import safe_json_dumps
-            print(safe_json_dumps(show_file_list_json(
+            print(safe_json_dumps(attach_invocation_warnings(show_file_list_json(
                 str(path), respect_gitignore=args.respect_gitignore,
                 exclude_patterns=args.exclude,
                 sort_by=sort_by, sort_desc=sort_desc,
                 include_extensions=include_extensions,
-                max_entries=args.max_entries)))
+                max_entries=args.max_entries))))
         else:
             print(show_file_list(str(path),
                                  respect_gitignore=args.respect_gitignore,
@@ -366,14 +368,14 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
         sort_desc = getattr(args, 'desc', False)
         if output_format == 'json':
             from ...utils import safe_json_dumps
-            print(safe_json_dumps(show_directory_tree_json(
+            print(safe_json_dumps(attach_invocation_warnings(show_directory_tree_json(
                 str(path), depth=args.depth if args.depth is not None else 3,
                 max_entries=args.max_entries, fast=args.fast,
                 respect_gitignore=args.respect_gitignore,
                 exclude_patterns=args.exclude,
                 dir_limit=getattr(args, 'dir_limit', 0),
                 sort_by=sort_by, sort_desc=sort_desc,
-                include_extensions=include_extensions)))
+                include_extensions=include_extensions))))
         else:
             print(show_directory_tree(str(path), depth=args.depth if args.depth is not None else 3,
                                       max_entries=args.max_entries, fast=args.fast,
@@ -442,9 +444,10 @@ STDIN_BLIND_FLAGS = frozenset({'explain_file', 'capabilities', 'show_ast', 'deco
 
 def _given_flags(args: 'Namespace', table: dict) -> list:
     """The (dest, spelling) pairs of ``table`` the command line set: a value other than the parser's default, as the
-    flag ledger reads it, so a switch typed off (``--group off``, default None) counts as given."""
+    flag ledger reads it, so a switch typed off (``--group off``, default None) counts as given; the spelling is the
+    one typed (``--no-group``)."""
     defaults = _parser_defaults()
-    return [(dest, spelling) for dest, spelling in table.items()
+    return [(dest, typed_spelling(dest, spelling)) for dest, spelling in table.items()
             if getattr(args, dest, None) not in (None, defaults.get(dest))]
 
 
@@ -531,9 +534,11 @@ def reject_ignored_path(args: 'Namespace', dest: str) -> None:
 
 
 def _flag_usage(dest: str, spelling: str) -> str:
-    """The flag as it must be typed: with its metavar when it takes a value."""
+    """The flag as it must be typed: with its metavar when it takes a value (the action that spelling names)."""
     from ..parser import create_argument_parser
-    for action in create_argument_parser('')._actions:
+    parser = create_argument_parser('')
+    named = parser._option_string_actions.get(spelling)
+    for action in [named] if named is not None else parser._actions:
         if action.dest == dest and action.nargs != 0:
             return f"{spelling} {action.metavar or dest.upper()}"
     return spelling

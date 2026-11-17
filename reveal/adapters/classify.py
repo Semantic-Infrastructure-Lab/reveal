@@ -93,7 +93,7 @@ class ClassifyAdapter(ResourceAdapter):
             'query_params': {
                 'respect_gitignore': {
                     'type': 'boolean',
-                    'description': 'Skip gitignored files (default true). Same as the CLI --no-gitignore (which sets this to false)',
+                    'description': 'Skip gitignored files (default true). Same as the CLI --respect-gitignore off (which sets this to false)',
                     'examples': ['classify://src?respect_gitignore=false'],
                 },
             },

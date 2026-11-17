@@ -34,7 +34,7 @@ def project(tmp_path, monkeypatch):
 
 
 def _json(*argv):
-    result = run(*argv, '--format', 'json', '--no-gitignore')
+    result = run(*argv, '--format', 'json', '--respect-gitignore=off')
     return result, json.loads(result.stdout)
 
 
@@ -72,7 +72,7 @@ def test_each_row_is_a_note_that_names_a_replacement():
 ])
 def test_a_retired_spelling_notes_once_and_answers_as_before(project, monkeypatch, argv, keys):
     noted, noted_doc = _json(*argv)
-    text = run(*argv, '--no-gitignore')
+    text = run(*argv, '--respect-gitignore=off')
     for key in keys:
         assert noted.stderr.count(f'note: {RETIREMENTS[key].text}') == 0, (key, noted.stderr)  # in the JSON (BACK-2659)
         assert text.stderr.count(f'note: {RETIREMENTS[key].text}') == 1, (key, text.stderr)
@@ -80,7 +80,7 @@ def test_a_retired_spelling_notes_once_and_answers_as_before(project, monkeypatc
     for key in ROWS:
         monkeypatch.delitem(RETIREMENTS, key)
     plain, plain_doc = _json(*argv)
-    plain_text = run(*argv, '--no-gitignore')
+    plain_text = run(*argv, '--respect-gitignore=off')
     assert 'deprecated' not in plain.stderr
     assert noted.returncode == plain.returncode == 0
     assert text.stdout == plain_text.stdout
@@ -90,7 +90,7 @@ def test_a_retired_spelling_notes_once_and_answers_as_before(project, monkeypatc
 @pytest.mark.parametrize('argv', [['hotspots', 'proj'], ['hotspots://proj']])
 def test_the_gate_still_answers_at_the_note_stage(project, argv):
     """Not the cut error: --fail-on findings still exits 1 (branchy has complexity 25)."""
-    result = run(*argv, '--fail-on', 'findings', '--format', 'json', '--no-gitignore')
+    result = run(*argv, '--fail-on', 'findings', '--format', 'json', '--respect-gitignore=off')
     assert result.returncode == 1, result.stderr
     assert json.loads(result.stdout)['summary']['has_findings'] is True
 

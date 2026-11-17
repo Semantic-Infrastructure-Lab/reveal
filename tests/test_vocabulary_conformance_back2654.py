@@ -2015,7 +2015,19 @@ def test_no_gitignore_answers_as_respect_gitignore_off_on_the_file_route_and_che
     _with_an_ignored_file()
     for extra in ([], ['--format', 'json']):
         legacy, canonical = _run(*request_argv, '--no-gitignore', *extra), _run(*request_argv, '--respect-gitignore', 'off', *extra)
-        assert canonical.rc != 2 and (legacy.rc, legacy.out) == (canonical.rc, canonical.out), (legacy.brief(), canonical.brief())
+        assert canonical.rc != 2 and _noteless(legacy) == _noteless(canonical), (legacy.brief(), canonical.brief())
+
+
+def _noteless(run):
+    """Exit and stdout, with a JSON answer's retired_spelling facts dropped (they name the spelling used)."""
+    try:
+        doc = json.loads(run.out)
+    except ValueError:
+        return run.rc, run.out
+    warnings = doc.get('meta', {}).get('warnings') if isinstance(doc.get('meta'), dict) else None
+    if isinstance(warnings, list):
+        doc['meta']['warnings'] = [w for w in warnings if w.get('code') != 'retired_spelling']
+    return run.rc, doc
 
 
 def test_the_ignored_file_fixture_changes_walking_answers(workspace):

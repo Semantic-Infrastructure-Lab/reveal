@@ -255,3 +255,15 @@ def test_a_flag_spec_note_names_respect_gitignore_as_typed(project):
     from conftest import _run_reveal_direct
     err = _run_reveal_direct('env://', '--respect-gitignore', 'off').stderr
     assert '--respect-gitignore has no effect on env://' in err, err
+
+
+
+@pytest.mark.parametrize('view', [[], ['--files'], ['--meta']], ids=['tree', 'files', 'meta'])
+def test_the_legacy_gitignore_note_reaches_the_directory_json_answers(project, view):
+    """Rule 2 on the directory views' JSON writers (tree, --files, directory metadata): --no-gitignore there answers
+    with its retired_spelling warning, as the file views do."""
+    from conftest import _run_reveal_direct
+    result = _run_reveal_direct('.', *view, '--no-gitignore', '--format', 'json')
+    warnings = json.loads(result.stdout).get('meta', {}).get('warnings', [])
+    assert result.returncode == 0 and [w.get('field') for w in warnings if w.get('code') == 'retired_spelling'] == [
+        'flag:--no-gitignore'], result.stdout

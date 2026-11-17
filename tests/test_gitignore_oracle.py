@@ -292,10 +292,10 @@ def test_grep_of_a_gitignored_directory_says_what_it_skipped(repo):
     target = repo / 'sessions' / 's1'
     text = _run_reveal_direct(str(target), '--grep', 'needle').stdout
     assert 'No matches found in 0 files.' in text
-    assert 'entries hidden by .gitignore (use --no-gitignore to show)' in text
+    assert 'entries hidden by .gitignore (use --respect-gitignore off to show)' in text
     data = json.loads(_run_reveal_direct(str(target), '--grep', 'needle', '--format', 'json').stdout)
     assert (data['files_searched'], data['hidden'].get('gitignore', 0) > 0) == (0, True)
-    assert _run_reveal_direct(str(target), '--grep', 'needle', '--no-gitignore').stdout.count('README.md') == 1
+    assert _run_reveal_direct(str(target), '--grep', 'needle', '--respect-gitignore=off').stdout.count('README.md') == 1
 
 
 @pytest.mark.parametrize('line', ['', '   ', '# comment', '/', '!'])

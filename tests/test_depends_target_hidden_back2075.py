@@ -19,7 +19,7 @@ from conftest import _run_reveal_direct
 
 pytestmark = pytest.mark.skipif(shutil.which('git') is None, reason='git not installed')
 
-HINT = 'entries hidden by .gitignore (use --no-gitignore to show)'
+HINT = 'entries hidden by .gitignore (use --respect-gitignore off to show)'
 
 A_PY = 'from pkg import b\n\n\ndef caller():\n    return b.helper()\n'
 B_PY = 'import requests\n\n\ndef helper():\n    return requests.get("http://example.invalid")\n'
@@ -62,16 +62,16 @@ def test_ignored_target_inside_a_live_project_says_so(repo, target):
     assert out.returncode == 0, out.stderr
     [warning] = _scope_hidden(json.loads(out.stdout))
     assert (warning['count'], warning['unit'], warning['hidden'], warning['causes'], warning['suggestion']) == (
-        1, 'entries', {'gitignore': 1}, ['gitignore'], '--no-gitignore')
+        1, 'entries', {'gitignore': 1}, ['gitignore'], '--respect-gitignore off')
     assert f'1 {HINT}' in warning['message']
 
 
 def test_no_gitignore_drops_the_warning(repo):
     """Positive control: with nothing hidden the target is analyzed and nothing is flagged."""
     uri = f'depends://{(repo / "gen" / "pkg").as_posix()}'
-    text = _run_reveal_direct(uri, '--no-gitignore')
+    text = _run_reveal_direct(uri, '--respect-gitignore=off')
     assert HINT not in text.stdout
-    data = json.loads(_run_reveal_direct(uri, '--no-gitignore', '--format', 'json').stdout)
+    data = json.loads(_run_reveal_direct(uri, '--respect-gitignore=off', '--format', 'json').stdout)
     assert _scope_hidden(data) == []
 
 
@@ -107,4 +107,4 @@ def test_sibling_engines_already_warn_for_the_same_target(repo, engine):
            'calls_uncalled': f'calls://{t}?uncalled', 'surface': f'surface://{t}'}[engine]
     data = json.loads(_run_reveal_direct(uri, '--format', 'json').stdout)
     [warning] = _scope_hidden(data)
-    assert warning['suggestion'] == '--no-gitignore'
+    assert warning['suggestion'] == '--respect-gitignore off'

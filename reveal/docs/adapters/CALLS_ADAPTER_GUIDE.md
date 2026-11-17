@@ -456,7 +456,7 @@ Standing language caveats stay verbatim in JSON `meta.warnings`; the pointer nam
 
 If `.gitignore` (or `--exclude`/REVEAL_IGNORE) hid every file under the path, the zero is
 not the code's: the output adds `⚠ No files left to analyze: N entries hidden by .gitignore
-(use --no-gitignore to show)`, and JSON carries a `scope_hidden` entry in `meta.warnings`
+(use --respect-gitignore off to show)`, and JSON carries a `scope_hidden` entry in `meta.warnings`
 with `count`, `hidden` (per cause) and `suggestion`.
 
 **Callees text output** (`?callees=`):

@@ -899,7 +899,7 @@ OnHidden = Callable[[Path, bool, str], None]
 # that shows them, so a hint would point at nothing (BACK-1224).
 ACTIONABLE_HIDDEN_CAUSES = ('gitignore', 'exclude', 'reveal_ignore')
 _HIDDEN_CAUSE_LABELS = {  # footer order
-    'gitignore': ('.gitignore', ' (use --no-gitignore to show)'),
+    'gitignore': ('.gitignore', ' (use --respect-gitignore off to show)'),
     'noise': ('default noise filters', ''),
     'exclude': ('--exclude', ''),
     'reveal_ignore': ('REVEAL_IGNORE / config ignore:', ''),
@@ -928,7 +928,7 @@ class HiddenTally(Counter[str]):
 
 
 def hidden_entries_phrase(hidden: Mapping[str, int]) -> Optional[str]:
-    """'N entries hidden by .gitignore (use --no-gitignore to show)' for a cause tally, or
+    """'N entries hidden by .gitignore (use --respect-gitignore off to show)' for a cause tally, or
     None when nothing was hidden. Only gitignore gets a hint: noise has no flag, and a user
     who typed --exclude or set REVEAL_IGNORE knows why those entries are missing. Dot
     entries are never named, since no flag shows them."""
@@ -956,7 +956,7 @@ def hidden_entries_warning(hidden: Mapping[str, int], analyzed: int) -> Optional
         'message': f"No files left to analyze: {hidden_entries_phrase(counts)}",
     }
     if 'gitignore' in counts:
-        warning['suggestion'] = '--no-gitignore'
+        warning['suggestion'] = '--respect-gitignore off'
     return warning
 
 

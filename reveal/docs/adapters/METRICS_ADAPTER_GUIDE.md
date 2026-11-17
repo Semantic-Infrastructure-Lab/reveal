@@ -280,7 +280,7 @@ Default penalties:
 | `tests` | `--tests include\|exclude` | `include` (default), `exclude` | In the hotspot ranking: leave test/support files selected by conventional names plus the selected project's `test_layout.additional_paths` out of the ranking. Only the ranking is narrowed; totals still count them. A request that names it adds `test_scope` (`rule`, policy basis/anchor/source, current declaration when present, `tests`, `files_excluded`). The default (and the retired `reveal hotspots`) ranks test files. Ordinary overview does not request this ranking. | `?view=hotspots&tests=exclude` |
 | `detail` | `--detail` | `normal` (default), `summary` | `summary` omits the per-file `files` array: the aggregate summary only (the walk still runs). Use on large repos. There is no fuller level: `detail=full` exits 2 | `?detail=summary` |
 | `sort`, `limit`, `offset` | `--sort=FIELD`, `--limit N`, `--offset N` | | Order and page the rows (`--sort=-lines` for descending); in `view=hotspots`, `limit`/`offset` page the ranking and `sort` does not apply | `?sort=-lines&limit=10` |
-| `exclude`, `respect_gitignore` | `--exclude`, `--no-gitignore` | | The walk's scope | `?exclude=vendor` |
+| `exclude`, `respect_gitignore` | `--exclude`, `--respect-gitignore off` | | The walk's scope | `?exclude=vendor` |
 
 `churn`, `merges` and `since` only affect the hotspot score and are unread otherwise. `match`, `kind`,
 `depth` and `until` are not metrics controls: they exit 2 naming `where` and the supported controls.
@@ -1832,7 +1832,7 @@ reveal 'metrics://src?view=provenance' --format json
 No file is analyzed and no rule runs: classification reads paths, plus at most the first few
 lines of a file its path did not classify. It walks the same files as the default view
 (respecting `REVEAL_IGNORE`, `config.yaml`'s `ignore:`, the well-known skip directories, and
-what git ignores; `?respect_gitignore=false` or `--no-gitignore` includes gitignored files).
+what git ignores; `?respect_gitignore=false` or `--respect-gitignore off` includes gitignored files).
 The other parameters of the default view (`where`, `sort`, `limit`) do not apply here, and
 the CLI says so. A file path lists its whole parent directory, not just that file.
 

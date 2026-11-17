@@ -265,7 +265,7 @@ def test_original_typed_paths_and_encoded_uri_paths_match(project, name):
 def test_scope_ignores_and_excludes_match(project):
     (project/'ignored.py').write_text('import pathlib\n', encoding='utf-8')
     (project/'.gitignore').write_text('ignored.py\n', encoding='utf-8')
-    for flags in (['--exclude', 'b.py'], ['--no-gitignore'], ['--exclude', 'a.py', '--no-gitignore']):
+    for flags in (['--exclude', 'b.py'], ['--respect-gitignore=off'], ['--exclude', 'a.py', '--respect-gitignore=off']):
         left = run('deps', 'proj', *flags, '--format', 'json')
         right = run('deps://proj', *flags, '--format', 'json')
         assert left.returncode == right.returncode == 0

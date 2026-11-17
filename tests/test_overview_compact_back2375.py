@@ -175,12 +175,12 @@ def test_navigation_keeps_explicit_scope_without_repeating_config_defaults(tmp_p
     write(tmp_path, 'explicit.py', 'VALUE=1\n')
     write(tmp_path, 'ignored/a.py', 'from .b import value\n')
     write(tmp_path, 'ignored/b.py', 'value=1\n')
-    result, body = answer(tmp_path, '--exclude', 'explicit.py', '--no-gitignore')
+    result, body = answer(tmp_path, '--exclude', 'explicit.py', '--respect-gitignore=off')
     assert result.returncode == 0 and body['scope']['total_code_files'] == 2
     for step in body['next_steps'][:4]:
         assert 'configured.py' not in step['command']
         tokens = shlex.split(step['command'])
-        assert '--no-gitignore' in tokens and 'explicit.py' in tokens
+        assert '--respect-gitignore' in tokens and 'off' in tokens and 'explicit.py' in tokens
         deeper = run(*tokens[1:], '--format', 'json')
         assert deeper.returncode == 0, deeper.stderr
         assert 'configured.py' not in deeper.stdout and 'explicit.py' not in deeper.stdout

@@ -4,7 +4,7 @@
 ``calls://?target=`` 'No callers found', ``calls://?uncalled`` 'Total defined: 0' and
 ``surface://`` 'No external surfaces detected' for a directory under an ignored path,
 while the path forms (tree, ``--grep``) already said '... N entries hidden by .gitignore
-(use --no-gitignore to show)' (BACK-1224, BACK-1546). The walker's ``on_hidden`` tally
+(use --respect-gitignore off to show)' (BACK-1224, BACK-1546). The walker's ``on_hidden`` tally
 now reaches each engine's result as one ``scope_hidden`` warning, in text and JSON.
 """
 
@@ -20,7 +20,7 @@ from conftest import _run_reveal_direct
 
 pytestmark = pytest.mark.skipif(shutil.which('git') is None, reason='git not installed')
 
-HINT = 'entries hidden by .gitignore (use --no-gitignore to show)'
+HINT = 'entries hidden by .gitignore (use --respect-gitignore off to show)'
 
 # Two files that import, call and reach the network: each engine has a real answer
 # for them once they are not hidden.
@@ -81,7 +81,7 @@ def test_every_engine_says_what_gitignore_hid(repo, engine):
     assert out.returncode == 0, out.stderr
     [warning] = _scope_hidden(json.loads(out.stdout))
     assert (warning['count'], warning['unit'], warning['hidden'], warning['causes'], warning['suggestion']) == (
-        count, 'entries', {'gitignore': count}, ['gitignore'], '--no-gitignore')
+        count, 'entries', {'gitignore': count}, ['gitignore'], '--respect-gitignore off')
     assert f'{count} {HINT}' in warning['message']
 
 
@@ -95,10 +95,10 @@ def test_no_gitignore_answers_and_drops_the_warning(repo):
         'surface': 'import requests',
     }
     for engine, needle in expected.items():
-        text = _run_reveal_direct(uris[engine], '--no-gitignore')
+        text = _run_reveal_direct(uris[engine], '--respect-gitignore=off')
         assert needle in text.stdout, (engine, text.stdout)
         assert HINT not in text.stdout
-        data = json.loads(_run_reveal_direct(uris[engine], '--no-gitignore', '--format', 'json').stdout)
+        data = json.loads(_run_reveal_direct(uris[engine], '--respect-gitignore=off', '--format', 'json').stdout)
         assert _scope_hidden(data) == []
 
 
@@ -136,6 +136,6 @@ def test_warning_policy():
     assert hidden_entries_warning({'noise': 3}, analyzed=0) is None  # no flag shows noise
     warning = hidden_entries_warning({'exclude': 1, 'gitignore': 2}, analyzed=0)
     assert (warning['count'], warning['hidden'], warning['causes'], warning['suggestion']) == (
-        3, {'gitignore': 2, 'exclude': 1}, ['exclude', 'gitignore'], '--no-gitignore')
-    assert '3 entries hidden (2 by .gitignore (use --no-gitignore to show); 1 by --exclude)' in warning['message']
+        3, {'gitignore': 2, 'exclude': 1}, ['exclude', 'gitignore'], '--respect-gitignore off')
+    assert '3 entries hidden (2 by .gitignore (use --respect-gitignore off to show); 1 by --exclude)' in warning['message']
     assert 'suggestion' not in hidden_entries_warning({'exclude': 1}, analyzed=0)

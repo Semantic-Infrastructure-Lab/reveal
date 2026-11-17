@@ -69,7 +69,7 @@ defmodule M do
 end
 '''
 
-HINT = 'entries hidden by .gitignore (use --no-gitignore to show)'
+HINT = 'entries hidden by .gitignore (use --respect-gitignore off to show)'
 NOT_MEASURED = 'not measured in any language'
 
 
@@ -85,7 +85,7 @@ def project(tmp_path, monkeypatch):
 
 
 def jrun(*args):
-    result = run(*args, '--format', 'json', '--no-gitignore')
+    result = run(*args, '--format', 'json', '--respect-gitignore=off')
     return result, json.loads(result.stdout) if result.stdout.strip() else None
 
 
@@ -217,7 +217,7 @@ def test_callees_file_selector_picks_one_files_definitions(project):
 
 
 def test_callees_depth_text_is_a_tree_with_its_rule(project):
-    result = run('calls://proj?callees=main&depth=2', '--no-gitignore')
+    result = run('calls://proj?callees=main&depth=2', '--respect-gitignore=off')
     assert result.returncode == 0, result.stderr
     lines = result.stdout.splitlines()
     assert any(line.startswith('Rules: --format json (walk_rule.text, meta.warnings)') for line in lines), result.stdout
@@ -245,7 +245,7 @@ def test_detail_at_depth_one_walks_one_level(project):
     assert result.returncode == 0, result.stderr
     assert answer['depth'] == 1
     assert [(d['name'], d['params'], d['effects']) for d in answer['definitions']] == [('helper', ['x', 'y'], ['file:open'])]
-    text = run('calls', 'proj', '--callees', 'helper', '--detail', '--no-gitignore')
+    text = run('calls', 'proj', '--callees', 'helper', '--detail', '--respect-gitignore=off')
     assert text.returncode == 0, text.stderr
     assert 'params: x, y' in text.stdout and 'effects: file:open' in text.stdout
 
@@ -271,7 +271,7 @@ def test_w_calls_9_declines_unmeasured_walks(project, query):
     assert result.returncode == 0, result.stderr
     declines = [w for w in answer['meta']['warnings'] if w.get('code') == 'W-CALLS-9']
     assert len(declines) == 1 and NOT_MEASURED in declines[0]['message']
-    text = run(f'calls://proj?{query}', '--no-gitignore')
+    text = run(f'calls://proj?{query}', '--respect-gitignore=off')
     assert text.stdout.count(NOT_MEASURED) == (1 if 'detail' in query else 0)
     assert 'meta.warnings' in text.stdout
 
@@ -298,7 +298,7 @@ def test_unmeasured_language_gets_null_confidence_and_is_named(project, with_pyt
     declines = [w for w in answer['meta']['warnings'] if w.get('code') == 'W-CALLS-10']
     assert len(declines) == 1 and declines[0]['languages'] == ['elixir']
     assert 'elixir' in declines[0]['message']
-    text = run('calls://proj/ex?callees=run', '--no-gitignore')
+    text = run('calls://proj/ex?callees=run', '--respect-gitignore=off')
     assert 'elixir' in text.stdout and 'no recall snapshot' in text.stdout
     walked = jrun('calls://proj/ex?callees=run&depth=2')[1]
     assert walked['walk_rule']['unmeasured_languages'] == ['elixir']
@@ -399,7 +399,7 @@ def test_shorthand_alone_still_selects_callers(project):
 # --- the depth warning (BACK-1504) now covers only the modes that take no depth ----------------
 
 def test_depth_with_a_mode_that_takes_none_still_warns(project):
-    result = run('calls://proj?rank=callers&depth=2', '--no-gitignore')
+    result = run('calls://proj?rank=callers&depth=2', '--respect-gitignore=off')
     assert result.returncode == 0, result.stderr
     assert "Query param 'depth' for calls:// applies to ?callers, ?callees and ?root only" in result.stderr
 
@@ -413,12 +413,12 @@ def test_walk_rule_states_the_callers_walk(project, query):
     assert rule['direction'] == 'callers' and rule['match'] == 'bare_name_or_import_alias'
     assert rule['measured'] == {'depth_1': True, 'depth_2': True, 'beyond_depth_2': False}
     assert rule['text'].startswith('Rule: callers whose body calls helper by bare name or import alias')
-    text = run(f'calls://proj?{query}', '--no-gitignore')
+    text = run(f'calls://proj?{query}', '--respect-gitignore=off')
     assert [line for line in text.stdout.splitlines() if line.startswith('Rules: ')] == ['Rules: --format json (walk_rule.text, meta.warnings)']
 
 
 def test_depth_one_callees_text_states_its_rule_and_every_warning(project):
-    text = run('calls://proj?callees=main', '--no-gitignore')
+    text = run('calls://proj?callees=main', '--respect-gitignore=off')
     assert any(line.startswith('Rules: --format json (walk_rule.text, meta.warnings)') for line in text.stdout.splitlines())
     assert 'meta.warnings' in text.stdout  # W-CALLS-1 stays in JSON at the named location
 

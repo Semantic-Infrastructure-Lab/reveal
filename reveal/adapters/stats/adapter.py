@@ -225,8 +225,8 @@ _OFFSET = ParamSpec('offset', 'integer', 'Skip this many rows before the first o
 # The walk's scope, from the URI or the global --exclude/--no-gitignore (overview composes them); declared so
 # where does not take them for filters. No subcommand flag: the global flags carry them.
 _EXCLUDE = exclude_param()
-_RESPECT_GITIGNORE = ParamSpec('respect_gitignore', 'string', 'false includes files git ignores; --no-gitignore '
-                               'fills it', None, lambda value: value, role='scope')
+_RESPECT_GITIGNORE = ParamSpec('respect_gitignore', 'string', 'false includes files git ignores; --respect-gitignore '
+                               'off fills it', None, lambda value: value, role='scope')
 
 # Every control metrics takes; a shared control it does not take (match, kind, depth, until, ...) is rejected by the
 # binder and the declared parser from the one shared list (BACK-2654 rule 7), never declared here to reject it.

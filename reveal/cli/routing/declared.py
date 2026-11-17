@@ -337,8 +337,8 @@ def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
 
 def _global_option(dest: str) -> str:
     """The global flag that carries *dest* (its option string; ``--verbose`` is not a query flag)."""
-    from .flag_specs import FLAG_SPECS
-    return next((flag.option for flag in FLAG_SPECS if flag.dest == dest), '--' + dest.replace('_', '-'))
+    from .flag_specs import FLAG_SPECS, typed_option
+    return next((typed_option(flag) for flag in FLAG_SPECS if flag.dest == dest), '--' + dest.replace('_', '-'))
 
 
 def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer_consumer=None) -> None:
@@ -440,7 +440,9 @@ def _validate_walk_policy(adapter, args, query_policy) -> None:
     if peek(args, 'exclude'):
         raise ValueError('--exclude requires a directory-walking operation')
     if query_policy is not None or peek(args, 'respect_gitignore', True) is False:
-        raise ValueError('--no-gitignore / respect-gitignore requires a directory-walking operation')
+        from ..invocation import typed_spelling
+        raise ValueError(f"{typed_spelling('respect_gitignore', '--respect-gitignore')} / ?respect-gitignore requires a "
+                         'directory-walking operation')
 
 
 

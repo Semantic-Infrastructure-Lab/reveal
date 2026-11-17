@@ -44,6 +44,7 @@ from urllib.parse import unquote_plus
 from ...utils.exclusions import exclusions_consulted
 from ...utils.results import outcome_of
 from ...utils.query_parser import QueryKeyLog, collect_query_keys, query_key
+from ..invocation import typed_spellings
 
 _LEDGER_ATTR = '_reveal_flag_ledger'
 _NOT_FLAGS = frozenset({'path', 'element'})
@@ -172,6 +173,7 @@ class FlagLedger:
     def _notes(self, scheme: str = '') -> List[dict]:
         from ..defaults import _option_names, option_names_of
         names = _option_names() if self.parser is None else option_names_of(self.parser)
+        names = {**names, **typed_spellings()}  # a flag with several spellings is named as typed (--no-group)
         scheme = scheme or self.scheme
         return self._flag_warnings(names, scheme) + self._key_warnings(scheme)
 

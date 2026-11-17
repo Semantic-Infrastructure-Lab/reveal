@@ -84,7 +84,7 @@ table mirrors those groups; verified live against reveal-cli 0.129.0.
 --limit N / --all                  # Cap results / lift caps (--limit is also --check's file cap)
 --since DATE / --until DATE        # Date filter
 --depth / --max-entries / --dir-limit / --fast   # Tree layout & perf
---respect-gitignore / --no-gitignore
+--respect-gitignore on|off
 --exclude PATTERN    # Exclude files/dirs matching pattern — works everywhere,
                       # including URI-adapter targets (confirmed live)
 --ext EXTS / --files / --hotspots / --code-only
@@ -146,7 +146,7 @@ cPanel`, `Markdown`, `HTML`, `Schema validation`):
 > (`cli/parser.py:805`) — this is the same anti-pattern BACK-1035 already
 > fixed for `--format grep`/`check` (stderr error + exit 2 instead of silent
 > wrong output) and BACK-1202 is fixing for `--depth`/`--ext`/`--type`/
-> `--fast` on URI adapters (`--respect-gitignore`/`--no-gitignore` apply on
+> `--fast` on URI adapters (`--respect-gitignore on|off` applies on
 > every walker since BACK-1386). **It is not a design goal.**
 > A documented flag that doesn't apply to a target should error or warn, never
 > silently succeed — treat any remaining silent-ignore as a bug to file, not

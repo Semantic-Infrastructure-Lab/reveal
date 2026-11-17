@@ -44,7 +44,7 @@ def requests(root, entry='main', depth=None):
 @pytest.mark.parametrize('depth', [None, '-2', '+2', '0', '8'])
 @pytest.mark.parametrize('provenance', [False, True])
 def test_canonical_parity(project, depth, provenance):
-    options = ['--format', 'json', '--no-gitignore'] + (['--provenance'] if provenance else [])
+    options = ['--format', 'json', '--respect-gitignore=off'] + (['--provenance'] if provenance else [])
     results = [run(*argv, *options) for argv in requests(project, depth=depth)]
     assert [result.returncode for result in results] == [0, 0]
     answers = [answer_of(result, key) for result, key in zip(results, SPELLING_KEYS)]

@@ -212,7 +212,7 @@ def _next_steps(path: str, exclude_patterns: List[str], respect_gitignore: bool)
         ('Full observed cycle groups and witness paths (subject to scan coverage)', f'imports://{target}?circular&scope=path'),
         ('Detailed file measurements', f'metrics://{target}'),
     )
-    flags = [] if respect_gitignore else ['--no-gitignore']
+    flags = [] if respect_gitignore else ['--respect-gitignore', 'off']
     for pattern in exclude_patterns:
         flags += ['--exclude', pattern]
     steps = [(question, ['reveal', uri]) for question, uri in questions]

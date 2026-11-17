@@ -396,7 +396,7 @@ class TestSuppressedEntriesFooter(unittest.TestCase):
         output = show_directory_tree(self.temp_dir, depth=3, respect_gitignore=True)
 
         self.assertIn('entries hidden by .gitignore', output)
-        self.assertIn('--no-gitignore', output)
+        self.assertIn('--respect-gitignore off', output)
 
     def test_show_directory_tree_no_footer_when_nothing_suppressed(self):
         """A plain directory with nothing gitignored/noise/excluded reports no footer."""
@@ -420,13 +420,13 @@ class TestSuppressedEntriesFooter(unittest.TestCase):
     def test_format_suppressed_footer_single_cause(self):
         from collections import Counter
         footer = _format_suppressed_footer(Counter({'gitignore': 4}))
-        self.assertEqual(footer, '... 4 entries hidden by .gitignore (use --no-gitignore to show)')
+        self.assertEqual(footer, '... 4 entries hidden by .gitignore (use --respect-gitignore off to show)')
 
     def test_format_suppressed_footer_multi_cause(self):
         from collections import Counter
         footer = _format_suppressed_footer(Counter({'gitignore': 4, 'exclude': 2}))
         self.assertTrue(footer.startswith('... 6 entries hidden ('))
-        self.assertIn('4 by .gitignore (use --no-gitignore to show)', footer)
+        self.assertIn('4 by .gitignore (use --respect-gitignore off to show)', footer)
         self.assertIn('2 by --exclude', footer)
 
     def test_format_suppressed_footer_empty(self):
